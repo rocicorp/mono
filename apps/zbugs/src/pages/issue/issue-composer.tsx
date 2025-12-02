@@ -1,5 +1,7 @@
+import {useZero} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {mutators} from '../../../shared/mutators.ts';
 import {Button} from '../../components/button.tsx';
 import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
@@ -8,13 +10,11 @@ import {
 } from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
 import {useIsOffline} from '../../hooks/use-is-offline.ts';
-import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {mutators} from '../../../shared/mutators.ts';
 
 interface Props {
   /** If id is defined the issue created by the composer. */

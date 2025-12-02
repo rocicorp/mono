@@ -39,26 +39,26 @@ export type ParameterReference = {
  * ```
  */
 export interface ExpressionFactory<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
 > {
-  (eb: ExpressionBuilder<TSchema, TTable>): Condition;
+  (eb: ExpressionBuilder<TTable, TSchema>): Condition;
 }
 
 export class ExpressionBuilder<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
 > {
   readonly #exists: (
     relationship: string,
-    cb?: (query: Query<TSchema, TTable>) => Query<TSchema, any>,
+    cb?: (query: Query<TTable, TSchema>) => Query<TTable, TSchema, any>,
     options?: ExistsOptions,
   ) => Condition;
 
   constructor(
     exists: (
       relationship: string,
-      cb?: (query: Query<TSchema, TTable>) => Query<TSchema, any>,
+      cb?: (query: Query<TTable, TSchema>) => Query<TTable, TSchema, any>,
       options?: ExistsOptions,
     ) => Condition,
   ) {
@@ -120,8 +120,8 @@ export class ExpressionBuilder<
   exists = <TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb?: (
-      query: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
-    ) => Query<TSchema, any>,
+      query: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
+    ) => Query<any, TSchema>,
     options?: ExistsOptions,
   ): Condition => this.#exists(relationship, cb, options);
 }

@@ -11,15 +11,22 @@ import {stringCompare} from '../../shared/src/string-compare.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 
-export const ZeroContext = createContext<unknown | undefined>(undefined);
+// oxlint-disable-next-line no-explicit-any
+export const ZeroContext = createContext<Zero<any, any, any> | undefined>(
+  undefined,
+);
 
 export function useZero<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  Context = DefaultContext,
 >(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
@@ -28,18 +35,29 @@ export function useZero<
   return zero as Zero<S, MD, Context>;
 }
 
+/**
+ * @deprecated Use {@linkcode useZero} instead, alongside default types defined with:
+ *
+ * ```ts
+ * declare module '@rocicorp/zero' {
+ *   interface DefaultTypes {
+ *     schema: typeof schema;
+ *     context: Context;
+ *   }
+ * }
+ */
 export function createUseZero<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  Context = DefaultContext,
 >() {
   return () => useZero<S, MD, Context>();
 }
 
 export type ZeroProviderProps<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
-  Context,
+  S extends Schema = DefaultSchema,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  Context = DefaultContext,
 > = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
   init?: (zero: Zero<S, MD, Context>) => void;
   children: ReactNode;
@@ -48,9 +66,9 @@ export type ZeroProviderProps<
 const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
-  Context,
+  S extends Schema = DefaultSchema,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  Context = DefaultContext,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
   const isExternalZero = 'zero' in props;
 

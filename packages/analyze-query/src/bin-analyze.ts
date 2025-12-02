@@ -264,7 +264,7 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   };
 
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
+  const q: Query<string, Schema, PullRow<string, Schema>> = f(z);
 
   const ast = asQueryInternals(q).ast;
   return runAst(lc, clientSchema, ast, false, {

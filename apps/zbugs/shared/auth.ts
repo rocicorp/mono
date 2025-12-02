@@ -2,7 +2,6 @@ import type {Query, Transaction} from '@rocicorp/zero';
 import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import type {MutatorTx} from './mutators.ts';
 import {builder, type schema} from './schema.ts';
 
 /** The contents of the zbugs JWT */
@@ -36,9 +35,9 @@ export function isAdmin(token: AuthData | undefined) {
 }
 
 export async function assertIsCreatorOrAdmin(
-  tx: MutatorTx,
+  tx: Transaction,
   authData: AuthData | undefined,
-  query: Query<typeof schema, 'comment' | 'issue' | 'emoji'>,
+  query: Query<'comment' | 'issue' | 'emoji'>,
   id: string,
 ) {
   assertIsLoggedIn(authData);
@@ -89,4 +88,10 @@ export async function assertUserCanSeeComment(
   );
 
   await assertUserCanSeeIssue(tx, userID, comment.issueID);
+}
+
+declare module '@rocicorp/zero' {
+  interface DefaultTypes {
+    context: AuthData;
+  }
 }

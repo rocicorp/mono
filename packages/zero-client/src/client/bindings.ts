@@ -55,7 +55,7 @@ export interface BindingsForZero<TSchema extends Schema> {
    * Returns a TypedView that automatically updates when underlying data changes.
    */
   materialize<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
@@ -65,8 +65,8 @@ export interface BindingsForZero<TSchema extends Schema> {
    * The factory can transform the view into a framework-specific reactive object.
    */
   materialize<TTable extends keyof TSchema['tables'] & string, TReturn, T>(
-    query: Query<TSchema, TTable, TReturn>,
-    factory: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TTable, TSchema, TReturn>,
+    factory: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -74,14 +74,14 @@ export interface BindingsForZero<TSchema extends Schema> {
    * Compute the hash of a query for caching and deduplication purposes.
    */
   hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
   ): string;
 
   /**
    * Get the format/schema of a query's result set.
    */
   format<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
   ): Format;
 }
 
@@ -100,22 +100,22 @@ export function bindingsForZero<
 
   return {
     materialize<TTable extends keyof TSchema['tables'] & string, TReturn, T>(
-      query: Query<TSchema, TTable, TReturn>,
-      factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+      query: Query<TTable, TSchema, TReturn>,
+      factory?: ViewFactory<TTable, TSchema, TReturn, T>,
       options?: MaterializeOptions,
     ) {
       return delegate.materialize(query, factory, options);
     },
 
     hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
-      query: Query<TSchema, TTable, TReturn>,
+      query: Query<TTable, TSchema, TReturn>,
     ): string {
       const queryInternals = asQueryInternals(query);
       return queryInternals.hash();
     },
 
     format<TTable extends keyof TSchema['tables'] & string, TReturn>(
-      query: Query<TSchema, TTable, TReturn>,
+      query: Query<TTable, TSchema, TReturn>,
     ): Format {
       const queryInternals = asQueryInternals(query);
       return queryInternals.format;

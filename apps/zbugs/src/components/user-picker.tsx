@@ -3,10 +3,11 @@ import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import {queries} from '../../shared/queries.ts';
-import {type Schema} from '../../shared/schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 import {Combobox} from './combobox.tsx';
+
+type User = Row['user'];
 
 type Props = {
   projectName: string;
@@ -18,8 +19,6 @@ type Props = {
   allowNone?: boolean | undefined;
   filter?: 'crew' | 'creators' | 'assignees' | undefined;
 };
-
-type User = Row<Schema['tables']['user']>;
 
 export function UserPicker({
   projectName,

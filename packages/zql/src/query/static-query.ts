@@ -9,11 +9,11 @@ import {AbstractQuery} from './query-impl.ts';
 import type {PullRow, Query} from './query.ts';
 
 export function staticQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
   TReturn = PullRow<TTable, TSchema>,
->(schema: TSchema, tableName: TTable): Query<TSchema, TTable, TReturn> {
-  return new StaticQuery<TSchema, TTable, TReturn>(
+>(schema: TSchema, tableName: TTable): Query<TTable, TSchema, TReturn> {
+  return new StaticQuery<TTable, TSchema, TReturn>(
     schema,
     tableName,
     {table: tableName},
@@ -26,10 +26,10 @@ export function staticQuery<
  * Only serves to generate ASTs.
  */
 export class StaticQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
   TReturn = PullRow<TTable, TSchema>,
-> extends AbstractQuery<TSchema, TTable, TReturn> {
+> extends AbstractQuery<TTable, TSchema, TReturn> {
   constructor(
     schema: TSchema,
     tableName: TTable,
@@ -66,10 +66,10 @@ export class StaticQuery<
 }
 
 export function asStaticQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
   TReturn,
->(q: Query<TSchema, TTable, TReturn>): StaticQuery<TSchema, TTable, TReturn> {
+>(q: Query<TTable, TSchema, TReturn>): StaticQuery<TTable, TSchema, TReturn> {
   assert(q instanceof StaticQuery);
   return q;
 }

@@ -20,15 +20,15 @@ export type GotCallback = (got: boolean, error?: ErroredQuery) => void;
 
 export interface NewQueryDelegate {
   newQuery<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
     schema: TSchema,
     table: TTable,
     ast: AST,
     format: Format,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
 }
 
 /**
@@ -78,23 +78,23 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
 
   /** Using the default view factory creates a TypedView */
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
 
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TTable, TSchema, TReturn>,
+    factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -102,13 +102,13 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
    * Materialize a query into a custom view using a provided factory function.
    */
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TTable, TSchema, TReturn>,
+    factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -116,11 +116,11 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
    * Run a query and return the results as a Promise.
    */
   run<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 
@@ -128,11 +128,11 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
    * Preload a query's data without materializing a view.
    */
   preload<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;

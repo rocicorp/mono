@@ -1,6 +1,8 @@
 import type {Row} from '@rocicorp/zero';
+import {useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
+import {mutators} from '../../../shared/mutators.ts';
 import {makePermalink} from '../../comment-permalink.ts';
 import type {commentQuery} from '../../comment-query.ts';
 import {AvatarImage} from '../../components/avatar-image.tsx';
@@ -13,10 +15,8 @@ import {Markdown} from '../../components/markdown.tsx';
 import {RelativeTime} from '../../components/relative-time.tsx';
 import {useHash} from '../../hooks/use-hash.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useZero} from '../../hooks/use-zero.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import style from './comment.module.css';
-import {mutators} from '../../../shared/mutators.ts';
 
 type Props = {
   id: string;

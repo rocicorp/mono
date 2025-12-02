@@ -1,6 +1,10 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -10,9 +14,9 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
  * Configuration for {@linkcode Zero}.
  */
 export interface ZeroOptions<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  C = unknown,
+  C = DefaultContext,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.

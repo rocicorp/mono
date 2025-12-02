@@ -4,6 +4,10 @@ import {
   getValueAtPath,
   iterateLeaves,
 } from '../../../shared/src/object-traversal.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {validateInput} from '../query/validate-input.ts';
 import type {Transaction} from './custom.ts';
@@ -55,26 +59,26 @@ import {
  * ```
  */
 export function defineMutators<
-  S extends Schema,
-  C,
   T extends MutatorDefinitions<S, C>,
+  S extends Schema = DefaultSchema,
+  C = DefaultContext,
 >(definitions: T): MutatorRegistry<S, C, T>;
 
 export function defineMutators<
-  S extends Schema,
-  C,
   TBase extends MutatorDefinitions<S, C>,
   TOverrides extends MutatorDefinitions<S, C>,
+  S extends Schema = DefaultSchema,
+  C = DefaultContext,
 >(
   base: MutatorRegistry<S, C, TBase>,
   overrides: TOverrides,
 ): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
 
 export function defineMutators<
-  S extends Schema,
-  C,
   TBase extends MutatorDefinitions<S, C>,
   TOverrides extends MutatorDefinitions<S, C>,
+  S extends Schema = DefaultSchema,
+  C = DefaultContext,
 >(
   base: TBase,
   overrides: TOverrides,
@@ -141,80 +145,6 @@ export function defineMutators<S extends Schema, C>(
 }
 
 /**
- * Returns a typed version of {@link defineMutators} with the schema and context
- * types pre-specified. This enables better type inference when defining
- * mutators.
- *
- * @example
- * ```ts
- * // With both Schema and Context types
- * const defineAppMutators = defineMutatorsWithType<AppSchema, AuthData>();
- * const mutators = defineAppMutators({
- *   user: {
- *     create: defineMutator(...),
- *   },
- * });
- *
- * // Extend an existing registry
- * const serverMutators = defineAppMutators(mutators, {
- *   user: {
- *     create: defineMutator(...),  // override
- *   },
- * });
- *
- * // With just Context type (Schema inferred)
- * const defineAppMutators = defineMutatorsWithType<AuthData>();
- * ```
- *
- * @typeParam S - The Zero schema type.
- * @typeParam C - The context type passed to mutator functions.
- * @returns A function equivalent to {@link defineMutators} but with types
- *   pre-bound.
- */
-export function defineMutatorsWithType<
-  S extends Schema,
-  C = unknown,
->(): TypedDefineMutators<S, C>;
-
-/**
- * Returns a typed version of {@link defineMutators} with the context type
- * pre-specified.
- *
- * @typeParam C - The context type passed to mutator functions.
- * @returns A function equivalent to {@link defineMutators} but with the context
- *   type pre-bound.
- */
-export function defineMutatorsWithType<C>(): TypedDefineMutators<Schema, C>;
-
-export function defineMutatorsWithType() {
-  return defineMutators;
-}
-
-/**
- * The return type of defineMutatorsWithType. A function matching the
- * defineMutators overloads but with Schema and Context pre-bound.
- */
-type TypedDefineMutators<S extends Schema, C> = {
-  <T extends MutatorDefinitions<S, C>>(
-    definitions: T,
-  ): MutatorRegistry<S, C, T>;
-  <
-    TBase extends MutatorDefinitions<S, C>,
-    TOverrides extends MutatorDefinitions<S, C>,
-  >(
-    base: MutatorRegistry<S, C, TBase>,
-    overrides: TOverrides,
-  ): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
-  <
-    TBase extends MutatorDefinitions<S, C>,
-    TOverrides extends MutatorDefinitions<S, C>,
-  >(
-    base: TBase,
-    overrides: TOverrides,
-  ): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
-};
-
-/**
  * Gets a Mutator by its dot-separated name from a MutatorRegistry.
  * Returns undefined if not found.
  */
@@ -261,7 +191,7 @@ export function isMutatorRegistry<S extends Schema, C>(
  */
 export type MutatorDefinitions<S extends Schema, C> = {
   readonly [key: string]: // oxlint-disable-next-line no-explicit-any
-  MutatorDefinition<S, C, any, any, any> | MutatorDefinitions<S, C>;
+  MutatorDefinition<any, any, S, C, any> | MutatorDefinitions<S, C>;
 };
 
 /**
@@ -298,14 +228,14 @@ const mutatorRegistryTag = Symbol('mutatorRegistry');
  */
 type ToMutatorTree<S extends Schema, C, T extends MutatorDefinitions<S, C>> = {
   readonly [K in keyof T]: T[K] extends MutatorDefinition<
-    S,
-    C,
     infer TInput,
     // oxlint-disable-next-line no-explicit-any
     any, // TOutput - only used internally for validation
+    S,
+    C,
     infer TWrappedTransaction
   >
-    ? Mutator<S, C, TInput, TWrappedTransaction>
+    ? Mutator<TInput, S, C, TWrappedTransaction>
     : T[K] extends MutatorDefinitions<S, C>
       ? ToMutatorTree<S, C, T[K]>
       : never;
@@ -320,13 +250,13 @@ function createMutator<
 >(
   name: string,
   definition: MutatorDefinition<
-    S,
-    C,
     ArgsInput,
     ArgsOutput,
+    S,
+    C,
     TWrappedTransaction
   >,
-): Mutator<S, C, ArgsInput, TWrappedTransaction> {
+): Mutator<ArgsInput, S, C, TWrappedTransaction> {
   const {validator} = definition;
 
   // fn takes ReadonlyJSONValue args because it's called during rebase (from
@@ -354,11 +284,11 @@ function createMutator<
   // Create the callable mutator
   const mutator = (
     args: ArgsInput,
-  ): MutationRequest<S, C, ArgsInput, Transaction<S, TWrappedTransaction>> => ({
+  ): MutationRequest<ArgsInput, S, C, Transaction<S, TWrappedTransaction>> => ({
     mutator: mutator as unknown as Mutator<
+      ArgsInput,
       S,
       C,
-      ArgsInput,
       Transaction<S, TWrappedTransaction>
     >,
     args,
@@ -367,9 +297,9 @@ function createMutator<
   mutator.fn = fn;
 
   return mutator as unknown as Mutator<
+    ArgsInput,
     S,
     C,
-    ArgsInput,
     Transaction<S, TWrappedTransaction>
   >;
 }

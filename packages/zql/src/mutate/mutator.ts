@@ -1,6 +1,11 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+  DefaultWrappedTransaction,
+} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {AnyTransaction, Transaction} from './custom.ts';
 
@@ -11,18 +16,18 @@ import type {AnyTransaction, Transaction} from './custom.ts';
 const defineMutatorTag = Symbol();
 
 export function isMutatorDefinition<
-  TSchema extends Schema,
-  TContext,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema,
+  TContext,
   TWrappedTransaction = unknown,
 >(
   f: unknown,
 ): f is MutatorDefinition<
-  TSchema,
-  TContext,
   TInput,
   TOutput,
+  TSchema,
+  TContext,
   TWrappedTransaction
 > {
   // oxlint-disable-next-line no-explicit-any
@@ -30,11 +35,11 @@ export function isMutatorDefinition<
 }
 
 export type MutatorDefinition<
-  TSchema extends Schema,
-  TContext,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TWrappedTransaction,
+  TSchema extends Schema = DefaultSchema,
+  TContext = DefaultContext,
+  TWrappedTransaction = DefaultWrappedTransaction,
 > = ((options: {
   args: TOutput;
   ctx: TContext;
@@ -46,11 +51,11 @@ export type MutatorDefinition<
 
 // Overload 1: Call with validator
 export function defineMutator<
-  TSchema extends Schema,
-  TContext,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TWrappedTransaction,
+  TSchema extends Schema = DefaultSchema,
+  TContext = DefaultContext,
+  TWrappedTransaction = DefaultWrappedTransaction,
 >(
   validator: StandardSchemaV1<TInput, TOutput>,
   mutator: (options: {
@@ -58,29 +63,29 @@ export function defineMutator<
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>,
-): MutatorDefinition<TSchema, TContext, TInput, TOutput, TWrappedTransaction>;
+): MutatorDefinition<TInput, TOutput, TSchema, TContext, TWrappedTransaction>;
 
 // Overload 2: Call without validator
 export function defineMutator<
-  TSchema extends Schema,
-  TContext,
   TArgs extends ReadonlyJSONValue | undefined,
-  TWrappedTransaction,
+  TSchema extends Schema = DefaultSchema,
+  TContext = DefaultContext,
+  TWrappedTransaction = DefaultWrappedTransaction,
 >(
   mutator: (options: {
     args: TArgs;
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>,
-): MutatorDefinition<TSchema, TContext, TArgs, TArgs, TWrappedTransaction>;
+): MutatorDefinition<TArgs, TArgs, TSchema, TContext, TWrappedTransaction>;
 
 // Implementation
 export function defineMutator<
-  TSchema extends Schema,
-  TContext,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TWrappedTransaction,
+  TSchema extends Schema = DefaultSchema,
+  TContext = DefaultContext,
+  TWrappedTransaction = DefaultWrappedTransaction,
 >(
   validatorOrMutator:
     | StandardSchemaV1<TInput, TOutput>
@@ -94,7 +99,7 @@ export function defineMutator<
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>,
-): MutatorDefinition<TSchema, TContext, TInput, TOutput, TWrappedTransaction> {
+): MutatorDefinition<TInput, TOutput, TSchema, TContext, TWrappedTransaction> {
   let validator: StandardSchemaV1<TInput, TOutput> | undefined;
   let actualMutator: (options: {
     args: TOutput;
@@ -113,72 +118,16 @@ export function defineMutator<
   }
 
   const f = actualMutator as MutatorDefinition<
-    TSchema,
-    TContext,
     TInput,
     TOutput,
+    TSchema,
+    TContext,
     TWrappedTransaction
   >;
   f[defineMutatorTag] = true;
   f.validator = validator;
   return f;
 }
-
-// Overload 1: Just Schema
-export function defineMutatorWithType<
-  TSchema extends Schema,
->(): TypedDefineMutator<TSchema, unknown, unknown>;
-
-// Overload 2: Schema and Context
-export function defineMutatorWithType<
-  TSchema extends Schema,
-  TContext,
->(): TypedDefineMutator<TSchema, TContext, unknown>;
-
-// Overload 3: Schema, Context, and WrappedTransaction
-export function defineMutatorWithType<
-  TSchema extends Schema,
-  TContext,
-  TWrappedTransaction,
->(): TypedDefineMutator<TSchema, TContext, TWrappedTransaction>;
-
-// Implementation
-export function defineMutatorWithType() {
-  return defineMutator;
-}
-
-/**
- * The return type of defineMutatorWithType. A function matching the
- * defineMutator overloads but with Schema, Context, and WrappedTransaction
- * pre-bound.
- */
-type TypedDefineMutator<
-  TSchema extends Schema,
-  TContext,
-  TWrappedTransaction,
-> = {
-  // Without validator
-  <TArgs extends ReadonlyJSONValue | undefined>(
-    mutator: (options: {
-      args: TArgs;
-      ctx: TContext;
-      tx: Transaction<TSchema, TWrappedTransaction>;
-    }) => Promise<void>,
-  ): MutatorDefinition<TSchema, TContext, TArgs, TArgs, TWrappedTransaction>;
-
-  // With validator
-  <
-    TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
-  >(
-    validator: StandardSchemaV1<TInput, TOutput>,
-    mutator: (options: {
-      args: TOutput;
-      ctx: TContext;
-      tx: Transaction<TSchema, TWrappedTransaction>;
-    }) => Promise<void>,
-  ): MutatorDefinition<TSchema, TContext, TInput, TOutput, TWrappedTransaction>;
-};
 
 // ----------------------------------------------------------------------------
 // Mutator and MutationRequest types
@@ -193,16 +142,16 @@ type TypedDefineMutator<
  * The `fn` property is used for execution and takes raw JSON args (for rebase
  * and server wire format cases) that are validated internally.
  *
+ * @template TArgsInput - The argument type accepted by the callable (before validation)
  * @template TSchema - The schema type
  * @template TContext - The context type available during mutation execution
- * @template TArgsInput - The argument type accepted by the callable (before validation)
  * @template TWrappedTransaction - The wrapped transaction type
  */
 export type Mutator<
-  TSchema extends Schema,
-  TContext,
   TArgsInput extends ReadonlyJSONValue | undefined,
-  TWrappedTransaction = unknown,
+  TSchema extends Schema = DefaultSchema,
+  TContext = DefaultContext,
+  TWrappedTransaction = DefaultWrappedTransaction,
 > = MutatorCallable<TSchema, TContext, TArgsInput, TWrappedTransaction> & {
   readonly mutatorName: string;
   /**
@@ -230,17 +179,17 @@ type MutatorCallable<
   TArgsInput extends ReadonlyJSONValue | undefined,
   TWrappedTransaction,
 > = [TArgsInput] extends [undefined]
-  ? () => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>
+  ? () => MutationRequest<TArgsInput, TSchema, TContext, TWrappedTransaction>
   : undefined extends TArgsInput
     ? (
         args?: TArgsInput,
-      ) => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>
+      ) => MutationRequest<TArgsInput, TSchema, TContext, TWrappedTransaction>
     : (
         args: TArgsInput,
-      ) => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>;
+      ) => MutationRequest<TArgsInput, TSchema, TContext, TWrappedTransaction>;
 
 // oxlint-disable-next-line no-explicit-any
-export type AnyMutator = Mutator<Schema, any, any, any>;
+export type AnyMutator = Mutator<any, Schema, any, any>;
 
 /**
  * The result of calling a Mutator with arguments.
@@ -248,18 +197,18 @@ export type AnyMutator = Mutator<Schema, any, any, any>;
  * Created by `mutators.foo.bar(42)`, executed by `zero.mutate(mr)` on the client
  * or `mr.mutator.fn({tx, ctx, args: mr.args})` on the server.
  *
+ * @template TArgsInput - The argument type (before validation, sent to server)
  * @template TSchema - The schema type
  * @template TContext - The context type available during mutation execution
- * @template TArgsInput - The argument type (before validation, sent to server)
  * @template TWrappedTransaction - The wrapped transaction type
  */
 export type MutationRequest<
+  TArgsInput extends ReadonlyJSONValue | undefined,
   TSchema extends Schema,
   TContext,
-  TArgsInput extends ReadonlyJSONValue | undefined,
   TWrappedTransaction,
 > = {
-  readonly mutator: Mutator<TSchema, TContext, TArgsInput, TWrappedTransaction>;
+  readonly mutator: Mutator<TArgsInput, TSchema, TContext, TWrappedTransaction>;
   readonly args: TArgsInput;
 };
 

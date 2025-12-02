@@ -95,6 +95,12 @@ export type {
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+export type {
+  DefaultContext,
+  DefaultSchema,
+  DefaultTypes,
+  DefaultWrappedTransaction,
+} from '../../zero-types/src/default-types.ts';
 export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
@@ -121,7 +127,6 @@ export type {
 } from '../../zql/src/mutate/custom.ts';
 export {
   defineMutators,
-  defineMutatorsWithType,
   getMutator,
   isMutatorRegistry,
   mustGetMutator,
@@ -131,7 +136,6 @@ export {
 } from '../../zql/src/mutate/mutator-registry.ts';
 export {
   defineMutator,
-  defineMutatorWithType,
   isMutator,
   isMutatorDefinition,
   type MutatorDefinition,
@@ -159,9 +163,7 @@ export type {
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export {
   defineQueries,
-  defineQueriesWithType,
   defineQuery,
-  defineQueryWithType,
   getQuery,
   isQueryDefinition,
   mustGetQuery,

@@ -1,3 +1,4 @@
+import {useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useEffect, useState} from 'react';
 import {useIntersectionObserver} from 'usehooks-ts';
@@ -9,7 +10,6 @@ import {
 } from '../emoji-utils.ts';
 import {useDocumentHasFocus} from '../hooks/use-document-has-focus.ts';
 import {useNumericPref} from '../hooks/use-user-pref.ts';
-import {useZero} from '../hooks/use-zero.ts';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {SKIN_TONE_PREF} from './emoji-picker.tsx';

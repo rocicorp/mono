@@ -387,7 +387,7 @@ export type AuthData = {
 };
 export const canSeeIssue = (
   authData: AuthData,
-  eb: ExpressionBuilder<Schema, 'issues'>,
+  eb: ExpressionBuilder<'issues', Schema>,
 ) => eb.cmpLit(authData.role, '=', 'admin');
 
 export const permissions = await definePermissions<AuthData, typeof schema>(
@@ -401,7 +401,7 @@ export const permissions = await definePermissions<AuthData, typeof schema>(
     comments: {
       row: {
         select: [
-          (authData, eb: ExpressionBuilder<Schema, 'comments'>) =>
+          (authData, eb: ExpressionBuilder<'comments', Schema>) =>
             eb.exists('issue', iq =>
               iq.where(({eb}) => canSeeIssue(authData, eb)),
             ),

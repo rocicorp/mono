@@ -2529,7 +2529,7 @@ test('factory', () => {
   ]);
 
   const view: SolidView = createSolidViewFactory(setState)(
-    undefined as unknown as Query<typeof schema, 'test', TestReturn>,
+    undefined as unknown as Query<'test', typeof schema, TestReturn>,
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],

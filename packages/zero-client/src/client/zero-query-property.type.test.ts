@@ -37,16 +37,16 @@ test('Zero.query type equals SchemaQuery<Schema>', () => {
   expectTypeOf<QueryProp>().toEqualTypeOf<SchemaQuery<Schema>>();
 });
 
-test('Zero.query.user equals Query<Schema, "user">', () => {
+test('Zero.query.user equals Query<"user", Schema>', () => {
   type ZeroInstance = Zero<Schema>;
   type UserQuery = ZeroInstance['query']['user'];
 
-  expectTypeOf<UserQuery>().toEqualTypeOf<Query<Schema, 'user'>>();
+  expectTypeOf<UserQuery>().toEqualTypeOf<Query<'user', Schema>>();
 });
 
-test('Zero.query.post equals Query<Schema, "post">', () => {
+test('Zero.query.post equals Query<"post", Schema>', () => {
   type ZeroInstance = Zero<Schema>;
   type PostQuery = ZeroInstance['query']['post'];
 
-  expectTypeOf<PostQuery>().toEqualTypeOf<Query<Schema, 'post'>>();
+  expectTypeOf<PostQuery>().toEqualTypeOf<Query<'post', Schema>>();
 });

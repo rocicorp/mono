@@ -7,6 +7,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   ClientTransaction,
@@ -116,7 +117,7 @@ export type MakeCustomMutatorInterface<TSchema extends Schema, F> = F extends (
   ? (...args: Args) => MutatorResult
   : never;
 
-export class TransactionImpl<TSchema extends Schema>
+export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   implements ClientTransaction<TSchema>
 {
   readonly location = 'client';
@@ -160,7 +161,7 @@ export class TransactionImpl<TSchema extends Schema>
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query, options);

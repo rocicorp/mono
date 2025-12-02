@@ -18,7 +18,7 @@ import type {NameMapper} from './name-mapper.ts';
 import {clientToServer} from './name-mapper.ts';
 
 export const ANYONE_CAN = [
-  (_: unknown, eb: ExpressionBuilder<Schema, never>) => eb.and(),
+  (_: unknown, eb: ExpressionBuilder<never, Schema>) => eb.and(),
 ];
 
 /**
@@ -41,7 +41,7 @@ export const NOBODY_CAN = [];
 export type Anchor = 'authData' | 'preMutationRow';
 
 export type Queries<TSchema extends Schema> = {
-  [K in keyof TSchema['tables']]: Query<Schema, K & string>;
+  [K in keyof TSchema['tables']]: Query<K & string, TSchema>;
 };
 
 export type PermissionRule<
@@ -50,7 +50,7 @@ export type PermissionRule<
   TTable extends keyof TSchema['tables'] & string,
 > = (
   authData: TAuthDataShape,
-  eb: ExpressionBuilder<TSchema, TTable>,
+  eb: ExpressionBuilder<TTable, TSchema>,
 ) => Condition;
 
 export type AssetPermissions<
@@ -104,7 +104,7 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
 ): Promise<CompiledPermissionsConfig | undefined> {
   const expressionBuilders = {} as Record<
     string,
-    ExpressionBuilder<Schema, string>
+    ExpressionBuilder<string, Schema>
   >;
   for (const name of Object.keys(schema.tables)) {
     expressionBuilders[name] = new StaticQuery(
@@ -122,7 +122,7 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
 function compilePermissions<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   authz: PermissionsConfig<TAuthDataShape, TSchema> | undefined,
-  expressionBuilders: Record<string, ExpressionBuilder<Schema, string>>,
+  expressionBuilders: Record<string, ExpressionBuilder<string, Schema>>,
 ): CompiledPermissionsConfig | undefined {
   if (!authz) {
     return undefined;
@@ -158,7 +158,7 @@ function compileRowConfig<
   clientToServer: NameMapper,
   tableName: TTable,
   rowRules: AssetPermissions<TAuthDataShape, TSchema, TTable> | undefined,
-  expressionBuilder: ExpressionBuilder<TSchema, TTable>,
+  expressionBuilder: ExpressionBuilder<TTable, TSchema>,
 ): CompiledAssetPermissions | undefined {
   if (!rowRules) {
     return undefined;
@@ -212,7 +212,7 @@ function compileRules<
   clientToServer: NameMapper,
   tableName: TTable,
   rules: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined,
-  expressionBuilder: ExpressionBuilder<TSchema, TTable>,
+  expressionBuilder: ExpressionBuilder<TTable, TSchema>,
 ): ['allow', Condition][] | undefined {
   if (!rules) {
     return undefined;
@@ -234,7 +234,7 @@ function compileCellConfig<
   cellRules:
     | Record<string, AssetPermissions<TAuthDataShape, TSchema, TTable>>
     | undefined,
-  expressionBuilder: ExpressionBuilder<TSchema, TTable>,
+  expressionBuilder: ExpressionBuilder<TTable, TSchema>,
 ): Record<string, CompiledAssetPermissions> | undefined {
   if (!cellRules) {
     return undefined;
