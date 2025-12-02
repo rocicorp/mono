@@ -123,9 +123,10 @@ async function benchmarkQuery<
   // const plannedQuery = createQuery(tableName, plannedClientAST);
 
   const start = performance.now();
-  await delegate.run(unplannedQuery as AnyQuery);
+  const x = await delegate.run(unplannedQuery as AnyQuery);
   const unplannedTime = performance.now() - start;
   console.log('Duration unplanned', name, unplannedTime);
+  console.log(x);
 
   // summary(() => {
   //   bench(`unplanned: ${name}`, async () => {

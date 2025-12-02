@@ -233,7 +233,7 @@ export class Statement {
     return new LoggingIterableIterator(
       this.#lc.withContext('method', 'iterate'),
       this.#attrs,
-      this.#stmt.iterate(...params),
+      this.#stmt.iterateWithLazyColumns(...params),
       this.#threshold,
     ) as IterableIterator<T>;
   }

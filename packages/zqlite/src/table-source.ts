@@ -287,12 +287,7 @@ export class TableSource implements Source {
       yield* generateWithStart(
         generateWithOverlay(
           req.start?.row,
-          this.#mapFromSQLiteTypes(
-            this.#columns,
-            rowIterator,
-            sqlAndBindings.text,
-            debug,
-          ),
+          rowIterator,
           req.constraint,
           this.#overlay,
           callingConnectionIndex,
@@ -548,6 +543,9 @@ export function fromSQLiteTypes(
 ): Row {
   const newRow: Writable<Row> = {};
   for (const key of Object.keys(row)) {
+    if (key.startsWith('_')) {
+      continue;
+    }
     const valueType = valueTypes[key];
     if (valueType === undefined) {
       const columnList = Object.keys(valueTypes).sort().join(', ');

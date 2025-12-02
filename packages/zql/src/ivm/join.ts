@@ -310,13 +310,15 @@ export class Join implements Input {
         }
       }
 
+      const constraint = Object.fromEntries(
+        this.#childKey.map((key, i) => [
+          key,
+          parentNodeRow[this.#parentKey[i]],
+        ]),
+      );
+
       const stream = this.#child[method]({
-        constraint: Object.fromEntries(
-          this.#childKey.map((key, i) => [
-            key,
-            parentNodeRow[this.#parentKey[i]],
-          ]),
-        ),
+        constraint,
       });
 
       if (
