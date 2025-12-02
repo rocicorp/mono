@@ -319,14 +319,10 @@ export class Connection {
   }
 }
 
-export type WebSocketLike = Pick<WebSocket, 'readyState'> & {
-  send(data: string, cb?: (err?: Error) => void): void;
-};
-
 // Exported for testing purposes.
 export function send(
   lc: LogContext,
-  ws: WebSocketLike,
+  ws: Pick<WebSocket, 'readyState' | 'send'>,
   data: Downstream,
   callback: ((err?: Error | null) => void) | 'ignore-backpressure',
 ) {
