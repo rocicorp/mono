@@ -12,6 +12,7 @@ const basicErrorKindSchema = v.literalUnion(
   ErrorKind.InvalidPush,
   ErrorKind.MutationRateLimited,
   ErrorKind.MutationFailed,
+  ErrorKind.TransformFailed,
   ErrorKind.Unauthorized,
   ErrorKind.VersionNotSupported,
   ErrorKind.SchemaVersionNotSupported,
@@ -61,3 +62,19 @@ export const errorMessageSchema: v.Type<ErrorMessage> = v.tuple([
 ]);
 
 export type ErrorMessage = ['error', ErrorBody];
+
+/**
+ * Base error class for protocol errors that can be sent to clients.
+ */
+export class ProtocolError extends Error {
+  readonly errorBody: ErrorBody;
+
+  constructor(errorBody: ErrorBody, options?: ErrorOptions) {
+    super(errorBody.message, options);
+    this.errorBody = errorBody;
+  }
+}
+
+export function isProtocolError(error: unknown): error is ProtocolError {
+  return error instanceof ProtocolError;
+}
