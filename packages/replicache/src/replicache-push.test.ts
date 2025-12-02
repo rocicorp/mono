@@ -209,7 +209,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
 
   await createTodo({id: 'id1'});
   await tickAFewTimes(vi);
@@ -218,7 +218,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
 
   rep.pushURL = 'https://diff.com/push';
 
@@ -228,7 +228,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
 
   rep.pushURL = '';
 
@@ -238,7 +238,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
   let pusherCallCount = 0;
 
   // oxlint-disable-next-line require-await
@@ -260,7 +260,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
   pusherCallCount = 0;
 
   rep.pusher = getDefaultPusher(rep);

@@ -9,12 +9,12 @@ import {
   type MockInstance,
   type VitestUtils,
 } from 'vitest';
-import {FetchMocker} from '../../shared/src/fetch-mocker.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import {randomUint64} from '../../shared/src/random-uint64.ts';
 import type {Cookie} from './cookies.ts';
 import type {Store} from './dag/store.ts';
+import {FetchMocker} from './fetch-mocker.ts';
 import type {Hash} from './hash.ts';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
 import {MemStore} from './kv/mem-store.ts';
@@ -228,7 +228,11 @@ export function initReplicacheTesting(): void {
   beforeEach(() => {
     fetchMocker = new FetchMocker(vi);
     // Set up a default response that looks like a valid pull response
-    fetchMocker.default({cookie: null, lastMutationIDChanges: {}, patch: []});
+    fetchMocker.post(undefined, {
+      cookie: null,
+      lastMutationIDChanges: {},
+      patch: [],
+    });
     vi.useFakeTimers({now: 0});
     setupIDBDatabasesStoreForTest();
   });

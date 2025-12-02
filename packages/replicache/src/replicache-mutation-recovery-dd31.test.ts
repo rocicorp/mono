@@ -169,9 +169,9 @@ describe('DD31', () => {
 
     await rep.recoverMutations();
 
-    const pushCalls = fetchMocker.calls(pushURL);
+    const pushCalls = fetchMocker.bodies(pushURL);
     expect(pushCalls.length).toBe(1);
-    expect(pushCalls[0].body).toEqual({
+    expect(pushCalls[0]).toEqual({
       profileID,
       clientGroupID: client1.clientGroupID,
       mutations: [
@@ -208,7 +208,7 @@ describe('DD31', () => {
       schemaVersion: schemaVersionOfClientWPendingMutations,
     });
 
-    const pullCalls = fetchMocker.calls(pullURL);
+    const pullCalls = fetchMocker.bodies(pullURL);
 
     if (pushResponse && pushResponse.error) {
       expect(pullCalls.length).toBe(0);
@@ -221,7 +221,7 @@ describe('DD31', () => {
         pullVersion: PULL_VERSION_DD31,
         schemaVersion: schemaVersionOfClientWPendingMutations,
       };
-      expect(pullCalls[0].body).toEqual(pullReq);
+      expect(pullCalls[0]).toEqual(pullReq);
     }
 
     const updatedClient1 = await withRead(testPerdag, read =>
@@ -444,15 +444,16 @@ describe('DD31', () => {
 
     fetchMocker.reset();
     fetchMocker.post(pushURL, 'ok');
-    fetchMocker.catch(() => {
+    // Any unmatched URL will throw (catch-all)
+    fetchMocker.post(undefined, () => {
       throw new Error('unexpected fetch in test');
     });
 
     await rep.recoverMutations();
 
-    const pushCalls = fetchMocker.calls(pushURL);
+    const pushCalls = fetchMocker.bodies(pushURL);
     expect(pushCalls.length).toBe(1);
-    expect(pushCalls[0].body).toEqual({
+    expect(pushCalls[0]).toEqual({
       profileID,
       clientGroupID: client1.clientGroupID,
       mutations: [
@@ -475,8 +476,7 @@ describe('DD31', () => {
       schemaVersion: schemaVersionOfClientWPendingMutations,
     });
 
-    // Expect no unmatched fetches (only a push request should be sent, no pull)
-    expect(fetchMocker.calls('unmatched').length).toBe(0);
+    // No need for unmatched check - the catch-all handler above would throw on any unexpected fetch
 
     const updatedClient1 = await withRead(testPerdag, read =>
       getClient(client1ID, read),
@@ -545,8 +545,8 @@ describe('DD31', () => {
 
     await rep.recoverMutations();
 
-    expect(fetchMocker.calls(pushURL).length).toBe(0);
-    expect(fetchMocker.calls(pullURL).length).toBe(0);
+    expect(fetchMocker.bodies(pushURL).length).toBe(0);
+    expect(fetchMocker.bodies(pullURL).length).toBe(0);
   });
 
   test('successfully recovering mutations of multiple clients with mix of schema versions and same replicache format version', async () => {
@@ -667,47 +667,39 @@ describe('DD31', () => {
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMocker.reset();
     fetchMocker.post(pushURL, 'ok');
-    fetchMocker.post(
-      pullURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJson = await request.json();
-        assertJSONObject(requestJson);
-        pullRequestJsonBodies.push(requestJson);
-        const {clientGroupID} = requestJson;
-        switch (clientGroupID) {
-          case client1.clientGroupID:
-            return {
-              cookie: 'pull_cookie_1',
-              lastMutationIDChanges: clientGroup1.mutationIDs,
-              patch: [],
-            };
-          case client3.clientGroupID:
-            return {
-              cookie: 'pull_cookie_3',
-              lastMutationIDChanges: clientGroup3.mutationIDs,
-              patch: [],
-            };
-          case client4.clientGroupID:
-            return {
-              cookie: 'pull_cookie_4',
-              lastMutationIDChanges: clientGroup4.mutationIDs,
-              patch: [],
-            };
-          default:
-            throw new Error(`Unexpected pull ${requestJson}`);
-        }
-      },
-    );
+    fetchMocker.post(pullURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pullRequestJsonBodies.push(body);
+      const {clientGroupID} = body;
+      switch (clientGroupID) {
+        case client1.clientGroupID:
+          return {
+            cookie: 'pull_cookie_1',
+            lastMutationIDChanges: clientGroup1.mutationIDs,
+            patch: [],
+          };
+        case client3.clientGroupID:
+          return {
+            cookie: 'pull_cookie_3',
+            lastMutationIDChanges: clientGroup3.mutationIDs,
+            patch: [],
+          };
+        case client4.clientGroupID:
+          return {
+            cookie: 'pull_cookie_4',
+            lastMutationIDChanges: clientGroup4.mutationIDs,
+            patch: [],
+          };
+        default:
+          throw new Error(`Unexpected pull ${body}`);
+      }
+    });
 
     await rep.recoverMutations();
 
-    const pushCalls = fetchMocker.calls(pushURL);
+    const pushCalls = fetchMocker.bodies(pushURL);
     expect(pushCalls.length).toBe(3);
-    expect(pushCalls[0].body).toEqual(
+    expect(pushCalls[0]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client1.clientGroupID,
@@ -716,7 +708,7 @@ describe('DD31', () => {
         schemaVersionOfClients1Thru3AndClientRecoveringMutations,
       ),
     );
-    expect(pushCalls[1].body).toEqual(
+    expect(pushCalls[1]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client3.clientGroupID,
@@ -725,7 +717,7 @@ describe('DD31', () => {
         schemaVersionOfClients1Thru3AndClientRecoveringMutations,
       ),
     );
-    expect(pushCalls[2].body).toEqual(
+    expect(pushCalls[2]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client4.clientGroupID,
@@ -911,52 +903,36 @@ describe('DD31', () => {
     const pushRequestJSONBodies: PushRequestV1[] = [];
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMocker.reset();
-    fetchMocker.post(
-      pushURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJSON = await request.json();
-        assertPushRequestV1(requestJSON);
-        pushRequestJSONBodies.push(requestJSON);
-        if (requestJSON.mutations.find(m => m.clientID === client2ID)) {
-          throw new Error('test error in push');
-        } else {
-          return 'ok';
-        }
-      },
-    );
-    fetchMocker.post(
-      pullURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJson = await request.json();
-        assertJSONObject(requestJson);
-        pullRequestJsonBodies.push(requestJson);
-        const {clientID} = requestJson;
-        switch (clientID) {
-          case client1ID:
-            return {
-              cookie: 'pull_cookie_1',
-              lastMutationIDChanges: clientGroup1.lastServerAckdMutationIDs,
-              patch: [],
-            };
-          case client3ID:
-            return {
-              cookie: 'pull_cookie_3',
-              lastMutationIDChanges: clientGroup3.lastServerAckdMutationIDs,
-              patch: [],
-            };
-          default:
-            throw new Error(`Unexpected pull ${requestJson}`);
-        }
-      },
-    );
+    fetchMocker.post(pushURL, (_url: string, body: unknown) => {
+      assertPushRequestV1(body);
+      pushRequestJSONBodies.push(body);
+      if (body.mutations.find(m => m.clientID === client2ID)) {
+        throw new Error('test error in push');
+      } else {
+        return 'ok';
+      }
+    });
+    fetchMocker.post(pullURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pullRequestJsonBodies.push(body);
+      const {clientID} = body;
+      switch (clientID) {
+        case client1ID:
+          return {
+            cookie: 'pull_cookie_1',
+            lastMutationIDChanges: clientGroup1.lastServerAckdMutationIDs,
+            patch: [],
+          };
+        case client3ID:
+          return {
+            cookie: 'pull_cookie_3',
+            lastMutationIDChanges: clientGroup3.lastServerAckdMutationIDs,
+            patch: [],
+          };
+        default:
+          throw new Error(`Unexpected pull ${body}`);
+      }
+    });
 
     await rep.recoverMutations();
 
@@ -1117,35 +1093,27 @@ describe('DD31', () => {
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMocker.reset();
     fetchMocker.post(pushURL, 'ok');
-    fetchMocker.post(
-      pullURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJson = await request.json();
-        assertJSONObject(requestJson);
-        pullRequestJsonBodies.push(requestJson);
-        const {clientID} = requestJson;
-        switch (clientID) {
-          case client1ID:
-            return {
-              cookie: 'pull_cookie_1',
-              lastMutationIDChanges: clientGroup1.lastServerAckdMutationIDs,
-              patch: [],
-            };
-          case client3ID:
-            return {
-              cookie: 'pull_cookie_3',
-              lastMutationIDChanges: clientGroup3.lastServerAckdMutationIDs,
-              patch: [],
-            };
-          default:
-            throw new Error(`Unexpected pull ${requestJson}`);
-        }
-      },
-    );
+    fetchMocker.post(pullURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pullRequestJsonBodies.push(body);
+      const {clientID} = body;
+      switch (clientID) {
+        case client1ID:
+          return {
+            cookie: 'pull_cookie_1',
+            lastMutationIDChanges: clientGroup1.lastServerAckdMutationIDs,
+            patch: [],
+          };
+        case client3ID:
+          return {
+            cookie: 'pull_cookie_3',
+            lastMutationIDChanges: clientGroup3.lastServerAckdMutationIDs,
+            patch: [],
+          };
+        default:
+          throw new Error(`Unexpected pull ${body}`);
+      }
+    });
 
     const {write} = LazyStore.prototype;
     vi.spyOn(LazyStore.prototype, 'write')
@@ -1172,9 +1140,9 @@ describe('DD31', () => {
       'Test dag.LazyStore.withWrite error',
     ]);
 
-    const pushCalls = fetchMocker.calls(pushURL);
+    const pushCalls = fetchMocker.bodies(pushURL);
     expect(pushCalls.length).toBe(2);
-    expect(pushCalls[0].body).toEqual(
+    expect(pushCalls[0]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client1.clientGroupID,
@@ -1183,7 +1151,7 @@ describe('DD31', () => {
         schemaVersion,
       ),
     );
-    expect(pushCalls[1].body).toEqual(
+    expect(pushCalls[1]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client3.clientGroupID,
@@ -1315,34 +1283,26 @@ describe('DD31', () => {
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMocker.reset();
     fetchMocker.post(pushURL, 'ok');
-    fetchMocker.post(
-      pullURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJson = await request.json();
-        assertJSONObject(requestJson);
-        pullRequestJsonBodies.push(requestJson);
-        const {clientGroupID} = requestJson;
-        switch (clientGroupID) {
-          case client2.clientGroupID: {
-            const pullResponse: PullResponseV1 = {
-              cookie: 'pull_cookie_2',
-              lastMutationIDChanges: {
-                [client2ID]: clientGroup2.mutationIDs[client2ID] ?? 0,
-              },
-              patch: [],
-            };
+    fetchMocker.post(pullURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pullRequestJsonBodies.push(body);
+      const {clientGroupID} = body;
+      switch (clientGroupID) {
+        case client2.clientGroupID: {
+          const pullResponse: PullResponseV1 = {
+            cookie: 'pull_cookie_2',
+            lastMutationIDChanges: {
+              [client2ID]: clientGroup2.mutationIDs[client2ID] ?? 0,
+            },
+            patch: [],
+          };
 
-            return pullResponse;
-          }
-          default:
-            throw new Error(`Unexpected pull ${requestJson}`);
+          return pullResponse;
         }
-      },
-    );
+        default:
+          throw new Error(`Unexpected pull ${body}`);
+      }
+    });
 
     const testErrorMsg = 'Test dag.StoreImpl.read error';
     const {read} = StoreImpl.prototype;
@@ -1369,9 +1329,9 @@ describe('DD31', () => {
       'Test dag.StoreImpl.read error',
     ]);
 
-    const pushCalls = fetchMocker.calls(pushURL);
+    const pushCalls = fetchMocker.bodies(pushURL);
     expect(pushCalls.length).toBe(1);
-    expect(pushCalls[0].body).toEqual(
+    expect(pushCalls[0]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client2.clientGroupID,
@@ -1487,32 +1447,24 @@ describe('DD31', () => {
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMocker.reset();
     fetchMocker.post(pushURL, 'ok');
-    fetchMocker.post(
-      pullURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJson = await request.json();
-        assertJSONObject(requestJson);
-        pullRequestJsonBodies.push(requestJson);
-        const {clientID} = requestJson;
-        const resp: PullResponseV1 = {
-          cookie: 'pull_cookie_1',
-          lastMutationIDChanges: {
-            [client1ID]: 0,
-          },
-          patch: [],
-        };
-        switch (clientID) {
-          case client1ID:
-            return resp;
-          default:
-            throw new Error(`Unexpected pull ${requestJson}`);
-        }
-      },
-    );
+    fetchMocker.post(pullURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pullRequestJsonBodies.push(body);
+      const {clientID} = body;
+      const resp: PullResponseV1 = {
+        cookie: 'pull_cookie_1',
+        lastMutationIDChanges: {
+          [client1ID]: 0,
+        },
+        patch: [],
+      };
+      switch (clientID) {
+        case client1ID:
+          return resp;
+        default:
+          throw new Error(`Unexpected pull ${body}`);
+      }
+    });
 
     // At the end of recovering client1 close the recovering Replicache instance
     const {close} = LazyStore.prototype;
@@ -1526,9 +1478,9 @@ describe('DD31', () => {
 
     await rep.recoverMutations();
 
-    const pushCalls = fetchMocker.calls(pushURL);
+    const pushCalls = fetchMocker.bodies(pushURL);
     expect(pushCalls.length).toBe(1);
-    expect(pushCalls[0].body).toEqual(
+    expect(pushCalls[0]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client1.clientGroupID,
@@ -1666,32 +1618,16 @@ describe('DD31', () => {
     const pullRequestJSONBodies: JSONObject[] = [];
     const pushRequestJSONBodies: JSONObject[] = [];
     fetchMocker.reset();
-    fetchMocker.post(
-      pushURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJSON = await request.json();
-        assertJSONObject(requestJSON);
-        pushRequestJSONBodies.push(requestJSON);
-        throw new Error();
-      },
-    );
-    fetchMocker.post(
-      pullURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJSON = await request.json();
-        assertJSONObject(requestJSON);
-        pullRequestJSONBodies.push(requestJSON);
-        throw new Error();
-      },
-    );
+    fetchMocker.post(pushURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pushRequestJSONBodies.push(body);
+      throw new Error();
+    });
+    fetchMocker.post(pullURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pullRequestJSONBodies.push(body);
+      throw new Error();
+    });
 
     await rep.recoverMutations();
 
@@ -1765,32 +1701,16 @@ describe('DD31', () => {
     const pullRequestJSONBodies: JSONObject[] = [];
     const pushRequestJSONBodies: JSONObject[] = [];
     fetchMocker.reset();
-    fetchMocker.post(
-      pushURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJSON = await request.json();
-        assertJSONObject(requestJSON);
-        pushRequestJSONBodies.push(requestJSON);
-        return 'ok';
-      },
-    );
-    fetchMocker.post(
-      pullURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJSON = await request.json();
-        assertJSONObject(requestJSON);
-        pullRequestJSONBodies.push(requestJSON);
-        throw new Error();
-      },
-    );
+    fetchMocker.post(pushURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pushRequestJSONBodies.push(body);
+      return 'ok';
+    });
+    fetchMocker.post(pullURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pullRequestJSONBodies.push(body);
+      throw new Error();
+    });
 
     await rep.recoverMutations();
 
@@ -1919,36 +1839,20 @@ describe('DD31', () => {
     const pullRequestJSONBodies: JSONObject[] = [];
     const pushRequestJSONBodies: JSONObject[] = [];
     fetchMocker.reset();
-    fetchMocker.post(
-      pushURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJSON = await request.json();
-        assertJSONObject(requestJSON);
-        pushRequestJSONBodies.push(requestJSON);
-        return 'ok';
-      },
-    );
-    fetchMocker.post(
-      pullURL,
-      async (
-        _url: string,
-        _options: RequestInit | undefined,
-        request: Request,
-      ) => {
-        const requestJSON = await request.json();
-        assertJSONObject(requestJSON);
-        pullRequestJSONBodies.push(requestJSON);
-        return {
-          cookie: 'c3',
-          lastMutationIDChanges: {[client2ID]: 2},
-          patch: [],
-        };
-      },
-    );
+    fetchMocker.post(pushURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pushRequestJSONBodies.push(body);
+      return 'ok';
+    });
+    fetchMocker.post(pullURL, (_url: string, body: unknown) => {
+      assertJSONObject(body);
+      pullRequestJSONBodies.push(body);
+      return {
+        cookie: 'c3',
+        lastMutationIDChanges: {[client2ID]: 2},
+        patch: [],
+      };
+    });
 
     await rep.recoverMutations();
 

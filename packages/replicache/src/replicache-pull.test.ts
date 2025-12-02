@@ -248,7 +248,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
 
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
@@ -267,7 +267,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
 
   rep.pullURL = '';
 
@@ -277,7 +277,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
 
   let pullerCallCount = 0;
 
@@ -309,7 +309,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   await tickAFewTimes(vi);
   fetchMocker.reset();
-  fetchMocker.postAny({});
+  fetchMocker.post(undefined, {});
   pullerCallCount = 0;
 
   rep.puller = getDefaultPuller(rep);
