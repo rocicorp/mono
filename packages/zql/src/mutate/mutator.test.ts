@@ -4,6 +4,7 @@ import {describe, expect, expectTypeOf, test, vi} from 'vitest';
 import * as z from 'zod';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Transaction} from './custom.ts';
+import {defineMutators} from './mutator-registry.ts';
 import {
   defineMutator,
   defineMutatorWithType,
@@ -250,5 +251,73 @@ describe('Type Tests', () => {
     expectTypeOf(def).toEqualTypeOf<
       MutatorDefinition<Schema, Context, undefined, undefined, unknown>
     >();
+  });
+});
+
+describe('Mutator callable type tests', () => {
+  test('Mutator without args - callable with 0 arguments', () => {
+    const mutators = defineMutators({
+      noArgs: defineMutator(({tx}) => {
+        void tx;
+        return Promise.resolve();
+      }),
+    } as const);
+
+    // Type test: noArgs() should be callable with no arguments
+    expectTypeOf(mutators.noArgs).toBeCallableWith();
+
+    // The result should be a MutationRequest with undefined args
+    const mr = mutators.noArgs();
+    // oxlint-disable-next-line no-explicit-any
+    expectTypeOf(mr.args).toEqualTypeOf<any>();
+  });
+
+  test('Mutator with required args - requires argument', () => {
+    const mutators = defineMutators({
+      withArgs: defineMutator(
+        ({tx, args}: {args: {id: string; title: string}; tx: unknown}) => {
+          void tx;
+          void args;
+          return Promise.resolve();
+        },
+      ),
+    } as const);
+
+    // Type test: withArgs should require an argument
+    expectTypeOf(mutators.withArgs).toBeCallableWith({
+      id: 'test',
+      title: 'test',
+    });
+
+    // @ts-expect-error - should not be callable without args
+    mutators.withArgs();
+
+    const mr = mutators.withArgs({id: '1', title: 'test'});
+    expectTypeOf(mr.args).toEqualTypeOf<{id: string; title: string}>();
+  });
+
+  test('Mutator with optional args - callable with or without argument', () => {
+    const mutators = defineMutators({
+      optionalArgs: defineMutator(
+        ({tx, args}: {args: {id: string} | undefined; tx: unknown}) => {
+          void tx;
+          void args;
+          return Promise.resolve();
+        },
+      ),
+    } as const);
+
+    // Type test: optionalArgs should be callable with no arguments
+    expectTypeOf(mutators.optionalArgs).toBeCallableWith();
+
+    // Type test: optionalArgs should also be callable with an argument
+    expectTypeOf(mutators.optionalArgs).toBeCallableWith({id: 'test'});
+
+    // Both should work
+    const mr1 = mutators.optionalArgs();
+    const mr2 = mutators.optionalArgs({id: 'test'});
+
+    expectTypeOf(mr1.args).toEqualTypeOf<{id: string} | undefined>();
+    expectTypeOf(mr2.args).toEqualTypeOf<{id: string} | undefined>();
   });
 });

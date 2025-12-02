@@ -355,7 +355,7 @@ function createMutator<
   const mutator = (
     args: ArgsInput,
   ): MutationRequest<S, C, ArgsInput, Transaction<S, TWrappedTransaction>> => ({
-    mutator: mutator as Mutator<
+    mutator: mutator as unknown as Mutator<
       S,
       C,
       ArgsInput,
@@ -366,7 +366,7 @@ function createMutator<
   mutator.mutatorName = name;
   mutator.fn = fn;
 
-  return mutator as Mutator<
+  return mutator as unknown as Mutator<
     S,
     C,
     ArgsInput,

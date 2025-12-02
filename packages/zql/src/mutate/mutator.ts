@@ -203,9 +203,7 @@ export type Mutator<
   TContext,
   TArgsInput extends ReadonlyJSONValue | undefined,
   TWrappedTransaction = unknown,
-> = ((
-  args: TArgsInput,
-) => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>) & {
+> = MutatorCallable<TSchema, TContext, TArgsInput, TWrappedTransaction> & {
   readonly mutatorName: string;
   /**
    * Execute the mutation. Args are ReadonlyJSONValue because this is called
@@ -221,6 +219,25 @@ export type Mutator<
     tx: AnyTransaction;
   }) => Promise<void>;
 };
+
+// Helper type for the callable part of Mutator
+// When TArgsInput is undefined, the function is callable with 0 args
+// When TArgsInput includes undefined (optional), args is optional
+// Otherwise, args is required
+type MutatorCallable<
+  TSchema extends Schema,
+  TContext,
+  TArgsInput extends ReadonlyJSONValue | undefined,
+  TWrappedTransaction,
+> = [TArgsInput] extends [undefined]
+  ? () => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>
+  : undefined extends TArgsInput
+    ? (
+        args?: TArgsInput,
+      ) => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>
+    : (
+        args: TArgsInput,
+      ) => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>;
 
 // oxlint-disable-next-line no-explicit-any
 export type AnyMutator = Mutator<Schema, any, any, any>;
