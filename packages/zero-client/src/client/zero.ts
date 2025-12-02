@@ -78,7 +78,6 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {
   DefaultContext,
-  DefaultMutators,
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -304,10 +303,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
 export class Zero<
   const S extends Schema = DefaultSchema,
-  MD extends
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = DefaultMutators,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   C = DefaultContext,
 > {
   readonly version = version;

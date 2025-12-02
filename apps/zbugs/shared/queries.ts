@@ -299,12 +299,6 @@ export const queries = defineQueries({
   ),
 });
 
-declare module '@rocicorp/zero' {
-  interface DefaultTypes {
-    queries: typeof queries;
-  }
-}
-
 export type ListContext = {
   readonly href: string;
   readonly title: string;

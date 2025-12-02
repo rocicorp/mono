@@ -30,7 +30,6 @@ import type {
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
-import type {DefaultMutators} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
@@ -103,10 +102,7 @@ export class MockSocket extends EventTarget {
 
 export class TestZero<
   const S extends Schema,
-  MD extends
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = DefaultMutators,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   C = unknown,
 > extends Zero<S, MD, C> {
   pokeIDCounter = 0;
@@ -315,10 +311,7 @@ let testZeroCounter = 0;
 
 export function zeroForTest<
   const S extends Schema,
-  MD extends
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = DefaultMutators,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   C = unknown,
 >(
   options: Partial<ZeroOptions<S, MD, C>> = {},

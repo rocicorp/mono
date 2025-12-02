@@ -2,7 +2,6 @@ import type {CustomMutatorDefs} from '../../../zero-client/src/client/custom.ts'
 import type {Zero} from '../../../zero-client/src/client/zero.ts';
 import type {
   DefaultContext,
-  DefaultMutators,
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -11,10 +10,7 @@ import {MarkIcon} from './mark-icon.tsx';
 
 export default function Inspector<
   S extends Schema = DefaultSchema,
-  MD extends
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = DefaultMutators,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >({zero, onClose}: {zero: Zero<S, MD, Context>; onClose: () => void}) {
   return (

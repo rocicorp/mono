@@ -15,7 +15,6 @@ import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {
   DefaultContext,
-  DefaultMutators,
   DefaultSchema,
 } from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
@@ -30,10 +29,7 @@ const NO_AUTH_SET = Symbol();
 
 export function createZero<
   S extends Schema = DefaultSchema,
-  MD extends
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = DefaultMutators,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >(options: ZeroOptions<S, MD, Context>): Zero<S, MD, Context> {
   const opts = {
@@ -45,10 +41,7 @@ export function createZero<
 
 export function useZero<
   S extends Schema = DefaultSchema,
-  MD extends
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = DefaultMutators,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >(): () => Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
@@ -61,10 +54,7 @@ export function useZero<
 
 export function ZeroProvider<
   S extends Schema = DefaultSchema,
-  MD extends
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = DefaultMutators,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >(
   props: {

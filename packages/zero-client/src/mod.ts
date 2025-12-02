@@ -98,8 +98,6 @@ export type {
 export type {
   DefaultContext,
   DefaultDbProvider,
-  DefaultMutators,
-  DefaultQueries,
   DefaultSchema,
   DefaultTypes,
   DefaultWrappedTransaction,

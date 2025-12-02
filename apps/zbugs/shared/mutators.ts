@@ -415,9 +415,3 @@ async function updateIssueNotification(
     });
   }
 }
-
-declare module '@rocicorp/zero' {
-  interface DefaultTypes {
-    mutators: typeof mutators;
-  }
-}

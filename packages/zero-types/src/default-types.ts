@@ -11,7 +11,6 @@ import type {Schema} from './schema.ts';
  * declare module '@rocicorp/zero' {
  *   interface DefaultTypes {
  *     schema: typeof schema;
- *     queries: typeof queries;
  *     context: Context;
  *     dbProvider: typeof dbProvider;
  *   }
@@ -25,18 +24,6 @@ export type DefaultSchema<TRegister = DefaultTypes> = TRegister extends {
 }
   ? S
   : Schema;
-
-export type DefaultQueries<TRegister = DefaultTypes> = TRegister extends {
-  queries: infer Q;
-}
-  ? Q
-  : undefined;
-
-export type DefaultMutators<TRegister = DefaultTypes> = TRegister extends {
-  mutators: infer M;
-}
-  ? M
-  : undefined;
 
 export type DefaultContext<TRegister = DefaultTypes> = TRegister extends {
   context: infer C;

@@ -16,7 +16,6 @@ import type {
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {
   DefaultContext,
-  DefaultMutators,
   DefaultSchema,
 } from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
@@ -123,7 +122,7 @@ export function useSuspenseQuery<
     } = options);
   }
 
-  const zero = useZero<TSchema, DefaultMutators, TContext>();
+  const zero = useZero<TSchema, undefined, TContext>();
 
   const view = viewStore.getView(zero, query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore

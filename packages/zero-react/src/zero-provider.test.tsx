@@ -3,7 +3,7 @@ import {createRoot, type Root} from 'react-dom/client';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import {useZero, ZeroProvider} from './zero-provider.tsx';
+import {createUseZero, useZero, ZeroProvider} from './zero-provider.tsx';
 
 // Mock the Zero constructor
 vi.mock('../../zero-client/src/client/zero.ts', () => ({
@@ -54,6 +54,32 @@ describe('useZero', () => {
 
     function TestComponent() {
       capturedZero = useZero<Schema>();
+      return <div>test</div>;
+    }
+
+    const root = renderWithRoot(
+      <ZeroProvider zero={mockZero}>
+        <TestComponent />
+      </ZeroProvider>,
+    );
+
+    expect(capturedZero).toBe(mockZero);
+
+    act(() => {
+      root.unmount();
+    });
+  });
+});
+
+describe('createUseZero', () => {
+  test('creates a typed version of useZero', () => {
+    const mockZero = createMockZero();
+    let capturedZero: Zero<Schema> | undefined;
+
+    const useTypedZero = createUseZero<Schema>();
+
+    function TestComponent() {
+      capturedZero = useTypedZero();
       return <div>test</div>;
     }
 

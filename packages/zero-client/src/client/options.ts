@@ -3,7 +3,6 @@ import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {
   DefaultContext,
-  DefaultMutators,
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -16,10 +15,7 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
  */
 export interface ZeroOptions<
   S extends Schema = DefaultSchema,
-  MD extends
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = DefaultMutators,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   C = DefaultContext,
 > {
   /**

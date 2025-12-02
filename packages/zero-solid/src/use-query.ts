@@ -12,7 +12,6 @@ import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
 import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {
   DefaultContext,
-  DefaultMutators,
   DefaultSchema,
 } from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
@@ -80,7 +79,7 @@ export function useQuery<
     setRefetchKey(k => k + 1);
   };
 
-  const zero = useZero<TSchema, DefaultMutators, TContext>();
+  const zero = useZero<TSchema, undefined, TContext>();
 
   const query = createMemo(() => querySignal().toQuery(zero().context));
   const bindings = createMemo(() => bindingsForZero(zero()));
