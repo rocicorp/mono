@@ -1,10 +1,5 @@
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
-import type {
-  Database,
-  TransactionProviderHooks,
-  TransactionProviderInput,
-} from '../../zero-types/src/database.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {
@@ -21,6 +16,11 @@ import type {
 import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import type {TransactionImpl} from './custom.ts';
 import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
+import type {
+  Database,
+  TransactionProviderHooks,
+  TransactionProviderInput,
+} from './process-mutations.ts';
 
 /**
  * Implements a Database for use with PushProcessor that is backed by Postgres.

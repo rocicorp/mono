@@ -1,5 +1,7 @@
-import type {Database} from './database.ts';
+import type {BaseDatabase} from './database.ts';
 import type {Schema} from './schema.ts';
+
+// oxlint-disable no-explicit-any
 
 /**
  * Applications can augment this interface to register their Zero types via
@@ -43,14 +45,18 @@ export type DefaultContext<TRegister = DefaultTypes> = TRegister extends {
   : unknown;
 
 export type DefaultDbProvider<TRegister = DefaultTypes> = TRegister extends {
-  dbProvider: infer D extends Database<unknown>;
+  dbProvider: infer D extends BaseDatabase<any, any, any>;
 }
   ? D
   : unknown;
 
 export type DefaultWrappedTransaction<TRegister = DefaultTypes> =
-  DefaultDbProvider<TRegister> extends Database<infer T>
-    ? T extends {
+  DefaultDbProvider<TRegister> extends BaseDatabase<
+    infer TTransaction,
+    any,
+    any
+  >
+    ? TTransaction extends {
         dbTransaction: infer TDbTransaction;
       }
       ? TDbTransaction extends {

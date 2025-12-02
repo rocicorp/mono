@@ -24,17 +24,48 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import type {
-  Database,
-  TransactionProviderHooks,
-  TransactionProviderInput,
-} from '../../zero-types/src/database.ts';
+import type {BaseDatabase} from '../../zero-types/src/database.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
 
-export type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
+/**
+ * Hooks invoked by the PushProcessor while executing a mutation inside a
+ * database transaction.
+ *
+ * Implementations must run these operations inside the same transaction as the
+ * mutator callback so that lastMutationID updates, mutation result persistence,
+ * and user writes commit or roll back together.
+ */
+export interface TransactionProviderHooks {
+  /**
+   * Increments the client's lastMutationID and returns the updated value.
+   */
+  updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
+
+  /**
+   * Persists the result of a mutation so it can be sent to the client via
+   * replication.
+   */
+  writeMutationResult: (result: MutationResponse) => Promise<void>;
+}
+
+export interface TransactionProviderInput {
+  upstreamSchema: string;
+  clientGroupID: string;
+  clientID: string;
+  mutationID: number;
+}
+
+export type Database<TTransaction> = BaseDatabase<
+  TTransaction,
+  TransactionProviderHooks,
+  TransactionProviderInput
+>;
+
+export type ExtractTransactionType<D> =
+  D extends Database<infer TTransaction> ? TTransaction : never;
 export type Params = v.Infer<typeof pushParamsSchema>;
 
 export type TransactFn<
