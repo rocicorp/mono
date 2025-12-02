@@ -631,7 +631,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } else {
         // Validate that subsequent clients have compatible parameters
         if (this.userQueryURL !== userQueryURL) {
-          this.#lc.warn?.(
+          this.#lc.error?.(
             'Client provided different query parameters than client group',
             {
               clientID,
@@ -724,11 +724,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: DeleteClientsMessage,
   ): Promise<void> {
-    await this.#runInLockForClient(
-      ctx,
-      [msg[0], {deleted: msg[1]}],
-      this.#handleConfigUpdate,
-    );
+    try {
+      await this.#runInLockForClient(
+        ctx,
+        [msg[0], {deleted: msg[1]}],
+        this.#handleConfigUpdate,
+      );
+    } catch (e) {
+      this.#lc.error?.('deleteClients failed', e);
+    }
   }
 
   #getTTLClock(now: number): TTLClock {
@@ -1204,7 +1208,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     for (const q of transformedCustomQueries) {
       if ('error' in q) {
         const errorMessage = `Error transforming custom query ${q.name}: ${q.error}${q.details ? ` ${JSON.stringify(q.details)}` : ''}`;
-        lc.warn?.(errorMessage, q);
+        lc.error?.(errorMessage, q);
         appQueryErrors.push(q);
         continue;
       }
@@ -1381,7 +1385,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         ) {
           // TransformFailedBody indicates an HTTP or infrastructure error.
           // Throw to disconnect the client without modifying pipelines.
-          throw new ProtocolErrorWithLevel(transformedCustomQueries);
+          throw new ProtocolErrorWithLevel(
+            transformedCustomQueries,
+            getLogLevel(transformedCustomQueries.kind),
+          );
         }
 
         // Process the transformed queries and track which ones succeeded.
