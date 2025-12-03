@@ -12,7 +12,6 @@ import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 import {schema, builder} from './schema.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {bench, run, summary} from 'mitata';
 
 const dbPath = process.env.ZBUGS_REPLICA_PATH;
 
@@ -92,7 +91,7 @@ function createQuery<TTable extends keyof typeof schema.tables & string>(
 // Helper to benchmark planned vs unplanned
 async function benchmarkQuery<
   TTable extends keyof typeof schema.tables & string,
->(name: string, query: AnyQuery) {
+>(_name: string, query: AnyQuery) {
   const unplannedAST = asQueryInternals(query).ast;
 
   // const mappedAST = mapAST(unplannedAST, clientToServerMapper);

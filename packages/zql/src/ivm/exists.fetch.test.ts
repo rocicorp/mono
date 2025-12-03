@@ -1475,7 +1475,6 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
     filterInput =>
       new Exists(
         filterInput,
-        existsStorage,
         reverse ? 'from_' + t.join.relationshipName : t.join.relationshipName,
         reverse ? t.join.childKey : t.join.parentKey,
         t.existsType,

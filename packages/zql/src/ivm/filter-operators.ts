@@ -30,9 +30,12 @@ export interface FilterInput extends InputBase {
 }
 
 export interface FilterOutput extends Output {
-  open(): void;
+  // Lets the operator know that we're in a loop of filtering
+  // nodes. E.g., so the operator can cache results for the
+  // duration of the loop.
+  beginFilter(): void;
   filter(node: Node, cleanup: boolean): boolean;
-  close(): void;
+  endFilter(): void;
 }
 
 export interface FilterOperator extends FilterInput, FilterOutput {}
@@ -51,8 +54,8 @@ export const throwFilterOutput: FilterOutput = {
     throw new Error('Output not set');
   },
 
-  open() {},
-  close() {},
+  beginFilter() {},
+  endFilter() {},
 };
 
 export class FilterStart implements FilterInput, Output {
@@ -81,13 +84,13 @@ export class FilterStart implements FilterInput, Output {
   }
 
   *fetch(req: FetchRequest): Stream<Node> {
-    this.#output.open();
+    this.#output.beginFilter();
     for (const node of this.#input.fetch(req)) {
       if (this.#output.filter(node, false)) {
         yield node;
       }
     }
-    this.#output.close();
+    this.#output.endFilter();
   }
 
   *cleanup(req: FetchRequest): Stream<Node> {
@@ -119,8 +122,8 @@ export class FilterEnd implements Input, FilterOutput {
     }
   }
 
-  open() {}
-  close() {}
+  beginFilter() {}
+  endFilter() {}
 
   *cleanup(req: FetchRequest): Stream<Node> {
     for (const node of this.#start.cleanup(req)) {
