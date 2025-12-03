@@ -37,11 +37,7 @@ const makeUserMutators = (create: ReturnType<typeof defineUserMutator>) =>
   defineMutators({user: {create}} satisfies MutatorDefinitions<
     Schema,
     unknown
-  >) as MutatorRegistry<
-    Schema,
-    unknown,
-    {readonly user: {readonly create: typeof create}}
-  >;
+  >) as MutatorRegistry<{readonly user: {readonly create: typeof create}}>;
 
 describe('zero.mutate(mr) with MutationRequest', () => {
   test('can call mutate with a MutationRequest', async () => {
