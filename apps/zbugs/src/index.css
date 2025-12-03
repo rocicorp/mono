@@ -1435,8 +1435,8 @@ textarea.autoResize {
     top: 6rem;
     left: 0;
     width: 100%;
-    padding: 0 0 0 2rem;
-    background-color: transparent;
+    padding: 0 0 2rem 2rem;
+    background-color: rgba(0, 0, 0, 1);
     z-index: var(--z-index-primary-nav);
     flex-direction: row;
     font-size: var(--typo-label-size);
@@ -1578,8 +1578,8 @@ textarea.autoResize {
   }
 
   .section-tabs {
-    top: 5.5rem;
-    padding: 0 0 0 1.5rem;
+    top: 5rem;
+    padding: 0.5rem 0 1.5rem 1.5rem;
   }
 
   .app-container {
