@@ -2,7 +2,6 @@ import type {SQLQuery} from '@databases/sql';
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
-import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import type {Writable} from '../../shared/src/writable.ts';
@@ -52,8 +51,6 @@ type Statements = {
   readonly checkExists: Statement;
   readonly getExisting: Statement;
 };
-
-let eventCount = 0;
 
 /**
  * A source that is backed by a SQLite table.
@@ -335,15 +332,7 @@ export class TableSource implements Source {
     let result;
     try {
       do {
-        result = timeSampled(
-          this.#lc,
-          ++eventCount,
-          this.#logConfig.ivmSampling,
-          () => rowIterator.next(),
-          this.#logConfig.slowRowThreshold,
-          () =>
-            `table-source.next took too long for ${query}. Are you missing an index?`,
-        );
+        result = rowIterator.next();
         if (result.done) {
           break;
         }
@@ -541,12 +530,14 @@ export function toSQLiteTypeName(type: ValueType) {
   }
 }
 
+/**
+ * MUTATES ROWS IN PLACE
+ */
 export function fromSQLiteTypes(
   valueTypes: Record<string, SchemaValue>,
-  row: Row,
+  row: Writable<Row>,
   tableName: string,
 ): Row {
-  const newRow: Writable<Row> = {};
   for (const key of Object.keys(row)) {
     const valueType = valueTypes[key];
     if (valueType === undefined) {
@@ -555,9 +546,9 @@ export function fromSQLiteTypes(
         `Invalid column "${key}" for table "${tableName}". Synced columns include ${columnList}`,
       );
     }
-    newRow[key] = fromSQLiteType(valueType.type, row[key], key, tableName);
+    row[key] = fromSQLiteType(valueType.type, row[key], key, tableName);
   }
-  return newRow;
+  return row;
 }
 
 function fromSQLiteType(
