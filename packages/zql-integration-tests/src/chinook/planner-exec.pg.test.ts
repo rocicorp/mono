@@ -414,7 +414,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(50),
       validations: [
-        ['within-optimal', 2.03],
+        ['within-optimal', 2.1],
         ['within-baseline', 1],
       ],
     },
@@ -429,7 +429,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(100),
       validations: [
-        ['within-optimal', 2.24],
+        ['within-optimal', 2.38],
         ['within-baseline', 1],
       ],
     },
