@@ -253,7 +253,7 @@ export class TestZero<
   }
 
   async triggerGotQueriesPatch(
-    q: Query<S, keyof S['tables'] & string>,
+    q: Query<keyof S['tables'] & string, S>,
   ): Promise<void> {
     await this.triggerPoke(null, '1', {
       gotQueriesPatch: [

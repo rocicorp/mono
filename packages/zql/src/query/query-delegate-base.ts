@@ -49,23 +49,23 @@ export abstract class QueryDelegateBase implements QueryDelegate {
    * Override if you need custom materialization behavior.
    */
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
 
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TTable, TSchema, TReturn>,
+    factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -73,24 +73,24 @@ export abstract class QueryDelegateBase implements QueryDelegate {
    * Materialize a query into a custom view using a provided factory function.
    */
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TTable, TSchema, TReturn>,
+    factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TTable, TSchema, TReturn>,
+    factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T {
     return materializeImpl(query, this, factory, options);
@@ -101,11 +101,11 @@ export abstract class QueryDelegateBase implements QueryDelegate {
    * Override if you need custom query execution (e.g., TestPGQueryDelegate).
    */
   run<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return runImpl(query, this, options);
@@ -116,11 +116,11 @@ export abstract class QueryDelegateBase implements QueryDelegate {
    * Override if you need custom preload behavior.
    */
   preload<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;

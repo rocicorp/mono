@@ -20,7 +20,7 @@ const lc = createSilentLogContext();
 let pg: PostgresDB;
 let sqlite: Database;
 type Schema = typeof schema;
-let issueQuery: Query<Schema, 'issue'>;
+let issueQuery: Query<'issue', Schema>;
 let queryDelegate: QueryDelegate;
 
 beforeAll(async () => {

@@ -36,6 +36,8 @@ const SHARD_ID = {
   shardNum: 123,
 } satisfies ShardID;
 
+const STARTUP_DELAY_KEEPALIVES = 3;
+
 describe('change-streamer/http', () => {
   let lc: LogContext;
   let changeDB: PostgresDB;
@@ -46,6 +48,8 @@ describe('change-streamer/http', () => {
   >;
   let snapshotFn: MockedFunction<(id: string) => Subscription<SnapshotMessage>>;
   let endReservationFn: MockedFunction<(id: string) => void>;
+  let runFn: MockedFunction<() => Promise<void>>;
+  let stopFn: MockedFunction<() => Promise<void>>;
 
   let serverAddress: string;
   let dispatcherAddress: string;
@@ -75,6 +79,8 @@ describe('change-streamer/http', () => {
     subscribeFn = vi.fn();
     snapshotFn = vi.fn();
     endReservationFn = vi.fn();
+    runFn = vi.fn();
+    stopFn = vi.fn();
 
     const [parent, sender] = inProcChannel();
 
@@ -89,14 +95,24 @@ describe('change-streamer/http', () => {
       dispatcher.server,
     );
 
+    const service = resolver();
+
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
     const server = new ChangeStreamerHttpServer(
       lc,
       createTestConfig(),
-      {port: 0},
+      {port: 0, startupDelayMs: 10000, startupDelayKeepalives: 3},
       parent,
-      {subscribe: subscribeFn.mockResolvedValue(downstream)},
+      {
+        id: 'change-streamer',
+        subscribe: subscribeFn.mockResolvedValue(downstream),
+        run: runFn.mockImplementation(() => service.promise),
+        stop: stopFn.mockImplementation(() => {
+          service.resolve();
+          return service.promise;
+        }),
+      },
       {
         startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
         endReservation: endReservationFn,
@@ -137,12 +153,25 @@ describe('change-streamer/http', () => {
 
   test('health checks and keepalives', async () => {
     const [parent] = inProcChannel();
+    const service = resolver();
     const server = new ChangeStreamerHttpServer(
       lc,
       createTestConfig(),
-      {port: 0},
+      {
+        port: 0,
+        startupDelayMs: 10000,
+        startupDelayKeepalives: STARTUP_DELAY_KEEPALIVES,
+      },
       parent,
-      {subscribe: vi.fn()},
+      {
+        id: 'change-streamer',
+        subscribe: subscribeFn.mockResolvedValue(downstream),
+        run: runFn.mockImplementation(() => service.promise),
+        stop: stopFn.mockImplementation(() => {
+          service.resolve();
+          return service.promise;
+        }),
+      },
       null,
     );
     const baseURL = await server.start();
@@ -153,8 +182,16 @@ describe('change-streamer/http', () => {
     res = await fetch(`${baseURL}/?foo=bar`);
     expect(res.ok).toBe(true);
 
-    res = await fetch(`${baseURL}/keepalive`);
-    expect(res.ok).toBe(true);
+    for (let i = 0; i < STARTUP_DELAY_KEEPALIVES; i++) {
+      // The ChangeStreamerService should not yet have been started.
+      expect(runFn).not.toHaveBeenCalled();
+
+      res = await fetch(`${baseURL}/keepalive`);
+      expect(res.ok).toBe(true);
+    }
+    // With the last /keepalive, the ChangeStreamerService should have been
+    // started.
+    expect(runFn).toHaveBeenCalledOnce();
 
     void server.stop();
   });
@@ -278,6 +315,10 @@ describe('change-streamer/http', () => {
 
       expect(subscribeFn).toHaveBeenCalledOnce();
       expect(subscribeFn.mock.calls[0][0]).toEqual(ctx);
+
+      // The ChangeStreamerService should be started when an
+      // incoming subscription is received
+      expect(runFn).toHaveBeenCalledOnce();
     },
   );
 

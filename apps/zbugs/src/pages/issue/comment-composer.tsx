@@ -1,5 +1,7 @@
+import {useZero} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useRef, useState} from 'react';
+import {mutators} from '../../../shared/mutators.ts';
 import {Button} from '../../components/button.tsx';
 import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
@@ -8,10 +10,8 @@ import {
 } from '../../components/image-upload-area.tsx';
 import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {mutators} from '../../../shared/mutators.ts';
 
 export function CommentComposer({
   id,

@@ -1,8 +1,8 @@
+import type {Zero} from '@rocicorp/zero';
 import {queries} from '../shared/queries.ts';
-import type {ZeroBugs} from '../shared/zero-type.ts';
 import {CACHE_PRELOAD} from './query-cache-policy.ts';
 
-export function preload(z: ZeroBugs, projectName: string) {
+export function preload(z: Zero, projectName: string) {
   // Preload all issues and first 10 comments from each.
   z.preload(
     queries.issuePreloadV2({userID: z.userID, projectName}),

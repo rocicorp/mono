@@ -1,16 +1,18 @@
-import type {ProjectRow} from '../../shared/schema.ts';
-import projectIcon from '../assets/icons/project-box.svg';
+import type {Row} from '@rocicorp/zero';
 import rocketIcon from '../assets/icons/icon-rocket.svg';
+import projectIcon from '../assets/icons/project-box.svg';
 import zeroMarkIcon from '../assets/images/mark.svg';
 import {Combobox} from './combobox.tsx';
 
+type Project = Row['project'];
+
 interface Props {
-  onChange: (selectedValue: ProjectRow) => void;
-  projects: ProjectRow[];
+  onChange: (selectedValue: Project) => void;
+  projects: Project[];
   selectedProjectName?: string | undefined;
 }
 
-function getProjectIcon(project: ProjectRow): string {
+function getProjectIcon(project: Project): string {
   if (project.name === 'Zero') {
     return zeroMarkIcon;
   }
@@ -38,7 +40,7 @@ export function ProjectPicker({
     ];
   }
   return projects.length > 1 ? (
-    <Combobox<ProjectRow>
+    <Combobox<Project>
       editable={false}
       className="project-picker-dropdown"
       items={reorderedProjects.map(p => ({

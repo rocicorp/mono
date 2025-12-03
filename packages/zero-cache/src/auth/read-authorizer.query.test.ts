@@ -37,11 +37,11 @@ import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {Query, Row} from '../../../zql/src/query/query.ts';
-import {Database} from '../../../zqlite/src/db.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
 } from '../../../zqlite/src/database-storage.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
@@ -299,19 +299,19 @@ const schema = createSchema({
 type Schema = typeof schema;
 
 const permissions = must(
-  await definePermissions<AuthData, typeof schema>(schema, () => {
+  await definePermissions<AuthData, Schema>(schema, () => {
     const isCommentCreator = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'comment'>,
+      {cmp}: ExpressionBuilder<'comment', Schema>,
     ) => cmp('authorId', '=', authData.sub);
     const isViewStateOwner = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'viewState'>,
+      {cmp}: ExpressionBuilder<'viewState', Schema>,
     ) => cmp('userId', '=', authData.sub);
 
     const canWriteIssueLabelIfProjectMember = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
+      {exists}: ExpressionBuilder<'issueLabel', Schema>,
     ) =>
       exists('issue', q =>
         q.whereExists('project', q =>
@@ -320,16 +320,16 @@ const permissions = must(
       );
     const canWriteIssueLabelIfIssueCreator = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
+      {exists}: ExpressionBuilder<'issueLabel', Schema>,
     ) => exists('issue', q => q.where('creatorId', '=', authData.sub));
     const canWriteIssueLabelIfIssueOwner = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
+      {exists}: ExpressionBuilder<'issueLabel', Schema>,
     ) => exists('issue', q => q.where('ownerId', '=', authData.sub));
 
     const canSeeIssue = (
       authData: AuthData,
-      eb: ExpressionBuilder<Schema, 'issue'>,
+      eb: ExpressionBuilder<'issue', Schema>,
     ) =>
       eb.or(
         isAdmin(authData, eb),
@@ -341,24 +341,24 @@ const permissions = must(
 
     const canSeeComment = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'comment'>,
+      {exists}: ExpressionBuilder<'comment', Schema>,
     ) => exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
 
     const isAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+      {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
     ) => cmpLit(authData.role, '=', 'admin');
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     type TODO = any;
     const isAdminThroughNestedData = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+      {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
       // TODO: proxy should return parameter references instead....
     ) => cmpLit(authData.properties?.role as TODO, 'IS', 'admin');
 
     const isMemberOfProject = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'issue'>,
+      {exists}: ExpressionBuilder<'issue', Schema>,
     ) =>
       exists('project', q =>
         q.whereExists('members', q => q.where('id', '=', authData.sub)),
@@ -366,12 +366,12 @@ const permissions = must(
 
     const isIssueOwner = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'issue'>,
+      {cmp}: ExpressionBuilder<'issue', Schema>,
     ) => cmp('ownerId', '=', authData.sub);
 
     const isIssueCreator = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'issue'>,
+      {cmp}: ExpressionBuilder<'issue', Schema>,
     ) => cmp('creatorId', '=', authData.sub);
 
     return {
@@ -383,7 +383,7 @@ const permissions = must(
       issue: {
         row: {
           insert: [
-            (authData: AuthData, eb: ExpressionBuilder<Schema, 'issue'>) =>
+            (authData: AuthData, eb: ExpressionBuilder<'issue', Schema>) =>
               eb.and(
                 isIssueCreator(authData, eb),
                 eb.or(isAdmin(authData, eb), isMemberOfProject(authData, eb)),
@@ -406,7 +406,7 @@ const permissions = must(
       comment: {
         row: {
           insert: [
-            (authData: AuthData, eb: ExpressionBuilder<Schema, 'comment'>) =>
+            (authData: AuthData, eb: ExpressionBuilder<'comment', Schema>) =>
               eb.and(
                 isCommentCreator(authData, eb),
                 canSeeComment(authData, eb),
@@ -915,7 +915,7 @@ describe('issue permissions', () => {
 
 function runReadQueryWithPermissions(
   authData: AuthData,
-  query: Query<ZeroSchema, string>,
+  query: Query<string, ZeroSchema>,
   queryDelegate: QueryDelegate,
 ) {
   const updatedAst = bindStaticParameters(

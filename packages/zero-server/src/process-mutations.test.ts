@@ -1,6 +1,5 @@
 import type {MockInstance} from 'vitest';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {promiseUndefined} from '../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
@@ -13,8 +12,12 @@ import {
   type MutationResponse,
 } from '../../zero-protocol/src/push.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {Database, TransactionProviderHooks} from './process-mutations.ts';
-import {getMutation, handleMutationRequest} from './process-mutations.ts';
+import {
+  getMutation,
+  handleMutationRequest,
+  type Database,
+  type TransactionProviderHooks,
+} from './process-mutations.ts';
 
 const baseQuery = {
   schema: 'test_schema',

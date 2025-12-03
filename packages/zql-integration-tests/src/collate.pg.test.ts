@@ -208,9 +208,9 @@ describe('collation behavior', () => {
       expect(memoryResult).toEqualPg(pgResult);
 
       function makeQuery(
-        query: Query<Schema, 'item'>,
+        query: Query<'item', Schema>,
         i: number,
-      ): Query<Schema, 'item'> {
+      ): Query<'item', Schema> {
         return query
           .where(col, '>', memoryResult[i].name)
           .limit(1)
@@ -347,7 +347,7 @@ describe('collation behavior', () => {
 });
 
 async function runAsSQL(
-  q: Query<Schema, 'item'>,
+  q: Query<'item', Schema>,
   runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
   const c = compile(serverSchema, schema, asQueryInternals(q).ast);

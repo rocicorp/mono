@@ -14,8 +14,8 @@ import type {
 import type {
   DBTransaction,
   SchemaCRUD,
+  ServerTransaction,
   TableCRUD,
-  TransactionBase,
 } from '../../zql/src/mutate/custom.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
@@ -25,13 +25,6 @@ import type {
 } from '../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {getServerSchema} from './schema.ts';
-
-interface ServerTransaction<TSchema extends Schema, TWrappedTransaction>
-  extends TransactionBase<TSchema> {
-  readonly location: 'server';
-  readonly reason: 'authoritative';
-  readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-}
 
 export type CustomMutatorDefs<TDBTransaction> = {
   [namespaceOrKey: string]:
@@ -78,7 +71,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     const queryInternals = asQueryInternals(query);

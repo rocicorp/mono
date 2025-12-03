@@ -939,7 +939,7 @@ describe('expression builder', () => {
       }
     `);
 
-    const f: ExpressionFactory<typeof schema, 'issue'> = eb =>
+    const f: ExpressionFactory<'issue', typeof schema> = eb =>
       eb.cmp('id', '2');
     const expr2 = issueQuery.where(f);
     expect(ast(expr2)).toMatchInlineSnapshot(`

@@ -14,11 +14,16 @@ import type {
   QueryResultDetails,
 } from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {
   type HumanReadable,
+  type PullRow,
   type Query,
   type ToQuery,
 } from '../../zql/src/query/query.ts';
@@ -65,12 +70,12 @@ const suspend: (p: Promise<unknown>) => void = reactUse
     };
 
 export function useQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  query: ToQuery<TSchema, TTable, TReturn, TContext>,
+  query: ToQuery<TTable, TSchema, TReturn, TContext>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -81,7 +86,8 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const view = viewStore.getView(useZero(), query, enabled, ttl);
+  const zero = useZero<TSchema, undefined, TContext>();
+  const view = viewStore.getView(zero, query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -91,12 +97,12 @@ export function useQuery<
 }
 
 export function useSuspenseQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  query: ToQuery<TSchema, TTable, TReturn, TContext>,
+  query: ToQuery<TTable, TSchema, TReturn, TContext>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -112,7 +118,9 @@ export function useSuspenseQuery<
     } = options);
   }
 
-  const view = viewStore.getView(useZero(), query, enabled, ttl);
+  const zero = useZero<TSchema, undefined, TContext>();
+
+  const view = viewStore.getView(zero, query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   const snapshot = useSyncExternalStore(
     view.subscribeReactInternals,
@@ -305,14 +313,14 @@ export class ViewStore {
   }
 
   getView<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
-    query: ToQuery<TSchema, TTable, TReturn, TContext>,
+    query: ToQuery<TTable, TSchema, TReturn, TContext>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -354,7 +362,7 @@ export class ViewStore {
     } else {
       existing.updateTTL(ttl);
     }
-    return existing as ViewWrapper<TSchema, TTable, TReturn, MD, TContext>;
+    return existing as ViewWrapper<TTable, TSchema, TReturn, MD, TContext>;
   }
 }
 
@@ -386,15 +394,15 @@ const viewStore = new ViewStore();
  * 2. If a different subscribe function is passed during a re-render, React will re-subscribe to the store using the newly passed subscribe function. You can prevent this by declaring subscribe outside the component.
  */
 class ViewWrapper<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
   TReturn,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
-  readonly #query: Query<TSchema, TTable, TReturn>;
+  readonly #query: Query<TTable, TSchema, TReturn>;
   readonly #format: Format;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
@@ -407,11 +415,11 @@ class ViewWrapper<
 
   constructor(
     bindings: BindingsForZero<TSchema>,
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     format: Format,
     ttl: TTL,
     onDematerialized: (
-      view: ViewWrapper<TSchema, TTable, TReturn, MD, TContext>,
+      view: ViewWrapper<TTable, TSchema, TReturn, MD, TContext>,
     ) => void,
   ) {
     this.#bindings = bindings;

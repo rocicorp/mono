@@ -1,9 +1,8 @@
 import type {Row} from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
-import type {Schema} from '../shared/schema.ts';
 
-export type Emoji = Row<Schema['tables']['emoji']> & {
-  readonly creator: Row<Schema['tables']['user']> | undefined;
+export type Emoji = Row['emoji'] & {
+  readonly creator: Row['user'] | undefined;
 };
 
 export function formatEmojiCreatorList(

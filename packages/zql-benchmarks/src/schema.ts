@@ -1,14 +1,14 @@
+import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
-  createBuilder,
-  createSchema,
   enumeration,
   number,
-  relationships,
   string,
   table,
-} from '@rocicorp/zero';
-import type {Role} from './auth.ts';
+} from '../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../zql/src/query/create-builder.ts';
+import type {Row} from '../../zql/src/query/query.ts';
 
 // Table definitions
 const user = table('user')
@@ -17,7 +17,7 @@ const user = table('user')
     login: string(),
     name: string().optional(),
     avatar: string(),
-    role: enumeration<Role>(),
+    role: enumeration<'crew' | 'user'>(),
   })
   .primaryKey('id');
 
@@ -26,10 +26,6 @@ const project = table('project')
     id: string(),
     name: string(),
     lowerCaseName: string(),
-    issueCountEstimate: number().optional(),
-    supportsSearch: boolean(),
-    markURL: string().optional(),
-    logoURL: string().optional(),
   })
   .primaryKey('id');
 
@@ -266,13 +262,11 @@ export const schema = createSchema({
   enableLegacyQueries: false,
 });
 
+export type Schema = typeof schema;
+
+export type IssueRow = Row<typeof schema.tables.issue>;
+export type CommentRow = Row<typeof schema.tables.comment>;
+export type UserRow = Row<typeof schema.tables.user>;
+export type ProjectRow = Row<typeof schema.tables.project>;
+
 export const builder = createBuilder(schema);
-
-export const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
-export const ZERO_PROJECT_NAME = 'Zero';
-
-declare module '@rocicorp/zero' {
-  interface DefaultTypes {
-    schema: typeof schema;
-  }
-}

@@ -10,8 +10,16 @@ import {
 import {createStore} from 'solid-js/store';
 import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
 import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {HumanReadable, ToQuery} from '../../zql/src/query/query.ts';
+import type {
+  HumanReadable,
+  PullRow,
+  ToQuery,
+} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
 import {useZero} from './use-zero.ts';
@@ -38,24 +46,24 @@ export type UseQueryOptions = {
  * @deprecated Use {@linkcode useQuery} instead.
  */
 export function createQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  querySignal: Accessor<ToQuery<TSchema, TTable, TReturn, TContext>>,
+  querySignal: Accessor<ToQuery<TTable, TSchema, TReturn, TContext>>,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
 ): QueryResult<TReturn> {
   return useQuery(querySignal, options);
 }
 
 export function useQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  querySignal: Accessor<ToQuery<TSchema, TTable, TReturn, TContext>>,
+  querySignal: Accessor<ToQuery<TTable, TSchema, TReturn, TContext>>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ): QueryResult<TReturn> {
   const [state, setState] = createStore<State>([
@@ -71,11 +79,9 @@ export function useQuery<
     setRefetchKey(k => k + 1);
   };
 
-  const zero = useZero();
+  const zero = useZero<TSchema, undefined, TContext>();
 
-  const query = createMemo(() =>
-    querySignal().toQuery(zero().context as TContext),
-  );
+  const query = createMemo(() => querySignal().toQuery(zero().context));
   const bindings = createMemo(() => bindingsForZero(zero()));
   const hash = createMemo(() => bindings().hash(query()));
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);

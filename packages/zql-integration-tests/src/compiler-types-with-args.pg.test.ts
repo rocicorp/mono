@@ -86,7 +86,7 @@ type Schema = typeof schema;
 
 let serverSchema: ServerSchema;
 
-let issueQuery: Query<Schema, 'issue'>;
+let issueQuery: Query<'issue', Schema>;
 let queryDelegate: QueryDelegate;
 
 beforeAll(async () => {

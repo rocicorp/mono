@@ -1,6 +1,7 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {
   SchemaValueToTSType,
   SchemaValueWithCustomType,
@@ -35,7 +36,7 @@ type ArraySelectors<E extends TableSchema> = {
 
 export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
 
-export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
+export type QueryTable<Q> = Q extends Query<infer T, any, any> ? T : never;
 
 export type ExistsOptions = {flip: boolean};
 
@@ -85,11 +86,14 @@ type AddSubreturn<TExistingReturn, TSubselectReturn, TAs extends string> = {
   : never;
 
 export type PullTableSchema<
-  TTable extends string,
+  TTable extends keyof ZeroSchema['tables'] & string,
   TSchemas extends ZeroSchema,
 > = TSchemas['tables'][TTable];
 
-export type PullRow<TTable extends string, TSchema extends ZeroSchema> = {
+export type PullRow<
+  TTable extends keyof ZeroSchema['tables'] & string,
+  TSchema extends ZeroSchema = DefaultSchema,
+> = {
   readonly [K in keyof PullTableSchema<
     TTable,
     TSchema
@@ -98,20 +102,37 @@ export type PullRow<TTable extends string, TSchema extends ZeroSchema> = {
   >;
 } & {};
 
+type RowNamespace<S extends Schema | TypeError> = S extends Schema
+  ? {
+      readonly [K in keyof S['tables'] &
+        string]: S['tables'][K] extends TableSchema
+        ? Row<S['tables'][K]>
+        : {
+            error: `The table schema for table ${K & string} you have registered with \`declare module '@rocicorp/zero'\` is incorrect.`;
+            registeredTableSchema: S['tables'][K];
+          };
+    }
+  : S;
+
 export type Row<
   T extends
+    | Schema
     | TableSchema
-    | Query<ZeroSchema, string, any>
-    | ((...args: any) => Query<ZeroSchema, string, any>),
-> = T extends TableSchema
-  ? {
-      readonly [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
-    }
-  : T extends
-        | Query<ZeroSchema, string, any>
-        | ((...args: any) => Query<ZeroSchema, string, any>)
-    ? QueryRowType<T>
-    : never;
+    | Query<string, ZeroSchema, any>
+    | ((...args: any) => Query<string, ZeroSchema, any>) = DefaultSchema,
+> = T extends Schema
+  ? RowNamespace<T>
+  : T extends TableSchema
+    ? {
+        readonly [K in keyof T['columns']]: SchemaValueToTSType<
+          T['columns'][K]
+        >;
+      }
+    : T extends
+          | Query<string, ZeroSchema, any>
+          | ((...args: any) => Query<string, ZeroSchema, any>)
+      ? QueryRowType<T>
+      : never;
 
 export type QueryRowType<Q> = Q extends (
   ...args: any
@@ -124,8 +145,8 @@ export type QueryRowType<Q> = Q extends (
 export type ZeRow<Q> = QueryRowType<Q>;
 
 export type QueryResultType<Q> = Q extends
-  | Query<ZeroSchema, string, any>
-  | ((...args: any) => Query<ZeroSchema, string, any>)
+  | Query<string, ZeroSchema, any>
+  | ((...args: any) => Query<string, ZeroSchema, any>)
   ? HumanReadable<QueryRowType<Q>>
   : never;
 
@@ -155,20 +176,20 @@ export type QueryResultType<Q> = Q extends
  * For more information on how to use queries, see the documentation:
  * https://zero.rocicorp.dev/docs/reading-data
  *
- * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
+ * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
  */
 export interface Query<
-  TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-> extends ToQuery<TSchema, TTable, TReturn, unknown> {
+> extends ToQuery<TTable, TSchema, TReturn, unknown> {
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
   ): Query<
-    TSchema,
     TTable,
+    TSchema,
     AddSubreturn<
       TReturn,
       DestRow<TTable, TSchema, TRelationship>,
@@ -177,22 +198,22 @@ export interface Query<
   >;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
-    TSub extends Query<TSchema, string, any>,
+    TSub extends Query<string, TSchema, any>,
   >(
     relationship: TRelationship,
     cb: (
       q: Query<
-        TSchema,
         DestTableName<TTable, TSchema, TRelationship>,
+        TSchema,
         DestRow<TTable, TSchema, TRelationship>
       >,
     ) => TSub,
   ): Query<
-    TSchema,
     TTable,
+    TSchema,
     AddSubreturn<
       TReturn,
-      TSub extends Query<TSchema, string, infer TSubReturn>
+      TSub extends Query<string, TSchema, infer TSubReturn>
         ? TSubReturn
         : never,
       TRelationship
@@ -208,7 +229,7 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(
@@ -216,36 +237,36 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
   where(
-    expressionFactory: ExpressionFactory<TSchema, TTable>,
-  ): Query<TSchema, TTable, TReturn>;
+    expressionFactory: ExpressionFactory<TTable, TSchema>,
+  ): Query<TTable, TSchema, TReturn>;
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
-      q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
-    ) => Query<TSchema, string>,
+      q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
+    ) => Query<string, TSchema>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
 
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
 
-  limit(limit: number): Query<TSchema, TTable, TReturn>;
+  limit(limit: number): Query<TTable, TSchema, TReturn>;
 
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
 
-  one(): Query<TSchema, TTable, TReturn | undefined>;
+  one(): Query<TTable, TSchema, TReturn | undefined>;
 }
 
 export type PreloadOptions = {
@@ -300,7 +321,7 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
   type: 'complete',
 } as const;
 
-export type AnyQuery = Query<Schema, string, any>;
+export type AnyQuery = Query<string, Schema, any>;
 
 /**
  * An interface for objects that can be converted to a {@link Query}.
@@ -309,16 +330,16 @@ export type AnyQuery = Query<Schema, string, any>;
  * materialized when needed, allowing the query to be constructed with
  * runtime context.
  *
- * @template S - The schema type
  * @template T - The table name (must be a key of S['tables'])
+ * @template S - The schema type
  * @template R - The return type of the query
  * @template C - The context type passed to {@link toQuery}
  */
 export interface ToQuery<
-  S extends Schema,
   T extends keyof S['tables'] & string,
+  S extends Schema,
   R,
   C,
 > {
-  toQuery(context: C): Query<S, T, R>;
+  toQuery(context: C): Query<T, S, R>;
 }

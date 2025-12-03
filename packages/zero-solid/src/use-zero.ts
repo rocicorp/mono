@@ -13,6 +13,10 @@ import {
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 
@@ -21,12 +25,13 @@ const ZeroContext = createContext<
   Accessor<Zero<any, any, any>> | undefined
 >(undefined);
 
-const NO_AUTH_SET = Symbol();
-
+/**
+ * @deprecated Use {@linkcode ZeroProvider} instead of managing your own Zero instance.
+ */
 export function createZero<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  Context = DefaultContext,
 >(options: ZeroOptions<S, MD, Context>): Zero<S, MD, Context> {
   const opts = {
     ...options,
@@ -36,9 +41,9 @@ export function createZero<
 }
 
 export function useZero<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  Context = DefaultContext,
 >(): () => Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
 
@@ -48,18 +53,31 @@ export function useZero<
   return zero;
 }
 
+/**
+ * @deprecated Use {@linkcode useZero} instead, alongside default types defined with:
+ *
+ * ```ts
+ * declare module '@rocicorp/zero' {
+ *   interface DefaultTypes {
+ *     schema: typeof schema;
+ *     context: Context;
+ *   }
+ * }
+ */
 export function createUseZero<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  Context = DefaultContext,
 >() {
   return () => useZero<S, MD, Context>();
 }
 
+const NO_AUTH_SET = Symbol();
+
 export function ZeroProvider<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
-  Context,
+  S extends Schema = DefaultSchema,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  Context = DefaultContext,
 >(
   props: {
     children: JSX.Element;

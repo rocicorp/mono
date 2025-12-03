@@ -1,22 +1,15 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {AnyTransaction, Transaction} from './custom.ts';
+import type {AnyTransaction} from './custom.ts';
 import {
   defineMutators,
-  defineMutatorsWithType,
   getMutator,
   isMutatorRegistry,
   iterateMutators,
   mustGetMutator,
 } from './mutator-registry.ts';
-import {
-  defineMutator,
-  defineMutatorWithType,
-  type MutationRequest,
-  type Mutator,
-} from './mutator.ts';
+import {defineMutator} from './mutator.ts';
 
 const createUser = defineMutator(
   ({args, ctx, tx}: {args: {name: string}; ctx: unknown; tx: unknown}) => {
@@ -346,134 +339,6 @@ test('defineMutators deep merges nested namespaces', () => {
 
   // New mutator added
   expect(extendedMutators.admin.user.ban.mutatorName).toBe('admin.user.ban');
-});
-
-describe('Type Tests', () => {
-  test('Mutator has correctly typed fn property', () => {
-    type Context = {userId: string};
-
-    const define = defineMutatorWithType<Schema, Context>();
-    const createItem = define(
-      async ({
-        args,
-        ctx,
-        tx,
-      }: {
-        args: {name: string; count: number};
-        ctx: Context;
-        tx: Transaction<Schema>;
-      }) => {
-        void args;
-        void ctx;
-        void tx;
-      },
-    );
-
-    const defineMutators_ = defineMutatorsWithType<Schema, Context>();
-    const mutators = defineMutators_({
-      item: {
-        create: createItem,
-      },
-    });
-
-    // The mutator should be a Mutator type
-    expectTypeOf(mutators.item.create).toEqualTypeOf<
-      Mutator<Schema, Context, {name: string; count: number}, unknown>
-    >();
-
-    // mutatorName should be string
-    expectTypeOf(mutators.item.create.mutatorName).toEqualTypeOf<string>();
-
-    // fn should be a function with typed parameters
-    expectTypeOf(mutators.item.create.fn).toEqualTypeOf<
-      (options: {
-        args: {name: string; count: number};
-        ctx: Context;
-        tx: AnyTransaction;
-      }) => Promise<void>
-    >();
-  });
-
-  test('calling Mutator returns correctly typed MutationRequest', () => {
-    type Context = {userId: string};
-
-    const define = defineMutatorWithType<Schema, Context>();
-    const updateItem = define(
-      async ({
-        args,
-        ctx,
-        tx,
-      }: {
-        args: {id: string; name: string};
-        ctx: Context;
-        tx: Transaction<Schema>;
-      }) => {
-        void args;
-        void ctx;
-        void tx;
-      },
-    );
-
-    const defineMutators_ = defineMutatorsWithType<Schema, Context>();
-    const mutators = defineMutators_({
-      item: {
-        update: updateItem,
-      },
-    });
-
-    const mr = mutators.item.update({id: '123', name: 'test'});
-
-    // MutationRequest should have typed mutator and args
-    expectTypeOf(mr).toEqualTypeOf<
-      MutationRequest<Schema, Context, {id: string; name: string}, unknown>
-    >();
-    expectTypeOf(mr.args).toEqualTypeOf<{id: string; name: string}>();
-    expectTypeOf(mr.mutator).toEqualTypeOf<
-      Mutator<Schema, Context, {id: string; name: string}, unknown>
-    >();
-
-    // Can access fn from the MutationRequest's mutator
-    expectTypeOf(mr.mutator.fn).toBeFunction();
-  });
-
-  test('fn property preserves args type through server-mutator pattern', () => {
-    type ServerContext = {userId: string; isAdmin: boolean};
-
-    const define = defineMutatorWithType<Schema, ServerContext>();
-    const deleteItem = define(
-      async ({
-        args,
-        ctx,
-        tx,
-      }: {
-        args: {id: string};
-        ctx: ServerContext;
-        tx: Transaction<Schema>;
-      }) => {
-        void args;
-        void ctx;
-        void tx;
-      },
-    );
-
-    const defineMutators_ = defineMutatorsWithType<Schema, ServerContext>();
-    const mutators = defineMutators_({
-      item: {
-        delete: deleteItem,
-      },
-    });
-
-    // Simulate server-side pattern: get the mutator and call its fn
-    const mutator = mutators.item.delete;
-
-    // The fn should accept the correct types
-    // This is the key test: fn.args should be typed as {id: string}
-    type FnArgs = Parameters<typeof mutator.fn>[0]['args'];
-    expectTypeOf<FnArgs>().toEqualTypeOf<{id: string}>();
-
-    type FnCtx = Parameters<typeof mutator.fn>[0]['ctx'];
-    expectTypeOf<FnCtx>().toEqualTypeOf<ServerContext>();
-  });
 });
 
 describe('input/output type separation', () => {

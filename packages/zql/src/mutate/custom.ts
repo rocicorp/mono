@@ -1,6 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Expand} from '../../../shared/src/expand.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {
+  DefaultSchema,
+  DefaultWrappedTransaction,
+} from '../../../zero-types/src/default-types.ts';
 import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
@@ -42,17 +46,20 @@ export interface TransactionBase<S extends Schema> {
   readonly query: SchemaQuery<S>;
 
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: Query<TTable, S, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 }
 
-export type Transaction<S extends Schema, TWrappedTransaction = unknown> =
-  | ServerTransaction<S, TWrappedTransaction>
-  | ClientTransaction<S>;
+export type Transaction<
+  S extends Schema = DefaultSchema,
+  TWrappedTransaction = DefaultWrappedTransaction,
+> = ServerTransaction<S, TWrappedTransaction> | ClientTransaction<S>;
 
-export interface ServerTransaction<S extends Schema, TWrappedTransaction>
-  extends TransactionBase<S> {
+export interface ServerTransaction<
+  S extends Schema = DefaultSchema,
+  TWrappedTransaction = DefaultWrappedTransaction,
+> extends TransactionBase<S> {
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
@@ -60,10 +67,10 @@ export interface ServerTransaction<S extends Schema, TWrappedTransaction>
 
 /**
  * An instance of this is passed to custom mutator implementations and
- * allows reading and writing to the database and IVM at the head
- * at which the mutator is being applied.
+ * allows reading and writing to the database and IVM at the head at which the
+ * mutator is being applied.
  */
-export interface ClientTransaction<S extends Schema>
+export interface ClientTransaction<S extends Schema = DefaultSchema>
   extends TransactionBase<S> {
   readonly location: 'client';
   readonly reason: 'optimistic' | 'rebase';

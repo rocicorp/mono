@@ -29,18 +29,18 @@ import type {
  * writing data that the Zero client does, so that mutator functions can be
  * shared across client and server.
  */
-export class ZQLDatabase<S extends Schema, WrappedTransaction>
-  implements Database<TransactionImpl<S, WrappedTransaction>>
+export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
+  implements Database<TransactionImpl<TSchema, TWrappedTransaction>>
 {
-  readonly connection: DBConnection<WrappedTransaction>;
+  readonly connection: DBConnection<TWrappedTransaction>;
   readonly #mutate: (
-    dbTransaction: DBTransaction<WrappedTransaction>,
+    dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
-  ) => SchemaCRUD<S>;
-  readonly #query: SchemaQuery<S>;
-  readonly #schema: S;
+  ) => SchemaCRUD<TSchema>;
+  readonly #query: SchemaQuery<TSchema>;
+  readonly #schema: TSchema;
 
-  constructor(connection: DBConnection<WrappedTransaction>, schema: S) {
+  constructor(connection: DBConnection<TWrappedTransaction>, schema: TSchema) {
     this.connection = connection;
     this.#mutate = makeSchemaCRUD(schema);
     this.#query = createBuilder(schema);
@@ -49,7 +49,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
 
   transaction<R>(
     callback: (
-      tx: TransactionImpl<S, WrappedTransaction>,
+      tx: TransactionImpl<TSchema, TWrappedTransaction>,
       transactionHooks: TransactionProviderHooks,
     ) => MaybePromise<R>,
     transactionInput?: TransactionProviderInput,
@@ -103,7 +103,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
   }
 
   async #makeServerTransaction(
-    dbTx: DBTransaction<WrappedTransaction>,
+    dbTx: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
   ) {
@@ -117,8 +117,8 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
     );
   }
 
-  run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.transaction(tx => tx.run(query, options));

@@ -14,14 +14,13 @@ import {
   handleMutationRequest,
   handleTransformRequest,
 } from '@rocicorp/zero/server';
-import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import type {IncomingHttpHeaders} from 'http';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
-import postgres from 'postgres';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {must} from '../../../packages/shared/src/must.ts';
+import {dbProvider, sql} from '../server/db.ts';
 import {createServerMutators} from '../server/server-mutators.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {queries} from '../shared/queries.ts';
@@ -34,15 +33,12 @@ declare module 'fastify' {
   }
 }
 
-const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 type QueryParams = {redirect?: string | undefined};
 let privateJwk: JWK | undefined;
 
 export const fastify = Fastify({
   logger: true,
 });
-
-const dbProvider = zeroPostgresJS(schema, sql);
 
 fastify.register(cookie);
 

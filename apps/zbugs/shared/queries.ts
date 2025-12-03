@@ -1,5 +1,5 @@
 import {
-  defineQueriesWithType,
+  defineQueries,
   defineQuery,
   escapeLike,
   type Query,
@@ -8,10 +8,9 @@ import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
-import {builder, ZERO_PROJECT_NAME, type Schema} from './schema.ts';
+import {builder, ZERO_PROJECT_NAME} from './schema.ts';
 
-// oxlint-disable-next-line no-explicit-any
-function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
+function applyIssuePermissions<TQuery extends Query<'issue'>>(
   q: TQuery,
   role: Role | undefined,
 ): TQuery {
@@ -59,8 +58,6 @@ function labelsOrderByName({
   }
   return q;
 }
-
-const defineQueries = defineQueriesWithType<AuthData | undefined>();
 
 export const queries = defineQueries({
   allLabels: defineQuery(z.undefined(), () => builder.label),
@@ -301,8 +298,6 @@ export const queries = defineQueries({
     },
   ),
 });
-
-export type Queries = typeof queries;
 
 export type ListContext = {
   readonly href: string;

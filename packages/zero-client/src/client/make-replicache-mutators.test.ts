@@ -2,16 +2,14 @@ import {describe, expect, test, vi} from 'vitest';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
+import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
 import {schema as testSchema} from '../../../zql/src/query/test/test-schemas.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {extendReplicacheMutators} from './make-replicache-mutators.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 
 type Schema = typeof testSchema;
-const defineMutators = defineMutatorsWithType<Schema>();
-const defineMutator = defineMutatorWithType<Schema>();
 
 describe('extendReplicacheMutators', () => {
   test('processes MutatorDefinition at top level', () => {
@@ -217,29 +215,28 @@ describe('extendReplicacheMutators', () => {
     const context = sharedContext;
     const mutateObject: Record<string, unknown> = {};
 
-    const defineTypedMutator = defineMutatorWithType<
+    const incrementMutator = defineMutator<
+      undefined,
       Schema,
       {counter: number}
-    >();
+    >(({ctx}: {ctx: {counter: number}}) => {
+      ctx.counter++;
+      return Promise.resolve();
+    });
 
-    const incrementMutator = defineTypedMutator(
+    const getMutator = defineMutator<undefined, Schema, {counter: number}>(
       ({ctx}: {ctx: {counter: number}}) => {
-        ctx.counter++;
+        // Read the counter value
+        void ctx.counter;
         return Promise.resolve();
       },
     );
 
-    const getMutator = defineTypedMutator(({ctx}: {ctx: {counter: number}}) => {
-      // Read the counter value
-      void ctx.counter;
-      return Promise.resolve();
-    });
-
-    const defineTypedMutators = defineMutatorsWithType<
+    const mutators = defineMutators<
+      {increment: typeof incrementMutator; get: typeof getMutator},
       Schema,
       {counter: number}
-    >();
-    const mutators = defineTypedMutators({
+    >({
       increment: incrementMutator,
       get: getMutator,
     });
@@ -298,12 +295,12 @@ describe('extendReplicacheMutators', () => {
 
     let receivedTx: Transaction<Schema> | undefined;
 
-    const mutator = defineMutator(({tx}: {tx: Transaction<Schema>}) => {
+    const mutator = defineMutator<undefined, Schema>(({tx}) => {
       receivedTx = tx;
       return Promise.resolve();
     });
 
-    const mutators = defineMutators({
+    const mutators = defineMutators<{test: typeof mutator}, Schema>({
       test: mutator,
     });
 

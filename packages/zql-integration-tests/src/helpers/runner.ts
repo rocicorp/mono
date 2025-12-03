@@ -75,7 +75,7 @@ type Delegates = {
 };
 
 type Queries<TSchema extends Schema> = {
-  [K in keyof TSchema['tables'] & string]: Query<TSchema, K>;
+  [K in keyof TSchema['tables'] & string]: Query<K, TSchema>;
 };
 
 let tempDir: string | undefined;
@@ -188,7 +188,7 @@ function makeDelegates<TSchema extends Schema>(
 function makeQueries<TSchema extends Schema>(
   schema: TSchema,
 ): Queries<TSchema> {
-  const ret: Record<string, Query<TSchema, string>> = {};
+  const ret: Record<string, Query<string, TSchema>> = {};
 
   for (const table of Object.keys(schema.tables)) {
     ret[table] = new QueryImpl(schema, table, {table}, defaultFormat, 'test');
@@ -247,7 +247,7 @@ export async function createVitests<TSchema extends Schema>(
   ...testSpecs: (readonly {
     name: string;
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    createQuery: (q: Queries<TSchema>) => Query<TSchema, string, any>;
+    createQuery: (q: Queries<TSchema>) => Query<string, TSchema, any>;
     manualVerification?: unknown;
   }[])[]
 ) {
@@ -281,14 +281,14 @@ export async function runBenchmarks<TSchema extends Schema>(
   {suiteName, type, zqlSchema, pgContent, only}: HydrationOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
   }[])[]
 ): Promise<void>;
 export async function runBenchmarks<TSchema extends Schema>(
   {suiteName, type, zqlSchema, pgContent, only}: PushOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
     generatePush: PushGenerator;
   }[])[]
 ): Promise<void>;
@@ -303,7 +303,7 @@ export async function runBenchmarks<TSchema extends Schema>(
   }: BenchOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
     generatePush?: PushGenerator;
   }[])[]
 ): Promise<void> {
@@ -413,7 +413,7 @@ function makeBenchmark<TSchema extends Schema>({
 }: {
   name: string;
   zqlSchema: TSchema;
-  createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+  createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
   type: 'hydration' | 'push';
   queries: Queries<TSchema>;
   delegates: Delegates;
@@ -546,7 +546,7 @@ function makeTest<TSchema extends Schema>(
   // Memory can do it by forking the sources as we do in custom mutators on rebase.
   dbs: DBs<TSchema>,
   delegates: Delegates,
-  createQuery: (q: Queries<TSchema>) => Query<TSchema, string>,
+  createQuery: (q: Queries<TSchema>) => Query<string, TSchema>,
   pushEvery: number,
   manualVerification?: unknown,
 ) {
@@ -1049,11 +1049,11 @@ class TestPGQueryDelegate extends QueryDelegateBase {
   }
 
   override async run<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     const queryInternals = asQueryInternals(query);
