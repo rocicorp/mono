@@ -37,6 +37,7 @@ import type {
 } from '../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import {
   fromSQLiteTypes,
   TableSource,
@@ -155,10 +156,12 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         const source = this.#getSource(op.tableName);
         switch (op.op) {
           case 'insert': {
-            source.push({
-              type: 'add',
-              row: op.value,
-            });
+            consume(
+              source.push({
+                type: 'add',
+                row: op.value,
+              }),
+            );
             break;
           }
           // TODO(mlaw): what if someone updates the same thing twice?
@@ -167,18 +170,22 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           // next requirePreMutationRow will just return the row that was
           // pushed in.
           case 'update': {
-            source.push({
-              type: 'edit',
-              oldRow: this.#requirePreMutationRow(op),
-              row: op.value,
-            });
+            consume(
+              source.push({
+                type: 'edit',
+                oldRow: this.#requirePreMutationRow(op),
+                row: op.value,
+              }),
+            );
             break;
           }
           case 'delete': {
-            source.push({
-              type: 'remove',
-              row: this.#requirePreMutationRow(op),
-            });
+            consume(
+              source.push({
+                type: 'remove',
+                row: this.#requirePreMutationRow(op),
+              }),
+            );
             break;
           }
         }

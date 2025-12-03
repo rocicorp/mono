@@ -13,6 +13,7 @@ import {Join} from './join.ts';
 import {UnionFanIn} from './union-fan-in.ts';
 import {UnionFanOut} from './union-fan-out.ts';
 import {FlippedJoin} from './flipped-join.ts';
+import {Exists} from './exists.ts';
 
 const YIELD_SOURCE_SCHEMA_BASE: SourceSchema = {
   tableName: 'table1',
@@ -303,6 +304,83 @@ describe('Yield Propagation', () => {
                   "id": "1",
                 },
               },
+              {
+                "relationships": {},
+                "row": {
+                  "id": "2",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "2",
+          },
+        },
+      ]
+    `);
+  });
+
+  test('Exists propagates yields from relationship iterator', () => {
+    const parent = new YieldSource({tableName: 'parent'});
+    const child = new YieldSource({tableName: 'child'});
+    const join = new Join({
+      parent,
+      child,
+      storage: new MockStorage(),
+      parentKey: ['id'],
+      childKey: ['id'],
+      relationshipName: 'child',
+      hidden: false,
+      system: 'client',
+    });
+
+    const start = new FilterStart(join);
+    const exists = new Exists(start, 'child', ['id'], 'EXISTS');
+    const end = new FilterEnd(start, exists);
+    const catchOp = new Catch(end);
+
+    expect(catchOp.fetch({})).toMatchInlineSnapshot(`
+      [
+        "yield",
+        "yield",
+        "yield",
+        {
+          "relationships": {
+            "child": [
+              "yield",
+              {
+                "relationships": {},
+                "row": {
+                  "id": "1",
+                },
+              },
+              "yield",
+              {
+                "relationships": {},
+                "row": {
+                  "id": "2",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "1",
+          },
+        },
+        "yield",
+        "yield",
+        "yield",
+        {
+          "relationships": {
+            "child": [
+              "yield",
+              {
+                "relationships": {},
+                "row": {
+                  "id": "1",
+                },
+              },
+              "yield",
               {
                 "relationships": {},
                 "row": {

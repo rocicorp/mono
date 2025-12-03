@@ -31,6 +31,7 @@ import type {MaterializeOptions} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {useQuery, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({
@@ -48,8 +49,8 @@ function setupTestEnvironment() {
     schema.tables.table.columns,
     schema.tables.table.primaryKey,
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
 
   const queryDelegate = new QueryDelegateImpl({sources: {table: ms}});
   const tableQuery = newQuery(schema, 'table');
@@ -129,7 +130,7 @@ test('useQuery', async () => {
   must(queryDelegate.gotCallbacks[0])(true);
   await Promise.resolve();
 
-  ms.push({row: {a: 3, b: 'c'}, type: 'add'});
+  consume(ms.push({row: {a: 3, b: 'c'}, type: 'add'}));
   queryDelegate.commit();
 
   expect(rows()).toEqual([
@@ -391,10 +392,10 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
     schema.tables.comment.columns,
     schema.tables.comment.primaryKey,
   );
-  issueSource.push({row: {id: 'i1'}, type: 'add'});
-  issueSource.push({row: {id: 'i2'}, type: 'add'});
-  commentSource.push({row: {id: 'c1', issueID: 'i1'}, type: 'add'});
-  commentSource.push({row: {id: 'c2', issueID: 'i1'}, type: 'add'});
+  consume(issueSource.push({row: {id: 'i1'}, type: 'add'}));
+  consume(issueSource.push({row: {id: 'i2'}, type: 'add'}));
+  consume(commentSource.push({row: {id: 'c1', issueID: 'i1'}, type: 'add'}));
+  consume(commentSource.push({row: {id: 'c2', issueID: 'i1'}, type: 'add'}));
 
   const queryDelegate = new QueryDelegateImpl({
     sources: {issue: issueSource, comment: commentSource},
@@ -682,7 +683,9 @@ test('useQuery query deps change testEffect', () => {
         expect(rows()).toEqual([
           {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
         ]);
-        ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}});
+        consume(
+          ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}}),
+        );
         queryDelegate.commit();
       } else if (run === 1) {
         expect(rows()).toEqual([

@@ -5,6 +5,7 @@ import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {buildFilterPipeline} from './filter-operators.ts';
+import {consume} from './stream.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 
 const lc = createSilentLogContext();
@@ -20,9 +21,9 @@ test('basics', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({type: 'add', row: {a: 3, b: 'foo'}});
-  ms.push({type: 'add', row: {a: 2, b: 'bar'}});
-  ms.push({type: 'add', row: {a: 1, b: 'foo'}});
+  consume(ms.push({type: 'add', row: {a: 3, b: 'foo'}}));
+  consume(ms.push({type: 'add', row: {a: 2, b: 'bar'}}));
+  consume(ms.push({type: 'add', row: {a: 1, b: 'foo'}}));
 
   const connector = ms.connect([['a', 'asc']]);
   const filter = buildFilterPipeline(
@@ -51,10 +52,10 @@ test('basics', () => {
       },
     ]
   `);
-  ms.push({type: 'add', row: {a: 4, b: 'bar'}});
-  ms.push({type: 'add', row: {a: 5, b: 'foo'}});
-  ms.push({type: 'remove', row: {a: 3, b: 'foo'}});
-  ms.push({type: 'remove', row: {a: 2, b: 'bar'}});
+  consume(ms.push({type: 'add', row: {a: 4, b: 'bar'}}));
+  consume(ms.push({type: 'add', row: {a: 5, b: 'foo'}}));
+  consume(ms.push({type: 'remove', row: {a: 3, b: 'foo'}}));
+  consume(ms.push({type: 'remove', row: {a: 2, b: 'bar'}}));
 
   expect(out.pushes).toMatchInlineSnapshot(`
     [
@@ -95,7 +96,7 @@ test('edit', () => {
     {a: 2, x: 2},
     {a: 3, x: 3},
   ]) {
-    ms.push({type: 'add', row});
+    consume(ms.push({type: 'add', row}));
   }
 
   const connector = ms.connect([['a', 'asc']]);
@@ -118,8 +119,8 @@ test('edit', () => {
     ]
   `);
 
-  ms.push({type: 'add', row: {a: 4, x: 4}});
-  ms.push({type: 'edit', oldRow: {a: 3, x: 3}, row: {a: 3, x: 6}});
+  consume(ms.push({type: 'add', row: {a: 4, x: 4}}));
+  consume(ms.push({type: 'edit', oldRow: {a: 3, x: 3}, row: {a: 3, x: 6}}));
 
   expect(out.pushes).toMatchInlineSnapshot(`
     [
@@ -172,7 +173,7 @@ test('edit', () => {
   `);
 
   out.pushes.length = 0;
-  ms.push({type: 'edit', oldRow: {a: 3, x: 6}, row: {a: 3, x: 5}});
+  consume(ms.push({type: 'edit', oldRow: {a: 3, x: 6}, row: {a: 3, x: 5}}));
   expect(out.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -207,7 +208,7 @@ test('edit', () => {
   `);
 
   out.pushes.length = 0;
-  ms.push({type: 'edit', oldRow: {a: 3, x: 5}, row: {a: 3, x: 7}});
+  consume(ms.push({type: 'edit', oldRow: {a: 3, x: 5}, row: {a: 3, x: 7}}));
   expect(out.pushes).toMatchInlineSnapshot(`[]`);
   expect(out.fetch({})).toMatchInlineSnapshot(`
     [
@@ -229,7 +230,7 @@ test('edit', () => {
   `);
 
   out.pushes.length = 0;
-  ms.push({type: 'edit', oldRow: {a: 2, x: 2}, row: {a: 2, x: 4}});
+  consume(ms.push({type: 'edit', oldRow: {a: 2, x: 2}, row: {a: 2, x: 4}}));
   expect(out.pushes).toMatchInlineSnapshot(`
     [
       {

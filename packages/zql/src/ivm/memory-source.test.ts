@@ -13,6 +13,8 @@ import {
 import {compareRowsTest} from './test/compare-rows-test.ts';
 import {createSource} from './test/source-factory.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -128,19 +130,23 @@ test('push edit change', () => {
     ['a'],
   );
 
-  ms.push({
-    type: 'add',
-    row: {a: 'a', b: 'b', c: 'c'},
-  });
+  consume(
+    ms.push({
+      type: 'add',
+      row: {a: 'a', b: 'b', c: 'c'},
+    }),
+  );
 
   const conn = ms.connect([['a', 'asc']]);
   const c = new Catch(conn);
 
-  ms.push({
-    type: 'edit',
-    oldRow: {a: 'a', b: 'b', c: 'c'},
-    row: {a: 'a', b: 'b2', c: 'c2'},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {a: 'a', b: 'b', c: 'c'},
+      row: {a: 'a', b: 'b2', c: 'c2'},
+    }),
+  );
   expect(c.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -183,29 +189,34 @@ test('fetch during push edit change', () => {
     ['a'],
   );
 
-  ms.push({
-    type: 'add',
-    row: {a: 'a', b: 'b', c: 'c'},
-  });
+  consume(
+    ms.push({
+      type: 'add',
+      row: {a: 'a', b: 'b', c: 'c'},
+    }),
+  );
 
   const conn = ms.connect([['a', 'asc']]);
   let fetchDuringPush = undefined;
   conn.setOutput({
-    push(change: Change): void {
+    push(change: Change) {
       expect(change).toEqual({
         type: 'edit',
         oldNode: {row: {a: 'a', b: 'b', c: 'c'}, relationships: {}},
         node: {row: {a: 'a', b: 'b2', c: 'c2'}, relationships: {}},
       });
       fetchDuringPush = [...conn.fetch({})];
+      return emptyArray;
     },
   });
 
-  ms.push({
-    type: 'edit',
-    oldRow: {a: 'a', b: 'b', c: 'c'},
-    row: {a: 'a', b: 'b2', c: 'c2'},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {a: 'a', b: 'b', c: 'c'},
+      row: {a: 'a', b: 'b2', c: 'c2'},
+    }),
+  );
   expect(fetchDuringPush).toMatchInlineSnapshot(`
     [
       {

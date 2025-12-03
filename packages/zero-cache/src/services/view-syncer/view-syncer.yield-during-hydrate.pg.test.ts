@@ -28,7 +28,7 @@ import {
   TimeSliceTimer,
   type ViewSyncerService,
 } from './view-syncer.ts';
-import {HYDRATE_YIELD_THRESHOLD_MS} from './pipeline-driver.ts';
+import {YIELD_THRESHOLD_MS} from './pipeline-driver.ts';
 import {CVRStore} from './cvr-store.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {CVRConfigDrivenUpdater, CVRQueryDrivenUpdater} from './cvr.ts';
@@ -101,7 +101,7 @@ describe('view-syncer/yield-during-hydrate', () => {
         }
         elapsedLapCallCountSinceYield++;
         const elapsed = elapsedLapCallCountSinceYield * 100;
-        expectYieldBeforeNext = elapsed > HYDRATE_YIELD_THRESHOLD_MS;
+        expectYieldBeforeNext = elapsed > YIELD_THRESHOLD_MS;
         return elapsed;
       });
 
@@ -143,7 +143,7 @@ describe('view-syncer/yield-during-hydrate', () => {
         }
         elapsedLapCallCountSinceYield++;
         const elapsed = elapsedLapCallCountSinceYield * 100;
-        expectYieldBeforeNext = elapsed > HYDRATE_YIELD_THRESHOLD_MS;
+        expectYieldBeforeNext = elapsed > YIELD_THRESHOLD_MS;
         return elapsed;
       });
 
@@ -242,7 +242,7 @@ describe('view-syncer/yield-during-hydrate', () => {
         }
         elapsedLapCallCountSinceYield++;
         const elapsed = elapsedLapCallCountSinceYield * 100;
-        expectYieldBeforeNext = elapsed > HYDRATE_YIELD_THRESHOLD_MS;
+        expectYieldBeforeNext = elapsed > YIELD_THRESHOLD_MS;
         return elapsed;
       });
 

@@ -15,6 +15,7 @@ import type {SourceSchema} from './schema.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 import {refCountSymbol} from './view-apply-change.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -26,8 +27,8 @@ test('basics', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
 
   const view = new ArrayView(
     ms.connect([
@@ -63,7 +64,7 @@ test('basics', () => {
 
   expect(callCount).toBe(1);
 
-  ms.push({row: {a: 3, b: 'c'}, type: 'add'});
+  consume(ms.push({row: {a: 3, b: 'c'}, type: 'add'}));
 
   // We don't get called until flush.
   expect(callCount).toBe(1);
@@ -88,9 +89,9 @@ test('basics', () => {
     },
   ]);
 
-  ms.push({row: {a: 2, b: 'b'}, type: 'remove'});
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'remove'}));
   expect(callCount).toBe(2);
-  ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'remove'}));
   expect(callCount).toBe(2);
 
   view.flush();
@@ -104,7 +105,7 @@ test('basics', () => {
   ]);
 
   unlisten();
-  ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
+  consume(ms.push({row: {a: 3, b: 'c'}, type: 'remove'}));
   expect(callCount).toBe(3);
 
   view.flush();
@@ -128,7 +129,7 @@ test('single-format', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
 
   const view = new ArrayView(
     ms.connect([
@@ -152,14 +153,14 @@ test('single-format', () => {
 
   // trying to add another element should be an error
   // pipeline should have been configured with a limit of one
-  expect(() => ms.push({row: {a: 2, b: 'b'}, type: 'add'})).toThrow(
+  expect(() => consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}))).toThrow(
     "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
   );
 
   // Adding the same element is not an error in the ArrayView but it is an error
   // in the Source. This case is tested in view-apply-change.ts.
 
-  ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'remove'}));
 
   // no call until flush
   expect(data).toEqual({a: 1, b: 'a'});
@@ -211,22 +212,30 @@ test('tree', () => {
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
   );
-  ms.push({
-    type: 'add',
-    row: {id: 1, name: 'foo', childID: 2},
-  });
-  ms.push({
-    type: 'add',
-    row: {id: 2, name: 'foobar', childID: null},
-  });
-  ms.push({
-    type: 'add',
-    row: {id: 3, name: 'mon', childID: 4},
-  });
-  ms.push({
-    type: 'add',
-    row: {id: 4, name: 'monkey', childID: null},
-  });
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 1, name: 'foo', childID: 2},
+    }),
+  );
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 2, name: 'foobar', childID: null},
+    }),
+  );
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 3, name: 'mon', childID: 4},
+    }),
+  );
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 4, name: 'monkey', childID: null},
+    }),
+  );
 
   const join = new Join({
     parent: ms.connect([
@@ -307,7 +316,7 @@ test('tree', () => {
   `);
 
   // add parent with child
-  ms.push({type: 'add', row: {id: 5, name: 'chocolate', childID: 2}});
+  consume(ms.push({type: 'add', row: {id: 5, name: 'chocolate', childID: 2}}));
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -371,7 +380,9 @@ test('tree', () => {
   `);
 
   // remove parent with child
-  ms.push({type: 'remove', row: {id: 5, name: 'chocolate', childID: 2}});
+  consume(
+    ms.push({type: 'remove', row: {id: 5, name: 'chocolate', childID: 2}}),
+  );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -421,14 +432,16 @@ test('tree', () => {
   `);
 
   // remove just child
-  ms.push({
-    type: 'remove',
-    row: {
-      id: 2,
-      name: 'foobar',
-      childID: null,
-    },
-  });
+  consume(
+    ms.push({
+      type: 'remove',
+      row: {
+        id: 2,
+        name: 'foobar',
+        childID: null,
+      },
+    }),
+  );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -464,14 +477,16 @@ test('tree', () => {
   `);
 
   // add child
-  ms.push({
-    type: 'add',
-    row: {
-      id: 2,
-      name: 'foobaz',
-      childID: null,
-    },
-  });
+  consume(
+    ms.push({
+      type: 'add',
+      row: {
+        id: 2,
+        name: 'foobaz',
+        childID: null,
+      },
+    }),
+  );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -529,14 +544,18 @@ test('tree-single', () => {
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
   );
-  ms.push({
-    type: 'add',
-    row: {id: 1, name: 'foo', childID: 2},
-  });
-  ms.push({
-    type: 'add',
-    row: {id: 2, name: 'foobar', childID: null},
-  });
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 1, name: 'foo', childID: 2},
+    }),
+  );
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 2, name: 'foobar', childID: null},
+    }),
+  );
 
   const take = new Take(
     ms.connect([
@@ -586,10 +605,12 @@ test('tree-single', () => {
   });
 
   // remove the child
-  ms.push({
-    type: 'remove',
-    row: {id: 2, name: 'foobar', childID: null},
-  });
+  consume(
+    ms.push({
+      type: 'remove',
+      row: {id: 2, name: 'foobar', childID: null},
+    }),
+  );
   view.flush();
 
   expect(data).toEqual({
@@ -600,10 +621,12 @@ test('tree-single', () => {
   });
 
   // remove the parent
-  ms.push({
-    type: 'remove',
-    row: {id: 1, name: 'foo', childID: 2},
-  });
+  consume(
+    ms.push({
+      type: 'remove',
+      row: {id: 1, name: 'foo', childID: 2},
+    }),
+  );
   view.flush();
   expect(data).toEqual(undefined);
 });
@@ -710,10 +733,12 @@ test('collapse', () => {
       },
     },
   } as const;
-  view.push({
-    type: 'add',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'add',
+      ...changeSansType,
+    }),
+  );
   view.flush();
 
   expect(data).toMatchInlineSnapshot(`
@@ -733,50 +758,81 @@ test('collapse', () => {
     ]
   `);
 
-  view.push({
-    type: 'remove',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'remove',
+      ...changeSansType,
+    }),
+  );
   view.flush();
 
   expect(data).toMatchInlineSnapshot(`[]`);
 
-  view.push({
-    type: 'add',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'add',
+      ...changeSansType,
+    }),
+  );
   // no commit
   expect(data).toMatchInlineSnapshot(`[]`);
 
-  view.push({
-    type: 'child',
-    node: {
-      row: {
-        id: 1,
-        name: 'issue',
-      },
-      relationships: {
-        labels: () => [
-          {
-            row: {
-              id: 1,
-              issueId: 1,
-              labelId: 1,
-              extra: 'a',
-            },
-            relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 1,
-                    name: 'label',
+  consume(
+    view.push({
+      type: 'child',
+      node: {
+        row: {
+          id: 1,
+          name: 'issue',
+        },
+        relationships: {
+          labels: () => [
+            {
+              row: {
+                id: 1,
+                issueId: 1,
+                labelId: 1,
+                extra: 'a',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 1,
+                      name: 'label',
+                    },
+                    relationships: {},
                   },
-                  relationships: {},
-                },
-              ],
+                ],
+              },
             },
-          },
-          {
+            {
+              row: {
+                id: 2,
+                issueId: 1,
+                labelId: 2,
+                extra: 'b',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 2,
+                      name: 'label2',
+                    },
+                    relationships: {},
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      child: {
+        relationshipName: 'labels',
+        change: {
+          type: 'add',
+          node: {
             row: {
               id: 2,
               issueId: 1,
@@ -795,35 +851,10 @@ test('collapse', () => {
               ],
             },
           },
-        ],
-      },
-    },
-    child: {
-      relationshipName: 'labels',
-      change: {
-        type: 'add',
-        node: {
-          row: {
-            id: 2,
-            issueId: 1,
-            labelId: 2,
-            extra: 'b',
-          },
-          relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 2,
-                  name: 'label2',
-                },
-                relationships: {},
-              },
-            ],
-          },
         },
       },
-    },
-  });
+    }),
+  );
   view.flush();
 
   expect(data).toMatchInlineSnapshot(`
@@ -849,35 +880,81 @@ test('collapse', () => {
   `);
 
   // edit the hidden row
-  view.push({
-    type: 'child',
-    node: {
-      row: {
-        id: 1,
-        name: 'issue',
+  consume(
+    view.push({
+      type: 'child',
+      node: {
+        row: {
+          id: 1,
+          name: 'issue',
+        },
+        relationships: {
+          labels: () => [
+            {
+              row: {
+                id: 1,
+                issueId: 1,
+                labelId: 1,
+                extra: 'a',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 1,
+                      name: 'label',
+                    },
+                    relationships: {},
+                  },
+                ],
+              },
+            },
+            {
+              row: {
+                id: 2,
+                issueId: 1,
+                labelId: 2,
+                extra: 'b2',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 2,
+                      name: 'label2',
+                    },
+                    relationships: {},
+                  },
+                ],
+              },
+            },
+          ],
+        },
       },
-      relationships: {
-        labels: () => [
-          {
+      child: {
+        relationshipName: 'labels',
+        change: {
+          type: 'edit',
+          oldNode: {
             row: {
-              id: 1,
+              id: 2,
               issueId: 1,
-              labelId: 1,
-              extra: 'a',
+              labelId: 2,
+              extra: 'b',
             },
             relationships: {
               labels: () => [
                 {
                   row: {
-                    id: 1,
-                    name: 'label',
+                    id: 2,
+                    name: 'label2',
                   },
                   relationships: {},
                 },
               ],
             },
           },
-          {
+          node: {
             row: {
               id: 2,
               issueId: 1,
@@ -896,54 +973,10 @@ test('collapse', () => {
               ],
             },
           },
-        ],
-      },
-    },
-    child: {
-      relationshipName: 'labels',
-      change: {
-        type: 'edit',
-        oldNode: {
-          row: {
-            id: 2,
-            issueId: 1,
-            labelId: 2,
-            extra: 'b',
-          },
-          relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 2,
-                  name: 'label2',
-                },
-                relationships: {},
-              },
-            ],
-          },
-        },
-        node: {
-          row: {
-            id: 2,
-            issueId: 1,
-            labelId: 2,
-            extra: 'b2',
-          },
-          relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 2,
-                  name: 'label2',
-                },
-                relationships: {},
-              },
-            ],
-          },
         },
       },
-    },
-  });
+    }),
+  );
   view.flush();
 
   expect(data).toMatchInlineSnapshot(`
@@ -969,35 +1002,62 @@ test('collapse', () => {
   `);
 
   // edit the leaf
-  view.push({
-    type: 'child',
-    node: {
-      row: {
-        id: 1,
-        name: 'issue',
-      },
-      relationships: {
-        labels: () => [
-          {
-            row: {
-              id: 1,
-              issueId: 1,
-              labelId: 1,
-              extra: 'a',
-            },
-            relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 1,
-                    name: 'label',
+  consume(
+    view.push({
+      type: 'child',
+      node: {
+        row: {
+          id: 1,
+          name: 'issue',
+        },
+        relationships: {
+          labels: () => [
+            {
+              row: {
+                id: 1,
+                issueId: 1,
+                labelId: 1,
+                extra: 'a',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 1,
+                      name: 'label',
+                    },
+                    relationships: {},
                   },
-                  relationships: {},
-                },
-              ],
+                ],
+              },
             },
-          },
-          {
+            {
+              row: {
+                id: 2,
+                issueId: 1,
+                labelId: 2,
+                extra: 'b2',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 2,
+                      name: 'label2x',
+                    },
+                    relationships: {},
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      child: {
+        relationshipName: 'labels',
+        change: {
+          type: 'child',
+          node: {
             row: {
               id: 2,
               issueId: 1,
@@ -1016,55 +1076,30 @@ test('collapse', () => {
               ],
             },
           },
-        ],
-      },
-    },
-    child: {
-      relationshipName: 'labels',
-      change: {
-        type: 'child',
-        node: {
-          row: {
-            id: 2,
-            issueId: 1,
-            labelId: 2,
-            extra: 'b2',
-          },
-          relationships: {
-            labels: () => [
-              {
+          child: {
+            relationshipName: 'labels',
+            change: {
+              type: 'edit',
+              oldNode: {
+                row: {
+                  id: 2,
+                  name: 'label2',
+                },
+                relationships: {},
+              },
+              node: {
                 row: {
                   id: 2,
                   name: 'label2x',
                 },
                 relationships: {},
               },
-            ],
-          },
-        },
-        child: {
-          relationshipName: 'labels',
-          change: {
-            type: 'edit',
-            oldNode: {
-              row: {
-                id: 2,
-                name: 'label2',
-              },
-              relationships: {},
-            },
-            node: {
-              row: {
-                id: 2,
-                name: 'label2x',
-              },
-              relationships: {},
             },
           },
         },
       },
-    },
-  });
+    }),
+  );
   view.flush();
 
   expect(data).toMatchInlineSnapshot(`
@@ -1143,8 +1178,8 @@ test('collapse-single', () => {
       return schema;
     },
     setOutput() {},
-    push(change: Change) {
-      view.push(change);
+    *push(change: Change) {
+      yield* view.push(change);
     },
   };
 
@@ -1192,10 +1227,12 @@ test('collapse-single', () => {
       },
     },
   } as const;
-  view.push({
-    type: 'add',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'add',
+      ...changeSansType,
+    }),
+  );
   view.flush();
 
   expect(data).toEqual([
@@ -1218,8 +1255,8 @@ test('basic with edit pushes', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
 
   const view = new ArrayView(
     ms.connect([['a', 'asc']]),
@@ -1253,7 +1290,9 @@ test('basic with edit pushes', () => {
 
   expect(callCount).toBe(1);
 
-  ms.push({type: 'edit', row: {a: 2, b: 'b2'}, oldRow: {a: 2, b: 'b'}});
+  consume(
+    ms.push({type: 'edit', row: {a: 2, b: 'b2'}, oldRow: {a: 2, b: 'b'}}),
+  );
 
   // We don't get called until flush.
   expect(callCount).toBe(1);
@@ -1275,7 +1314,9 @@ test('basic with edit pushes', () => {
     ]
   `);
 
-  ms.push({type: 'edit', row: {a: 3, b: 'b3'}, oldRow: {a: 2, b: 'b2'}});
+  consume(
+    ms.push({type: 'edit', row: {a: 3, b: 'b3'}, oldRow: {a: 2, b: 'b2'}}),
+  );
 
   view.flush();
   expect(callCount).toBe(3);
@@ -1316,7 +1357,7 @@ test('tree edit', () => {
     {id: 3, name: 'mon', data: 'c', childID: 4},
     {id: 4, name: 'monkey', data: 'd', childID: null},
   ] as const) {
-    ms.push({type: 'add', row});
+    consume(ms.push({type: 'add', row}));
   }
 
   const join = new Join({
@@ -1404,11 +1445,13 @@ test('tree edit', () => {
   `);
 
   // Edit root
-  ms.push({
-    type: 'edit',
-    oldRow: {id: 1, name: 'foo', data: 'a', childID: 2},
-    row: {id: 1, name: 'foo', data: 'a2', childID: 2},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {id: 1, name: 'foo', data: 'a', childID: 2},
+      row: {id: 1, name: 'foo', data: 'a2', childID: 2},
+    }),
+  );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -1477,7 +1520,7 @@ test('edit to change the order', () => {
     {a: 20, b: 'b'},
     {a: 30, b: 'c'},
   ] as const) {
-    ms.push({row, type: 'add'});
+    consume(ms.push({row, type: 'add'}));
   }
 
   const view = new ArrayView(
@@ -1512,11 +1555,13 @@ test('edit to change the order', () => {
     ]
   `);
 
-  ms.push({
-    type: 'edit',
-    oldRow: {a: 20, b: 'b'},
-    row: {a: 5, b: 'b2'},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {a: 20, b: 'b'},
+      row: {a: 5, b: 'b2'},
+    }),
+  );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -1538,11 +1583,13 @@ test('edit to change the order', () => {
     ]
   `);
 
-  ms.push({
-    type: 'edit',
-    oldRow: {a: 5, b: 'b2'},
-    row: {a: 4, b: 'b3'},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {a: 5, b: 'b2'},
+      row: {a: 4, b: 'b3'},
+    }),
+  );
 
   view.flush();
   expect(data).toMatchInlineSnapshot(`
@@ -1565,11 +1612,13 @@ test('edit to change the order', () => {
     ]
   `);
 
-  ms.push({
-    type: 'edit',
-    oldRow: {a: 4, b: 'b3'},
-    row: {a: 20, b: 'b4'},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {a: 4, b: 'b3'},
+      row: {a: 20, b: 'b4'},
+    }),
+  );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -1638,34 +1687,38 @@ test('edit to preserve relationships', () => {
     true,
     () => void 0,
   );
-  view.push({
-    type: 'add',
-    node: {
-      row: {id: 1, title: 'issue1'},
-      relationships: {
-        labels: () => [
-          {
-            row: {id: 1, name: 'label1'},
-            relationships: {},
-          },
-        ],
+  consume(
+    view.push({
+      type: 'add',
+      node: {
+        row: {id: 1, title: 'issue1'},
+        relationships: {
+          labels: () => [
+            {
+              row: {id: 1, name: 'label1'},
+              relationships: {},
+            },
+          ],
+        },
       },
-    },
-  });
-  view.push({
-    type: 'add',
-    node: {
-      row: {id: 2, title: 'issue2'},
-      relationships: {
-        labels: () => [
-          {
-            row: {id: 2, name: 'label2'},
-            relationships: {},
-          },
-        ],
+    }),
+  );
+  consume(
+    view.push({
+      type: 'add',
+      node: {
+        row: {id: 2, title: 'issue2'},
+        relationships: {
+          labels: () => [
+            {
+              row: {id: 2, name: 'label2'},
+              relationships: {},
+            },
+          ],
+        },
       },
-    },
-  });
+    }),
+  );
   let data: unknown[] = [];
   view.addListener(entries => {
     assertArray(entries);
@@ -1701,14 +1754,16 @@ test('edit to preserve relationships', () => {
     ]
   `);
 
-  view.push({
-    type: 'edit',
-    oldNode: {
-      row: {id: 1, title: 'issue1'},
-      relationships: {},
-    },
-    node: {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
-  });
+  consume(
+    view.push({
+      type: 'edit',
+      oldNode: {
+        row: {id: 1, title: 'issue1'},
+        relationships: {},
+      },
+      node: {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
+    }),
+  );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -1740,11 +1795,13 @@ test('edit to preserve relationships', () => {
   `);
 
   // And now edit to change order
-  view.push({
-    type: 'edit',
-    oldNode: {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
-    node: {row: {id: 3, title: 'issue1 is now issue3'}, relationships: {}},
-  });
+  consume(
+    view.push({
+      type: 'edit',
+      oldNode: {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
+      node: {row: {id: 3, title: 'issue1 is now issue3'}, relationships: {}},
+    }),
+  );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -1784,8 +1841,8 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
 
   const testError: ErroredQuery = {
     error: 'app',
@@ -1842,7 +1899,7 @@ test('listeners receive error when queryComplete rejects - singular', async () =
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
 
   const testError: ErroredQuery = {
     error: 'parse',
@@ -1892,7 +1949,7 @@ test('all listeners receive error when queryComplete rejects', async () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
 
   const testError: ErroredQuery = {
     error: 'parse',
@@ -1947,7 +2004,7 @@ test('listeners added after error still receive error state', async () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
 
   const testError: ErroredQuery = {
     error: 'app',
@@ -1990,7 +2047,7 @@ test('error state persists through flush operations', async () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
 
   const testError: ErroredQuery = {
     error: 'app',
@@ -2022,7 +2079,7 @@ test('error state persists through flush operations', async () => {
   const callsAfterError = callCount;
 
   // Add more data and flush
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
   view.flush();
 
   // Should still be in error state

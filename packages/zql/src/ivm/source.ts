@@ -3,6 +3,7 @@ import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {TableSchema} from '../../../zero-types/src/schema.ts';
 import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import type {Input} from './operator.ts';
+import type {Stream} from './stream.ts';
 
 export type SourceChangeAdd = {
   type: 'add';
@@ -68,11 +69,13 @@ export interface Source {
 
   /**
    * Pushes a change into the source and into all connected outputs.
+   * // TODO: this should return
    */
-  push(change: SourceChange): void;
+  push(change: SourceChange): Stream<'yield'>;
 
   /**
    * Pushes a change into the source.
+   * // TODO: this comment needs updating
    * Iterating the returned iterator will push the
    * change into one connected input at a time.
    *
@@ -80,7 +83,7 @@ export interface Source {
    * have been pushed into all connected inputs and
    * committed to the source.
    */
-  genPush(change: SourceChange): Iterable<void>;
+  genPush(change: SourceChange): Stream<'yield' | undefined>;
 }
 
 export interface SourceInput extends Input {

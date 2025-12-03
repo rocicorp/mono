@@ -66,7 +66,7 @@ export interface Output {
    * - Only add rows which do not already exist (by deep equality).
    * - Only remove rows which do exist (by deep equality).
    */
-  push(change: Change, pusher: InputBase): void;
+  push(change: Change, pusher: InputBase): Stream<'yield'>;
 }
 
 /**
@@ -74,7 +74,7 @@ export interface Output {
  * initial value for for an operator's output before it is set.
  */
 export const throwOutput: Output = {
-  push(_change: Change): void {
+  push(_change: Change): Stream<'yield'> {
     throw new Error('Output not set');
   },
 };

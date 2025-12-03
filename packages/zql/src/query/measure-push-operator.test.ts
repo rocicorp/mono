@@ -5,6 +5,7 @@ import type {FetchRequest, Input, Output} from '../ivm/operator.ts';
 import type {SourceSchema} from '../ivm/schema.ts';
 import {MeasurePushOperator} from './measure-push-operator.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 
 describe('MeasurePushOperator', () => {
   test('should pass through fetch calls', () => {
@@ -91,7 +92,7 @@ describe('MeasurePushOperator', () => {
     };
 
     const mockOutput: Output = {
-      push: vi.fn(),
+      push: vi.fn(() => emptyArray),
     };
 
     const mockMetricsDelegate: MetricsDelegate = {
@@ -111,7 +112,7 @@ describe('MeasurePushOperator', () => {
       node: {} as Node,
     };
 
-    measurePushOperator.push(change);
+    [...measurePushOperator.push(change)];
 
     expect(mockOutput.push).toHaveBeenCalledWith(change, measurePushOperator);
     expect(mockMetricsDelegate.addMetric).toHaveBeenCalledWith(
@@ -152,7 +153,7 @@ describe('MeasurePushOperator', () => {
       node: {} as Node,
     };
 
-    expect(() => measurePushOperator.push(change)).toThrow('Test error');
+    expect(() => [...measurePushOperator.push(change)]).toThrow('Test error');
     expect(mockMetricsDelegate.addMetric).not.toHaveBeenCalled();
   });
 });

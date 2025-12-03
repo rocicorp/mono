@@ -9,6 +9,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {buildFilterPipeline} from './filter-operators.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -30,7 +31,7 @@ test('destroy source connections', () => {
     type: 'add',
     row: {a: 3},
   } as const;
-  ms.push(msg1);
+  consume(ms.push(msg1));
 
   expect(snitch1.log).toEqual([['snitch1', 'push', msg1]]);
   expect(snitch2.log).toEqual([['snitch2', 'push', msg1]]);
@@ -41,7 +42,7 @@ test('destroy source connections', () => {
     type: 'add',
     row: {a: 2},
   } as const;
-  ms.push(msg2);
+  consume(ms.push(msg2));
 
   // snitch1 was destroyed. No new events should
   // be received.
@@ -58,7 +59,7 @@ test('destroy source connections', () => {
     type: 'add',
     row: {a: 1},
   } as const;
-  ms.push(msg3);
+  consume(ms.push(msg3));
   expect(snitch2.log).toEqual([
     ['snitch2', 'push', msg1],
     ['snitch2', 'push', msg2],
@@ -92,7 +93,7 @@ test('destroy a pipeline that has forking', () => {
 
   const out = new Catch(pipeline);
 
-  ms.push({type: 'add', row: {a: 1, b: 'foo'}});
+  consume(ms.push({type: 'add', row: {a: 1, b: 'foo'}}));
 
   const expected = [
     {
@@ -109,7 +110,7 @@ test('destroy a pipeline that has forking', () => {
   expect(out.pushes).toEqual(expected);
 
   out.destroy();
-  ms.push({type: 'add', row: {a: 2, b: 'foo'}});
+  consume(ms.push({type: 'add', row: {a: 2, b: 'foo'}}));
 
   // The pipeline was destroyed. No new events should
   // be received.
