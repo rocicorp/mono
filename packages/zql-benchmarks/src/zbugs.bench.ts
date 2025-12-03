@@ -122,7 +122,7 @@ async function benchmarkQuery<
   // });
 }
 
-benchmarkQuery(
+await benchmarkQuery(
   'forced table scan via exists',
   builder.issue.whereExists('creator', q => q.where('name', 'sdf'), {
     flip: false,

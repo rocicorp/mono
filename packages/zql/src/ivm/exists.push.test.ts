@@ -547,7 +547,9 @@ suite('EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent add that has children is pushed', () => {
@@ -667,7 +669,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent remove that has no children is not pushed', () => {
@@ -730,7 +734,9 @@ suite('EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent remove that has children is pushed', () => {
@@ -818,7 +824,9 @@ suite('EXISTS', () => {
     `);
 
     // i1 size is removed
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent edit that has no children is not pushed', () => {
@@ -882,7 +890,9 @@ suite('EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent edit that has children is pushed', () => {
@@ -977,7 +987,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child add resulting in one child causes push of parent add', () => {
@@ -1090,7 +1102,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child add resulting in > 1 child is pushed', () => {
@@ -1204,7 +1218,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child remove resulting in no children causes push of parent remove', () => {
@@ -1291,7 +1307,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child remove resulting in > 0 children is pushed', () => {
@@ -1393,7 +1411,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child edit is pushed', () => {
@@ -1509,7 +1529,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child edit changes correlation', () => {
@@ -1642,7 +1664,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   // potential tests to add
@@ -1744,7 +1768,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent add that has children is not pushed', () => {
@@ -1795,7 +1821,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent remove that has no children is pushed', () => {
@@ -1862,7 +1890,9 @@ suite('NOT EXISTS', () => {
     `);
 
     // i2 size is removed
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent remove that has children is not pushed', () => {
@@ -1907,7 +1937,9 @@ suite('NOT EXISTS', () => {
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
     // i1 size is removed
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent edit that has no children is pushed', () => {
@@ -1983,7 +2015,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent edit that has children is not pushed', () => {
@@ -2028,7 +2062,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child add resulting in one child causes push of parent remove', () => {
@@ -2094,7 +2130,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child add resulting in > 1 child is not pushed', () => {
@@ -2138,7 +2176,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child remove resulting in no children causes push of parent add', () => {
@@ -2216,7 +2256,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child remove resulting in > 0 children is not pushed', () => {
@@ -2260,7 +2302,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child edit is not pushed', () => {
@@ -2305,7 +2349,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child edit changes correlation', () => {
@@ -2401,7 +2447,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   // potential tests to add
