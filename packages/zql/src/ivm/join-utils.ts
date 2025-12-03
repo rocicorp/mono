@@ -11,15 +11,27 @@ export type JoinChangeOverlay = {
   position: Row | undefined;
 };
 
-export function* generateWithOverlay(
+export function generateWithOverlayNoYield(
   stream: Stream<Node>,
   overlay: Change,
   schema: SourceSchema,
 ): Stream<Node> {
+  return generateWithOverlay(stream, overlay, schema) as Stream<Node>;
+}
+
+export function* generateWithOverlay(
+  stream: Stream<Node | 'yield'>,
+  overlay: Change,
+  schema: SourceSchema,
+): Stream<Node | 'yield'> {
   let applied = false;
   let editOldApplied = false;
   let editNewApplied = false;
   for (const node of stream) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
     let yieldNode = true;
     if (!applied) {
       switch (overlay.type) {

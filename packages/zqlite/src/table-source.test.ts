@@ -14,6 +14,7 @@ import {
   UnsupportedValueError,
 } from './table-source.ts';
 import {filtersToSQL} from './query-builder.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
 const columns = {
   id: {type: 'string'},
@@ -186,7 +187,12 @@ describe('fetching from a table source', () => {
     const out = new Catch(c);
     c.setOutput(out);
     const rows = out.fetch(fetchArgs);
-    expect(rows.map(r => r.row)).toEqual(expectedRows);
+    expect(
+      rows.map(r => {
+        assert(r !== 'yield');
+        return r.row;
+      }),
+    ).toEqual(expectedRows);
   });
 });
 
@@ -281,7 +287,11 @@ describe('fetched value types', () => {
       const input = source.connect([['id', 'asc']]);
 
       if (c.output) {
-        expect([...input.fetch({})].map(node => node.row)).toEqual([c.output]);
+        expect(
+          [...input.fetch({})].map(node =>
+            node === 'yield' ? node : node.row,
+          ),
+        ).toEqual([c.output]);
       } else {
         expect(() => [...input.fetch({})]).toThrow(UnsupportedValueError);
       }

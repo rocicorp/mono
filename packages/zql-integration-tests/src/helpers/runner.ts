@@ -55,6 +55,7 @@ import {
   newQueryDelegate,
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
+import {skipYields} from '../../../zql/src/ivm/operator.ts';
 
 const lc = createSilentLogContext();
 
@@ -674,7 +675,7 @@ function gatherRows(
       _queryComplete,
     ) => {
       const schema = input.getSchema();
-      for (const node of input.fetch({})) {
+      for (const node of skipYields(input.fetch({}))) {
         processNode(schema, node);
       }
 
@@ -701,7 +702,7 @@ function gatherRows(
       node.relationships,
     )) {
       const childSchema = must(schema.relationships[relationship]);
-      for (const child of getChildren()) {
+      for (const child of skipYields(getChildren())) {
         processNode(childSchema, child);
       }
     }

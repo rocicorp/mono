@@ -322,7 +322,7 @@ test('transactions', () => {
   context.processChanges(undefined, 'ahash' as Hash, changes);
 
   expect(transactions).toEqual(1);
-  const result = out.fetch({});
+  const result = out.fetch({}).filter(n => n !== 'yield');
   expect(result).length(2);
   expect(result[0].row).toEqual({id: 's1', name: 'joanna'});
   expect(result[0].relationships.flair).length(15);

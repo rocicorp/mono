@@ -20,6 +20,7 @@ import type {
 } from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
+import {skipYields} from '../../zql/src/ivm/operator.ts';
 
 export type State = [Entry, QueryResultDetails];
 
@@ -67,7 +68,7 @@ export class SolidView implements Output {
 
     const initialRoot = this.#createEmptyRoot();
     this.#applyChangesToRoot(
-      input.fetch({}),
+      skipYields(input.fetch({})),
       node => ({type: 'add', node}),
       initialRoot,
     );
@@ -231,7 +232,7 @@ function materializeNodeRelationships(node: Node): Node {
   const relationships: Record<string, () => Stream<Node>> = {};
   for (const relationship in node.relationships) {
     const materialized: Node[] = [];
-    for (const n of node.relationships[relationship]()) {
+    for (const n of skipYields(node.relationships[relationship]())) {
       materialized.push(materializeNodeRelationships(n));
     }
     relationships[relationship] = () => materialized;

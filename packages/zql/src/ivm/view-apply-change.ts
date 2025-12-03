@@ -8,6 +8,7 @@ import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {drainStreams, type Comparator, type Node} from './data.ts';
+import {skipYields} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Entry, Format} from './view.ts';
 
@@ -84,7 +85,7 @@ export function applyChange(
           change.node.relationships,
         )) {
           const childSchema = must(schema.relationships[relationship]);
-          for (const node of children()) {
+          for (const node of skipYields(children())) {
             applyChange(
               parentEntry,
               {type: change.type, node},
@@ -165,7 +166,7 @@ export function applyChange(
             : ([] as MetaEntryList);
           newEntry[relationship] = newView;
 
-          for (const node of children()) {
+          for (const node of skipYields(children())) {
             applyChange(
               newEntry,
               {type: 'add', node},

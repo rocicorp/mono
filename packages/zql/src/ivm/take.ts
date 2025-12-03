@@ -8,6 +8,7 @@ import {type Change, type EditChange, type RemoveChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import {compareValues, type Comparator, type Node} from './data.ts';
 import {
+  skipYields,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -85,7 +86,7 @@ export class Take implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest): Stream<Node> {
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     if (
       !this.#partitionKey ||
       (req.constraint &&
@@ -101,6 +102,10 @@ export class Take implements Operator {
         return;
       }
       for (const inputNode of this.#input.fetch(req)) {
+        if (inputNode === 'yield') {
+          yield inputNode;
+          continue;
+        }
         if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
           return;
         }
@@ -128,6 +133,10 @@ export class Take implements Operator {
       return;
     }
     for (const inputNode of this.#input.fetch(req)) {
+      if (inputNode === 'yield') {
+        yield inputNode;
+        continue;
+      }
       if (this.getSchema().compareRows(inputNode.row, maxBound) > 0) {
         return;
       }
@@ -142,7 +151,7 @@ export class Take implements Operator {
     }
   }
 
-  *#initialFetch(req: FetchRequest): Stream<Node> {
+  *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
     assert(req.start === undefined, 'Start should be undefined');
     assert(!req.reverse, 'Reverse should be false');
     assert(
@@ -166,6 +175,10 @@ export class Take implements Operator {
     let exceptionThrown = false;
     try {
       for (const inputNode of this.#input.fetch(req)) {
+        if (inputNode === 'yield') {
+          yield 'yield';
+          continue;
+        }
         yield inputNode;
         bound = inputNode.row;
         size++;
@@ -285,25 +298,29 @@ export class Take implements Operator {
       if (this.#limit === 1) {
         boundNode = must(
           first(
+            skipYields(
+              this.#input.fetch({
+                start: {
+                  row: takeState.bound,
+                  basis: 'at',
+                },
+                constraint,
+              }),
+            ),
+          ),
+        );
+      } else {
+        [boundNode, beforeBoundNode] = take(
+          skipYields(
             this.#input.fetch({
               start: {
                 row: takeState.bound,
                 basis: 'at',
               },
               constraint,
+              reverse: true,
             }),
           ),
-        );
-      } else {
-        [boundNode, beforeBoundNode] = take(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'at',
-            },
-            constraint,
-            reverse: true,
-          }),
           2,
         );
       }
@@ -337,14 +354,16 @@ export class Take implements Operator {
         return;
       }
       const [beforeBoundNode] = take(
-        this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'after',
-          },
-          constraint,
-          reverse: true,
-        }),
+        skipYields(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'after',
+            },
+            constraint,
+            reverse: true,
+          }),
+        ),
         1,
       );
 
@@ -357,13 +376,15 @@ export class Take implements Operator {
         };
       }
       if (!newBound?.push) {
-        for (const node of this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-        })) {
+        for (const node of skipYields(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+          }),
+        )) {
           const push = compareRows(node.row, takeState.bound) > 0;
           newBound = {
             node,
@@ -460,14 +481,16 @@ export class Take implements Operator {
 
         const beforeBoundNode = must(
           first(
-            this.#input.fetch({
-              start: {
-                row: takeState.bound,
-                basis: 'after',
-              },
-              constraint,
-              reverse: true,
-            }),
+            skipYields(
+              this.#input.fetch({
+                start: {
+                  row: takeState.bound,
+                  basis: 'after',
+                },
+                constraint,
+                reverse: true,
+              }),
+            ),
           ),
         );
 
@@ -485,13 +508,15 @@ export class Take implements Operator {
       // Find the first item at the old bounds. This will be the new bounds.
       const newBoundNode = must(
         first(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'at',
-            },
-            constraint,
-          }),
+          skipYields(
+            this.#input.fetch({
+              start: {
+                row: takeState.bound,
+                basis: 'at',
+              },
+              constraint,
+            }),
+          ),
         ),
       );
 
@@ -541,14 +566,16 @@ export class Take implements Operator {
       assert(newCmp < 0, 'New comparison must be less than 0');
 
       const [oldBoundNode, newBoundNode] = take(
-        this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-          reverse: true,
-        }),
+        skipYields(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+            reverse: true,
+          }),
+        ),
         2,
       );
       // Remove before add to maintain invariant that
@@ -596,13 +623,15 @@ export class Take implements Operator {
       // the newRow as the new bound.
       const afterBoundNode = must(
         first(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'after',
-            },
-            constraint,
-          }),
+          skipYields(
+            this.#input.fetch({
+              start: {
+                row: takeState.bound,
+                basis: 'after',
+              },
+              constraint,
+            }),
+          ),
         ),
       );
 

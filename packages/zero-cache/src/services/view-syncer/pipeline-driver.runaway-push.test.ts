@@ -81,6 +81,10 @@ describe('view-syncer/pipeline-driver', () => {
         id TEXT PRIMARY KEY, 
         name TEXT,
          _0_version TEXT NOT NULL);
+      CREATE TABLE comment (
+        id TEXT PRIMARY KEY, 
+        issueID TEXT,
+         _0_version TEXT NOT NULL);
 
       INSERT INTO user (id, name, _0_version) VALUES ('u1', 'fuzzy', '123');
       INSERT INTO issue (id, creatorID, _0_version)
@@ -113,8 +117,15 @@ describe('view-syncer/pipeline-driver', () => {
       name: string(),
     })
     .primaryKey('id');
+  const comment = table('comment')
+    .columns({
+      id: string(),
+      issueID: string(),
+    })
+    .primaryKey('id');
+
   const clientSchema = createSchema({
-    tables: [issue, user],
+    tables: [issue, user, comment],
   });
 
   const ISSUES_WITH_CREATOR: AST = {
@@ -136,16 +147,52 @@ describe('view-syncer/pipeline-driver', () => {
     ],
   };
 
+  const ISSUES_WITH_CREATOR_EXISTS_COMMENT_AST: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {
+          parentField: ['creatorID'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'creator',
+          orderBy: [['id', 'desc']],
+        },
+      },
+    ],
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'client',
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'comment',
+          alias: 'comments',
+          orderBy: [['id', 'asc']],
+        },
+      },
+    },
+  };
+
   const messages = new ReplicationMessages({
     issue: 'id',
     user: 'id',
   });
 
-  test('timeout on single change that causes lot of push processing', () => {
+  test('timeout on single change that causes lot of push processing and push output', () => {
     pipelines.init(clientSchema);
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
         totalElapsed: () => 1000,
+        elapsedLap: () => 1000,
       }),
     ];
 
@@ -162,5 +209,69 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toThrowErrorMatchingInlineSnapshot(
       `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 501 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
     );
+  });
+
+  test('timeout on single change that causes lot of push processing but no push output', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_WITH_CREATOR_EXISTS_COMMENT_AST,
+        {
+          totalElapsed: () => 1000,
+          elapsedLap: () => 1000,
+        },
+      ),
+    ];
+
+    // This change will fetch each of the 1000 issue related to user 'u1', but
+    // has no push output because none of them pass the exists comments filter.
+    replicator.processTransaction(
+      '134',
+      messages.update('user', {id: 'u1', name: 'wuzzy'}),
+    );
+
+    let elapsed = 0;
+    expect(() => [
+      ...pipelines.advance({totalElapsed: () => elapsed++}).changes,
+    ]).toThrowErrorMatchingInlineSnapshot(
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 501 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
+    );
+  });
+
+  test("timeout on many changes that don't fetch any rows", () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 1000,
+        elapsedLap: () => 1000,
+      }),
+    ];
+
+    // This change will cause a child change push for each of the 1000
+    // issue related to user 'u1'.
+    replicator.processTransaction(
+      '134',
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n =>
+        messages.insert('issue', {id: `i${1000 + n}`}),
+      ),
+    );
+
+    let elapsedCalls = 0;
+    let changeCount = 0;
+    expect(() => {
+      for (const _ of pipelines.advance({
+        totalElapsed: () => {
+          elapsedCalls++;
+          return elapsedCalls * 100;
+        },
+      }).changes) {
+        changeCount++;
+      }
+    }).toThrowErrorMatchingInlineSnapshot(
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 5 of 10 changes after 600 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
+    );
+    expect(changeCount).toEqual(5);
   });
 });

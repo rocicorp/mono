@@ -141,6 +141,7 @@ describe('analyzeQuery', () => {
           decorateFilterInput: expect.any(Function),
         }),
       }),
+      expect.anything(),
     );
 
     expect(explainQueries).toHaveBeenCalledWith(
@@ -184,6 +185,7 @@ describe('analyzeQuery', () => {
         syncedRows: false,
         vendedRows: true,
       }),
+      expect.anything(),
     );
 
     expect(result).toEqual({
@@ -232,6 +234,7 @@ describe('analyzeQuery', () => {
       complexAST,
       true,
       expect.any(Object),
+      expect.anything(),
     );
     expect(result.syncedRowCount).toBe(10);
   });
@@ -336,6 +339,7 @@ describe('analyzeQuery', () => {
       tableName,
       mockTableSpec.zqlSpec,
       mockTableSpec.tableSpec.primaryKey,
+      expect.anything(), // should yield
     );
   });
 
@@ -406,6 +410,7 @@ describe('analyzeQuery', () => {
         syncedRows: false,
         vendedRows: true,
       }),
+      expect.anything(),
     );
   });
 
@@ -703,6 +708,7 @@ describe('analyzeQuery', () => {
           costModel: expect.anything(),
           planDebugger: mockDebugger,
         }),
+        expect.anything(), // shouldYield
       );
 
       // Verify serializePlanDebugEvents was called
@@ -754,6 +760,7 @@ describe('analyzeQuery', () => {
           costModel: undefined,
           planDebugger: undefined,
         }),
+        expect.anything(), // shouldYield
       );
 
       // Verify serializePlanDebugEvents was NOT called

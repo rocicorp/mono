@@ -2,12 +2,14 @@ import {unreachable} from '../../../shared/src/asserts.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
-import type {FetchRequest, Input, Output} from './operator.ts';
+import {type FetchRequest, type Input, type Output} from './operator.ts';
 
-export type CaughtNode = {
-  row: Row;
-  relationships: Record<string, CaughtNode[]>;
-};
+export type CaughtNode =
+  | {
+      row: Row;
+      relationships: Record<string, CaughtNode[]>;
+    }
+  | 'yield';
 
 export type CaughtAddChange = {
   type: 'add';
@@ -115,14 +117,16 @@ export function expandChange(change: Change): CaughtChange {
   }
 }
 
-export function expandNode(node: Node): CaughtNode {
-  return {
-    row: node.row,
-    relationships: Object.fromEntries(
-      Object.entries(node.relationships).map(([k, v]) => [
-        k,
-        [...v()].map(expandNode),
-      ]),
-    ),
-  };
+export function expandNode(node: Node | 'yield'): CaughtNode {
+  return node === 'yield'
+    ? node
+    : {
+        row: node.row,
+        relationships: Object.fromEntries(
+          Object.entries(node.relationships).map(([k, v]) => [
+            k,
+            [...v()].map(expandNode),
+          ]),
+        ),
+      };
 }

@@ -1,7 +1,7 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {describe, expect, test, vi} from 'vitest';
 import type {Node} from './data.js';
-import type {FetchRequest, Operator} from './operator.js';
+import {skipYields, type FetchRequest, type Operator} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {UnionFanIn} from './union-fan-in.js';
 import type {UnionFanOut} from './union-fan-out.js';
@@ -211,7 +211,7 @@ describe('UnionFanIn', () => {
       const input2 = mockOperator(mockSchema, data2);
 
       const fanIn = new UnionFanIn(fanOut, [input1, input2]);
-      const result = Array.from(fanIn.fetch({} as FetchRequest));
+      const result = Array.from(skipYields(fanIn.fetch({} as FetchRequest)));
 
       expect(result).toHaveLength(4);
       expect(result.map(n => n.row.id)).toEqual([1, 2, 3, 4]);
@@ -240,7 +240,7 @@ describe('UnionFanIn', () => {
       const input2 = mockOperator(mockSchema, data2);
 
       const fanIn = new UnionFanIn(fanOut, [input1, input2]);
-      const result = Array.from(fanIn.fetch({} as FetchRequest));
+      const result = Array.from(skipYields(fanIn.fetch({} as FetchRequest)));
 
       expect(result).toHaveLength(3);
       expect(result.map(n => n.row.id)).toEqual([1, 2, 3]);

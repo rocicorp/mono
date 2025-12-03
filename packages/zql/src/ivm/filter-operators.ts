@@ -75,8 +75,12 @@ export class FilterStart implements FilterInput, Output {
     this.#output.push(change, this);
   }
 
-  *fetch(req: FetchRequest): Stream<Node> {
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     for (const node of this.#input.fetch(req)) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
       if (this.#output.filter(node, false)) {
         yield node;
       }
@@ -106,7 +110,7 @@ export class FilterEnd implements Input, FilterOutput {
     input.setFilterOutput(this);
   }
 
-  *fetch(req: FetchRequest): Stream<Node> {
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     for (const node of this.#start.fetch(req)) {
       yield node;
     }

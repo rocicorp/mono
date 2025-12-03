@@ -40,12 +40,12 @@ export class Skip implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     return this.#fetchOrCleanup('fetch', req);
   }
 
   cleanup(req: FetchRequest): Stream<Node> {
-    return this.#fetchOrCleanup('fetch', req);
+    return this.#fetchOrCleanup('cleanup', req) as Stream<Node>;
   }
 
   *#fetchOrCleanup(method: 'fetch' | 'cleanup', req: FetchRequest) {
@@ -59,6 +59,12 @@ export class Skip implements Operator {
       return;
     }
     for (const node of nodes) {
+      if (node === 'yield') {
+        if (method === 'fetch') {
+          yield node;
+        }
+        continue;
+      }
       if (!this.#shouldBePresent(node.row)) {
         return;
       }

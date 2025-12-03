@@ -1160,16 +1160,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           span.setAttribute('queryHash', queryID);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', transformedAst.table);
-          for (const _ of this.#pipelines.addQuery(
+          for (const change of this.#pipelines.addQuery(
             transformationHash,
             queryID,
             transformedAst,
             await timer.start(),
           )) {
-            if (++count % TIME_SLICE_CHECK_SIZE === 0) {
-              if (timer.elapsedLap() > TIME_SLICE_MS) {
-                await timer.yieldProcess();
-              }
+            if (change === 'yield') {
+              await timer.yieldProcess('yield in hydrateUnchangedQueries');
+            } else {
+              count++;
             }
           }
         },
@@ -1814,7 +1814,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #processChanges(
     lc: LogContext,
     timer: TimeSliceTimer,
-    changes: Iterable<RowChange>,
+    changes: Iterable<RowChange | 'yield'>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler,
     hashToIDs: Map<string, string[]>,
@@ -1842,6 +1842,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       await startAsyncSpan(tracer, 'loopingChanges', async span => {
         for (const change of changes) {
+          if (change === 'yield') {
+            await timer.yieldProcess('yield in processChanges');
+            continue;
+          }
           const {
             type,
             queryHash: transformationHash,
@@ -1889,7 +1893,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (rows.size % CURSOR_PAGE_SIZE === 0) {
             await processBatch();
           }
-
           if (rows.size % TIME_SLICE_CHECK_SIZE === 0) {
             if (timer.elapsedLap() > TIME_SLICE_MS) {
               await timer.yieldProcess();
@@ -2223,7 +2226,7 @@ export class TimeSliceTimer {
     return this;
   }
 
-  async yieldProcess() {
+  async yieldProcess(_msgForTesting?: string) {
     this.#stopLap();
     await yieldProcess();
     this.#startLap();

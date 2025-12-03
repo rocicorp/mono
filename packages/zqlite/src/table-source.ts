@@ -26,7 +26,7 @@ import {
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import type {FetchRequest} from '../../zql/src/ivm/operator.ts';
+import {skipYields, type FetchRequest} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {
   type Source,
@@ -79,9 +79,16 @@ export class TableSource implements Source {
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
+  readonly #shouldYield: () => boolean;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
 
+  /**
+   * @param shouldYield a function called after each row is read from the database,
+   * which should return true if the source should yield the special 'yield' value
+   * to yield control back to the caller at the end of the pipeline.  Can
+   * also throw an error to abort the pipeline processing.
+   */
   constructor(
     logContext: LogContext,
     logConfig: LogConfig,
@@ -89,6 +96,7 @@ export class TableSource implements Source {
     tableName: string,
     columns: Record<string, SchemaValue>,
     primaryKey: PrimaryKey,
+    shouldYield = () => false,
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
@@ -97,6 +105,7 @@ export class TableSource implements Source {
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
+    this.#shouldYield = shouldYield;
 
     assert(
       this.#uniqueIndexes.has(JSON.stringify([...primaryKey].sort())),
@@ -261,10 +270,10 @@ export class TableSource implements Source {
   }
 
   #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
-    return this.#fetch(req, connection);
+    return skipYields(this.#fetch(req, connection));
   }
 
-  *#fetch(req: FetchRequest, connection: Connection): Stream<Node> {
+  *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
     const query = this.#requestToSQL(req, connection.filters?.condition, sort);
@@ -285,19 +294,22 @@ export class TableSource implements Source {
       debug?.initQuery(this.#table, sqlAndBindings.text);
 
       yield* generateWithStart(
-        generateWithOverlay(
-          req.start?.row,
-          this.#mapFromSQLiteTypes(
-            this.#columns,
-            rowIterator,
-            sqlAndBindings.text,
-            debug,
+        generateWithYields(
+          generateWithOverlay(
+            req.start?.row,
+            this.#mapFromSQLiteTypes(
+              this.#columns,
+              rowIterator,
+              sqlAndBindings.text,
+              debug,
+            ),
+            req.constraint,
+            this.#overlay,
+            callingConnectionIndex,
+            comparator,
+            connection.filters?.predicate,
           ),
-          req.constraint,
-          this.#overlay,
-          callingConnectionIndex,
-          comparator,
-          connection.filters?.predicate,
+          this.#shouldYield,
         ),
         req.start,
         comparator,
@@ -629,4 +641,13 @@ function nonPrimaryKeys(
   primaryKey: PrimaryKey,
 ) {
   return Object.keys(columns).filter(c => !primaryKey.includes(c));
+}
+
+function* generateWithYields(stream: Stream<Node>, shouldYield: () => boolean) {
+  for (const n of stream) {
+    if (shouldYield()) {
+      yield 'yield';
+    }
+    yield n;
+  }
 }
