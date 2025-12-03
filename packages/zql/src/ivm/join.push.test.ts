@@ -96,11 +96,7 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -155,11 +151,7 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`[]`);
   });
 
@@ -223,13 +215,7 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -323,13 +309,7 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -416,13 +396,7 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -508,13 +482,7 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -585,13 +553,7 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`[]`);
   });
 
@@ -641,11 +603,7 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -720,11 +678,7 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -949,11 +903,7 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -1147,13 +1097,7 @@ suite('push one:many', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
-          },
-        }
-      `);
+      expect(actualStorage).toMatchInlineSnapshot(`{}`);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -1272,13 +1216,7 @@ suite('push one:many', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
-          },
-        }
-      `);
+      expect(actualStorage).toMatchInlineSnapshot(`{}`);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -1449,14 +1387,7 @@ suite('push one:many', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-        }
-      `);
+      expect(actualStorage).toMatchInlineSnapshot(`{}`);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -1629,14 +1560,7 @@ suite('push one:many', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(comments)": {
-            ""pKeySet","i2","i2",": true,
-            ""pKeySet","i3","i3",": true,
-          },
-        }
-      `);
+      expect(actualStorage).toMatchInlineSnapshot(`{}`);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -1790,13 +1714,7 @@ suite('push many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -1879,13 +1797,7 @@ suite('push many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u2","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -1969,13 +1881,7 @@ suite('push many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -2095,14 +2001,7 @@ suite('push many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -2297,14 +2196,7 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
-          },
-        }
-      `);
+      expect(actualStorage).toMatchInlineSnapshot(`{}`);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -2614,18 +2506,7 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ".issues:join(comments)": {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-          ":join(issues)": {
-            ""pKeySet","u1","u1",": true,
-            ""pKeySet","u2","u2",": true,
-          },
-        }
-      `);
+      expect(actualStorage).toMatchInlineSnapshot(`{}`);
 
       expect(pushes).toMatchInlineSnapshot(`
         [
@@ -2765,14 +2646,7 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
-          },
-        }
-      `);
+      expect(actualStorage).toMatchInlineSnapshot(`{}`);
       expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
@@ -2900,14 +2774,7 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
-          },
-        }
-      `);
+      expect(actualStorage).toMatchInlineSnapshot(`{}`);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -3136,16 +3003,7 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
-        },
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3277,16 +3135,7 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
-        },
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3408,16 +3257,7 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
-        },
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3497,57 +3337,16 @@ suite('push one:many:many', () => {
             },
           },
         ],
-        [
-          ".comments:source(comment)",
-          "cleanup",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          ".comments.revisions:source(revision)",
-          "cleanup",
-          {
-            "constraint": {
-              "commentID": "c1",
-            },
-          },
-        ],
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:join(revisions)": {},
-        ":join(comments)": {},
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
           "node": {
             "relationships": {
-              "comments": [
-                {
-                  "relationships": {
-                    "revisions": [
-                      {
-                        "relationships": {},
-                        "row": {
-                          "commentID": "c1",
-                          "id": "r1",
-                        },
-                      },
-                    ],
-                  },
-                  "row": {
-                    "id": "c1",
-                    "issueID": "i1",
-                  },
-                },
-              ],
+              "comments": [],
             },
             "row": {
               "id": "i1",
@@ -3735,16 +3534,7 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
-        },
-        ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3874,16 +3664,7 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
-        },
-        ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -4089,18 +3870,7 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
-          ""pKeySet","l1","i2","l1",": true,
-        },
-        ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -4500,18 +4270,7 @@ describe('edit assignee', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 
   test('from none to many', () => {
@@ -4865,18 +4624,7 @@ describe('edit assignee', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 
   test('from one to none', () => {
@@ -5132,18 +4880,7 @@ describe('edit assignee', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u2","i2",": true,
-          ""pKeySet",null,"i1",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 
   test('from many to none', () => {
@@ -5485,18 +5222,7 @@ describe('edit assignee', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u2","i2",": true,
-          ""pKeySet",null,"i1",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 });
 
@@ -5765,15 +5491,7 @@ describe('joins with compound join keys', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ab)": {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
-          ""pKeySet",7,8,2,": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 
   test('edit child with moving it', () => {
@@ -5894,14 +5612,7 @@ describe('joins with compound join keys', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ab)": {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 });
 
@@ -6074,16 +5785,7 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -6384,16 +6086,7 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -6707,16 +6400,7 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -7260,21 +6944,7 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".owner:join(state)": {
-          ""pKeySet","s0","u0",": true,
-          ""pKeySet","s0","u1",": true,
-          ""pKeySet","s1","u2",": true,
-        },
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -7940,16 +7610,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -8363,16 +8024,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -8804,16 +8456,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -9517,23 +9160,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".ownerByName:join(state)": {
-          ""pKeySet","s0","u2",": true,
-          ""pKeySet","s0","u3",": true,
-          ""pKeySet","s1","u0",": true,
-          ""pKeySet","s1","u1",": true,
-          ""pKeySet","s1","u4",": true,
-        },
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {

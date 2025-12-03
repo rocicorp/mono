@@ -1,7 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change, ChildChange} from './change.ts';
 import type {Node} from './data.ts';
 import {
@@ -291,31 +290,4 @@ export class Join implements Input {
       },
     };
   }
-}
-
-/** Exported for testing. */
-export function makeStorageKeyForValues(values: readonly Value[]): string {
-  const json = JSON.stringify(['pKeySet', ...values]);
-  return json.substring(1, json.length - 1) + ',';
-}
-
-/** Exported for testing. */
-export function makeStorageKeyPrefix(row: Row, key: CompoundKey): string {
-  return makeStorageKeyForValues(key.map(k => row[k]));
-}
-
-/** Exported for testing.
- * This storage key tracks the primary keys seen for each unique
- * value joined on. This is used to know when to cleanup a child's state.
- */
-export function makeStorageKey(
-  key: CompoundKey,
-  primaryKey: PrimaryKey,
-  row: Row,
-): string {
-  const values: Value[] = key.map(k => row[k]);
-  for (const key of primaryKey) {
-    values.push(row[key]);
-  }
-  return makeStorageKeyForValues(values);
 }

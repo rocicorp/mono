@@ -1,14 +1,11 @@
 import {expect, suite, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
 import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtNode} from './catch.ts';
-import {SetOfConstraint} from './constraint.ts';
-import {Join, makeStorageKey, makeStorageKeyPrefix} from './join.ts';
-import {MemoryStorage} from './memory-storage.ts';
+import {Join} from './join.ts';
 import type {SourceSchema} from './schema.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
@@ -49,11 +46,6 @@ suite('fetch one:many', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
-      ]
-    `);
   });
 
   test('no parent', () => {
@@ -70,11 +62,6 @@ suite('fetch one:many', () => {
           "fetch",
           {},
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
       ]
     `);
   });
@@ -113,13 +100,6 @@ suite('fetch one:many', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
       ]
     `);
   });
@@ -168,13 +148,6 @@ suite('fetch one:many', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
-      ]
-    `);
   });
 
   test('one parent, wrong child', () => {
@@ -211,13 +184,6 @@ suite('fetch one:many', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
       ]
     `);
   });
@@ -270,13 +236,6 @@ suite('fetch one:many', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
       ]
     `);
   });
@@ -372,14 +331,6 @@ suite('fetch one:many', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-      ]
-    `);
   });
 });
 
@@ -413,11 +364,6 @@ suite('fetch many:one', () => {
           "fetch",
           {},
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
       ]
     `);
   });
@@ -459,13 +405,6 @@ suite('fetch many:one', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","u1","i1",": true,
-        },
-      ]
-    `);
   });
 
   test('no parent, one child', () => {
@@ -482,11 +421,6 @@ suite('fetch many:one', () => {
           "fetch",
           {},
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
       ]
     `);
   });
@@ -533,13 +467,6 @@ suite('fetch many:one', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","u1","i1",": true,
-        },
       ]
     `);
   });
@@ -619,14 +546,6 @@ suite('fetch many:one', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-        },
-      ]
-    `);
   });
 
   test('two parents, two children', () => {
@@ -704,14 +623,6 @@ suite('fetch many:one', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      ]
-    `);
   });
 });
 
@@ -753,12 +664,6 @@ suite('fetch one:many:many', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
-        {},
-      ]
-    `);
   });
 
   test('no parent, one comment, no revision', () => {
@@ -777,12 +682,6 @@ suite('fetch one:many:many', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
-        {},
-      ]
-    `);
   });
 
   test('no parent, one comment, one revision', () => {
@@ -799,12 +698,6 @@ suite('fetch one:many:many', () => {
           "fetch",
           {},
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
-        {},
       ]
     `);
   });
@@ -843,14 +736,6 @@ suite('fetch one:many:many', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
-        {},
       ]
     `);
   });
@@ -920,16 +805,6 @@ suite('fetch one:many:many', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
-        {
-          ""pKeySet","c1","c1",": true,
-        },
       ]
     `);
   });
@@ -1139,20 +1014,6 @@ suite('fetch one:many:many', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","c1","c1",": true,
-          ""pKeySet","c2","c2",": true,
-          ""pKeySet","c3","c3",": true,
-          ""pKeySet","c4","c4",": true,
-        },
-      ]
-    `);
   });
 });
 
@@ -1203,12 +1064,6 @@ suite('fetch one:many:one', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
-        {},
-      ]
-    `);
   });
 
   test('no issues, one issuelabel, one label', () => {
@@ -1226,12 +1081,6 @@ suite('fetch one:many:one', () => {
           "fetch",
           {},
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
-        {},
       ]
     `);
   });
@@ -1271,14 +1120,6 @@ suite('fetch one:many:one', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
-        {},
       ]
     `);
   });
@@ -1337,16 +1178,6 @@ suite('fetch one:many:one', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
-        {
-          ""pKeySet","l1","i1","l1",": true,
-        },
       ]
     `);
   });
@@ -1412,16 +1243,6 @@ suite('fetch one:many:one', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
-        {
-          ""pKeySet","l1","i1","l1",": true,
-        },
       ]
     `);
   });
@@ -1519,17 +1340,6 @@ suite('fetch one:many:one', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-        },
-        {
-          ""pKeySet","l1","i1","l1",": true,
-          ""pKeySet","l2","i1","l2",": true,
-        },
       ]
     `);
   });
@@ -1699,20 +1509,6 @@ suite('fetch one:many:one', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","l1","i1","l1",": true,
-          ""pKeySet","l1","i2","l1",": true,
-          ""pKeySet","l2","i1","l2",": true,
-          ""pKeySet","l2","i2","l2",": true,
-        },
-      ]
-    `);
   });
 });
 
@@ -1758,11 +1554,6 @@ suite('compound join keys', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
-      ]
-    `);
   });
 
   test('no parent', () => {
@@ -1779,11 +1570,6 @@ suite('compound join keys', () => {
           "fetch",
           {},
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {},
       ]
     `);
   });
@@ -1826,13 +1612,6 @@ suite('compound join keys', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet",1,2,0,": true,
-        },
       ]
     `);
   });
@@ -1887,13 +1666,6 @@ suite('compound join keys', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet",1,2,0,": true,
-        },
-      ]
-    `);
   });
 
   test('one parent, wrong child', () => {
@@ -1935,13 +1707,6 @@ suite('compound join keys', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet",1,2,0,": true,
-        },
       ]
     `);
   });
@@ -2000,13 +1765,6 @@ suite('compound join keys', () => {
             },
           },
         ],
-      ]
-    `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet",1,2,0,": true,
-        },
       ]
     `);
   });
@@ -2121,14 +1879,6 @@ suite('compound join keys', () => {
         ],
       ]
     `);
-    expect(results.storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
-        },
-      ]
-    `);
   });
 });
 
@@ -2159,35 +1909,26 @@ function fetchTest(t: FetchTest): FetchTestResults {
     };
   });
 
-  const joins: {
-    join: Join;
-    storage: MemoryStorage;
-  }[] = [];
+  const joins: Join[] = [];
   // Although we tend to think of the joins from left to right, we need to
   // build them from right to left.
   for (let i = t.joins.length - 1; i >= 0; i--) {
     const info = t.joins[i];
     const parent = sources[i].snitch;
     const child =
-      i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
-    const storage = new MemoryStorage();
+      i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1];
     const join = new Join({
       parent,
       child,
-      storage,
       ...info,
       hidden: false,
       system: 'client',
     });
-    joins[i] = {
-      join,
-      storage,
-    };
+    joins[i] = join;
   }
 
   const results: FetchTestResults = {
     hydrate: [],
-    storage: [],
     fetchMessages: [],
   };
   for (const [phase, fetchType] of [
@@ -2215,29 +1956,21 @@ function fetchTest(t: FetchTest): FetchTestResults {
     }
 
     // toEqual doesn't work here for some reason that I am too lazy to find.
-    expect(finalJoin.join.getSchema()).toStrictEqual(expectedSchema);
+    expect(finalJoin.getSchema()).toStrictEqual(expectedSchema);
 
-    const c = new Catch(finalJoin.join);
+    const c = new Catch(finalJoin);
     const r = c[fetchType]();
 
     if (phase === 'hydrate') {
       results.hydrate = r;
-    } else {
+    } else if (phase === 'fetch') {
       expect(r).toEqual(results.hydrate);
+    } else {
+      // Cleanup is now a no-op
+      phase satisfies 'cleanup';
+      expect(r).toEqual([]);
     }
     expect(c.pushes).toEqual([]);
-
-    for (const [i, j] of joins.entries()) {
-      const {storage} = j;
-      if (phase === 'hydrate') {
-        results.storage[i] = storage.cloneData();
-      } else if (phase === 'fetch') {
-        expect(storage.cloneData()).toEqual(results.storage[i]);
-      } else {
-        phase satisfies 'cleanup';
-        expect(storage.cloneData()).toEqual({});
-      }
-    }
 
     if (phase === 'hydrate') {
       results.fetchMessages = [...log];
@@ -2245,23 +1978,9 @@ function fetchTest(t: FetchTest): FetchTestResults {
       // should be the same as for hydrate
       expect(log).toEqual(results.fetchMessages);
     } else {
-      // For cleanup, the last fetch for any constraint should be a cleanup.
-      // Others should be fetch.
+      // Cleanup is now a no-op, so no messages are expected
       phase satisfies 'cleanup';
-      const expectedMessages = [];
-      const seen = new SetOfConstraint();
-      for (let i = results.fetchMessages.length - 1; i >= 0; i--) {
-        const [name, type, req] = results.fetchMessages[i];
-        expect(type).toSatisfy(t => t === 'fetch' || t === 'cleanup');
-        assert(type === 'fetch' || type === 'cleanup');
-        if (!(req.constraint && seen.has(req.constraint))) {
-          expectedMessages[i] = [name, 'cleanup', req];
-        } else {
-          expectedMessages[i] = [name, 'fetch', req];
-        }
-        req.constraint && seen.add(req.constraint);
-      }
-      expect(log).toEqual(expectedMessages);
+      expect(log).toEqual([]);
     }
   }
 
@@ -2283,43 +2002,4 @@ type FetchTest = {
 type FetchTestResults = {
   fetchMessages: SnitchMessage[];
   hydrate: CaughtNode[];
-  storage: Record<string, JSONValue>[];
 };
-
-test('createPrimaryKeySetStorageKey', () => {
-  const row123 = {a: 123, b: true, id: 'id1'};
-  const row1234 = {a: 1234, b: true, id: 'id1'};
-  const k123 = makeStorageKey(['a'], ['id'], row123);
-  const kp123 = makeStorageKeyPrefix(row123, ['a']);
-  const k1234 = makeStorageKey(['a'], ['id'], row1234);
-  const kp1234 = makeStorageKeyPrefix(row1234, ['a']);
-
-  expect(k123).toEqual('"pKeySet",123,"id1",');
-  expect(kp123).toEqual('"pKeySet",123,');
-  expect(k123.startsWith(kp123)).true;
-
-  expect(k1234).toEqual('"pKeySet",1234,"id1",');
-  expect(kp1234).toEqual('"pKeySet",1234,');
-  expect(k1234.startsWith(kp1234)).true;
-
-  expect(k123.startsWith(kp1234)).false;
-  expect(k1234.startsWith(kp123)).false;
-
-  const row456 = {a: 456, b: true, id: 'id1', id2: 'id2'};
-  const row4567 = {a: 4567, b: true, id: 'id1', id2: 'id2'};
-  const k456 = makeStorageKey(['b', 'a'], ['id', 'id2'], row456);
-  const kp456 = makeStorageKeyPrefix(row456, ['b', 'a']);
-  const k4567 = makeStorageKey(['b', 'a'], ['id', 'id2'], row4567);
-  const kp4567 = makeStorageKeyPrefix(row4567, ['b', 'a']);
-
-  expect(k456).toEqual('"pKeySet",true,456,"id1","id2",');
-  expect(kp456).toEqual('"pKeySet",true,456,');
-  expect(k456.startsWith(kp456)).true;
-
-  expect(k4567).toEqual('"pKeySet",true,4567,"id1","id2",');
-  expect(kp4567).toEqual('"pKeySet",true,4567,');
-  expect(k4567.startsWith(kp4567)).true;
-
-  expect(k456.startsWith(kp4567)).false;
-  expect(k4567.startsWith(kp456)).false;
-});
