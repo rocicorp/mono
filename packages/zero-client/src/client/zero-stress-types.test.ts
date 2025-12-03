@@ -1,11 +1,14 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {mustGetMutator} from '../../../zql/src/mutate/mutator-registry.ts';
+import type {AnyMutator} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
+import {mutators} from './zero-stress-mutators.ts';
 import {queryDeep} from './zero-stress-queries-deep-test.ts';
 import {queryWide} from './zero-stress-queries-wide-test.ts';
 import {zeroStressSchema} from './zero-stress-schema-test.ts';
@@ -85,6 +88,26 @@ describe('stress test types', () => {
     expectTypeOf<
       Awaited<ReturnType<typeof zero.mutate.updateThing>['client']>
     >().toEqualTypeOf<MutatorResultDetails>();
+  });
+
+  test('can resolve mutator types', () => {
+    const mutator = mustGetMutator(mutators, 'updateThing');
+    expectTypeOf<typeof mutator>().toEqualTypeOf<AnyMutator>();
+    expectTypeOf<typeof mutators.updateThing>().parameter(0).toEqualTypeOf<{
+      workspaceId: string;
+      vitalId: string;
+      readonly bloodPressureSystolic?: number | null | undefined;
+      readonly bloodPressureDiastolic?: number | null | undefined;
+      readonly heartRate?: number | null | undefined;
+      readonly temperature?: number | null | undefined;
+      readonly weight?: number | null | undefined;
+      readonly height?: number | null | undefined;
+      readonly oxygenSaturation?: number | null | undefined;
+      readonly patientId: string;
+      readonly recordedAt: string;
+      readonly recordedById: string;
+      readonly createdAt: number;
+    }>();
   });
 
   test('multiple table queries maintain distinct types', async () => {
