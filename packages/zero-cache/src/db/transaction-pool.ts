@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {stringify} from '../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
@@ -224,7 +225,6 @@ export class TransactionPool {
         return last;
       } catch (e) {
         if (e !== this.#failure) {
-          lc.error?.('error from worker', e);
           this.fail(e); // A failure in any worker should fail the pool.
         }
         throw e;
@@ -464,11 +464,13 @@ export class TransactionPool {
   fail(err: unknown) {
     if (!this.#failure) {
       this.#failure = ensureError(err); // Fail fast: this is checked in the worker loop.
-      if (this.#failure instanceof ControlFlowError) {
-        this.#lc.debug?.(this.#failure);
-      } else {
-        this.#lc.error?.(this.#failure);
-      }
+      const level =
+        this.#failure instanceof ControlFlowError
+          ? 'debug'
+          : this.#failure instanceof AbortError
+            ? 'info'
+            : 'error';
+      this.#lc[level]?.(this.#failure);
 
       for (let i = 0; i < this.#numWorkers; i++) {
         // Enqueue the Error to terminate any workers waiting for tasks.
