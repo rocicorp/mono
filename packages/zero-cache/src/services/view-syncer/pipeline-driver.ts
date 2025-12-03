@@ -639,7 +639,9 @@ export class PipelineDriver {
         (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
     ) {
       throw new ResetPipelinesSignal(
-        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
+          `after ${elapsed} ms. Advancement time limited based on total ` +
+          `hydration time of ${totalHydrationTimeMs} ms.`,
       );
     }
   }
@@ -654,9 +656,11 @@ export class PipelineDriver {
     try {
       for (const _ of source.genPush(change)) {
         for (const change of this.#stopAccumulating().stream()) {
-          if (change !== 'yield') {
-            yield change;
-          }
+          // PipelineDriver's shouldYield implementation never yields during
+          // push processing, so we can assert that we never see a 'yield'
+          // here.
+          assert(change !== 'yield');
+          yield change;
         }
         this.#startAccumulating();
       }
