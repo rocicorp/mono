@@ -640,7 +640,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "fetch",
+            "cleanup",
             {
               "constraint": {
                 "id": "i1",
@@ -649,7 +649,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "fetch",
+            "cleanup",
             {
               "constraint": {
                 "id": "i3",
@@ -685,7 +685,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "fetch",
+            "cleanup",
             {
               "constraint": {
                 "id": "i1",
@@ -703,7 +703,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "fetch",
+            "cleanup",
             {
               "constraint": {
                 "id": "i3",
@@ -712,7 +712,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "fetch",
+            "cleanup",
             {
               "constraint": {
                 "id": "i3",
@@ -1701,7 +1701,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "fetch",
+            "cleanup",
             {
               "constraint": {
                 "id": "i4",
@@ -1710,7 +1710,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "fetch",
+            "cleanup",
             {
               "constraint": {
                 "id": "i4",
@@ -2199,7 +2199,6 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
     new Join({
       parent: sources[0].snitch,
       child: sources[1].snitch,
-      storage: new MemoryStorage(),
       ...(reverse
         ? {
             parentKey: t.join.childKey,
