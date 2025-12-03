@@ -12,6 +12,7 @@ import {
 } from './join-utils.ts';
 import {
   throwOutput,
+  skipYields,
   type FetchRequest,
   type Input,
   type Output,
@@ -112,8 +113,12 @@ export class Join implements Input {
     return this.#schema;
   }
 
-  *fetch(req: FetchRequest): Stream<Node> {
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     for (const parentNode of this.#parent.fetch(req)) {
+      if (parentNode === 'yield') {
+        yield parentNode;
+        continue;
+      }
       yield this.#processParentNode(
         parentNode.row,
         parentNode.relationships,
@@ -214,11 +219,16 @@ export class Join implements Input {
         position: undefined,
       };
       try {
-        const parentNodes = this.#parent.fetch({
-          constraint: Object.fromEntries(
-            this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
-          ),
-        });
+        const parentNodes = skipYields(
+          this.#parent.fetch({
+            constraint: Object.fromEntries(
+              this.#parentKey.map((key, i) => [
+                key,
+                childRow[this.#childKey[i]],
+              ]),
+            ),
+          }),
+        );
 
         for (const parentNode of parentNodes) {
           this.#inprogressChildChange.position = parentNode.row;
@@ -268,7 +278,7 @@ export class Join implements Input {
 
   #processParentNode(
     parentNodeRow: Row,
-    parentNodeRelations: Record<string, () => Stream<Node>>,
+    parentNodeRelations: Record<string, () => Stream<Node | 'yield'>>,
     mode: ProcessParentMode,
   ): Node {
     let method: ProcessParentMode = mode;

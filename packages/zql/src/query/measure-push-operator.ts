@@ -38,7 +38,7 @@ export class MeasurePushOperator implements Operator {
     this.#output = output;
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     return this.#input.fetch(req);
   }
 

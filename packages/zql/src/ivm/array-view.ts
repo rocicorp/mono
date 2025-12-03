@@ -4,7 +4,7 @@ import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
 import type {Change} from './change.ts';
-import type {Input, Output} from './operator.ts';
+import {skipYields, type Input, type Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {applyChange} from './view-apply-change.ts';
 import type {Entry, Format, View} from './view.ts';
@@ -101,7 +101,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #hydrate() {
     this.#dirty = true;
-    for (const node of this.#input.fetch({})) {
+    for (const node of skipYields(this.#input.fetch({}))) {
       applyChange(
         this.#root,
         {type: 'add', node},

@@ -13,7 +13,7 @@ import {
 } from '../../../../zql/src/builder/debug-delegate.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
-import type {Input, Storage} from '../../../../zql/src/ivm/operator.ts';
+import {type Input, type Storage} from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -84,8 +84,11 @@ type AdvanceContext = {
   readonly timer: {totalElapsed: () => number};
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
-  advanceCheckCount: number;
   pos: number;
+};
+
+type HydrateContext = {
+  readonly timer: {elapsedLap: () => number};
 };
 
 /**
@@ -93,6 +96,7 @@ type AdvanceContext = {
  * complete before doing a pipeline reset.
  */
 const MIN_ADVANCEMENT_TIME_LIMIT_MS = 30;
+export const HYDRATE_YIELD_THRESHOLD_MS = 200;
 
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
@@ -112,6 +116,7 @@ export class PipelineDriver {
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   #streamer: Streamer | null = null;
+  #hydrateContext: HydrateContext | null = null;
   #advanceContext: AdvanceContext | null = null;
   #replicaVersion: string | null = null;
   #primaryKeys: Map<string, PrimaryKey> | null = null;
@@ -338,8 +343,8 @@ export class PipelineDriver {
     transformationHash: string,
     queryID: string,
     query: AST,
-    timer: {totalElapsed: () => number},
-  ): Iterable<RowChange> {
+    timer: {totalElapsed: () => number; elapsedLap: () => number},
+  ): Iterable<RowChange | 'yield'> {
     assert(this.initialized());
     this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
     if (this.#pipelines.has(transformationHash)) {
@@ -380,12 +385,23 @@ export class PipelineDriver {
       push: change => {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
-        this.#checkAdvanceProgress();
         streamer.accumulate(transformationHash, schema, [change]);
       },
     });
 
-    yield* hydrateInternal(input, transformationHash, must(this.#primaryKeys));
+    assert(this.#advanceContext === null);
+    this.#hydrateContext = {
+      timer,
+    };
+    try {
+      yield* hydrateInternal(
+        input,
+        transformationHash,
+        must(this.#primaryKeys),
+      );
+    } finally {
+      this.#hydrateContext = null;
+    }
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowCountsVended) {
@@ -479,15 +495,19 @@ export class PipelineDriver {
     timer: {totalElapsed: () => number},
     numChanges: number,
   ): Iterable<RowChange> {
+    assert(this.#hydrateContext === null);
     this.#advanceContext = {
       timer,
       totalHydrationTimeMs: this.totalHydrationTimeMs(),
       numChanges,
-      advanceCheckCount: 0,
       pos: 0,
     };
     try {
       for (const {table, prevValues, nextValue} of diff) {
+        // Advance progress is checked each time a row is fetched
+        // from a TableSource during push processing, but some pushes
+        // don't read any rows.  Check progress here before processing
+        // the next change.
         this.#checkAdvanceProgress();
         const start = performance.now();
         let type;
@@ -555,40 +575,6 @@ export class PipelineDriver {
     }
   }
 
-  #checkAdvanceProgress() {
-    // Cancel the advancement processing if it takes longer than half the
-    // total hydration time to make it through half of the advancement, or
-    // if processing time exceeds total hydration time.
-    // This serves as both a circuit breaker for very large transactions,
-    // as well as a bound on the amount of time the previous connection locks
-    // the inactive WAL file (as the lock prevents WAL2 from switching to the
-    // free WAL when the current one is over the size limit, which can make
-    // the WAL grow continuously and compound slowness).
-    assert(this.#advanceContext !== null);
-    // Reduce the overhead of checking the timer by only
-    // actually checking on the first and then every 10th call to
-    // checkAdvanceProgress
-    if (this.#advanceContext.advanceCheckCount++ % 10 === 0) {
-      return;
-    }
-    const {
-      pos,
-      numChanges,
-      timer: advanceTimer,
-      totalHydrationTimeMs,
-    } = this.#advanceContext;
-    const elapsed = advanceTimer.totalElapsed();
-    if (
-      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
-      (elapsed > totalHydrationTimeMs ||
-        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
-    ) {
-      throw new ResetPipelinesSignal(
-        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
-      );
-    }
-  }
-
   /** Implements `BuilderDelegate.getSource()` */
   #getSource(tableName: string): Source {
     let source = this.#tables.get(tableName);
@@ -607,10 +593,57 @@ export class PipelineDriver {
       tableName,
       tableSpec.zqlSpec,
       primaryKey,
+      () => this.#shouldYield(),
     );
     this.#tables.set(tableName, source);
     this.#lc.debug?.(`created TableSource for ${tableName}`);
     return source;
+  }
+
+  #shouldYield(): boolean {
+    if (this.#hydrateContext) {
+      return (
+        this.#hydrateContext.timer.elapsedLap() > HYDRATE_YIELD_THRESHOLD_MS
+      );
+    }
+    if (this.#advanceContext) {
+      this.#checkAdvanceProgress();
+    }
+    return false;
+  }
+
+  /**
+   * Cancel the advancement processing, by throwing a ResetPipelinesSignal, if
+   * it has taken longer than half the total hydration time to make it through
+   * half of the advancement, or if processing time exceeds total hydration
+   * time.  This serves as both a circuit breaker for very large transactions,
+   * as well as a bound on the amount of time the previous connection locks
+   * the inactive WAL file (as the lock prevents WAL2 from switching to the
+   * free WAL when the current one is over the size limit, which can make
+   * the WAL grow continuously and compound slowness).
+   * This is checked:
+   * 1. before starting to process each change in an advancement is processed
+   * 2. whenever a row is fetched from a TableSource during push processing
+   */
+  #checkAdvanceProgress() {
+    const {
+      pos,
+      numChanges,
+      timer: advanceTimer,
+      totalHydrationTimeMs,
+    } = must(this.#advanceContext);
+    const elapsed = advanceTimer.totalElapsed();
+    if (
+      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+      (elapsed > totalHydrationTimeMs ||
+        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
+    ) {
+      throw new ResetPipelinesSignal(
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
+          `after ${elapsed} ms. Advancement time limited based on total ` +
+          `hydration time of ${totalHydrationTimeMs} ms.`,
+      );
+    }
   }
 
   /** Implements `BuilderDelegate.createStorage()` */
@@ -622,7 +655,13 @@ export class PipelineDriver {
     this.#startAccumulating();
     try {
       for (const _ of source.genPush(change)) {
-        yield* this.#stopAccumulating().stream();
+        for (const change of this.#stopAccumulating().stream()) {
+          // PipelineDriver's shouldYield implementation never yields during
+          // push processing, so we can assert that we never see a 'yield'
+          // here.
+          assert(change !== 'yield');
+          yield change;
+        }
         this.#startAccumulating();
       }
     } finally {
@@ -655,19 +694,19 @@ class Streamer {
   readonly #changes: [
     hash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
+    changes: Iterable<Change | 'yield'>,
   ][] = [];
 
   accumulate(
     hash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
+    changes: Iterable<Change | 'yield'>,
   ): this {
     this.#changes.push([hash, schema, changes]);
     return this;
   }
 
-  *stream(): Iterable<RowChange> {
+  *stream(): Iterable<RowChange | 'yield'> {
     for (const [hash, schema, changes] of this.#changes) {
       yield* this.#streamChanges(hash, schema, changes);
     }
@@ -676,8 +715,8 @@ class Streamer {
   *#streamChanges(
     queryHash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
-  ): Iterable<RowChange> {
+    changes: Iterable<Change | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
     // We do not sync rows gathered by the permissions
     // system to the client.
     if (schema.system === 'permissions') {
@@ -685,6 +724,10 @@ class Streamer {
     }
 
     for (const change of changes) {
+      if (change === 'yield') {
+        yield change;
+        continue;
+      }
       const {type} = change;
 
       switch (type) {
@@ -719,8 +762,8 @@ class Streamer {
     queryHash: string,
     schema: SourceSchema,
     op: 'add' | 'remove' | 'edit',
-    nodes: () => Iterable<Node>,
-  ): Iterable<RowChange> {
+    nodes: () => Iterable<Node | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
     const {tableName: table, system} = schema;
 
     const primaryKey = must(this.#primaryKeys.get(table));
@@ -732,6 +775,10 @@ class Streamer {
     }
 
     for (const node of nodes()) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
       const {relationships, row} = node;
       const rowKey = getRowKey(primaryKey, row);
 
@@ -751,8 +798,12 @@ class Streamer {
   }
 }
 
-function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
+function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
   for (const node of nodes) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
     yield {type: 'add', node};
   }
 }
@@ -770,7 +821,7 @@ export function* hydrate(
   input: Input,
   hash: string,
   clientSchema: ClientSchema,
-) {
+): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
   const streamer = new Streamer(buildPrimaryKeys(clientSchema)).accumulate(
     hash,
@@ -784,7 +835,7 @@ export function* hydrateInternal(
   input: Input,
   hash: string,
   primaryKeys: Map<string, PrimaryKey>,
-) {
+): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
   const streamer = new Streamer(primaryKeys).accumulate(
     hash,

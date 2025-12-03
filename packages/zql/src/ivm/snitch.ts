@@ -60,15 +60,19 @@ export class Snitch implements Operator {
     this.log.push(message);
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     this.#log([this.#name, 'fetch', req]);
     return this.fetchGenerator(req);
   }
 
-  *fetchGenerator(req: FetchRequest): Stream<Node> {
+  *fetchGenerator(req: FetchRequest): Stream<Node | 'yield'> {
     let count = 0;
     try {
       for (const node of this.#input.fetch(req)) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
         count++;
         yield node;
       }
@@ -77,7 +81,7 @@ export class Snitch implements Operator {
     }
   }
 
-  cleanup(req: FetchRequest) {
+  cleanup(req: FetchRequest): Stream<Node> {
     this.#log([this.#name, 'cleanup', req]);
     return this.#input.cleanup(req);
   }

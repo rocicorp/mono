@@ -3,7 +3,6 @@ import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
-import {sleep} from '../../shared/src/sleep.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
@@ -82,15 +81,10 @@ export async function runAst(
   const rowsByTable: Record<string, Row[]> = {};
   const seenByTable: Set<string> = new Set();
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), clientSchema)) {
+    if (rowChange === 'yield') {
+      continue;
+    }
     assert(rowChange.type === 'add');
-
-    // yield to other tasks to avoid blocking for too long
-    if (syncedRowCount % 10 === 0) {
-      await Promise.resolve();
-    }
-    if (syncedRowCount % 100 === 0) {
-      await sleep(1);
-    }
 
     let rows: Row[] = rowsByTable[rowChange.table];
     const s = rowChange.table + '.' + JSON.stringify(rowChange.row);

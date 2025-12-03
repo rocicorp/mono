@@ -1,5 +1,4 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import {mergeIterables} from '../../../shared/src/iterables.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Change} from './change.ts';
 import type {Constraint} from './constraint.ts';
@@ -103,12 +102,10 @@ export class UnionFanIn implements Operator {
     }
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     const iterables = this.#inputs.map(input => input.fetch(req));
-    return mergeIterables(
-      iterables,
-      (l, r) => this.#schema.compareRows(l.row, r.row),
-      true,
+    return mergeFetches(iterables, (l, r) =>
+      this.#schema.compareRows(l.row, r.row),
     );
   }
 
@@ -210,5 +207,81 @@ export class UnionFanIn implements Operator {
 
   setOutput(output: Output): void {
     this.#output = output;
+  }
+}
+
+export function* mergeFetches(
+  fetches: Iterable<Node | 'yield'>[],
+  comparator: (l: Node, r: Node) => number,
+): IterableIterator<Node | 'yield'> {
+  const iterators = fetches.map(i => i[Symbol.iterator]());
+  let threw = false;
+  try {
+    const current: (Node | null)[] = [];
+    let lastNodeYielded: Node | undefined;
+    for (let i = 0; i < iterators.length; i++) {
+      const iter = iterators[i];
+      let result = iter.next();
+      // yield yields when initializing
+      while (!result.done && result.value === 'yield') {
+        yield result.value;
+        result = iter.next();
+      }
+      current[i] = result.done ? null : (result.value as Node);
+    }
+    while (current.some(c => c !== null)) {
+      const min = current.reduce(
+        (acc: [Node, number] | undefined, c, i): [Node, number] | undefined => {
+          if (c === null) {
+            return acc;
+          }
+          if (acc === undefined || comparator(c, acc[0]) < 0) {
+            return [c, i];
+          }
+          return acc;
+        },
+        undefined,
+      );
+
+      assert(min !== undefined, 'min is undefined');
+      const [minNode, minIndex] = min;
+      const iter = iterators[minIndex];
+      let result = iter.next();
+      while (!result.done && result.value === 'yield') {
+        yield result.value;
+        result = iter.next();
+      }
+      current[minIndex] = result.done ? null : (result.value as Node);
+      if (
+        lastNodeYielded !== undefined &&
+        comparator(lastNodeYielded, minNode) === 0
+      ) {
+        continue;
+      }
+      lastNodeYielded = minNode;
+      yield minNode;
+    }
+  } catch (e) {
+    threw = true;
+    for (const iter of iterators) {
+      try {
+        iter.throw?.(e);
+      } catch (_cleanupError) {
+        // error in the iter.throw cleanup,
+        // catch so other iterators are cleaned up
+      }
+    }
+    throw e;
+  } finally {
+    if (!threw) {
+      for (const iter of iterators) {
+        try {
+          iter.return?.();
+        } catch (_cleanupError) {
+          // error in the iter.return cleanup,
+          // catch so other iterators are cleaned up
+        }
+      }
+    }
   }
 }

@@ -28,8 +28,15 @@ export interface Input extends InputBase {
   /**
    * Fetch data. May modify the data in place.
    * Returns nodes sorted in order of `SourceSchema.compareRows`.
+   *
+   * The stream may contain 'yield' to indicate the operator has yielded control.
+   *
+   * Contract:
+   * - During fetch: If an input yields 'yield', 'yield' must be yielded to the
+   * caller of fetch immediately.
+   * - During push: If a fetch to an input yields 'yield', it can be skipped/ignored.
    */
-  fetch(req: FetchRequest): Stream<Node>;
+  fetch(req: FetchRequest): Stream<Node | 'yield'>;
 
   /**
    * Cleanup maintained state. This is called when `output` will no longer need
@@ -84,6 +91,14 @@ export const throwOutput: Output = {
     throw new Error('Output not set');
   },
 };
+
+export function* skipYields(stream: Stream<Node | 'yield'>): Stream<Node> {
+  for (const node of stream) {
+    if (node !== 'yield') {
+      yield node;
+    }
+  }
+}
 
 /**
  * Operators are arranged into pipelines.

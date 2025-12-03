@@ -46,6 +46,7 @@ export async function runAst(
   ast: AST,
   isTransformed: boolean,
   options: RunAstOptions,
+  yieldProcess: () => Promise<void>,
 ): Promise<AnalyzeQueryResult> {
   const {clientToServerMapper, permissions, host} = options;
   const result: AnalyzeQueryResult = {
@@ -98,6 +99,10 @@ export async function runAst(
   const rowsByTable: Record<string, Row[]> = {};
   const seenByTable: Set<string> = new Set();
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), clientSchema)) {
+    if (rowChange === 'yield') {
+      await yieldProcess();
+      continue;
+    }
     assert(rowChange.type === 'add');
 
     // yield to other tasks to avoid blocking for too long
