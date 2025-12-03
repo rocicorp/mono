@@ -5,31 +5,41 @@
 // We also export the query and Zero instance so that tsc will try to compile it
 // and fail if it can't output .d.ts
 
+import type {StandardSchemaV1} from '@standard-schema/spec';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {defineQuery} from '../../../zql/src/query/query-registry.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
 
 const zql = createBuilder(zeroStress.schema);
 
-const queryDeep = zql.order.related('createdByUser', q =>
-  q.related('workspaceMembers', q =>
-    q.related('workspace', q =>
-      q.related('budgets', q =>
-        q.related('department', q =>
-          q.related('parentDepartment', q =>
-            q.related('headOfDepartment', q =>
-              q.related('manager', q =>
-                q.related('workspace', q =>
-                  q.related('agentAssignments', q =>
-                    q.related('ticket', q =>
-                      q.related('team', q =>
-                        q.related('leader', q =>
-                          q.related('updatedCmsArticles', q =>
-                            q.related('author', q =>
-                              q.related('ownedProjects', q =>
-                                q.related('owner', q =>
-                                  q.related('updatedEntityComments', q =>
-                                    q.related('parentComment', q =>
-                                      q.related('createdByUser'),
+const queryDeep = defineQuery(
+  ((v: unknown) => v) as unknown as StandardSchemaV1<{
+    workspaceId: string;
+    fieldId: string;
+  }>,
+  () =>
+    zql.order.related('createdByUser', q =>
+      q.related('workspaceMembers', q =>
+        q.related('workspace', q =>
+          q.related('budgets', q =>
+            q.related('department', q =>
+              q.related('parentDepartment', q =>
+                q.related('headOfDepartment', q =>
+                  q.related('manager', q =>
+                    q.related('workspace', q =>
+                      q.related('agentAssignments', q =>
+                        q.related('ticket', q =>
+                          q.related('team', q =>
+                            q.related('leader', q =>
+                              q.related('updatedCmsArticles', q =>
+                                q.related('author', q =>
+                                  q.related('ownedProjects', q =>
+                                    q.related('owner', q =>
+                                      q.related('updatedEntityComments', q =>
+                                        q.related('parentComment', q =>
+                                          q.related('createdByUser'),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -47,7 +57,6 @@ const queryDeep = zql.order.related('createdByUser', q =>
         ),
       ),
     ),
-  ),
 );
 
 // this is testing .d.ts generation for complex queries
