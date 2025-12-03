@@ -17,8 +17,8 @@ import type {QueryResultDetails} from '../../zero-client/src/types/query-result.
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
+import {type AbstractQuery} from '../../zql/src/query/abstract-query.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import {
   queryInternalsTag,
   type QueryInternals,
@@ -32,10 +32,7 @@ import {
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
 
-function newMockQuery(
-  query: string,
-  singular = false,
-): Query<string, Schema, unknown> {
+function newMockQuery(query: string, singular = false): Query<string, Schema> {
   const ret = {
     [queryInternalsTag]: true,
     hash() {
