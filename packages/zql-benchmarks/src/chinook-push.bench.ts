@@ -1,3 +1,4 @@
+import {expect, test} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
@@ -142,3 +143,7 @@ function makeEdit() {
     } as const;
   };
 }
+
+test('no-op', () => {
+  expect(true).toBe(true);
+});

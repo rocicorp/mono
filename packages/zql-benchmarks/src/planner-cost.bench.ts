@@ -12,6 +12,9 @@ import {planQuery} from '../../zql/src/planner/planner-builder.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
+import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
+import {must} from '../../shared/src/must.ts';
+import type {TableSchema} from '../../zero-types/src/schema.ts';
 
 const pgContent = await getChinook();
 
@@ -24,6 +27,7 @@ const {dbs, queries} = await bootstrap({
 // Run ANALYZE to populate SQLite statistics for cost model
 dbs.sqlite.exec('ANALYZE;');
 
+const tables: {[key: string]: TableSchema} = schema.tables;
 // Get table specs using computeZqlSpecs
 const tableSpecs = new Map<string, LiteAndZqlSpec>();
 computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
@@ -40,7 +44,12 @@ function benchmarkPlanning<TTable extends keyof typeof schema.tables & string>(
   query: Query<TTable, typeof schema>,
 ) {
   const unplannedAST = asQueryInternals(query).ast;
-  const mappedAST = mapAST(unplannedAST, clientToServerMapper);
+  const completeOrderAst = completeOrdering(
+    unplannedAST,
+    tableName =>
+      must(tables[tableName], `Table ${tableName} not found`).primaryKey,
+  );
+  const mappedAST = mapAST(completeOrderAst, clientToServerMapper);
 
   bench(name, () => {
     planQuery(mappedAST, costModel);
