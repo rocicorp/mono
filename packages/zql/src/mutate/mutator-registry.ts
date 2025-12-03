@@ -1,13 +1,10 @@
+// oxlint-disable no-explicit-any
 import {deepMerge, type DeepMerge} from '../../../shared/src/deep-merge.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   getValueAtPath,
   iterateLeaves,
 } from '../../../shared/src/object-traversal.ts';
-import type {
-  DefaultContext,
-  DefaultSchema,
-} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {validateInput} from '../query/validate-input.ts';
 import type {Transaction} from './custom.ts';
@@ -58,34 +55,38 @@ import {
  * const mutator = getMutator(mutators, 'user.create');
  * ```
  */
-export function defineMutators<
-  T extends MutatorDefinitions<S, C>,
-  S extends Schema = DefaultSchema,
-  C = DefaultContext,
->(definitions: T): MutatorRegistry<S, C, T>;
+export function defineMutators<T extends AnyMutatorDefinitions>(
+  definitions: T,
+): MutatorRegistry<T>;
 
 export function defineMutators<
-  TBase extends MutatorDefinitions<S, C>,
-  TOverrides extends MutatorDefinitions<S, C>,
-  S extends Schema = DefaultSchema,
-  C = DefaultContext,
+  TBase extends AnyMutatorDefinitions,
+  TOverrides extends MutatorDefinitions<
+    SchemaFromMutatorDefinitions<TBase>,
+    ContextFromMutatorDefinitions<TBase>
+  >,
 >(
-  base: MutatorRegistry<S, C, TBase>,
+  base: MutatorRegistry<TBase>,
   overrides: TOverrides,
-): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
+): MutatorRegistry<DeepMerge<TBase, TOverrides>>;
 
 export function defineMutators<
-  TBase extends MutatorDefinitions<S, C>,
-  TOverrides extends MutatorDefinitions<S, C>,
-  S extends Schema = DefaultSchema,
-  C = DefaultContext,
+  TBase extends AnyMutatorDefinitions,
+  TOverrides extends MutatorDefinitions<
+    SchemaFromMutatorDefinitions<TBase>,
+    ContextFromMutatorDefinitions<TBase>
+  >,
 >(
   base: TBase,
   overrides: TOverrides,
-): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
+): MutatorRegistry<DeepMerge<TBase, TOverrides>>;
 
-export function defineMutators<S extends Schema, C>(
-  definitionsOrBase: MutatorDefinitions<S, C> | AnyMutatorRegistry,
+export function defineMutators<
+  MD extends AnyMutatorDefinitions,
+  S extends SchemaFromMutatorDefinitions<MD>,
+  C extends ContextFromMutatorDefinitions<MD>,
+>(
+  definitionsOrBase: MD | AnyMutatorRegistry,
   maybeOverrides?: MutatorDefinitions<S, C>,
 ): AnyMutatorRegistry {
   function processDefinitions(
@@ -160,8 +161,8 @@ export function getMutator(
  * Gets a Mutator by its dot-separated name from a MutatorRegistry.
  * Throws if not found.
  */
-export function mustGetMutator(
-  registry: AnyMutatorRegistry,
+export function mustGetMutator<MD extends AnyMutatorDefinitions>(
+  registry: MutatorRegistry<MD>,
   name: string,
 ): AnyMutator {
   const mutator = getMutator(registry, name);
@@ -174,9 +175,9 @@ export function mustGetMutator(
 /**
  * Checks if a value is a MutatorRegistry.
  */
-export function isMutatorRegistry<S extends Schema, C>(
+export function isMutatorRegistry<M extends AnyMutatorDefinitions>(
   value: unknown,
-): value is MutatorRegistry<S, C, MutatorDefinitions<S, C>> {
+): value is MutatorRegistry<M> {
   return (
     typeof value === 'object' && value !== null && mutatorRegistryTag in value
   );
@@ -189,19 +190,28 @@ export function isMutatorRegistry<S extends Schema, C>(
 /**
  * A tree of MutatorDefinitions, possibly nested.
  */
-export type MutatorDefinitions<S extends Schema, C> = {
-  readonly [key: string]: // oxlint-disable-next-line no-explicit-any
-  MutatorDefinition<any, any, S, C, any> | MutatorDefinitions<S, C>;
+export type MutatorDefinitions<S extends Schema, Context> = {
+  readonly [key: string]:
+    | MutatorDefinition<any, any, S, Context, any>
+    | MutatorDefinitions<S, Context>;
 };
+
+type AnyMutatorDefinitions = MutatorDefinitions<any, any>;
+
+type SchemaFromMutatorDefinitions<MD extends AnyMutatorDefinitions> =
+  MD extends MutatorDefinitions<infer S, any> ? S : never;
+
+type ContextFromMutatorDefinitions<MD extends AnyMutatorDefinitions> =
+  MD extends MutatorDefinitions<any, infer C> ? C : never;
 
 /**
  * The result of defineMutators(). A tree of Mutators with a tag for detection.
  */
-export type MutatorRegistry<
-  S extends Schema,
-  C,
-  T extends MutatorDefinitions<S, C>,
-> = ToMutatorTree<S, C, T> & {
+export type MutatorRegistry<MD extends AnyMutatorDefinitions> = ToMutatorTree<
+  MD,
+  SchemaFromMutatorDefinitions<MD>,
+  ContextFromMutatorDefinitions<MD>
+> & {
   [mutatorRegistryTag]: true;
 };
 
@@ -226,18 +236,21 @@ const mutatorRegistryTag = Symbol('mutatorRegistry');
  * Each MutatorDefinition becomes a Mutator at the same path.
  * Uses TInput for the callable args (TOutput is only used internally for validation).
  */
-type ToMutatorTree<S extends Schema, C, T extends MutatorDefinitions<S, C>> = {
-  readonly [K in keyof T]: T[K] extends MutatorDefinition<
+type ToMutatorTree<
+  MD extends MutatorDefinitions<S, any>,
+  S extends Schema,
+  C,
+> = {
+  readonly [K in keyof MD]: MD[K] extends MutatorDefinition<
     infer TInput,
-    // oxlint-disable-next-line no-explicit-any
     any, // TOutput - only used internally for validation
     S,
     C,
     infer TWrappedTransaction
   >
     ? Mutator<TInput, S, C, TWrappedTransaction>
-    : T[K] extends MutatorDefinitions<S, C>
-      ? ToMutatorTree<S, C, T[K]>
+    : MD[K] extends MutatorDefinitions<S, any>
+      ? ToMutatorTree<MD[K], S, C>
       : never;
 };
 
@@ -284,24 +297,19 @@ function createMutator<
   // Create the callable mutator
   const mutator = (
     args: ArgsInput,
-  ): MutationRequest<ArgsInput, S, C, Transaction<S, TWrappedTransaction>> => ({
+  ): MutationRequest<ArgsInput, S, C, TWrappedTransaction> => ({
     mutator: mutator as unknown as Mutator<
       ArgsInput,
       S,
       C,
-      Transaction<S, TWrappedTransaction>
+      TWrappedTransaction
     >,
     args,
   });
   mutator.mutatorName = name;
   mutator.fn = fn;
 
-  return mutator as unknown as Mutator<
-    ArgsInput,
-    S,
-    C,
-    Transaction<S, TWrappedTransaction>
-  >;
+  return mutator as unknown as Mutator<ArgsInput, S, C, TWrappedTransaction>;
 }
 
 export function* iterateMutators(

@@ -232,11 +232,10 @@ describe('extendReplicacheMutators', () => {
       },
     );
 
-    const mutators = defineMutators<
-      {increment: typeof incrementMutator; get: typeof getMutator},
-      Schema,
-      {counter: number}
-    >({
+    const mutators = defineMutators<{
+      increment: typeof incrementMutator;
+      get: typeof getMutator;
+    }>({
       increment: incrementMutator,
       get: getMutator,
     });
@@ -300,7 +299,7 @@ describe('extendReplicacheMutators', () => {
       return Promise.resolve();
     });
 
-    const mutators = defineMutators<{test: typeof mutator}, Schema>({
+    const mutators = defineMutators<{test: typeof mutator}>({
       test: mutator,
     });
 

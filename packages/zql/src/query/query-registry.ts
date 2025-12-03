@@ -4,9 +4,13 @@ import {deepMerge, type DeepMerge} from '../../../shared/src/deep-merge.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {getValueAtPath} from '../../../shared/src/object-traversal.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from './query-internals.ts';
-import type {Query} from './query.ts';
+import type {PullRow, Query} from './query.ts';
 import {validateInput} from './validate-input.ts';
 
 const customQueryTag = Symbol();
@@ -22,25 +26,31 @@ const customQueryTag = Symbol();
  *   queries.foo(args).toQuery(ctx)
  */
 export type CustomQuery<
-  T extends keyof S['tables'] & string,
-  S extends Schema,
-  R,
-  C,
-  Args extends ReadonlyJSONValue | undefined,
-  HasArgs extends boolean = false,
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+  THasArgs extends boolean = false,
 > = {
   readonly [customQueryTag]: true;
-} & (HasArgs extends true
+} & (THasArgs extends true
   ? unknown
-  : undefined extends Args
+  : undefined extends TInput
     ? {
-        (): CustomQuery<T, S, R, C, Args, true>;
-        (args?: Args): CustomQuery<T, S, R, C, Args, true>;
+        (): CustomQuery<TTable, TInput, TSchema, TReturn, TContext, true>;
+        (
+          args?: TInput,
+        ): CustomQuery<TTable, TInput, TSchema, TReturn, TContext, true>;
       }
     : {
-        (args: Args): CustomQuery<T, S, R, C, Args, true>;
+        (
+          args: TInput,
+        ): CustomQuery<TTable, TInput, TSchema, TReturn, TContext, true>;
       }) &
-  (HasArgs extends true ? {toQuery(ctx: C): Query<T, S, R>} : unknown);
+  (THasArgs extends true
+    ? {toQuery(ctx: TContext): Query<TTable, TSchema, TReturn>}
+    : unknown);
 
 const queryRegistryTag = Symbol();
 
@@ -58,7 +68,9 @@ type SchemaFromQueryDefinitions<QD extends QueryDefinitions<Schema, any>> =
   QD extends QueryDefinitions<infer S, any> ? S : never;
 
 export type QueryRegistry<QD extends QueryDefinitions<Schema, any>> =
-  CustomQueriesInner<QD, SchemaFromQueryDefinitions<QD>>;
+  CustomQueriesInner<QD, SchemaFromQueryDefinitions<QD>> & {
+    [queryRegistryTag]: true;
+  };
 
 type CustomQueriesInner<
   QD extends QueryDefinitions<Schema, any>,
@@ -66,18 +78,16 @@ type CustomQueriesInner<
 > = {
   readonly [K in keyof QD]: QD[K] extends QueryDefinition<
     infer TTable extends keyof S['tables'] & string,
+    infer TInput,
+    any,
     S,
     infer TReturn,
-    infer TContext,
-    infer TInput,
-    any
+    infer TContext
   >
-    ? CustomQuery<TTable, S, TReturn, TContext, TInput>
+    ? CustomQuery<TTable, TInput, S, TReturn, TContext>
     : QD[K] extends QueryDefinitions<S, any>
       ? CustomQueriesInner<QD[K], S>
       : never;
-} & {
-  [queryRegistryTag]: true;
 };
 
 export type ContextTypeOfQueryRegistry<CQ> =
@@ -91,43 +101,46 @@ export const defineQueryTag = Symbol();
 
 type QueryDefinitionFunction<
   TTable extends keyof TSchema['tables'] & string,
+  TOutput extends ReadonlyJSONValue | undefined,
   TSchema extends Schema,
   TReturn,
   TContext,
-  Args extends ReadonlyJSONValue | undefined,
-> = (options: {args: Args; ctx: TContext}) => Query<TTable, TSchema, TReturn>;
+> = (options: {
+  args: TOutput;
+  ctx: TContext;
+}) => Query<TTable, TSchema, TReturn>;
 
 /**
  * A query definition is the return type of `defineQuery()`.
  */
 export type QueryDefinition<
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
-  TReturn,
-  TContext,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-> = QueryDefinitionFunction<TTable, TSchema, TReturn, TContext, TOutput> & {
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+> = QueryDefinitionFunction<TTable, TOutput, TSchema, TReturn, TContext> & {
   [defineQueryTag]: true;
   validator: StandardSchemaV1<TInput, TOutput> | undefined;
 };
 
 export function isQueryDefinition<
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
-  TReturn,
-  TContext,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
   f: unknown,
-): f is QueryDefinition<TTable, TSchema, TReturn, TContext, TInput, TOutput> {
+): f is QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext> {
   return typeof f === 'function' && (f as any)[defineQueryTag];
 }
 
 export type QueryDefinitions<S extends Schema, Context> = {
   readonly [key: string]:
-    | QueryDefinition<any, S, any, Context, any, any>
+    | QueryDefinition<any, any, any, S, any, Context>
     | QueryDefinitions<S, Context>;
 };
 
@@ -179,55 +192,55 @@ export type QueryDefinitions<S extends Schema, Context> = {
 // Overload for no validator parameter with default inference for untyped functions
 export function defineQuery<
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
-  TReturn,
-  TContext,
-  TArgs extends ReadonlyJSONValue | undefined,
+  TInput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  queryFn: QueryDefinitionFunction<TTable, TSchema, TReturn, TContext, TArgs>,
-): QueryDefinition<TTable, TSchema, TReturn, TContext, TArgs, TArgs>;
+  queryFn: QueryDefinitionFunction<TTable, TInput, TSchema, TReturn, TContext>,
+): QueryDefinition<TTable, TInput, TInput, TSchema, TReturn, TContext>;
 
 // Overload for validator parameter - Input and Output can be different
 export function defineQuery<
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
-  TReturn,
-  TContext,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
   validator: StandardSchemaV1<TInput, TOutput>,
-  queryFn: QueryDefinitionFunction<TTable, TSchema, TReturn, TContext, TOutput>,
-): QueryDefinition<TTable, TSchema, TReturn, TContext, TInput, TOutput>;
+  queryFn: QueryDefinitionFunction<TTable, TOutput, TSchema, TReturn, TContext>,
+): QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
 
 // Implementation
 export function defineQuery<
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
-  TReturn,
-  TContext,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
   validatorOrQueryFn:
     | StandardSchemaV1<TInput, TOutput>
-    | QueryDefinitionFunction<TTable, TSchema, TReturn, TContext, TOutput>,
+    | QueryDefinitionFunction<TTable, TOutput, TSchema, TReturn, TContext>,
   queryFn?: QueryDefinitionFunction<
     TTable,
+    TOutput,
     TSchema,
     TReturn,
-    TContext,
-    TOutput
+    TContext
   >,
-): QueryDefinition<TTable, TSchema, TReturn, TContext, TInput, TOutput> {
+): QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext> {
   // Handle different parameter patterns
   let validator: StandardSchemaV1<TInput, TOutput> | undefined;
   let actualQueryFn: QueryDefinitionFunction<
     TTable,
+    TOutput,
     TSchema,
     TReturn,
-    TContext,
-    TOutput
+    TContext
   >;
 
   if (typeof validatorOrQueryFn === 'function') {
@@ -248,39 +261,48 @@ export function defineQuery<
 }
 
 function createCustomQueryBuilder<
-  T extends keyof S['tables'] & string,
-  S extends Schema,
-  R,
-  C,
-  ArgsInput extends ReadonlyJSONValue | undefined,
-  ArgsOutput extends ReadonlyJSONValue | undefined,
-  HasArgs extends boolean,
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema,
+  TReturn,
+  TContext,
+  THasArgs extends boolean,
 >(
-  queryDef: QueryDefinition<T, S, R, C, ArgsInput, ArgsOutput>,
+  queryDef: QueryDefinition<
+    TTable,
+    TInput,
+    TOutput,
+    TSchema,
+    TReturn,
+    TContext
+  >,
   name: string,
-  inputArgs: ArgsInput,
-  validatedArgs: ArgsOutput,
-  hasArgs: HasArgs,
-): CustomQuery<T, S, R, C, ArgsInput, HasArgs> {
+  inputArgs: TInput,
+  validatedArgs: TOutput,
+  hasArgs: THasArgs,
+): CustomQuery<TTable, TInput, TSchema, TReturn, TContext, THasArgs> {
   const {validator} = queryDef;
 
   // The callable function that sets args
-  const builder = (args: ArgsInput) => {
+  const builder = (args: TInput) => {
     if (hasArgs) {
       throw new Error('args already set');
     }
     const validated = validateInput(name, args, validator, 'query');
-    return createCustomQueryBuilder<T, S, R, C, ArgsInput, ArgsOutput, true>(
-      queryDef,
-      name,
-      args,
-      validated,
-      true,
-    );
+    return createCustomQueryBuilder<
+      TTable,
+      TInput,
+      TOutput,
+      TSchema,
+      TReturn,
+      TContext,
+      true
+    >(queryDef, name, args, validated, true);
   };
 
   // Add create method
-  builder.toQuery = (ctx: C) => {
+  builder.toQuery = (ctx: TContext) => {
     if (!hasArgs) {
       throw new Error('args not set');
     }
@@ -303,7 +325,14 @@ function createCustomQueryBuilder<
   // Add the tag
   builder[customQueryTag] = true;
 
-  return builder as unknown as CustomQuery<T, S, R, C, ArgsInput, HasArgs>;
+  return builder as unknown as CustomQuery<
+    TTable,
+    TInput,
+    TSchema,
+    TReturn,
+    TContext,
+    THasArgs
+  >;
 }
 
 /**
@@ -438,20 +467,20 @@ export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
 ):
   | CustomQuery<
       keyof S['tables'] & string,
+      ReadonlyJSONValue | undefined, // ArgsInput
       S,
       unknown, // return
       unknown, // context
-      ReadonlyJSONValue | undefined, // ArgsInput
       false
     >
   | undefined {
   return getValueAtPath(queries, name, /[.|]/) as
     | CustomQuery<
         keyof S['tables'] & string,
+        ReadonlyJSONValue | undefined, // ArgsInput
         S,
         unknown, // return
         unknown, // context
-        ReadonlyJSONValue | undefined, // ArgsInput
         false
       >
     | undefined;
@@ -465,10 +494,10 @@ export function mustGetQuery<
   name: string,
 ): CustomQuery<
   keyof S['tables'] & string,
+  ReadonlyJSONValue | undefined, // ArgsInput
   S,
   unknown, // return
   unknown, // context
-  ReadonlyJSONValue | undefined, // ArgsInput
   false
 > {
   const v = getQuery(queries, name);

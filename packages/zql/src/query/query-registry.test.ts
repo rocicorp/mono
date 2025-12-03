@@ -15,6 +15,7 @@ import {
   defineQuery,
   isQueryRegistry,
   type ContextTypeOfQueryRegistry,
+  type CustomQuery,
 } from './query-registry.ts';
 import type {Query} from './query.ts';
 
@@ -374,6 +375,25 @@ describe('defineQuery types', () => {
       Parameters<(typeof stringToNumberValidator)['~standard']['validate']>
     >().toEqualTypeOf<[unknown]>();
   });
+
+  test('defineQuery infers args and context types', () => {
+    type Context = {userId: string};
+
+    const query = defineQuery<
+      'foo',
+      {id: string},
+      typeof schema,
+      {someReturnType: string},
+      Context
+    >(({args}) => builder.foo.where('id', '=', args.id));
+
+    expectTypeOf<typeof query>().returns.toEqualTypeOf<
+      Query<'foo', typeof schema, {someReturnType: string}>
+    >();
+    expectTypeOf<typeof query>()
+      .parameter(0)
+      .toEqualTypeOf<{args: {id: string}; ctx: Context}>();
+  });
 });
 
 describe('defineQueries', () => {
@@ -594,6 +614,37 @@ describe('defineQueries', () => {
       args: ['explicit'],
     });
   });
+
+  test('defineQueries infers types from defineQuery', () => {
+    type Context = {userId: string};
+
+    const queries = defineQueries({
+      getAllUsers: defineQuery<
+        'foo',
+        {id: string},
+        typeof schema,
+        {someReturnType: string},
+        Context
+      >(({ctx: _ctx}) => builder.foo),
+    });
+
+    expectTypeOf<typeof queries.getAllUsers>().returns.toExtend<
+      CustomQuery<
+        'foo',
+        {id: string},
+        typeof schema,
+        {someReturnType: string},
+        Context,
+        true
+      >
+    >();
+    expectTypeOf<typeof queries.getAllUsers>()
+      .parameter(0)
+      .toEqualTypeOf<{id: string}>();
+    expectTypeOf<ReturnType<typeof queries.getAllUsers>['toQuery']>()
+      .parameter(0)
+      .toEqualTypeOf<Context>();
+  });
 });
 
 describe('isQueryRegistry', () => {
@@ -638,6 +689,35 @@ describe('isQueryRegistry', () => {
 });
 
 describe('defineQueries types', () => {
+  test('defineQueries keeps validator input for callable and context for toQuery', () => {
+    type Context = {userId: string};
+    const stringToNumberValidator = makeValidator<
+      {raw: string},
+      {parsed: number}
+    >(data => {
+      const value = Number((data as {raw: string}).raw);
+      if (Number.isNaN(value)) {
+        throw new Error('invalid');
+      }
+      return {parsed: value};
+    });
+
+    const queries = defineQueries({
+      byCount: defineQuery(
+        stringToNumberValidator,
+        ({args}: {ctx: Context; args: {parsed: number}}) =>
+          builder.foo.where('val', '=', args.parsed),
+      ),
+    });
+
+    expectTypeOf(queries.byCount).parameter(0).toEqualTypeOf<{raw: string}>();
+
+    const withArgs = queries.byCount({raw: '1'});
+    expectTypeOf<Parameters<typeof withArgs.toQuery>>().toEqualTypeOf<
+      [Context]
+    >();
+  });
+
   test('initial CustomQuery should have args callable but no toQuery', () => {
     const queries = defineQueries({
       getUser: defineQuery(
