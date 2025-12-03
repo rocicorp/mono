@@ -27,6 +27,7 @@
     "typescript": "~5.9.3",
     "zero-cache": "0.0.0",
     "zero-protocol": "0.0.0",
+    "zero-types": "0.0.0",
     "zql": "0.0.0",
     "zero-schema": "0.0.0",
     "zqlite": "0.0.0",
