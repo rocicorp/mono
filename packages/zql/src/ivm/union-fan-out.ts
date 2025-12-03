@@ -23,12 +23,12 @@ export class UnionFanOut implements Operator {
     this.#unionFanIn = fanIn;
   }
 
-  push(change: Change): void {
+  *push(change: Change): Stream<'yield'> {
     must(this.#unionFanIn).fanOutStartedPushing();
     for (const output of this.#outputs) {
-      output.push(change, this);
+      yield* output.push(change, this);
     }
-    must(this.#unionFanIn).fanOutDonePushing(change.type);
+    yield* must(this.#unionFanIn).fanOutDonePushing(change.type);
   }
 
   setOutput(output: Output): void {

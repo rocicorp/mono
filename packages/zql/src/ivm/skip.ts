@@ -75,17 +75,22 @@ export class Skip implements Operator {
     return cmp < 0 || (cmp === 0 && !this.#bound.exclusive);
   }
 
-  push(change: Change): void {
+  *push(change: Change): Stream<'yield'> {
     const shouldBePresent = (row: Row) => this.#shouldBePresent(row);
     if (change.type === 'edit') {
-      maybeSplitAndPushEditChange(change, shouldBePresent, this.#output, this);
+      yield* maybeSplitAndPushEditChange(
+        change,
+        shouldBePresent,
+        this.#output,
+        this,
+      );
       return;
     }
 
     change satisfies AddChange | RemoveChange | ChildChange;
 
     if (shouldBePresent(change.node.row)) {
-      this.#output.push(change, this);
+      yield* this.#output.push(change, this);
     }
   }
 

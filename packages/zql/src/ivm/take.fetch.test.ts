@@ -15,6 +15,7 @@ import {Take, type PartitionKey} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -413,7 +414,7 @@ test('early return during hydrate', () => {
     {id: 'i3', created: 300},
   ];
   for (const row of sourceRows) {
-    source.push({type: 'add', row});
+    consume(source.push({type: 'add', row}));
   }
   const snitch = new Snitch(source.connect([['id', 'asc']]), 'takeSnitch', log);
   const storage = new MemoryStorage();
@@ -1412,7 +1413,7 @@ function takeTest(t: TakeTest): TakeTestResults {
     t.primaryKey,
   );
   for (const row of t.sourceRows) {
-    source.push({type: 'add', row});
+    consume(source.push({type: 'add', row}));
   }
   const snitch = new Snitch(
     source.connect(t.sort || [['id', 'asc']]),

@@ -18,6 +18,7 @@ import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {createDb} from './test/create-db.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 
 test('fork', () => {
   const main = new IVMSourceBranch({
@@ -34,10 +35,12 @@ test('fork', () => {
 
   // Add initial data to main
   const usersSource = main.getSource('users')!;
-  usersSource.push({
-    type: 'add',
-    row: {id: 'u1', name: 'Alice'},
-  });
+  consume(
+    usersSource.push({
+      type: 'add',
+      row: {id: 'u1', name: 'Alice'},
+    }),
+  );
 
   // Fork should have same initial data
   const fork = main.fork();
@@ -55,16 +58,20 @@ test('fork', () => {
   `);
 
   // Mutate main
-  usersSource.push({
-    type: 'add',
-    row: {id: 'u2', name: 'Bob'},
-  });
+  consume(
+    usersSource.push({
+      type: 'add',
+      row: {id: 'u2', name: 'Bob'},
+    }),
+  );
 
   // Mutate fork differently
-  fork.getSource('users')!.push({
-    type: 'add',
-    row: {id: 'u3', name: 'Charlie'},
-  });
+  consume(
+    fork.getSource('users')!.push({
+      type: 'add',
+      row: {id: 'u3', name: 'Charlie'},
+    }),
+  );
 
   // Verify main and fork evolved independently
   expect([...mainConnection.fetch({})]).toMatchInlineSnapshot(`

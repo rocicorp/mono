@@ -50,9 +50,9 @@ export class MeasurePushOperator implements Operator {
     this.#input.destroy();
   }
 
-  push(change: Change): void {
+  *push(change: Change): Stream<'yield'> {
     const startTime = performance.now();
-    this.#output.push(change, this);
+    yield* this.#output.push(change, this);
     this.#metricsDelegate.addMetric(
       this.#metricName,
       performance.now() - startTime,

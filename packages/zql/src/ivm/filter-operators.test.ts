@@ -19,7 +19,7 @@ describe('FilterStart', () => {
     const mockFilterOutput: FilterOutput = {
       push: vi.fn(),
       beginFilter: vi.fn(),
-      filter: vi.fn(() => true),
+      filter: filterGenerator,
       endFilter: vi.fn(),
     };
 
@@ -36,3 +36,7 @@ describe('FilterStart', () => {
     expect(mockFilterOutput.endFilter).toHaveBeenCalledTimes(1);
   });
 });
+
+function* filterGenerator(): Generator<'yield', boolean> {
+  return true;
+}
