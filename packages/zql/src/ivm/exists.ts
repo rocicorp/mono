@@ -101,19 +101,9 @@ export class Exists implements FilterOperator {
         // add, remove and edit cannot change the size of the
         // this.#relationshipName relationship, so simply #pushWithFilter
         case 'add':
-        case 'edit': {
-          this.#pushWithFilter(change);
-          return;
-        }
+        case 'edit':
         case 'remove': {
-          const size = this.#fetchSize(change.node);
-          // If size is undefined, this operator has not output
-          // this row before and so it is unnecessary to output a remove for
-          // it.
-          if (size === undefined) {
-            return;
-          }
-          this.#pushWithFilter(change, size);
+          this.#pushWithFilter(change);
           return;
         }
         case 'child':
@@ -131,12 +121,7 @@ export class Exists implements FilterOperator {
           }
           switch (change.child.change.type) {
             case 'add': {
-              let size = this.#fetchSize(change.node);
-              if (size !== undefined) {
-                size++;
-              } else {
-                size = this.#fetchSize(change.node);
-              }
+              const size = this.#fetchSize(change.node);
               if (size === 1) {
                 if (this.#not) {
                   // Since the add child change currently being processed is not
@@ -171,13 +156,7 @@ export class Exists implements FilterOperator {
               return;
             }
             case 'remove': {
-              let size = this.#fetchSize(change.node);
-              if (size !== undefined) {
-                assert(size > 0);
-                size--;
-              } else {
-                size = this.#fetchSize(change.node);
-              }
+              const size = this.#fetchSize(change.node);
               if (size === 0) {
                 if (this.#not) {
                   this.#output.push(
