@@ -9,8 +9,7 @@ import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
 import {mutators} from './zero-stress-mutators.ts';
-import {queryDeep} from './zero-stress-queries-deep-test.ts';
-import {queryWide} from './zero-stress-queries-wide-test.ts';
+import {queries} from './zero-stress-queries.ts';
 import {zeroStressSchema} from './zero-stress-schema-test.ts';
 import {Zero} from './zero.ts';
 
@@ -431,7 +430,9 @@ describe('stress test types', () => {
   });
 
   test('deeply nested relationship chains', async () => {
-    const results = await zeroStress.run(queryDeep);
+    const results = await zeroStress.run(
+      queries.deep({workspaceId: '123', fieldId: '123'}),
+    );
 
     type Result = (typeof results)[number];
     type Creator = NonNullable<Result['createdByUser']>;
@@ -453,7 +454,9 @@ describe('stress test types', () => {
   });
 
   test('wide parallel relationships maintain distinct types', async () => {
-    const results = await zeroStress.run(queryWide);
+    const results = await zeroStress.run(
+      queries.wide({workspaceId: '123', fieldId: '123'}),
+    );
 
     type Result = (typeof results)[number];
 

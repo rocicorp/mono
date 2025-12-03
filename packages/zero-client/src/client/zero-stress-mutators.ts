@@ -1,8 +1,5 @@
 // This file defines complex mutators to stress test TypeScript's type
 // inference.
-//
-// We also export the mutators so that tsc will try to compile it
-// and fail if it can't output .d.ts
 
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
