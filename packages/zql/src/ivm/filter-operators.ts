@@ -94,6 +94,7 @@ export class FilterStart implements FilterInput, Output {
   }
 
   *cleanup(req: FetchRequest): Stream<Node> {
+    this.#output.beginFilter();
     for (const node of this.#input.cleanup(req)) {
       if (this.#output.filter(node, true)) {
         yield node;
@@ -101,6 +102,7 @@ export class FilterStart implements FilterInput, Output {
         drainStreams(node);
       }
     }
+    this.#output.endFilter();
   }
 }
 
