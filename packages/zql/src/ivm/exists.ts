@@ -37,7 +37,6 @@ export class Exists implements FilterOperator {
 
   constructor(
     input: FilterInput,
-    storage: Storage,
     relationshipName: string,
     parentJoinKey: CompoundKey,
     type: 'EXISTS' | 'NOT EXISTS',
@@ -64,9 +63,9 @@ export class Exists implements FilterOperator {
     this.#output = output;
   }
 
-  open() {}
+  beginFilter() {}
 
-  close() {
+  endFilter() {
     this.#cache = new Map();
   }
 
