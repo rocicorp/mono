@@ -2,6 +2,7 @@ import {
   defineQueries,
   defineQuery,
   escapeLike,
+  type DefaultSchema,
   type Query,
 } from '@rocicorp/zero';
 import * as z from 'zod/mini';
@@ -10,10 +11,11 @@ import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
 import {builder, ZERO_PROJECT_NAME} from './schema.ts';
 
-function applyIssuePermissions<TQuery extends Query<'issue'>>(
-  q: TQuery,
-  role: Role | undefined,
-): TQuery {
+function applyIssuePermissions<
+  // TReturn must be any or the `.one()` case does not match
+  // oxlint-disable-next-line no-explicit-any
+  TQuery extends Query<'issue', DefaultSchema, any>,
+>(q: TQuery, role: Role | undefined): TQuery {
   return q.where(({or, cmp, cmpLit}) =>
     or(cmp('visibility', '=', 'public'), cmpLit(role ?? null, '=', 'crew')),
   ) as TQuery;

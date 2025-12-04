@@ -3,9 +3,9 @@ import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format} from '../ivm/view.ts';
+import {AbstractQuery} from './abstract-query.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import {AbstractQuery} from './query-impl.ts';
 import type {PullRow, Query} from './query.ts';
 
 export function staticQuery<
