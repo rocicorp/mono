@@ -176,10 +176,9 @@ export class Storer implements Service {
       const [{owner}] = await sql<ReplicationState[]>`
         SELECT * FROM ${this.#cdc('replicationState')}`;
       if (owner !== this.#taskID) {
-        this.#lc.error?.(
-          `Change log purge requested (${watermark}) while no longer owner`,
+        this.#lc.warn?.(
+          `Ignoring change log purge request (${watermark}) while not owner`,
         );
-        void this.stop();
         return 0;
       }
 
