@@ -24,7 +24,7 @@ import {
   mustGetQuery,
   type CustomQuery,
 } from './query-registry.ts';
-import type {Query} from './query.ts';
+import type {PullRow, Query} from './query.ts';
 
 const schema = createSchema({
   tables: [
@@ -413,23 +413,38 @@ describe('defineQuery types', () => {
     >().toEqualTypeOf<[unknown]>();
   });
 
-  test('defineQuery infers args and context types', () => {
+  test('defineQuery with with explicit types', () => {
     type Context = {userId: string};
 
     const query = defineQuery<
-      'foo',
       {id: string},
+      PullRow<'foo', typeof schema>,
+      Context,
       typeof schema,
-      {someReturnType: string},
-      Context
+      'foo'
     >(({args}) => builder.foo.where('id', '=', args.id));
 
     expectTypeOf<typeof query>().returns.toEqualTypeOf<
-      Query<'foo', typeof schema, {someReturnType: string}>
+      Query<'foo', typeof schema, PullRow<'foo', typeof schema>>
     >();
     expectTypeOf<typeof query>()
       .parameter(0)
       .toEqualTypeOf<{args: {id: string}; ctx: Context}>();
+  });
+
+  test('defineQuery infers args and context types', () => {
+    const query = defineQuery(({args, ctx}) => {
+      expectTypeOf(args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
+      expectTypeOf(ctx).toEqualTypeOf<unknown>();
+      return builder.foo.where('id', '=', 'test');
+    });
+
+    expectTypeOf<typeof query>().returns.toEqualTypeOf<
+      Query<'foo', typeof schema, PullRow<'foo', typeof schema>>
+    >();
+    expectTypeOf<typeof query>()
+      .parameter(0)
+      .toEqualTypeOf<{args: ReadonlyJSONValue | undefined; ctx: unknown}>();
   });
 });
 
@@ -659,11 +674,11 @@ describe('defineQueries', () => {
     const define = defineQueriesWithType<typeof schema>();
 
     const getFoo = defineQuery<
-      'foo',
       {id: string},
+      PullRow<'foo', typeof schema>,
+      Context1,
       typeof schema,
-      {someReturnType: string},
-      Context1
+      'foo'
     >(({ctx, args}) => {
       expectTypeOf(ctx).toEqualTypeOf<Context1>();
       expectTypeOf(args).toEqualTypeOf<{id: string}>();
@@ -672,11 +687,11 @@ describe('defineQueries', () => {
     });
 
     const getBar = defineQuery<
-      'bar',
       {some: 'baz'},
+      PullRow<'bar', typeof schema>,
+      Context2,
       typeof schema,
-      {anotherReturnType: string},
-      Context2
+      'bar'
     >(({ctx, args}) => {
       expectTypeOf(ctx).toEqualTypeOf<Context2>();
       expectTypeOf(args).toEqualTypeOf<{some: 'baz'}>();
@@ -694,7 +709,7 @@ describe('defineQueries', () => {
         'foo',
         {id: string},
         typeof schema,
-        {someReturnType: string},
+        PullRow<'foo', typeof schema>,
         Context1,
         true
       >
@@ -711,7 +726,7 @@ describe('defineQueries', () => {
         'bar',
         {some: 'baz'},
         typeof schema,
-        {anotherReturnType: string},
+        PullRow<'bar', typeof schema>,
         Context2,
         true
       >
@@ -1499,13 +1514,15 @@ describe('defineQueryWithType', () => {
 
     const defineQueryTyped = defineQueryWithType<typeof schema, Context>();
 
-    const query = defineQueryTyped<'foo', {return: 'type'}, {id: string}>(
-      ({args, ctx}) => {
-        expectTypeOf(args).toEqualTypeOf<{id: string}>();
-        expectTypeOf(ctx).toEqualTypeOf<Context>();
-        return builder.foo.where('id', '=', args.id);
-      },
-    );
+    const query = defineQueryTyped<
+      {id: string},
+      PullRow<'foo', typeof schema>,
+      'foo'
+    >(({args, ctx}) => {
+      expectTypeOf(args).toEqualTypeOf<{id: string}>();
+      expectTypeOf(ctx).toEqualTypeOf<Context>();
+      return builder.foo.where('id', '=', args.id);
+    });
 
     const defineQueriesTyped = defineQueriesWithType<typeof schema>();
 
@@ -1515,9 +1532,9 @@ describe('defineQueryWithType', () => {
 
     expectTypeOf<(typeof q)['~']['$schema']>().toEqualTypeOf<typeof schema>();
     expectTypeOf<(typeof q)['~']['$context']>().toEqualTypeOf<Context>();
-    expectTypeOf<(typeof q)['~']['$return']>().toEqualTypeOf<{
-      return: 'type';
-    }>();
+    expectTypeOf<(typeof q)['~']['$return']>().toEqualTypeOf<
+      PullRow<'foo', typeof schema>
+    >();
   });
 
   test('works with validator', () => {
@@ -1614,4 +1631,77 @@ describe('isQueryDefinition', () => {
     expect(isQueryDefinition({validator: undefined})).toBe(false);
     expect(isQueryDefinition(null)).toBe(false);
   });
+});
+
+test('defineQueries preserves types from defineQuery', () => {
+  type Context1 = {userId: string};
+  type Context2 = {some: 'baz'};
+  type Context3 = {bool: true};
+
+  const queries = defineQueries({
+    // Explicit type params: TInput, TReturn, TContext, TSchema, TTable
+    def1: defineQuery<
+      {id: string},
+      PullRow<'foo', typeof schema>,
+      Context1,
+      typeof schema
+    >(({args, ctx}) => {
+      expectTypeOf(args).toEqualTypeOf<{id: string}>();
+      expectTypeOf(ctx).toEqualTypeOf<Context1>();
+      return builder.foo.where('id', '=', args.id);
+    }),
+    // Different table, different context
+    def2: defineQuery<
+      {id: string},
+      PullRow<'bar', typeof schema>,
+      Context2,
+      typeof schema,
+      'bar'
+    >(({args, ctx}) => {
+      expectTypeOf(args).toEqualTypeOf<{id: string}>();
+      expectTypeOf(ctx).toEqualTypeOf<Context2>();
+      return builder.bar.where('id', '=', args.id);
+    }),
+    // No explicit type params - should infer defaults
+    def3: defineQuery(({args, ctx}) => {
+      expectTypeOf(args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
+      expectTypeOf(ctx).toEqualTypeOf<unknown>();
+      return builder.foo;
+    }),
+    // Inline type annotation instead of type params
+    def4: defineQuery(({args, ctx}: {args: string; ctx: Context3}) => {
+      expectTypeOf(args).toEqualTypeOf<string>();
+      expectTypeOf(ctx).toEqualTypeOf<Context3>();
+      return builder.bar.where('id', '=', args);
+    }),
+  });
+
+  expectTypeOf(queries.def1).parameter(0).toEqualTypeOf<{id: string}>();
+
+  const query1 = queries.def1({id: '123'});
+  expectTypeOf(query1['~']['$input']).toEqualTypeOf<{id: string}>();
+  expectTypeOf(query1['~']['$context']).toEqualTypeOf<Context1>();
+  expectTypeOf(query1['~']['$return']).toEqualTypeOf<
+    PullRow<'foo', typeof schema>
+  >();
+
+  const query2 = queries.def2({id: '123'});
+  expectTypeOf(query2['~']['$input']).toEqualTypeOf<{id: string}>();
+  expectTypeOf(query2['~']['$context']).toEqualTypeOf<Context2>();
+  expectTypeOf(query2['~']['$return']).toEqualTypeOf<
+    PullRow<'bar', typeof schema>
+  >();
+
+  expectTypeOf(queries.def3)
+    .parameter(0)
+    .toEqualTypeOf<ReadonlyJSONValue | undefined>();
+  const query3 = queries.def3('whatever');
+  expectTypeOf(query3['~']['$input']).toEqualTypeOf<
+    ReadonlyJSONValue | undefined
+  >();
+  expectTypeOf(query3['~']['$context']).toEqualTypeOf<unknown>();
+
+  const query4 = queries.def4('test-string');
+  expectTypeOf(query4['~']['$input']).toEqualTypeOf<string>();
+  expectTypeOf(query4['~']['$context']).toEqualTypeOf<Context3>();
 });
