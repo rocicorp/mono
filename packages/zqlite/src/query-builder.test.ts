@@ -3,7 +3,6 @@ import {formatNamed} from './internal/sql.ts';
 import {
   buildSelectQuery,
   constraintsToSQL,
-  filtersToSQL,
   orderByToSQL,
 } from './query-builder.ts';
 
