@@ -35,13 +35,7 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const {
     taskID,
-    changeStreamer: {
-      port,
-      address,
-      protocol,
-      startupDelayMs,
-      startupDelayKeepalives,
-    },
+    changeStreamer: {port, address, protocol, startupDelayMs},
     upstream,
     change,
     replica,
@@ -137,7 +131,7 @@ export default async function runWorker(
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
     config,
-    {port, startupDelayMs, startupDelayKeepalives},
+    {port, startupDelayMs},
     parent,
     changeStreamer,
     monitor instanceof BackupMonitor ? monitor : null,
