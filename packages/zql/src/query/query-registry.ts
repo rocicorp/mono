@@ -333,12 +333,7 @@ export function defineQuery<
   f.validator = validator;
   f['~'] = {
     tag: 'QueryDefinition',
-    $tableName: undefined as unknown as TTable,
-    $input: undefined as unknown as TInput,
-    $output: undefined as unknown as TOutput,
-    $return: undefined as unknown as TReturn,
-    $context: undefined as unknown as TContext,
-  } as const;
+  } as QueryDefinitionTypes<TTable, TInput, TOutput, TReturn, TContext>;
   return f;
 }
 
