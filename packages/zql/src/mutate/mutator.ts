@@ -16,19 +16,12 @@ import type {AnyTransaction, Transaction} from './custom.ts';
 // defineMutator
 // ----------------------------------------------------------------------------
 
-// export const defineMutatorTag = Symbol();
-// export const mutatorTypesTag = Symbol();
-
-const mutatorDefinitionTag = Symbol();
-export type MutatorDefinitionTag = typeof mutatorDefinitionTag;
-
-type MutatorDefinitionTypes<
+export type MutatorDefinitionTypes<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput,
   TContext,
   TWrappedTransaction,
-> = {
-  readonly tag: 'MutatorDefinition';
+> = 'MutatorDefinition' & {
   readonly $input: TInput;
   readonly $output: TOutput;
   readonly $context: TContext;
@@ -43,7 +36,7 @@ export function isMutatorDefinition<
 >(
   f: unknown,
 ): f is MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> {
-  return typeof f === 'function' && mutatorDefinitionTag in f;
+  return typeof f === 'function' && (f as any)['~'] === 'MutatorDefinition';
 }
 
 export type MutatorDefinition<
@@ -61,7 +54,7 @@ export type MutatorDefinition<
   /**
    * Type-only phantom property to surface mutator types in a covariant position.
    */
-  [mutatorDefinitionTag]: Expand<
+  ['~']: Expand<
     MutatorDefinitionTypes<TInput, TOutput, TContext, TWrappedTransaction>
   >;
 };
@@ -140,7 +133,7 @@ export function defineMutator<
     TContext,
     TWrappedTransaction
   >;
-  f[mutatorDefinitionTag] = true as unknown as MutatorDefinitionTypes<
+  f['~'] = 'MutatorDefinition' as unknown as MutatorDefinitionTypes<
     TInput,
     TOutput,
     TContext,

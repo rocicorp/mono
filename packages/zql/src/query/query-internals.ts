@@ -6,7 +6,7 @@ import type {Format} from '../ivm/view.ts';
 import type {CustomQueryID} from './named.ts';
 import type {Query} from './query.ts';
 
-export const queryInternalsTag = Symbol('QueryInternals');
+export const queryInternalsTag = Symbol();
 
 /**
  * Internal interface for query implementation details.
