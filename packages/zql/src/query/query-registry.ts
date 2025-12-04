@@ -56,8 +56,6 @@ export type CustomQuery<
     ? {toQuery(ctx: TContext): Query<TTable, TSchema, TReturn>}
     : unknown);
 
-// const queryRegistryTag = Symbol();
-
 export function isQueryRegistry<
   Q extends QueryDefinitions<S, any>,
   S extends Schema = DefaultSchema,
@@ -161,8 +159,6 @@ type FromQueryTree<QD extends QueryDefinitions<S, any>, S extends Schema> = {
       : never;
 }[keyof QD];
 
-// export const defineQueryTag = Symbol();
-
 type QueryDefinitionFunction<
   TTable extends keyof TSchema['tables'] & string,
   TOutput extends ReadonlyJSONValue | undefined,
@@ -172,7 +168,8 @@ type QueryDefinitionFunction<
 > = (options: {
   args: TOutput;
   ctx: TContext;
-  // we don't use the schema parameter here
+  // we intentionally don't use the schema parameter here,
+  // since this is filled in by defineQueries
 }) => Query<TTable, Schema, TReturn>;
 
 /**
@@ -534,46 +531,26 @@ function createCustomQueryBuilder<
  *   converted to a {@link CustomQuery}.
  */
 export function defineQueries<
-  QD extends QueryDefinitions<S, any>,
-  S extends Schema = DefaultSchema,
->(defs: QD): QueryRegistry<QD, S>;
-
-/**
- * Extends an existing query registry with additional or overriding query
- * definitions. Properties from overrides replace properties from base with
- * the same key.
- *
- * @param base - An existing query registry to extend.
- * @param overrides - New query definitions to add or override.
- * @returns A merged query registry with all queries from both base and overrides.
- */
-export function defineQueries<
-  TBase extends QueryDefinitions<S, any>,
-  TOverrides extends QueryDefinitions<S, any>,
+  // let QD infer freely so defaults aren't erased by a QueryDefinitions<any, any> constraint
+  const QD,
   S extends Schema = DefaultSchema,
 >(
-  base: QueryRegistry<TBase, S>,
-  overrides: TOverrides,
-): QueryRegistry<DeepMerge<TBase, TOverrides>, S>;
+  defs: QD & AssertQueryDefinitions<QD>,
+): QueryRegistry<EnsureQueryDefinitions<QD>, S>;
 
-/**
- * Merges two query definition objects into a single query registry.
- * Properties from the second parameter replace properties from the first
- * with the same key.
- *
- * @param base - The base query definitions to start with.
- * @param overrides - Additional query definitions to merge in, overriding any
- *   existing definitions with the same key.
- * @returns A merged query registry with all queries from both parameters.
- */
 export function defineQueries<
-  TBase extends QueryDefinitions<S, any>,
-  TOverrides extends QueryDefinitions<S, any>,
+  TBase,
+  TOverrides,
   S extends Schema = DefaultSchema,
 >(
-  base: TBase,
-  overrides: TOverrides,
-): QueryRegistry<DeepMerge<TBase, TOverrides>, S>;
+  base:
+    | QueryRegistry<EnsureQueryDefinitions<TBase>, S>
+    | (TBase & AssertQueryDefinitions<TBase>),
+  overrides: TOverrides & AssertQueryDefinitions<TOverrides>,
+): QueryRegistry<
+  DeepMerge<EnsureQueryDefinitions<TBase>, EnsureQueryDefinitions<TOverrides>>,
+  S
+>;
 
 export function defineQueries<
   QD extends QueryDefinitions<S, any>,
@@ -649,6 +626,12 @@ export function defineQueriesWithType<
 >(): TypedDefineQueries<TSchema> {
   return defineQueries;
 }
+
+type AssertQueryDefinitions<QD> =
+  QD extends QueryDefinitions<any, any> ? unknown : never;
+
+type EnsureQueryDefinitions<QD> =
+  QD extends QueryDefinitions<any, any> ? QD : never;
 
 /**
  * The return type of defineQueriesWithType. A function matching the

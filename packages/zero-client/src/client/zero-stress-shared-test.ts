@@ -1,12 +1,12 @@
 import type {zeroStressSchema} from './zero-stress-schema-test.ts';
 
 export type StressContext = {
-  someUserId: string;
+  userId: string;
   role: 'admin' | 'user';
-  workspaceId: string;
-  workspaceName: string;
-  fieldId: string;
-  $schema: typeof zeroStressSchema;
+  workspaceId?: string;
+  workspaceName?: string;
+  fieldId?: string;
+  $schema?: typeof zeroStressSchema;
 };
 
 export type StressTransaction = {
