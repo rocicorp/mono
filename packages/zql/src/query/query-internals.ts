@@ -84,7 +84,7 @@ export function asQueryInternals<
 >(
   query: Query<TTable, TSchema, TReturn>,
 ): QueryInternals<TTable, TSchema, TReturn> {
-  assert(queryInternalsTag in query);
+  assert(queryInternalsTag in query, 'Query does not implement QueryInternals');
   return query as unknown as QueryInternals<TTable, TSchema, TReturn>;
 }
 

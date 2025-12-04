@@ -1,16 +1,21 @@
 import {describe, expectTypeOf, test} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {mustGetMutator} from '../../../zql/src/mutate/mutator-registry.ts';
-import type {AnyMutator} from '../../../zql/src/mutate/mutator.ts';
+import type {Mutator} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
-import {mutators} from './zero-stress-mutators.ts';
-import {queries} from './zero-stress-queries.ts';
+import {mutators} from './zero-stress-mutators-test.ts';
+import {queries} from './zero-stress-queries-test.ts';
 import {zeroStressSchema} from './zero-stress-schema-test.ts';
+import type {
+  StressContext,
+  StressTransaction,
+} from './zero-stress-shared-test.ts';
 import {Zero} from './zero.ts';
 
 type Schema = typeof zeroStressSchema;
@@ -91,22 +96,30 @@ describe('stress test types', () => {
 
   test('can resolve mutator types', () => {
     const mutator = mustGetMutator(mutators, 'updateThing');
-    expectTypeOf<typeof mutator>().toEqualTypeOf<AnyMutator>();
-    expectTypeOf<typeof mutators.updateThing>().parameter(0).toEqualTypeOf<{
-      workspaceId: string;
-      vitalId: string;
-      readonly bloodPressureSystolic?: number | null | undefined;
-      readonly bloodPressureDiastolic?: number | null | undefined;
-      readonly heartRate?: number | null | undefined;
-      readonly temperature?: number | null | undefined;
-      readonly weight?: number | null | undefined;
-      readonly height?: number | null | undefined;
-      readonly oxygenSaturation?: number | null | undefined;
-      readonly patientId: string;
-      readonly recordedAt: string;
-      readonly recordedById: string;
-      readonly createdAt: number;
-    }>();
+    expectTypeOf<typeof mutator>().toEqualTypeOf<
+      Mutator<ReadonlyJSONValue | undefined, StressContext, StressTransaction>
+    >();
+    expectTypeOf<typeof mutators.updateThing>().toEqualTypeOf<
+      Mutator<
+        {
+          workspaceId: string;
+          vitalId: string;
+          readonly bloodPressureSystolic?: number | null | undefined;
+          readonly bloodPressureDiastolic?: number | null | undefined;
+          readonly heartRate?: number | null | undefined;
+          readonly temperature?: number | null | undefined;
+          readonly weight?: number | null | undefined;
+          readonly height?: number | null | undefined;
+          readonly oxygenSaturation?: number | null | undefined;
+          readonly patientId: string;
+          readonly recordedAt: string;
+          readonly recordedById: string;
+          readonly createdAt: number;
+        },
+        StressContext,
+        StressTransaction
+      >
+    >();
   });
 
   test('multiple table queries maintain distinct types', async () => {

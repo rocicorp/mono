@@ -64,7 +64,7 @@ function makeReplicacheMutator<
   TWrappedTransaction,
 >(
   lc: LogContext,
-  mutator: Mutator<TArgs, TSchema, TContext, TWrappedTransaction>,
+  mutator: Mutator<TArgs, TContext, TWrappedTransaction>,
   schema: TSchema,
   context: TContext,
 ): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
@@ -155,7 +155,7 @@ export function makeReplicacheMutators<const S extends Schema, C>(
 function isMutator(
   value: unknown,
   // oxlint-disable-next-line no-explicit-any
-): value is Mutator<any, any, any, any> {
+): value is Mutator<any, any, any> {
   return (
     typeof value === 'function' &&
     'mutatorName' in value &&
