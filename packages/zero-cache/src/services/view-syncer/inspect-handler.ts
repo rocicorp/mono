@@ -142,22 +142,32 @@ export async function handleInspect(
           }
         }
 
-        const result = await analyzeQuery(
-          lc,
-          config,
-          must(cvr.clientSchema),
-          ast,
-          body.options?.syncedRows,
-          body.options?.vendedRows,
-          permissions,
-          authData,
-          body.options?.plannerDebug,
-        );
-        client.sendInspectResponse(lc, {
-          op: 'analyze-query',
-          id: body.id,
-          value: result,
-        });
+        console.log('WFDFSDFSDFS');
+
+        try {
+          const result = await analyzeQuery(
+            lc,
+            config,
+            must(cvr.clientSchema),
+            ast,
+            body.options?.syncedRows,
+            body.options?.vendedRows,
+            permissions,
+            authData,
+            body.options?.plannerDebug,
+          );
+          console.log('sending inspect response');
+          console.log(result);
+          client.sendInspectResponse(lc, {
+            op: 'analyze-query',
+            id: body.id,
+            value: result,
+          });
+          console.log(result);
+        } catch (e) {
+          console.log(e);
+          throw e;
+        }
         break;
       }
 

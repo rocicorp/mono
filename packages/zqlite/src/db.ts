@@ -229,6 +229,11 @@ export class Statement {
     return ret as T[];
   }
 
+  explainQueryPlan() {
+    console.log('EQP');
+    return this.#stmt.explainQueryPlan();
+  }
+
   iterate<T>(...params: unknown[]): IterableIterator<T> {
     return new LoggingIterableIterator(
       this.#lc.withContext('method', 'iterate'),
