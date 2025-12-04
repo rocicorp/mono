@@ -156,9 +156,7 @@ type QueryDefinitionFunction<
 > = (options: {
   args: TOutput;
   ctx: TContext;
-  // we intentionally don't use the schema parameter here,
-  // since this is filled in by defineQueries
-}) => Query<TTable, Schema, TReturn>;
+}) => Query<TTable, TSchema, TReturn>;
 
 /**
  * A query definition is the return type of `defineQuery()`.
