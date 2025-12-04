@@ -5,6 +5,8 @@ import {
   getValueAtPath,
   iterateLeaves,
 } from '../../../shared/src/object-traversal.ts';
+import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {validateInput} from '../query/validate-input.ts';
 import type {AnyTransaction} from './custom.ts';
 import {
@@ -57,25 +59,28 @@ import {
 export function defineMutators<
   // let MD infer freely so defaults aren't erased by a AnyMutatorDefinitions constraint
   const MD,
+  S extends Schema = DefaultSchema,
 >(
   // we assert types here for clear error messages
   definitions: MD & AssertMutatorDefinitions<MD>,
-): MutatorRegistry<EnsureMutatorDefinitions<MD>>;
+): MutatorRegistry<EnsureMutatorDefinitions<MD>, S>;
 
 export function defineMutators<
   // same as MD above, but for TBase and TOverrides
   const TBase,
   const TOverrides,
+  S extends Schema = DefaultSchema,
 >(
   base:
-    | MutatorRegistry<EnsureMutatorDefinitions<TBase>>
+    | MutatorRegistry<EnsureMutatorDefinitions<TBase>, S>
     | (TBase & AssertMutatorDefinitions<TBase>),
   overrides: TOverrides & AssertMutatorDefinitions<TOverrides>,
 ): MutatorRegistry<
   DeepMerge<
     EnsureMutatorDefinitions<TBase>,
     EnsureMutatorDefinitions<TOverrides>
-  >
+  >,
+  S
 >;
 
 export function defineMutators(
@@ -136,22 +141,28 @@ export function defineMutators(
  * Gets a Mutator by its dot-separated name from a MutatorRegistry.
  * Returns undefined if not found.
  */
-export function getMutator<MD extends AnyMutatorDefinitions>(
-  registry: MutatorRegistry<MD>,
+export function getMutator<
+  MD extends AnyMutatorDefinitions,
+  TSchema extends Schema = DefaultSchema,
+>(
+  registry: MutatorRegistry<MD, TSchema>,
   name: string,
-): FromMutatorTree<MD> | undefined {
+): FromMutatorTree<MD, TSchema> | undefined {
   const m = getValueAtPath(registry, name, '.');
-  return m as FromMutatorTree<MD> | undefined;
+  return m as FromMutatorTree<MD, TSchema> | undefined;
 }
 
 /**
  * Gets a Mutator by its dot-separated name from a MutatorRegistry.
  * Throws if not found.
  */
-export function mustGetMutator<MD extends AnyMutatorDefinitions>(
-  registry: MutatorRegistry<MD>,
+export function mustGetMutator<
+  MD extends AnyMutatorDefinitions,
+  TSchema extends Schema = DefaultSchema,
+>(
+  registry: MutatorRegistry<MD, TSchema>,
   name: string,
-): FromMutatorTree<MD> {
+): FromMutatorTree<MD, TSchema> {
   const mutator = getMutator(registry, name);
   if (mutator === undefined) {
     throw new Error(`Mutator not found: ${name}`);
@@ -162,13 +173,48 @@ export function mustGetMutator<MD extends AnyMutatorDefinitions>(
 /**
  * Checks if a value is a MutatorRegistry.
  */
-export function isMutatorRegistry<MD extends AnyMutatorDefinitions>(
-  value: unknown,
-): value is MutatorRegistry<MD> {
+export function isMutatorRegistry<
+  MD extends AnyMutatorDefinitions,
+  TSchema extends Schema = DefaultSchema,
+>(value: unknown): value is MutatorRegistry<MD, TSchema> {
   return (
     typeof value === 'object' && value !== null && mutatorRegistryTag in value
   );
 }
+
+/**
+ * Creates a function that can be used to define mutators with a specific schema.
+ */
+export function defineMutatorsWithType<
+  TSchema extends Schema,
+>(): TypedDefineMutators<TSchema> {
+  return defineMutators;
+}
+
+/**
+ * The return type of defineMutatorsWithType. A function matching the
+ * defineMutators overloads but with Schema pre-bound.
+ */
+type TypedDefineMutators<S extends Schema> = {
+  // Single definitions
+  <MD>(
+    definitions: MD & AssertMutatorDefinitions<MD>,
+  ): MutatorRegistry<EnsureMutatorDefinitions<MD>, S>;
+
+  // Base and overrides
+  <TBase, TOverrides>(
+    base:
+      | MutatorRegistry<EnsureMutatorDefinitions<TBase>, S>
+      | (TBase & AssertMutatorDefinitions<TBase>),
+    overrides: TOverrides,
+  ): MutatorRegistry<
+    DeepMerge<
+      EnsureMutatorDefinitions<TBase>,
+      EnsureMutatorDefinitions<TOverrides>
+    >,
+    S
+  >;
+};
 
 // ----------------------------------------------------------------------------
 // Types
@@ -196,10 +242,12 @@ export type EnsureMutatorDefinitions<MD> = MD extends AnyMutatorDefinitions
 /**
  * The result of defineMutators(). A tree of Mutators with a tag for detection.
  */
-export type MutatorRegistry<MD extends AnyMutatorDefinitions> =
-  ToMutatorTree<MD> & {
-    [mutatorRegistryTag]: true;
-  };
+export type MutatorRegistry<
+  MD extends AnyMutatorDefinitions,
+  TSchema extends Schema,
+> = ToMutatorTree<MD, TSchema> & {
+  [mutatorRegistryTag]: true;
+};
 
 /**
  * A branded type for use in type constraints. Use this instead of
@@ -222,41 +270,50 @@ const mutatorRegistryTag = Symbol('mutatorRegistry');
  * Each MutatorDefinition becomes a Mutator at the same path.
  * Uses TInput for the callable args (TOutput is only used internally for validation).
  */
-export type ToMutatorTree<MD extends AnyMutatorDefinitions> = {
+export type ToMutatorTree<
+  MD extends AnyMutatorDefinitions,
+  TSchema extends Schema,
+> = {
   readonly [K in keyof MD]: MD[K] extends MutatorDefinition<any, any, any, any>
     ? // pull types from the phantom property
       Mutator<
         MD[K]['~']['$input'],
+        TSchema,
         MD[K]['~']['$context'],
         MD[K]['~']['$wrappedTransaction']
       >
     : MD[K] extends AnyMutatorDefinitions
-      ? ToMutatorTree<MD[K]>
+      ? ToMutatorTree<MD[K], TSchema>
       : never;
 };
 
-export type FromMutatorTree<MD extends AnyMutatorDefinitions> = {
+export type FromMutatorTree<
+  MD extends AnyMutatorDefinitions,
+  TSchema extends Schema,
+> = {
   readonly [K in keyof MD]: MD[K] extends MutatorDefinition<any, any, any, any>
     ? // pull types from the phantom property
       Mutator<
         ReadonlyJSONValue | undefined, // intentionally left as generic to avoid variance issues
+        TSchema,
         MD[K]['~']['$context'],
         MD[K]['~']['$wrappedTransaction']
       >
     : MD[K] extends AnyMutatorDefinitions
-      ? FromMutatorTree<MD[K]>
+      ? FromMutatorTree<MD[K], TSchema>
       : never;
 }[keyof MD];
 
 function createMutator<
   ArgsInput extends ReadonlyJSONValue | undefined,
   ArgsOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema,
   C,
   TWrappedTransaction,
 >(
   name: string,
   definition: MutatorDefinition<ArgsInput, ArgsOutput, C, TWrappedTransaction>,
-): Mutator<ArgsInput, C, TWrappedTransaction> {
+): Mutator<ArgsInput, TSchema, C, TWrappedTransaction> {
   const {validator} = definition;
 
   // fn takes ReadonlyJSONValue args because it's called during rebase (from
@@ -284,14 +341,24 @@ function createMutator<
   // Create the callable mutator
   const mutator = (
     args: ArgsInput,
-  ): MutationRequest<ArgsInput, C, TWrappedTransaction> => ({
-    mutator: mutator as unknown as Mutator<ArgsInput, C, TWrappedTransaction>,
+  ): MutationRequest<ArgsInput, TSchema, C, TWrappedTransaction> => ({
+    mutator: mutator as unknown as Mutator<
+      ArgsInput,
+      TSchema,
+      C,
+      TWrappedTransaction
+    >,
     args,
   });
   mutator.mutatorName = name;
   mutator.fn = fn;
 
-  return mutator as unknown as Mutator<ArgsInput, C, TWrappedTransaction>;
+  return mutator as unknown as Mutator<
+    ArgsInput,
+    TSchema,
+    C,
+    TWrappedTransaction
+  >;
 }
 
 export function* iterateMutators(

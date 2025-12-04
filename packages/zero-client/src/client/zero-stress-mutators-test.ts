@@ -2,7 +2,7 @@
 
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import type {zeroStressSchema} from './zero-stress-schema-test.ts';
 import type {
@@ -16,7 +16,7 @@ const defineMutatorTyped = defineMutatorWithType<
   StressTransaction
 >();
 
-const mutators = defineMutators({
+const mutators = defineMutatorsWithType<typeof zeroStressSchema>()({
   // Basic insert operations
   updateThing: defineMutatorTyped(
     ((v: unknown) => v) as unknown as StandardSchemaV1<

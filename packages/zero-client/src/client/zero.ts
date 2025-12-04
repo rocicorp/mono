@@ -682,7 +682,7 @@ export class Zero<
     );
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const callableMutate = (mr: MutationRequest<any, C, any>) => {
+    const callableMutate = (mr: MutationRequest<any, S, C, any>) => {
       if (!registeredMutators.has(mr.mutator)) {
         throw new Error(
           `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
@@ -1025,7 +1025,7 @@ export class Zero<
   readonly mutate: MakeMutatePropertyType<S, MD, C> &
     // Also callable with MutationRequest: zero.mutate(mr)
     // oxlint-disable-next-line no-explicit-any
-    ((mr: MutationRequest<any, C, any>) => MutatorResult);
+    ((mr: MutationRequest<any, S, C, any>) => MutatorResult);
 
   /**
    * Provides a way to batch multiple CRUD mutations together:

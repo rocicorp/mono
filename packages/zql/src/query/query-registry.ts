@@ -110,7 +110,7 @@ export type QueryRegistry<
   ['~']: Expand<QueryRegistryTypes<S>>;
 };
 
-type AnyQueryDefinition = QueryDefinition<any, any, any, any, any, any>;
+type AnyQueryDefinition = QueryDefinition<any, any, any, any, any>;
 
 type ToQueryTree<QD extends QueryDefinitions<S, any>, S extends Schema> = {
   readonly [K in keyof QD]: QD[K] extends AnyQueryDefinition
@@ -147,27 +147,22 @@ export type FromQueryTree<
 }[keyof QD];
 
 type QueryDefinitionFunction<
-  TTable extends keyof TSchema['tables'] & string,
+  TTable extends string,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema,
   TReturn,
   TContext,
-> = (options: {
-  args: TOutput;
-  ctx: TContext;
-}) => Query<TTable, TSchema, TReturn>;
+> = (options: {args: TOutput; ctx: TContext}) => Query<TTable, Schema, TReturn>;
 
 /**
  * A query definition is the return type of `defineQuery()`.
  */
 export type QueryDefinition<
-  TTable extends keyof TSchema['tables'] & string,
+  TTable extends string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
+  TReturn,
   TContext = DefaultContext,
-> = QueryDefinitionFunction<TTable, TOutput, TSchema, TReturn, TContext> & {
+> = QueryDefinitionFunction<TTable, TOutput, TReturn, TContext> & {
   'validator': StandardSchemaV1<TInput, TOutput> | undefined;
 
   /**
@@ -187,13 +182,13 @@ export function isQueryDefinition<
   TContext = DefaultContext,
 >(
   f: unknown,
-): f is QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext> {
+): f is QueryDefinition<TTable, TInput, TOutput, TReturn, TContext> {
   return typeof f === 'function' && (f as any)['~'] === 'QueryDefinition';
 }
 
 export type QueryDefinitions<S extends Schema, Context> = {
   readonly [key: string]:
-    | QueryDefinition<any, any, any, S, any, Context>
+    | QueryDefinition<any, any, any, any, Context>
     | QueryDefinitions<S, Context>;
 };
 
@@ -245,62 +240,55 @@ export type QueryDefinitions<S extends Schema, Context> = {
 // Overload for no validator parameter with default inference for untyped functions
 export function defineQuery<
   TInput extends ReadonlyJSONValue | undefined,
-  TReturn,
   TContext = DefaultContext,
   TSchema extends Schema = DefaultSchema,
   TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
     string,
+  TReturn = PullRow<TTable, TSchema>,
 >(
   queryFn: (options: {
     args: TInput;
     ctx: TContext;
   }) => Query<TTable, TSchema, TReturn>,
-): QueryDefinition<TTable, TInput, TInput, TSchema, TReturn, TContext> & {};
+): QueryDefinition<TTable, TInput, TInput, TReturn, TContext> & {};
 
 // Overload for validator parameter - Input and Output can be different
 export function defineQuery<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TReturn,
   TContext = DefaultContext,
   TSchema extends Schema = DefaultSchema,
   TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
     string,
+  TReturn = PullRow<TTable, TSchema>,
 >(
   validator: StandardSchemaV1<TInput, TOutput>,
   queryFn: (options: {
     args: TOutput;
     ctx: TContext;
   }) => Query<TTable, TSchema, TReturn>,
-): QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext> & {};
+): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext> & {};
 
 // Implementation
 export function defineQuery<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TReturn,
   TContext = DefaultContext,
   TSchema extends Schema = DefaultSchema,
   TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
     string,
+  TReturn = PullRow<TTable, TSchema>,
 >(
   validatorOrQueryFn:
     | StandardSchemaV1<TInput, TOutput>
-    | QueryDefinitionFunction<TTable, TOutput, TSchema, TReturn, TContext>,
-  queryFn?: QueryDefinitionFunction<
-    TTable,
-    TOutput,
-    TSchema,
-    TReturn,
-    TContext
-  >,
-): QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext> {
+    | QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
+  queryFn?: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
+): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext> {
   // Handle different parameter patterns
   let validator: StandardSchemaV1<TInput, TOutput> | undefined;
   let actualQueryFn: QueryDefinitionFunction<
     TTable,
     TOutput,
-    TSchema,
     TReturn,
     TContext
   >;
@@ -388,7 +376,7 @@ type TypedDefineQuery<TSchema extends Schema, TContext> = {
       args: TArgs;
       ctx: TContext;
     }) => Query<TTable, TSchema, TReturn>,
-  ): QueryDefinition<TTable, TArgs, TArgs, TSchema, TReturn, TContext>;
+  ): QueryDefinition<TTable, TArgs, TArgs, TReturn, TContext>;
 
   // With validator
   <
@@ -403,7 +391,7 @@ type TypedDefineQuery<TSchema extends Schema, TContext> = {
       args: TOutput;
       ctx: TContext;
     }) => Query<TTable, TSchema, TReturn>,
-  ): QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
+  ): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext>;
 };
 
 export function createCustomQueryBuilder<
@@ -415,14 +403,7 @@ export function createCustomQueryBuilder<
   TContext,
   THasArgs extends boolean,
 >(
-  queryDef: QueryDefinition<
-    TTable,
-    TInput,
-    TOutput,
-    TSchema,
-    TReturn,
-    TContext
-  >,
+  queryDef: QueryDefinition<TTable, TInput, TOutput, TReturn, TContext>,
   name: string,
   inputArgs: TInput,
   validatedArgs: TOutput,
@@ -593,16 +574,6 @@ export function defineQueries<
   return processDefinitions(defsOrBase as QD, []) as QueryRegistry<QD, S>;
 }
 
-/**
- * Creates a function that can be used to define queries with a specific schema.
- */
-export function defineQueriesWithType<
-  TSchema extends Schema,
-  TContext = any,
->(): TypedDefineQueries<TSchema, TContext> {
-  return defineQueries;
-}
-
 type AssertQueryDefinitions<QD> =
   QD extends QueryDefinitions<any, any> ? unknown : never;
 
@@ -610,23 +581,37 @@ type EnsureQueryDefinitions<QD> =
   QD extends QueryDefinitions<any, any> ? QD : never;
 
 /**
+ * Creates a function that can be used to define queries with a specific schema.
+ */
+export function defineQueriesWithType<
+  TSchema extends Schema,
+>(): TypedDefineQueries<TSchema> {
+  return defineQueries;
+}
+
+/**
  * The return type of defineQueriesWithType. A function matching the
  * defineQueries overloads but with Schema pre-bound.
  */
-type TypedDefineQueries<TSchema extends Schema, TContext> = {
+type TypedDefineQueries<S extends Schema> = {
   // Single definitions
-  <QD extends QueryDefinitions<TSchema, TContext>>(
-    definitions: QD,
-  ): QueryRegistry<QD, TSchema>;
+  <QD>(
+    definitions: QD & AssertQueryDefinitions<QD>,
+  ): QueryRegistry<EnsureQueryDefinitions<QD>, S>;
 
   // Base and overrides
-  <
-    TBase extends QueryDefinitions<TSchema, TContext>,
-    TOverrides extends QueryDefinitions<TSchema, TContext>,
-  >(
-    base: QueryRegistry<TBase, TSchema>,
-    overrides: TOverrides,
-  ): QueryRegistry<DeepMerge<TBase, TOverrides>, TSchema>;
+  <TBase, TOverrides>(
+    base:
+      | QueryRegistry<EnsureQueryDefinitions<TBase>, S>
+      | (TBase & AssertQueryDefinitions<TBase>),
+    overrides: TOverrides & AssertQueryDefinitions<TOverrides>,
+  ): QueryRegistry<
+    DeepMerge<
+      EnsureQueryDefinitions<TBase>,
+      EnsureQueryDefinitions<TOverrides>
+    >,
+    S
+  >;
 };
 
 export function getQuery<QD extends QueryDefinitions<S, any>, S extends Schema>(

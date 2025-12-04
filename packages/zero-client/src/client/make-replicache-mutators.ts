@@ -64,7 +64,7 @@ function makeReplicacheMutator<
   TWrappedTransaction,
 >(
   lc: LogContext,
-  mutator: Mutator<TArgs, TContext, TWrappedTransaction>,
+  mutator: Mutator<TArgs, TSchema, TContext, TWrappedTransaction>,
   schema: TSchema,
   context: TContext,
 ): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {

@@ -418,14 +418,14 @@ describe('defineQuery types', () => {
 
     const query = defineQuery<
       {id: string},
-      PullRow<'foo', typeof schema>,
       Context,
       typeof schema,
-      'foo'
+      'foo',
+      PullRow<'foo', typeof schema>
     >(({args}) => builder.foo.where('id', '=', args.id));
 
     expectTypeOf<typeof query>().returns.toEqualTypeOf<
-      Query<'foo', typeof schema, PullRow<'foo', typeof schema>>
+      Query<'foo', Schema, PullRow<'foo', typeof schema>>
     >();
     expectTypeOf<typeof query>()
       .parameter(0)
@@ -440,7 +440,7 @@ describe('defineQuery types', () => {
     });
 
     expectTypeOf<typeof query>().returns.toEqualTypeOf<
-      Query<'foo', typeof schema, PullRow<'foo', typeof schema>>
+      Query<'foo', Schema, PullRow<'foo', typeof schema>>
     >();
     expectTypeOf<typeof query>()
       .parameter(0)
@@ -675,10 +675,10 @@ describe('defineQueries', () => {
 
     const getFoo = defineQuery<
       {id: string},
-      PullRow<'foo', typeof schema>,
       Context1,
       typeof schema,
-      'foo'
+      'foo',
+      PullRow<'foo', typeof schema>
     >(({ctx, args}) => {
       expectTypeOf(ctx).toEqualTypeOf<Context1>();
       expectTypeOf(args).toEqualTypeOf<{id: string}>();
@@ -688,10 +688,10 @@ describe('defineQueries', () => {
 
     const getBar = defineQuery<
       {some: 'baz'},
-      PullRow<'bar', typeof schema>,
       Context2,
       typeof schema,
-      'bar'
+      'bar',
+      PullRow<'bar', typeof schema>
     >(({ctx, args}) => {
       expectTypeOf(ctx).toEqualTypeOf<Context2>();
       expectTypeOf(args).toEqualTypeOf<{some: 'baz'}>();
@@ -899,7 +899,7 @@ describe('defineQueries types', () => {
 
     // Context is unknown, so any value is accepted
     expectTypeOf(withArgs.toQuery).toEqualTypeOf<
-      (ctx: any) => Query<'foo', typeof schema>
+      (ctx: unknown) => Query<'foo', typeof schema>
     >();
   });
 });
@@ -1471,21 +1471,23 @@ describe('mustGetQuery', () => {
     expectTypeOf(query1['~']['$input']).toEqualTypeOf<
       ReadonlyJSONValue | undefined
     >();
-    expectTypeOf(query1['~']['$context']).toEqualTypeOf<any>();
+    expectTypeOf(query1['~']['$context']).toEqualTypeOf<unknown>();
 
     expectTypeOf(query2['~']['$schema']).toEqualTypeOf<typeof schema>();
   });
 
   test('returns query by name with schema and context', () => {
     type Context = {userId: string};
-    const defineQueriesTyped = defineQueriesWithType<typeof schema, Context>();
+    const defineQueriesTyped = defineQueriesWithType<typeof schema>();
 
     const queries = defineQueriesTyped({
-      getUser: defineQuery(({args}: {args: string}) =>
-        builder.foo.where('id', '=', args),
+      getUser: defineQueryWithType<typeof schema, Context>()(
+        ({args}: {args: string}) => builder.foo.where('id', '=', args),
       ),
       nested: {
-        getBar: defineQuery(() => builder.bar),
+        getBar: defineQueryWithType<typeof schema, Context>()(
+          () => builder.bar,
+        ),
       },
     });
 
@@ -1639,12 +1641,13 @@ test('defineQueries preserves types from defineQuery', () => {
   type Context3 = {bool: true};
 
   const queries = defineQueries({
-    // Explicit type params: TInput, TReturn, TContext, TSchema, TTable
+    // Explicit type params
     def1: defineQuery<
       {id: string},
-      PullRow<'foo', typeof schema>,
       Context1,
-      typeof schema
+      typeof schema,
+      'foo',
+      PullRow<'foo', typeof schema>
     >(({args, ctx}) => {
       expectTypeOf(args).toEqualTypeOf<{id: string}>();
       expectTypeOf(ctx).toEqualTypeOf<Context1>();
@@ -1653,10 +1656,10 @@ test('defineQueries preserves types from defineQuery', () => {
     // Different table, different context
     def2: defineQuery<
       {id: string},
-      PullRow<'bar', typeof schema>,
       Context2,
       typeof schema,
-      'bar'
+      'bar',
+      PullRow<'bar', typeof schema>
     >(({args, ctx}) => {
       expectTypeOf(args).toEqualTypeOf<{id: string}>();
       expectTypeOf(ctx).toEqualTypeOf<Context2>();

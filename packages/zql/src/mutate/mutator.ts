@@ -144,24 +144,12 @@ export function defineMutator<
   return f;
 }
 
-// overloads intentionally do not use DefaultSchema, DefaultContext,
-// or DefaultWrappedTransaction
+// intentionally not using DefaultSchema, DefaultContext, or DefaultWrappedTransaction
 export function defineMutatorWithType<
   TSchema extends Schema,
->(): TypedDefineMutator<TSchema, unknown, unknown>;
-
-export function defineMutatorWithType<
-  TSchema extends Schema,
-  TContext,
->(): TypedDefineMutator<TSchema, TContext, unknown>;
-
-export function defineMutatorWithType<
-  TSchema extends Schema,
-  TContext,
-  TWrappedTransaction,
->(): TypedDefineMutator<TSchema, TContext, TWrappedTransaction>;
-
-export function defineMutatorWithType() {
+  TContext = unknown,
+  TWrappedTransaction = unknown,
+>(): TypedDefineMutator<TSchema, TContext, TWrappedTransaction> {
   return defineMutator;
 }
 
@@ -220,9 +208,10 @@ type TypedDefineMutator<
  */
 export type Mutator<
   TInput extends ReadonlyJSONValue | undefined,
-  TContext,
-  TWrappedTransaction,
-> = MutatorCallable<TInput, TContext, TWrappedTransaction> & {
+  TSchema extends Schema = DefaultSchema,
+  TContext = DefaultContext,
+  TWrappedTransaction = DefaultWrappedTransaction,
+> = MutatorCallable<TInput, TSchema, TContext, TWrappedTransaction> & {
   readonly mutatorName: string;
   /**
    * Execute the mutation. Args are ReadonlyJSONValue because this is called
@@ -232,7 +221,7 @@ export type Mutator<
   readonly fn: (options: {
     args: TInput;
     ctx: TContext;
-    tx: AnyTransaction;
+    tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>;
 };
 
@@ -242,16 +231,21 @@ export type Mutator<
 // Otherwise, args is required
 type MutatorCallable<
   TInput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema,
   TContext,
   TWrappedTransaction,
 > = [TInput] extends [undefined]
-  ? () => MutationRequest<TInput, TContext, TWrappedTransaction>
+  ? () => MutationRequest<TInput, TSchema, TContext, TWrappedTransaction>
   : undefined extends TInput
-    ? (args?: TInput) => MutationRequest<TInput, TContext, TWrappedTransaction>
-    : (args: TInput) => MutationRequest<TInput, TContext, TWrappedTransaction>;
+    ? (
+        args?: TInput,
+      ) => MutationRequest<TInput, TSchema, TContext, TWrappedTransaction>
+    : (
+        args: TInput,
+      ) => MutationRequest<TInput, TSchema, TContext, TWrappedTransaction>;
 
 // oxlint-disable-next-line no-explicit-any
-export type AnyMutator = Mutator<any, any, any>;
+export type AnyMutator = Mutator<any, any, any, any>;
 
 /**
  * The result of calling a Mutator with arguments.
@@ -265,10 +259,11 @@ export type AnyMutator = Mutator<any, any, any>;
  */
 export type MutationRequest<
   TInput extends ReadonlyJSONValue | undefined,
-  TContext,
-  TWrappedTransaction,
+  TSchema extends Schema = DefaultSchema,
+  TContext = DefaultContext,
+  TWrappedTransaction = DefaultWrappedTransaction,
 > = {
-  readonly mutator: Mutator<TInput, TContext, TWrappedTransaction>;
+  readonly mutator: Mutator<TInput, TSchema, TContext, TWrappedTransaction>;
   readonly args: TInput;
 };
 
