@@ -1,6 +1,7 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Transaction} from './custom.ts';
 import {defineMutators} from './mutator-registry.ts';
@@ -159,9 +160,9 @@ describe('Mutator callable type tests', () => {
     // Type test: noArgs() should be callable with no arguments
     expectTypeOf(mutators.noArgs).toBeCallableWith();
 
-    // The result should be a MutationRequest with undefined args
+    // The result should be a MutationRequest with ReadonlyJSONValue | undefined args
     const mr = mutators.noArgs();
-    expectTypeOf(mr.args).toBeUndefined();
+    expectTypeOf(mr.args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
   });
 
   test('Mutator with required args - requires argument', () => {

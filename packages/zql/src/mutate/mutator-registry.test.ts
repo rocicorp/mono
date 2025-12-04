@@ -8,6 +8,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {AnyTransaction, Transaction} from './custom.ts';
 import {
   defineMutators,
@@ -643,8 +644,10 @@ describe('type inference', () => {
   test('defineMutators preserves types from defineMutator', () => {
     type Context1 = {userId: string};
     type Context2 = {some: 'baz'};
+    type Context3 = {bool: true};
     type DbTransaction1 = {db: true};
     type DbTransaction2 = {db: false};
+    type DbTransaction3 = {db: 3};
 
     const mutators = defineMutators({
       def1: defineMutator<
@@ -671,6 +674,28 @@ describe('type inference', () => {
           Transaction<typeof schema, DbTransaction2>
         >();
       }),
+      def3: defineMutator(async ({args, ctx, tx}) => {
+        expectTypeOf(args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
+        expectTypeOf(ctx).toEqualTypeOf<unknown>();
+        expectTypeOf(tx).toEqualTypeOf<Transaction<Schema, unknown>>();
+      }),
+      def4: defineMutator(
+        async ({
+          args,
+          ctx,
+          tx,
+        }: {
+          args: string;
+          ctx: Context3;
+          tx: Transaction<typeof schema, DbTransaction3>;
+        }) => {
+          expectTypeOf(args).toEqualTypeOf<string>();
+          expectTypeOf(ctx).toEqualTypeOf<Context3>();
+          expectTypeOf(tx).toEqualTypeOf<
+            Transaction<typeof schema, DbTransaction3>
+          >();
+        },
+      ),
     });
 
     expectTypeOf(mutators.def1).parameter(0).toEqualTypeOf<{id: string}>();
@@ -688,6 +713,25 @@ describe('type inference', () => {
     expectTypeOf<typeof request2.mutator.fn>().parameter(0).toEqualTypeOf<{
       args: {id: string};
       ctx: Context2;
+      tx: AnyTransaction;
+    }>();
+
+    expectTypeOf(mutators.def3)
+      .parameter(0)
+      .toEqualTypeOf<ReadonlyJSONValue | undefined>();
+    const request3 = mutators.def3('whatever');
+    expectTypeOf(request3.args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
+    expectTypeOf<typeof request3.mutator.fn>().parameter(0).toEqualTypeOf<{
+      args: ReadonlyJSONValue | undefined;
+      ctx: unknown;
+      tx: AnyTransaction;
+    }>();
+
+    const request4 = mutators.def4('test-string');
+    expectTypeOf(request4.args).toEqualTypeOf<string>();
+    expectTypeOf<typeof request4.mutator.fn>().parameter(0).toEqualTypeOf<{
+      args: string;
+      ctx: Context3;
       tx: AnyTransaction;
     }>();
   });

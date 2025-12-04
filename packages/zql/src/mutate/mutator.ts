@@ -99,7 +99,7 @@ export function defineMutator<
 
 // Overload 2: Call without validator
 export function defineMutator<
-  TInput extends ReadonlyJSONValue | undefined = undefined,
+  TInput extends ReadonlyJSONValue | undefined = ReadonlyJSONValue | undefined,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
