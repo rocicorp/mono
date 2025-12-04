@@ -6,7 +6,6 @@ export type StressContext = {
   workspaceId?: string;
   workspaceName?: string;
   fieldId?: string;
-  $schema?: typeof zeroStressSchema;
 };
 
 export type StressTransaction = {

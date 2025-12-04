@@ -5,6 +5,7 @@ import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {mustGetMutator} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {Mutator} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {mustGetQuery} from '../../../zql/src/query/query-registry.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {MutatorResultDetails} from './custom.ts';
@@ -120,6 +121,16 @@ describe('stress test types', () => {
         StressTransaction
       >
     >();
+  });
+
+  test('can resolve query types', () => {
+    const query = mustGetQuery(queries, 'wide');
+
+    type TableName = ReturnType<typeof query>['~']['$tableName'];
+
+    expectTypeOf<'workspace'>().toExtend<TableName>();
+    expectTypeOf<'user'>().toExtend<TableName>();
+    expectTypeOf<'order'>().toExtend<TableName>();
   });
 
   test('multiple table queries maintain distinct types', async () => {

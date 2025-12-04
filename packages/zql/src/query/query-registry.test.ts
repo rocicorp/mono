@@ -1,6 +1,6 @@
 // oxlint-disable no-explicit-any
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import {describe, expect, expectTypeOf, test} from 'vitest';
+import {describe, expect, expectTypeOf, test, vi} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -12,10 +12,15 @@ import type {Schema} from '../../../zero-types/src/schema.ts';
 import {createBuilder} from './create-builder.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {
+  createCustomQueryBuilder,
   defineQueries,
   defineQueriesWithType,
   defineQuery,
+  defineQueryWithType,
+  getQuery,
+  isQueryDefinition,
   isQueryRegistry,
+  mustGetQuery,
   type CustomQuery,
 } from './query-registry.ts';
 import type {Query} from './query.ts';
@@ -213,6 +218,36 @@ describe('defineQuery', () => {
         table: 'foo',
       });
     });
+  });
+
+  test('validator failure throws before executing query', () => {
+    const validator: StandardSchemaV1<string, string> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: () => ({issues: [{message: 'bad'}]}),
+      },
+    };
+
+    const run = vi.fn();
+
+    const query = defineQuery(validator, ({args}) => {
+      run(args);
+      return builder.foo.where('id', '=', args);
+    });
+
+    const customQuery = createCustomQueryBuilder(
+      query,
+      'test',
+      'boom',
+      'boom',
+      false,
+    );
+
+    expect(() => customQuery('boom')).toThrowErrorMatchingInlineSnapshot(
+      `[Error: Validation failed for query test: bad]`,
+    );
+    expect(run).not.toHaveBeenCalled();
   });
 });
 
@@ -1334,5 +1369,197 @@ describe('defineQueries merging types', () => {
     expectTypeOf<Parameters<typeof extended.users.byId>>().toEqualTypeOf<
       [args: {id: string; extra: boolean}]
     >();
+  });
+});
+
+describe('getQuery', () => {
+  test('returns query by name', () => {
+    const queries = defineQueries({
+      getUser: defineQuery(({args}: {args: string}) =>
+        builder.foo.where('id', '=', args),
+      ),
+      nested: {
+        getBar: defineQuery(() => builder.bar),
+      },
+    });
+
+    const query1 = getQuery(queries, 'getUser');
+    const query2 = getQuery(queries, 'nested.getBar');
+
+    expect(query1).toBe(queries.getUser);
+    expect(query2).toBe(queries.nested.getBar);
+
+    expectTypeOf(query1?.['~']['$tableName']).toEqualTypeOf<
+      'foo' | 'bar' | undefined
+    >();
+  });
+
+  test('returns undefined for non-existent query', () => {
+    const queries = defineQueries({
+      getUser: defineQuery(() => builder.foo),
+    });
+
+    expect(getQuery(queries, 'nonExistent')).toBeUndefined();
+    expect(getQuery(queries, 'nested.getBar')).toBeUndefined();
+  });
+});
+
+describe('mustGetQuery', () => {
+  test('returns query by name', () => {
+    const defineQueriesTyped = defineQueriesWithType<typeof schema>();
+
+    const queries = defineQueriesTyped({
+      getUser: defineQuery(({args}: {args: string}) =>
+        builder.foo.where('id', '=', args),
+      ),
+      nested: {
+        getBar: defineQuery(() => builder.bar),
+      },
+    });
+
+    const query1 = mustGetQuery(queries, 'getUser');
+    const query2 = mustGetQuery(queries, 'nested.getBar');
+
+    expect(query1).toBe(queries.getUser);
+    expect(query2).toBe(queries.nested.getBar);
+    expectTypeOf(query1['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
+    expectTypeOf(query2['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
+    expectTypeOf(query1['~']['$input']).toEqualTypeOf<
+      ReadonlyJSONValue | undefined
+    >();
+    expectTypeOf(query2['~']['$schema']).toEqualTypeOf<typeof schema>();
+  });
+
+  test('throws for non-existent query', () => {
+    const queries = defineQueries({
+      getUser: defineQuery(() => builder.foo),
+    });
+
+    expect(() => mustGetQuery(queries, 'nonExistent')).toThrow(
+      'Query not found: nonExistent',
+    );
+  });
+});
+
+describe('defineQueryWithType', () => {
+  test('binds schema and context types correctly', () => {
+    type Context = {userId: string; role: 'admin' | 'user'};
+
+    const defineQueryTyped = defineQueryWithType<typeof schema, Context>();
+
+    const query = defineQueryTyped<'foo', {return: 'type'}, {id: string}>(
+      ({args, ctx}) => {
+        expectTypeOf(args).toEqualTypeOf<{id: string}>();
+        expectTypeOf(ctx).toEqualTypeOf<Context>();
+        return builder.foo.where('id', '=', args.id);
+      },
+    );
+
+    const defineQueriesTyped = defineQueriesWithType<typeof schema>();
+
+    const queries = defineQueriesTyped({test: query});
+
+    const q = queries.test({id: 'test'});
+
+    expectTypeOf<(typeof q)['~']['$schema']>().toEqualTypeOf<typeof schema>();
+    expectTypeOf<(typeof q)['~']['$context']>().toEqualTypeOf<Context>();
+    expectTypeOf<(typeof q)['~']['$return']>().toEqualTypeOf<{
+      return: 'type';
+    }>();
+  });
+
+  test('works with validator', () => {
+    type Context = {userId: string};
+    const define = defineQueryWithType<typeof schema, Context>();
+
+    const query = define(
+      ((v: unknown) => v) as unknown as StandardSchemaV1<
+        {raw: number},
+        {validated: string}
+      >,
+      ({args, ctx}) => {
+        expectTypeOf(args).toEqualTypeOf<{validated: string}>();
+        expectTypeOf(ctx).toEqualTypeOf<Context>();
+        return builder.foo.where('id', '=', args.validated);
+      },
+    );
+
+    const defineQueriesTyped = defineQueriesWithType<typeof schema>();
+    const queries = defineQueriesTyped({test: query});
+
+    const q = queries.test({raw: 1});
+
+    expectTypeOf<(typeof q)['~']['$schema']>().toEqualTypeOf<typeof schema>();
+    expectTypeOf<(typeof q)['~']['$context']>().toEqualTypeOf<Context>();
+    expectTypeOf<(typeof q)['~']['$input']>().toEqualTypeOf<{
+      raw: number;
+    }>();
+    expectTypeOf<(typeof q)['~']['$return']>().toEqualTypeOf<{
+      readonly id: string;
+      readonly val: number;
+    }>();
+  });
+
+  test('context-only overload still produces a working query', () => {
+    type Ctx = {tenant: string};
+    const defineQueryTyped = defineQueryWithType<Ctx>();
+
+    const query = defineQueryTyped(({ctx}) => {
+      expect(ctx.tenant).toBe('t1');
+      return builder.foo;
+    });
+
+    const result = query({args: undefined, ctx: {tenant: 't1'}});
+    expect(asQueryInternals(result).ast).toEqual({table: 'foo'});
+  });
+});
+
+describe('defineQueriesWithType', () => {
+  test('binds schema type correctly', () => {
+    const define = defineQueriesWithType<typeof schema>();
+
+    const queries = define({
+      getFoo: defineQuery(({args}: {args: string}) =>
+        builder.foo.where('id', '=', args),
+      ),
+      getBar: defineQuery(() => builder.bar),
+    });
+
+    const q = queries.getFoo('test');
+
+    expectTypeOf<(typeof q)['~']['$schema']>().toEqualTypeOf<typeof schema>();
+  });
+
+  test('preserves different context types per query', () => {
+    type Context1 = {userId: string};
+    type Context2 = {role: 'admin'};
+
+    const define = defineQueriesWithType<typeof schema>();
+
+    const queries = define({
+      query1: defineQuery(
+        ({ctx: _ctx}: {ctx: Context1; args: undefined}) => builder.foo,
+      ),
+      query2: defineQuery(
+        ({ctx: _ctx}: {ctx: Context2; args: undefined}) => builder.bar,
+      ),
+    });
+
+    const q1 = queries.query1();
+    const q2 = queries.query2();
+
+    expectTypeOf<(typeof q1)['~']['$context']>().toEqualTypeOf<Context1>();
+    expectTypeOf<(typeof q2)['~']['$context']>().toEqualTypeOf<Context2>();
+  });
+});
+
+describe('isQueryDefinition', () => {
+  test('detects query definitions and rejects other values', () => {
+    const def = defineQuery(() => builder.foo);
+
+    expect(isQueryDefinition(def)).toBe(true);
+    expect(isQueryDefinition(() => builder.foo)).toBe(false);
+    expect(isQueryDefinition({validator: undefined})).toBe(false);
+    expect(isQueryDefinition(null)).toBe(false);
   });
 });

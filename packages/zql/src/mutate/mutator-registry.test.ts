@@ -1,6 +1,6 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import {describe, expect, expectTypeOf, test, vi} from 'vitest';
+import {assert, describe, expect, expectTypeOf, test, vi} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -16,7 +16,7 @@ import {
   iterateMutators,
   mustGetMutator,
 } from './mutator-registry.ts';
-import {defineMutator, type Mutator} from './mutator.ts';
+import {defineMutator, defineMutatorWithType, type Mutator} from './mutator.ts';
 
 const schema = createSchema({
   tables: [
@@ -185,6 +185,46 @@ test('mutator.fn validates args when validator is provided', async () => {
     ctx: undefined,
     tx: mockTx,
   });
+});
+
+test('mutator.fn throws on validation failure and does not run', async () => {
+  const validator: StandardSchemaV1<{id: string}, {id: string}> = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: () => ({
+        issues: [{message: 'invalid'}],
+      }),
+    },
+  };
+
+  const fn = vi.fn();
+
+  const testMutator = defineMutator(
+    validator,
+    ({args, ctx, tx}: {args: {id: string}; ctx: unknown; tx: unknown}) => {
+      fn(args, ctx, tx);
+      return Promise.resolve();
+    },
+  );
+
+  const mutators = defineMutators({
+    item: {
+      test: testMutator,
+    },
+  });
+
+  await expect(
+    mutators.item.test.fn({
+      args: {id: 'bad'},
+      ctx: undefined,
+      tx: {} as AnyTransaction,
+    }),
+  ).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: Validation failed for mutator item.test: invalid]`,
+  );
+
+  expect(fn).not.toHaveBeenCalled();
 });
 
 test('getMutator looks up by dot-separated name and returns the correct type', () => {
@@ -670,5 +710,113 @@ describe('type inference', () => {
       // @ts-expect-error invalid type
       () => defineMutators({invalidDef}, {invalidDef2}),
     ).returns.toBeNever();
+  });
+});
+
+describe('defineMutatorWithType', () => {
+  test('binds schema and context types correctly', () => {
+    type Context = {userId: string; role: 'admin' | 'user'};
+    type Tx = {db: 'postgres'};
+
+    const define = defineMutatorWithType<typeof schema, Context, Tx>();
+
+    const mutator = define<{id: string}>(async ({args, ctx, tx}) => {
+      expectTypeOf(args).toEqualTypeOf<{id: string}>();
+      expectTypeOf(ctx).toEqualTypeOf<Context>();
+      expectTypeOf(tx).toEqualTypeOf<Transaction<typeof schema, Tx>>();
+    });
+
+    const mutators = defineMutators({test: mutator});
+
+    expectTypeOf(mutators.test).toEqualTypeOf<
+      Mutator<{id: string}, Context, Tx>
+    >();
+  });
+
+  test('defaults context and wrapped transaction to unknown', () => {
+    const define = defineMutatorWithType<typeof schema>();
+
+    const mutator = define(async ({ctx, tx}) => {
+      expectTypeOf(ctx).toEqualTypeOf<unknown>();
+      expectTypeOf(tx).toEqualTypeOf<Transaction<typeof schema, unknown>>();
+    });
+
+    const mutators = defineMutators({test: mutator});
+
+    expectTypeOf(mutators.test).toEqualTypeOf<
+      Mutator<ReadonlyJSONValue | undefined, unknown, unknown>
+    >();
+  });
+
+  test('works with validator', () => {
+    type Context = {workspaceId: string};
+    const define = defineMutatorWithType<typeof schema, Context>();
+
+    const mutator = define(
+      ((v: unknown) => v) as unknown as StandardSchemaV1<
+        {raw: number},
+        {validated: string}
+      >,
+      async ({args, ctx}) => {
+        expectTypeOf(args).toEqualTypeOf<{validated: string}>();
+        expectTypeOf(ctx).toEqualTypeOf<Context>();
+      },
+    );
+
+    const mutators = defineMutators({test: mutator});
+
+    expectTypeOf(mutators.test).toEqualTypeOf<
+      Mutator<{raw: number}, Context, unknown>
+    >();
+  });
+
+  test('produces a working mutator at runtime', async () => {
+    const define = defineMutatorWithType<typeof schema, Context1>();
+
+    const fn = vi.fn();
+    const mutator = define<{name: string}>(({args, ctx}) => {
+      fn(args, ctx);
+      return Promise.resolve();
+    });
+
+    const mutators = defineMutators({test: mutator});
+    expect(mutators.test.mutatorName).toBe('test');
+
+    await mutators.test.fn({
+      args: {name: 'alice'},
+      ctx: {userId: '123'},
+      tx: {} as AnyTransaction,
+    });
+
+    expect(fn).toHaveBeenCalledWith({name: 'alice'}, {userId: '123'});
+  });
+});
+
+describe('isMutatorRegistry type tests', () => {
+  test('preserves registry type after type guard', () => {
+    const mutators = defineMutators({
+      user: {
+        create: createUser,
+      },
+    });
+
+    assert(isMutatorRegistry(mutators), 'mutators is not a MutatorRegistry');
+
+    expectTypeOf(mutators.user.create).toEqualTypeOf<
+      Mutator<{name: string}, Context1, DbTransaction>
+    >();
+  });
+
+  test('narrows unknown to registry type', () => {
+    const maybeRegistry: unknown = defineMutators({
+      test: createUser,
+    });
+
+    assert(
+      isMutatorRegistry(maybeRegistry),
+      'maybeRegistry is not a MutatorRegistry',
+    );
+
+    expectTypeOf(maybeRegistry).toHaveProperty('test');
   });
 });
