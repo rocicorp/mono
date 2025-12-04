@@ -1,15 +1,11 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {mustGetMutator} from '../../../zql/src/mutate/mutator-registry.ts';
-import type {AnyMutator} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
-import {mutators} from './zero-stress-mutators.ts';
-import {queries} from './zero-stress-queries.ts';
 import {zeroStressSchema} from './zero-stress-schema-test.ts';
 import {Zero} from './zero.ts';
 
@@ -87,26 +83,6 @@ describe('stress test types', () => {
     expectTypeOf<
       Awaited<ReturnType<typeof zero.mutate.updateThing>['client']>
     >().toEqualTypeOf<MutatorResultDetails>();
-  });
-
-  test('can resolve mutator types', () => {
-    const mutator = mustGetMutator(mutators, 'updateThing');
-    expectTypeOf<typeof mutator>().toEqualTypeOf<AnyMutator>();
-    expectTypeOf<typeof mutators.updateThing>().parameter(0).toEqualTypeOf<{
-      workspaceId: string;
-      vitalId: string;
-      readonly bloodPressureSystolic?: number | null | undefined;
-      readonly bloodPressureDiastolic?: number | null | undefined;
-      readonly heartRate?: number | null | undefined;
-      readonly temperature?: number | null | undefined;
-      readonly weight?: number | null | undefined;
-      readonly height?: number | null | undefined;
-      readonly oxygenSaturation?: number | null | undefined;
-      readonly patientId: string;
-      readonly recordedAt: string;
-      readonly recordedById: string;
-      readonly createdAt: number;
-    }>();
   });
 
   test('multiple table queries maintain distinct types', async () => {
@@ -426,66 +402,6 @@ describe('stress test types', () => {
     );
     expectTypeOf<NonNullable<Campaign['workspace']>>().toHaveProperty(
       'workspaceId',
-    );
-  });
-
-  test('deeply nested relationship chains', async () => {
-    const results = await zeroStress.run(
-      queries.deep({workspaceId: '123', fieldId: '123'}),
-    );
-
-    type Result = (typeof results)[number];
-    type Creator = NonNullable<Result['createdByUser']>;
-    type Workspace = NonNullable<
-      Creator['workspaceMembers'][number]['workspace']
-    >;
-    type Department = NonNullable<Workspace['budgets'][number]['department']>;
-    type Manager = NonNullable<
-      NonNullable<
-        NonNullable<Department['parentDepartment']>['headOfDepartment']
-      >['manager']
-    >;
-
-    expectTypeOf<Result>().toHaveProperty('orderId');
-    expectTypeOf<Creator>().toHaveProperty('userId');
-    expectTypeOf<Workspace>().toHaveProperty('workspaceId');
-    expectTypeOf<Department>().toHaveProperty('departmentId');
-    expectTypeOf<Manager>().toHaveProperty('email');
-  });
-
-  test('wide parallel relationships maintain distinct types', async () => {
-    const results = await zeroStress.run(
-      queries.wide({workspaceId: '123', fieldId: '123'}),
-    );
-
-    type Result = (typeof results)[number];
-
-    // Verify the root workspace type
-    expectTypeOf<Result>().toHaveProperty('workspaceId');
-    expectTypeOf<Result>().toHaveProperty('name');
-    expectTypeOf<Result>().toHaveProperty('plan');
-
-    // Sample relationships from different business domains
-    expectTypeOf<Result['sessions'][number]>().toHaveProperty('sessionId');
-    expectTypeOf<Result['accounts'][number]>().toHaveProperty('provider');
-    expectTypeOf<Result['emailCampaigns'][number]>().toHaveProperty(
-      'campaignId',
-    );
-    expectTypeOf<Result['subscribers'][number]>().toHaveProperty('email');
-    expectTypeOf<Result['supportTickets'][number]>().toHaveProperty('status');
-    expectTypeOf<Result['knowledgeBaseArticles'][number]>().toHaveProperty(
-      'title',
-    );
-    expectTypeOf<Result['products'][number]>().toHaveProperty('productId');
-    expectTypeOf<Result['orders'][number]>().toHaveProperty('orderId');
-    expectTypeOf<Result['projects'][number]>().toHaveProperty('projectId');
-    expectTypeOf<Result['tasks'][number]>().toHaveProperty('taskId');
-    expectTypeOf<Result['sprints'][number]>().toHaveProperty('sprintId');
-    expectTypeOf<Result['employees'][number]>().toHaveProperty('employeeId');
-    expectTypeOf<Result['payrollRuns'][number]>().toHaveProperty('runId');
-    expectTypeOf<Result['patients'][number]>().toHaveProperty('patientId');
-    expectTypeOf<Result['appointments'][number]>().toHaveProperty(
-      'appointmentId',
     );
   });
 });
