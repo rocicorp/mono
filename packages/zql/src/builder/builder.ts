@@ -672,7 +672,6 @@ function applyCorrelatedSubqueryCondition(
   const existsName = `${name}:exists(${condition.related.subquery.alias})`;
   const exists = new Exists(
     input,
-    delegate.createStorage(existsName),
     must(condition.related.subquery.alias),
     condition.related.correlation.parentField,
     condition.op,
