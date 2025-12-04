@@ -98,7 +98,12 @@ describe('stress test types', () => {
   test('can resolve mutator types', () => {
     const mutator = mustGetMutator(mutators, 'updateThing');
     expectTypeOf<typeof mutator>().toEqualTypeOf<
-      Mutator<ReadonlyJSONValue | undefined, StressContext, StressTransaction>
+      Mutator<
+        ReadonlyJSONValue | undefined,
+        typeof zeroStressSchema,
+        StressContext,
+        StressTransaction
+      >
     >();
     expectTypeOf<typeof mutators.updateThing>().toEqualTypeOf<
       Mutator<
@@ -117,6 +122,7 @@ describe('stress test types', () => {
           readonly recordedById: string;
           readonly createdAt: number;
         },
+        typeof zeroStressSchema,
         StressContext,
         StressTransaction
       >
