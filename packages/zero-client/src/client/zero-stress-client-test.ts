@@ -8,6 +8,7 @@ const zeroStress = new Zero({
   schema: zeroStressSchema,
   userID: 'anon',
   cacheURL: null,
+  // adding this breaks the types
   // mutators,
 });
 
