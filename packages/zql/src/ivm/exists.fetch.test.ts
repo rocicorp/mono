@@ -85,12 +85,30 @@ suite('EXISTS', () => {
               },
             },
           ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
           ],
           [
             "1",
@@ -129,11 +147,7 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -178,12 +192,30 @@ suite('EXISTS', () => {
               },
             },
           ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
             "1",
             "fetch",
             {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
           ],
           [
             "0",
@@ -222,11 +254,7 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -268,12 +296,30 @@ suite('EXISTS', () => {
               },
             },
           ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -294,11 +340,7 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
@@ -350,7 +392,34 @@ suite('EXISTS', () => {
             "cleanup",
             {
               "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
                 "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i3",
               },
             },
           ],
@@ -378,6 +447,33 @@ suite('EXISTS', () => {
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
           ],
           [
             "1",
@@ -452,13 +548,7 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -529,12 +619,48 @@ suite('EXISTS', () => {
               },
             },
           ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
             "1",
             "fetch",
             {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
           ],
           [
             "0",
@@ -600,12 +726,7 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 1,
-        "row/["i3"]/["c2"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -668,7 +789,34 @@ suite('EXISTS', () => {
             "cleanup",
             {
               "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
                 "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i3",
               },
             },
           ],
@@ -687,6 +835,33 @@ suite('EXISTS', () => {
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -725,13 +900,7 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-        "row//["i2"]": 0,
-        "row//["i3"]": 0,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
@@ -794,12 +963,30 @@ suite('NOT EXISTS', () => {
               },
             },
           ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -820,11 +1007,7 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
@@ -854,12 +1037,30 @@ suite('NOT EXISTS', () => {
               },
             },
           ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
             "1",
             "fetch",
             {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -880,11 +1081,7 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
@@ -910,12 +1107,30 @@ suite('NOT EXISTS', () => {
               },
             },
           ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
           ],
           [
             "1",
@@ -954,11 +1169,7 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -1038,6 +1249,33 @@ suite('NOT EXISTS', () => {
             "cleanup",
             {
               "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
                 "issueID": "i3",
               },
             },
@@ -1057,6 +1295,33 @@ suite('NOT EXISTS', () => {
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
           ],
           [
             "1",
@@ -1113,13 +1378,7 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -1164,6 +1423,24 @@ suite('NOT EXISTS', () => {
             "cleanup",
             {
               "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
                 "id": "i3",
               },
             },
@@ -1174,6 +1451,24 @@ suite('NOT EXISTS', () => {
             "1",
             "fetch",
             {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -1203,12 +1498,7 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 1,
-        "row/["i3"]/["c2"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
@@ -1252,12 +1542,66 @@ suite('NOT EXISTS', () => {
               },
             },
           ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
           ],
           [
             "1",
@@ -1350,13 +1694,7 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-        "row//["i2"]": 0,
-        "row//["i3"]": 0,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -1475,7 +1813,6 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
     filterInput =>
       new Exists(
         filterInput,
-        existsStorage,
         reverse ? 'from_' + t.join.relationshipName : t.join.relationshipName,
         reverse ? t.join.childKey : t.join.parentKey,
         t.existsType,

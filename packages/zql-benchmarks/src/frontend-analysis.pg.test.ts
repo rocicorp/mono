@@ -7,6 +7,7 @@ import type {Row} from '../../zero-protocol/src/data.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
+import type {AnyQuery} from '../../zql/src/query/query.ts';
 
 const pgContent = await getChinook();
 
@@ -264,7 +265,7 @@ const maintain10RangeQueriesAltField = new B(
       zql.invoiceLine.orderBy('unitPrice', 'desc').limit(10),
       zql.customer.orderBy('lastName', 'asc').limit(10),
       zql.employee.orderBy('lastName', 'asc').limit(10),
-    ].map(q => harness.delegates.memory.materialize(q));
+    ].map(q => harness.delegates.memory.materialize(q as AnyQuery));
     let count = 0;
     yield () => {
       const table = tables[count % tables.length];

@@ -12,8 +12,10 @@ import type {
   TableSchema,
   Schema as ZeroSchema,
 } from '../../../zero-types/src/schema.ts';
+import type {ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {TTL} from './ttl.ts';
+import type {TypedView} from './typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
 
@@ -267,6 +269,31 @@ export interface Query<
   ): Query<TTable, TSchema, TReturn>;
 
   one(): Query<TTable, TSchema, TReturn | undefined>;
+
+  /**
+   * @deprecated Use {@linkcode RunOptions} with {@linkcode zero.run} instead.
+   */
+  run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
+
+  /**
+   * @deprecated Use {@linkcode PreloadOptions} with {@linkcode zero.preload} instead.
+   */
+  preload(options?: PreloadOptions): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  };
+
+  /**
+   * @deprecated Use {@linkcode MaterializeOptions} with {@linkcode zero.materialize} instead.
+   */
+  materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
+  /**
+   * @deprecated Use {@linkcode MaterializeOptions} with {@linkcode zero.materialize} instead.
+   */
+  materialize<T>(
+    factory: ViewFactory<TTable, TSchema, TReturn, T>,
+    ttl?: TTL,
+  ): T;
 }
 
 export type PreloadOptions = {
