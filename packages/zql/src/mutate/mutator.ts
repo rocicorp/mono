@@ -157,11 +157,8 @@ export function defineMutator<
   >;
   f['~'] = {
     tag: 'MutatorDefinition',
-    $input: undefined as unknown as TInput,
-    $output: undefined as unknown as TOutput,
-    $context: undefined as unknown as TContext,
-    $wrappedTransaction: undefined as unknown as TWrappedTransaction,
-  };
+  } as MutatorDefinitionTypes<TInput, TOutput, TContext, TWrappedTransaction>;
+
   f.validator = validator;
   return f;
 }
