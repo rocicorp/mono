@@ -38,7 +38,6 @@ const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 type Options = {
   port: number;
   startupDelayMs: number;
-  startupDelayKeepalives: number;
 };
 
 export class ChangeStreamerHttpServer extends HttpService {
@@ -190,15 +189,6 @@ export class ChangeStreamerHttpServer extends HttpService {
         ),
       startupDelayMs,
     );
-  }
-
-  protected override _onHeartbeat(count: number): void {
-    if (
-      count === this.#opts.startupDelayKeepalives &&
-      this._state.shouldRun()
-    ) {
-      this.#ensureChangeStreamerStarted(`${count} startup keepalives received`);
-    }
   }
 
   protected override async _onStop(): Promise<void> {
