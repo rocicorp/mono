@@ -1,7 +1,7 @@
 // oxlint-disable no-console
 import type {AST, Condition} from '../../zero-protocol/src/ast.ts';
 import {QueryImpl} from '../../zql/src/query/query-impl.ts';
-import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
+import {type Format} from '../../zql/src/ivm/default-format.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {expect, test} from 'vitest';
@@ -76,12 +76,13 @@ function setFlipToFalseInAST(ast: AST): AST {
 function createQuery<TTable extends keyof typeof schema.tables & string>(
   tableName: TTable,
   queryAST: AST,
+  format: Format,
 ) {
   return new QueryImpl(
     schema,
     tableName,
     queryAST,
-    defaultFormat,
+    format,
     'test',
     undefined,
     undefined,
@@ -93,6 +94,7 @@ async function benchmarkQuery<
   TTable extends keyof typeof schema.tables & string,
 >(_name: string, query: AnyQuery) {
   const unplannedAST = asQueryInternals(query).ast;
+  const format = asQueryInternals(query).format;
 
   // const mappedAST = mapAST(unplannedAST, clientToServerMapper);
   // const mappedASTCopy = setFlipToFalseInAST(mappedAST);
@@ -102,7 +104,7 @@ async function benchmarkQuery<
   // const plannedQuery = createQuery(tableName, plannedClientAST);
 
   const tableName = unplannedAST.table as TTable;
-  const unplannedQuery = createQuery(tableName, unplannedAST);
+  const unplannedQuery = createQuery(tableName, unplannedAST, format);
 
   db.exec('BEGIN');
   const start = performance.now();
