@@ -409,21 +409,13 @@ test('zero-cache --help', () => {
                                                                                                                                                                                          
                                                                    If unspecified, defaults to --port + 1.                                                                               
                                                                                                                                                                                          
-     --change-streamer-startup-delay-keepalives number             default: 3                                                                                                            
-       ZERO_CHANGE_STREAMER_STARTUP_DELAY_KEEPALIVES env                                                                                                                                 
-                                                                   The number of /keepalive requests to wait for before the change-streamer takes over                                   
-                                                                   the replication stream (i.e. the handoff during replication-manager updates). This                                    
-                                                                   delay is used to verify that the task is recognized by the load balancer as a healthy                                 
-                                                                   target before the shutdown signal is sent to the previous replication-manager.                                        
-                                                                                                                                                                                         
      --change-streamer-startup-delay-ms number                     default: 15000                                                                                                        
        ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS env                                                                                                                                         
-                                                                   The maximum delay to wait before the change-streamer takes over the replication                                       
-                                                                   stream (i.e. the handoff during replication-manager updates). The takeover will thus                                  
-                                                                   happen when (1) ZERO_CHANGE_STREAMER_STARTUP_DELAY_KEEPALIVES are received,                                           
-                                                                   (2) when ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS has elapsed since the change-streamer                                  
-                                                                   service started (i.e. after the replica has been initialized or restored), or (3) when                                
-                                                                   a change stream request is received by a view-syncer (i.e. serving-replicator).                                       
+                                                                   The delay to wait before the change-streamer takes over the replication stream                                        
+                                                                   (i.e. the handoff during replication-manager updates), to allow loadbalancers to register                             
+                                                                   the task as healthy based on healthcheck parameters. Note that if a change stream request                             
+                                                                   is received during this interval, the delay will be canceled and the takeover will happen                             
+                                                                   immediately, since the incoming request indicates that the task is registered as a target.                            
                                                                                                                                                                                          
      --task-id string                                              optional                                                                                                              
        ZERO_TASK_ID env                                                                                                                                                                  
