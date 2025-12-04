@@ -8,7 +8,6 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import {createBuilder} from './create-builder.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {
@@ -424,7 +423,7 @@ describe('defineQuery types', () => {
     >(({args}) => builder.foo.where('id', '=', args.id));
 
     expectTypeOf<typeof query>().returns.toEqualTypeOf<
-      Query<'foo', Schema, {someReturnType: string}>
+      Query<'foo', typeof schema, {someReturnType: string}>
     >();
     expectTypeOf<typeof query>()
       .parameter(0)
