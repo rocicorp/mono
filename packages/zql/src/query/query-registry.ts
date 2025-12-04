@@ -114,15 +114,10 @@ export type QueryRegistry<
   ['~']: Expand<QueryRegistryTypes<S>>;
 };
 
+type AnyQueryDefinition = QueryDefinition<any, any, any, any, any, any>;
+
 type ToQueryTree<QD extends QueryDefinitions<S, any>, S extends Schema> = {
-  readonly [K in keyof QD]: QD[K] extends QueryDefinition<
-    any,
-    any,
-    any,
-    any,
-    any,
-    any
-  >
+  readonly [K in keyof QD]: QD[K] extends AnyQueryDefinition
     ? // pull types from the phantom property
       CustomQuery<
         QD[K]['~']['$tableName'],
@@ -138,14 +133,7 @@ type ToQueryTree<QD extends QueryDefinitions<S, any>, S extends Schema> = {
 };
 
 type FromQueryTree<QD extends QueryDefinitions<S, any>, S extends Schema> = {
-  readonly [K in keyof QD]: QD[K] extends QueryDefinition<
-    any,
-    any,
-    any,
-    any,
-    any,
-    any
-  >
+  readonly [K in keyof QD]: QD[K] extends AnyQueryDefinition
     ? CustomQuery<
         QD[K]['~']['$tableName'],
         ReadonlyJSONValue | undefined, // intentionally left as generic to avoid variance issues
@@ -477,13 +465,7 @@ export function createCustomQueryBuilder<
   // Add the phantom property
   builder['~'] = {
     tag: 'CustomQuery',
-    $tableName: undefined as unknown as TTable,
-    $input: undefined as unknown as TInput,
-    $output: undefined as unknown as TOutput,
-    $return: undefined as unknown as TReturn,
-    $context: undefined as unknown as TContext,
-    $hasArgs: undefined as unknown as THasArgs,
-  } as const;
+  };
 
   return builder as unknown as CustomQuery<
     TTable,
@@ -605,8 +587,7 @@ export function defineQueries<
     const merged = deepMerge(base, processed) as QueryRegistry<any, S>;
     merged['~'] = {
       tag: 'QueryRegistry',
-      $schema: undefined as unknown as S,
-    } as const;
+    } as QueryRegistry<any, S>['~'];
     return merged;
   }
 
