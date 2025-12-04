@@ -16,7 +16,10 @@ import type {StressContext} from './zero-stress-shared-test.ts';
 const zql = createBuilder(zeroStressSchema);
 
 const defineQueries = defineQueriesWithType<typeof zeroStressSchema>();
-const defineQuery = defineQueryWithType<StressContext>();
+const defineQuery = defineQueryWithType<
+  typeof zeroStressSchema,
+  StressContext
+>();
 
 const queryWide = defineQuery(
   ((v: unknown) => v) as unknown as StandardSchemaV1<{
