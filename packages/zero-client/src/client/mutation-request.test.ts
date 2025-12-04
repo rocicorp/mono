@@ -2,12 +2,8 @@ import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {
-  defineMutators,
-  type MutatorDefinitions,
-  type MutatorRegistry,
-} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
+import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import type {MutatorResult} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 
@@ -26,21 +22,11 @@ const schema = createSchema({
 
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;
-const defineUserMutator = (
-  mutator: (options: {
-    tx: MutatorTx;
-    args: {id: string; name: string};
-    ctx: unknown;
-  }) => Promise<void>,
-) =>
-  defineMutator<{id: string; name: string}, Schema, unknown, MutatorTx>(
-    mutator,
-  );
-const makeUserMutators = (create: ReturnType<typeof defineUserMutator>) =>
-  defineMutators({user: {create}} satisfies MutatorDefinitions<
-    unknown,
-    MutatorTx
-  >) as MutatorRegistry<{readonly user: {readonly create: typeof create}}>;
+
+const defineMutatorTyped = defineMutatorWithType<Schema, unknown, MutatorTx>();
+const defineUserMutator = defineMutatorTyped<{id: string; name: string}>;
+const defineUserMutators = (def: ReturnType<typeof defineUserMutator>) =>
+  defineMutators({user: {create: def}});
 
 describe('zero.mutate(mr) with MutationRequest', () => {
   test('can call mutate with a MutationRequest', async () => {
@@ -48,7 +34,7 @@ describe('zero.mutate(mr) with MutationRequest', () => {
       await tx.mutate.user.insert(args);
     });
 
-    const mutators = makeUserMutators(createUser);
+    const mutators = defineUserMutators(createUser);
 
     const z = zeroForTest({
       schema,
@@ -73,7 +59,7 @@ describe('zero.mutate(mr) with MutationRequest', () => {
     });
 
     // Create mutators but don't pass to Zero
-    const mutators = makeUserMutators(createUser);
+    const mutators = defineUserMutators(createUser);
 
     const z = zeroForTest({
       schema,
@@ -99,9 +85,9 @@ describe('zero.mutate(mr) with MutationRequest', () => {
       await tx.mutate.user.insert(args);
     });
 
-    const mutators1 = makeUserMutators(createUser1);
+    const mutators1 = defineUserMutators(createUser1);
 
-    const mutators2 = makeUserMutators(createUser2);
+    const mutators2 = defineUserMutators(createUser2);
 
     const z = zeroForTest({
       schema,
@@ -148,7 +134,7 @@ describe('zero.mutate(mr) with MutationRequest', () => {
       await tx.mutate.user.insert(args);
     });
 
-    const mutators = makeUserMutators(createUser);
+    const mutators = defineUserMutators(createUser);
 
     const z = zeroForTest({
       schema,
@@ -172,9 +158,9 @@ describe('zero.mutate(mr) with MutationRequest', () => {
       await tx.mutate.user.insert(args);
     });
 
-    const mutators1 = makeUserMutators(createUser1);
+    const mutators1 = defineUserMutators(createUser1);
 
-    const mutators2 = makeUserMutators(createUser2);
+    const mutators2 = defineUserMutators(createUser2);
 
     const z1 = zeroForTest({
       schema,
