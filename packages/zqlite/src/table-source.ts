@@ -18,6 +18,7 @@ import {
   createPredicate,
   transformFilters,
 } from '../../zql/src/builder/filter.ts';
+import type {Constraint} from '../../zql/src/ivm/constraint.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
@@ -26,7 +27,7 @@ import {
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
+import {type FetchRequest, type Start} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {
   type Source,
@@ -34,11 +35,12 @@ import {
   type SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
-import type {Database, Statement} from './db.ts';
-import {compile, format, sql} from './internal/sql.ts';
+import {type Database, type Statement} from './db.ts';
+import {compile, format, formatNamed, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
 import {
   buildSelectQuery,
+  filtersToSQL,
   toSQLiteType,
   type NoSubqueryCondition,
 } from './query-builder.ts';
@@ -51,6 +53,26 @@ type Statements = {
   readonly update: Statement | undefined;
   readonly checkExists: Statement;
   readonly getExisting: Statement;
+};
+
+/**
+ * A cached prepared statement with an in-use flag for re-entrancy.
+ */
+type CachedStatement = {
+  statement: Statement;
+  inUse: boolean;
+};
+
+/**
+ * Extended Connection type with per-connection query caching.
+ * Filter values are pre-computed at connection time since they're static.
+ * Statements are cached per (database, cacheKey) to avoid repeated prepare() calls.
+ */
+type TableConnection = Connection & {
+  /** Pre-computed filter values (static for connection lifetime) */
+  readonly filterValues: Record<string, unknown>;
+  /** Per-database statement cache: cacheKey -> CachedStatement */
+  readonly stmtCache: WeakMap<Database, Map<string, CachedStatement>>;
 };
 
 let eventCount = 0;
@@ -71,7 +93,7 @@ let eventCount = 0;
  */
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
-  readonly #connections: Connection[] = [];
+  readonly #connections: TableConnection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
@@ -225,6 +247,15 @@ export class TableSource implements Source {
     debug?: DebugDelegate,
   ) {
     const transformedFilters = transformFilters(filters);
+
+    // Pre-compute filter values at connection time (they're static)
+    let filterValues: Record<string, unknown> = {};
+    if (transformedFilters.filters) {
+      const filterSQL = filtersToSQL(transformedFilters.filters);
+      const formatted = formatNamed(filterSQL);
+      filterValues = formatted.values;
+    }
+
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
@@ -235,11 +266,12 @@ export class TableSource implements Source {
         const idx = this.#connections.indexOf(connection);
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
+        // Connection's stmtCache WeakMap is automatically GC'd
       },
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
 
-    const connection: Connection = {
+    const connection: TableConnection = {
       input,
       debug,
       output: undefined,
@@ -252,7 +284,10 @@ export class TableSource implements Source {
           }
         : undefined,
       compareRows: makeComparator(sort),
+      // Per-connection cache for query statements
       lastPushedEpoch: 0,
+      filterValues,
+      stmtCache: new WeakMap(),
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -270,22 +305,116 @@ export class TableSource implements Source {
     ) as Row;
   }
 
-  *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
-    const {sort, debug} = connection;
+  /**
+   * Generates a cache key from the structural parts of a fetch request.
+   * Format: constraintCols|startCols|basis|direction
+   */
+  #makeCacheKey(
+    constraint: Constraint | undefined,
+    start: Start | undefined,
+    reverse: boolean | undefined,
+  ): string {
+    const constraintCols = constraint
+      ? JSON.stringify(Object.keys(constraint).sort())
+      : '';
+    const startCols = start
+      ? JSON.stringify(Object.keys(start.row).sort())
+      : '';
+    const basis = start?.basis ?? '';
+    const dir = reverse ? 'r' : 'f';
+    return `${constraintCols}|${startCols}|${basis}|${dir}`;
+  }
 
-    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
-    const sqlAndBindings = format(query);
-
-    const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
-    try {
-      cachedStatement.statement.safeIntegers(true);
-      const rowIterator = cachedStatement.statement.iterate<Row>(
-        ...sqlAndBindings.values,
+  /**
+   * Extracts constraint values as named parameters (c_{colName}).
+   */
+  #extractConstraintValues(
+    constraint: Constraint | undefined,
+  ): Record<string, unknown> {
+    if (!constraint) return {};
+    const values: Record<string, unknown> = {};
+    for (const key of Object.keys(constraint)) {
+      values[`c_${key}`] = toSQLiteType(
+        constraint[key],
+        this.#columns[key].type,
       );
+    }
+    return values;
+  }
+
+  /**
+   * Extracts start values as named parameters (s_{colName}).
+   * SQLite binds the same value to all occurrences of the same param name.
+   */
+  #extractStartValues(start: Start | undefined): Record<string, unknown> {
+    if (!start) return {};
+    const values: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(start.row)) {
+      values[`s_${key}`] = toSQLiteType(value, this.#columns[key].type);
+    }
+    return values;
+  }
+
+  *#fetch(
+    req: FetchRequest,
+    connection: TableConnection,
+  ): Stream<Node | 'yield'> {
+    const {sort, debug, filterValues, stmtCache} = connection;
+    const cacheKey = this.#makeCacheKey(req.constraint, req.start, req.reverse);
+
+    // Get or create per-database cache map
+    const db = this.#stmts.cache.db;
+    let dbCache = stmtCache.get(db);
+    if (!dbCache) {
+      dbCache = new Map();
+      stmtCache.set(db, dbCache);
+    }
+
+    // Try to get cached statement
+    let cached = dbCache.get(cacheKey);
+    let statement: Statement;
+    let sqlText: string;
+    let isFromCache = false;
+
+    if (cached && !cached.inUse) {
+      // Cache hit - reuse existing statement
+      cached.inUse = true;
+      statement = cached.statement;
+      sqlText = '(cached)';
+      isFromCache = true;
+    } else {
+      // Cache miss - build SQL and prepare statement
+      const query = this.#requestToSQL(
+        req,
+        connection.filters?.condition,
+        sort,
+      );
+      const {text, values: _} = formatNamed(query);
+      sqlText = text;
+      statement = db.prepare(text);
+
+      if (!cached) {
+        // Store for future use
+        cached = {statement, inUse: true};
+        dbCache.set(cacheKey, cached);
+      }
+      // If cached but inUse (re-entrancy), we don't cache the second statement
+    }
+
+    // Extract bind values directly (fast - no SQL building on cache hit)
+    const values: Record<string, unknown> = {
+      ...this.#extractConstraintValues(req.constraint),
+      ...this.#extractStartValues(req.start),
+      ...filterValues,
+    };
+
+    try {
+      statement.safeIntegers(true);
+      const rowIterator = statement.iterate<Row>(values);
 
       const comparator = makeComparator(sort, req.reverse);
 
-      debug?.initQuery(this.#table, sqlAndBindings.text);
+      debug?.initQuery(this.#table, sqlText);
 
       yield* generateWithStart(
         generateWithYields(
@@ -294,7 +423,7 @@ export class TableSource implements Source {
             this.#mapFromSQLiteTypes(
               this.#columns,
               rowIterator,
-              sqlAndBindings.text,
+              sqlText,
               debug,
             ),
             req.constraint,
@@ -309,11 +438,11 @@ export class TableSource implements Source {
         comparator,
       );
     } finally {
-      if (debug) {
+      if (debug && !isFromCache) {
         let totalNvisit = 0;
         let i = 0;
         while (true) {
-          const nvisit = cachedStatement.statement.scanStatus(
+          const nvisit = statement.scanStatus(
             i++,
             SQLite3Database.SQLITE_SCANSTAT_NVISIT,
             1,
@@ -324,11 +453,13 @@ export class TableSource implements Source {
           totalNvisit += Number(nvisit);
         }
         if (totalNvisit !== 0) {
-          debug.recordNVisit(this.#table, sqlAndBindings.text, totalNvisit);
+          debug.recordNVisit(this.#table, sqlText, totalNvisit);
         }
-        cachedStatement.statement.scanStatusReset();
+        statement.scanStatusReset();
       }
-      this.#stmts.cache.return(cachedStatement);
+      if (cached) {
+        cached.inUse = false;
+      }
     }
   }
 
