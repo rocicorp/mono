@@ -453,12 +453,9 @@ describe('stress test types', () => {
     );
   });
 
-  test('deeply nested relationship chains', async () => {
-    const results = await zeroStress.run(
-      queries.deep({workspaceId: '123', fieldId: '123'}),
-    );
+  test('deeply nested relationship chains', () => {
+    type Result = (typeof queries.deep)['~']['$return'];
 
-    type Result = (typeof results)[number];
     type Creator = NonNullable<Result['createdByUser']>;
     type Workspace = NonNullable<
       Creator['workspaceMembers'][number]['workspace']
@@ -477,12 +474,8 @@ describe('stress test types', () => {
     expectTypeOf<Manager>().toHaveProperty('email');
   });
 
-  test('wide parallel relationships maintain distinct types', async () => {
-    const results = await zeroStress.run(
-      queries.wide({workspaceId: '123', fieldId: '123'}),
-    );
-
-    type Result = (typeof results)[number];
+  test('wide parallel relationships maintain distinct types', () => {
+    type Result = (typeof queries.wide)['~']['$return'];
 
     // Verify the root workspace type
     expectTypeOf<Result>().toHaveProperty('workspaceId');
