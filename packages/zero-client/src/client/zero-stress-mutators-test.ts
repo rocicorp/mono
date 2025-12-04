@@ -3,11 +3,8 @@
 
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
-import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
-import {
-  defineMutator,
-  defineMutatorWithType,
-} from '../../../zql/src/mutate/mutator.ts';
+import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import type {zeroStressSchema} from './zero-stress-schema-test.ts';
 import type {
   StressContext,
@@ -20,17 +17,9 @@ const defineMutatorTyped = defineMutatorWithType<
   StressTransaction
 >();
 
-const defineMutators = defineMutatorsWithType<typeof zeroStressSchema>();
-
 const mutators = defineMutators({
   // Basic insert operations
-  updateThing: defineMutator<
-    InsertValue<typeof zeroStressSchema.tables.vitalSigns>,
-    InsertValue<typeof zeroStressSchema.tables.vitalSigns>,
-    typeof zeroStressSchema,
-    StressContext,
-    StressTransaction
-  >(
+  updateThing: defineMutatorTyped(
     ((v: unknown) => v) as unknown as StandardSchemaV1<
       InsertValue<typeof zeroStressSchema.tables.vitalSigns>
     >,
@@ -39,13 +28,7 @@ const mutators = defineMutators({
     },
   ),
 
-  createUser: defineMutator<
-    InsertValue<typeof zeroStressSchema.tables.user>,
-    InsertValue<typeof zeroStressSchema.tables.user>,
-    typeof zeroStressSchema,
-    StressContext,
-    StressTransaction
-  >(
+  createUser: defineMutatorTyped(
     ((v: unknown) => v) as unknown as StandardSchemaV1<
       InsertValue<typeof zeroStressSchema.tables.user>
     >,
@@ -54,13 +37,7 @@ const mutators = defineMutators({
     },
   ),
 
-  insertProduct: defineMutator<
-    InsertValue<typeof zeroStressSchema.tables.product>,
-    InsertValue<typeof zeroStressSchema.tables.product>,
-    typeof zeroStressSchema,
-    StressContext,
-    StressTransaction
-  >(
+  insertProduct: defineMutatorTyped(
     ((v: unknown) => v) as unknown as StandardSchemaV1<
       InsertValue<typeof zeroStressSchema.tables.product>
     >,
@@ -416,8 +393,8 @@ const mutators = defineMutators({
     }>,
     async ({tx, args, ctx}) => {
       await tx.mutate.user.insert({
-        workspaceId: ctx.workspaceId,
-        userId: ctx.someUserId,
+        workspaceId: ctx.workspaceId ?? 'workspaceId',
+        userId: ctx.userId ?? 'userId',
         email: args.email,
         name: args.name,
         emailVerified: false,

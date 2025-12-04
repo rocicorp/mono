@@ -55,7 +55,7 @@ import {
  * ```
  */
 export function defineMutators<
-  // let MD infer freely so defaults aren't erased by the AnyMutatorDefinitions constraint
+  // let MD infer freely so defaults aren't erased by a AnyMutatorDefinitions constraint
   const MD,
 >(
   // we assert types here for clear error messages
@@ -193,18 +193,6 @@ type AssertMutatorDefinitions<MD> = MD extends AnyMutatorDefinitions
 type EnsureMutatorDefinitions<MD> = MD extends AnyMutatorDefinitions
   ? MD
   : never;
-
-// type SchemaFromTypes<T extends DefineMutatorsTypes<any, any, any>> =
-//   T[typeof defineMutatorsTypesTag]['schema'];
-// type ContextFromTypes<T extends DefineMutatorsTypes<any, any, any>> =
-//   T[typeof defineMutatorsTypesTag]['context'];
-// type WrappedTransactionFromTypes<T extends DefineMutatorsTypes<any, any, any>> =
-//   T[typeof defineMutatorsTypesTag]['wrappedTransaction'];
-
-// type MutatorTypesFromDefs<MD> =
-//   MD extends MutatorDefinitions<infer S, infer C, infer W>
-//     ? DefineMutatorsTypes<S, C, W>
-//     : DefineMutatorsTypes<Schema, unknown, unknown>;
 
 /**
  * The result of defineMutators(). A tree of Mutators with a tag for detection.

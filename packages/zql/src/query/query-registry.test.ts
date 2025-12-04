@@ -616,30 +616,44 @@ describe('defineQueries', () => {
     });
   });
 
-  test('defineQueries infers types from defineQuery', () => {
+  test('defineQueries infers types from defineQuery and provides Schema type', () => {
     type Context1 = {userId: string};
     type Context2 = {some: 'baz'};
 
     const define = defineQueriesWithType<typeof schema>();
 
-    const queries = define({
-      getAllUsers: defineQuery<
-        'foo',
-        {id: string},
-        typeof schema,
-        {someReturnType: string},
-        Context1
-      >(({ctx: _ctx}) => builder.foo),
-      getBar: defineQuery<
-        'bar',
-        {some: 'baz'},
-        typeof schema,
-        {anotherReturnType: string},
-        Context2
-      >(({ctx: _ctx}) => builder.bar),
+    const getFoo = defineQuery<
+      'foo',
+      {id: string},
+      typeof schema,
+      {someReturnType: string},
+      Context1
+    >(({ctx, args}) => {
+      expectTypeOf(ctx).toEqualTypeOf<Context1>();
+      expectTypeOf(args).toEqualTypeOf<{id: string}>();
+
+      return builder.foo;
     });
 
-    expectTypeOf<typeof queries.getAllUsers>().returns.toExtend<
+    const getBar = defineQuery<
+      'bar',
+      {some: 'baz'},
+      typeof schema,
+      {anotherReturnType: string},
+      Context2
+    >(({ctx, args}) => {
+      expectTypeOf(ctx).toEqualTypeOf<Context2>();
+      expectTypeOf(args).toEqualTypeOf<{some: 'baz'}>();
+
+      return builder.bar;
+    });
+
+    const queries = define({
+      getFoo,
+      getBar,
+    });
+
+    expectTypeOf<typeof queries.getFoo>().returns.toExtend<
       CustomQuery<
         'foo',
         {id: string},
@@ -649,10 +663,10 @@ describe('defineQueries', () => {
         true
       >
     >();
-    expectTypeOf<typeof queries.getAllUsers>()
+    expectTypeOf<typeof queries.getFoo>()
       .parameter(0)
       .toEqualTypeOf<{id: string}>();
-    expectTypeOf<ReturnType<typeof queries.getAllUsers>['toQuery']>()
+    expectTypeOf<ReturnType<typeof queries.getFoo>['toQuery']>()
       .parameter(0)
       .toEqualTypeOf<Context1>();
 

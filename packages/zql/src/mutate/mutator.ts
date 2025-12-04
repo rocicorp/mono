@@ -18,7 +18,6 @@ import type {AnyTransaction, Transaction} from './custom.ts';
 
 // export const defineMutatorTag = Symbol();
 // export const mutatorTypesTag = Symbol();
-// export const defineMutatorsTypesTag = Symbol('defineMutatorsTypes');
 
 export type MutatorTypes<
   TInput extends ReadonlyJSONValue | undefined,
