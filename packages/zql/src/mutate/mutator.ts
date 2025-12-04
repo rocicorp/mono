@@ -19,18 +19,10 @@ import type {AnyTransaction, Transaction} from './custom.ts';
 // export const defineMutatorTag = Symbol();
 // export const mutatorTypesTag = Symbol();
 
-export type MutatorTypes<
-  TInput extends ReadonlyJSONValue | undefined,
-  TContext,
-  TWrappedTransaction,
-> = {
-  readonly tag: 'Mutator';
-  readonly $input: TInput;
-  readonly $context: TContext;
-  readonly $wrappedTransaction: TWrappedTransaction;
-};
+const mutatorDefinitionTag = Symbol();
+export type MutatorDefinitionTag = typeof mutatorDefinitionTag;
 
-export type MutatorDefinitionTypes<
+type MutatorDefinitionTypes<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput,
   TContext,
@@ -51,14 +43,7 @@ export function isMutatorDefinition<
 >(
   f: unknown,
 ): f is MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> {
-  return (
-    typeof f === 'function' &&
-    (
-      f as unknown as {
-        '~': Partial<MutatorDefinitionTypes<any, any, any, any>>;
-      }
-    )?.['~']?.['tag'] === 'MutatorDefinition'
-  );
+  return typeof f === 'function' && mutatorDefinitionTag in f;
 }
 
 export type MutatorDefinition<
@@ -71,12 +56,12 @@ export type MutatorDefinition<
   ctx: TContext;
   tx: AnyTransaction;
 }) => Promise<void>) & {
-  'validator': StandardSchemaV1<TInput, TOutput> | undefined;
+  validator: StandardSchemaV1<TInput, TOutput> | undefined;
 
   /**
    * Type-only phantom property to surface mutator types in a covariant position.
    */
-  '~': Expand<
+  [mutatorDefinitionTag]: Expand<
     MutatorDefinitionTypes<TInput, TOutput, TContext, TWrappedTransaction>
   >;
 };
@@ -155,9 +140,12 @@ export function defineMutator<
     TContext,
     TWrappedTransaction
   >;
-  f['~'] = {
-    tag: 'MutatorDefinition',
-  } as MutatorDefinitionTypes<TInput, TOutput, TContext, TWrappedTransaction>;
+  f[mutatorDefinitionTag] = true as unknown as MutatorDefinitionTypes<
+    TInput,
+    TOutput,
+    TContext,
+    TWrappedTransaction
+  >;
 
   f.validator = validator;
   return f;
@@ -242,22 +230,17 @@ export type Mutator<
   TContext,
   TWrappedTransaction,
 > = MutatorCallable<TInput, TContext, TWrappedTransaction> & {
-  readonly 'mutatorName': string;
+  readonly mutatorName: string;
   /**
    * Execute the mutation. Args are ReadonlyJSONValue because this is called
    * during rebase (from stored JSON) and on the server (from wire format).
    * Validation happens internally before the recipe function runs.
    */
-  readonly 'fn': (options: {
+  readonly fn: (options: {
     args: TInput;
     ctx: TContext;
     tx: AnyTransaction;
   }) => Promise<void>;
-
-  /**
-   * Type-only phantom property to surface mutator types in a covariant position.
-   */
-  readonly '~': Expand<MutatorTypes<TInput, TContext, TWrappedTransaction>>;
 };
 
 // Helper type for the callable part of Mutator

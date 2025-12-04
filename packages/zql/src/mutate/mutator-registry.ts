@@ -14,6 +14,7 @@ import {
   type MutationRequest,
   type Mutator,
   type MutatorDefinition,
+  type MutatorDefinitionTag,
 } from './mutator.ts';
 
 /**
@@ -226,9 +227,9 @@ type ToMutatorTree<MD extends AnyMutatorDefinitions> = {
   readonly [K in keyof MD]: MD[K] extends MutatorDefinition<any, any, any, any>
     ? // pull types from the phantom property
       Mutator<
-        MD[K]['~']['$input'],
-        MD[K]['~']['$context'],
-        MD[K]['~']['$wrappedTransaction']
+        MD[K][MutatorDefinitionTag]['$input'],
+        MD[K][MutatorDefinitionTag]['$context'],
+        MD[K][MutatorDefinitionTag]['$wrappedTransaction']
       >
     : MD[K] extends AnyMutatorDefinitions
       ? ToMutatorTree<MD[K]>
@@ -240,8 +241,8 @@ type FromMutatorTree<MD extends AnyMutatorDefinitions> = {
     ? // pull types from the phantom property
       Mutator<
         ReadonlyJSONValue | undefined, // intentionally left as generic to avoid variance issues
-        MD[K]['~']['$context'],
-        MD[K]['~']['$wrappedTransaction']
+        MD[K][MutatorDefinitionTag]['$context'],
+        MD[K][MutatorDefinitionTag]['$wrappedTransaction']
       >
     : MD[K] extends AnyMutatorDefinitions
       ? FromMutatorTree<MD[K]>

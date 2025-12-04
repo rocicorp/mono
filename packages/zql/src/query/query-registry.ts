@@ -63,8 +63,9 @@ export function isQueryRegistry<
   return (
     typeof obj === 'object' &&
     obj !== null &&
-    (obj as Partial<{'~': QueryRegistryTypes<S>}>)?.['~']?.['tag'] ===
-      'QueryRegistry'
+    (obj as Partial<{'~QueryRegistry': QueryRegistryTypes<S>}>)?.[
+      '~QueryRegistry'
+    ]?.['tag'] === 'QueryRegistry'
   );
 }
 
@@ -111,7 +112,7 @@ export type QueryRegistry<
   QD extends QueryDefinitions<S, any>,
   S extends Schema,
 > = ToQueryTree<QD, S> & {
-  ['~']: Expand<QueryRegistryTypes<S>>;
+  ['~QueryRegistry']: Expand<QueryRegistryTypes<S>>;
 };
 
 type AnyQueryDefinition = QueryDefinition<any, any, any, any, any, any>;
@@ -120,11 +121,11 @@ type ToQueryTree<QD extends QueryDefinitions<S, any>, S extends Schema> = {
   readonly [K in keyof QD]: QD[K] extends AnyQueryDefinition
     ? // pull types from the phantom property
       CustomQuery<
-        QD[K]['~']['$tableName'],
-        QD[K]['~']['$input'],
+        QD[K]['~QueryDefinition']['$tableName'],
+        QD[K]['~QueryDefinition']['$input'],
         S,
-        QD[K]['~']['$return'],
-        QD[K]['~']['$context'],
+        QD[K]['~QueryDefinition']['$return'],
+        QD[K]['~QueryDefinition']['$context'],
         false
       >
     : QD[K] extends QueryDefinitions<Schema, any>
@@ -135,11 +136,11 @@ type ToQueryTree<QD extends QueryDefinitions<S, any>, S extends Schema> = {
 type FromQueryTree<QD extends QueryDefinitions<S, any>, S extends Schema> = {
   readonly [K in keyof QD]: QD[K] extends AnyQueryDefinition
     ? CustomQuery<
-        QD[K]['~']['$tableName'],
+        QD[K]['~QueryDefinition']['$tableName'],
         ReadonlyJSONValue | undefined, // intentionally left as generic to avoid variance issues
         S,
-        QD[K]['~']['$return'],
-        QD[K]['~']['$context'],
+        QD[K]['~QueryDefinition']['$return'],
+        QD[K]['~QueryDefinition']['$context'],
         false
       >
     : QD[K] extends QueryDefinitions<Schema, any>
@@ -174,7 +175,7 @@ export type QueryDefinition<
   /**
    * Type-only phantom property to surface query types in a covariant position.
    */
-  readonly '~': Expand<
+  readonly '~QueryDefinition': Expand<
     QueryDefinitionTypes<TTable, TInput, TOutput, TReturn, TContext>
   >;
 };
@@ -193,9 +194,15 @@ export function isQueryDefinition<
     typeof f === 'function' &&
     (
       f as Partial<{
-        '~': QueryDefinitionTypes<TTable, TInput, TOutput, TReturn, TContext>;
+        '~QueryDefinition': QueryDefinitionTypes<
+          TTable,
+          TInput,
+          TOutput,
+          TReturn,
+          TContext
+        >;
       }>
-    )?.['~']?.['tag'] === 'QueryDefinition'
+    )?.['~QueryDefinition']?.['tag'] === 'QueryDefinition'
   );
 }
 
@@ -317,7 +324,7 @@ export function defineQuery<
   // We wrap the function to add the tag and validator and ensure we do not mutate it in place.
   const f = (options: {args: TOutput; ctx: TContext}) => actualQueryFn(options);
   f.validator = validator;
-  f['~'] = {
+  f['~QueryDefinition'] = {
     tag: 'QueryDefinition',
   } as QueryDefinitionTypes<TTable, TInput, TOutput, TReturn, TContext>;
   return f;
@@ -461,7 +468,7 @@ export function createCustomQueryBuilder<
   };
 
   // Add the phantom property
-  builder['~'] = {
+  builder['~CustomQuery'] = {
     tag: 'CustomQuery',
   };
 
@@ -539,7 +546,7 @@ export function defineQueries<
     path: string[],
   ): Record<string | symbol, any> {
     const result: Record<string | symbol, any> = {
-      ['~']: {
+      ['~QueryRegistry']: {
         tag: 'QueryRegistry',
         $schema: undefined as unknown as S,
       } as const,
@@ -583,9 +590,9 @@ export function defineQueries<
     const processed = processDefinitions(overrides, []);
 
     const merged = deepMerge(base, processed) as QueryRegistry<any, S>;
-    merged['~'] = {
+    merged['~QueryRegistry'] = {
       tag: 'QueryRegistry',
-    } as QueryRegistry<any, S>['~'];
+    } as QueryRegistry<any, S>['~QueryRegistry'];
     return merged;
   }
 
