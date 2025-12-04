@@ -219,16 +219,23 @@ export class Join implements Input {
         position: undefined,
       };
       try {
-        const parentNodes = skipYields(
-          this.#parent.fetch({
-            constraint: Object.fromEntries(
-              this.#parentKey.map((key, i) => [
-                key,
-                childRow[this.#childKey[i]],
-              ]),
-            ),
+        let anyNull = false;
+        const constraint = Object.fromEntries(
+          this.#parentKey.map((key, i) => {
+            const value = childRow[this.#childKey[i]];
+            if (value === null) {
+              anyNull = true;
+            }
+            return [key, value];
           }),
         );
+        const parentNodes = anyNull
+          ? []
+          : skipYields(
+              this.#parent.fetch({
+                constraint,
+              }),
+            );
 
         for (const parentNode of parentNodes) {
           this.#inprogressChildChange.position = parentNode.row;
@@ -320,14 +327,21 @@ export class Join implements Input {
         }
       }
 
-      const stream = this.#child[method]({
-        constraint: Object.fromEntries(
-          this.#childKey.map((key, i) => [
-            key,
-            parentNodeRow[this.#parentKey[i]],
-          ]),
-        ),
-      });
+      let anyNull = false;
+      const constraint = Object.fromEntries(
+        this.#childKey.map((key, i) => {
+          const value = parentNodeRow[this.#parentKey[i]];
+          if (value === null) {
+            anyNull = true;
+          }
+          return [key, value];
+        }),
+      );
+      const stream = anyNull
+        ? []
+        : this.#child[method]({
+            constraint,
+          });
 
       if (
         this.#inprogressChildChange &&
