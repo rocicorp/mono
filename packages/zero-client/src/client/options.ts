@@ -15,7 +15,7 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
  */
 export interface ZeroOptions<
   S extends Schema = DefaultSchema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
   C = DefaultContext,
 > {
   /**
@@ -128,7 +128,7 @@ export interface ZeroOptions<
    * await z.mutate.issues.close({id: 'issue-123'}).client;
    * ```
    */
-  mutators?: MD | undefined;
+  mutators?: MD extends CustomMutatorDefs ? MD : AnyMutatorRegistry | undefined;
 
   /**
    * Custom URL for mutation requests sent to your API server.
@@ -314,7 +314,7 @@ export interface ZeroOptions<
  */
 export interface ZeroAdvancedOptions<
   S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
+  MD extends CustomMutatorDefs | undefined,
   Context,
 > extends ZeroOptions<S, MD, Context> {}
 
