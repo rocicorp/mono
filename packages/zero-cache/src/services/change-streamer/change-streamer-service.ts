@@ -323,7 +323,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     await this.#storer.assumeOwnership();
     // The storer will, in turn, detect changes to ownership and stop
     // the change-streamer appropriately.
-    this.#storer.run().catch(e => this.stop(e));
+    this.#storer
+      .run()
+      .then(() => this.stop())
+      .catch(e => this.stop(e));
 
     while (this.#state.shouldRun()) {
       let err: unknown;
