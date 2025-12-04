@@ -7,8 +7,19 @@ import type {SchemaQuery} from './schema-query.ts';
  * Returns a set of query builders for the given schema.
  */
 export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
-  // oxlint-disable-next-line no-explicit-any
-  const cache = new Map<string, Query<string, S, any>>();
+  const factory = (table: keyof S['tables'] & string) =>
+    newQuery(schema, table);
+  return createBuilderWithQueryFactory(schema, factory);
+}
+
+export function createBuilderWithQueryFactory<
+  S extends Schema,
+  // TQuery extends Query<keyof S['tables'] & string, S>,
+>(
+  schema: S,
+  queryFactory: (table: keyof S['tables'] & string) => Query<string, S>,
+): SchemaQuery<S> {
+  const cache = new Map<string, Query<string, S>>();
   const {tables} = schema;
 
   function getQuery(prop: string) {
@@ -21,7 +32,7 @@ export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
       return undefined;
     }
 
-    const q = newQuery(schema, prop);
+    const q = queryFactory(prop);
     cache.set(prop, q);
     return q;
   }
