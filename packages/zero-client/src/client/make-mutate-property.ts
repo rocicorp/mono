@@ -98,7 +98,6 @@ type MakeFromMutatorDefinitions<
     infer TInput,
     // oxlint-disable-next-line no-explicit-any
     any,
-    S,
     C,
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     any

@@ -7,10 +7,13 @@
 
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
-import {defineQuery} from '../../../zql/src/query/query-registry.ts';
-import {zeroStress} from './zero-stress-client-test.ts';
+import {defineQueryWithType} from '../../../zql/src/query/query-registry.ts';
+import {zeroStressSchema} from './zero-stress-schema-test.ts';
+import type {StressContext} from './zero-stress-shared-test.ts';
 
-const zql = createBuilder(zeroStress.schema);
+const zql = createBuilder(zeroStressSchema);
+
+const defineQuery = defineQueryWithType<StressContext>();
 
 const queryDeep = defineQuery(
   ((v: unknown) => v) as unknown as StandardSchemaV1<{

@@ -32,11 +32,14 @@ const defineUserMutator = (
     args: {id: string; name: string};
     ctx: unknown;
   }) => Promise<void>,
-) => defineMutator<{id: string; name: string}, Schema>(mutator);
+) =>
+  defineMutator<{id: string; name: string}, Schema, unknown, MutatorTx>(
+    mutator,
+  );
 const makeUserMutators = (create: ReturnType<typeof defineUserMutator>) =>
   defineMutators({user: {create}} satisfies MutatorDefinitions<
-    Schema,
-    unknown
+    unknown,
+    MutatorTx
   >) as MutatorRegistry<{readonly user: {readonly create: typeof create}}>;
 
 describe('zero.mutate(mr) with MutationRequest', () => {

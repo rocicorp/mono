@@ -8,13 +8,14 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {createBuilder} from './create-builder.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {
   defineQueries,
+  defineQueriesWithType,
   defineQuery,
   isQueryRegistry,
-  type ContextTypeOfQueryRegistry,
   type CustomQuery,
 } from './query-registry.ts';
 import type {Query} from './query.ts';
@@ -388,7 +389,7 @@ describe('defineQuery types', () => {
     >(({args}) => builder.foo.where('id', '=', args.id));
 
     expectTypeOf<typeof query>().returns.toEqualTypeOf<
-      Query<'foo', typeof schema, {someReturnType: string}>
+      Query<'foo', Schema, {someReturnType: string}>
     >();
     expectTypeOf<typeof query>()
       .parameter(0)
@@ -616,16 +617,26 @@ describe('defineQueries', () => {
   });
 
   test('defineQueries infers types from defineQuery', () => {
-    type Context = {userId: string};
+    type Context1 = {userId: string};
+    type Context2 = {some: 'baz'};
 
-    const queries = defineQueries({
+    const define = defineQueriesWithType<typeof schema>();
+
+    const queries = define({
       getAllUsers: defineQuery<
         'foo',
         {id: string},
         typeof schema,
         {someReturnType: string},
-        Context
+        Context1
       >(({ctx: _ctx}) => builder.foo),
+      getBar: defineQuery<
+        'bar',
+        {some: 'baz'},
+        typeof schema,
+        {anotherReturnType: string},
+        Context2
+      >(({ctx: _ctx}) => builder.bar),
     });
 
     expectTypeOf<typeof queries.getAllUsers>().returns.toExtend<
@@ -634,7 +645,7 @@ describe('defineQueries', () => {
         {id: string},
         typeof schema,
         {someReturnType: string},
-        Context,
+        Context1,
         true
       >
     >();
@@ -643,7 +654,24 @@ describe('defineQueries', () => {
       .toEqualTypeOf<{id: string}>();
     expectTypeOf<ReturnType<typeof queries.getAllUsers>['toQuery']>()
       .parameter(0)
-      .toEqualTypeOf<Context>();
+      .toEqualTypeOf<Context1>();
+
+    expectTypeOf<typeof queries.getBar>().returns.toExtend<
+      CustomQuery<
+        'bar',
+        {some: 'baz'},
+        typeof schema,
+        {anotherReturnType: string},
+        Context2,
+        true
+      >
+    >();
+    expectTypeOf<typeof queries.getBar>()
+      .parameter(0)
+      .toEqualTypeOf<{some: 'baz'}>();
+    expectTypeOf<ReturnType<typeof queries.getBar>['toQuery']>()
+      .parameter(0)
+      .toEqualTypeOf<Context2>();
   });
 });
 
@@ -790,7 +818,9 @@ describe('defineQueries types', () => {
   });
 
   test('Context inferred as unknown when not annotated', () => {
-    const queries = defineQueries({
+    const define = defineQueriesWithType<typeof schema>();
+
+    const queries = define({
       getFoo: defineQuery(
         makeValidator<string, string>(() => ''),
         ({args}) => builder.foo.where('id', '=', args),
@@ -823,9 +853,12 @@ describe('context type mismatch detection', () => {
       ),
     });
 
-    expectTypeOf<ContextTypeOfQueryRegistry<typeof queries>>().toEqualTypeOf<
-      {userId: string} & {role: 'admin' | 'user'}
-    >();
+    expectTypeOf<(typeof queries)['query1']['~']['$context']>().toEqualTypeOf<{
+      userId: string;
+    }>();
+    expectTypeOf<(typeof queries)['query2']['~']['$context']>().toEqualTypeOf<{
+      role: 'admin' | 'user';
+    }>();
 
     const q1 = queries.query1('test');
     const q2 = queries.query2('test');
@@ -1140,13 +1173,15 @@ describe('defineQueries merging types', () => {
   });
 
   test('return type should be Query with correct table', () => {
-    const base = defineQueries({
+    const b = {
       getFoo: defineQuery(({args: _args}: {args: undefined}) => builder.foo),
-    });
+    };
+    const base = defineQueries<typeof b, typeof schema>(b);
 
-    const extended = defineQueries(base, {
+    const e = {
       getBar: defineQuery(({args: _args}: {args: undefined}) => builder.bar),
-    });
+    };
+    const extended = defineQueries<typeof b, typeof e, typeof schema>(base, e);
 
     const fooQuery = extended.getFoo().toQuery({});
     const barQuery = extended.getBar().toQuery({});

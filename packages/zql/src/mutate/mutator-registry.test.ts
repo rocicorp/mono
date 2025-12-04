@@ -1,13 +1,14 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type {Transaction} from './custom.ts';
+import type {AnyTransaction, Transaction} from './custom.ts';
 import {
   defineMutators,
   getMutator,
@@ -15,10 +16,7 @@ import {
   iterateMutators,
   mustGetMutator,
 } from './mutator-registry.ts';
-import {defineMutator} from './mutator.ts';
-
-// oxlint-disable-next-line no-explicit-any
-type AnyTransaction = Transaction<any, any>;
+import {defineMutator, type Mutator} from './mutator.ts';
 
 const schema = createSchema({
   tables: [
@@ -26,32 +24,51 @@ const schema = createSchema({
   ],
 });
 
-const createUser = defineMutator(
-  ({args, ctx, tx}: {args: {name: string}; ctx: unknown; tx: unknown}) => {
-    void args;
-    void ctx;
-    void tx;
-    return Promise.resolve();
-  },
-);
+type Context1 = {
+  userId: string;
+};
+type Context2 = {
+  some: 'baz';
+};
+type DbTransaction = {
+  db: true;
+};
 
-const deleteUser = defineMutator(
-  ({args, ctx, tx}: {args: {id: string}; ctx: unknown; tx: unknown}) => {
-    void args;
-    void ctx;
-    void tx;
-    return Promise.resolve();
-  },
-);
+const createUser = defineMutator<
+  {name: string},
+  typeof schema,
+  Context1,
+  DbTransaction
+>(({args, ctx, tx}) => {
+  void args;
+  void ctx;
+  void tx;
+  return Promise.resolve();
+});
 
-const publishPost = defineMutator(
-  ({args, ctx, tx}: {args: {postId: string}; ctx: unknown; tx: unknown}) => {
-    void args;
-    void ctx;
-    void tx;
-    return Promise.resolve();
-  },
-);
+const deleteUser = defineMutator<
+  {id: string},
+  typeof schema,
+  Context2,
+  DbTransaction
+>(({args, ctx, tx}) => {
+  void args;
+  void ctx;
+  void tx;
+  return Promise.resolve();
+});
+
+const publishPost = defineMutator<
+  {postId: string},
+  typeof schema,
+  Context1,
+  DbTransaction
+>(({args, ctx, tx}) => {
+  void args;
+  void ctx;
+  void tx;
+  return Promise.resolve();
+});
 
 test('defineMutators creates a registry with nested mutators', () => {
   const mutators = defineMutators({
@@ -170,7 +187,7 @@ test('mutator.fn validates args when validator is provided', async () => {
   });
 });
 
-test('getMutator looks up by dot-separated name', () => {
+test('getMutator looks up by dot-separated name and returns the correct type', () => {
   const mutators = defineMutators({
     user: {
       create: createUser,
@@ -186,16 +203,26 @@ test('getMutator looks up by dot-separated name', () => {
   expect(getMutator(mutators, 'post.publish')).toBe(mutators.post.publish);
   expect(getMutator(mutators, 'nonexistent')).toBeUndefined();
   expect(getMutator(mutators, 'user.nonexistent')).toBeUndefined();
+  expectTypeOf(getMutator(mutators, 'user.create')).toEqualTypeOf<
+    | Mutator<ReadonlyJSONValue | undefined, Context1, DbTransaction>
+    | Mutator<ReadonlyJSONValue | undefined, Context2, DbTransaction>
+    | undefined
+  >();
 });
 
-test('mustGetMutator throws for unknown names', () => {
+test('mustGetMutator throws for unknown names and returns the correct type', () => {
   const mutators = defineMutators({
     user: {
       create: createUser,
+      delete: deleteUser,
     },
   });
 
   expect(mustGetMutator(mutators, 'user.create')).toBe(mutators.user.create);
+  expectTypeOf(mustGetMutator(mutators, 'user.create')).toEqualTypeOf<
+    | Mutator<ReadonlyJSONValue | undefined, Context1, DbTransaction>
+    | Mutator<ReadonlyJSONValue | undefined, Context2, DbTransaction>
+  >();
   expect(() => mustGetMutator(mutators, 'nonexistent')).toThrow(
     'Mutator not found: nonexistent',
   );
@@ -569,52 +596,79 @@ describe('type inference', () => {
     expectTypeOf<typeof def>().parameter(0).toEqualTypeOf<{
       args: {id: string};
       ctx: Context;
-      tx: Transaction<typeof schema, DbTransaction>;
+      tx: AnyTransaction;
     }>();
   });
 
-  test('defineMutators infers types from defineMutator', () => {
+  test('defineMutators preserves types from defineMutator', () => {
     type Context1 = {userId: string};
-    type Context2 = {userId2: string};
-    type DbTransaction = {db: true};
+    type Context2 = {some: 'baz'};
+    type DbTransaction1 = {db: true};
+    type DbTransaction2 = {db: false};
 
     const mutators = defineMutators({
-      def: defineMutator<{id: string}, typeof schema, Context1, DbTransaction>(
-        async ({args, ctx, tx}) => {
-          expectTypeOf(args).toEqualTypeOf<{id: string}>();
-          expectTypeOf(ctx).toEqualTypeOf<Context1>();
-          expectTypeOf(tx).toEqualTypeOf<
-            Transaction<typeof schema, DbTransaction>
-          >();
-        },
-      ),
-      def2: defineMutator<{id: string}, typeof schema, Context2, DbTransaction>(
-        async ({args, ctx, tx}) => {
-          expectTypeOf(args).toEqualTypeOf<{id: string}>();
-          expectTypeOf(ctx).toEqualTypeOf<Context2>();
-          expectTypeOf(tx).toEqualTypeOf<
-            Transaction<typeof schema, DbTransaction>
-          >();
-        },
-      ),
+      def1: defineMutator<
+        {id: string},
+        typeof schema,
+        Context1,
+        DbTransaction1
+      >(async ({args, ctx, tx}) => {
+        expectTypeOf(args).toEqualTypeOf<{id: string}>();
+        expectTypeOf(ctx).toEqualTypeOf<Context1>();
+        expectTypeOf(tx).toEqualTypeOf<
+          Transaction<typeof schema, DbTransaction1>
+        >();
+      }),
+      def2: defineMutator<
+        {id: string},
+        typeof schema,
+        Context2,
+        DbTransaction2
+      >(async ({args, ctx, tx}) => {
+        expectTypeOf(args).toEqualTypeOf<{id: string}>();
+        expectTypeOf(ctx).toEqualTypeOf<Context2>();
+        expectTypeOf(tx).toEqualTypeOf<
+          Transaction<typeof schema, DbTransaction2>
+        >();
+      }),
     });
 
-    expectTypeOf(mutators.def).parameter(0).toEqualTypeOf<{id: string}>();
+    expectTypeOf(mutators.def1).parameter(0).toEqualTypeOf<{id: string}>();
 
-    const request = mutators.def({id: '123'});
+    const request = mutators.def1({id: '123'});
     expectTypeOf(request.args).toEqualTypeOf<{id: string}>();
     expectTypeOf<typeof request.mutator.fn>().parameter(0).toEqualTypeOf<{
       args: {id: string};
-      ctx: Context1 & Context2;
-      tx: Transaction<typeof schema, DbTransaction>;
+      ctx: Context1;
+      tx: AnyTransaction;
     }>();
 
     const request2 = mutators.def2({id: '123'});
     expectTypeOf(request2.args).toEqualTypeOf<{id: string}>();
     expectTypeOf<typeof request2.mutator.fn>().parameter(0).toEqualTypeOf<{
       args: {id: string};
-      ctx: Context1 & Context2;
-      tx: Transaction<typeof schema, DbTransaction>;
+      ctx: Context2;
+      tx: AnyTransaction;
     }>();
+  });
+
+  test('defineMutators should show ts errors for invalid types', () => {
+    const invalidDef = {something: 'invalid'};
+    const invalidDef2 = {more: 'invalid'};
+
+    expectTypeOf(
+      // @ts-expect-error invalid type
+      () => defineMutators({invalidDef}),
+    ).returns.toBeNever();
+
+    expectTypeOf(
+      // @ts-expect-error invalid type
+      () => defineMutators({createUser}, {invalidDef2}),
+    ).returns.toBeNever();
+
+    expectTypeOf(
+      // @ts-expect-error invalid type
+      () => defineMutators({invalidDef}, {invalidDef2}),
+    ).returns.toBeNever();
   });
 });

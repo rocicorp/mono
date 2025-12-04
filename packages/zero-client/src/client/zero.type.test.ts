@@ -143,7 +143,7 @@ test('legacy mutators disabled - table mutators do not exist', () => {
   expectTypeOf(z.mutate).toEqualTypeOf<
     {} & ((
       // oxlint-disable-next-line no-explicit-any
-      mr: MutationRequest<any, typeof schema, unknown, any>,
+      mr: MutationRequest<any, unknown, any>,
     ) => MutatorResult)
   >();
 
