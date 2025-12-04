@@ -143,6 +143,10 @@ export class FilterSnitch implements FilterOperator {
     this.#output = output;
   }
 
+  beginFilter(): void {}
+
+  endFilter(): void {}
+
   filter(node: Node, cleanup: boolean): boolean {
     this.#log([this.#name, 'filter', node.row, cleanup ? 'cleanup' : 'fetch']);
     assert(this.#output);

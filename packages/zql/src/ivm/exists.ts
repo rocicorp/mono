@@ -9,31 +9,7 @@ import {
   type FilterOperator,
   type FilterOutput,
 } from './filter-operators.ts';
-import {type Storage} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {first} from './stream.ts';
-
-type SizeStorageKeyPrefix = `row/${string}/`;
-/**
- * Key is of format
- * `row/${JSON.stringify(parentJoinKeyValues)}/${JSON.stringify(primaryKeyValues)}`
- * This format allows us to look up an existing cached size for a given set of
- * `parentJoinKeyValues` by scanning for prefix
- * `row/${JSON.stringify(parentJoinKeyValues)}/` and using the first result, and
- * to look up the cached size for a specific row by the full key.
- * If the parent join and primary key are the same, then format is changed to
- * `row//${JSON.stringify(primaryKeyValues)}` to shorten the key, since there
- * is no point in looking up an existing cached size by
- * `parentJoinKeyValues` if the specific rows cached size is missing.
- */
-type SizeStorageKey = `${SizeStorageKeyPrefix}${string}`;
-
-interface ExistsStorage {
-  get(key: SizeStorageKey): number | undefined;
-  set(key: SizeStorageKey, value: number): void;
-  del(key: SizeStorageKey): void;
-  scan({prefix}: {prefix: SizeStorageKeyPrefix}): Iterable<[string, number]>;
-}
 
 /**
  * The Exists operator filters data based on whether or not a relationship is
@@ -42,10 +18,10 @@ interface ExistsStorage {
 export class Exists implements FilterOperator {
   readonly #input: FilterInput;
   readonly #relationshipName: string;
-  readonly #storage: ExistsStorage;
   readonly #not: boolean;
   readonly #parentJoinKey: CompoundKey;
   readonly #noSizeReuse: boolean;
+  #cache: Map<string, number>;
 
   #output: FilterOutput = throwFilterOutput;
 
@@ -61,7 +37,6 @@ export class Exists implements FilterOperator {
 
   constructor(
     input: FilterInput,
-    storage: Storage,
     relationshipName: string,
     parentJoinKey: CompoundKey,
     type: 'EXISTS' | 'NOT EXISTS',
@@ -69,7 +44,7 @@ export class Exists implements FilterOperator {
     this.#input = input;
     this.#relationshipName = relationshipName;
     this.#input.setFilterOutput(this);
-    this.#storage = storage as ExistsStorage;
+    this.#cache = new Map();
     assert(
       this.#input.getSchema().relationships[relationshipName],
       `Input schema missing ${relationshipName}`,
@@ -88,11 +63,25 @@ export class Exists implements FilterOperator {
     this.#output = output;
   }
 
+  beginFilter() {}
+
+  endFilter() {
+    this.#cache = new Map();
+  }
+
   filter(node: Node, cleanup: boolean): boolean {
-    const result = this.#filter(node) && this.#output.filter(node, cleanup);
-    if (cleanup) {
-      this.#delSize(node);
+    let size: number | undefined;
+    if (!this.#noSizeReuse) {
+      const key = this.#getKeyValues(node, this.#parentJoinKey).toString();
+      size = this.#cache.get(key);
+      if (size === undefined) {
+        size = this.#fetchSize(node);
+        this.#cache.set(key, size);
+      }
     }
+
+    const result =
+      this.#filter(node, size) && this.#output.filter(node, cleanup);
     return result;
   }
 
@@ -112,20 +101,9 @@ export class Exists implements FilterOperator {
         // add, remove and edit cannot change the size of the
         // this.#relationshipName relationship, so simply #pushWithFilter
         case 'add':
-        case 'edit': {
-          this.#pushWithFilter(change);
-          return;
-        }
+        case 'edit':
         case 'remove': {
-          const size = this.#getSize(change.node);
-          // If size is undefined, this operator has not output
-          // this row before and so it is unnecessary to output a remove for
-          // it.
-          if (size === undefined) {
-            return;
-          }
-          this.#pushWithFilter(change, size);
-          this.#delSize(change.node);
+          this.#pushWithFilter(change);
           return;
         }
         case 'child':
@@ -143,13 +121,7 @@ export class Exists implements FilterOperator {
           }
           switch (change.child.change.type) {
             case 'add': {
-              let size = this.#getSize(change.node);
-              if (size !== undefined) {
-                size++;
-                this.#setSize(change.node, size);
-              } else {
-                size = this.#fetchSize(change.node);
-              }
+              const size = this.#fetchSize(change.node);
               if (size === 1) {
                 if (this.#not) {
                   // Since the add child change currently being processed is not
@@ -184,14 +156,7 @@ export class Exists implements FilterOperator {
               return;
             }
             case 'remove': {
-              let size = this.#getSize(change.node);
-              if (size !== undefined) {
-                assert(size > 0);
-                size--;
-                this.#setSize(change.node, size);
-              } else {
-                size = this.#fetchSize(change.node);
-              }
+              const size = this.#fetchSize(change.node);
               if (size === 0) {
                 if (this.#not) {
                   this.#output.push(
@@ -246,8 +211,16 @@ export class Exists implements FilterOperator {
    * stored).
    */
   #filter(node: Node, size?: number): boolean {
-    const exists = (size ?? this.#getOrFetchSize(node)) > 0;
+    const exists = (size ?? this.#fetchSize(node)) > 0;
     return this.#not ? !exists : exists;
+  }
+
+  #getKeyValues(node: Node, def: CompoundKey): NormalizedValue[] {
+    const values: NormalizedValue[] = [];
+    for (const key of def) {
+      values.push(normalizeUndefined(node.row[key]));
+    }
+    return values;
   }
 
   /**
@@ -259,69 +232,13 @@ export class Exists implements FilterOperator {
     }
   }
 
-  #getSize(node: Node): number | undefined {
-    return this.#storage.get(this.#makeSizeStorageKey(node));
-  }
-
-  #setSize(node: Node, size: number) {
-    this.#storage.set(this.#makeSizeStorageKey(node), size);
-  }
-
-  #delSize(node: Node) {
-    this.#storage.del(this.#makeSizeStorageKey(node));
-  }
-
-  #getOrFetchSize(node: Node): number {
-    const size = this.#getSize(node);
-    if (size !== undefined) {
-      return size;
-    }
-    return this.#fetchSize(node);
-  }
-
   #fetchSize(node: Node): number {
-    if (!this.#noSizeReuse && !this.#inPush) {
-      const cachedSizeEntry = first(
-        this.#storage.scan({
-          prefix: this.#makeSizeStorageKeyPrefix(node),
-        }),
-      );
-      if (cachedSizeEntry !== undefined) {
-        this.#setSize(node, cachedSizeEntry[1]);
-        return cachedSizeEntry[1];
-      }
-    }
-
     const relationship = node.relationships[this.#relationshipName];
     assert(relationship);
     let size = 0;
     for (const _relatedNode of relationship()) {
       size++;
     }
-
-    this.#setSize(node, size);
     return size;
-  }
-
-  #makeSizeStorageKeyPrefix(node: Node): SizeStorageKeyPrefix {
-    return `row/${
-      this.#noSizeReuse
-        ? ''
-        : JSON.stringify(this.#getKeyValues(node, this.#parentJoinKey))
-    }/`;
-  }
-
-  #makeSizeStorageKey(node: Node): SizeStorageKey {
-    return `${this.#makeSizeStorageKeyPrefix(node)}${JSON.stringify(
-      this.#getKeyValues(node, this.#input.getSchema().primaryKey),
-    )}`;
-  }
-
-  #getKeyValues(node: Node, def: CompoundKey): NormalizedValue[] {
-    const values: NormalizedValue[] = [];
-    for (const key of def) {
-      values.push(normalizeUndefined(node.row[key]));
-    }
-    return values;
   }
 }

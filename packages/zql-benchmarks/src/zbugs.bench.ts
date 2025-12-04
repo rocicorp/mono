@@ -12,7 +12,6 @@ import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 import {schema, builder} from './schema.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {bench, run, summary} from 'mitata';
 
 const dbPath = process.env.ZBUGS_REPLICA_PATH;
 
@@ -90,10 +89,9 @@ function createQuery<TTable extends keyof typeof schema.tables & string>(
 }
 
 // Helper to benchmark planned vs unplanned
-function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
-  name: string,
-  query: AnyQuery,
-) {
+async function benchmarkQuery<
+  TTable extends keyof typeof schema.tables & string,
+>(_name: string, query: AnyQuery) {
   const unplannedAST = asQueryInternals(query).ast;
 
   // const mappedAST = mapAST(unplannedAST, clientToServerMapper);
@@ -106,18 +104,25 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);
 
-  summary(() => {
-    bench(`unplanned: ${name}`, async () => {
-      await delegate.run(unplannedQuery as AnyQuery);
-    });
+  db.exec('BEGIN');
+  const start = performance.now();
+  await delegate.run(unplannedQuery as AnyQuery);
+  const end = performance.now();
+  db.exec('ROLLBACK');
+  console.log('DURATION ', end - start);
 
-    // bench(`planned: ${name}`, async () => {
-    //   await delegate.run(plannedQuery as AnyQuery);
-    // });
-  });
+  // summary(() => {
+  // bench(`unplanned: ${name}`, async () => {
+  //   await delegate.run(unplannedQuery as AnyQuery);
+  // });
+
+  // bench(`planned: ${name}`, async () => {
+  //   await delegate.run(plannedQuery as AnyQuery);
+  // });
+  // });
 }
 
-benchmarkQuery(
+await benchmarkQuery(
   'forced table scan via exists',
   builder.issue.whereExists('creator', q => q.where('name', 'sdf'), {
     flip: false,
@@ -129,6 +134,6 @@ test('no-op', () => {
 });
 
 // run all reads in an explicit tx
-db.exec('BEGIN');
-await run();
-db.exec('ROLLBACK');
+// db.exec('BEGIN');
+// await run();
+// db.exec('ROLLBACK');

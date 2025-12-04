@@ -192,6 +192,15 @@ suite('EXISTS 1 to many', () => {
             ":exists(issue)",
             "filter",
             {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "fetch",
+          ],
+          [
+            ":exists(issue)",
+            "filter",
+            {
               "id": "c2",
               "issueID": "i1",
             },
@@ -221,6 +230,15 @@ suite('EXISTS 1 to many', () => {
             ":exists(issue)",
             "filter",
             {
+              "id": "c2",
+              "issueID": "i1",
+            },
+            "fetch",
+          ],
+          [
+            ":exists(issue)",
+            "filter",
+            {
               "id": "c3",
               "issueID": "i1",
             },
@@ -245,6 +263,15 @@ suite('EXISTS 1 to many', () => {
               },
               "type": "remove",
             },
+          ],
+          [
+            ":exists(issue)",
+            "filter",
+            {
+              "id": "c3",
+              "issueID": "i1",
+            },
+            "fetch",
           ],
           [
             ":exists(issue)",
@@ -422,14 +449,7 @@ suite('EXISTS 1 to many', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(issue)']).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 0,
-        "row/["i1"]/["c2"]": 0,
-        "row/["i1"]/["c3"]": 0,
-        "row/["i2"]/["c4"]": 1,
-      }
-    `);
+    expect(actualStorage[':exists(issue)']).toMatchInlineSnapshot(`undefined`);
 
     expect(actualStorage[':take']).toMatchInlineSnapshot(`
       {
@@ -527,15 +547,9 @@ suite('EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-        "row//["i5"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent add that has children is pushed', () => {
@@ -655,15 +669,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-        "row//["i5"]": 1,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent remove that has no children is not pushed', () => {
@@ -726,13 +734,9 @@ suite('EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent remove that has children is pushed', () => {
@@ -820,13 +824,9 @@ suite('EXISTS', () => {
     `);
 
     // i1 size is removed
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent edit that has no children is not pushed', () => {
@@ -890,14 +890,9 @@ suite('EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent edit that has children is pushed', () => {
@@ -992,14 +987,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child add resulting in one child causes push of parent add', () => {
@@ -1112,14 +1102,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 1,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child add resulting in > 1 child is pushed', () => {
@@ -1233,14 +1218,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 2,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child remove resulting in no children causes push of parent remove', () => {
@@ -1327,14 +1307,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child remove resulting in > 0 children is pushed', () => {
@@ -1436,14 +1411,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 1,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child edit is pushed', () => {
@@ -1559,14 +1529,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child edit changes correlation', () => {
@@ -1699,14 +1664,9 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-        "row//["i2"]": 1,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   // potential tests to add
@@ -1808,15 +1768,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-        "row//["i5"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent add that has children is not pushed', () => {
@@ -1867,15 +1821,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-        "row//["i5"]": 1,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent remove that has no children is pushed', () => {
@@ -1942,13 +1890,9 @@ suite('NOT EXISTS', () => {
     `);
 
     // i2 size is removed
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent remove that has children is not pushed', () => {
@@ -1993,13 +1937,9 @@ suite('NOT EXISTS', () => {
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
     // i1 size is removed
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent edit that has no children is pushed', () => {
@@ -2075,14 +2015,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('parent edit that has children is not pushed', () => {
@@ -2127,14 +2062,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child add resulting in one child causes push of parent remove', () => {
@@ -2200,14 +2130,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 1,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child add resulting in > 1 child is not pushed', () => {
@@ -2251,14 +2176,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 2,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child remove resulting in no children causes push of parent add', () => {
@@ -2336,14 +2256,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child remove resulting in > 0 children is not pushed', () => {
@@ -2387,14 +2302,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 1,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child edit is not pushed', () => {
@@ -2439,14 +2349,9 @@ suite('NOT EXISTS', () => {
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   test('child edit changes correlation', () => {
@@ -2542,14 +2447,9 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-        "row//["i2"]": 1,
-        "row//["i3"]": 2,
-        "row//["i4"]": 0,
-      }
-    `);
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
+      `undefined`,
+    );
   });
 
   // potential tests to add

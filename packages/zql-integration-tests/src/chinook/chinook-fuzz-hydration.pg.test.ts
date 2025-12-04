@@ -23,6 +23,7 @@ const harness = await bootstrap({
   pgContent,
 });
 
+// oxlint-disable-next-line expect-expect
 test.each(Array.from({length: 0}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
