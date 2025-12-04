@@ -1,5 +1,4 @@
-// This file defines complex mutators to stress test TypeScript's type
-// inference.
+// This file defines 100 mutators to stress test TS
 
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
@@ -508,6 +507,513 @@ const mutators = defineMutators({
     >,
     async ({tx, args}) => {
       await tx.mutate.discountCode.insert(args);
+    },
+  ),
+
+  // Additional mutators to reach 100 total (54 more)
+  createAccount: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.account>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.account.insert(args);
+    },
+  ),
+
+  addWorkspaceMember: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.workspaceMember>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.workspaceMember.insert(args);
+    },
+  ),
+
+  insertApiKey: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.apiKey>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.apiKey.insert(args);
+    },
+  ),
+
+  createVerificationToken: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.verificationToken>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.verificationToken.insert(args);
+    },
+  ),
+
+  addPasswordReset: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.passwordReset>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.passwordReset.insert(args);
+    },
+  ),
+
+  createEntityTag: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.entityTag>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.entityTag.insert(args);
+    },
+  ),
+
+  addEntityAttachment: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.entityAttachment>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.entityAttachment.insert(args);
+    },
+  ),
+
+  insertEntityComment: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.entityComment>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.entityComment.insert(args);
+    },
+  ),
+
+  createCustomFieldDefinition: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.customFieldDefinition>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.customFieldDefinition.insert(args);
+    },
+  ),
+
+  addCustomFieldValue: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.customFieldValue>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.customFieldValue.insert(args);
+    },
+  ),
+
+  insertWebhookDelivery: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.webhookDelivery>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.webhookDelivery.insert(args);
+    },
+  ),
+
+  createRateLimit: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.rateLimit>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.rateLimit.insert(args);
+    },
+  ),
+
+  addIntegration: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.integration>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.integration.insert(args);
+    },
+  ),
+
+  createEmailTemplate: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.emailTemplate>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.emailTemplate.insert(args);
+    },
+  ),
+
+  insertEmailSend: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.emailSend>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.emailSend.insert(args);
+    },
+  ),
+
+  addSubscriberList: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.subscriberList>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.subscriberList.insert(args);
+    },
+  ),
+
+  createSubscriber: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.subscriber>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.subscriber.insert(args);
+    },
+  ),
+
+  insertAutomationWorkflow: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.automationWorkflow>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.automationWorkflow.insert(args);
+    },
+  ),
+
+  addEmailLink: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.emailLink>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.emailLink.insert(args);
+    },
+  ),
+
+  createUnsubscribeEvent: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.unsubscribeEvent>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.unsubscribeEvent.insert(args);
+    },
+  ),
+
+  insertEmailAttachment: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.emailAttachment>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.emailAttachment.insert(args);
+    },
+  ),
+
+  addSpamComplaint: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.spamComplaint>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.spamComplaint.insert(args);
+    },
+  ),
+
+  createTicketMessage: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.ticketMessage>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.ticketMessage.insert(args);
+    },
+  ),
+
+  insertKnowledgeBaseArticle: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.knowledgeBaseArticle>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.knowledgeBaseArticle.insert(args);
+    },
+  ),
+
+  addSlaPolicy: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.slaPolicy>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.slaPolicy.insert(args);
+    },
+  ),
+
+  createCannedResponse: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.cannedResponse>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.cannedResponse.insert(args);
+    },
+  ),
+
+  insertTicketTag: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.ticketTag>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.ticketTag.insert(args);
+    },
+  ),
+
+  addSatisfactionSurvey: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.satisfactionSurvey>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.satisfactionSurvey.insert(args);
+    },
+  ),
+
+  createAgentAssignment: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.agentAssignment>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.agentAssignment.insert(args);
+    },
+  ),
+
+  insertTicketEscalation: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.ticketEscalation>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.ticketEscalation.insert(args);
+    },
+  ),
+
+  addProductVariant: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.productVariant>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.productVariant.insert(args);
+    },
+  ),
+
+  createShoppingCart: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.shoppingCart>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.shoppingCart.insert(args);
+    },
+  ),
+
+  insertProductReview: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.productReview>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.productReview.insert(args);
+    },
+  ),
+
+  addShippingZone: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.shippingZone>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.shippingZone.insert(args);
+    },
+  ),
+
+  createPaymentTransaction: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.paymentTransaction>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.paymentTransaction.insert(args);
+    },
+  ),
+
+  insertCmsPage: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.cmsPage>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.cmsPage.insert(args);
+    },
+  ),
+
+  addMediaAsset: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.mediaAsset>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.mediaAsset.insert(args);
+    },
+  ),
+
+  createContentRevision: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.contentRevision>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.contentRevision.insert(args);
+    },
+  ),
+
+  insertTaxonomyTerm: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.taxonomyTerm>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.taxonomyTerm.insert(args);
+    },
+  ),
+
+  addContentBlock: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.contentBlock>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.contentBlock.insert(args);
+    },
+  ),
+
+  createCmsMenu: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.cmsMenu>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.cmsMenu.insert(args);
+    },
+  ),
+
+  insertRedirectRule: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.redirectRule>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.redirectRule.insert(args);
+    },
+  ),
+
+  addCmsComment: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.cmsComment>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.cmsComment.insert(args);
+    },
+  ),
+
+  createTaskDependency: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.taskDependency>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.taskDependency.insert(args);
+    },
+  ),
+
+  insertBoard: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.board>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.board.insert(args);
+    },
+  ),
+
+  addTaskComment: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.taskComment>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.taskComment.insert(args);
+    },
+  ),
+
+  createDepartment: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.department>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.department.insert(args);
+    },
+  ),
+
+  insertLabResult: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.labResult>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.labResult.insert(args);
+    },
+  ),
+
+  addDiagnosis: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.diagnosis>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.diagnosis.insert(args);
+    },
+  ),
+
+  createImmunization: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<
+      InsertValue<typeof zeroStressSchema.tables.immunization>
+    >,
+    async ({tx, args}) => {
+      await tx.mutate.immunization.insert(args);
+    },
+  ),
+
+  // Update operations
+  updateApiKey: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<{
+      workspaceId: string;
+      keyId: string;
+      status: string;
+    }>,
+    async ({tx, args}) => {
+      await tx.mutate.apiKey.update({
+        workspaceId: args.workspaceId,
+        keyId: args.keyId,
+      });
+    },
+  ),
+
+  updateIntegration: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<{
+      workspaceId: string;
+      integrationId: string;
+      enabled: boolean;
+    }>,
+    async ({tx, args}) => {
+      await tx.mutate.integration.update({
+        workspaceId: args.workspaceId,
+        integrationId: args.integrationId,
+      });
+    },
+  ),
+
+  // Delete operations
+  deleteWorkspaceMember: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<{
+      workspaceId: string;
+      memberId: string;
+    }>,
+    async ({tx, args}) => {
+      await tx.mutate.workspaceMember.delete({
+        workspaceId: args.workspaceId,
+        memberId: args.memberId,
+      });
+    },
+  ),
+
+  deleteVerificationToken: defineMutatorTyped(
+    ((v: unknown) => v) as unknown as StandardSchemaV1<{
+      workspaceId: string;
+      tokenId: string;
+    }>,
+    async ({tx, args}) => {
+      await tx.mutate.verificationToken.delete({
+        workspaceId: args.workspaceId,
+        tokenId: args.tokenId,
+      });
     },
   ),
 });

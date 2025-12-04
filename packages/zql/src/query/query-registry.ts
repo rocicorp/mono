@@ -417,7 +417,7 @@ type TypedDefineQuery<TSchema extends Schema, TContext> = {
   ): QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
 };
 
-function createCustomQueryBuilder<
+export function createCustomQueryBuilder<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
