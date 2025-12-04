@@ -244,36 +244,45 @@ export type QueryDefinitions<S extends Schema, Context> = {
  */
 // Overload for no validator parameter with default inference for untyped functions
 export function defineQuery<
-  TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
+  TReturn,
   TContext = DefaultContext,
+  TSchema extends Schema = DefaultSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
 >(
-  queryFn: QueryDefinitionFunction<TTable, TInput, TSchema, TReturn, TContext>,
+  queryFn: (options: {
+    args: TInput;
+    ctx: TContext;
+  }) => Query<TTable, TSchema, TReturn>,
 ): QueryDefinition<TTable, TInput, TInput, TSchema, TReturn, TContext> & {};
 
 // Overload for validator parameter - Input and Output can be different
 export function defineQuery<
-  TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
+  TReturn,
   TContext = DefaultContext,
+  TSchema extends Schema = DefaultSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
 >(
   validator: StandardSchemaV1<TInput, TOutput>,
-  queryFn: QueryDefinitionFunction<TTable, TOutput, TSchema, TReturn, TContext>,
+  queryFn: (options: {
+    args: TOutput;
+    ctx: TContext;
+  }) => Query<TTable, TSchema, TReturn>,
 ): QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext> & {};
 
 // Implementation
 export function defineQuery<
-  TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
+  TReturn,
   TContext = DefaultContext,
+  TSchema extends Schema = DefaultSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
 >(
   validatorOrQueryFn:
     | StandardSchemaV1<TInput, TOutput>
@@ -370,28 +379,30 @@ export function defineQueryWithType() {
 type TypedDefineQuery<TSchema extends Schema, TContext> = {
   // Without validator
   <
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
     TArgs extends ReadonlyJSONValue | undefined,
+    TReturn,
+    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+      string,
   >(
-    queryFn: QueryDefinitionFunction<TTable, TArgs, TSchema, TReturn, TContext>,
+    queryFn: (options: {
+      args: TArgs;
+      ctx: TContext;
+    }) => Query<TTable, TSchema, TReturn>,
   ): QueryDefinition<TTable, TArgs, TArgs, TSchema, TReturn, TContext>;
 
   // With validator
   <
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
     TInput extends ReadonlyJSONValue | undefined,
     TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+      string,
   >(
     validator: StandardSchemaV1<TInput, TOutput>,
-    queryFn: QueryDefinitionFunction<
-      TTable,
-      TOutput,
-      TSchema,
-      TReturn,
-      TContext
-    >,
+    queryFn: (options: {
+      args: TOutput;
+      ctx: TContext;
+    }) => Query<TTable, TSchema, TReturn>,
   ): QueryDefinition<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
 };
 
