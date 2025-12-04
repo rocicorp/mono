@@ -43,12 +43,17 @@ export class HttpService implements Service {
   protected _onStop(): Promise<void> {
     return promiseVoid;
   }
+  protected _onHeartbeat(_count: number) {}
+
   // start() is used in unit tests.
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<string> {
+    let heartbeats = 0;
+
     this.#fastify.get('/', (_req, res) => res.send('OK'));
     this.#fastify.get('/keepalive', ({headers}, res) => {
       this.#heartbeatMonitor.onHeartbeat(headers);
+      this._onHeartbeat(++heartbeats);
       return res.send('OK');
     });
     await this.#init(this.#fastify);
