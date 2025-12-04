@@ -14,7 +14,6 @@ import {
   type MutationRequest,
   type Mutator,
   type MutatorDefinition,
-  type MutatorDefinitionTag,
 } from './mutator.ts';
 
 /**
@@ -184,13 +183,13 @@ export type MutatorDefinitions<Context, WrappedTransaction> = {
     | MutatorDefinitions<Context, WrappedTransaction>;
 };
 
-type AnyMutatorDefinitions = MutatorDefinitions<any, any>;
+export type AnyMutatorDefinitions = MutatorDefinitions<any, any>;
 
-type AssertMutatorDefinitions<MD> = MD extends AnyMutatorDefinitions
+export type AssertMutatorDefinitions<MD> = MD extends AnyMutatorDefinitions
   ? unknown
   : never;
 
-type EnsureMutatorDefinitions<MD> = MD extends AnyMutatorDefinitions
+export type EnsureMutatorDefinitions<MD> = MD extends AnyMutatorDefinitions
   ? MD
   : never;
 
@@ -223,26 +222,26 @@ const mutatorRegistryTag = Symbol('mutatorRegistry');
  * Each MutatorDefinition becomes a Mutator at the same path.
  * Uses TInput for the callable args (TOutput is only used internally for validation).
  */
-type ToMutatorTree<MD extends AnyMutatorDefinitions> = {
+export type ToMutatorTree<MD extends AnyMutatorDefinitions> = {
   readonly [K in keyof MD]: MD[K] extends MutatorDefinition<any, any, any, any>
     ? // pull types from the phantom property
       Mutator<
-        MD[K][MutatorDefinitionTag]['$input'],
-        MD[K][MutatorDefinitionTag]['$context'],
-        MD[K][MutatorDefinitionTag]['$wrappedTransaction']
+        MD[K]['~']['$input'],
+        MD[K]['~']['$context'],
+        MD[K]['~']['$wrappedTransaction']
       >
     : MD[K] extends AnyMutatorDefinitions
       ? ToMutatorTree<MD[K]>
       : never;
 };
 
-type FromMutatorTree<MD extends AnyMutatorDefinitions> = {
+export type FromMutatorTree<MD extends AnyMutatorDefinitions> = {
   readonly [K in keyof MD]: MD[K] extends MutatorDefinition<any, any, any, any>
     ? // pull types from the phantom property
       Mutator<
         ReadonlyJSONValue | undefined, // intentionally left as generic to avoid variance issues
-        MD[K][MutatorDefinitionTag]['$context'],
-        MD[K][MutatorDefinitionTag]['$wrappedTransaction']
+        MD[K]['~']['$context'],
+        MD[K]['~']['$wrappedTransaction']
       >
     : MD[K] extends AnyMutatorDefinitions
       ? FromMutatorTree<MD[K]>

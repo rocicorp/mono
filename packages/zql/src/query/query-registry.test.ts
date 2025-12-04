@@ -1,6 +1,7 @@
 // oxlint-disable no-explicit-any
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -8,6 +9,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {createBuilder} from './create-builder.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {
@@ -1388,9 +1390,36 @@ describe('getQuery', () => {
     expect(query1).toBe(queries.getUser);
     expect(query2).toBe(queries.nested.getBar);
 
-    expectTypeOf(query1?.['~']['$tableName']).toEqualTypeOf<
-      'foo' | 'bar' | undefined
+    assert(query1);
+    assert(query2);
+
+    // The runtime of this property is not the same as the type.
+    expect(query1['~']).toEqual('CustomQuery');
+    expectTypeOf(query1['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
+    expectTypeOf(query1['~']['$schema']).toEqualTypeOf<Schema>();
+    expectTypeOf(query1['~']['$input']).toEqualTypeOf<
+      ReadonlyJSONValue | undefined
     >();
+    expectTypeOf(query1['~']['$context']).toEqualTypeOf<unknown>();
+    expectTypeOf(query1['~']['$return']).toEqualTypeOf<
+      | {
+          readonly id: string;
+          readonly val: number;
+        }
+      | {
+          readonly id: string;
+          readonly val: string;
+        }
+    >();
+    expectTypeOf(query1['~']['$hasArgs']).toEqualTypeOf<false>();
+
+    expectTypeOf(query2['~']['$tableName']).toEqualTypeOf<'foo' | 'bar'>();
+    expectTypeOf(query2['~']['$schema']).toEqualTypeOf<Schema>();
+    expectTypeOf(query2['~']['$input']).toEqualTypeOf<
+      ReadonlyJSONValue | undefined
+    >();
+    expectTypeOf(query2['~']['$context']).toEqualTypeOf<unknown>();
+    expectTypeOf(query2['~']['$hasArgs']).toEqualTypeOf<false>();
   });
 
   test('returns undefined for non-existent query', () => {
@@ -1405,10 +1434,11 @@ describe('getQuery', () => {
 
 describe('mustGetQuery', () => {
   test('returns query by name', () => {
+    type Context1 = {userId: string};
     const defineQueriesTyped = defineQueriesWithType<typeof schema>();
 
     const queries = defineQueriesTyped({
-      getUser: defineQuery(({args}: {args: string}) =>
+      getUser: defineQuery(({args}: {args: string; ctx: Context1}) =>
         builder.foo.where('id', '=', args),
       ),
       nested: {
@@ -1426,6 +1456,29 @@ describe('mustGetQuery', () => {
     expectTypeOf(query1['~']['$input']).toEqualTypeOf<
       ReadonlyJSONValue | undefined
     >();
+    expectTypeOf(query1['~']['$context']).toEqualTypeOf<any>();
+
+    expectTypeOf(query2['~']['$schema']).toEqualTypeOf<typeof schema>();
+  });
+
+  test('returns query by name with schema and context', () => {
+    type Context = {userId: string};
+    const defineQueriesTyped = defineQueriesWithType<typeof schema, Context>();
+
+    const queries = defineQueriesTyped({
+      getUser: defineQuery(({args}: {args: string}) =>
+        builder.foo.where('id', '=', args),
+      ),
+      nested: {
+        getBar: defineQuery(() => builder.bar),
+      },
+    });
+
+    const query1 = mustGetQuery(queries, 'getUser');
+    const query2 = mustGetQuery(queries, 'nested.getBar');
+
+    expectTypeOf(query1['~']['$context']).toEqualTypeOf<Context>();
+
     expectTypeOf(query2['~']['$schema']).toEqualTypeOf<typeof schema>();
   });
 
