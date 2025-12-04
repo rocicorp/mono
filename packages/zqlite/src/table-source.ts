@@ -65,7 +65,7 @@ type StatementSlot = {
 
 /**
  * Cached statements for a given cache key.
- * Stores up to 4 duplicate statements to allow re-entrant cached calls.
+ * Stores up to MAX_CACHED_STATEMENTS to allow re-entrant cached calls.
  */
 type CachedStatement = {
   sql: string;
@@ -85,6 +85,9 @@ type TableConnection = Connection & {
 };
 
 let eventCount = 0;
+
+/** Max duplicate statements per cache key to allow re-entrant cached calls. */
+const MAX_CACHED_STATEMENTS = 4;
 
 /**
  * A source that is backed by a SQLite table.
@@ -334,32 +337,15 @@ export class TableSource implements Source {
     return `${constraintCols}|${startCols}|${basis}|${dir}`;
   }
 
-  /**
-   * Extracts constraint values as named parameters (c_{colName}).
-   */
-  #extractConstraintValues(
-    constraint: Constraint | undefined,
+  /** Extracts row values as named parameters with the given prefix. */
+  #extractValues(
+    prefix: string,
+    row: Row | undefined,
   ): Record<string, unknown> {
-    if (!constraint) return {};
+    if (!row) return {};
     const values: Record<string, unknown> = {};
-    for (const key of Object.keys(constraint)) {
-      values[`c_${key}`] = toSQLiteType(
-        constraint[key],
-        this.#columns[key].type,
-      );
-    }
-    return values;
-  }
-
-  /**
-   * Extracts start values as named parameters (s_{colName}).
-   * SQLite binds the same value to all occurrences of the same param name.
-   */
-  #extractStartValues(start: Start | undefined): Record<string, unknown> {
-    if (!start) return {};
-    const values: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(start.row)) {
-      values[`s_${key}`] = toSQLiteType(value, this.#columns[key].type);
+    for (const [key, value] of Object.entries(row)) {
+      values[`${prefix}_${key}`] = toSQLiteType(value, this.#columns[key].type);
     }
     return values;
   }
@@ -379,62 +365,42 @@ export class TableSource implements Source {
       stmtCache.set(db, dbCache);
     }
 
-    // Try to get cached statement (supports up to 4 re-entrant calls)
+    // Try to get cached statement (supports up to MAX_CACHED_STATEMENTS re-entrant calls)
     const cached = dbCache.get(cacheKey);
     let statement: Statement;
     let sqlText: string;
-    let usedSlot: StatementSlot | undefined;
+    let usedSlot = cached?.statements.find(s => !s.inUse);
 
-    if (cached) {
-      // Find an available slot
-      usedSlot = cached.statements.find(s => !s.inUse);
-      if (usedSlot) {
-        // Reuse existing statement
-        usedSlot.inUse = true;
-        statement = usedSlot.statement;
-        sqlText = cached.sql;
-      } else if (cached.statements.length < 4) {
-        // All in use but room for more - create and cache
-        const query = this.#requestToSQL(
-          req,
-          connection.filters?.condition,
-          sort,
-        );
-        const {text} = formatNamed(query);
-        sqlText = text;
-        statement = db.prepare(text);
-        usedSlot = {statement, inUse: true};
-        cached.statements.push(usedSlot);
-      } else {
-        // All 4 in use - create temporary (uncached)
-        const query = this.#requestToSQL(
-          req,
-          connection.filters?.condition,
-          sort,
-        );
-        const {text} = formatNamed(query);
-        sqlText = text;
-        statement = db.prepare(text);
-        // usedSlot stays undefined - no caching
-      }
+    if (usedSlot) {
+      // Reuse existing cached statement
+      usedSlot.inUse = true;
+      statement = usedSlot.statement;
+      sqlText = must(cached).sql;
     } else {
-      // Cache miss - build and cache first statement
+      // Build SQL and prepare statement
       const query = this.#requestToSQL(
         req,
         connection.filters?.condition,
         sort,
       );
-      const {text} = formatNamed(query);
-      sqlText = text;
-      statement = db.prepare(text);
-      usedSlot = {statement, inUse: true};
-      dbCache.set(cacheKey, {sql: sqlText, statements: [usedSlot]});
+      ({text: sqlText} = formatNamed(query));
+      statement = db.prepare(sqlText);
+
+      // Cache if room available
+      if (!cached) {
+        usedSlot = {statement, inUse: true};
+        dbCache.set(cacheKey, {sql: sqlText, statements: [usedSlot]});
+      } else if (cached.statements.length < MAX_CACHED_STATEMENTS) {
+        usedSlot = {statement, inUse: true};
+        cached.statements.push(usedSlot);
+      }
+      // else: all slots in use, usedSlot stays undefined (temporary)
     }
 
     // Extract bind values directly (fast - no SQL building on cache hit)
     const values: Record<string, unknown> = {
-      ...this.#extractConstraintValues(req.constraint),
-      ...this.#extractStartValues(req.start),
+      ...this.#extractValues('c', req.constraint),
+      ...this.#extractValues('s', req.start?.row),
       ...filterValues,
     };
 
