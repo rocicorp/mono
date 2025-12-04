@@ -62,7 +62,7 @@ function labelsOrderByName({
 }
 
 export const queries = defineQueries({
-  allLabels: defineQuery(() => builder.label),
+  allLabels: defineQuery(z.undefined(), () => builder.label),
 
   allUsers: defineQuery(z.undefined(), () => builder.user),
 
