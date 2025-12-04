@@ -40,7 +40,7 @@
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/prettier-config": "^0.4.0",
-    "@rocicorp/zero-sqlite3": "^1.0.12",
+    "@rocicorp/zero-sqlite3": "1.0.13",
     "@types/command-line-usage": "^5.0.2",
     "@vitest/runner": "3.2.4",
     "command-line-args": "^6.0.1",
@@ -56,7 +56,7 @@
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-sqlite3": "^1.0.12",
+    "@rocicorp/zero-sqlite3": "1.0.13",
     "expo-sqlite": ">=15"
   },
   "peerDependenciesMeta": {

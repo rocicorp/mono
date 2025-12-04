@@ -42,7 +42,7 @@ import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
-import {explainQueries} from './explain-queries.ts';
+import {explainQueries} from '../../zqlite/src/explain-queries.ts';
 import {runAst} from './run-ast.ts';
 
 const options = {

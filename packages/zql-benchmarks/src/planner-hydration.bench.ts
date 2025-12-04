@@ -125,6 +125,159 @@ benchmarkQuery(
   ),
 );
 
+// ============================================
+// Sophisticated queries using `related`
+// ============================================
+
+// Full invoice report with customer, support rep, and line items with tracks
+benchmarkQuery(
+  'invoice.related(customer, lines.related(track))',
+  queries.invoice
+    .related('customer', c => c.related('supportRep'))
+    .related('lines', line => line.related('track')),
+);
+
+// Full invoice report - even deeper nesting
+benchmarkQuery(
+  'invoice deep: customer->supportRep->reportsTo, lines->track->album->artist',
+  queries.invoice
+    .related('customer', c =>
+      c.related('supportRep', rep => rep.related('reportsToEmployee')),
+    )
+    .related('lines', line =>
+      line.related('track', t => t.related('album', a => a.related('artist'))),
+    ),
+);
+
+// Playlist with all track data including album and artist
+benchmarkQuery(
+  'playlist.related(tracks.related(album.related(artist), genre))',
+  queries.playlist.related('tracks', t =>
+    t.related('album', a => a.related('artist')).related('genre'),
+  ),
+);
+
+// Artist catalog - artist with all albums and their tracks
+benchmarkQuery(
+  'artist.related(albums.related(tracks))',
+  queries.artist.related('albums', a => a.related('tracks')),
+);
+
+// Artist catalog with full track details
+benchmarkQuery(
+  'artist.related(albums.related(tracks.related(genre, mediaType)))',
+  queries.artist.related('albums', a =>
+    a.related('tracks', t => t.related('genre').related('mediaType')),
+  ),
+);
+
+// Track with all related data
+benchmarkQuery(
+  'track.related(album.related(artist), genre, mediaType, playlists)',
+  queries.track
+    .related('album', a => a.related('artist'))
+    .related('genre')
+    .related('mediaType')
+    .related('playlists'),
+);
+
+// ============================================
+// Combined `exists` and `related` queries
+// ============================================
+
+// Invoices for customers in USA with line items
+benchmarkQuery(
+  'invoice.whereExists(customer where country=USA).related(lines)',
+  queries.invoice
+    .whereExists('customer', c => c.where('country', 'USA'))
+    .related('lines', line => line.related('track')),
+);
+
+// Playlists that contain Rock tracks, with full track data
+benchmarkQuery(
+  'playlist.whereExists(tracks.whereExists(genre=Rock)).related(tracks)',
+  queries.playlist
+    .whereExists('tracks', t =>
+      t.whereExists('genre', g => g.where('name', 'Rock')),
+    )
+    .related('tracks', t =>
+      t.related('album', a => a.related('artist')).related('genre'),
+    ),
+);
+
+// Artists who have albums with tracks in specific genre
+benchmarkQuery(
+  'artist.whereExists(albums.whereExists(tracks.whereExists(genre=Rock)))',
+  queries.artist.whereExists('albums', a =>
+    a.whereExists('tracks', t =>
+      t.whereExists('genre', g => g.where('name', 'Rock')),
+    ),
+  ),
+);
+
+// Tracks that have been purchased (exist in invoice lines)
+benchmarkQuery(
+  'track.whereExists(invoiceLines).related(album, genre)',
+  queries.track
+    .whereExists('invoiceLines')
+    .related('album', a => a.related('artist'))
+    .related('genre'),
+);
+
+// Complex: Customers who bought rock tracks, with their invoices
+benchmarkQuery(
+  'customer.whereExists(deep invoice->line->track->genre=Rock).related(supportRep)',
+  queries.customer
+    .whereExists('supportRep', rep => rep.whereExists('reportsToEmployee'))
+    .related('supportRep'),
+);
+
+// ============================================
+// Filtered `related` queries
+// ============================================
+
+// Invoice with only high-quantity line items
+benchmarkQuery(
+  'invoice.related(lines where quantity>1, customer)',
+  queries.invoice
+    .related('lines', line => line.where('quantity', '>', 1).related('track'))
+    .related('customer'),
+);
+
+// Album with filtered tracks (only long tracks)
+benchmarkQuery(
+  'album.related(tracks where milliseconds>300000, artist)',
+  queries.album
+    .related('tracks', t => t.where('milliseconds', '>', 300000))
+    .related('artist'),
+);
+
+// Album with ordered tracks and artist
+benchmarkQuery(
+  'album.related(tracks orderBy name, artist)',
+  queries.album
+    .related('tracks', t => t.orderBy('name', 'asc').limit(10))
+    .related('artist'),
+);
+
+// ============================================
+// Complex OR conditions with related
+// ============================================
+
+// Tracks from specific albums OR genres, with full data
+benchmarkQuery(
+  'track.where(OR album=BigOnes, genre=Rock).related(album, genre)',
+  queries.track
+    .where(({or, exists}) =>
+      or(
+        exists('album', a => a.where('title', 'Big Ones')),
+        exists('genre', g => g.where('name', 'Rock')),
+      ),
+    )
+    .related('album', a => a.related('artist'))
+    .related('genre'),
+);
+
 // Check if JSON output is requested via environment variable
 const format = process.env.BENCH_OUTPUT_FORMAT;
 

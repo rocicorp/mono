@@ -39,7 +39,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.12",
+    "@rocicorp/zero-sqlite3": "1.0.13",
     "@types/basic-auth": "^1.1.8",
     "basic-auth": "^2.0.1",
     "chalk": "^5.3.0",
@@ -60,9 +60,9 @@
     "urlpattern-polyfill": "^10.1.0",
     "ws": "^8.18.1",
     "zero-protocol": "0.0.0",
+    "zero-types": "0.0.0",
     "zql": "0.0.0",
-    "zqlite": "0.0.0",
-    "zero-types": "0.0.0"
+    "zqlite": "0.0.0"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",

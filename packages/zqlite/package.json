@@ -35,7 +35,7 @@
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
     "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/zero-sqlite3": "^1.0.12",
+    "@rocicorp/zero-sqlite3": "1.0.13",
     "zql": "0.0.0"
   }
 }
