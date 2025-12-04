@@ -116,7 +116,7 @@ type MakeFromMutatorDefinitions<
 
 export type MakeMutatePropertyType<
   S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
+  MD extends CustomMutatorDefs | undefined,
   C,
 > = MD extends AnyMutatorRegistry
   ? // MutatorRegistry: no property tree, user calls zero.mutate(mr) directly

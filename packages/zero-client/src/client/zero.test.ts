@@ -63,7 +63,6 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
@@ -1101,7 +1100,7 @@ describe('initConnection', () => {
 
   async function zeroForTestWithDeletedClients<
     const S extends Schema,
-    MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+    MD extends CustomMutatorDefs | undefined = undefined,
     C = unknown,
   >(
     options: Partial<ZeroOptions<S, MD, C>> & {
