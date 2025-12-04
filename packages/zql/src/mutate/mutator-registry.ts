@@ -123,7 +123,6 @@ export function defineMutators(
     >;
     // deepMerge doesn't copy symbols, so we need to add the tag
     merged[mutatorRegistryTag] = true;
-    // merged[defineMutatorsTypesTag] = types[defineMutatorsTypesTag];
     return merged as AnyMutatorRegistry;
   }
 
@@ -209,7 +208,8 @@ export type MutatorRegistry<MD extends AnyMutatorDefinitions> =
  */
 export type AnyMutatorRegistry = {
   [mutatorRegistryTag]: true;
-} & Record<string, unknown>;
+  [key: string]: unknown;
+};
 
 // ----------------------------------------------------------------------------
 // Internal
