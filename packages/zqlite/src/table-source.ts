@@ -56,11 +56,20 @@ type Statements = {
 };
 
 /**
- * A cached prepared statement with an in-use flag for re-entrancy.
+ * A slot in the statement cache - one prepared statement with in-use tracking.
  */
-type CachedStatement = {
+type StatementSlot = {
   statement: Statement;
   inUse: boolean;
+};
+
+/**
+ * Cached statements for a given cache key.
+ * Stores up to 4 duplicate statements to allow re-entrant cached calls.
+ */
+type CachedStatement = {
+  sql: string;
+  statements: StatementSlot[];
 };
 
 /**
@@ -370,35 +379,56 @@ export class TableSource implements Source {
       stmtCache.set(db, dbCache);
     }
 
-    // Try to get cached statement
-    let cached = dbCache.get(cacheKey);
+    // Try to get cached statement (supports up to 4 re-entrant calls)
+    const cached = dbCache.get(cacheKey);
     let statement: Statement;
     let sqlText: string;
-    let isFromCache = false;
+    let usedSlot: StatementSlot | undefined;
 
-    if (cached && !cached.inUse) {
-      // Cache hit - reuse existing statement
-      cached.inUse = true;
-      statement = cached.statement;
-      sqlText = '(cached)';
-      isFromCache = true;
+    if (cached) {
+      // Find an available slot
+      usedSlot = cached.statements.find(s => !s.inUse);
+      if (usedSlot) {
+        // Reuse existing statement
+        usedSlot.inUse = true;
+        statement = usedSlot.statement;
+        sqlText = cached.sql;
+      } else if (cached.statements.length < 4) {
+        // All in use but room for more - create and cache
+        const query = this.#requestToSQL(
+          req,
+          connection.filters?.condition,
+          sort,
+        );
+        const {text} = formatNamed(query);
+        sqlText = text;
+        statement = db.prepare(text);
+        usedSlot = {statement, inUse: true};
+        cached.statements.push(usedSlot);
+      } else {
+        // All 4 in use - create temporary (uncached)
+        const query = this.#requestToSQL(
+          req,
+          connection.filters?.condition,
+          sort,
+        );
+        const {text} = formatNamed(query);
+        sqlText = text;
+        statement = db.prepare(text);
+        // usedSlot stays undefined - no caching
+      }
     } else {
-      // Cache miss - build SQL and prepare statement
+      // Cache miss - build and cache first statement
       const query = this.#requestToSQL(
         req,
         connection.filters?.condition,
         sort,
       );
-      const {text, values: _} = formatNamed(query);
+      const {text} = formatNamed(query);
       sqlText = text;
       statement = db.prepare(text);
-
-      if (!cached) {
-        // Store for future use
-        cached = {statement, inUse: true};
-        dbCache.set(cacheKey, cached);
-      }
-      // If cached but inUse (re-entrancy), we don't cache the second statement
+      usedSlot = {statement, inUse: true};
+      dbCache.set(cacheKey, {sql: sqlText, statements: [usedSlot]});
     }
 
     // Extract bind values directly (fast - no SQL building on cache hit)
@@ -438,7 +468,7 @@ export class TableSource implements Source {
         comparator,
       );
     } finally {
-      if (debug && !isFromCache) {
+      if (debug) {
         let totalNvisit = 0;
         let i = 0;
         while (true) {
@@ -457,8 +487,8 @@ export class TableSource implements Source {
         }
         statement.scanStatusReset();
       }
-      if (cached) {
-        cached.inUse = false;
+      if (usedSlot) {
+        usedSlot.inUse = false;
       }
     }
   }
