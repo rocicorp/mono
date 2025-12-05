@@ -92,6 +92,30 @@ describe('MutatorProxy', () => {
       expect(rejectAllOutstandingMutations).toHaveBeenCalledTimes(1);
     });
 
+    test('does not reject mutations when disconnected due to missing socket origin', () => {
+      const {
+        manager,
+        mutationTracker,
+        rejectAllOutstandingMutations,
+        stateCallback,
+      } = createMockConnectionManager();
+      const proxy = new MutatorProxy(manager, mutationTracker);
+
+      const error = new ClientError({
+        kind: ClientErrorKind.NoSocketOrigin,
+        message: 'no socket origin',
+      });
+      const state: ConnectionManagerState = {
+        name: ConnectionStatus.Disconnected,
+        reason: error,
+      };
+
+      stateCallback(state);
+
+      expect(proxy.mutationRejectionError).toBeUndefined();
+      expect(rejectAllOutstandingMutations).not.toHaveBeenCalled();
+    });
+
     test('sets rejection error and rejects mutations on Error', () => {
       const {
         manager,

@@ -1792,7 +1792,7 @@ export class Zero<
 
     if (this.#server === null) {
       this.#lc.info?.('No socket origin provided, not starting connect loop.');
-      this.#connectionManager.error(
+      this.#connectionManager.disconnected(
         new ClientError({
           kind: ClientErrorKind.NoSocketOrigin,
           message: 'No server socket origin provided',
