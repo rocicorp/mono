@@ -207,7 +207,7 @@ export interface ZeroOptions<
    * The number of milliseconds to wait before disconnecting a Zero
    * instance when the connection to the server has timed out.
    *
-   * Default is 5 minutes.
+   * Default is 1 minute.
    */
   disconnectTimeoutMs?: number | undefined;
 
