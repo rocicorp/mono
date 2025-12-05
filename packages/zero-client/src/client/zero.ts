@@ -91,7 +91,7 @@ import type {
   AnyMutator,
   MutationRequest,
 } from '../../../zql/src/mutate/mutator.ts';
-import {createBuilderWithQueryFactory} from '../../../zql/src/query/create-builder.ts';
+import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
   type ClientMetricMap,
   type MetricMap,
@@ -106,7 +106,6 @@ import {
   type RunOptions,
   type ToQuery,
 } from '../../../zql/src/query/query.ts';
-import {newRunnableQuery} from '../../../zql/src/query/runnable-query-impl.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -488,9 +487,6 @@ export class Zero<
     }
 
     this.#options = options;
-    this.query = createBuilderWithQueryFactory(schema, table =>
-      newRunnableQuery(this.#zeroContext, schema, table),
-    );
 
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'warn',
@@ -593,6 +589,8 @@ export class Zero<
     // Register the delegate for bindings to access via WeakMap.
     // This avoids exposing the delegate as a public API on Zero.
     registerZeroDelegate(this, this.#zeroContext);
+
+    this.query = createRunnableBuilder(this.#zeroContext, schema);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
