@@ -7,7 +7,7 @@ import type {MutatorProxy} from './mutator-proxy.ts';
 describe('makeMutateProperty', () => {
   function createMockMutatorProxy(): MutatorProxy {
     return {
-      wrapCustomMutator: vi.fn((fn: () => MutatorResult) => fn),
+      wrapCustomMutator: vi.fn((_name: string, fn: () => MutatorResult) => fn),
     } as unknown as MutatorProxy;
   }
 
@@ -37,9 +37,11 @@ describe('makeMutateProperty', () => {
     expect(mutateObject).toHaveProperty('updateUser');
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledTimes(2);
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'createUser',
       mockRepMutate.createUser,
     );
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'updateUser',
       mockRepMutate.updateUser,
     );
   });
@@ -76,12 +78,15 @@ describe('makeMutateProperty', () => {
 
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledTimes(3);
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'user|create',
       mockRepMutate['user|create'],
     );
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'user|update',
       mockRepMutate['user|update'],
     );
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'post|create',
       mockRepMutate['post|create'],
     );
   });
@@ -113,9 +118,11 @@ describe('makeMutateProperty', () => {
 
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledTimes(2);
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'api|user|profile|update',
       mockRepMutate['api|user|profile|update'],
     );
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'api|user|profile|delete',
       mockRepMutate['api|user|profile|delete'],
     );
   });
@@ -209,6 +216,7 @@ describe('makeMutateProperty', () => {
 
     expect(mutateObject).toHaveProperty('customAction');
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'customAction',
       mockRepMutate.customAction,
     );
   });
@@ -284,6 +292,7 @@ describe('makeMutateProperty', () => {
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
+      'a|b|c',
       mockRepMutate['a|b|c'],
     );
   });

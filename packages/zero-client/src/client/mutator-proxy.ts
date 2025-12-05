@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
@@ -27,14 +28,17 @@ type CachedMutationRejection = {
 };
 
 export class MutatorProxy {
+  readonly #lc: LogContext;
   readonly #connectionManager: ConnectionManager;
   readonly #mutationTracker: MutationTracker;
   #mutationRejection: CachedMutationRejection | undefined;
 
   constructor(
+    lc: LogContext,
     connectionManager: ConnectionManager,
     mutationTracker: MutationTracker,
   ) {
+    this.#lc = lc;
     this.#connectionManager = connectionManager;
     this.#mutationTracker = mutationTracker;
 
@@ -93,7 +97,7 @@ export class MutatorProxy {
       client: Promise<unknown>;
       server: Promise<unknown>;
     },
-  >(f: F): (...args: Parameters<F>) => MutatorResult {
+  >(name: string, f: F): (...args: Parameters<F>) => MutatorResult {
     return (...args) => {
       if (this.#mutationRejection) {
         return {
@@ -118,6 +122,12 @@ export class MutatorProxy {
           if (cachedPromise) {
             return cachedPromise;
           }
+
+          this.#lc.error?.(
+            `Mutator "${name}" error on ${origin}`,
+            args[0],
+            error,
+          );
 
           if (isZeroError(error)) {
             const zeroErrorPromise = this.#makeZeroErrorResultDetails(error);

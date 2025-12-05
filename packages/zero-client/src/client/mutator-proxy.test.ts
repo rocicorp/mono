@@ -1,5 +1,6 @@
 import {assert, describe, expect, test, vi} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -13,6 +14,8 @@ import {ConnectionStatus} from './connection-status.ts';
 import {ClientError} from './error.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import {MutatorProxy} from './mutator-proxy.ts';
+
+const lc = createSilentLogContext();
 
 function createMockConnectionManager(): {
   manager: ConnectionManager;
@@ -53,7 +56,7 @@ describe('MutatorProxy', () => {
   test('subscribes to connection manager on construction', () => {
     const {manager, mutationTracker} = createMockConnectionManager();
 
-    new MutatorProxy(manager, mutationTracker);
+    new MutatorProxy(lc, manager, mutationTracker);
 
     expect(manager.subscribe).toHaveBeenCalledWith(expect.any(Function));
   });
@@ -61,7 +64,7 @@ describe('MutatorProxy', () => {
   test('mutationRejectionError is initially undefined', () => {
     const {manager, mutationTracker} = createMockConnectionManager();
 
-    const proxy = new MutatorProxy(manager, mutationTracker);
+    const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
     expect(proxy.mutationRejectionError).toBeUndefined();
   });
@@ -74,7 +77,7 @@ describe('MutatorProxy', () => {
         rejectAllOutstandingMutations,
         stateCallback,
       } = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const error = new ClientError({
         kind: ClientErrorKind.Offline,
@@ -99,7 +102,7 @@ describe('MutatorProxy', () => {
         rejectAllOutstandingMutations,
         stateCallback,
       } = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const error = new ClientError({
         kind: ClientErrorKind.NoSocketOrigin,
@@ -123,7 +126,7 @@ describe('MutatorProxy', () => {
         rejectAllOutstandingMutations,
         stateCallback,
       } = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const error = new ClientError({
         kind: ClientErrorKind.Internal,
@@ -148,7 +151,7 @@ describe('MutatorProxy', () => {
         rejectAllOutstandingMutations,
         stateCallback,
       } = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const error = new ClientError({
         kind: ClientErrorKind.ClientClosed,
@@ -173,7 +176,7 @@ describe('MutatorProxy', () => {
         rejectAllOutstandingMutations,
         stateCallback,
       } = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       // First set an error
       const error = new ClientError({
@@ -201,7 +204,7 @@ describe('MutatorProxy', () => {
         rejectAllOutstandingMutations,
         stateCallback,
       } = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       // First set an error
       const error = new ClientError({
@@ -233,7 +236,7 @@ describe('MutatorProxy', () => {
         rejectAllOutstandingMutations,
         stateCallback,
       } = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       // First set an error
       const error = new ClientError({
@@ -267,7 +270,7 @@ describe('MutatorProxy', () => {
     test('returns zero error when mutation rejection error is set', async () => {
       const {manager, mutationTracker, stateCallback} =
         createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       // Set a rejection error
       const error = new ClientError({
@@ -284,7 +287,7 @@ describe('MutatorProxy', () => {
         client: Promise.resolve(),
         server: Promise.resolve(),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       // Call the wrapped mutator
       const result = wrapped();
@@ -315,13 +318,13 @@ describe('MutatorProxy', () => {
 
     test('returns app error when mutator throws synchronously', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const thrownError = new Error('mutator failed');
       const mutator = vi.fn(() => {
         throw thrownError;
       });
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
 
@@ -344,13 +347,13 @@ describe('MutatorProxy', () => {
 
     test('returns success when mutator succeeds', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const mutator = vi.fn(() => ({
         client: Promise.resolve(),
         server: Promise.resolve(),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
 
@@ -364,14 +367,14 @@ describe('MutatorProxy', () => {
 
     test('wraps client promise rejection as app error', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const clientError = new Error('client failed');
       const mutator = vi.fn(() => ({
         client: Promise.reject(clientError),
         server: Promise.resolve(),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
 
@@ -394,14 +397,14 @@ describe('MutatorProxy', () => {
 
     test('wraps server promise rejection as app error', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const serverError = new Error('server failed');
       const mutator = vi.fn(() => ({
         client: Promise.resolve(),
         server: Promise.reject(serverError),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
 
@@ -425,7 +428,7 @@ describe('MutatorProxy', () => {
 
     test('wraps ApplicationError from server as app error', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const appError = new ApplicationError('validation error', {
         details: {code: 'INVALID_INPUT'},
@@ -434,7 +437,7 @@ describe('MutatorProxy', () => {
         client: Promise.resolve(),
         server: Promise.reject(appError),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
       const serverResult = await result.server;
@@ -452,13 +455,13 @@ describe('MutatorProxy', () => {
 
     test('forwards args to wrapped mutator', () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const mutator = vi.fn((..._args: [] | [ReadonlyJSONValue]) => ({
         client: Promise.resolve(),
         server: Promise.resolve(),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const args = {userId: '123', action: 'update'};
       wrapped(args);
@@ -468,7 +471,7 @@ describe('MutatorProxy', () => {
 
     test('notifies once when both client and server reject', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const mutator = vi.fn(() => ({
         client: Promise.reject(new Error('client error')),
@@ -476,7 +479,7 @@ describe('MutatorProxy', () => {
           setTimeout(() => reject(new Error('client error')), 0);
         }),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
 
@@ -504,14 +507,14 @@ describe('MutatorProxy', () => {
 
     test('returns already-wrapped success result from client promise', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const successResult = {type: 'success' as const};
       const mutator = vi.fn(() => ({
         client: Promise.resolve(successResult),
         server: Promise.resolve(),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
       const clientResult = await result.client;
@@ -522,7 +525,7 @@ describe('MutatorProxy', () => {
 
     test('wraps rejection from server promise as app error', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const clientError = new ApplicationError('client error');
       const serverError = new ApplicationError('server error');
@@ -533,7 +536,7 @@ describe('MutatorProxy', () => {
           setTimeout(() => reject(serverError), 1);
         }),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
       const serverResult = await result.server;
@@ -551,13 +554,13 @@ describe('MutatorProxy', () => {
 
     test('handles non-object result as success', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const mutator = vi.fn(() => ({
         client: Promise.resolve(null),
         server: Promise.resolve(undefined),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
       const clientResult = await result.client;
@@ -570,13 +573,13 @@ describe('MutatorProxy', () => {
 
     test('handles object without type key as success', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
-      const proxy = new MutatorProxy(manager, mutationTracker);
+      const proxy = new MutatorProxy(lc, manager, mutationTracker);
 
       const mutator = vi.fn(() => ({
         client: Promise.resolve({foo: 'bar'}),
         server: Promise.resolve({baz: 123}),
       }));
-      const wrapped = proxy.wrapCustomMutator(mutator);
+      const wrapped = proxy.wrapCustomMutator('testMutator', mutator);
 
       const result = wrapped();
       const clientResult = await result.client;
