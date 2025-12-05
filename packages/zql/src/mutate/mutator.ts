@@ -73,7 +73,7 @@ export function defineMutator<
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>,
-): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> & {};
+): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction>;
 
 // Overload 2: Call without validator
 export function defineMutator<
@@ -87,7 +87,7 @@ export function defineMutator<
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>,
-): MutatorDefinition<TInput, TInput, TContext, TWrappedTransaction> & {};
+): MutatorDefinition<TInput, TInput, TContext, TWrappedTransaction>;
 
 // Implementation
 export function defineMutator<
