@@ -59,23 +59,19 @@ export interface Database<T> {
 export type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
 export type Params = v.Infer<typeof pushParamsSchema>;
 
-export type TransactFn<
-  D extends Database<ExtractTransactionType<D>>,
-  Context,
-> = (cb: TransactFnCallback<D, Context>) => Promise<MutationResponse>;
+export type TransactFn<D extends Database<ExtractTransactionType<D>>> = (
+  cb: TransactFnCallback<D>,
+) => Promise<MutationResponse>;
 
-export type TransactFnCallback<
-  D extends Database<ExtractTransactionType<D>>,
-  Context,
-> = (
-  tx: ExtractTransactionType<D>,
-  mutatorName: string,
-  mutatorArgs: ReadonlyJSONValue | undefined,
-  ctx: Context,
-) => Promise<void>;
+export type TransactFnCallback<D extends Database<ExtractTransactionType<D>>> =
+  (
+    tx: ExtractTransactionType<D>,
+    mutatorName: string,
+    mutatorArgs: ReadonlyJSONValue | undefined,
+  ) => Promise<void>;
 
-export type Parsed<D extends Database<ExtractTransactionType<D>>, Context> = {
-  transact: TransactFn<D, Context>;
+export type Parsed<D extends Database<ExtractTransactionType<D>>> = {
+  transact: TransactFn<D>;
   mutations: CustomMutation[];
 };
 
@@ -105,45 +101,39 @@ export const handleMutationRequest = handleMutateRequest;
 
 export function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
-  C = undefined,
 >(
   dbProvider: D,
   cb: (
-    transact: TransactFn<D, C>,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   queryString: URLSearchParams | Record<string, string>,
   body: ReadonlyJSONValue,
-  context?: C,
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
 
 export function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
-  C = undefined,
 >(
   dbProvider: D,
   cb: (
-    transact: TransactFn<D, C>,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   request: Request,
-  context?: C,
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
 
 export async function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
-  C,
 >(
   dbProvider: D,
   cb: (
-    transact: TransactFn<D, C>,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   queryStringOrRequest: Request | URLSearchParams | Record<string, string>,
-  bodyOrContext: ReadonlyJSONValue | C,
-  contextOrLogLevel?: C | LogLevel,
+  bodyOrLogLevel?: ReadonlyJSONValue | LogLevel,
   logLevel?: LogLevel,
 ): Promise<PushResponse> {
   // Parse overload arguments
@@ -152,13 +142,12 @@ export async function handleMutateRequest<
   let request: Request | undefined;
   let queryString: URLSearchParams | Record<string, string>;
   let jsonBody: unknown;
-  let context: C;
+
   let lc: LogContext;
 
   if (isRequestOverload) {
     request = queryStringOrRequest;
-    context = bodyOrContext as C;
-    const level = (contextOrLogLevel as LogLevel | undefined) ?? 'info';
+    const level = (bodyOrLogLevel as LogLevel | undefined) ?? 'info';
 
     // Create log context early, before extracting JSON from Request
     lc = createLogContext(level).withContext('PushProcessor');
@@ -183,8 +172,7 @@ export async function handleMutateRequest<
     }
   } else {
     queryString = queryStringOrRequest;
-    jsonBody = bodyOrContext;
-    context = contextOrLogLevel as C;
+    jsonBody = bodyOrLogLevel;
     const level = logLevel ?? 'info';
     lc = createLogContext(level).withContext('PushProcessor');
   }
@@ -248,13 +236,7 @@ export async function handleMutateRequest<
   let processedCount = 0;
 
   try {
-    const transactor = new Transactor(
-      dbProvider,
-      pushBody,
-      queryParams,
-      lc,
-      context,
-    );
+    const transactor = new Transactor(dbProvider, pushBody, queryParams, lc);
 
     // Each mutation goes through three phases:
     //   1. Pre-transaction: user logic that runs before `transact` is called. If
@@ -272,10 +254,10 @@ export async function handleMutateRequest<
 
       let mutationPhase: MutationPhase = 'preTransaction';
 
-      const transactProxy: TransactFn<D, C> = async innerCb => {
+      const transactProxy: TransactFn<D> = async innerCb => {
         mutationPhase = 'transactionPending';
         const result = await transactor.transact(m, (tx, name, args) =>
-          applicationErrorWrapper(() => innerCb(tx, name, args, context)),
+          applicationErrorWrapper(() => innerCb(tx, name, args)),
         );
         mutationPhase = 'postCommit';
         return result;
@@ -340,30 +322,22 @@ export async function handleMutateRequest<
   }
 }
 
-class Transactor<D extends Database<ExtractTransactionType<D>>, Context> {
+class Transactor<D extends Database<ExtractTransactionType<D>>> {
   readonly #dbProvider: D;
   readonly #req: PushBody;
   readonly #params: Params;
   readonly #lc: LogContext;
-  readonly #context: Context;
 
-  constructor(
-    dbProvider: D,
-    req: PushBody,
-    params: Params,
-    lc: LogContext,
-    context: Context,
-  ) {
+  constructor(dbProvider: D, req: PushBody, params: Params, lc: LogContext) {
     this.#dbProvider = dbProvider;
     this.#req = req;
     this.#params = params;
     this.#lc = lc;
-    this.#context = context;
   }
 
   transact = async (
     mutation: CustomMutation,
-    cb: TransactFnCallback<D, Context>,
+    cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
     let appError: ApplicationError | undefined = undefined;
     for (;;) {
@@ -434,7 +408,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>, Context> {
 
   async #transactImpl(
     mutation: CustomMutation,
-    cb: TransactFnCallback<D, Context>,
+    cb: TransactFnCallback<D>,
     appError: ApplicationError | undefined,
   ): Promise<MutationResponse> {
     let transactionPhase: DatabaseTransactionPhase = 'open';
@@ -456,7 +430,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>, Context> {
               `Executing mutator '${mutation.name}' (id=${mutation.id})`,
             );
             try {
-              await cb(dbTx, mutation.name, mutation.args[0], this.#context);
+              await cb(dbTx, mutation.name, mutation.args[0]);
             } catch (appError) {
               throw wrapWithApplicationError(appError);
             }
