@@ -128,7 +128,7 @@ export class ConnectionImpl implements Connection {
       this.#setAuth(opts.auth);
     }
 
-    // only allow connect() to be called from a terminal state
+    // if the connection is disconnected due to a missing cacheURL, we don't allow a reconnect
     if (
       this.#connectionManager.state.name === ConnectionStatus.Disconnected &&
       this.#connectionManager.state.reason.kind ===
