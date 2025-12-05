@@ -519,7 +519,7 @@ export class Zero<
 
     this.#ivmMain = new IVMSourceBranch(schema.tables);
 
-    const {enableLegacyQueries = true} = schema;
+    const {enableLegacyQueries = false} = schema;
 
     const replicacheMutators = makeReplicacheMutators<S, C>(
       schema,

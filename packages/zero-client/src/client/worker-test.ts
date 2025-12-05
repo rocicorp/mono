@@ -9,6 +9,9 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 
@@ -46,9 +49,16 @@ async function testBasics(userID: string) {
         .primaryKey('id'),
     ],
   });
+  const mutators = defineMutators({
+    upsertE: defineMutator(({tx, args}: {tx: Transaction; args: E}) =>
+      tx.mutate.e.upsert(args),
+    ),
+  });
+  const {upsertE} = mutators;
   const z = zeroForTest({
     userID,
     schema,
+    mutators,
   });
   const zql = createBuilder(schema);
   const q = zql.e.limit(1);
@@ -65,17 +75,17 @@ async function testBasics(userID: string) {
   await sleep(1);
   assert(deepEqual(log, [[]]));
 
-  await z.mutate.e.upsert({id: 'foo', value: 1});
+  await z.mutate(upsertE({id: 'foo', value: 1})).client;
   assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
-  await z.mutate.e.upsert({id: 'foo', value: 2});
+  await z.mutate(upsertE({id: 'foo', value: 2})).client;
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
   removeListener();
 
-  await z.mutate.e.upsert({id: 'foo', value: 3});
+  await z.mutate(upsertE({id: 'foo', value: 3})).client;
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
