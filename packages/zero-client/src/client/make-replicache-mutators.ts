@@ -8,7 +8,10 @@ import {
   isMutatorRegistry,
   type AnyMutatorRegistry,
 } from '../../../zql/src/mutate/mutator-registry.ts';
-import {type Mutator} from '../../../zql/src/mutate/mutator.ts';
+import {
+  type AnyMutator,
+  type Mutator,
+} from '../../../zql/src/mutate/mutator.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {makeCRUDMutator, type CRUDMutator} from './crud.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
@@ -155,7 +158,7 @@ export function makeReplicacheMutators<const S extends Schema, C>(
 function isMutator(
   value: unknown,
   // oxlint-disable-next-line no-explicit-any
-): value is Mutator<any, any, any> {
+): value is AnyMutator {
   return (
     typeof value === 'function' &&
     'mutatorName' in value &&
