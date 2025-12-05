@@ -10,10 +10,7 @@ import {
   mustGetQuery,
   type ReadonlyJSONValue,
 } from '@rocicorp/zero';
-import {
-  handleMutateRequest,
-  handleTransformRequest,
-} from '@rocicorp/zero/server';
+import {handleMutateRequest, handleQueryRequest} from '@rocicorp/zero/server';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import type {IncomingHttpHeaders} from 'http';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
@@ -220,7 +217,7 @@ async function queryHandler(
 ) {
   await withAuth(request, reply, async authData => {
     reply.send(
-      await handleTransformRequest(
+      await handleQueryRequest(
         (name: string, args: ReadonlyJSONValue | undefined) => {
           const query = mustGetQuery(queries, name);
           return query(args).toQuery(authData);

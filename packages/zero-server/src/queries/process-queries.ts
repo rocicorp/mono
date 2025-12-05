@@ -1,4 +1,4 @@
-import type {LogContext, LogLevel} from '@rocicorp/logger';
+import type {LogLevel} from '@rocicorp/logger';
 import {getErrorDetails, getErrorMessage} from '../../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
@@ -27,7 +27,7 @@ import {createLogContext} from '../logging.ts';
  * This function will call `cb` in parallel for each query found in the request.
  *
  * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
- * @deprecated Use {@linkcode handleTransformRequest} instead.
+ * @deprecated Use {@linkcode handleQueryRequest} instead.
  */
 export function handleGetQueriesRequest<S extends Schema>(
   cb: (
@@ -38,8 +38,55 @@ export function handleGetQueriesRequest<S extends Schema>(
   requestOrJsonBody: Request | ReadonlyJSONValue,
   logLevel: LogLevel = 'info',
 ): Promise<TransformResponseMessage> {
-  const lc = createLogContext(logLevel).withContext('GetQueries');
-  return transform(cb, schema, requestOrJsonBody, lc, 'get');
+  return transform(cb, schema, requestOrJsonBody, 'getQueries', logLevel);
+}
+
+/**
+ * Invokes the callback `cb` for each query in the request or JSON body.
+ * The callback should return a Query or Promise<Query> that is the transformed result.
+ *
+ * This function will call `cb` in parallel for each query found in the request.
+ *
+ * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
+ * @deprecated Use {@linkcode handleQueryRequest} instead.
+ */
+export function handleTransformRequest<S extends Schema>(
+  cb: (
+    name: string,
+    args: readonly ReadonlyJSONValue[],
+  ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
+  schema: S,
+  requestOrJsonBody: Request | ReadonlyJSONValue,
+  logLevel: LogLevel = 'info',
+): Promise<TransformResponseMessage> {
+  return transform(cb, schema, requestOrJsonBody, 'transform', logLevel);
+}
+
+/**
+ * Processes a transform request by invoking the provided callback for each query.
+ * The callback should return a Query that is the transformed result.
+ *
+ * This function will call `transformQuery` in parallel for each query found in the request.
+ *
+ * @param transformQuery - Callback function that takes a query name and args, and returns a Query
+ * @param schema - The Zero schema
+ * @param requestOrJsonBody - Either a Request object or the JSON body directly
+ * @param logLevel - Logging level (defaults to 'info')
+ * @returns A Promise that resolves to a TransformResponseMessage
+ */
+export function handleQueryRequest<S extends Schema>(
+  transformQuery: TransformQueryFunction,
+  schema: S,
+  requestOrJsonBody: Request | ReadonlyJSONValue,
+  logLevel: LogLevel = 'info',
+) {
+  return transform(
+    (name, argsArray) => transformQuery(name, argsArray[0]),
+    schema,
+    requestOrJsonBody,
+    'query',
+    logLevel,
+  );
 }
 
 async function transform<S extends Schema>(
@@ -49,9 +96,10 @@ async function transform<S extends Schema>(
   ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
-  lc: LogContext,
-  apiName: 'get' | 'transform',
+  apiName: 'query' | 'getQueries' | 'transform',
+  logLevel: LogLevel = 'info',
 ): Promise<TransformResponseMessage> {
+  const lc = createLogContext(logLevel).withContext('TransformRequest');
   let parsed: TransformRequestMessage;
   let queryIDs: string[] = [];
   try {
@@ -66,9 +114,9 @@ async function transform<S extends Schema>(
 
     queryIDs = parsed[1].map(r => r.id);
   } catch (error) {
-    lc.error?.(`Failed to parse ${apiName} queries request`, error);
+    lc.error?.(`Failed to parse ${apiName} request`, error);
 
-    const message = `Failed to parse ${apiName} queries request: ${getErrorMessage(error)}`;
+    const message = `Failed to parse ${apiName} request: ${getErrorMessage(error)}`;
     const details = getErrorDetails(error);
 
     return [
@@ -139,34 +187,6 @@ async function transform<S extends Schema>(
       },
     ];
   }
-}
-
-/**
- * Processes a transform request by invoking the provided callback for each query.
- * The callback should return a Query that is the transformed result.
- *
- * This function will call `transformQuery` in parallel for each query found in the request.
- *
- * @param transformQuery - Callback function that takes a query name and args, and returns a Query
- * @param schema - The Zero schema
- * @param requestOrJsonBody - Either a Request object or the JSON body directly
- * @param logLevel - Logging level (defaults to 'info')
- * @returns A Promise that resolves to a TransformResponseMessage
- */
-export function handleTransformRequest<S extends Schema>(
-  transformQuery: TransformQueryFunction,
-  schema: S,
-  requestOrJsonBody: Request | ReadonlyJSONValue,
-  logLevel: LogLevel = 'info',
-) {
-  const lc = createLogContext(logLevel).withContext('TransformRequest');
-  return transform(
-    (name, argsArray) => transformQuery(name, argsArray[0]),
-    schema,
-    requestOrJsonBody,
-    lc,
-    'transform',
-  );
 }
 
 /**
