@@ -179,13 +179,12 @@ async function mutateHandler(
   const response = await handleMutateRequest(
     dbProvider,
     (transact, _mutation) =>
-      transact((tx, name, args, ctx) => {
+      transact((tx, name, args) => {
         const mutator = mustGetMutator(mutators, name);
-        return mutator.fn({tx, args, ctx});
+        return mutator.fn({tx, args, ctx: jwtData});
       }),
     request.query,
     request.body,
-    jwtData,
     'info',
   );
 
