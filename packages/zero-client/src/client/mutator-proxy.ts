@@ -2,6 +2,7 @@ import {unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {wrapWithApplicationError} from '../../../zero-protocol/src/application-error.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import type {
   ConnectionManager,
   ConnectionManagerState,
@@ -55,6 +56,16 @@ export class MutatorProxy {
    * the mutation tracker are rejected with the error.
    */
   #onConnectionStateChange(state: ConnectionManagerState) {
+    // we short circuit the rejection if the error is due to a missing cacheURL
+    // this allows local writes to continue
+    if (
+      state.name === ConnectionStatus.Disconnected &&
+      state.reason.kind === ClientErrorKind.NoSocketOrigin
+    ) {
+      this.#mutationRejection = undefined;
+      return;
+    }
+
     switch (state.name) {
       case ConnectionStatus.Disconnected:
       case ConnectionStatus.Error:
