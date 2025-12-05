@@ -21,8 +21,8 @@ export class Exists implements FilterOperator {
   readonly #not: boolean;
   readonly #parentJoinKey: CompoundKey;
   readonly #noSizeReuse: boolean;
-  #cache: Map<string, number>;
-
+  #cache: Map<string, boolean>;
+  #cacheHitCountsForTesting: Map<string, number> | undefined;
   #output: FilterOutput = throwFilterOutput;
 
   /**
@@ -40,11 +40,13 @@ export class Exists implements FilterOperator {
     relationshipName: string,
     parentJoinKey: CompoundKey,
     type: 'EXISTS' | 'NOT EXISTS',
+    cacheHitCountsForTesting?: Map<string, number>,
   ) {
     this.#input = input;
     this.#relationshipName = relationshipName;
     this.#input.setFilterOutput(this);
     this.#cache = new Map();
+    this.#cacheHitCountsForTesting = cacheHitCountsForTesting;
     assert(
       this.#input.getSchema().relationships[relationshipName],
       `Input schema missing ${relationshipName}`,
@@ -63,25 +65,33 @@ export class Exists implements FilterOperator {
     this.#output = output;
   }
 
-  beginFilter() {}
+  beginFilter() {
+    this.#output.beginFilter();
+  }
 
   endFilter() {
     this.#cache = new Map();
+    this.#output.endFilter();
   }
 
   filter(node: Node, cleanup: boolean): boolean {
-    let size: number | undefined;
-    if (!this.#noSizeReuse) {
-      const key = this.#getKeyValues(node, this.#parentJoinKey).toString();
-      size = this.#cache.get(key);
-      if (size === undefined) {
-        size = this.#fetchSize(node);
-        this.#cache.set(key, size);
+    let exists: boolean | undefined;
+    if (!this.#noSizeReuse && !this.#inPush) {
+      const key = this.#getCacheKey(node, this.#parentJoinKey);
+      exists = this.#cache.get(key);
+      if (exists === undefined) {
+        exists = this.#fetchExists(node);
+        this.#cache.set(key, exists);
+      } else if (this.#cacheHitCountsForTesting) {
+        this.#cacheHitCountsForTesting.set(
+          key,
+          (this.#cacheHitCountsForTesting.get(key) ?? 0) + 1,
+        );
       }
     }
 
     const result =
-      this.#filter(node, size) && this.#output.filter(node, cleanup);
+      this.#filter(node, exists) && this.#output.filter(node, cleanup);
     return result;
   }
 
@@ -151,7 +161,7 @@ export class Exists implements FilterOperator {
                   );
                 }
               } else {
-                this.#pushWithFilter(change, size);
+                this.#pushWithFilter(change, size > 0);
               }
               return;
             }
@@ -187,7 +197,7 @@ export class Exists implements FilterOperator {
                   );
                 }
               } else {
-                this.#pushWithFilter(change, size);
+                this.#pushWithFilter(change, size > 0);
               }
               return;
             }
@@ -210,34 +220,43 @@ export class Exists implements FilterOperator {
    * relationship with this.#relationshipName (this computed size is also
    * stored).
    */
-  #filter(node: Node, size?: number): boolean {
-    const exists = (size ?? this.#fetchSize(node)) > 0;
+  #filter(node: Node, exists?: boolean): boolean {
+    exists = exists ?? this.#fetchExists(node);
     return this.#not ? !exists : exists;
   }
 
-  #getKeyValues(node: Node, def: CompoundKey): NormalizedValue[] {
+  #getCacheKey(node: Node, def: CompoundKey): string {
     const values: NormalizedValue[] = [];
     for (const key of def) {
       values.push(normalizeUndefined(node.row[key]));
     }
-    return values;
+    return JSON.stringify(values);
   }
 
   /**
    * Pushes a change if this.#filter is true for its row.
    */
-  #pushWithFilter(change: Change, size?: number): void {
-    if (this.#filter(change.node, size)) {
+  #pushWithFilter(change: Change, exists?: boolean): void {
+    if (this.#filter(change.node, exists)) {
       this.#output.push(change, this);
     }
+  }
+
+  #fetchExists(node: Node): boolean {
+    // While it seems like this should be able to fetch just 1 node
+    // to check for exists, we can't because Take does not support
+    // early return during initial fetch.
+    return this.#fetchSize(node) > 0;
   }
 
   #fetchSize(node: Node): number {
     const relationship = node.relationships[this.#relationshipName];
     assert(relationship);
     let size = 0;
-    for (const _relatedNode of relationship()) {
-      size++;
+    for (const n of relationship()) {
+      if (n !== 'yield') {
+        size++;
+      }
     }
     return size;
   }

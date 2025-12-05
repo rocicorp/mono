@@ -47,9 +47,17 @@ export class FanOut implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  beginFilter(): void {}
+  beginFilter(): void {
+    for (const output of this.#outputs) {
+      output.beginFilter();
+    }
+  }
 
-  endFilter(): void {}
+  endFilter(): void {
+    for (const output of this.#outputs) {
+      output.endFilter();
+    }
+  }
 
   filter(node: Node, cleanup: boolean): boolean {
     let result = false;

@@ -27,9 +27,13 @@ export class Filter implements FilterOperator {
     input.setFilterOutput(this);
   }
 
-  beginFilter(): void {}
+  beginFilter(): void {
+    this.#output.beginFilter();
+  }
 
-  endFilter(): void {}
+  endFilter(): void {
+    this.#output.endFilter();
+  }
 
   filter(node: Node, cleanup: boolean): boolean {
     return this.#predicate(node.row) && this.#output.filter(node, cleanup);
