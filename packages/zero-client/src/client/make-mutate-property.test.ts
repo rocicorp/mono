@@ -1,7 +1,5 @@
 // oxlint-disable no-explicit-any
 import {describe, expect, test, vi} from 'vitest';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import {makeMutateProperty} from './make-mutate-property.ts';
 import type {MutatorProxy} from './mutator-proxy.ts';
@@ -20,7 +18,7 @@ describe('makeMutateProperty', () => {
     } as MutatorResult;
   }
 
-  test('handles flat mutator definitions', () => {
+  test('handles flat CustomMutatorDefs', () => {
     const mutatorProxy = createMockMutatorProxy();
     const mutateObject = {};
     const mockRepMutate = {
@@ -28,13 +26,10 @@ describe('makeMutateProperty', () => {
       updateUser: vi.fn(createMockMutatorResult),
     };
 
-    const mockMutatorFn1 = defineMutator(async () => {});
-    const mockMutatorFn2 = defineMutator(async () => {});
-
-    const mutators = defineMutators({
-      createUser: mockMutatorFn1,
-      updateUser: mockMutatorFn2,
-    });
+    const mutators = {
+      createUser: vi.fn(),
+      updateUser: vi.fn(),
+    } as CustomMutatorDefs;
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -49,28 +44,24 @@ describe('makeMutateProperty', () => {
     );
   });
 
-  test('handles nested mutator definitions', () => {
+  test('handles nested CustomMutatorDefs', () => {
     const mutatorProxy = createMockMutatorProxy();
     const mutateObject = {};
     const mockRepMutate = {
-      'user.create': vi.fn(createMockMutatorResult),
-      'user.update': vi.fn(createMockMutatorResult),
-      'post.create': vi.fn(createMockMutatorResult),
+      'user|create': vi.fn(createMockMutatorResult),
+      'user|update': vi.fn(createMockMutatorResult),
+      'post|create': vi.fn(createMockMutatorResult),
     };
 
-    const mockMutatorFn1 = defineMutator(async () => {});
-    const mockMutatorFn2 = defineMutator(async () => {});
-    const mockMutatorFn3 = defineMutator(async () => {});
-
-    const mutators = defineMutators({
+    const mutators = {
       user: {
-        create: mockMutatorFn1,
-        update: mockMutatorFn2,
+        create: vi.fn(),
+        update: vi.fn(),
       },
       post: {
-        create: mockMutatorFn3,
+        create: vi.fn(),
       },
-    });
+    } as CustomMutatorDefs;
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -85,37 +76,34 @@ describe('makeMutateProperty', () => {
 
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledTimes(3);
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
-      mockRepMutate['user.create'],
+      mockRepMutate['user|create'],
     );
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
-      mockRepMutate['user.update'],
+      mockRepMutate['user|update'],
     );
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
-      mockRepMutate['post.create'],
+      mockRepMutate['post|create'],
     );
   });
 
-  test('handles deeply nested mutator definitions', () => {
+  test('handles deeply nested CustomMutatorDefs', () => {
     const mutatorProxy = createMockMutatorProxy();
     const mutateObject = {};
     const mockRepMutate = {
-      'api.user.profile.update': vi.fn(createMockMutatorResult),
-      'api.user.profile.delete': vi.fn(createMockMutatorResult),
+      'api|user|profile|update': vi.fn(createMockMutatorResult),
+      'api|user|profile|delete': vi.fn(createMockMutatorResult),
     };
 
-    const mockMutatorFn1 = defineMutator(async () => {});
-    const mockMutatorFn2 = defineMutator(async () => {});
-
-    const mutators = defineMutators({
+    const mutators = {
       api: {
         user: {
           profile: {
-            update: mockMutatorFn1,
-            delete: mockMutatorFn2,
+            update: vi.fn(),
+            delete: vi.fn(),
           },
         },
       },
-    });
+    } as CustomMutatorDefs;
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -125,30 +113,27 @@ describe('makeMutateProperty', () => {
 
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledTimes(2);
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
-      mockRepMutate['api.user.profile.update'],
+      mockRepMutate['api|user|profile|update'],
     );
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
-      mockRepMutate['api.user.profile.delete'],
+      mockRepMutate['api|user|profile|delete'],
     );
   });
 
-  test('handles mixed flat and nested mutator definitions', () => {
+  test('handles mixed flat and nested CustomMutatorDefs', () => {
     const mutatorProxy = createMockMutatorProxy();
     const mutateObject = {};
     const mockRepMutate = {
       'simpleAction': vi.fn(createMockMutatorResult),
-      'user.create': vi.fn(createMockMutatorResult),
+      'user|create': vi.fn(createMockMutatorResult),
     };
 
-    const mockMutatorFn1 = defineMutator(async () => {});
-    const mockMutatorFn2 = defineMutator(async () => {});
-
-    const mutators = defineMutators({
-      simpleAction: mockMutatorFn1,
+    const mutators = {
+      simpleAction: vi.fn(),
       user: {
-        create: mockMutatorFn2,
+        create: vi.fn(),
       },
-    });
+    } as CustomMutatorDefs;
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -170,11 +155,9 @@ describe('makeMutateProperty', () => {
       newMutator: vi.fn(createMockMutatorResult),
     };
 
-    const mockMutatorFn = defineMutator(async () => {});
-
-    const mutators = defineMutators({
-      newMutator: mockMutatorFn,
-    });
+    const mutators = {
+      newMutator: vi.fn(),
+    } as CustomMutatorDefs;
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -191,16 +174,14 @@ describe('makeMutateProperty', () => {
       user: existingUserObject,
     };
     const mockRepMutate = {
-      'user.create': vi.fn(createMockMutatorResult),
+      'user|create': vi.fn(createMockMutatorResult),
     };
 
-    const mockMutatorFn = defineMutator(async () => {});
-
-    const mutators = defineMutators({
+    const mutators = {
       user: {
-        create: mockMutatorFn,
+        create: vi.fn(),
       },
-    });
+    } as CustomMutatorDefs;
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -240,11 +221,9 @@ describe('makeMutateProperty', () => {
       testMutator: mockFn,
     };
 
-    const mockMutatorFn = defineMutator(async () => {});
-
-    const mutators = defineMutators({
-      testMutator: mockMutatorFn,
-    });
+    const mutators = {
+      testMutator: vi.fn(),
+    } as CustomMutatorDefs;
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -258,12 +237,12 @@ describe('makeMutateProperty', () => {
     expect(mockFn).toHaveBeenCalled();
   });
 
-  test('handles empty mutator definitions', () => {
+  test('handles empty CustomMutatorDefs', () => {
     const mutatorProxy = createMockMutatorProxy();
     const mutateObject = {};
     const mockRepMutate = {};
 
-    const mutators = defineMutators({});
+    const mutators = {} as CustomMutatorDefs;
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -276,11 +255,9 @@ describe('makeMutateProperty', () => {
     const mutateObject = {};
     const mockRepMutate = {}; // Missing the expected key
 
-    const mockMutatorFn = defineMutator(async () => {});
-
-    const mutators = defineMutators({
-      missingMutator: mockMutatorFn,
-    });
+    const mutators = {
+      missingMutator: vi.fn(),
+    } as CustomMutatorDefs;
 
     expect(() => {
       makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);

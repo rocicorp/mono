@@ -155,7 +155,7 @@ export function makeReplicacheMutators<const S extends Schema, C>(
 function isMutator(
   value: unknown,
   // oxlint-disable-next-line no-explicit-any
-): value is Mutator<any, any, any, any> {
+): value is Mutator<any, any, any> {
   return (
     typeof value === 'function' &&
     'mutatorName' in value &&

@@ -6,14 +6,13 @@ import type {
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import {MarkIcon} from './mark-icon.tsx';
 
 const Inspector = lazy(() => import('./inspector.tsx'));
 
 export function ZeroInspector<
   S extends Schema = DefaultSchema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >({zero}: {zero: Zero<S, MD, Context>}): JSX.Element {
   const [show, setShow] = useState(false);

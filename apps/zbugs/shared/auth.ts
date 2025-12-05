@@ -4,6 +4,8 @@ import * as v from '../../../packages/shared/src/valita.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
 import {builder, type schema} from './schema.ts';
 
+// TDOO(arv): Use zod-mini here too
+
 /** The contents of the zbugs JWT */
 export const jwtDataSchema = v.object({
   sub: v.string(),
@@ -92,6 +94,6 @@ export async function assertUserCanSeeComment(
 
 declare module '@rocicorp/zero' {
   interface DefaultTypes {
-    context: AuthData;
+    context: AuthData | undefined;
   }
 }

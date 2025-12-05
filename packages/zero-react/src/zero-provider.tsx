@@ -16,7 +16,6 @@ import type {
   DefaultSchema,
 } from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 
 // oxlint-disable-next-line no-explicit-any
 export const ZeroContext = createContext<Zero<any, any, any> | undefined>(
@@ -25,7 +24,7 @@ export const ZeroContext = createContext<Zero<any, any, any> | undefined>(
 
 export function useZero<
   S extends Schema = DefaultSchema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
@@ -48,7 +47,7 @@ export function useZero<
  */
 export function createUseZero<
   S extends Schema = DefaultSchema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >() {
   return () => useZero<S, MD, Context>();
@@ -56,7 +55,7 @@ export function createUseZero<
 
 export type ZeroProviderProps<
   S extends Schema = DefaultSchema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 > = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
   init?: (zero: Zero<S, MD, Context>) => void;
@@ -67,7 +66,7 @@ const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
   S extends Schema = DefaultSchema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
   const isExternalZero = 'zero' in props;

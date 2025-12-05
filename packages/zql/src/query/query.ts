@@ -116,41 +116,56 @@ type RowNamespace<S extends Schema | TypeError> = S extends Schema
     }
   : S;
 
-export type Row<
-  T extends
-    | Schema
-    | TableSchema
-    | Query<string, ZeroSchema, any>
-    | ((...args: any) => Query<string, ZeroSchema, any>) = DefaultSchema,
-> = T extends Schema
-  ? RowNamespace<T>
-  : T extends TableSchema
-    ? {
-        readonly [K in keyof T['columns']]: SchemaValueToTSType<
-          T['columns'][K]
-        >;
-      }
-    : T extends
-          | Query<string, ZeroSchema, any>
-          | ((...args: any) => Query<string, ZeroSchema, any>)
-      ? QueryRowType<T>
-      : never;
+export type Row<T extends Schema | TableSchema | AnyQueryLike = DefaultSchema> =
+  T extends Schema
+    ? RowNamespace<T>
+    : T extends TableSchema
+      ? {
+          readonly [K in keyof T['columns']]: SchemaValueToTSType<
+            T['columns'][K]
+          >;
+        }
+      : T extends AnyQueryLike
+        ? QueryRowType<T>
+        : never;
 
-export type QueryRowType<Q> = Q extends (
+/**
+ * The shape of a CustomQuery's phantom type property.
+ * CustomQuery has '~' containing QueryTypes which extends 'Query' & {...}
+ */
+type CustomQueryPhantom = {
+  '~': {
+    readonly $return: unknown;
+  };
+};
+
+/**
+ * A Query, CustomQuery, or a function returning either.
+ */
+export type AnyQueryLike =
+  | Query<string, ZeroSchema, any>
+  | ((...args: any) => Query<string, ZeroSchema, any>)
+  | CustomQueryPhantom;
+
+export type QueryRowType<Q extends AnyQueryLike> = Q extends (
   ...args: any
 ) => Query<any, any, infer R>
   ? R
   : Q extends Query<any, any, infer R>
     ? R
-    : never;
+    : Q extends CustomQueryPhantom
+      ? Q['~']['$return']
+      : never;
 
-export type ZeRow<Q> = QueryRowType<Q>;
+export type ZeRow<Q extends AnyQueryLike> = QueryRowType<Q>;
 
-export type QueryResultType<Q> = Q extends
+export type QueryResultType<Q extends AnyQueryLike> = Q extends
   | Query<string, ZeroSchema, any>
   | ((...args: any) => Query<string, ZeroSchema, any>)
   ? HumanReadable<QueryRowType<Q>>
-  : never;
+  : Q extends CustomQueryPhantom
+    ? HumanReadable<Q['~']['$return']>
+    : never;
 
 /**
  * A hybrid query that runs on both client and server.
