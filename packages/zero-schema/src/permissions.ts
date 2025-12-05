@@ -96,6 +96,9 @@ export type PermissionsConfig<TAuthDataShape, TSchema extends Schema> = {
   };
 };
 
+/**
+ * @deprecated Use {@link defineMutators} and {@link defineQueries} instead.
+ */
 export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   definer: () =>
