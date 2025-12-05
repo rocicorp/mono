@@ -86,7 +86,7 @@ suite('push one:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -593,7 +593,7 @@ suite('push one:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -668,7 +668,7 @@ suite('push one:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -893,7 +893,7 @@ suite('push one:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -1490,7 +1490,7 @@ suite('push one:many', () => {
           ],
           [
             ".comments:source(comment)",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -2393,7 +2393,7 @@ suite('push many:one', () => {
           ],
           [
             ".issues.comments:source(comment)",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -3330,7 +3330,7 @@ suite('push one:many:many', () => {
         ],
         [
           ".comments:join(revisions)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -3339,7 +3339,7 @@ suite('push one:many:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -3348,7 +3348,7 @@ suite('push one:many:many', () => {
         ],
         [
           ".comments.revisions:source(revision)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "commentID": "c1",
@@ -4171,7 +4171,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -4180,7 +4180,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": undefined,
@@ -4498,7 +4498,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -4507,7 +4507,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": undefined,
@@ -4781,7 +4781,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -4790,7 +4790,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5096,7 +5096,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5105,7 +5105,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",

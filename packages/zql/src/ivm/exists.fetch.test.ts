@@ -85,7 +85,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -94,7 +94,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -193,7 +193,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -202,7 +202,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -299,7 +299,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -308,7 +308,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -404,7 +404,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -413,7 +413,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -422,7 +422,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -431,7 +431,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
@@ -440,7 +440,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -449,7 +449,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
@@ -640,7 +640,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -649,7 +649,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
@@ -658,7 +658,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i4",
@@ -667,7 +667,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i4",
@@ -676,7 +676,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i4",
@@ -685,7 +685,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -694,7 +694,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -703,7 +703,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
@@ -712,7 +712,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
@@ -721,7 +721,7 @@ suite('EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
@@ -997,7 +997,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1006,7 +1006,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1015,7 +1015,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -1024,7 +1024,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -1033,7 +1033,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
@@ -1042,7 +1042,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
@@ -1178,7 +1178,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1187,7 +1187,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1253,7 +1253,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -1262,7 +1262,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -1324,7 +1324,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1333,7 +1333,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1463,7 +1463,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1472,7 +1472,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1481,7 +1481,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -1490,7 +1490,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
@@ -1499,7 +1499,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
@@ -1508,7 +1508,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -1638,7 +1638,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -1647,7 +1647,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -1656,7 +1656,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -1665,7 +1665,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
@@ -1674,7 +1674,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
@@ -1683,7 +1683,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
@@ -1692,7 +1692,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
@@ -1701,7 +1701,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i4",
@@ -1710,7 +1710,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i4",
@@ -1719,7 +1719,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i4",
@@ -1880,7 +1880,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1889,7 +1889,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -1898,7 +1898,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
@@ -1907,7 +1907,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1916,7 +1916,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -1925,7 +1925,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
