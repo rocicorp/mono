@@ -86,6 +86,7 @@ const NON_CRITICAL_OTEL_ERRORS = [
   'request timeout',
   'unexpected server response: 502',
   'export failed with retryable status',
+  'Export took longer than',
   'metrics export failed',
   'method not allowed',
   'socket hang up',
