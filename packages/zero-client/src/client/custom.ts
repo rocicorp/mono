@@ -19,7 +19,7 @@ import type {
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
   type HumanReadable,
   type Query,
@@ -136,12 +136,14 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
       repTx,
       txData.ivmSources as IVMSourceBranch,
     );
-    this.query = createBuilder(schema);
 
-    this.#zeroContext = newZeroContext(
+    const zeroContext = newZeroContext(
       lc,
       txData.ivmSources as IVMSourceBranch,
     );
+
+    this.query = createRunnableBuilder(zeroContext, schema);
+    this.#zeroContext = zeroContext;
   }
 
   get clientID(): ClientID {
