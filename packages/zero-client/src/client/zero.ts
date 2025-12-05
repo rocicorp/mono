@@ -698,9 +698,8 @@ export class Zero<
 
     // This is the legacy mutators. They are added to zero.mutate.<mutatorName>.
     if (mutators && !isMutatorRegistry(mutators)) {
-      // TODO(0xcadams): remove the types/tests for passing mutator registries to makeMutateProperty
       makeMutateProperty(
-        mutators,
+        mutators as CustomMutatorDefs,
         mutatorProxy,
         callableMutate as unknown as Record<string, unknown>,
         rep.mutate,
