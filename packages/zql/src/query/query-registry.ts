@@ -158,8 +158,8 @@ export type QueryDefinition<
   TTable extends string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema,
-  TReturn,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 > = QueryDefinitionFunction<TTable, TOutput, TSchema, TReturn, TContext> & {
   'validator': StandardSchemaV1<TInput, TOutput> | undefined;

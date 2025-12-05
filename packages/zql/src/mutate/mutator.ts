@@ -51,7 +51,7 @@ export function isMutatorDefinition<
 export type MutatorDefinition<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema,
+  TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
 > = ((options: {
