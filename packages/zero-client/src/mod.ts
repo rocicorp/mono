@@ -118,10 +118,13 @@ export type {
   ViewFactory,
 } from '../../zql/src/ivm/view.ts';
 export type {
+  AnyTransaction,
   DeleteID,
   InsertValue,
+  Location,
   ServerTransaction,
   Transaction,
+  TransactionReason,
   UpdateValue,
   UpsertValue,
 } from '../../zql/src/mutate/custom.ts';
@@ -130,17 +133,26 @@ export {
   getMutator,
   isMutatorRegistry,
   mustGetMutator,
+  type AnyMutatorDefinitions,
   type AnyMutatorRegistry,
+  type AssertMutatorDefinitions,
+  type EnsureMutatorDefinitions,
   type MutatorDefinitions,
   type MutatorRegistry,
+  type ToMutatorTree,
 } from '../../zql/src/mutate/mutator-registry.ts';
 export {
   defineMutator,
+  defineMutatorWithType,
   isMutator,
   isMutatorDefinition,
   type MutatorDefinition,
 } from '../../zql/src/mutate/mutator.ts';
-export type {MutationRequest, Mutator} from '../../zql/src/mutate/mutator.ts';
+export type {
+  MutationRequest,
+  Mutator,
+  MutatorDefinitionTypes,
+} from '../../zql/src/mutate/mutator.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
@@ -151,28 +163,26 @@ export {
   syncedQuery,
   syncedQueryWithContext,
   withValidation,
-} from '../../zql/src/query/named.ts';
-export type {
-  CustomQueryID,
-  HasParseFn,
-  ParseFn,
-  Parser,
-  QueryFn,
-  SyncedQuery,
+  type CustomQueryID,
+  type HasParseFn,
+  type ParseFn,
+  type Parser,
+  type QueryFn,
+  type SyncedQuery,
 } from '../../zql/src/query/named.ts';
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export {
   defineQueries,
   defineQuery,
+  defineQueryWithType,
   getQuery,
   isQueryDefinition,
   mustGetQuery,
+  type CustomQuery,
+  type FromQueryTree,
+  type QueryDefinition,
+  type QueryDefinitions,
   type QueryRegistry,
-} from '../../zql/src/query/query-registry.ts';
-export type {
-  CustomQuery,
-  QueryDefinition,
-  QueryDefinitions,
 } from '../../zql/src/query/query-registry.ts';
 export type {
   AnyQuery,

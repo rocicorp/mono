@@ -9,7 +9,7 @@ import type {Schema} from './schema.ts';
  * declare module '@rocicorp/zero' {
  *   interface DefaultTypes {
  *     schema: typeof schema;
- *     context: AuthData;
+ *     context: AuthData | undefined;
  *     dbProvider: typeof dbProvider;
  *   }
  * }
@@ -28,7 +28,7 @@ export type DefaultContext<TDefaultTypes = DefaultTypes> =
   TDefaultTypes extends {
     readonly context: infer C;
   }
-    ? Expand<Readonly<C>> | undefined
+    ? Expand<Readonly<C>>
     : unknown;
 
 export type InferTransactionFromDbProvider<TDbProvider> = TDbProvider extends {

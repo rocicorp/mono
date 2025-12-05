@@ -1,11 +1,13 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Transaction} from './custom.ts';
 import {defineMutators} from './mutator-registry.ts';
 import {
   defineMutator,
+  isMutator,
   isMutatorDefinition,
   type MutatorDefinition,
 } from './mutator.ts';
@@ -165,10 +167,9 @@ describe('Mutator callable type tests', () => {
     // Type test: noArgs() should be callable with no arguments
     expectTypeOf(mutators.noArgs).toBeCallableWith();
 
-    // The result should be a MutationRequest with undefined args
+    // The result should be a MutationRequest with ReadonlyJSONValue | undefined args
     const mr = mutators.noArgs();
-    // oxlint-disable-next-line no-explicit-any
-    expectTypeOf(mr.args).toEqualTypeOf<any>();
+    expectTypeOf(mr.args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
   });
 
   test('Mutator with required args - requires argument', () => {
@@ -218,5 +219,29 @@ describe('Mutator callable type tests', () => {
 
     expectTypeOf(mr1.args).toEqualTypeOf<{id: string} | undefined>();
     expectTypeOf(mr2.args).toEqualTypeOf<{id: string} | undefined>();
+  });
+});
+
+describe('isMutator', () => {
+  test('returns true for a Mutator from defineMutators', () => {
+    const mutators = defineMutators({
+      test: defineMutator(async () => {}),
+    });
+
+    expect(isMutator(mutators.test)).toBe(true);
+  });
+
+  test('returns false for a MutatorDefinition', () => {
+    const def = defineMutator(async () => {});
+    expect(isMutator(def)).toBe(false);
+  });
+
+  test('returns false for non-mutator values', () => {
+    expect(isMutator(null)).toBe(false);
+    expect(isMutator(undefined)).toBe(false);
+    expect(isMutator({})).toBe(false);
+    expect(isMutator({mutatorName: 'test'})).toBe(false);
+    expect(isMutator({fn: () => {}})).toBe(false);
+    expect(isMutator(() => {})).toBe(false);
   });
 });
