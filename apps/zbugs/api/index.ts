@@ -11,7 +11,7 @@ import {
   type ReadonlyJSONValue,
 } from '@rocicorp/zero';
 import {
-  handleMutationRequest,
+  handleMutateRequest,
   handleTransformRequest,
 } from '@rocicorp/zero/server';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
@@ -179,7 +179,7 @@ async function mutateHandler(
   const postCommitTasks: (() => Promise<void>)[] = [];
   const mutators = createServerMutators(postCommitTasks);
 
-  const response = await handleMutationRequest(
+  const response = await handleMutateRequest(
     dbProvider,
     (transact, _mutation) =>
       transact((tx, name, args, ctx) => {

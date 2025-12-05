@@ -14,7 +14,7 @@ import {
 import type {CustomMutatorDefs} from './custom.ts';
 import {
   getMutation,
-  handleMutationRequest,
+  handleMutateRequest,
   type Database,
   type TransactionProviderHooks,
 } from './process-mutations.ts';
@@ -175,7 +175,7 @@ function makePushBody(mutations: readonly MutationShape[]): ReadonlyJSONValue {
   } as const;
 }
 
-describe('handleMutationRequest', () => {
+describe('handleMutateRequest', () => {
   let consoleErrorSpy: MockInstance<typeof console.error>;
   let consoleWarnSpy: MockInstance<typeof console.warn>;
 
@@ -196,7 +196,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    await handleMutationRequest(
+    await handleMutateRequest(
       trackingDb,
       () => {
         throw new Error('never got to db tx');
@@ -231,7 +231,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       trackingDb,
       () => {
         throw new ApplicationError('failed before transact', {
@@ -263,7 +263,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    await handleMutationRequest(
+    await handleMutateRequest(
       trackingDb,
       async (transact, _mutation) => {
         await transact((_tx, _name, _args) => Promise.resolve());
@@ -292,7 +292,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    await handleMutationRequest(
+    await handleMutateRequest(
       trackingDb,
       (transact, mutation) =>
         transact(async (_tx, _name, _args) => {
@@ -326,7 +326,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    await handleMutationRequest(
+    await handleMutateRequest(
       trackingDb,
       (transact, mutation) =>
         transact(async (_tx, _name, _args) => {
@@ -381,7 +381,7 @@ describe('handleMutationRequest', () => {
       transactionErrorProvider: () => new Error('db unavailable'),
     });
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       failingDb,
       (transact, mutation) =>
         transact(async (_tx, _name, _args) => {
@@ -419,7 +419,7 @@ describe('handleMutationRequest', () => {
       makeCustomMutation({id: 2}),
     ]);
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       flakyDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
@@ -448,7 +448,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       trackingDb,
       () => {
         callbackInvoked = true;
@@ -484,7 +484,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       trackingDb,
       () => {
         callbackInvoked = true;
@@ -520,7 +520,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       trackingDb,
       () => {
         callbackInvoked = true;
@@ -550,7 +550,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase();
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       trackingDb,
       () => {
         callbackInvoked = true;
@@ -589,7 +589,7 @@ describe('handleMutationRequest', () => {
       lastMutationIDProvider: () => BigInt(0),
     });
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       trackingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
@@ -618,7 +618,7 @@ describe('handleMutationRequest', () => {
       lastMutationIDProvider: () => BigInt(1),
     });
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       trackingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
@@ -653,7 +653,7 @@ describe('handleMutationRequest', () => {
       recordedResults,
     } = createTrackingDatabase({lastMutationIDProvider: () => BigInt(5)});
 
-    await handleMutationRequest(
+    await handleMutateRequest(
       trackingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
@@ -676,7 +676,7 @@ describe('handleMutationRequest', () => {
         transactionCount === 1 ? 5 : 2,
     });
 
-    await handleMutationRequest(
+    await handleMutateRequest(
       dbWithVaryingID,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
@@ -702,7 +702,7 @@ describe('handleMutationRequest', () => {
           : undefined,
     });
 
-    const response = await handleMutationRequest(
+    const response = await handleMutateRequest(
       failingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
@@ -739,7 +739,7 @@ describe('handleMutationRequest', () => {
       },
     );
 
-    await handleMutationRequest(
+    await handleMutateRequest(
       trackingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),

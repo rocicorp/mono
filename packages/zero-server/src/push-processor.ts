@@ -11,7 +11,7 @@ import {
 import {
   type Database,
   type ExtractTransactionType,
-  handleMutationRequest,
+  handleMutateRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
@@ -66,7 +66,7 @@ export class PushProcessor<
     body?: ReadonlyJSONValue,
   ): Promise<PushResponse> {
     if (queryOrQueryString instanceof Request) {
-      return handleMutationRequest(
+      return handleMutateRequest(
         this.#dbProvider,
         (transact, mutation) =>
           this.#processMutation(mutators, transact, mutation),
@@ -75,7 +75,7 @@ export class PushProcessor<
         this.#logLevel,
       );
     }
-    return handleMutationRequest(
+    return handleMutateRequest(
       this.#dbProvider,
       (transact, mutation) =>
         this.#processMutation(mutators, transact, mutation),
