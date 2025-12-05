@@ -233,6 +233,7 @@ type TypedDefineMutator<
  * and server wire format cases) that are validated internally.
  *
  * @template TInput - The argument type accepted by the callable (before validation)
+ * @template TSchema - The schema type
  * @template TContext - The context type available during mutation execution
  * @template TWrappedTransaction - The wrapped transaction type
  */
@@ -284,6 +285,7 @@ export type AnyMutator = Mutator<any, any, any, any>;
  * or `mr.mutator.fn({tx, ctx, args: mr.args})` on the server.
  *
  * @template TInput - The argument type (before validation, sent to server)
+ * @template TSchema - The schema type
  * @template TContext - The context type available during mutation execution
  * @template TWrappedTransaction - The wrapped transaction type
  */
