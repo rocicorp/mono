@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {
@@ -295,20 +296,25 @@ function extractConstraint(
   return Object.fromEntries(fields.map(field => [field, undefined]));
 }
 
-function planRecursively(plans: Plans, planDebugger?: PlanDebugger): void {
+function planRecursively(
+  plans: Plans,
+  planDebugger?: PlanDebugger,
+  lc?: LogContext,
+): void {
   for (const subPlan of Object.values(plans.subPlans)) {
-    planRecursively(subPlan, planDebugger);
+    planRecursively(subPlan, planDebugger, lc);
   }
-  plans.plan.plan(planDebugger);
+  plans.plan.plan(planDebugger, lc);
 }
 
 export function planQuery(
   ast: AST,
   model: ConnectionCostModel,
   planDebugger?: PlanDebugger,
+  lc?: LogContext,
 ): AST {
   const plans = buildPlanGraph(ast, model, true);
-  planRecursively(plans, planDebugger);
+  planRecursively(plans, planDebugger, lc);
   return applyPlansToAST(ast, plans);
 }
 

@@ -2,7 +2,6 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import {PlannerException} from '../error.ts';
 import type {
   AST,
   ColumnReference,
@@ -137,19 +136,7 @@ export function buildPipeline(
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
   );
   if (costModel) {
-    try {
-      ast = planQuery(ast, costModel, planDebugger);
-    } catch (e) {
-      // If the planner fails (e.g., too many joins), fall back to the
-      // unoptimized query rather than failing the entire query.
-      if (e instanceof PlannerException) {
-        const message = `Query planner failed (${e.kind}), falling back to unoptimized query: ${e.message}`;
-        lc?.warn?.(message);
-      } else {
-        // Re-throw unexpected errors
-        throw e;
-      }
-    }
+    ast = planQuery(ast, costModel, planDebugger, lc);
   }
   return buildPipelineInternal(ast, delegate, queryID, '');
 }

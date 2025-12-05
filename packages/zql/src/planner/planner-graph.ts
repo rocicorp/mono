@@ -1,6 +1,6 @@
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import {PlannerException} from '../error.ts';
 import type {PlanDebugger} from './planner-debug.ts';
 import type {PlannerConnection} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
@@ -251,19 +251,19 @@ export class PlannerGraph {
    * FanOut/FanIn states (FO/UFO and FI/UFI) are automatically derived from join flip states.
    *
    * @param planDebugger - Optional debugger to receive structured events during planning
+   * @param lc - Optional logger for warnings
    */
-  plan(planDebugger?: PlanDebugger): void {
+  plan(planDebugger?: PlanDebugger, lc?: LogContext): void {
     // Get all flippable joins
     const flippableJoins = this.joins.filter(j => j.isFlippable());
 
-    // Safety check: throw if too many flippable joins
+    // Too many flippable joins - skip optimization and run as-is
     if (flippableJoins.length > MAX_FLIPPABLE_JOINS) {
-      throw new PlannerException(
-        'max_flippable_joins',
-        `Query has ${flippableJoins.length} EXISTS checks in a single RELATED call (or in the top level query), which would require ` +
-          `${2 ** flippableJoins.length} plan evaluations. This may be very slow. ` +
-          `Consider simplifying the query or increasing MAX_FLIPPABLE_JOINS (currently set to ${MAX_FLIPPABLE_JOINS}).`,
+      lc?.warn?.(
+        `Query has ${flippableJoins.length} EXISTS checks which would require ` +
+          `${2 ** flippableJoins.length} plan evaluations. Skipping optimization.`,
       );
+      return;
     }
 
     // Build FO→FI cache once to avoid redundant BFS traversals in each iteration
