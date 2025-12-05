@@ -187,7 +187,6 @@ suite('EXISTS 1 to many', () => {
               "id": "c2",
               "issueID": "i1",
             },
-            "fetch",
           ],
           [
             ":exists(issue)",
@@ -196,7 +195,6 @@ suite('EXISTS 1 to many', () => {
               "id": "c3",
               "issueID": "i1",
             },
-            "fetch",
           ],
           [
             ":exists(issue)",
@@ -216,7 +214,6 @@ suite('EXISTS 1 to many', () => {
               "id": "c3",
               "issueID": "i1",
             },
-            "fetch",
           ],
           [
             ":exists(issue)",
@@ -225,7 +222,6 @@ suite('EXISTS 1 to many', () => {
               "id": "c4",
               "issueID": "i2",
             },
-            "fetch",
           ],
           [
             ":exists(issue)",
@@ -245,7 +241,6 @@ suite('EXISTS 1 to many', () => {
               "id": "c4",
               "issueID": "i2",
             },
-            "fetch",
           ],
         ]
       `);

@@ -42,10 +42,6 @@ export class MeasurePushOperator implements Operator {
     return this.#input.fetch(req);
   }
 
-  cleanup(req: FetchRequest): Stream<Node> {
-    return this.#input.cleanup(req);
-  }
-
   getSchema(): SourceSchema {
     return this.#input.getSchema();
   }

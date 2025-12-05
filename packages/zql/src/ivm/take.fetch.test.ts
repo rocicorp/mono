@@ -42,13 +42,6 @@ suite('take with no partition', () => {
     });
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [],
         "hydrate": [],
       }
@@ -65,13 +58,6 @@ suite('take with no partition', () => {
     });
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [],
         "hydrate": [
           [
@@ -105,13 +91,6 @@ suite('take with no partition', () => {
     });
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -184,13 +163,6 @@ suite('take with no partition', () => {
     });
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -278,13 +250,6 @@ suite('take with no partition', () => {
     });
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -369,13 +334,6 @@ suite('take with no partition', () => {
     });
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -502,17 +460,6 @@ suite('take with partition', () => {
 
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [],
         "hydrate": [],
       }
@@ -522,17 +469,6 @@ suite('take with partition', () => {
 
     expect(partitions[1].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-        ],
         "fetch": [],
         "hydrate": [],
       }
@@ -551,17 +487,6 @@ suite('take with partition', () => {
 
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [],
         "hydrate": [
           [
@@ -588,17 +513,6 @@ suite('take with partition', () => {
 
     expect(partitions[1].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-        ],
         "fetch": [],
         "hydrate": [
           [
@@ -615,6 +529,10 @@ suite('take with partition', () => {
     `);
     expect(partitions[1].storage).toMatchInlineSnapshot(`
       {
+        "["take","i1"]": {
+          "bound": undefined,
+          "size": 0,
+        },
         "["take","i2"]": {
           "bound": undefined,
           "size": 0,
@@ -640,17 +558,6 @@ suite('take with partition', () => {
 
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i0",
-              },
-            },
-          ],
-        ],
         "fetch": [],
         "hydrate": [
           [
@@ -677,17 +584,6 @@ suite('take with partition', () => {
 
     expect(partitions[1].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -714,6 +610,10 @@ suite('take with partition', () => {
     `);
     expect(partitions[1].storage).toMatchInlineSnapshot(`
       {
+        "["take","i0"]": {
+          "bound": undefined,
+          "size": 0,
+        },
         "["take","i1"]": {
           "bound": {
             "created": 300,
@@ -760,17 +660,6 @@ suite('take with partition', () => {
 
     expect(partitions[2].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -797,6 +686,18 @@ suite('take with partition', () => {
     `);
     expect(partitions[2].storage).toMatchInlineSnapshot(`
       {
+        "["take","i0"]": {
+          "bound": undefined,
+          "size": 0,
+        },
+        "["take","i1"]": {
+          "bound": {
+            "created": 300,
+            "id": "c3",
+            "issueID": "i1",
+          },
+          "size": 3,
+        },
         "["take","i2"]": {
           "bound": {
             "created": 500,
@@ -834,234 +735,6 @@ suite('take with partition', () => {
     `);
   });
 
-  test('cleanup partitions not previously fetched', () => {
-    const {partitions, cleanupOnlyPartitions} = takeTest({
-      ...base,
-      sourceRows: [
-        {id: 'c1', issueID: 'i1', created: 100},
-        {id: 'c2', issueID: 'i1', created: 200},
-        {id: 'c3', issueID: 'i2', created: 300},
-        {id: 'c4', issueID: 'i3', created: 400},
-        {id: 'c5', issueID: 'i4', created: 500},
-      ],
-      limit: 5,
-      partitionValues: [['i1'], ['i3']],
-      cleanupOnlyPartitionValues: [['i2'], ['i4']],
-    });
-
-    expect(partitions[0].messages).toMatchInlineSnapshot(`
-      {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
-        "fetch": [
-          [
-            "takeSnitch",
-            "fetch",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
-        "hydrate": [
-          [
-            "takeSnitch",
-            "fetch",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
-      }
-    `);
-    expect(partitions[0].storage).toMatchInlineSnapshot(`
-      {
-        "["take","i1"]": {
-          "bound": {
-            "created": 200,
-            "id": "c2",
-            "issueID": "i1",
-          },
-          "size": 2,
-        },
-        "maxBound": {
-          "created": 200,
-          "id": "c2",
-          "issueID": "i1",
-        },
-      }
-    `);
-    expect(partitions[0].hydrate).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "created": 100,
-            "id": "c1",
-            "issueID": "i1",
-          },
-        },
-        {
-          "relationships": {},
-          "row": {
-            "created": 200,
-            "id": "c2",
-            "issueID": "i1",
-          },
-        },
-      ]
-    `);
-
-    expect(partitions[1].messages).toMatchInlineSnapshot(`
-      {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i3",
-              },
-            },
-          ],
-        ],
-        "fetch": [
-          [
-            "takeSnitch",
-            "fetch",
-            {
-              "constraint": {
-                "issueID": "i3",
-              },
-            },
-          ],
-        ],
-        "hydrate": [
-          [
-            "takeSnitch",
-            "fetch",
-            {
-              "constraint": {
-                "issueID": "i3",
-              },
-            },
-          ],
-        ],
-      }
-    `);
-    expect(partitions[1].storage).toMatchInlineSnapshot(`
-      {
-        "["take","i3"]": {
-          "bound": {
-            "created": 400,
-            "id": "c4",
-            "issueID": "i3",
-          },
-          "size": 1,
-        },
-        "maxBound": {
-          "created": 400,
-          "id": "c4",
-          "issueID": "i3",
-        },
-      }
-    `);
-    expect(partitions[1].hydrate).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "created": 400,
-            "id": "c4",
-            "issueID": "i3",
-          },
-        },
-      ]
-    `);
-
-    expect(cleanupOnlyPartitions[0].messages).toMatchInlineSnapshot(`
-      [
-        [
-          "takeSnitch",
-          "cleanup",
-          {
-            "constraint": {
-              "issueID": "i2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(cleanupOnlyPartitions[0].nodes).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "created": 300,
-            "id": "c3",
-            "issueID": "i2",
-          },
-        },
-      ]
-    `);
-    expect(cleanupOnlyPartitions[0].storage).toMatchInlineSnapshot(`
-      {
-        "maxBound": {
-          "created": 400,
-          "id": "c4",
-          "issueID": "i3",
-        },
-      }
-    `);
-
-    expect(cleanupOnlyPartitions[1].messages).toMatchInlineSnapshot(`
-      [
-        [
-          "takeSnitch",
-          "cleanup",
-          {
-            "constraint": {
-              "issueID": "i4",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(cleanupOnlyPartitions[1].nodes).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "created": 500,
-            "id": "c5",
-            "issueID": "i4",
-          },
-        },
-      ]
-    `);
-    expect(cleanupOnlyPartitions[1].storage).toMatchInlineSnapshot(`
-      {
-        "maxBound": {
-          "created": 400,
-          "id": "c4",
-          "issueID": "i3",
-        },
-      }
-    `);
-  });
-
   test('data size and limit equal', () => {
     const {partitions} = takeTest({
       ...base,
@@ -1079,17 +752,6 @@ suite('take with partition', () => {
 
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -1162,17 +824,6 @@ suite('take with partition', () => {
 
     expect(partitions[1].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -1199,6 +850,14 @@ suite('take with partition', () => {
     `);
     expect(partitions[1].storage).toMatchInlineSnapshot(`
       {
+        "["take","i1"]": {
+          "bound": {
+            "created": 300,
+            "id": "c3",
+            "issueID": "i1",
+          },
+          "size": 3,
+        },
         "["take","i2"]": {
           "bound": {
             "created": 600,
@@ -1263,17 +922,6 @@ suite('take with partition', () => {
 
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -1346,17 +994,6 @@ suite('take with partition', () => {
 
     expect(partitions[1].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -1383,6 +1020,14 @@ suite('take with partition', () => {
     `);
     expect(partitions[1].storage).toMatchInlineSnapshot(`
       {
+        "["take","i1"]": {
+          "bound": {
+            "created": 300,
+            "id": "c3",
+            "issueID": "i1",
+          },
+          "size": 3,
+        },
         "["take","i2"]": {
           "bound": {
             "created": 600,
@@ -1453,18 +1098,6 @@ suite('take with partition', () => {
 
     expect(partitions[0].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "created": 100,
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -1531,18 +1164,6 @@ suite('take with partition', () => {
 
     expect(partitions[1].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "created": 200,
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -1571,6 +1192,14 @@ suite('take with partition', () => {
     `);
     expect(partitions[1].storage).toMatchInlineSnapshot(`
       {
+        "["take","i1",100]": {
+          "bound": {
+            "created": 100,
+            "id": "c2",
+            "issueID": "i1",
+          },
+          "size": 2,
+        },
         "["take","i1",200]": {
           "bound": {
             "created": 200,
@@ -1601,18 +1230,6 @@ suite('take with partition', () => {
 
     expect(partitions[2].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "created": 100,
-                "issueID": "i2",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -1641,6 +1258,22 @@ suite('take with partition', () => {
     `);
     expect(partitions[2].storage).toMatchInlineSnapshot(`
       {
+        "["take","i1",100]": {
+          "bound": {
+            "created": 100,
+            "id": "c2",
+            "issueID": "i1",
+          },
+          "size": 2,
+        },
+        "["take","i1",200]": {
+          "bound": {
+            "created": 200,
+            "id": "c4",
+            "issueID": "i1",
+          },
+          "size": 1,
+        },
         "["take","i2",100]": {
           "bound": {
             "created": 100,
@@ -1679,18 +1312,6 @@ suite('take with partition', () => {
 
     expect(partitions[3].messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "takeSnitch",
-            "cleanup",
-            {
-              "constraint": {
-                "created": 200,
-                "issueID": "i2",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "takeSnitch",
@@ -1719,6 +1340,30 @@ suite('take with partition', () => {
     `);
     expect(partitions[3].storage).toMatchInlineSnapshot(`
       {
+        "["take","i1",100]": {
+          "bound": {
+            "created": 100,
+            "id": "c2",
+            "issueID": "i1",
+          },
+          "size": 2,
+        },
+        "["take","i1",200]": {
+          "bound": {
+            "created": 200,
+            "id": "c4",
+            "issueID": "i1",
+          },
+          "size": 1,
+        },
+        "["take","i2",100]": {
+          "bound": {
+            "created": 100,
+            "id": "c6",
+            "issueID": "i2",
+          },
+          "size": 2,
+        },
         "["take","i2",200]": {
           "bound": {
             "created": 200,
@@ -1784,28 +1429,22 @@ function takeTest(t: TakeTest): TakeTestResults {
   }
   const results: TakeTestResults = {
     partitions: [],
-    cleanupOnlyPartitions: [],
   };
   for (const partitionValue of t.partitionValues) {
     const partitionResults: PartitionTestResults = {
       messages: {
         hydrate: [],
         fetch: [],
-        cleanup: [],
       },
       storage: {},
       hydrate: [],
     };
     results.partitions.push(partitionResults);
-    for (const [phase, fetchType] of [
-      ['hydrate', 'fetch'],
-      ['fetch', 'fetch'],
-      ['cleanup', 'cleanup'],
-    ] as const) {
+    for (const phase of ['hydrate', 'fetch'] as const) {
       log.length = 0;
 
       const c = new Catch(take);
-      const r = c[fetchType](
+      const r = c.fetch(
         partitionKey &&
           partitionValue && {
             constraint: Object.fromEntries(
@@ -1816,45 +1455,19 @@ function takeTest(t: TakeTest): TakeTestResults {
       if (phase === 'hydrate') {
         partitionResults.hydrate = r;
       } else {
+        phase satisfies 'fetch';
         expect(r).toEqual(partitionResults.hydrate);
       }
 
       if (phase === 'hydrate') {
         partitionResults.storage = storage.cloneData();
-      } else if (phase === 'fetch') {
-        expect(storage.cloneData()).toEqual(partitionResults.storage);
       } else {
-        phase satisfies 'cleanup';
-        expect(storage.cloneData()).toEqual(
-          'maxBound' in partitionResults.storage
-            ? {maxBound: partitionResults.storage.maxBound}
-            : {},
-        );
+        phase satisfies 'fetch';
+        expect(storage.cloneData()).toEqual(partitionResults.storage);
       }
 
       partitionResults.messages[phase] = [...log];
     }
-  }
-
-  for (const partitionValue of t.cleanupOnlyPartitionValues ?? []) {
-    const cleanupOnlyPartitionResults: CleanupOnlyPartitionTestResults = {
-      messages: [],
-      storage: {},
-      nodes: [],
-    };
-    results.cleanupOnlyPartitions.push(cleanupOnlyPartitionResults);
-    log.length = 0;
-    const c = new Catch(take);
-    cleanupOnlyPartitionResults.nodes = c.cleanup(
-      partitionKey &&
-        partitionValue && {
-          constraint: Object.fromEntries(
-            partitionKey.map((k, i) => [k, partitionValue[i]]),
-          ),
-        },
-    );
-    cleanupOnlyPartitionResults.storage = storage.cloneData();
-    cleanupOnlyPartitionResults.messages = [...log];
   }
   return results;
 }
@@ -1867,28 +1480,17 @@ type TakeTest = {
   limit: number;
   partitionKey: PartitionKey | undefined;
   partitionValues: readonly ([Value, ...Value[]] | undefined)[];
-  cleanupOnlyPartitionValues?:
-    | readonly ([Value, ...Value[]] | undefined)[]
-    | undefined;
 };
 
 type TakeTestResults = {
   partitions: PartitionTestResults[];
-  cleanupOnlyPartitions: CleanupOnlyPartitionTestResults[];
 };
 
 type PartitionTestResults = {
   messages: {
     hydrate: SnitchMessage[];
     fetch: SnitchMessage[];
-    cleanup: SnitchMessage[];
   };
   storage: Record<string, JSONValue>;
   hydrate: CaughtNode[];
-};
-
-type CleanupOnlyPartitionTestResults = {
-  messages: SnitchMessage[];
-  storage: Record<string, JSONValue>;
-  nodes: CaughtNode[];
 };

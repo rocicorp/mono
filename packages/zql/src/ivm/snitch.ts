@@ -32,7 +32,7 @@ export class Snitch implements Operator {
     input: Input,
     name: string,
     log: SnitchMessage[] = [],
-    logTypes: LogType[] = ['fetch', 'push', 'cleanup'],
+    logTypes: LogType[] = ['fetch', 'push'],
   ) {
     this.#input = input;
     this.#name = name;
@@ -81,11 +81,6 @@ export class Snitch implements Operator {
     }
   }
 
-  cleanup(req: FetchRequest): Stream<Node> {
-    this.#log([this.#name, 'cleanup', req]);
-    return this.#input.cleanup(req);
-  }
-
   push(change: Change) {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
     this.#output?.push(change, this);
@@ -130,7 +125,7 @@ export class FilterSnitch implements FilterOperator {
     input: FilterInput,
     name: string,
     log: SnitchMessage[] = [],
-    logTypes: LogType[] = ['filter', 'push', 'cleanup'],
+    logTypes: LogType[] = ['filter', 'push'],
   ) {
     this.#input = input;
     this.#name = name;
@@ -151,10 +146,10 @@ export class FilterSnitch implements FilterOperator {
     this.#output?.endFilter();
   }
 
-  filter(node: Node, cleanup: boolean): boolean {
-    this.#log([this.#name, 'filter', node.row, cleanup ? 'cleanup' : 'fetch']);
+  filter(node: Node): boolean {
+    this.#log([this.#name, 'filter', node.row]);
     assert(this.#output);
-    return this.#output.filter(node, cleanup);
+    return this.#output.filter(node);
   }
 
   destroy(): void {
@@ -181,15 +176,13 @@ export class FilterSnitch implements FilterOperator {
 export type SnitchMessage =
   | FetchMessage
   | FetchCountMessage
-  | CleanupMessage
   | PushMessage
   | FilterMessage;
 
 export type FetchCountMessage = [string, 'fetchCount', FetchRequest, number];
 export type FetchMessage = [string, 'fetch', FetchRequest];
-export type CleanupMessage = [string, 'cleanup', FetchRequest];
 export type PushMessage = [string, 'push', ChangeRecord];
-export type FilterMessage = [string, 'filter', Row, 'fetch' | 'cleanup'];
+export type FilterMessage = [string, 'filter', Row];
 
 export type ChangeRecord =
   | AddChangeRecord
@@ -221,4 +214,4 @@ export type EditChangeRecord = {
   oldRow: Row;
 };
 
-export type LogType = 'fetch' | 'push' | 'cleanup' | 'fetchCount' | 'filter';
+export type LogType = 'fetch' | 'push' | 'fetchCount' | 'filter';

@@ -654,9 +654,6 @@ test('collapse', () => {
   };
 
   const input: Input = {
-    cleanup() {
-      return [];
-    },
     fetch() {
       return [];
     },
@@ -1138,9 +1135,6 @@ test('collapse-single', () => {
   };
 
   const input = {
-    cleanup() {
-      return [];
-    },
     fetch() {
       return [];
     },
@@ -1627,9 +1621,6 @@ test('edit to preserve relationships', () => {
       return schema;
     },
     fetch() {
-      return [];
-    },
-    cleanup() {
       return [];
     },
     setOutput() {},

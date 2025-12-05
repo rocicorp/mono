@@ -47,10 +47,6 @@ class YieldSource implements Input {
     yield {row: {id: '2'}, relationships: {}};
   }
 
-  *cleanup(_req: FetchRequest): Stream<Node> {
-    // cleanup doesn't yield 'yield' anymore
-  }
-
   destroy(): void {}
 }
 

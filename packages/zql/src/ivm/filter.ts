@@ -35,8 +35,8 @@ export class Filter implements FilterOperator {
     this.#output.endFilter();
   }
 
-  filter(node: Node, cleanup: boolean): boolean {
-    return this.#predicate(node.row) && this.#output.filter(node, cleanup);
+  filter(node: Node): boolean {
+    return this.#predicate(node.row) && this.#output.filter(node);
   }
 
   setFilterOutput(output: FilterOutput) {

@@ -11,7 +11,6 @@ describe('MeasurePushOperator', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -33,38 +32,11 @@ describe('MeasurePushOperator', () => {
     expect(mockInput.fetch).toHaveBeenCalledWith(req);
   });
 
-  test('should pass through cleanup calls', () => {
-    const mockInput: Input = {
-      setOutput: vi.fn(),
-      fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
-      getSchema: vi.fn(() => ({}) as SourceSchema),
-      destroy: vi.fn(),
-    };
-
-    const mockMetricsDelegate: MetricsDelegate = {
-      addMetric: vi.fn(),
-    };
-
-    const measurePushOperator = new MeasurePushOperator(
-      mockInput,
-      'test-query-id',
-      mockMetricsDelegate,
-      'query-update-client',
-    );
-    const req = {} as FetchRequest;
-
-    measurePushOperator.cleanup(req);
-
-    expect(mockInput.cleanup).toHaveBeenCalledWith(req);
-  });
-
   test('should pass through getSchema calls', () => {
     const schema = {} as SourceSchema;
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => schema),
       destroy: vi.fn(),
     };
@@ -90,7 +62,6 @@ describe('MeasurePushOperator', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -115,7 +86,6 @@ describe('MeasurePushOperator', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -155,7 +125,6 @@ describe('MeasurePushOperator', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
