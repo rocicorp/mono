@@ -1,4 +1,4 @@
-import * as v from '@badrap/valita';
+import type * as v from '@badrap/valita';
 import {expectTypeOf, test} from 'vitest';
 import type {
   JSONObject,
