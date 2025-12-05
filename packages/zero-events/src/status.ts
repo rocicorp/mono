@@ -85,5 +85,5 @@ export interface ReplicationStatusEvent extends StatusEvent {
   type: typeof REPLICATION_STATUS_EVENT_V1_TYPE;
   component: 'replication';
   stage: ReplicationStage;
-  state: ReplicationState;
+  state?: ReplicationState;
 }

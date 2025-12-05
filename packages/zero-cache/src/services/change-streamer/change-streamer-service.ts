@@ -17,6 +17,7 @@ import {
   type ChangeStreamMessage,
 } from '../change-source/protocol/current/downstream.ts';
 import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.ts';
+import {publishReplicationError} from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
@@ -406,6 +407,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     switch (tag) {
       case 'reset-required':
         await markResetRequired(this.#changeDB, this.#shard);
+        await publishReplicationError(
+          this.#lc,
+          'Replicating',
+          msg.message ?? 'Resync required',
+          msg.errorDetails,
+        );
         if (this.#autoReset) {
           this.#lc.warn?.('shutting down for auto-reset');
           await this.stop(new AutoResetSignal());
