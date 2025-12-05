@@ -117,11 +117,7 @@ export class Join implements Input {
     }
   }
 
-  *cleanup(req: FetchRequest): Stream<Node> {
-    for (const parentNode of this.#parent.cleanup(req)) {
-      yield this.#processParentNode(parentNode.row, parentNode.relationships);
-    }
-  }
+  *cleanup(_req: FetchRequest): Stream<Node> {}
 
   #pushParent(change: Change): void {
     switch (change.type) {

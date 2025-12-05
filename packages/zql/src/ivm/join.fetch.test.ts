@@ -2123,7 +2123,6 @@ function fetchTest(t: FetchTest): FetchTestResults {
   for (const [phase, fetchType] of [
     ['hydrate', 'fetch'],
     ['fetch', 'fetch'],
-    ['cleanup', 'cleanup'],
   ] as const) {
     log.length = 0;
 
