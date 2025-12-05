@@ -71,7 +71,6 @@ export class PushProcessor<
         (transact, mutation) =>
           this.#processMutation(mutators, transact, mutation),
         queryOrQueryString,
-        this.#context,
         this.#logLevel,
       );
     }
@@ -81,18 +80,17 @@ export class PushProcessor<
         this.#processMutation(mutators, transact, mutation),
       queryOrQueryString,
       must(body),
-      this.#context,
       this.#logLevel,
     );
   }
 
   #processMutation(
     mutators: MD,
-    transact: TransactFn<D, C>,
+    transact: TransactFn<D>,
     _mutation: CustomMutation,
   ): Promise<MutationResponse> {
-    return transact((tx, name, args, ctx) =>
-      this.#dispatchMutation(mutators, tx, name, args, ctx),
+    return transact((tx, name, args) =>
+      this.#dispatchMutation(mutators, tx, name, args),
     );
   }
 
@@ -101,13 +99,16 @@ export class PushProcessor<
     dbTx: ExtractTransactionType<D>,
     key: string,
     args: ReadonlyJSONValue | undefined,
-    ctx: C,
   ): Promise<void> {
     // Legacy mutators used | as a separator, new mutators use .
     const mutator = getValueAtPath(mutators, key, /\.|\|/);
     assert(typeof mutator === 'function', `could not find mutator ${key}`);
     if (isMutator(mutator)) {
-      return mutator.fn({args, ctx, tx: dbTx as Transaction<Schema, unknown>});
+      return mutator.fn({
+        args,
+        ctx: this.#context,
+        tx: dbTx as Transaction<Schema, unknown>,
+      });
     }
     return mutator(dbTx, args);
   }
