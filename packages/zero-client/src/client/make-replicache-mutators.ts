@@ -155,10 +155,7 @@ export function makeReplicacheMutators<const S extends Schema, C>(
  * Checks if a value is a Mutator (from MutatorRegistry).
  * Mutators have `mutatorName` and `fn` properties.
  */
-function isMutator(
-  value: unknown,
-  // oxlint-disable-next-line no-explicit-any
-): value is AnyMutator {
+function isMutator(value: unknown): value is AnyMutator {
   return (
     typeof value === 'function' &&
     'mutatorName' in value &&
