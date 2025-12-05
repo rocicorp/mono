@@ -40,29 +40,19 @@ export class Skip implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    return this.#fetchOrCleanup('fetch', req);
-  }
-
-  cleanup(req: FetchRequest): Stream<Node> {
-    return this.#fetchOrCleanup('cleanup', req) as Stream<Node>;
-  }
-
-  *#fetchOrCleanup(method: 'fetch' | 'cleanup', req: FetchRequest) {
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     const start = this.#getStart(req);
     if (start === 'empty') {
       return;
     }
-    const nodes = this.#input[method]({...req, start});
+    const nodes = this.#input.fetch({...req, start});
     if (!req.reverse) {
       yield* nodes;
       return;
     }
     for (const node of nodes) {
       if (node === 'yield') {
-        if (method === 'fetch') {
-          yield node;
-        }
+        yield node;
         continue;
       }
       if (!this.#shouldBePresent(node.row)) {

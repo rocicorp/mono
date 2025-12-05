@@ -62,10 +62,6 @@ export class Catch implements Output {
     return [...this.#input.fetch(req)].map(expandNode);
   }
 
-  cleanup(req: FetchRequest = {}) {
-    return [...this.#input.cleanup(req)].map(expandNode);
-  }
-
   push(change: Change) {
     const fetch = this.#fetchOnPush
       ? [...this.#input.fetch({})].map(expandNode)

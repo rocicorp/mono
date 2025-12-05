@@ -712,9 +712,6 @@ test('collapse', () => {
   };
 
   const input: Input = {
-    cleanup() {
-      return [];
-    },
     fetch() {
       return [];
     },
@@ -1932,9 +1929,6 @@ test('edit to preserve relationships', () => {
     fetch() {
       return [];
     },
-    cleanup() {
-      return [];
-    },
     setOutput() {},
     destroy() {
       unreachable();
@@ -2155,9 +2149,6 @@ test('edit leaf', () => {
   };
 
   const input: Input = {
-    cleanup() {
-      return [];
-    },
     fetch() {
       return [];
     },

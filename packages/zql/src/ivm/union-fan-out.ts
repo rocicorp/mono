@@ -43,11 +43,6 @@ export class UnionFanOut implements Operator {
     return this.#input.fetch(req);
   }
 
-  cleanup(_req: FetchRequest): Stream<Node> {
-    // Cleanup is going away. Not implemented.
-    return [];
-  }
-
   destroy(): void {
     if (this.#destroyCount < this.#outputs.length) {
       ++this.#destroyCount;

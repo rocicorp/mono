@@ -309,8 +309,6 @@ export class FlippedJoin implements Input {
     }
   }
 
-  *cleanup(_req: FetchRequest): Stream<Node> {}
-
   #pushChild(change: Change): void {
     const pushChildChange = (exists?: boolean) => {
       this.#inprogressChildChange = {

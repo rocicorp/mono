@@ -37,19 +37,6 @@ export interface Input extends InputBase {
    * - During push: If a fetch to an input yields 'yield', it can be skipped/ignored.
    */
   fetch(req: FetchRequest): Stream<Node | 'yield'>;
-
-  /**
-   * Cleanup maintained state. This is called when `output` will no longer need
-   * the data returned by {@linkcode fetch}. The receiving operator should clean up any
-   * resources it has allocated to service such requests.
-   *
-   * This is different from {@linkcode destroy} which means this input will no longer
-   * be called at all, for any input.
-   *
-   * Returns the same thing as {@linkcode fetch}. This allows callers to properly
-   * propagate the cleanup message through the graph.
-   */
-  cleanup(req: FetchRequest): Stream<Node>;
 }
 
 export type FetchRequest = {

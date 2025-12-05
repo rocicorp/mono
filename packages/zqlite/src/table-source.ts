@@ -26,7 +26,7 @@ import {
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import {skipYields, type FetchRequest} from '../../zql/src/ivm/operator.ts';
+import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {
   type Source,
@@ -228,7 +228,6 @@ export class TableSource implements Source {
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
-      cleanup: req => this.#cleanup(req, connection),
       setOutput: output => {
         connection.output = output;
       },
@@ -269,10 +268,6 @@ export class TableSource implements Source {
         toSQLiteType(value, this.#columns[key].type),
       ]),
     ) as Row;
-  }
-
-  #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
-    return skipYields(this.#fetch(req, connection));
   }
 
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {

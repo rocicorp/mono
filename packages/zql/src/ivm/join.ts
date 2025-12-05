@@ -117,8 +117,6 @@ export class Join implements Input {
     }
   }
 
-  *cleanup(_req: FetchRequest): Stream<Node> {}
-
   #pushParent(change: Change): void {
     switch (change.type) {
       case 'add':
