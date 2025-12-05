@@ -85,16 +85,21 @@ export class FilterStart implements FilterInput, Output {
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     this.#output.beginFilter();
-    for (const node of this.#input.fetch(req)) {
-      if (node === 'yield') {
-        yield node;
-        continue;
+    try {
+      for (const node of this.#input.fetch(req)) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
+        if (this.#output.filter(node, false)) {
+          yield node;
+        }
       }
-      if (this.#output.filter(node, false)) {
-        yield node;
-      }
+    } finally {
+      // finally is important if an exception is thrown or
+      // if the stream is not fully consumed.
+      this.#output.endFilter();
     }
-    this.#output.endFilter();
   }
 
   *cleanup(req: FetchRequest): Stream<Node> {

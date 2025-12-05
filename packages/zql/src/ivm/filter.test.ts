@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {Catch} from './catch.ts';
 import {Filter} from './filter.ts';
 import {createSource} from './test/source-factory.ts';
@@ -282,4 +282,27 @@ test('edit', () => {
       },
     ]
   `);
+});
+
+test('forwards beginFilter/endFilter', () => {
+  const mockOutput = {
+    push: vi.fn(),
+    filter: vi.fn(),
+    beginFilter: vi.fn(),
+    endFilter: vi.fn(),
+  };
+  const mockInput = {
+    setFilterOutput: vi.fn(),
+    getSchema: vi.fn(),
+    destroy: vi.fn(),
+  };
+
+  const filter = new Filter(mockInput, () => true);
+  filter.setFilterOutput(mockOutput);
+
+  filter.beginFilter();
+  expect(mockOutput.beginFilter).toHaveBeenCalled();
+
+  filter.endFilter();
+  expect(mockOutput.endFilter).toHaveBeenCalled();
 });
