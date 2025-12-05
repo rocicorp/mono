@@ -1,5 +1,5 @@
 import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
-import {drainStreams, type Node} from './data.ts';
+import {type Node} from './data.ts';
 import type {Change} from './change.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';

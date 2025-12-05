@@ -158,20 +158,14 @@ export class Join implements Input {
         break;
       case 'edit': {
         // Assert the edit could not change the relationship.
-        const equal = rowEqualsForCompoundKey(
-          change.oldNode.row,
-          change.node.row,
-          this.#parentKey,
+        assert(
+          rowEqualsForCompoundKey(
+            change.oldNode.row,
+            change.node.row,
+            this.#parentKey,
+          ),
+          `Parent edit must not change relationship.`,
         );
-        if (!equal) {
-          console.log('Join edit key mismatch:', {
-            old: change.oldNode.row,
-            new: change.node.row,
-            key: this.#parentKey,
-            equal,
-          });
-        }
-        assert(equal, `Parent edit must not change relationship.`);
         this.#output.push(
           {
             type: 'edit',

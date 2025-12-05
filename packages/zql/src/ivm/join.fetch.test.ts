@@ -6,7 +6,6 @@ import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtNode} from './catch.ts';
-import {SetOfConstraint} from './constraint.ts';
 import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
 import type {SourceSchema} from './schema.ts';
