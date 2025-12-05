@@ -51,7 +51,7 @@ import type {
 import type {Stream} from './stream.ts';
 
 export type Overlay = {
-  outputIndex: number;
+  epoch: number;
   change: SourceChange;
 };
 
@@ -79,6 +79,7 @@ export type Connection = {
       }
     | undefined;
   readonly debug?: DebugDelegate | undefined;
+  lastPushedEpoch: number;
 };
 
 /**
@@ -97,6 +98,7 @@ export class MemorySource implements Source {
   readonly #connections: Connection[] = [];
 
   #overlay: Overlay | undefined;
+  #pushEpoch = 0;
 
   constructor(
     tableName: string,
@@ -183,6 +185,7 @@ export class MemorySource implements Source {
             predicate: createPredicate(transformedFilters.filters),
           }
         : undefined,
+      lastPushedEpoch: 0,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -247,10 +250,7 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  *#fetch(req: FetchRequest, from: Connection): Stream<Node | 'yield'> {
-    const callingConnectionIndex = this.#connections.indexOf(from);
-    assert(callingConnectionIndex !== -1, 'Output not found');
-    const conn = this.#connections[callingConnectionIndex];
+  *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
     const {sort: requestedSort, compareRows} = conn;
     const connectionComparator = (r1: Row, r2: Row) =>
       compareRows(r1, r2) * (req.reverse ? -1 : 1);
@@ -282,7 +282,7 @@ export class MemorySource implements Source {
       indexSort.push(...requestedSort);
     }
 
-    const index = this.#getOrCreateIndex(indexSort, from);
+    const index = this.#getOrCreateIndex(indexSort, conn);
     const {data, comparator: compare} = index;
     const indexComparator = (r1: Row, r2: Row) =>
       compare(r1, r2) * (req.reverse ? -1 : 1);
@@ -327,7 +327,7 @@ export class MemorySource implements Source {
       // rather than as the fetch constraint.
       req.constraint,
       this.#overlay,
-      callingConnectionIndex,
+      conn.lastPushedEpoch,
       // Use indexComparator, generateWithOverlayInner has a subtle dependency
       // on this.  Since generateWithConstraint is done after
       // generateWithOverlay, the generator consumed by generateWithOverlayInner
@@ -377,6 +377,7 @@ export class MemorySource implements Source {
       exists,
       setOverlay,
       writeChange,
+      () => ++this.#pushEpoch,
     );
   }
 
@@ -439,6 +440,7 @@ export function* genPushAndWriteWithSplitEdit(
   exists: (row: Row) => boolean,
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
+  getNextEpoch: () => number,
 ) {
   let shouldSplitEdit = false;
   if (change.type === 'edit') {
@@ -464,6 +466,7 @@ export function* genPushAndWriteWithSplitEdit(
       exists,
       setOverlay,
       writeChange,
+      getNextEpoch(),
     );
     yield* genPushAndWrite(
       connections,
@@ -474,6 +477,7 @@ export function* genPushAndWriteWithSplitEdit(
       exists,
       setOverlay,
       writeChange,
+      getNextEpoch(),
     );
   } else {
     yield* genPushAndWrite(
@@ -482,6 +486,7 @@ export function* genPushAndWriteWithSplitEdit(
       exists,
       setOverlay,
       writeChange,
+      getNextEpoch(),
     );
   }
 }
@@ -492,8 +497,9 @@ function* genPushAndWrite(
   exists: (row: Row) => boolean,
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
+  pushEpoch: number,
 ) {
-  for (const x of genPush(connections, change, exists, setOverlay)) {
+  for (const x of genPush(connections, change, exists, setOverlay, pushEpoch)) {
     yield x;
   }
   writeChange(change);
@@ -504,6 +510,7 @@ function* genPush(
   change: SourceChange,
   exists: (row: Row) => boolean,
   setOverlay: (o: Overlay | undefined) => void,
+  pushEpoch: number,
 ) {
   switch (change.type) {
     case 'add':
@@ -522,9 +529,11 @@ function* genPush(
       unreachable(change);
   }
 
-  for (const [outputIndex, {output, filters, input}] of connections.entries()) {
+  for (const conn of connections) {
+    const {output, filters, input} = conn;
     if (output) {
-      setOverlay({outputIndex, change});
+      conn.lastPushedEpoch = pushEpoch;
+      setOverlay({epoch: pushEpoch, change});
       const outputChange: Change =
         change.type === 'edit'
           ? {
@@ -602,12 +611,12 @@ export function* generateWithOverlay(
   rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
-  connectionIndex: number,
+  lastPushedEpoch: number,
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
 ) {
   let overlayToApply: Overlay | undefined = undefined;
-  if (overlay && connectionIndex <= overlay.outputIndex) {
+  if (overlay && lastPushedEpoch >= overlay.epoch) {
     overlayToApply = overlay;
   }
   const overlays = computeOverlays(
