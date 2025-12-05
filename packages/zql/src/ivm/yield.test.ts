@@ -195,7 +195,6 @@ describe('Yield Propagation', () => {
     const join = new Join({
       parent,
       child,
-      storage: new MockStorage(),
       parentKey: ['id'],
       childKey: ['id'],
       relationshipName: 'child',
