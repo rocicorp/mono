@@ -357,53 +357,90 @@ test('custom mutators write to the local store', async () => {
   expect(issues.length).toEqual(0);
 });
 
-test('custom mutators can query the local store during an optimistic mutation', async () => {
-  const z = zeroForTest({
-    schema,
-    mutators: {
-      issue: {
-        create: async (
-          tx: MutatorTx,
-          args: InsertValue<typeof schema.tables.issue>,
-        ) => {
-          await tx.mutate.issue.insert(args);
+describe('custom mutators can query the local store during an optimistic mutation', () => {
+  test.each([
+    ['tx.run(tx.query.issue)', (tx: MutatorTx) => tx.run(tx.query.issue)],
+    ['tx.query.issue.run()', (tx: MutatorTx) => tx.query.issue.run()],
+  ] as const)('%s can read data', async (_, runQuery) => {
+    let queryResult: readonly Row<typeof schema.tables.issue>[] | undefined;
+
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          createAndQuery: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof schema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+            queryResult = await runQuery(tx);
+          },
         },
-        closeAll: async (tx: MutatorTx) => {
-          const issues = await tx.run(tx.query.issue);
-          await Promise.all(
-            issues.map(issue =>
-              tx.mutate.issue.update({id: issue.id, closed: true}),
-            ),
-          );
-        },
-      },
-    } as const,
+      } as const,
+    });
+
+    await z.mutate.issue.createAndQuery({
+      id: '1',
+      title: 'test issue',
+      closed: false,
+      description: '',
+      ownerId: '',
+      createdAt: 1743018138477,
+    }).client;
+
+    expect(queryResult).toEqual([
+      expect.objectContaining({id: '1', title: 'test issue'}),
+    ]);
   });
 
-  await Promise.all(
-    Array.from({length: 10}, async (_, i) => {
-      await z.mutate.issue.create({
-        id: i.toString().padStart(3, '0'),
-        title: `issue ${i}`,
-        closed: false,
-        description: '',
-        ownerId: '',
-        createdAt: 1743018138477,
-      }).client;
-    }),
-  );
+  test('closeAll using tx.run', async () => {
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof schema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+          },
+          closeAll: async (tx: MutatorTx) => {
+            const issues = await tx.run(tx.query.issue);
+            await Promise.all(
+              issues.map(issue =>
+                tx.mutate.issue.update({id: issue.id, closed: true}),
+              ),
+            );
+          },
+        },
+      } as const,
+    });
 
-  const zql = createBuilder(schema);
+    await Promise.all(
+      Array.from({length: 10}, async (_, i) => {
+        await z.mutate.issue.create({
+          id: i.toString().padStart(3, '0'),
+          title: `issue ${i}`,
+          closed: false,
+          description: '',
+          ownerId: '',
+          createdAt: 1743018138477,
+        }).client;
+      }),
+    );
 
-  const q = zql.issue.where('closed', false);
-  await z.markQueryAsGot(q);
-  let issues = await z.run(q);
-  expect(issues.length).toEqual(10);
+    const zql = createBuilder(schema);
 
-  await z.mutate.issue.closeAll().client;
+    const q = zql.issue.where('closed', false);
+    await z.markQueryAsGot(q);
+    let issues = await z.run(q);
+    expect(issues.length).toEqual(10);
 
-  issues = await z.run(q);
-  expect(issues.length).toEqual(0);
+    await z.mutate.issue.closeAll().client;
+
+    issues = await z.run(q);
+    expect(issues.length).toEqual(0);
+  });
 });
 
 describe('rebasing custom mutators', () => {
