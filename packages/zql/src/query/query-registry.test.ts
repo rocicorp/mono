@@ -1238,15 +1238,15 @@ describe('defineQueries merging types', () => {
   });
 
   test('return type should be Query with correct table', () => {
-    const b = {
-      getFoo: defineQuery(({args: _args}: {args: undefined}) => builder.foo),
-    };
-    const base = defineQueries<typeof b, typeof schema>(b);
+    const defineQueriesTyped = defineQueriesWithType<typeof schema>();
 
-    const e = {
+    const base = defineQueriesTyped({
+      getFoo: defineQuery(({args: _args}: {args: undefined}) => builder.foo),
+    });
+
+    const extended = defineQueriesTyped(base, {
       getBar: defineQuery(({args: _args}: {args: undefined}) => builder.bar),
-    };
-    const extended = defineQueries<typeof b, typeof e, typeof schema>(base, e);
+    });
 
     const fooQuery = extended.getFoo().toQuery({});
     const barQuery = extended.getBar().toQuery({});
