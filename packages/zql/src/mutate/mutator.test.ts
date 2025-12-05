@@ -91,7 +91,6 @@ describe('Type Tests', () => {
     type TestDef = MutatorDefinition<
       {input: number},
       {output: string},
-      Schema,
       {userId: string},
       unknown
     >;
@@ -122,13 +121,7 @@ describe('Type Tests', () => {
 
     // Without validator, TInput === TOutput === TArgs
     expectTypeOf(def).toEqualTypeOf<
-      MutatorDefinition<
-        {id: string},
-        {id: string},
-        Schema,
-        {userId: string},
-        unknown
-      >
+      MutatorDefinition<{id: string}, {id: string}, {userId: string}, unknown>
     >();
   });
 
@@ -150,7 +143,7 @@ describe('Type Tests', () => {
 
     // MutatorDefinition still has TInput/TOutput for validator typing
     expectTypeOf(def).toEqualTypeOf<
-      MutatorDefinition<{a: number}, {b: string}, Schema, unknown, unknown>
+      MutatorDefinition<{a: number}, {b: string}, unknown, unknown>
     >();
   });
 });

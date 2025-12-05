@@ -2,7 +2,7 @@ import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import type {MutatorResult} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
@@ -26,7 +26,7 @@ type MutatorTx = Transaction<Schema>;
 const defineMutatorTyped = defineMutatorWithType<Schema, unknown, MutatorTx>();
 const defineUserMutator = defineMutatorTyped<{id: string; name: string}>;
 const defineUserMutators = (def: ReturnType<typeof defineUserMutator>) =>
-  defineMutators({user: {create: def}});
+  defineMutatorsWithType<Schema>()({user: {create: def}});
 
 describe('zero.mutate(mr) with MutationRequest', () => {
   test('can call mutate with a MutationRequest', async () => {

@@ -10,7 +10,7 @@ import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
-import type {AnyMutatorRegistry, Zero} from '../../zero/src/zero.ts';
+import type {Zero} from '../../zero/src/zero.ts';
 import {
   createSchema,
   number,
@@ -61,9 +61,10 @@ afterEach(() => vi.resetAllMocks());
 
 type C = unknown;
 
-function newMockZero<
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
->(clientID: string, queryDelegate: QueryDelegate): Zero<Schema, MD, C> {
+function newMockZero<MD extends CustomMutatorDefs | undefined = undefined>(
+  clientID: string,
+  queryDelegate: QueryDelegate,
+): Zero<Schema, MD, C> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
     query: Query<TTable, Schema, TReturn>,
     factoryOrOptions?:
@@ -89,7 +90,7 @@ function useQueryWithZeroProvider<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
+  MD extends CustomMutatorDefs | undefined,
   TContext,
 >(
   zeroOrZeroSignal:

@@ -5,12 +5,11 @@ import type {
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import {MarkIcon} from './mark-icon.tsx';
 
 export default function Inspector<
   S extends Schema = DefaultSchema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
 >({zero, onClose}: {zero: Zero<S, MD, Context>; onClose: () => void}) {
   return (

@@ -8,7 +8,7 @@ import type {
   DefaultWrappedTransaction,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {Transaction} from './custom.ts';
+import type {AnyTransaction, Transaction} from './custom.ts';
 
 // oxlint-disable no-explicit-any
 
@@ -19,45 +19,35 @@ import type {Transaction} from './custom.ts';
 export type MutatorDefinitionTypes<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput,
-  TSchema extends Schema,
   TContext,
   TWrappedTransaction,
 > = 'MutatorDefinition' & {
   readonly $input: TInput;
   readonly $output: TOutput;
   readonly $context: TContext;
-  readonly $schema: TSchema;
   readonly $wrappedTransaction: TWrappedTransaction;
 };
 
 export function isMutatorDefinition<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
 >(
   f: unknown,
-): f is MutatorDefinition<
-  TInput,
-  TOutput,
-  TSchema,
-  TContext,
-  TWrappedTransaction
-> {
+): f is MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> {
   return typeof f === 'function' && (f as any)['~'] === 'MutatorDefinition';
 }
 
 export type MutatorDefinition<
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
 > = ((options: {
   args: TOutput;
   ctx: TContext;
-  tx: Transaction<TSchema, TWrappedTransaction>;
+  tx: AnyTransaction;
 }) => Promise<void>) & {
   validator: StandardSchemaV1<TInput, TOutput> | undefined;
 
@@ -65,13 +55,7 @@ export type MutatorDefinition<
    * Type-only phantom property to surface mutator types in a covariant position.
    */
   ['~']: Expand<
-    MutatorDefinitionTypes<
-      TInput,
-      TOutput,
-      TSchema,
-      TContext,
-      TWrappedTransaction
-    >
+    MutatorDefinitionTypes<TInput, TOutput, TContext, TWrappedTransaction>
   >;
 };
 
@@ -89,13 +73,7 @@ export function defineMutator<
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>,
-): MutatorDefinition<
-  TInput,
-  TOutput,
-  TSchema,
-  TContext,
-  TWrappedTransaction
-> & {};
+): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> & {};
 
 // Overload 2: Call without validator
 export function defineMutator<
@@ -109,13 +87,7 @@ export function defineMutator<
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>,
-): MutatorDefinition<
-  TInput,
-  TInput,
-  TSchema,
-  TContext,
-  TWrappedTransaction
-> & {};
+): MutatorDefinition<TInput, TInput, TContext, TWrappedTransaction> & {};
 
 // Implementation
 export function defineMutator<
@@ -137,7 +109,7 @@ export function defineMutator<
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>,
-): MutatorDefinition<TInput, TOutput, TSchema, TContext, TWrappedTransaction> {
+): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> {
   let validator: StandardSchemaV1<TInput, TOutput> | undefined;
   let actualMutator: (options: {
     args: TOutput;
@@ -158,14 +130,12 @@ export function defineMutator<
   const f = actualMutator as MutatorDefinition<
     TInput,
     TOutput,
-    TSchema,
     TContext,
     TWrappedTransaction
   >;
   f['~'] = 'MutatorDefinition' as unknown as MutatorDefinitionTypes<
     TInput,
     TOutput,
-    TSchema,
     TContext,
     TWrappedTransaction
   >;
@@ -203,7 +173,7 @@ type TypedDefineMutator<
       ctx: TContext;
       tx: Transaction<TSchema, TWrappedTransaction>;
     }) => Promise<void>,
-  ): MutatorDefinition<TArgs, TArgs, TSchema, TContext, TWrappedTransaction>;
+  ): MutatorDefinition<TArgs, TArgs, TContext, TWrappedTransaction>;
 
   // With validator
   <
@@ -216,7 +186,7 @@ type TypedDefineMutator<
       ctx: TContext;
       tx: Transaction<TSchema, TWrappedTransaction>;
     }) => Promise<void>,
-  ): MutatorDefinition<TInput, TOutput, TSchema, TContext, TWrappedTransaction>;
+  ): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction>;
 };
 
 // ----------------------------------------------------------------------------
@@ -233,7 +203,6 @@ type TypedDefineMutator<
  * and server wire format cases) that are validated internally.
  *
  * @template TInput - The argument type accepted by the callable (before validation)
- * @template TSchema - The schema type
  * @template TContext - The context type available during mutation execution
  * @template TWrappedTransaction - The wrapped transaction type
  */
@@ -285,7 +254,6 @@ export type AnyMutator = Mutator<any, any, any, any>;
  * or `mr.mutator.fn({tx, ctx, args: mr.args})` on the server.
  *
  * @template TInput - The argument type (before validation, sent to server)
- * @template TSchema - The schema type
  * @template TContext - The context type available during mutation execution
  * @template TWrappedTransaction - The wrapped transaction type
  */

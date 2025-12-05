@@ -130,6 +130,7 @@ export type {
 } from '../../zql/src/mutate/custom.ts';
 export {
   defineMutators,
+  defineMutatorsWithType,
   getMutator,
   isMutatorRegistry,
   mustGetMutator,
@@ -173,6 +174,7 @@ export {
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export {
   defineQueries,
+  defineQueriesWithType,
   defineQuery,
   defineQueryWithType,
   getQuery,

@@ -98,7 +98,6 @@ type MakeFromMutatorDefinitions<
     infer TInput,
     // oxlint-disable-next-line no-explicit-any
     any,
-    S,
     C,
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     any
@@ -117,7 +116,7 @@ type MakeFromMutatorDefinitions<
 
 export type MakeMutatePropertyType<
   S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
+  MD extends CustomMutatorDefs | undefined,
   C,
 > = MD extends AnyMutatorRegistry
   ? // MutatorRegistry: no property tree, user calls zero.mutate(mr) directly
