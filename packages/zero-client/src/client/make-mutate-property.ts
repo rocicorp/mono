@@ -48,6 +48,7 @@ export function makeMutateProperty(
       if (typeof mutator === 'function') {
         const fullKey = customMutatorKey('|', path);
         mutateObject[key] = mutatorProxy.wrapCustomMutator(
+          fullKey,
           must(replicacheMutate[fullKey]) as unknown as (
             ...args: unknown[]
           ) => MutatorResult,
