@@ -98,7 +98,12 @@ const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
   }
 };
 
-export function handleMutationRequest<
+/**
+ * @deprecated Use {@linkcode handleMutateRequest} instead.
+ */
+export const handleMutationRequest = handleMutateRequest;
+
+export function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
   C = undefined,
 >(
@@ -113,7 +118,7 @@ export function handleMutationRequest<
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
 
-export function handleMutationRequest<
+export function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
   C = undefined,
 >(
@@ -127,7 +132,7 @@ export function handleMutationRequest<
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
 
-export async function handleMutationRequest<
+export async function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
   C,
 >(

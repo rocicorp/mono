@@ -5,7 +5,9 @@ export * from './process-mutations.ts';
 export * from './push-processor.ts';
 export * from './queries/process-queries.ts';
 export {
+  handleQueryRequest,
   handleTransformRequest,
+  handleGetQueriesRequest,
   type TransformQueryFunction,
 } from './queries/process-queries.ts';
 export * from './zql-database.ts';

@@ -10,7 +10,7 @@ import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {schema} from '../test/schema.ts';
 import {
   handleGetQueriesRequest,
-  handleTransformRequest,
+  handleQueryRequest,
 } from './process-queries.ts';
 
 function makeQuery(ast: AST): AnyQuery {
@@ -122,7 +122,7 @@ describe('handleGetQueriesRequest', () => {
       reason: ErrorReason.Parse,
       kind: expect.any(String),
       origin: expect.any(String),
-      message: expect.stringContaining('Failed to parse get queries request'),
+      message: expect.stringContaining('Failed to parse getQueries request'),
       queryIDs: [],
       details: expect.objectContaining({name: 'TypeError'}),
     });
@@ -148,7 +148,7 @@ describe('handleGetQueriesRequest', () => {
       reason: ErrorReason.Parse,
       kind: expect.any(String),
       origin: expect.any(String),
-      message: expect.stringContaining('Failed to parse get queries request'),
+      message: expect.stringContaining('Failed to parse getQueries request'),
       details: expect.objectContaining({name: 'SyntaxError'}),
       queryIDs: [],
     });
@@ -362,7 +362,7 @@ describe('handleTransformRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleTransformRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [
         {
@@ -416,7 +416,7 @@ describe('handleTransformRequest', () => {
       body,
     });
 
-    const result = await handleTransformRequest(cb, schema, request);
+    const result = await handleQueryRequest(cb, schema, request);
 
     expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
     expect(result).toEqual([
@@ -432,7 +432,7 @@ describe('handleTransformRequest', () => {
   });
 
   test('returns transformFailed parse error when validation fails', async () => {
-    const result = await handleTransformRequest(
+    const result = await handleQueryRequest(
       () => {
         throw new Error('should not be called');
       },
@@ -444,9 +444,7 @@ describe('handleTransformRequest', () => {
       'transformFailed',
       {
         kind: expect.any(String),
-        message: expect.stringContaining(
-          'Failed to parse transform queries request',
-        ),
+        message: expect.stringContaining('Failed to parse query request'),
         origin: expect.any(String),
         queryIDs: [],
         reason: ErrorReason.Parse,
@@ -462,7 +460,7 @@ describe('handleTransformRequest', () => {
       body: 'not valid json',
     });
 
-    const result = await handleTransformRequest(
+    const result = await handleQueryRequest(
       () => {
         throw new Error('should not be called');
       },
@@ -476,9 +474,7 @@ describe('handleTransformRequest', () => {
         reason: ErrorReason.Parse,
         kind: expect.any(String),
         origin: expect.any(String),
-        message: expect.stringContaining(
-          'Failed to parse transform queries request',
-        ),
+        message: expect.stringContaining('Failed to parse query request'),
         details: expect.objectContaining({name: 'SyntaxError'}),
         queryIDs: [],
       },
@@ -497,7 +493,7 @@ describe('handleTransformRequest', () => {
       return makeQuery(ast);
     });
 
-    const result = await handleTransformRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [
         {id: 'q1', name: 'first', args: []},
@@ -529,7 +525,7 @@ describe('handleTransformRequest', () => {
       throw error;
     });
 
-    const result = await handleTransformRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);
@@ -558,7 +554,7 @@ describe('handleTransformRequest', () => {
       throw error;
     });
 
-    const result = await handleTransformRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);
@@ -586,7 +582,7 @@ describe('handleTransformRequest', () => {
       throw parseError;
     });
 
-    const result = await handleTransformRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [{id: 'q1', name: 'testQuery', args: [{foo: 'bar'}]}],
     ]);
@@ -619,7 +615,7 @@ describe('handleTransformRequest', () => {
       return makeQuery(ast);
     });
 
-    const result = await handleTransformRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [
         {id: 'q1', name: 'parseErrorQuery', args: []},
@@ -661,7 +657,7 @@ describe('handleTransformRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleTransformRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);
