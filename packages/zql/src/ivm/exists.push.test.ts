@@ -133,14 +133,6 @@ suite('EXISTS 1 to many', () => {
   };
 
   test('Remove of child that joins with multiple parents, interplay with take', () => {
-    /**
-     * The problem, exists receives `child.remove` events for relationships with 0 size:
-     * 1. An issue is removed in a push
-     * 2. `take` fetches, bringing `c3` into scope of `exists`
-     * 3. `join` pushes a child remove for `c3`
-     * 4. `exists` receives the child remove for `c3` and used to throw because the size is 0,
-     * but this assert is currently disabled as a work around and the remove is just dropped
-     */
     const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
@@ -192,15 +184,6 @@ suite('EXISTS 1 to many', () => {
             ":exists(issue)",
             "filter",
             {
-              "id": "c1",
-              "issueID": "i1",
-            },
-            "fetch",
-          ],
-          [
-            ":exists(issue)",
-            "filter",
-            {
               "id": "c2",
               "issueID": "i1",
             },
@@ -230,15 +213,6 @@ suite('EXISTS 1 to many', () => {
             ":exists(issue)",
             "filter",
             {
-              "id": "c2",
-              "issueID": "i1",
-            },
-            "fetch",
-          ],
-          [
-            ":exists(issue)",
-            "filter",
-            {
               "id": "c3",
               "issueID": "i1",
             },
@@ -263,15 +237,6 @@ suite('EXISTS 1 to many', () => {
               },
               "type": "remove",
             },
-          ],
-          [
-            ":exists(issue)",
-            "filter",
-            {
-              "id": "c3",
-              "issueID": "i1",
-            },
-            "fetch",
           ],
           [
             ":exists(issue)",
