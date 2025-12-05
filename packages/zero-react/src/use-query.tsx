@@ -316,7 +316,7 @@ export class ViewStore {
     TTable extends keyof TSchema['tables'] & string,
     TSchema extends Schema,
     TReturn,
-    MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
+    MD extends CustomMutatorDefs | undefined,
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,

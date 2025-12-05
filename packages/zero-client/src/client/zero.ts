@@ -83,7 +83,6 @@ import type {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {
-  type AnyMutatorRegistry,
   isMutatorRegistry,
   iterateMutators,
 } from '../../../zql/src/mutate/mutator-registry.ts';
@@ -202,7 +201,7 @@ interface TestZero {
 
 function asTestZero<
   S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
+  MD extends CustomMutatorDefs | undefined,
   C,
 >(z: Zero<S, MD, C>): TestZero {
   return z as TestZero;
@@ -303,7 +302,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
 export class Zero<
   const S extends Schema = DefaultSchema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
   C = DefaultContext,
 > {
   readonly version = version;
@@ -695,10 +694,10 @@ export class Zero<
 
     const mutateBatch = makeCRUDMutate<S>(schema, rep.mutate, callableMutate);
 
-    //  This is the legacy mutators. They are added to zero.mutate.<mutatorName>.
+    // This is the legacy mutators. They are added to zero.mutate.<mutatorName>.
     if (mutators && !isMutatorRegistry(mutators)) {
       makeMutateProperty(
-        mutators as AnyMutatorRegistry | CustomMutatorDefs,
+        mutators as CustomMutatorDefs,
         mutatorProxy,
         callableMutate as unknown as Record<string, unknown>,
         rep.mutate,

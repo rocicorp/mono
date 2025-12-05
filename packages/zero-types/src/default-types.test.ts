@@ -30,12 +30,9 @@ test('DefaultSchema uses registered schema and falls back to Schema', () => {
 });
 
 test('DefaultContext uses registered context with undefined and defaults to unknown', () => {
-  expectTypeOf<DefaultContext<RegisteredTypes>>().toEqualTypeOf<
-    | {
-        readonly userId: string;
-      }
-    | undefined
-  >();
+  expectTypeOf<DefaultContext<RegisteredTypes>>().toEqualTypeOf<{
+    readonly userId: string;
+  }>();
   expectTypeOf<DefaultContext>().toEqualTypeOf<unknown>();
 });
 

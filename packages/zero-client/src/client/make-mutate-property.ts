@@ -5,11 +5,6 @@ import {
   customMutatorKey,
   type Transaction,
 } from '../../../zql/src/mutate/custom.ts';
-import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
-import {
-  isMutator,
-  type MutatorDefinition,
-} from '../../../zql/src/mutate/mutator.ts';
 import type {DBMutator} from './crud.ts';
 import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import type {MutatorProxy} from './mutator-proxy.ts';
@@ -38,41 +33,34 @@ import type {MutatorProxy} from './mutator-proxy.ts';
  * using the mutator proxy.
  */
 export function makeMutateProperty(
-  mutators: AnyMutatorRegistry | CustomMutatorDefs,
+  mutators: CustomMutatorDefs,
   mutatorProxy: MutatorProxy,
   mutateObject: Record<string, unknown>,
   replicacheMutate: Record<string, unknown>,
 ): void {
   const processMutators = (
-    mutators: AnyMutatorRegistry | CustomMutatorDefs,
+    mutators: CustomMutatorDefs,
     path: string[],
     mutateObject: Record<string, unknown>,
   ) => {
     for (const [key, mutator] of Object.entries(mutators)) {
       path.push(key);
-      let fullKey: string | undefined;
-      if (isMutator(mutator)) {
-        fullKey = customMutatorKey('.', path);
-      } else if (typeof mutator === 'function') {
-        // Legacy CustomMutatorImpl
-        fullKey = customMutatorKey('|', path);
-      }
-
-      if (fullKey) {
+      if (typeof mutator === 'function') {
+        const fullKey = customMutatorKey('|', path);
         mutateObject[key] = mutatorProxy.wrapCustomMutator(
           must(replicacheMutate[fullKey]) as unknown as (
             ...args: unknown[]
           ) => MutatorResult,
         );
       } else {
-        // recursive build and process.
+        // Nested namespace - recursive build and process.
         let existing = mutateObject[key];
         if (existing === undefined) {
           existing = {};
           mutateObject[key] = existing;
         }
         processMutators(
-          mutator as AnyMutatorRegistry | CustomMutatorDefs,
+          mutator as CustomMutatorDefs,
           path,
           existing as Record<string, unknown>,
         );
@@ -85,45 +73,30 @@ export function makeMutateProperty(
 }
 
 /**
- * Builds the mutate type from mutator definitions, handling arbitrary nesting.
- * Each node can be either a MutatorDefinition or a CustomMutatorImpl function,
- * or a namespace containing more mutators.
+ * Builds the mutate type from legacy CustomMutatorDefs, handling arbitrary nesting.
+ * Each node can be either a CustomMutatorImpl function or a namespace containing more mutators.
  */
 type MakeFromMutatorDefinitions<
   S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs,
+  MD extends CustomMutatorDefs,
   C,
 > = {
-  readonly [K in keyof MD]: MD[K] extends MutatorDefinition<
-    infer TInput,
-    // oxlint-disable-next-line no-explicit-any
-    any,
-    S,
-    C,
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    any
-  >
-    ? [TInput] extends [undefined]
-      ? () => MutatorResult
-      : undefined extends TInput
-        ? (args?: TInput) => MutatorResult
-        : (args: TInput) => MutatorResult
-    : MD[K] extends (tx: Transaction<S>, ...args: infer Args) => Promise<void>
-      ? (...args: Args) => MutatorResult
-      : MD[K] extends AnyMutatorRegistry | CustomMutatorDefs
-        ? MakeFromMutatorDefinitions<S, MD[K], C>
-        : never;
+  readonly [K in keyof MD]: MD[K] extends (
+    tx: Transaction<S>,
+    ...args: infer Args
+  ) => Promise<void>
+    ? (...args: Args) => MutatorResult
+    : MD[K] extends CustomMutatorDefs
+      ? MakeFromMutatorDefinitions<S, MD[K], C>
+      : never;
 };
 
 export type MakeMutatePropertyType<
   S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
+  MD extends CustomMutatorDefs | undefined,
   C,
-> = MD extends AnyMutatorRegistry
-  ? // MutatorRegistry: no property tree, user calls zero.mutate(mr) directly
-    {}
-  : MD extends AnyMutatorRegistry | CustomMutatorDefs
-    ? S['enableLegacyMutators'] extends false
-      ? MakeFromMutatorDefinitions<S, MD, C>
-      : DeepMerge<DBMutator<S>, MakeFromMutatorDefinitions<S, MD, C>>
-    : DBMutator<S>;
+> = MD extends CustomMutatorDefs
+  ? S['enableLegacyMutators'] extends false
+    ? MakeFromMutatorDefinitions<S, MD, C>
+    : DeepMerge<DBMutator<S>, MakeFromMutatorDefinitions<S, MD, C>>
+  : DBMutator<S>;

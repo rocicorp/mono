@@ -14,9 +14,6 @@ import type {SchemaQuery} from '../query/schema-query.ts';
 
 type ClientID = string;
 
-export type Location = 'client' | 'server';
-export type TransactionReason = 'optimistic' | 'rebase' | 'authoritative';
-
 /**
  * A base transaction interface that any Transaction<S, T> is assignable to.
  * Used in places where the schema type doesn't need to be preserved,
@@ -28,6 +25,9 @@ export interface AnyTransaction {
   readonly mutationID: number;
   readonly reason: TransactionReason;
 }
+
+export type Location = 'client' | 'server';
+export type TransactionReason = 'optimistic' | 'rebase' | 'authoritative';
 
 export interface TransactionBase<S extends Schema> {
   readonly location: Location;
