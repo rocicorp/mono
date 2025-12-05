@@ -946,7 +946,6 @@ class UnsupportedSchemaChangeError extends Error {
   readonly description: string;
   readonly ddlUpdate: DdlUpdateEvent;
 
-  // Schema changes cannot be reliably replicated without event trigger support.
   constructor(
     description: string,
     ddlUpdate: DdlUpdateEvent,
