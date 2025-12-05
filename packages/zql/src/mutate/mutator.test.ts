@@ -160,7 +160,9 @@ describe('Non-JSON output types', () => {
       '~standard': {
         version: 1,
         vendor: 'test',
-        validate: input => ({value: {date: new Date(input.date)}}),
+        validate: input => ({
+          value: {date: new Date((input as {date: string}).date)},
+        }),
       },
     };
 
@@ -182,7 +184,9 @@ describe('Non-JSON output types', () => {
       '~standard': {
         version: 1,
         vendor: 'test',
-        validate: input => ({value: {date: new Date(input.date)}}),
+        validate: input => ({
+          value: {date: new Date((input as {date: string}).date)},
+        }),
       },
     };
 

@@ -1207,3 +1207,58 @@ describe('defineQueries merging types', () => {
     >();
   });
 });
+
+describe('Non-JSON output types', () => {
+  test('defineQuery with validator that outputs Date', () => {
+    // Validator that transforms a string input to a Date output
+    const dateValidator = makeValidator<{date: string}, {date: Date}>(data => ({
+      date: new Date((data as {date: string}).date),
+    }));
+
+    const query = defineQuery(dateValidator, ({args}) => {
+      // args.date should be a Date, not a string
+      expectTypeOf(args.date).toEqualTypeOf<Date>();
+      return builder.foo.where('id', '=', args.date.toISOString());
+    });
+
+    // The query function parameter should accept the output type (with Date)
+    expectTypeOf<Parameters<typeof query>>().toEqualTypeOf<
+      [{args: {date: Date}; ctx: unknown}]
+    >();
+  });
+
+  test('defineQueries with Date output type', () => {
+    const dateValidator = makeValidator<{date: string}, {date: Date}>(data => ({
+      date: new Date((data as {date: string}).date),
+    }));
+
+    const queries = defineQueries({
+      getByDate: defineQuery(dateValidator, ({args}) => {
+        expectTypeOf(args.date).toEqualTypeOf<Date>();
+        return builder.foo.where('id', '=', args.date.toISOString());
+      }),
+    });
+
+    // Input type should be {date: string} (JSON-serializable)
+    expectTypeOf(queries.getByDate).parameter(0).toEqualTypeOf<{date: string}>();
+
+    // Test actual runtime behavior
+    const result = queries.getByDate({date: '2024-01-01'}).toQuery({});
+    expect(asQueryInternals(result).ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        // The Date is transformed and used in the query
+        right: {type: 'literal', value: new Date('2024-01-01').toISOString()},
+      },
+    });
+
+    // Args sent to server should be the original input (string)
+    expect(asQueryInternals(result).customQueryID).toEqual({
+      name: 'getByDate',
+      args: [{date: '2024-01-01'}],
+    });
+  });
+});

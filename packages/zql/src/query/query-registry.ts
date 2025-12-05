@@ -94,7 +94,7 @@ type QueryDefinitionFunction<
   TSchema extends Schema,
   TReturn,
   TContext,
-  Args extends ReadonlyJSONValue | undefined,
+  Args,
 > = (options: {args: Args; ctx: TContext}) => Query<TTable, TSchema, TReturn>;
 
 /**
@@ -106,7 +106,7 @@ export type QueryDefinition<
   TReturn,
   TContext,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
 > = QueryDefinitionFunction<TTable, TSchema, TReturn, TContext, TOutput> & {
   [defineQueryTag]: true;
   validator: StandardSchemaV1<TInput, TOutput> | undefined;
@@ -118,7 +118,7 @@ export function isQueryDefinition<
   TReturn,
   TContext,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
 >(
   f: unknown,
 ): f is QueryDefinition<TTable, TSchema, TReturn, TContext, TInput, TOutput> {
@@ -194,7 +194,7 @@ export function defineQuery<
   TReturn,
   TContext,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
 >(
   validator: StandardSchemaV1<TInput, TOutput>,
   queryFn: QueryDefinitionFunction<TTable, TSchema, TReturn, TContext, TOutput>,
@@ -207,7 +207,7 @@ export function defineQuery<
   TReturn,
   TContext,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
 >(
   validatorOrQueryFn:
     | StandardSchemaV1<TInput, TOutput>
@@ -253,7 +253,7 @@ function createCustomQueryBuilder<
   R,
   C,
   ArgsInput extends ReadonlyJSONValue | undefined,
-  ArgsOutput extends ReadonlyJSONValue | undefined,
+  ArgsOutput,
   HasArgs extends boolean,
 >(
   queryDef: QueryDefinition<T, S, R, C, ArgsInput, ArgsOutput>,
