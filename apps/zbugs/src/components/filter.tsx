@@ -1,6 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
-import {memo, useMemo, useState} from 'react';
+import {memo, useEffect, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import {queries} from '../../shared/queries.ts';
 import labelIcon from '../assets/icons/label.svg';
@@ -32,6 +32,24 @@ export const Filter = memo(function Filter({projectName, onSelect}: Props) {
     setIsOpen(!isOpen);
     onSelect?.(selection);
   };
+
+  // Prevent page scroll when modal is open on mobile
+  // This fixes the issue where the keyboard causes content to scroll under the header
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const scrollY = window.scrollY;
+    const handleScroll = () => {
+      window.scrollTo(0, scrollY);
+    };
+
+    // Lock scroll position
+    window.addEventListener('scroll', handleScroll, {passive: false});
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [isOpen]);
 
   return (
     <div className="add-filter-container">
