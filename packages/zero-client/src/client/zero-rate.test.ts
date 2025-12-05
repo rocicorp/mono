@@ -9,8 +9,8 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.ts';
 
@@ -71,13 +71,14 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
         .primaryKey('id'),
     ],
   });
-  const mutators = defineMutators({
+  const mutators = defineMutatorsWithType<typeof schema>()({
     issue: {
-      insert: defineMutator<{id: string; value: number}, typeof schema>(
-        async ({tx, args}) => {
-          await tx.mutate.issue.insert(args);
-        },
-      ),
+      insert: defineMutatorWithType<typeof schema>()<{
+        id: string;
+        value: number;
+      }>(async ({tx, args}) => {
+        await tx.mutate.issue.insert(args);
+      }),
     },
   });
   const z = zeroForTest({
@@ -133,13 +134,14 @@ test('previously confirmed mutations are not resent after a rate limit error', a
         .primaryKey('id'),
     ],
   });
-  const mutators = defineMutators({
+  const mutators = defineMutatorsWithType<typeof schema>()({
     issue: {
-      insert: defineMutator<{id: string; value: number}, typeof schema>(
-        async ({tx, args}) => {
-          await tx.mutate.issue.insert(args);
-        },
-      ),
+      insert: defineMutatorWithType<typeof schema>()<{
+        id: string;
+        value: number;
+      }>(async ({tx, args}) => {
+        await tx.mutate.issue.insert(args);
+      }),
     },
   });
   const z = zeroForTest({

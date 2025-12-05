@@ -1,7 +1,7 @@
 import {expect, expectTypeOf, test} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
-  defineMutator,
+  defineMutatorWithType,
   type MutationRequest,
 } from '../../../zql/src/mutate/mutator.ts';
 import type {DBMutator} from './crud.ts';
@@ -16,7 +16,7 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
 test('run', async () => {
@@ -30,8 +30,9 @@ test('run', async () => {
         .primaryKey('id'),
     ],
   });
-  const mutators = defineMutators({
-    insertIssue: defineMutator(async ({tx}) => {
+
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    insertIssue: defineMutatorWithType<typeof schema>()(async ({tx}) => {
       await tx.mutate.issues.insert({id: 'a', value: 1});
       // @ts-expect-error no such table
       await tx.mutate.noSuchTable.insert({id: 'a', value: 1});
@@ -65,8 +66,8 @@ test('materialize', async () => {
         .primaryKey('id'),
     ],
   });
-  const mutators = defineMutators({
-    insertIssue: defineMutator(({tx}) =>
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    insertIssue: defineMutatorWithType<typeof schema>()(({tx}) =>
       tx.mutate.issues.insert({id: 'a', value: 1}),
     ),
   });

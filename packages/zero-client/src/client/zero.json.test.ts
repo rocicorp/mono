@@ -5,45 +5,37 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {zeroForTest} from './test-utils.ts';
 
 test('we can create rows with json columns and query those rows', async () => {
-  const mutators = defineMutators({
-    insertTrack: defineMutator(
-      ({
-        tx,
-        args,
-      }: {
-        tx: Transaction<DefaultSchema>;
-        args: {
-          id: string;
-          title: string;
-          artists: string[];
-        };
-      }) => tx.mutate.track.insert(args),
-    ),
+  const schema = createSchema({
+    tables: [
+      table('track')
+        .columns({
+          id: string(),
+          title: string(),
+          artists: json<string[]>(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    insertTrack: defineMutatorWithType<typeof schema>()<{
+      id: string;
+      title: string;
+      artists: string[];
+    }>(({tx, args}) => tx.mutate.track.insert(args)),
   });
 
   const {insertTrack} = mutators;
 
   const z = zeroForTest({
-    schema: createSchema({
-      tables: [
-        table('track')
-          .columns({
-            id: string(),
-            title: string(),
-            artists: json<string[]>(),
-          })
-          .primaryKey('id'),
-      ],
-    }),
+    schema,
     mutators,
   });
 

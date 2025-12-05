@@ -193,6 +193,18 @@ type TypedDefineMutator<
 // Mutator and MutationRequest types
 // ----------------------------------------------------------------------------
 
+export type MutatorTypes<
+  TInput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema,
+  TContext,
+  TWrappedTransaction,
+> = 'Mutator' & {
+  readonly $input: TInput;
+  readonly $schema: TSchema;
+  readonly $context: TContext;
+  readonly $wrappedTransaction: TWrappedTransaction;
+};
+
 /**
  * A callable wrapper around a MutatorDefinition, created by `defineMutators()`.
  *
@@ -223,6 +235,11 @@ export type Mutator<
     ctx: TContext;
     tx: Transaction<TSchema, TWrappedTransaction>;
   }) => Promise<void>;
+
+  /**
+   * Type-only phantom property to surface mutator types in a covariant position.
+   */
+  ['~']: Expand<MutatorTypes<TInput, TSchema, TContext, TWrappedTransaction>>;
 };
 
 // Helper type for the callable part of Mutator

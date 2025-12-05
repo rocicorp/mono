@@ -2,8 +2,8 @@ import {expect, test, vi} from 'vitest';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {zeroForTest} from './test-utils.ts';
 
@@ -50,8 +50,8 @@ test('Zero Junction', async () => {
     relationships: [eventRelation],
   });
 
-  const mutators = defineMutators({
-    doBatch: defineMutator(async ({tx}) => {
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    doBatch: defineMutatorWithType<typeof schema>()(async ({tx}) => {
       const m = tx.mutate;
       await m.event.insert({id: 'e1', name: 'Buffalo Big Board Classic'});
       await m.athlete.insert({id: 'a1', name: 'Mason Ho'});

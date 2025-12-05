@@ -9,9 +9,8 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 
@@ -49,8 +48,8 @@ async function testBasics(userID: string) {
         .primaryKey('id'),
     ],
   });
-  const mutators = defineMutators({
-    upsertE: defineMutator(({tx, args}: {tx: Transaction; args: E}) =>
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    upsertE: defineMutatorWithType<typeof schema>()<E>(({tx, args}) =>
       tx.mutate.e.upsert(args),
     ),
   });
