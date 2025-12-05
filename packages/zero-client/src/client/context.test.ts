@@ -8,7 +8,6 @@ import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {
   ZeroContext,
   type AddCustomQuery,
@@ -268,7 +267,6 @@ test('transactions', () => {
   const join = new Join({
     parent: servers.connect([['id', 'asc']]),
     child: flair.connect([['id', 'asc']]),
-    storage: new MemoryStorage(),
     parentKey: ['id'],
     childKey: ['serverID'],
     hidden: false,
