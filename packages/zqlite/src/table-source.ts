@@ -82,6 +82,7 @@ export class TableSource implements Source {
   readonly #shouldYield: () => boolean;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
+  #pushEpoch = 0;
 
   /**
    * @param shouldYield a function called after each row is read from the database,
@@ -252,6 +253,7 @@ export class TableSource implements Source {
           }
         : undefined,
       compareRows: makeComparator(sort),
+      lastPushedEpoch: 0,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -286,9 +288,6 @@ export class TableSource implements Source {
         ...sqlAndBindings.values,
       );
 
-      const callingConnectionIndex = this.#connections.indexOf(connection);
-      assert(callingConnectionIndex !== -1, 'Connection not found');
-
       const comparator = makeComparator(sort, req.reverse);
 
       debug?.initQuery(this.#table, sqlAndBindings.text);
@@ -305,7 +304,7 @@ export class TableSource implements Source {
             ),
             req.constraint,
             this.#overlay,
-            callingConnectionIndex,
+            connection.lastPushedEpoch,
             comparator,
             connection.filters?.predicate,
           ),
@@ -388,6 +387,7 @@ export class TableSource implements Source {
       exists,
       setOverlay,
       writeChange,
+      () => ++this.#pushEpoch,
     );
   }
 
