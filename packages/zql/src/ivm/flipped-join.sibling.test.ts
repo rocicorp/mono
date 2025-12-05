@@ -1117,7 +1117,6 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
       'fetch',
       'fetchCount',
       'push',
-      'cleanup',
     ]);
     return {
       source,

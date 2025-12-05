@@ -12,7 +12,6 @@ describe('FilterStart', () => {
         yield {row: {id: 2}, relationships: {}};
         yield {row: {id: 3}, relationships: {}};
       },
-      cleanup: vi.fn(),
       destroy: vi.fn(),
       getSchema: vi.fn(() => ({}) as SourceSchema),
     };

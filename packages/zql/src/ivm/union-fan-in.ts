@@ -91,11 +91,6 @@ export class UnionFanIn implements Operator {
     this.#inputs = inputs;
   }
 
-  cleanup(_req: FetchRequest): Stream<Node> {
-    // Cleanup is going away. Not implemented.
-    return [];
-  }
-
   destroy(): void {
     for (const input of this.#inputs) {
       input.destroy();

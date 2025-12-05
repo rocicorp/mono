@@ -117,8 +117,6 @@ export class Join implements Input {
     }
   }
 
-  *cleanup(_req: FetchRequest): Stream<Node> {}
-
   #pushParent(change: Change): void {
     switch (change.type) {
       case 'add':
@@ -160,14 +158,20 @@ export class Join implements Input {
         break;
       case 'edit': {
         // Assert the edit could not change the relationship.
-        assert(
-          rowEqualsForCompoundKey(
-            change.oldNode.row,
-            change.node.row,
-            this.#parentKey,
-          ),
-          `Parent edit must not change relationship.`,
+        const equal = rowEqualsForCompoundKey(
+          change.oldNode.row,
+          change.node.row,
+          this.#parentKey,
         );
+        if (!equal) {
+          console.log('Join edit key mismatch:', {
+            old: change.oldNode.row,
+            new: change.node.row,
+            key: this.#parentKey,
+            equal,
+          });
+        }
+        assert(equal, `Parent edit must not change relationship.`);
         this.#output.push(
           {
             type: 'edit',

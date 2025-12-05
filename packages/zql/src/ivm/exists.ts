@@ -74,7 +74,7 @@ export class Exists implements FilterOperator {
     this.#output.endFilter();
   }
 
-  filter(node: Node, cleanup: boolean): boolean {
+  filter(node: Node): boolean {
     let exists: boolean | undefined;
     if (!this.#noSizeReuse && !this.#inPush) {
       const key = this.#getCacheKey(node, this.#parentJoinKey);
@@ -90,8 +90,7 @@ export class Exists implements FilterOperator {
       }
     }
 
-    const result =
-      this.#filter(node, exists) && this.#output.filter(node, cleanup);
+    const result = this.#filter(node, exists) && this.#output.filter(node);
     return result;
   }
 

@@ -77,7 +77,6 @@ suite('EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -161,7 +160,6 @@ suite('EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -243,7 +241,6 @@ suite('EXISTS', () => {
       fetchTest(oneParentNoChildTest);
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -290,7 +287,6 @@ suite('EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -318,7 +314,6 @@ suite('EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -494,7 +489,6 @@ suite('EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -755,7 +749,6 @@ suite('EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -839,7 +832,6 @@ suite('EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -870,7 +862,6 @@ suite('NOT EXISTS', () => {
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -921,7 +912,6 @@ suite('NOT EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -968,7 +958,6 @@ suite('NOT EXISTS', () => {
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -1048,7 +1037,6 @@ suite('NOT EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -1077,7 +1065,6 @@ suite('NOT EXISTS', () => {
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -1192,7 +1179,6 @@ suite('NOT EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -1338,7 +1324,6 @@ suite('NOT EXISTS', () => {
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -1507,7 +1492,6 @@ test('three parents, no children - reversed', () => {
 
   expect(messages).toMatchInlineSnapshot(`
     {
-      "cleanup": [],
       "fetch": [
         [
           "1",
@@ -1564,8 +1548,8 @@ test('Exists forwards beginFilter/endFilter', () => {
   expect(mockOutput.endFilter).toHaveBeenCalled();
 });
 
-// This test runs the join through three phases:
-// initial fetch, fetch, and cleanup.
+// This test runs the join through two phases:
+// initial fetch and fetch.
 function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
   const log: SnitchMessage[] = [];
 
@@ -1626,21 +1610,17 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
     messages: {
       initialFetch: [],
       fetch: [],
-      cleanup: [],
     },
     cacheHitCounts,
   };
-  for (const [method, fetchType] of [
-    ['fetch', 'initialFetch'],
-    ['fetch', 'fetch'],
-  ] as const) {
+  for (const fetchType of ['initialFetch', 'fetch'] as const) {
     log.length = 0;
 
     const prevCacheHitCounts = new Map(cacheHitCounts);
     cacheHitCounts.clear();
 
     const c = new Catch(filter);
-    const r = c[method]();
+    const r = c.fetch({});
     expect(c.pushes).toEqual([]);
 
     switch (fetchType) {
@@ -1680,7 +1660,6 @@ type FetchTestResults = {
   messages: {
     initialFetch: SnitchMessage[];
     fetch: SnitchMessage[];
-    cleanup: SnitchMessage[];
   };
   storage: Record<string, JSONValue>;
   hydrate: CaughtNode[];

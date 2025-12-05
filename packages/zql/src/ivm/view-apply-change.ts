@@ -196,8 +196,6 @@ export function applyChange(
           schema.compareRows,
         );
       }
-      // Needed to ensure cleanup of operator state is fully done.
-      drainStreams(change.node);
       break;
     }
     case 'child': {

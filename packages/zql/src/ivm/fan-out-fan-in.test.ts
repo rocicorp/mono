@@ -272,58 +272,6 @@ test('fan-in fetch', () => {
   `);
 });
 
-test('cleanup forwards too all branches', () => {
-  const s = createSource(
-    lc,
-    testLogConfig,
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
-  s.push({type: 'add', row: {a: 1, b: 'foo'}});
-
-  const connector = s.connect([['a', 'asc']]);
-  const filterStart = new FilterStart(connector);
-  const fanOut = new FanOut(filterStart);
-  const filter1 = new Filter(fanOut, () => false);
-  const filter2 = new Filter(fanOut, () => true);
-  const filter3 = new Filter(fanOut, () => true);
-
-  const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
-  fanOut.setFanIn(fanIn);
-  const out = new Catch(new FilterEnd(filterStart, fanIn));
-
-  const filterSpy1 = vi.spyOn(filter1, 'filter');
-  const filterSpy2 = vi.spyOn(filter2, 'filter');
-  const filterSpy3 = vi.spyOn(filter3, 'filter');
-
-  const result = out.cleanup();
-  expect(result).toMatchInlineSnapshot(`
-    [
-      {
-        "relationships": {},
-        "row": {
-          "a": 1,
-          "b": "foo",
-        },
-      },
-    ]
-  `);
-
-  expect(filterSpy1).toHaveBeenCalledExactlyOnceWith(
-    {relationships: {}, row: {a: 1, b: 'foo'}},
-    true,
-  );
-  expect(filterSpy2).toHaveBeenCalledExactlyOnceWith(
-    {relationships: {}, row: {a: 1, b: 'foo'}},
-    true,
-  );
-  expect(filterSpy3).toHaveBeenCalledExactlyOnceWith(
-    {relationships: {}, row: {a: 1, b: 'foo'}},
-    true,
-  );
-});
-
 test('FanOut forwards beginFilter/endFilter to all outputs', () => {
   const mockInput = {
     setFilterOutput: vi.fn(),

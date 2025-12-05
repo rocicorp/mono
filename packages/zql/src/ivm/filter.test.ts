@@ -80,25 +80,6 @@ test('basics', () => {
       },
     ]
   `);
-
-  expect(out.cleanup({})).toMatchInlineSnapshot(`
-    [
-      {
-        "relationships": {},
-        "row": {
-          "a": 1,
-          "b": "foo",
-        },
-      },
-      {
-        "relationships": {},
-        "row": {
-          "a": 5,
-          "b": "foo",
-        },
-      },
-    ]
-  `);
 });
 
 test('edit', () => {

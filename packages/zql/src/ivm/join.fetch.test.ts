@@ -2063,8 +2063,8 @@ suite('compound join keys', () => {
   });
 });
 
-// Despite the name, this test runs the join through all three phases:
-// initial fetch, fetch, and cleanup.
+// Despite the name, this test runs the join through two phases:
+// hydrate, fetch.
 function fetchTest(t: FetchTest): FetchTestResults {
   assert(t.sources.length > 0);
   assert(t.joins.length === t.sources.length - 1);
@@ -2120,10 +2120,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
     storage: [],
     fetchMessages: [],
   };
-  for (const [phase, fetchType] of [
-    ['hydrate', 'fetch'],
-    ['fetch', 'fetch'],
-  ] as const) {
+  for (const phase of ['hydrate', 'fetch'] as const) {
     log.length = 0;
 
     // By convention we put them in the test bottom up. Why? Easier to think
@@ -2147,7 +2144,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
     expect(finalJoin.join.getSchema()).toStrictEqual(expectedSchema);
 
     const c = new Catch(finalJoin.join);
-    const r = c[fetchType]();
+    const r = c.fetch({});
 
     if (phase === 'hydrate') {
       results.hydrate = r;
@@ -2160,37 +2157,18 @@ function fetchTest(t: FetchTest): FetchTestResults {
       const {storage} = j;
       if (phase === 'hydrate') {
         results.storage[i] = storage.cloneData();
-      } else if (phase === 'fetch') {
-        expect(storage.cloneData()).toEqual(results.storage[i]);
       } else {
-        phase satisfies 'cleanup';
-        expect(storage.cloneData()).toEqual({});
+        phase satisfies 'fetch';
+        expect(storage.cloneData()).toEqual(results.storage[i]);
       }
     }
 
     if (phase === 'hydrate') {
       results.fetchMessages = [...log];
-    } else if (phase === 'fetch') {
+    } else {
+      phase satisfies 'fetch';
       // should be the same as for hydrate
       expect(log).toEqual(results.fetchMessages);
-    } else {
-      // For cleanup, the last fetch for any constraint should be a cleanup.
-      // Others should be fetch.
-      phase satisfies 'cleanup';
-      const expectedMessages = [];
-      const seen = new SetOfConstraint();
-      for (let i = results.fetchMessages.length - 1; i >= 0; i--) {
-        const [name, type, req] = results.fetchMessages[i];
-        expect(type).toSatisfy(t => t === 'fetch' || t === 'cleanup');
-        assert(type === 'fetch' || type === 'cleanup');
-        if (!req.constraint) {
-          expectedMessages[i] = [name, 'cleanup', req];
-        } else {
-          expectedMessages[i] = [name, 'fetch', req];
-        }
-        req.constraint && seen.add(req.constraint);
-      }
-      expect(log).toEqual(expectedMessages);
     }
   }
 

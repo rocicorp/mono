@@ -163,7 +163,6 @@ export class MemorySource implements Source {
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
-      cleanup: req => this.#cleanup(req, connection),
       setOutput: output => {
         connection.output = output;
       },
@@ -353,10 +352,6 @@ export class MemorySource implements Source {
     yield* conn.filters
       ? generateWithFilter(withConstraint, conn.filters.predicate)
       : withConstraint;
-  }
-
-  #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
-    return this.#fetch(req, connection) as Stream<Node>;
   }
 
   push(change: SourceChange): void {

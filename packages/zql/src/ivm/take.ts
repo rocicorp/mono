@@ -210,24 +210,6 @@ export class Take implements Operator {
     }
   }
 
-  *cleanup(req: FetchRequest): Stream<Node> {
-    assert(req.start === undefined, 'Start should be undefined');
-    assert(
-      constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
-      'Constraint should match partition key',
-    );
-    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-    this.#storage.del(takeStateKey);
-    let size = 0;
-    for (const inputNode of this.#input.cleanup(req)) {
-      if (size === this.#limit) {
-        return;
-      }
-      size++;
-      yield inputNode;
-    }
-  }
-
   #getStateAndConstraint(row: Row) {
     const takeStateKey = getTakeStateKey(this.#partitionKey, row);
     const takeState = this.#storage.get(takeStateKey);
