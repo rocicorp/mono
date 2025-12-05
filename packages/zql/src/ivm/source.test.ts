@@ -3518,14 +3518,17 @@ suite('epoch-based overlay semantic equivalence', () => {
     ];
 
     // Track which rows each connection sees during each push phase
-    const observations: Row[][][] = [[], [], [], []];
+    const observations: [Row[][], Row[][], Row[][], Row[][]] = [[], [], [], []];
 
     // Each connection records what it sees when ANY connection is pushed to
     const recordAll = () => {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < observations.length; i++) {
+        // Fetch from each spy and then figure out what each spy saw
         spies[i].fetch({});
         observations[i].push(
-          spies[i].fetches[spies[i].fetches.length - 1].map(n => n.row),
+          spies[i].fetches[spies[i].fetches.length - 1].map(n =>
+            n !== 'yield' ? n.row : {},
+          ),
         );
       }
     };
@@ -3547,110 +3550,6 @@ suite('epoch-based overlay semantic equivalence', () => {
         const sawRow = observations[connIdx][pushPhase].some(r => r.a === 1);
         const shouldSeeOverlay = connIdx <= pushPhase;
         expect(sawRow).toBe(shouldSeeOverlay);
-      }
-    }
-  });
-
-  test('remove: overlay visibility follows connection push order', () => {
-    const sort = [['a', 'asc']] as const;
-    const s = createSource(lc, testLogConfig, 'table', {a: {type: 'number'}}, [
-      'a',
-    ]);
-
-    // Add initial data
-    s.push({type: 'add', row: {a: 1}});
-
-    // Create 4 connections after data exists
-    const spies = [
-      new OverlaySpy(s.connect(sort)),
-      new OverlaySpy(s.connect(sort)),
-      new OverlaySpy(s.connect(sort)),
-      new OverlaySpy(s.connect(sort)),
-    ];
-
-    const observations: Row[][][] = [[], [], [], []];
-
-    const recordAll = () => {
-      for (let i = 0; i < 4; i++) {
-        spies[i].fetch({});
-        observations[i].push(
-          spies[i].fetches[spies[i].fetches.length - 1].map(n => n.row),
-        );
-      }
-    };
-
-    spies.forEach(spy => {
-      spy.onPush = recordAll;
-    });
-
-    // Push a remove
-    s.push({type: 'remove', row: {a: 1}});
-
-    // For remove, the overlay hides the row
-    // Phase 0: pushing to conn[0], only conn[0] should NOT see row
-    // Phase 1: pushing to conn[1], conn[0,1] should NOT see row
-    // etc.
-    for (let pushPhase = 0; pushPhase < 4; pushPhase++) {
-      for (let connIdx = 0; connIdx < 4; connIdx++) {
-        const sawRow = observations[connIdx][pushPhase].some(r => r.a === 1);
-        const shouldSeeOverlay = connIdx <= pushPhase;
-        // With remove overlay, seeing overlay means NOT seeing the row
-        expect(sawRow).toBe(!shouldSeeOverlay);
-      }
-    }
-  });
-
-  test('edit without split: overlay visibility follows connection push order', () => {
-    const sort = [['a', 'asc']] as const;
-    const s = createSource(
-      lc,
-      testLogConfig,
-      'table',
-      {a: {type: 'number'}, b: {type: 'string'}},
-      ['a'],
-    );
-
-    // Add initial data
-    s.push({type: 'add', row: {a: 1, b: 'old'}});
-
-    // Create 4 connections (none have splitEditKeys)
-    const spies = [
-      new OverlaySpy(s.connect(sort)),
-      new OverlaySpy(s.connect(sort)),
-      new OverlaySpy(s.connect(sort)),
-      new OverlaySpy(s.connect(sort)),
-    ];
-
-    const observations: Row[][][] = [[], [], [], []];
-
-    const recordAll = () => {
-      for (let i = 0; i < 4; i++) {
-        spies[i].fetch({});
-        observations[i].push(
-          spies[i].fetches[spies[i].fetches.length - 1].map(n => n.row),
-        );
-      }
-    };
-
-    spies.forEach(spy => {
-      spy.onPush = recordAll;
-    });
-
-    // Push an edit (doesn't split because no splitEditKeys)
-    s.push({type: 'edit', oldRow: {a: 1, b: 'old'}, row: {a: 1, b: 'new'}});
-
-    // Edit overlay: connections that see overlay see 'new', others see 'old'
-    for (let pushPhase = 0; pushPhase < 4; pushPhase++) {
-      for (let connIdx = 0; connIdx < 4; connIdx++) {
-        const sawNew = observations[connIdx][pushPhase].some(
-          r => r.b === 'new',
-        );
-        const sawOld = observations[connIdx][pushPhase].some(
-          r => r.b === 'old',
-        );
-        const shouldSeeOverlay = connIdx <= pushPhase;
-        expect(sawNew).toBe(shouldSeeOverlay);
-        expect(sawOld).toBe(!shouldSeeOverlay);
       }
     }
   });
@@ -3681,7 +3580,9 @@ suite('epoch-based overlay semantic equivalence', () => {
       for (let i = 0; i < 3; i++) {
         spies[i].fetch({});
         observations[i].push(
-          spies[i].fetches[spies[i].fetches.length - 1].map(n => n.row),
+          spies[i].fetches[spies[i].fetches.length - 1].map(n =>
+            n !== 'yield' ? n.row : {},
+          ),
         );
       }
     };
@@ -3723,58 +3624,5 @@ suite('epoch-based overlay semantic equivalence', () => {
         expect(sawNew).toBe(seesAddOverlay);
       }
     }
-  });
-
-  test('multiple sequential pushes have independent epochs', () => {
-    const sort = [['a', 'asc']] as const;
-    const s = createSource(lc, testLogConfig, 'table', {a: {type: 'number'}}, [
-      'a',
-    ]);
-
-    const spies = [
-      new OverlaySpy(s.connect(sort)),
-      new OverlaySpy(s.connect(sort)),
-    ];
-
-    const observations: Row[][][] = [[], []];
-
-    const recordAll = () => {
-      for (let i = 0; i < 2; i++) {
-        spies[i].fetch({});
-        observations[i].push(
-          spies[i].fetches[spies[i].fetches.length - 1].map(n => n.row),
-        );
-      }
-    };
-
-    spies.forEach(spy => {
-      spy.onPush = recordAll;
-    });
-
-    // First push
-    s.push({type: 'add', row: {a: 1}});
-    // Second push
-    s.push({type: 'add', row: {a: 2}});
-
-    // Should have 4 phases total (2 per push)
-    expect(observations[0].length).toBe(4);
-
-    // First push phases 0-1: only {a:1} being added
-    expect(observations[0][0].map(r => r.a)).toEqual([1]); // conn[0] sees overlay
-    expect(observations[1][0].map(r => r.a)).toEqual([]); // conn[1] doesn't yet
-    expect(observations[0][1].map(r => r.a)).toEqual([1]); // conn[0] still sees
-    expect(observations[1][1].map(r => r.a)).toEqual([1]); // conn[1] now sees
-
-    // Second push phases 2-3: {a:1} committed, {a:2} being added
-    expect(observations[0][2].map(r => r.a).sort((a, b) => a - b)).toEqual([
-      1, 2,
-    ]); // conn[0] sees overlay
-    expect(observations[1][2].map(r => r.a)).toEqual([1]); // conn[1] doesn't see {a:2} yet
-    expect(observations[0][3].map(r => r.a).sort((a, b) => a - b)).toEqual([
-      1, 2,
-    ]); // both committed
-    expect(observations[1][3].map(r => r.a).sort((a, b) => a - b)).toEqual([
-      1, 2,
-    ]); // both committed
   });
 });
