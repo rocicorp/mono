@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {JSONObject} from '../../../../zero-events/src/json.ts';
 import type {
   ReplicatedIndex,
   ReplicatedTable,
@@ -70,6 +71,25 @@ export class ReplicationStatusPublisher {
     clearInterval(this.#timer);
     return this;
   }
+}
+
+export async function publishReplicationError(
+  lc: LogContext,
+  stage: ReplicationStage,
+  description: string,
+  errorDetails?: JSONObject,
+  now = new Date(),
+) {
+  const event: ReplicationStatusEvent = {
+    type: 'zero/events/status/replication/v1',
+    component: 'replication',
+    status: 'ERROR',
+    stage,
+    description,
+    errorDetails,
+    time: now.toISOString(),
+  };
+  await publishCriticalEvent(lc, event);
 }
 
 // Exported for testing.

@@ -17,6 +17,7 @@ import {
   type ChangeStreamMessage,
 } from '../change-source/protocol/current/downstream.ts';
 import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.ts';
+import {publishReplicationError} from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
@@ -323,7 +324,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     await this.#storer.assumeOwnership();
     // The storer will, in turn, detect changes to ownership and stop
     // the change-streamer appropriately.
-    this.#storer.run().catch(e => this.stop(e));
+    this.#storer
+      .run()
+      .then(() => this.stop())
+      .catch(e => this.stop(e));
 
     while (this.#state.shouldRun()) {
       let err: unknown;
@@ -403,6 +407,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     switch (tag) {
       case 'reset-required':
         await markResetRequired(this.#changeDB, this.#shard);
+        await publishReplicationError(
+          this.#lc,
+          'Replicating',
+          msg.message ?? 'Resync required',
+          msg.errorDetails,
+        );
         if (this.#autoReset) {
           this.#lc.warn?.('shutting down for auto-reset');
           await this.stop(new AutoResetSignal());

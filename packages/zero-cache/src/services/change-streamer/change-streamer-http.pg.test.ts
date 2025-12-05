@@ -36,8 +36,6 @@ const SHARD_ID = {
   shardNum: 123,
 } satisfies ShardID;
 
-const STARTUP_DELAY_KEEPALIVES = 3;
-
 describe('change-streamer/http', () => {
   let lc: LogContext;
   let changeDB: PostgresDB;
@@ -102,7 +100,7 @@ describe('change-streamer/http', () => {
     const server = new ChangeStreamerHttpServer(
       lc,
       createTestConfig(),
-      {port: 0, startupDelayMs: 10000, startupDelayKeepalives: 3},
+      {port: 0, startupDelayMs: 10000},
       parent,
       {
         id: 'change-streamer',
@@ -160,7 +158,6 @@ describe('change-streamer/http', () => {
       {
         port: 0,
         startupDelayMs: 10000,
-        startupDelayKeepalives: STARTUP_DELAY_KEEPALIVES,
       },
       parent,
       {
@@ -182,16 +179,11 @@ describe('change-streamer/http', () => {
     res = await fetch(`${baseURL}/?foo=bar`);
     expect(res.ok).toBe(true);
 
-    for (let i = 0; i < STARTUP_DELAY_KEEPALIVES; i++) {
-      // The ChangeStreamerService should not yet have been started.
-      expect(runFn).not.toHaveBeenCalled();
+    res = await fetch(`${baseURL}/keepalive`);
+    expect(res.ok).toBe(true);
 
-      res = await fetch(`${baseURL}/keepalive`);
-      expect(res.ok).toBe(true);
-    }
-    // With the last /keepalive, the ChangeStreamerService should have been
-    // started.
-    expect(runFn).toHaveBeenCalledOnce();
+    // The ChangeStreamerService should not yet have been started.
+    expect(runFn).not.toHaveBeenCalledOnce();
 
     void server.stop();
   });

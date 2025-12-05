@@ -27,6 +27,9 @@ const entryPoints = [
   path.resolve(dirname, '../src/solid.ts'),
 ];
 
+// Explicitly set the tsconfig path to use tsconfig.client.json which includes the entry points
+const tsconfigPath = path.resolve(dirname, '../tsconfig.client.json');
+
 const options = {
   entryPoints,
   out: outputDir,
@@ -34,6 +37,7 @@ const options = {
   excludePrivate: true,
   excludeProtected: true,
   preserveWatchOutput: true,
+  tsconfig: tsconfigPath,
 };
 
 let wsServer: LiveReloadServer | null = null;

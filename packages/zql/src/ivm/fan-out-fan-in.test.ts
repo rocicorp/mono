@@ -323,3 +323,63 @@ test('cleanup forwards too all branches', () => {
     true,
   );
 });
+
+test('FanOut forwards beginFilter/endFilter to all outputs', () => {
+  const mockInput = {
+    setFilterOutput: vi.fn(),
+    getSchema: vi.fn(),
+    destroy: vi.fn(),
+  };
+
+  const fanOut = new FanOut(mockInput);
+  const mockOutput1 = {
+    push: vi.fn(),
+    filter: vi.fn(),
+    beginFilter: vi.fn(),
+    endFilter: vi.fn(),
+  };
+  const mockOutput2 = {
+    push: vi.fn(),
+    filter: vi.fn(),
+    beginFilter: vi.fn(),
+    endFilter: vi.fn(),
+  };
+
+  fanOut.setFilterOutput(mockOutput1);
+  fanOut.setFilterOutput(mockOutput2);
+
+  fanOut.beginFilter();
+  expect(mockOutput1.beginFilter).toHaveBeenCalled();
+  expect(mockOutput2.beginFilter).toHaveBeenCalled();
+
+  fanOut.endFilter();
+  expect(mockOutput1.endFilter).toHaveBeenCalled();
+  expect(mockOutput2.endFilter).toHaveBeenCalled();
+});
+
+test('FanIn forwards beginFilter/endFilter to output', () => {
+  const mockFanOut = {
+    getSchema: vi.fn(),
+  } as unknown as FanOut;
+  const mockInput = {
+    setFilterOutput: vi.fn(),
+    getSchema: vi.fn(),
+    destroy: vi.fn(),
+  };
+
+  const fanIn = new FanIn(mockFanOut, [mockInput]);
+  const mockOutput = {
+    push: vi.fn(),
+    filter: vi.fn(),
+    beginFilter: vi.fn(),
+    endFilter: vi.fn(),
+  };
+
+  fanIn.setFilterOutput(mockOutput);
+
+  fanIn.beginFilter();
+  expect(mockOutput.beginFilter).toHaveBeenCalled();
+
+  fanIn.endFilter();
+  expect(mockOutput.endFilter).toHaveBeenCalled();
+});

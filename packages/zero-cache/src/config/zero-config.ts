@@ -471,25 +471,14 @@ export const zeroOptions = {
       hidden: true,
     },
 
-    startupDelayKeepalives: {
-      type: v.number().default(3),
-      desc: [
-        `The number of /keepalive requests to wait for before the change-streamer takes over`,
-        `the replication stream (i.e. the handoff during replication-manager updates). This`,
-        `delay is used to verify that the task is recognized by the load balancer as a healthy`,
-        `target before the shutdown signal is sent to the previous replication-manager.`,
-      ],
-    },
-
     startupDelayMs: {
       type: v.number().default(15000),
       desc: [
-        `The maximum delay to wait before the change-streamer takes over the replication`,
-        `stream (i.e. the handoff during replication-manager updates). The takeover will thus`,
-        `happen when (1) {bold ZERO_CHANGE_STREAMER_STARTUP_DELAY_KEEPALIVES} are received,`,
-        `(2) when {bold ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS} has elapsed since the change-streamer`,
-        `service started (i.e. after the replica has been initialized or restored), or (3) when`,
-        `a change stream request is received by a view-syncer (i.e. serving-replicator).`,
+        `The delay to wait before the change-streamer takes over the replication stream`,
+        `(i.e. the handoff during replication-manager updates), to allow loadbalancers to register`,
+        `the task as healthy based on healthcheck parameters. Note that if a change stream request`,
+        `is received during this interval, the delay will be canceled and the takeover will happen`,
+        `immediately, since the incoming request indicates that the task is registered as a target.`,
       ],
     },
   },
