@@ -114,7 +114,9 @@ export function runPushTest(t: PushTest) {
     data = v;
   });
 
-  expect(log).toEqual(log2);
+  // ArrayView does not expand relationships of removed nodes, so
+  // its logs should be a subset of the catch operator's logs.
+  expect(log).toEqual(expect.arrayContaining(log2));
   expect(actualStorage).toEqual(actualStorage2);
 
   view.flush();
