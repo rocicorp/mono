@@ -657,7 +657,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       expect(logSink.messages[0]).toMatchObject([
         'error',
         {component: 'change-source'},
-        [expect.stringContaining(errMsg), {tag: 'message'}],
+        [expect.stringContaining(errMsg), {query: stmt}],
       ]);
     } finally {
       changes.cancel();

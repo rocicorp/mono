@@ -500,8 +500,10 @@ class ChangeMaker {
         `Unable to continue replication from LSN ${fromBigInt(lsn)}: ${String(
           err,
         )}`,
-        // 'content' can be a large byte Buffer. Exclude it from logging output.
-        {...msg, content: undefined},
+        err instanceof UnsupportedSchemaChangeError
+          ? err.ddlUpdate.context
+          : // 'content' can be a large byte Buffer. Exclude it from logging output.
+            {...msg, content: undefined},
       );
       error.lastLogTime = now;
     }
