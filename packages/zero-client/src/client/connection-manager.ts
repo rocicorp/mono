@@ -7,7 +7,7 @@ import {
   isClientError,
   type AuthError,
   type ClosedError,
-  type OfflineError,
+  type DisconnectedReason,
   type ZeroError,
 } from './error.ts';
 
@@ -16,7 +16,7 @@ const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
 export type ConnectionManagerState =
   | {
       name: ConnectionStatus.Disconnected;
-      reason: OfflineError;
+      reason: DisconnectedReason;
     }
   | {
       name: ConnectionStatus.Connecting;
@@ -253,7 +253,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  disconnected(reason: OfflineError): {
+  disconnected(reason: DisconnectedReason): {
     nextStatePromise: Promise<ConnectionManagerState>;
   } {
     // cannot transition from closed to any other status
