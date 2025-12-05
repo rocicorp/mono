@@ -132,7 +132,7 @@ suite('EXISTS 1 to many', () => {
     },
   };
 
-  test.only('Remove of child that joins with multiple parents, interplay with take', () => {
+  test('Remove of child that joins with multiple parents, interplay with take', () => {
     const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
