@@ -1,10 +1,10 @@
 import * as v from '@badrap/valita';
 import {expectTypeOf, test} from 'vitest';
-import {
+import type {
+  JSONObject,
   jsonObjectSchema,
+  JSONValue,
   jsonValueSchema,
-  type JSONObject,
-  type JSONValue,
 } from './json.ts';
 
 test('json schema types', () => {
