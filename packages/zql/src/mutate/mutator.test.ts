@@ -153,6 +153,55 @@ describe('Type Tests', () => {
   });
 });
 
+describe('Non-JSON output types', () => {
+  test('defineMutator with validator that outputs Date', () => {
+    // Validator that transforms a string input to a Date output
+    const dateValidator: StandardSchemaV1<{date: string}, {date: Date}> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: input => ({value: {date: new Date(input.date)}}),
+      },
+    };
+
+    const def = defineMutator(dateValidator, async ({args, ctx, tx}) => {
+      // args.date should be a Date, not a string
+      expectTypeOf(args.date).toEqualTypeOf<Date>();
+      expect(args.date).toBeInstanceOf(Date);
+      void ctx;
+      void tx;
+    });
+
+    expectTypeOf(def).toEqualTypeOf<
+      MutatorDefinition<{date: string}, {date: Date}, Schema, unknown, unknown>
+    >();
+  });
+
+  test('defineMutators with Date output type', () => {
+    const dateValidator: StandardSchemaV1<{date: string}, {date: Date}> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: input => ({value: {date: new Date(input.date)}}),
+      },
+    };
+
+    const mutators = defineMutators({
+      setDate: defineMutator(dateValidator, async ({args}) => {
+        expectTypeOf(args.date).toEqualTypeOf<Date>();
+        void args;
+      }),
+    } as const);
+
+    // Input type should be {date: string} (JSON-serializable)
+    expectTypeOf(mutators.setDate).toBeCallableWith({date: '2024-01-01'});
+
+    const mr = mutators.setDate({date: '2024-01-01'});
+    // The args on MutationRequest is the INPUT type (what gets sent to server)
+    expectTypeOf(mr.args).toEqualTypeOf<{date: string}>();
+  });
+});
+
 describe('Mutator callable type tests', () => {
   test('Mutator without args - callable with 0 arguments', () => {
     const mutators = defineMutators({

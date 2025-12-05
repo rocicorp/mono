@@ -17,7 +17,7 @@ const defineMutatorTag = Symbol();
 
 export function isMutatorDefinition<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TContext,
   TWrappedTransaction = unknown,
@@ -36,7 +36,7 @@ export function isMutatorDefinition<
 
 export type MutatorDefinition<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
@@ -52,7 +52,7 @@ export type MutatorDefinition<
 // Overload 1: Call with validator
 export function defineMutator<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
@@ -82,7 +82,7 @@ export function defineMutator<
 // Implementation
 export function defineMutator<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
