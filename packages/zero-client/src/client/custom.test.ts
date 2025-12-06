@@ -17,7 +17,6 @@ import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import {bindingsForZero} from './bindings.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {
@@ -28,7 +27,7 @@ import {
 import {ClientError} from './error.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import {MockSocket, zeroForTest} from './test-utils.ts';
+import {asCustomQuery, MockSocket, queryID, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
 
@@ -528,7 +527,7 @@ describe('rebasing custom mutators', () => {
 
     const zql = createBuilder(schema);
 
-    const q = zql.issue.where('id', '1').one();
+    const q = asCustomQuery(zql.issue.where('id', '1').one(), 'a', '1');
     const issue = await z.run(q, {type: 'unknown'});
     expect(issue?.title).toEqual('foo updated');
     expect(issue?.description).toEqual('updated');
@@ -548,9 +547,7 @@ describe('rebasing custom mutators', () => {
     await vi.waitFor(async () => {
       const rep = getInternalReplicacheImplForTesting(z);
 
-      expect(
-        await rep.query(tx => tx.has(`g/${bindingsForZero(z).hash(q)}`)),
-      ).toEqual(true);
+      expect(await rep.query(tx => tx.has(`g/${queryID(q)}`))).toEqual(true);
     });
 
     expect(completed).toEqual(true);
@@ -956,7 +953,8 @@ describe('server results and keeping read queries', () => {
 
     const zql = createBuilder(schema);
 
-    const q = z.materialize(zql.issue.limit(1));
+    const q = asCustomQuery(zql.issue.limit(1), 'a', undefined);
+    const view = z.materialize(q);
     const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
@@ -967,14 +965,14 @@ describe('server results and keeping read queries', () => {
     });
     await create.client;
 
-    q.destroy();
+    view.destroy();
 
     z.queryDelegate.flushQueryChanges();
 
     // query is not removed, only put.
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"2c1evh894a8vx","ast":{"table":"issues","limit":1},"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"37augjshwgayh","name":"a","args":[],"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -1008,23 +1006,24 @@ describe('server results and keeping read queries', () => {
     // mutation is no longer outstanding, query is removed.
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"2c1evh894a8vx"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"37augjshwgayh"}]}]`,
       ]);
     });
 
     messages.length = 0;
 
     // check the error case
-    const q2 = z.materialize(zql.issue);
+    const q2 = asCustomQuery(zql.issue, 'b', undefined);
+    const view2 = z.materialize(q2);
     const close = z.mutate.issue.close({});
     await close.client;
-    q2.destroy();
+    view2.destroy();
 
     z.queryDelegate.flushQueryChanges();
 
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"2uh1iy5olazzo","ast":{"table":"issues"},"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1pmg07l6czqjy","name":"b","args":[],"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -1068,7 +1067,7 @@ describe('server results and keeping read queries', () => {
 
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"2uh1iy5olazzo"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1pmg07l6czqjy"}]}]`,
       ]);
     });
 
@@ -1168,7 +1167,7 @@ describe('server results and keeping read queries', () => {
   });
 });
 
-test('trying to use crud mutators throws if `enableLegacyMutators` is set to false', async () => {
+test('crud mutators are not available if `enableLegacyMutators` is set to false', async () => {
   const z = zeroForTest({
     schema: {
       ...schema,
@@ -1176,24 +1175,14 @@ test('trying to use crud mutators throws if `enableLegacyMutators` is set to fal
     },
   });
 
-  await expect(
-    // @ts-expect-error - Testing runtime behavior when legacy mutators are disabled
-    z.mutate.issue.insert({
-      id: '1',
-      title: 'foo',
-      closed: false,
-      description: '',
-      ownerId: '',
-      createdAt: 1743018138477,
-    }),
-  ).rejects.toThrow(ClientError);
+  expect('issue' in z.mutate).toBe(false);
 
   await z.close();
 });
 
 test('crud mutators work if `enableLegacyMutators` is set to true (or not set)', async () => {
   const z = zeroForTest({
-    schema,
+    schema: {...schema, enableLegacyMutators: true},
   });
 
   await z.mutate.issue.insert({
@@ -1258,7 +1247,7 @@ describe('enableLegacyQueries', () => {
   test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
     const zql = createBuilder(schema);
     const z = zeroForTest({
-      schema,
+      schema: {...schema, enableLegacyQueries: true},
     });
 
     await z.triggerConnected();

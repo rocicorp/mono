@@ -111,7 +111,7 @@ export function makeReplicacheMutators<const S extends Schema, C>(
   context: C,
   lc: LogContext,
 ): MutatorDefs & {_zero_crud: CRUDMutator} {
-  const {enableLegacyMutators = true} = schema;
+  const {enableLegacyMutators = false} = schema;
 
   const replicacheMutators = {
     [CRUD_MUTATION_NAME]: enableLegacyMutators

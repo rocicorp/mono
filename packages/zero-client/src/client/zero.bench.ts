@@ -26,6 +26,7 @@ const schema = {
     user,
   },
   relationships: {},
+  enableLegacyMutators: true,
 } as const;
 type UserRow = Row<typeof user>;
 

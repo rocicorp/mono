@@ -2,6 +2,8 @@ import {expect, test, vi} from 'vitest';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {zeroForTest} from './test-utils.ts';
 
@@ -48,8 +50,29 @@ test('Zero Junction', async () => {
     relationships: [eventRelation],
   });
 
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    doBatch: defineMutatorWithType<typeof schema>()(async ({tx}) => {
+      const m = tx.mutate;
+      await m.event.insert({id: 'e1', name: 'Buffalo Big Board Classic'});
+      await m.athlete.insert({id: 'a1', name: 'Mason Ho'});
+      await m.discipline.insert({id: 'd1', name: 'Shortboard'});
+      await m.discipline.insert({id: 'd1', name: 'Supsquatch'});
+
+      await m.matchup.insert({
+        eventID: 'e1',
+        athleteID: 'a1',
+        disciplineID: 'd1',
+      });
+      await m.matchup.insert({
+        eventID: 'e1',
+        athleteID: 'a1',
+        disciplineID: 'd2',
+      });
+    }),
+  });
   const z = zeroForTest({
     schema,
+    mutators,
   });
   const zql = createBuilder(schema);
   const q = zql.event.related('athletes');
@@ -60,23 +83,7 @@ test('Zero Junction', async () => {
   expect(listener).toHaveBeenCalledTimes(1);
   expect(view.data).toMatchInlineSnapshot(`[]`);
 
-  await z.mutateBatch(async tx => {
-    await tx.event.insert({id: 'e1', name: 'Buffalo Big Board Classic'});
-    await tx.athlete.insert({id: 'a1', name: 'Mason Ho'});
-    await tx.discipline.insert({id: 'd1', name: 'Shortboard'});
-    await tx.discipline.insert({id: 'd1', name: 'Supsquatch'});
-
-    await tx.matchup.insert({
-      eventID: 'e1',
-      athleteID: 'a1',
-      disciplineID: 'd1',
-    });
-    await tx.matchup.insert({
-      eventID: 'e1',
-      athleteID: 'a1',
-      disciplineID: 'd2',
-    });
-  });
+  await z.mutate(mutators.doBatch()).client;
 
   expect(listener).toHaveBeenCalledTimes(2);
   expect(view.data).toMatchInlineSnapshot(`

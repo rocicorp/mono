@@ -97,7 +97,7 @@ export type MakeMutatePropertyType<
   MD extends CustomMutatorDefs | undefined,
   C,
 > = MD extends CustomMutatorDefs
-  ? S['enableLegacyMutators'] extends false
-    ? MakeFromMutatorDefinitions<S, MD, C>
-    : DeepMerge<DBMutator<S>, MakeFromMutatorDefinitions<S, MD, C>>
+  ? S['enableLegacyMutators'] extends true
+    ? DeepMerge<DBMutator<S>, MakeFromMutatorDefinitions<S, MD, C>>
+    : MakeFromMutatorDefinitions<S, MD, C>
   : DBMutator<S>;
