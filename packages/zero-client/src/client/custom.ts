@@ -9,6 +9,7 @@ import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {CRUDMutationRequest} from '../../../zql/src/mutate/crud-mutation-request.ts';
 import type {
   ClientTransaction,
   DeleteID,
@@ -202,21 +203,31 @@ function makeSchemaCRUD<S extends Schema>(
   tx: WriteTransaction,
   ivmBranch: IVMSourceBranch,
 ) {
-  // Only creates the CRUD mutators on demand
-  // rather than creating them all up-front for each mutation.
-  return new Proxy(
-    {},
-    {
-      get(target: Record<string, TableCRUD<TableSchema>>, prop: string) {
-        if (prop in target) {
-          return target[prop];
-        }
+  const cache: Record<string, TableCRUD<TableSchema>> = {};
 
-        target[prop] = makeTableCRUD(schema, prop, tx, ivmBranch);
-        return target[prop];
-      },
+  // The callable function that handles tx.mutate(crudRequest)
+  const callableMutate = (request: CRUDMutationRequest) => {
+    const tableCRUD = getTableCRUD(request.table);
+    return tableCRUD[request.op](request.value);
+  };
+
+  function getTableCRUD(tableName: string): TableCRUD<TableSchema> {
+    if (tableName in cache) {
+      return cache[tableName];
+    }
+    cache[tableName] = makeTableCRUD(schema, tableName, tx, ivmBranch);
+    return cache[tableName];
+  }
+
+  // Use a function as the proxy target so it's callable
+  return new Proxy(callableMutate, {
+    get(_target, prop: string) {
+      if (typeof prop === 'symbol') {
+        return undefined;
+      }
+      return getTableCRUD(prop);
     },
-  ) as SchemaCRUD<S>;
+  }) as unknown as SchemaCRUD<S>;
 }
 
 function assertValidRunOptions(options: RunOptions | undefined): void {

@@ -152,6 +152,7 @@ export type {
   Mutator,
   MutatorDefinitionTypes,
 } from '../../zql/src/mutate/mutator.ts';
+export {createCRUD} from '../../zql/src/mutate/create-crud.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
