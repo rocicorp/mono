@@ -7,13 +7,11 @@ import type {
   DBTransaction,
   SchemaCRUD,
 } from '../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import type {
   HumanReadable,
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
-import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import type {TransactionImpl} from './custom.ts';
 import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
 import type {
@@ -37,13 +35,11 @@ export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
     dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
   ) => SchemaCRUD<TSchema>;
-  readonly #query: SchemaQuery<TSchema>;
   readonly #schema: TSchema;
 
   constructor(connection: DBConnection<TWrappedTransaction>, schema: TSchema) {
     this.connection = connection;
     this.#mutate = makeSchemaCRUD(schema);
-    this.#query = createBuilder(schema);
     this.#schema = schema;
   }
 
@@ -113,7 +109,6 @@ export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
       mutationID,
       this.#schema,
       this.#mutate,
-      this.#query,
     );
   }
 
