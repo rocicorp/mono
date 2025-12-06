@@ -1,22 +1,17 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {createBuilder} from '../../zql/src/query/create-builder.ts';
-import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
 import {schema, schemaSql, seedDataSql} from './test/schema.ts';
 import {Transaction} from './test/util.ts';
 
 describe('makeSchemaQuery', () => {
   let pg: PostgresDB;
-  let query: SchemaQuery<typeof schema>;
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaQuery-test');
     await pg.unsafe(schemaSql);
     await pg.unsafe(seedDataSql);
-
-    query = createBuilder(schema);
   });
 
   test('select', async () => {
@@ -29,7 +24,6 @@ describe('makeSchemaQuery', () => {
         1,
         schema,
         mutate,
-        query,
       );
 
       const result = await transaction.run(transaction.query.basic);
@@ -53,7 +47,6 @@ describe('makeSchemaQuery', () => {
         1,
         schema,
         mutate,
-        query,
       );
 
       const result = await transaction.run(transaction.query.basic.one());
@@ -71,13 +64,30 @@ describe('makeSchemaQuery', () => {
         1,
         schema,
         mutate,
-        query,
       );
 
       const result = await transaction.run(
         transaction.query.basic.where('id', 'non-existent').one(),
       );
       expect(result).toEqual(undefined);
+    });
+  });
+
+  test('tx.query.table.run() works', async () => {
+    await pg.begin(async tx => {
+      const dbTransaction = new Transaction(tx);
+      const mutate = makeSchemaCRUD(schema);
+      const transaction = await makeServerTransaction(
+        dbTransaction,
+        'test-client',
+        1,
+        schema,
+        mutate,
+      );
+
+      // Test that tx.query.table.run() works (the fix for the bug)
+      const result = await transaction.query.basic.run();
+      expect(result).toEqual([{id: '1', a: 2, b: 'foo', c: true}]);
     });
   });
 });
