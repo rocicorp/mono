@@ -11,6 +11,7 @@ import type {
   ServerSchema,
   ServerTableSchema,
 } from '../../zero-types/src/server-schema.ts';
+import type {CRUDMutationRequest} from '../../zql/src/mutate/crud-mutation-request.ts';
 import type {
   DBTransaction,
   SchemaCRUD,
@@ -200,6 +201,8 @@ export function makeSchemaCRUD<S extends Schema>(
   class CRUDHandler {
     readonly #dbTransaction: DBTransaction<unknown>;
     readonly #serverSchema: ServerSchema;
+    readonly #boundCache: Record<string, TableCRUD<TableSchema>> = {};
+
     constructor(
       dbTransaction: DBTransaction<unknown>,
       serverSchema: ServerSchema,
@@ -208,31 +211,48 @@ export function makeSchemaCRUD<S extends Schema>(
       this.#serverSchema = serverSchema;
     }
 
-    get(target: Record<string, TableCRUD<TableSchema>>, prop: string) {
-      if (prop in target) {
-        return target[prop];
+    #getTableCRUD(tableName: string): TableCRUD<TableSchema> {
+      if (tableName in this.#boundCache) {
+        return this.#boundCache[tableName];
       }
 
       const txHolder: WithHiddenTxAndSchema = {
         [dbTxSymbol]: this.#dbTransaction,
         [serverSchemaSymbol]: this.#serverSchema,
       };
-      target[prop] = Object.fromEntries(
-        Object.entries(schemaCRUDs[prop]).map(([name, method]) => [
+      this.#boundCache[tableName] = Object.fromEntries(
+        Object.entries(schemaCRUDs[tableName]).map(([name, method]) => [
           name,
           method.bind(txHolder),
         ]),
       ) as TableCRUD<TableSchema>;
 
-      return target[prop];
+      return this.#boundCache[tableName];
+    }
+
+    get(_target: unknown, prop: string) {
+      if (typeof prop === 'symbol') {
+        return undefined;
+      }
+      return this.#getTableCRUD(prop);
+    }
+
+    apply(_target: unknown, _thisArg: unknown, args: [CRUDMutationRequest]) {
+      const [request] = args;
+      const tableCRUD = this.#getTableCRUD(request.table);
+      return tableCRUD[request.op](request.value);
     }
   }
 
-  return (dbTransaction: DBTransaction<unknown>, serverSchema: ServerSchema) =>
-    new Proxy(
-      {},
-      new CRUDHandler(dbTransaction, serverSchema),
-    ) as SchemaCRUD<S>;
+  return (
+    dbTransaction: DBTransaction<unknown>,
+    serverSchema: ServerSchema,
+  ) => {
+    const handler = new CRUDHandler(dbTransaction, serverSchema);
+    // Use a function as the proxy target so it's callable
+    const callableMutate = () => {};
+    return new Proxy(callableMutate, handler) as SchemaCRUD<S>;
+  };
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): T {

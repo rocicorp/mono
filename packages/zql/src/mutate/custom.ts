@@ -11,6 +11,7 @@ import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
 import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
 import type {SchemaQuery} from '../query/schema-query.ts';
+import type {CRUDMutationRequest, CRUDOp} from './crud-mutation-request.ts';
 
 type ClientID = string;
 
@@ -102,7 +103,18 @@ interface Queryable {
 
 export type SchemaCRUD<S extends Schema> = {
   [Table in keyof S['tables']]: TableCRUD<S['tables'][Table]>;
-};
+} & SchemaCRUDCallable<S>;
+
+/**
+ * Makes SchemaCRUD callable with a CRUDMutationRequest.
+ * This allows: tx.mutate(crud.tableName.insert({...}))
+ */
+type SchemaCRUDCallable<S extends Schema> = <
+  TTable extends keyof S['tables'] & string,
+  TOp extends CRUDOp,
+>(
+  request: CRUDMutationRequest<S, TTable, TOp>,
+) => Promise<void>;
 
 export type TableCRUD<S extends TableSchema> = {
   /**
