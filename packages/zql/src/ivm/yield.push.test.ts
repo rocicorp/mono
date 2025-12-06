@@ -42,7 +42,7 @@ class YieldOutput implements FilterOutput {
 
   beginFilter(): void {}
   endFilter(): void {}
-  *filter(_node: Node, _cleanup: boolean): Generator<'yield', boolean> {
+  *filter(_node: Node): Generator<'yield', boolean> {
     return true;
   }
 }
@@ -286,7 +286,6 @@ describe('Yield Propagation (Push)', () => {
     const join = new Join({
       parent,
       child,
-      storage: new MockStorage(),
       parentKey: ['id'],
       childKey: ['id'],
       relationshipName: 'child',
