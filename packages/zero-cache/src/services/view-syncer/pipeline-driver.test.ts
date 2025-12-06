@@ -19,7 +19,7 @@ import {
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
 import {getMutationResultsQuery} from './cvr.ts';
-import {PipelineDriver} from './pipeline-driver.ts';
+import {PipelineDriver, type Timer} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 import {TimeSliceTimer} from './view-syncer.ts';
 import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
@@ -31,7 +31,10 @@ import {
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 
-const NO_TIME_ADVANCEMENT_TIMER = {totalElapsed: () => 0};
+const NO_TIME_ADVANCEMENT_TIMER: Timer = {
+  elapsedLap: () => 0,
+  totalElapsed: () => 0,
+};
 
 describe('view-syncer/pipeline-driver', () => {
   const shardID: ShardID = {appID: 'zeroz', shardNum: 1};
@@ -369,9 +372,7 @@ describe('view-syncer/pipeline-driver', () => {
     return new TimeSliceTimer().startWithoutYielding();
   }
 
-  function changes(
-    timer: {totalElapsed: () => number} = NO_TIME_ADVANCEMENT_TIMER,
-  ) {
+  function changes(timer: Timer = NO_TIME_ADVANCEMENT_TIMER) {
     return [...pipelines.advance(timer).changes];
   }
 
@@ -719,7 +720,8 @@ describe('view-syncer/pipeline-driver', () => {
 
     // 60ms is larger than half of the hydration time.
     expect(() => [
-      ...pipelines.advance({totalElapsed: () => 60}).changes,
+      ...pipelines.advance({totalElapsed: () => 60, elapsedLap: () => 60})
+        .changes,
     ]).toThrowErrorMatchingInlineSnapshot(
       `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 60 ms. Advancement time limited based on total hydration time of 100 ms.]`,
     );
@@ -740,7 +742,8 @@ describe('view-syncer/pipeline-driver', () => {
     replicator.processTransaction('140', messages.insert('issues', {id: 'i1'}));
 
     expect(() => [
-      ...pipelines.advance({totalElapsed: () => 20}).changes,
+      ...pipelines.advance({totalElapsed: () => 20, elapsedLap: () => 20})
+        .changes,
     ]).not.toThrow();
   });
 
@@ -759,7 +762,8 @@ describe('view-syncer/pipeline-driver', () => {
     // 29 is larger than the hydration time but less than the minimum
     // advancement time limit
     expect(() => [
-      ...pipelines.advance({totalElapsed: () => 29}).changes,
+      ...pipelines.advance({totalElapsed: () => 29, elapsedLap: () => 29})
+        .changes,
     ]).not.toThrow();
   });
 

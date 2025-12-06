@@ -11,7 +11,6 @@ import {
 } from './join-utils.ts';
 import {
   throwOutput,
-  skipYields,
   type FetchRequest,
   type Input,
   type Output,
@@ -117,10 +116,10 @@ export class Join implements Input {
     }
   }
 
-  #pushParent(change: Change): void {
+  *#pushParent(change: Change): Stream<'yield'> {
     switch (change.type) {
       case 'add':
-        this.#output.push(
+        yield* this.#output.push(
           {
             type: 'add',
             node: this.#processParentNode(
@@ -132,7 +131,7 @@ export class Join implements Input {
         );
         break;
       case 'remove':
-        this.#output.push(
+        yield* this.#output.push(
           {
             type: 'remove',
             node: this.#processParentNode(
@@ -144,7 +143,7 @@ export class Join implements Input {
         );
         break;
       case 'child':
-        this.#output.push(
+        yield* this.#output.push(
           {
             type: 'child',
             node: this.#processParentNode(
@@ -166,7 +165,7 @@ export class Join implements Input {
           ),
           `Parent edit must not change relationship.`,
         );
-        this.#output.push(
+        yield* this.#output.push(
           {
             type: 'edit',
             oldNode: this.#processParentNode(
@@ -187,58 +186,14 @@ export class Join implements Input {
     }
   }
 
-  #pushChild(change: Change): void {
-    const pushChildChange = (childRow: Row, change: Change) => {
-      this.#inprogressChildChange = {
-        change,
-        position: undefined,
-      };
-      try {
-        let anyNull = false;
-        const constraint = Object.fromEntries(
-          this.#parentKey.map((key, i) => {
-            const value = childRow[this.#childKey[i]];
-            if (value === null) {
-              anyNull = true;
-            }
-            return [key, value];
-          }),
-        );
-        const parentNodes = anyNull
-          ? []
-          : skipYields(
-              this.#parent.fetch({
-                constraint,
-              }),
-            );
-
-        for (const parentNode of parentNodes) {
-          this.#inprogressChildChange.position = parentNode.row;
-          const childChange: ChildChange = {
-            type: 'child',
-            node: this.#processParentNode(
-              parentNode.row,
-              parentNode.relationships,
-            ),
-            child: {
-              relationshipName: this.#relationshipName,
-              change,
-            },
-          };
-          this.#output.push(childChange, this);
-        }
-      } finally {
-        this.#inprogressChildChange = undefined;
-      }
-    };
-
+  *#pushChild(change: Change): Stream<'yield'> {
     switch (change.type) {
       case 'add':
       case 'remove':
-        pushChildChange(change.node.row, change);
+        yield* this.#pushChildChange(change.node.row, change);
         break;
       case 'child':
-        pushChildChange(change.node.row, change);
+        yield* this.#pushChildChange(change.node.row, change);
         break;
       case 'edit': {
         const childRow = change.node.row;
@@ -248,12 +203,58 @@ export class Join implements Input {
           rowEqualsForCompoundKey(oldChildRow, childRow, this.#childKey),
           'Child edit must not change relationship.',
         );
-        pushChildChange(childRow, change);
+        yield* this.#pushChildChange(childRow, change);
         break;
       }
 
       default:
         unreachable(change);
+    }
+  }
+
+  *#pushChildChange(childRow: Row, change: Change): Stream<'yield'> {
+    this.#inprogressChildChange = {
+      change,
+      position: undefined,
+    };
+    try {
+      let anyNull = false;
+      const constraint = Object.fromEntries(
+        this.#parentKey.map((key, i) => {
+          const value = childRow[this.#childKey[i]];
+          if (value === null) {
+            anyNull = true;
+          }
+          return [key, value];
+        }),
+      );
+      const parentNodes = anyNull
+        ? []
+        : this.#parent.fetch({
+            constraint,
+          });
+
+      for (const parentNode of parentNodes) {
+        if (parentNode === 'yield') {
+          yield parentNode;
+          continue;
+        }
+        this.#inprogressChildChange.position = parentNode.row;
+        const childChange: ChildChange = {
+          type: 'child',
+          node: this.#processParentNode(
+            parentNode.row,
+            parentNode.relationships,
+          ),
+          child: {
+            relationshipName: this.#relationshipName,
+            change,
+          },
+        };
+        yield* this.#output.push(childChange, this);
+      }
+    } finally {
+      this.#inprogressChildChange = undefined;
     }
   }
 

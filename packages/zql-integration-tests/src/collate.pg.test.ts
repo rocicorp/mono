@@ -26,6 +26,7 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 import './helpers/comparePg.ts';
 import {fillPgAndSync} from './helpers/setup.ts';
 
@@ -136,10 +137,12 @@ beforeAll(async () => {
 
   // Initialize memory sources with test data
   for (const row of testData.item) {
-    memorySources.item.push({
-      type: 'add',
-      row,
-    });
+    consume(
+      memorySources.item.push({
+        type: 'add',
+        row,
+      }),
+    );
   }
 
   // Check that PG, SQLite, and test data are in sync

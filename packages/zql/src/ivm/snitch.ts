@@ -81,9 +81,11 @@ export class Snitch implements Operator {
     }
   }
 
-  push(change: Change) {
+  *push(change: Change): Stream<'yield'> {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
-    this.#output?.push(change, this);
+    if (this.#output) {
+      yield* this.#output.push(change, this);
+    }
   }
 }
 
@@ -146,10 +148,10 @@ export class FilterSnitch implements FilterOperator {
     this.#output?.endFilter();
   }
 
-  filter(node: Node): boolean {
+  *filter(node: Node): Generator<'yield', boolean> {
     this.#log([this.#name, 'filter', node.row]);
     assert(this.#output);
-    return this.#output.filter(node);
+    return yield* this.#output.filter(node);
   }
 
   destroy(): void {
@@ -167,9 +169,11 @@ export class FilterSnitch implements FilterOperator {
     this.log.push(message);
   }
 
-  push(change: Change) {
+  *push(change: Change): Stream<'yield'> {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
-    this.#output?.push(change, this);
+    if (this.#output) {
+      yield* this.#output.push(change, this);
+    }
   }
 }
 
