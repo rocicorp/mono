@@ -1,18 +1,4 @@
 import {afterEach, describe, expect, test, vi} from 'vitest';
-import type {ReplicacheTest} from './test-util.ts';
-import {
-  addData,
-  disableAllBackgroundProcesses,
-  expectLogContext,
-  initReplicacheTesting,
-  makePullResponseV1,
-  replicacheForTesting,
-  tickAFewTimes,
-} from './test-util.ts';
-
-// fetch-mock has invalid d.ts file so we removed that on npm install.
-// @ts-expect-error
-import fetchMock from 'fetch-mock/esm/client';
 import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
 import {sleep} from '../../shared/src/sleep.ts';
 import {StoreImpl} from './dag/store-impl.ts';
@@ -31,6 +17,17 @@ import {
   ClientStateNotFoundError,
   getClient,
 } from './persist/clients.ts';
+import type {ReplicacheTest} from './test-util.ts';
+import {
+  addData,
+  disableAllBackgroundProcesses,
+  expectLogContext,
+  fetchMocker,
+  initReplicacheTesting,
+  makePullResponseV1,
+  replicacheForTesting,
+  tickAFewTimes,
+} from './test-util.ts';
 import type {WriteTransaction} from './transactions.ts';
 import type {MutatorDefs} from './types.ts';
 import {withRead, withWriteNoImplicitCommit} from './with-transactions.ts';
@@ -73,7 +70,7 @@ test('basic persist & load', async () => {
   );
   assertNotUndefined(clientGroupBeforePull);
 
-  fetchMock.postOnce(
+  fetchMocker.postOnce(
     pullURL,
     makePullResponseV1(clientID, 2, [
       {
