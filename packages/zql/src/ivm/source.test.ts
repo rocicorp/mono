@@ -3548,7 +3548,7 @@ suite('epoch-based overlay semantic equivalence', () => {
     });
 
     // Push an add - this will trigger 4 push phases (one per connection)
-    s.push({type: 'add', row: {a: 1}});
+    consume(s.push({type: 'add', row: {a: 1}}));
 
     // Verify the invariant: connection sees overlay iff its index <= current push target
     // Phase 0: pushing to conn[0], only conn[0] should see overlay
@@ -3575,7 +3575,7 @@ suite('epoch-based overlay semantic equivalence', () => {
     );
 
     // Add initial data
-    s.push({type: 'add', row: {a: 1, b: 'old'}});
+    consume(s.push({type: 'add', row: {a: 1, b: 'old'}}));
 
     // Create 3 connections - middle one has splitEditKeys on 'b'
     const spies = [
@@ -3602,7 +3602,9 @@ suite('epoch-based overlay semantic equivalence', () => {
     });
 
     // Push an edit that will be split into remove + add
-    s.push({type: 'edit', oldRow: {a: 1, b: 'old'}, row: {a: 1, b: 'new'}});
+    consume(
+      s.push({type: 'edit', oldRow: {a: 1, b: 'old'}, row: {a: 1, b: 'new'}}),
+    );
 
     // Split edit creates 6 push phases: 3 for remove, 3 for add
     expect(observations[0].length).toBe(6);

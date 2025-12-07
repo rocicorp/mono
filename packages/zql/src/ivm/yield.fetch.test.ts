@@ -1,6 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import type {JSONValue} from '../../../shared/src/json.ts';
-import type {FetchRequest, Input, Output, Storage} from './operator.ts';
+import type {FetchRequest, Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 import {compareValues, type Node} from './data.ts';
@@ -14,6 +13,7 @@ import {UnionFanIn} from './union-fan-in.ts';
 import {UnionFanOut} from './union-fan-out.ts';
 import {FlippedJoin} from './flipped-join.ts';
 import {Exists} from './exists.ts';
+import {MemoryStorage} from './memory-storage.ts';
 
 const YIELD_SOURCE_SCHEMA_BASE: SourceSchema = {
   tableName: 'table1',
@@ -49,15 +49,6 @@ class YieldSource implements Input {
   }
 
   destroy(): void {}
-}
-
-class MockStorage implements Storage {
-  get(_key: string) {
-    return undefined;
-  }
-  set(_key: string, _value: JSONValue) {}
-  del(_key: string) {}
-  *scan(_options?: {prefix: string}): Stream<[string, JSONValue]> {}
 }
 
 describe('Yield Propagation', () => {
@@ -112,7 +103,7 @@ describe('Yield Propagation', () => {
 
   test('Take propagates yield', () => {
     const source = new YieldSource();
-    const take = new Take(source, new MockStorage(), 10);
+    const take = new Take(source, new MemoryStorage(), 10);
     const catchOp = new Catch(take);
     expect(catchOp.fetch({})).toMatchInlineSnapshot(`
       [
@@ -394,5 +385,18 @@ describe('Yield Propagation', () => {
         },
       ]
     `);
+  });
+
+  test('Error propagation during fetch', () => {
+    const source = new YieldSource();
+    const error = new Error('Fetch failed');
+    source.fetch = function* (_req: FetchRequest) {
+      yield 'yield';
+      throw error;
+    };
+
+    const catchOp = new Catch(source);
+
+    expect(() => catchOp.fetch({})).toThrow(error);
   });
 });

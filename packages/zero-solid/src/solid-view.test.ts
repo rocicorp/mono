@@ -1334,10 +1334,12 @@ test('collapse-single', () => {
       },
     },
   } as const;
-  view.push({
-    type: 'add',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'add',
+      ...changeSansType,
+    }),
+  );
 
   expect(data()).toEqual(data0);
   commit();

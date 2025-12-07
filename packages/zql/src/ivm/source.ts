@@ -69,19 +69,24 @@ export interface Source {
 
   /**
    * Pushes a change into the source and into all connected outputs.
-   * // TODO: this should return
+   *
+   * The returned stream can yield 'yield' to yield control to the caller
+   * for purposes of responsiveness.
+   *
+   * Once the stream is exhausted, the change will have been pushed into all
+   * connected inputs and committed to the source.
    */
   push(change: SourceChange): Stream<'yield'>;
 
   /**
    * Pushes a change into the source.
-   * // TODO: this comment needs updating
-   * Iterating the returned iterator will push the
-   * change into one connected input at a time.
    *
-   * Once the iterator is exhausted, the change will
-   * have been pushed into all connected inputs and
-   * committed to the source.
+   * Iterating the returned stream will push the change into one connected input
+   * at a time, yielding `undefined` between each, and yielding `'yield'` to
+   * yield control to the caller for purposes of responsiveness.
+   *
+   * Once the stream is exhausted, the change will have been pushed
+   * into all connected inputs and committed to the source.
    */
   genPush(change: SourceChange): Stream<'yield' | undefined>;
 }

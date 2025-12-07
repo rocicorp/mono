@@ -1,375 +1,658 @@
 import {describe, expect, test} from 'vitest';
-import type {JSONValue} from '../../../shared/src/json.ts';
-import type {FetchRequest, Output, Storage} from './operator.ts';
-import type {SourceSchema} from './schema.ts';
+import type {InputBase, FetchRequest} from './operator.ts';
 import type {Stream} from './stream.ts';
-import {compareValues, type Node} from './data.ts';
-import {
-  FilterEnd,
-  FilterStart,
-  type FilterInput,
-  type FilterOutput,
-} from './filter-operators.ts';
+import type {Node} from './data.ts';
+import {FilterEnd, FilterStart, type FilterOutput} from './filter-operators.ts';
 import {Skip} from './skip.ts';
 import {Take} from './take.ts';
-import {Snitch} from './snitch.ts';
 import {Join} from './join.ts';
 import {UnionFanIn} from './union-fan-in.ts';
 import {UnionFanOut} from './union-fan-out.ts';
 import {FlippedJoin} from './flipped-join.ts';
 import {Exists} from './exists.ts';
+import {FanOut} from './fan-out.ts';
+import {FanIn} from './fan-in.ts';
+import {Filter} from './filter.ts';
 import type {Change} from './change.ts';
-
-const YIELD_SOURCE_SCHEMA_BASE: SourceSchema = {
-  tableName: 'table1',
-  primaryKey: ['id'],
-  columns: {id: {type: 'string'}},
-  relationships: {},
-  system: 'client',
-  sort: [['id', 'asc']],
-  compareRows: (a, b) => compareValues(a.id, b.id),
-  isHidden: false,
-};
+import {MemorySource} from './memory-source.ts';
+import {MemoryStorage} from './memory-storage.ts';
+import type {SourceChange, SourceInput} from './source.ts';
+import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import {consume} from './stream.ts';
+import type {PrimaryKey} from '../../../zero-types/src/schema.ts';
 
 class YieldOutput implements FilterOutput {
-  readonly pushes: Change[] = [];
+  yields: boolean = false;
 
-  *push(change: Change): Stream<'yield'> {
-    yield 'yield';
-    this.pushes.push(change);
-    yield 'yield';
+  *push(_change: Change | SourceChange, _pusher: InputBase): Stream<'yield'> {
+    if (this.yields) yield 'yield';
+    // Consume change
+    if (this.yields) yield 'yield';
   }
 
-  beginFilter(): void {}
-  endFilter(): void {}
+  beginFilter() {}
+  endFilter() {}
   *filter(_node: Node): Generator<'yield', boolean> {
+    if (this.yields) yield 'yield';
     return true;
   }
 }
 
-class YieldSource implements FilterInput {
-  #schema: SourceSchema;
-  #output: Output | undefined;
+class YieldMemorySource extends MemorySource {
+  yieldOnFetch = false;
 
-  yieldOnFetch = true;
-  yieldOnPush = true;
-  yieldOnChildFetch = true;
-
-  constructor(schema: Partial<SourceSchema> = {}) {
-    this.#schema = {
-      ...YIELD_SOURCE_SCHEMA_BASE,
-      ...schema,
+  constructor(schema?: {
+    tableName: string;
+    primaryKey: PrimaryKey;
+    columns: Record<string, SchemaValue>;
+  }) {
+    const defaultSchema = {
+      tableName: 'table1',
+      primaryKey: ['id'] as const,
+      columns: {id: {type: 'string'}} as Record<string, SchemaValue>,
     };
+    const s = schema ?? defaultSchema;
+    super(s.tableName, s.columns, s.primaryKey);
   }
 
-  setOutput(output: Output): void {
-    this.#output = output;
-  }
+  override connect(
+    sort: Ordering,
+    filters?: Condition,
+    splitEditKeys?: Set<string>,
+  ): SourceInput {
+    const input = super.connect(sort, filters, splitEditKeys);
+    const originalFetch = input.fetch.bind(input);
 
-  setFilterOutput(output: FilterOutput): void {
-    this.#output = output;
-  }
-
-  getSchema(): SourceSchema {
-    return this.#schema;
-  }
-
-  *fetch(_req: FetchRequest): Stream<Node | 'yield'> {
-    if (this.yieldOnFetch) yield 'yield';
-    yield this.#createNode('1');
-    if (this.yieldOnFetch) yield 'yield';
-    yield this.#createNode('2');
-  }
-
-  *push(change: Change): Stream<'yield'> {
-    if (this.yieldOnPush) yield 'yield';
-    if (this.#output) {
-      let internalChange: Change;
-      if (change.type === 'add') {
-        internalChange = {
-          type: 'add',
-          node: this.#createNode(change.node.row.id as string),
-        };
-      } else if (change.type === 'remove') {
-        internalChange = {
-          type: 'remove',
-          node: this.#createNode(change.node.row.id as string),
-        };
-      } else if (change.type === 'edit') {
-        internalChange = {
-          type: 'edit',
-          node: this.#createNode(change.node.row.id as string),
-          oldNode: this.#createNode(change.oldNode.row.id as string),
-        };
-      } else if (change.type === 'child') {
-        internalChange = {
-          ...change,
-          node: this.#createNode(change.node.row.id as string),
-        };
-      } else {
-        internalChange = change;
+    const source = this;
+    input.fetch = function* (req: FetchRequest): Stream<Node | 'yield'> {
+      for (const n of originalFetch(req)) {
+        if (source.yieldOnFetch) {
+          yield 'yield';
+        }
+        yield n;
       }
-      yield* this.#output.push(internalChange, this);
-    }
-    if (this.yieldOnPush) yield 'yield';
-  }
-
-  *cleanup(_req: FetchRequest): Stream<Node> {
-    // cleanup doesn't yield 'yield' anymore
-  }
-
-  destroy(): void {}
-
-  #createNode(id: string): Node {
-    const relationships: Record<string, () => Stream<Node | 'yield'>> = {};
-    for (const relName of Object.keys(this.#schema.relationships)) {
-      relationships[relName] = function* (this: YieldSource) {
-        if (this.yieldOnChildFetch) yield 'yield';
-        yield {row: {id: 'c1'}, relationships: {}};
-        if (this.yieldOnChildFetch) yield 'yield';
-      }.bind(this);
-    }
-    return {row: {id}, relationships};
+      if (source.yieldOnFetch) yield 'yield';
+    };
+    return input;
   }
 }
 
-class MockStorage implements Storage {
-  data = new Map<string, JSONValue>();
+const CHILD_SCHEMA = {
+  tableName: 'child',
+  primaryKey: ['id'] as const,
+  columns: {
+    id: {type: 'string'},
+    parentId: {type: 'string'},
+  } as Record<string, SchemaValue>,
+} as const;
 
-  get(key: string) {
-    return this.data.get(key);
-  }
-  set(key: string, value: JSONValue) {
-    this.data.set(key, value);
-  }
-  del(key: string) {
-    this.data.delete(key);
-  }
-  *scan(_options?: {prefix: string}): Stream<[string, JSONValue]> {}
-}
-
-function collectPush(input: YieldSource, change: Change) {
-  const result = [];
-  for (const r of input.push(change)) {
-    result.push(r);
+function collectPush(
+  source: YieldMemorySource,
+  change: SourceChange,
+): ('yield' | undefined)[] {
+  const result: ('yield' | undefined)[] = [];
+  for (const r of source.push(change)) {
+    if (r === 'yield') {
+      result.push(r);
+    }
   }
   return result;
 }
 
-function makeAdd(id: string): Change {
-  return {type: 'add', node: {row: {id}, relationships: {}}};
+function makeAdd(id: string): SourceChange {
+  return {type: 'add', row: {id}};
 }
 
-function makeRemove(id: string): Change {
-  return {type: 'remove', node: {row: {id}, relationships: {}}};
+function makeRemove(id: string): SourceChange {
+  return {type: 'remove', row: {id}};
+}
+
+function makeEdit(id: string, oldId: string): SourceChange {
+  return {
+    type: 'edit',
+    row: {id},
+    oldRow: {id: oldId},
+  };
 }
 
 describe('Yield Propagation (Push)', () => {
-  test('FilterStart/End propagates yield', () => {
-    const source = new YieldSource();
-    const start = new FilterStart(source);
-    const end = new FilterEnd(start, start);
-    const output = new YieldOutput();
+  describe('FilterStart/End', () => {
+    test('propagates yield from output push', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = false;
 
-    // Let's check FilterEnd.push.
-    // It calls this.#start.push(change).
-    // FilterStart.push calls this.#output.push(change).
+      const start = new FilterStart(source.connect([['id', 'asc']]));
+      const end = new FilterEnd(start, start);
+      const output = new YieldOutput(); // Yields
+      output.yields = true;
 
-    // So: Source -> FilterStart -> ... -> FilterEnd.
-    // We set output of FilterStart.
+      end.setOutput(output);
+      start.setFilterOutput(end);
 
-    end.setOutput(output);
-    start.setFilterOutput(end); // FilterStart outputs to FilterEnd
-
-    // Source pushes to FilterStart.
-    // FilterStart pushes to Output (YieldOutput).
-
-    expect(collectPush(source, makeAdd('1'))).toEqual([
-      'yield', // Source push start
-      'yield', // YieldOutput push start
-      'yield', // YieldOutput push end
-      'yield', // Source push end
-    ]);
-  });
-
-  test('Skip propagates yield', () => {
-    const source = new YieldSource();
-    const skip = new Skip(source, {row: {id: ''}, exclusive: false});
-    const output = new YieldOutput();
-    skip.setOutput(output);
-
-    expect(collectPush(source, makeAdd('1'))).toEqual([
-      'yield',
-      'yield',
-      'yield',
-      'yield',
-    ]);
-  });
-
-  test('Take propagates yield', () => {
-    const source = new YieldSource();
-    const storage = new MockStorage();
-    // Initialize Take state manually
-    storage.set('["take"]', {size: 0, bound: undefined});
-
-    const take = new Take(source, storage, 10);
-    const output = new YieldOutput();
-    take.setOutput(output);
-
-    expect(collectPush(source, makeAdd('1'))).toEqual([
-      'yield',
-      'yield',
-      'yield',
-      'yield',
-    ]);
-  });
-
-  test('Take propagates yield from fetch during push (remove)', () => {
-    const source = new YieldSource();
-    const storage = new MockStorage();
-    storage.set('["take"]', {size: 0, bound: undefined});
-    // Limit 1.
-    const take = new Take(source, storage, 1);
-    const output = new YieldOutput();
-    take.setOutput(output);
-
-    // 1. Push '0'. Take state: size=1, bound='0'.
-    collectPush(source, makeAdd('0'));
-
-    // 2. Push remove '0'.
-    const result = collectPush(source, makeRemove('0'));
-
-    expect(result).toEqual(expect.arrayContaining(['yield']));
-    expect(result.filter(x => x === 'yield').length).toBeGreaterThanOrEqual(6);
-  });
-
-  test('Snitch propagates yield', () => {
-    const source = new YieldSource();
-    const snitch = new Snitch(source, 'snitch');
-    const output = new YieldOutput();
-    snitch.setOutput(output);
-
-    expect(collectPush(source, makeAdd('1'))).toEqual([
-      'yield',
-      'yield',
-      'yield',
-      'yield',
-    ]);
-  });
-
-  test('UnionFanIn propagates yield', () => {
-    const source1 = new YieldSource();
-    const source2 = new YieldSource();
-    const fanOut = new UnionFanOut(new YieldSource());
-    const ufi = new UnionFanIn(fanOut, [source1, source2]);
-    const output = new YieldOutput();
-    ufi.setOutput(output);
-
-    ufi.fanOutStartedPushing();
-    // Pushing to source1 only yields source yields because FanIn accumulates.
-    expect(collectPush(source1, makeAdd('1'))).toEqual(['yield', 'yield']);
-
-    // Flushing FanIn should yield output yields.
-    const flushResult = [];
-    for (const r of ufi.fanOutDonePushing('add')) {
-      flushResult.push(r);
-    }
-    // YieldOutput yields 2 per push.
-    // We accumulated 1 push.
-    // So expect 2 yields.
-    expect(flushResult).toEqual(['yield', 'yield']);
-  });
-
-  test('Join propagates parent push yields and child fetch yields', () => {
-    const parent = new YieldSource({tableName: 'parent'});
-    const child = new YieldSource({tableName: 'child'});
-    const join = new Join({
-      parent,
-      child,
-      parentKey: ['id'],
-      childKey: ['id'],
-      relationshipName: 'child',
-      hidden: false,
-      system: 'client',
+      // YieldOutput yields 2.
+      expect(collectPush(source, makeAdd('1'))).toEqual(['yield', 'yield']);
     });
-    const output = new YieldOutput();
-    join.setOutput(output);
-
-    const result = collectPush(parent, makeAdd('1'));
-
-    // Source push: 2
-    // Child fetch: 2 (YieldSource.fetch yields 2)
-    // Output push: 2
-    // Total: 6
-    // Observed: 4. Missing 2. Likely child fetch yields are not propagated or not generated?
-    // But logs show YieldOutput push, so it matched.
-    // For now, we accept 4 to pass the test, but this warrants investigation.
-
-    expect(result).toEqual(expect.arrayContaining(['yield']));
-    expect(result.filter(x => x === 'yield').length).toBeGreaterThanOrEqual(4);
   });
 
-  test('FlippedJoin propagates parent push yields and child fetch yields', () => {
-    const parent = new YieldSource({tableName: 'parent'});
-    const child = new YieldSource({tableName: 'child'});
-    const flippedJoin = new FlippedJoin({
-      parent,
-      child,
-      parentKey: ['id'],
-      childKey: ['id'],
-      relationshipName: 'child',
-      hidden: false,
-      system: 'client',
+  describe('Skip', () => {
+    test('propagates yield from output push', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = false;
+      const skip = new Skip(source.connect([['id', 'asc']]), {
+        row: {id: ''},
+        exclusive: false,
+      });
+      const output = new YieldOutput();
+      output.yields = true;
+      skip.setOutput(output);
+
+      expect(collectPush(source, makeAdd('1'))).toEqual(['yield', 'yield']);
     });
-    const output = new YieldOutput();
-    flippedJoin.setOutput(output);
-
-    const result = collectPush(parent, makeAdd('1'));
-
-    // Source push: 2
-    // Child fetch: 2
-    // Output push: 2
-    // Total: 6
-    // Observed: 5. Missing 1.
-
-    expect(result).toEqual(expect.arrayContaining(['yield']));
-    expect(result.filter(x => x === 'yield').length).toBeGreaterThanOrEqual(5);
   });
 
-  test('Exists propagates yields from child fetch and output push', () => {
-    const source = new YieldSource({
-      relationships: {
-        child: {
-          ...YIELD_SOURCE_SCHEMA_BASE,
-          tableName: 'child',
-        },
-      },
+  describe('Take', () => {
+    test('propagates yield from output push add', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = false;
+
+      const storage = new MemoryStorage();
+      const take = new Take(source.connect([['id', 'asc']]), storage, 1);
+      const output = new YieldOutput();
+      output.yields = true;
+      take.setOutput(output);
+
+      // Initialize Take
+      consume(take.fetch({}));
+
+      expect(collectPush(source, makeAdd('0'))).toEqual(['yield', 'yield']);
     });
 
-    const exists = new Exists(source, 'child', ['id'], 'EXISTS');
-    const output = new YieldOutput();
-    exists.setFilterOutput(output); // Exists uses setFilterOutput, not setOutput.
+    test('propagates yield from output push remove', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = false;
 
-    // Push a child change to trigger Exists logic.
-    // Exists handles 'child' change.
-    // It calls fetchSize -> reads relationship from node.
-    // YieldSource creates node with relationship that yields.
+      consume(source.push(makeAdd('0')));
 
-    const result = collectPush(source, {
-      type: 'child',
-      node: {row: {id: '1'}, relationships: {}}, // YieldSource.push will ignore this node and create its own with relationships
-      child: {
+      const storage = new MemoryStorage();
+      const take = new Take(source.connect([['id', 'asc']]), storage, 3);
+      const output = new YieldOutput();
+      output.yields = true;
+      take.setOutput(output);
+
+      // Initialize Take
+      consume(take.fetch({}));
+
+      expect(collectPush(source, makeRemove('0'))).toEqual(['yield', 'yield']);
+    });
+
+    test('propagates yield from fetch during push (add, displacement)', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = true;
+
+      // Initialize with data
+      consume(source.push(makeAdd('1')));
+      consume(source.push(makeAdd('2')));
+
+      const storage = new MemoryStorage();
+      const take = new Take(source.connect([['id', 'asc']]), storage, 1);
+      const output = new YieldOutput();
+      output.yields = false;
+      take.setOutput(output);
+
+      // Initialize Take
+      consume(take.fetch({}));
+
+      // Push add '0'. This should displace '1'.
+      const result = collectPush(source, makeAdd('0'));
+      // Take fetches to find bound to remove. It finds 1 node and stops.
+      // YieldMemorySource yields before each node (1) + at end (but not reached due to early break).
+      expect(result).toEqual(['yield']);
+    });
+
+    test('propagates yield from fetch during push (remove)', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = true;
+
+      // Initialize with data
+      consume(source.push(makeAdd('0')));
+      consume(source.push(makeAdd('1')));
+
+      const storage = new MemoryStorage();
+      const take = new Take(source.connect([['id', 'asc']]), storage, 1);
+      const output = new YieldOutput();
+      output.yields = false;
+
+      take.setOutput(output);
+
+      // Initialize Take
+      consume(take.fetch({}));
+
+      // Push remove '0'.
+      const result = collectPush(source, makeRemove('0'));
+      // Take fetches to find replacement.
+      expect(result).toEqual(['yield', 'yield']);
+    });
+
+    test('propagates yield from fetch during push (edit, move out)', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = true;
+
+      // Initialize with data
+      consume(source.push(makeAdd('0')));
+      consume(source.push(makeAdd('1')));
+
+      const storage = new MemoryStorage();
+      const take = new Take(source.connect([['id', 'asc']]), storage, 1);
+      const output = new YieldOutput();
+      output.yields = false;
+      take.setOutput(output);
+
+      // Initialize Take
+      consume(take.fetch({}));
+
+      // Edit '0' to '2' (move out of bounds).
+      const result = collectPush(source, makeEdit('2', '0'));
+      // Take fetches to find replacement. It finds 1 node and stops.
+      // YieldMemorySource yields before each node (1).
+      expect(result).toEqual(['yield']);
+    });
+
+    test('propagates yield from fetch during push (edit, move in)', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = true;
+
+      // Initialize with data
+      consume(source.push(makeAdd('1')));
+      consume(source.push(makeAdd('2')));
+
+      const storage = new MemoryStorage();
+      const take = new Take(source.connect([['id', 'asc']]), storage, 1);
+      const output = new YieldOutput();
+      output.yields = false;
+      take.setOutput(output);
+
+      // Initialize Take
+      consume(take.fetch({}));
+
+      // Edit '2' to '0' (move into bounds).
+      const result = collectPush(source, makeEdit('0', '2'));
+      // Take fetches to find old bound to remove.
+      // Test shows 2 yields.
+      expect(result).toEqual(['yield', 'yield']);
+    });
+  });
+
+  describe('Join', () => {
+    test("doesn't propagate yield from child fetch when pushing to parent, because doesn't consume child fetch", () => {
+      const parent = new YieldMemorySource();
+      parent.yieldOnFetch = false;
+      const child = new YieldMemorySource(CHILD_SCHEMA);
+      child.yieldOnFetch = true;
+
+      // Initialize data
+      consume(parent.push(makeAdd('1')));
+      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+      consume(child.push({type: 'add', row: {id: 'c2', parentId: '2'}}));
+
+      const join = new Join({
+        parent: parent.connect([['id', 'asc']]),
+        child: child.connect([['id', 'asc']]),
+        parentKey: ['id'],
+        childKey: ['parentId'],
         relationshipName: 'child',
-        change: {type: 'add', node: {row: {id: 'c1'}, relationships: {}}},
-      },
+        hidden: false,
+        system: 'client',
+      });
+      const output = new YieldOutput();
+      output.yields = false;
+      join.setOutput(output);
+
+      // Join push does not iterate the child fetch.
+      // It attaches the fetch iterator to the node relationship map.
+      // Since the iterator is not consumed, YieldMemorySource.fetch generator is not executed.
+      // Total 0 yields.
+      expect(collectPush(parent, makeAdd('2'))).toEqual([]);
     });
 
-    // Source push: 2
-    // Exists fetches size -> reads relationship -> yields 2 (from YieldSource.#createNode relationship)
-    // Exists pushes to output -> yields 2
-    // Total: 6
+    test('propagates yield from parent fetch when pushing to child', () => {
+      const parent = new YieldMemorySource();
+      parent.yieldOnFetch = true;
+      const child = new YieldMemorySource(CHILD_SCHEMA);
+      child.yieldOnFetch = false;
 
-    expect(result).toEqual(expect.arrayContaining(['yield']));
-    expect(result.filter(x => x === 'yield').length).toBeGreaterThanOrEqual(6);
+      // Initialize parent with matching data
+      consume(parent.push(makeAdd('1')));
+
+      const join = new Join({
+        parent: parent.connect([['id', 'asc']]),
+        child: child.connect([['id', 'asc']]),
+        parentKey: ['id'],
+        childKey: ['parentId'],
+        relationshipName: 'child',
+        hidden: false,
+        system: 'client',
+      });
+      const output = new YieldOutput();
+      output.yields = false;
+      join.setOutput(output);
+
+      // Push to child with parentId='1' which matches the existing parent.
+      // Join fetches from parent. Parent has 1 matching node, so fetch yields 2 (1 before node + 1 at end).
+      expect(
+        collectPush(child, {
+          type: 'add',
+          row: {id: 'c1', parentId: '1'},
+        }),
+      ).toEqual(['yield', 'yield']);
+    });
+
+    test('propagates yield from output push', () => {
+      const parent = new YieldMemorySource();
+      parent.yieldOnFetch = false;
+      const child = new YieldMemorySource(CHILD_SCHEMA);
+      child.yieldOnFetch = false;
+
+      // Initialize parent with matching data
+      consume(parent.push(makeAdd('1')));
+
+      const join = new Join({
+        parent: parent.connect([['id', 'asc']]),
+        child: child.connect([['id', 'asc']]),
+        parentKey: ['id'],
+        childKey: ['parentId'],
+        relationshipName: 'child',
+        hidden: false,
+        system: 'client',
+      });
+      const output = new YieldOutput();
+      output.yields = true;
+      join.setOutput(output);
+
+      // Push to child with matching parent. YieldOutput yields.
+      expect(
+        collectPush(child, {
+          type: 'add',
+          row: {id: 'c1', parentId: '1'},
+        }),
+      ).toEqual(['yield', 'yield']);
+    });
+  });
+
+  describe('FlippedJoin', () => {
+    test('propagates yield from fetch when pushing to child', () => {
+      const parent = new YieldMemorySource();
+      parent.yieldOnFetch = true;
+      const child = new YieldMemorySource(CHILD_SCHEMA);
+      child.yieldOnFetch = false;
+
+      // Initialize data
+      consume(parent.push(makeAdd('1')));
+      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+
+      const flippedJoin = new FlippedJoin({
+        parent: parent.connect([['id', 'asc']]),
+        child: child.connect([['id', 'asc']]),
+        parentKey: ['id'],
+        childKey: ['parentId'],
+        relationshipName: 'child',
+        hidden: false,
+        system: 'client',
+      });
+      const output = new YieldOutput();
+      output.yields = false;
+      flippedJoin.setOutput(output);
+
+      // When pushing to child, FlippedJoin fetches the parent to join with the new child row.
+      // Push child with parentId='1' which matches the existing parent.
+      // Parent fetch yields 2 (1 before node + 1 at end).
+      expect(
+        collectPush(child, {type: 'add', row: {id: 'c2', parentId: '1'}}),
+      ).toEqual(['yield', 'yield']);
+    });
+
+    test('propagates yield from child fetch when pushing to parent', () => {
+      const parent = new YieldMemorySource();
+      parent.yieldOnFetch = false;
+      const child = new YieldMemorySource(CHILD_SCHEMA);
+      child.yieldOnFetch = true;
+
+      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+
+      const flippedJoin = new FlippedJoin({
+        parent: parent.connect([['id', 'asc']]),
+        child: child.connect([['id', 'asc']]),
+        parentKey: ['id'],
+        childKey: ['parentId'],
+        relationshipName: 'child',
+        hidden: false,
+        system: 'client',
+      });
+      const output = new YieldOutput();
+      output.yields = false;
+      flippedJoin.setOutput(output);
+
+      // When pushing to parent, FlippedJoin fetches children to check if any exist (inner join).
+      // No children exist, so fetch yields 1 (only end yield).
+      expect(collectPush(parent, makeAdd('1'))).toEqual(['yield']);
+    });
+
+    test('propagates yield from output push', () => {
+      const parent = new YieldMemorySource();
+      parent.yieldOnFetch = false;
+      const child = new YieldMemorySource(CHILD_SCHEMA);
+      child.yieldOnFetch = false;
+
+      // Initialize child with matching data
+      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+
+      const flippedJoin = new FlippedJoin({
+        parent: parent.connect([['id', 'asc']]),
+        child: child.connect([['id', 'asc']]),
+        parentKey: ['id'],
+        childKey: ['parentId'],
+        relationshipName: 'child',
+        hidden: false,
+        system: 'client',
+      });
+      const output = new YieldOutput();
+      output.yields = true;
+      flippedJoin.setOutput(output);
+
+      // Push to parent with matching child. YieldOutput yields.
+      expect(collectPush(parent, makeAdd('1'))).toEqual(['yield', 'yield']);
+    });
+  });
+
+  describe('Exists', () => {
+    test('propagates yield from output push', () => {
+      const parent = new YieldMemorySource();
+      parent.yieldOnFetch = false;
+      const child = new YieldMemorySource(CHILD_SCHEMA);
+      child.yieldOnFetch = false;
+
+      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+
+      const join = new Join({
+        parent: parent.connect([['id', 'asc']]),
+        child: child.connect([['id', 'asc']]),
+        parentKey: ['id'],
+        childKey: ['parentId'],
+        relationshipName: 'child',
+        hidden: false,
+        system: 'client',
+      });
+
+      const start = new FilterStart(join);
+      const exists = new Exists(start, 'child', ['id'], 'EXISTS');
+      const end = new FilterEnd(start, exists);
+      const output = new YieldOutput();
+      output.yields = true;
+      end.setOutput(output);
+
+      // Two from output
+      expect(collectPush(parent, makeAdd('1'))).toEqual(['yield', 'yield']);
+    });
+
+    test('propagates yield from child exist check', () => {
+      const parent = new YieldMemorySource();
+      const child = new YieldMemorySource(CHILD_SCHEMA);
+      child.yieldOnFetch = true;
+
+      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+      consume(child.push({type: 'add', row: {id: 'c2', parentId: '1'}}));
+
+      const join = new Join({
+        parent: parent.connect([['id', 'asc']]),
+        child: child.connect([['id', 'asc']]),
+        parentKey: ['id'],
+        childKey: ['parentId'],
+        relationshipName: 'child',
+        hidden: false,
+        system: 'client',
+      });
+
+      const start = new FilterStart(join);
+      const exists = new Exists(start, 'child', ['id'], 'EXISTS');
+      const end = new FilterEnd(start, exists);
+      const output = new YieldOutput();
+      output.yields = false;
+      end.setOutput(output);
+
+      // child fetch yields 3 (2 matching child + 1 at end).
+      expect(collectPush(parent, makeAdd('1'))).toEqual([
+        'yield',
+        'yield',
+        'yield',
+      ]);
+    });
+  });
+
+  describe('FanOut', () => {
+    test('propagates yield from output push', () => {
+      const source = new YieldMemorySource();
+      const start = new FilterStart(source.connect([['id', 'asc']]));
+      const fanOut = new FanOut(start);
+
+      // Create two branches with Filter operators
+      const filter1 = new Filter(fanOut, () => true);
+      const filter2 = new Filter(fanOut, () => true);
+      fanOut.setFilterOutput(filter1);
+      fanOut.setFilterOutput(filter2);
+
+      // FanOut requires FanIn to be set for push to work
+      const fanIn = new FanIn(fanOut, [filter1, filter2]);
+      fanOut.setFanIn(fanIn);
+
+      const output = new YieldOutput();
+      output.yields = true;
+      fanIn.setFilterOutput(output);
+
+      // FanOut pushes to 2 branches, FanIn combines and pushes to YieldOutput.
+      // Each branch push to FanIn, then FanIn pushes to YieldOutput (which yields).
+      expect(collectPush(source, makeAdd('1'))).toEqual(['yield', 'yield']);
+    });
+  });
+
+  describe('FanIn', () => {
+    test('propagates yield from output push', () => {
+      const source = new YieldMemorySource();
+      const start = new FilterStart(source.connect([['id', 'asc']]));
+
+      // FanIn needs a FanOut to get schema
+      const fanOut = new FanOut(start);
+
+      // Create two branches with Filter operators
+      const filter1 = new Filter(fanOut, () => true);
+      const filter2 = new Filter(fanOut, () => true);
+      fanOut.setFilterOutput(filter1);
+      fanOut.setFilterOutput(filter2);
+
+      const fanIn = new FanIn(fanOut, [filter1, filter2]);
+      fanOut.setFanIn(fanIn);
+
+      const output = new YieldOutput();
+      output.yields = true;
+      fanIn.setFilterOutput(output);
+
+      // FanOut pushes to 2 branches, FanIn combines and pushes to YieldOutput.
+      expect(collectPush(source, makeAdd('1'))).toEqual(['yield', 'yield']);
+    });
+  });
+
+  describe('Filter', () => {
+    test('propagates yield from output push', () => {
+      const source = new YieldMemorySource();
+      const start = new FilterStart(source.connect([['id', 'asc']]));
+      const filter = new Filter(start, () => true);
+      const output = new YieldOutput();
+      output.yields = true;
+      filter.setFilterOutput(output);
+
+      expect(collectPush(source, makeAdd('1'))).toEqual(['yield', 'yield']);
+    });
+  });
+
+  describe('UnionFanOut', () => {
+    test('propagates yield from output push', () => {
+      const source = new YieldMemorySource();
+      const ufo = new UnionFanOut(source.connect([['id', 'asc']]));
+      const output1 = new YieldOutput();
+      output1.yields = true;
+      const output2 = new YieldOutput();
+      output2.yields = true;
+      ufo.setOutput(output1);
+      ufo.setOutput(output2);
+
+      new UnionFanIn(ufo, []);
+
+      // UnionFanOut yields from both outputs.
+      expect(collectPush(source, makeAdd('1'))).toEqual([
+        'yield',
+        'yield',
+        'yield',
+        'yield',
+      ]);
+    });
+  });
+
+  describe('Error Propagation', () => {
+    test('propagates error from input push', () => {
+      const source = new YieldMemorySource();
+      const output = new YieldOutput();
+      output.yields = false;
+      source.connect([['id', 'asc']]).setOutput(output);
+
+      const error = new Error('Push failed');
+      // Override push to throw
+      source.push = function* (_change: SourceChange) {
+        yield 'yield';
+        throw error;
+      };
+
+      const generator = source.push(makeAdd('1')) as Generator<'yield'>;
+      expect(generator.next()).toEqual({value: 'yield', done: false});
+      expect(() => generator.next()).toThrow(error);
+    });
+  });
+
+  describe('Deep Pipeline', () => {
+    test('propagates yield through multiple operators', () => {
+      const source = new YieldMemorySource();
+      source.yieldOnFetch = false;
+      const start = new FilterStart(source.connect([['id', 'asc']]));
+      const filter = new Filter(start, () => true);
+      const end = new FilterEnd(start, filter);
+      const storage = new MemoryStorage();
+      const take = new Take(end, storage, 10);
+      const output = new YieldOutput();
+      output.yields = true;
+      take.setOutput(output);
+
+      consume(take.fetch({}));
+
+      // Output yields 2.
+      expect(collectPush(source, makeAdd('1'))).toEqual(['yield', 'yield']);
+    });
   });
 });
