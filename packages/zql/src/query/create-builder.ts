@@ -1,3 +1,4 @@
+import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
@@ -27,46 +28,11 @@ function createBuilderWithQueryFactory<S extends Schema>(
   schema: S,
   queryFactory: (table: keyof S['tables'] & string) => Query<string, S>,
 ): SchemaQuery<S> {
-  const cache = new Map<string, Query<string, S>>();
-  const {tables} = schema;
-
-  function getQuery(prop: string) {
-    const cached = cache.get(prop);
-    if (cached) {
-      return cached;
-    }
-
-    if (!Object.hasOwn(schema.tables, prop)) {
-      return undefined;
-    }
-
-    const q = queryFactory(prop);
-    cache.set(prop, q);
-    return q;
-  }
-
-  return new Proxy(tables, {
-    get: (_target, prop) => {
-      if (typeof prop === 'symbol') {
-        return undefined;
-      }
-      const q = getQuery(prop);
-      if (!q) {
-        throw new Error(`Table ${String(prop)} does not exist in schema`);
-      }
-      return q;
+  return recordProxy(
+    schema.tables,
+    (_tableSchema, prop) => queryFactory(prop),
+    prop => {
+      throw new Error(`Table ${prop} does not exist in schema`);
     },
-
-    getOwnPropertyDescriptor: (_target, prop) => {
-      if (typeof prop === 'symbol') {
-        return undefined;
-      }
-      const value = getQuery(prop);
-      if (!value) {
-        return undefined;
-      }
-      const desc = Reflect.getOwnPropertyDescriptor(tables, prop);
-      return {...desc, value};
-    },
-  }) as unknown as SchemaQuery<S>;
+  ) as unknown as SchemaQuery<S>;
 }

@@ -111,12 +111,14 @@ export function makeReplicacheMutators<const S extends Schema, C>(
   context: C,
   lc: LogContext,
 ): MutatorDefs & {_zero_crud: CRUDMutator} {
-  const {enableLegacyMutators = true} = schema;
+  const {enableLegacyMutators = false} = schema;
 
   const replicacheMutators = {
     [CRUD_MUTATION_NAME]: enableLegacyMutators
       ? makeCRUDMutator(schema)
-      : () =>
+      : // TODO(arv): This code is unreachable since the public API prevents
+        // calling CRUD mutators when enableLegacyMutators is false. Remove this.
+        () =>
           Promise.reject(
             new ClientError({
               kind: ClientErrorKind.Internal,

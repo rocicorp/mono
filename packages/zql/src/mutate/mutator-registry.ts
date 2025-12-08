@@ -16,6 +16,7 @@ import {
   type MutationRequest,
   type Mutator,
   type MutatorDefinition,
+  type MutatorTypes,
 } from './mutator.ts';
 
 /**
@@ -352,6 +353,12 @@ function createMutator<
   });
   mutator.mutatorName = name;
   mutator.fn = fn;
+  mutator['~'] = 'Mutator' as unknown as MutatorTypes<
+    ArgsInput,
+    TSchema,
+    C,
+    TWrappedTransaction
+  >;
 
   return mutator as unknown as Mutator<
     ArgsInput,

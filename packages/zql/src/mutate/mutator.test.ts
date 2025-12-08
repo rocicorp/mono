@@ -238,3 +238,73 @@ describe('isMutator', () => {
     expect(isMutator(() => {})).toBe(false);
   });
 });
+
+describe('Mutator phantom type (~)', () => {
+  test('Mutator has phantom type with correct structure', () => {
+    type TestContext = {userId: string};
+
+    const mutators = defineMutators({
+      testMutator: defineMutator(
+        ({
+          args,
+          ctx,
+          tx,
+        }: {
+          args: {id: string; title: string};
+          ctx: TestContext;
+          tx: unknown;
+        }) => {
+          void args;
+          void ctx;
+          void tx;
+          return Promise.resolve();
+        },
+      ),
+    } as const);
+
+    const mutator = mutators.testMutator;
+
+    // Verify the phantom type structure has all expected properties
+    expectTypeOf(mutator['~']['$input']).toEqualTypeOf<{
+      id: string;
+      title: string;
+    }>();
+    expectTypeOf(mutator['~']['$schema']).toEqualTypeOf<Schema>();
+    expectTypeOf(mutator['~']['$context']).toEqualTypeOf<TestContext>();
+    expectTypeOf(mutator['~']['$wrappedTransaction']).toEqualTypeOf<unknown>();
+  });
+
+  test('Mutator phantom type reflects undefined args', () => {
+    const mutators = defineMutators({
+      noArgs: defineMutator(({tx}: {tx: unknown}) => {
+        void tx;
+        return Promise.resolve();
+      }),
+    } as const);
+
+    const mutator = mutators.noArgs;
+
+    // When args is not specified, $input should be ReadonlyJSONValue | undefined
+    expectTypeOf(mutator['~']['$input']).toEqualTypeOf<
+      ReadonlyJSONValue | undefined
+    >();
+  });
+
+  test('Mutator phantom type reflects optional args', () => {
+    const mutators = defineMutators({
+      optionalArgs: defineMutator(
+        ({args, tx}: {args: {id: string} | undefined; tx: unknown}) => {
+          void args;
+          void tx;
+          return Promise.resolve();
+        },
+      ),
+    } as const);
+
+    const mutator = mutators.optionalArgs;
+
+    expectTypeOf(mutator['~']['$input']).toEqualTypeOf<
+      {id: string} | undefined
+    >();
+  });
+});
