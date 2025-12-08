@@ -29,9 +29,14 @@ export function extendReplicacheMutators<S extends Schema, C>(
   // Recursively process mutator definitions at arbitrary depth
   const processMutators = (mutators: object, path: string[]) => {
     for (const [key, mutator] of Object.entries(mutators)) {
-      path.push(key);
+      if (key === '~') {
+        // Skip phantom type
+        continue;
+      }
+
+      const nextPath = [...path, key];
       if (isMutator(mutator)) {
-        const fullKey = customMutatorKey('.', path);
+        const fullKey = customMutatorKey('.', nextPath);
         mutateObject[fullKey] = makeReplicacheMutator(
           lc,
           mutator,
@@ -39,7 +44,7 @@ export function extendReplicacheMutators<S extends Schema, C>(
           context,
         );
       } else if (typeof mutator === 'function') {
-        const fullKey = customMutatorKey('|', path);
+        const fullKey = customMutatorKey('|', nextPath);
         mutateObject[fullKey] = makeReplicacheMutatorLegacy(
           lc,
           // oxlint-disable-next-line no-explicit-any
@@ -47,10 +52,9 @@ export function extendReplicacheMutators<S extends Schema, C>(
           schema,
           context,
         );
-      } else {
-        processMutators(mutator, path);
+      } else if (mutator !== null && typeof mutator === 'object') {
+        processMutators(mutator, nextPath);
       }
-      path.pop();
     }
   };
 

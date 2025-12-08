@@ -35,19 +35,21 @@ import {
   type Format,
 } from '../../../zql/src/ivm/default-format.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {skipYields} from '../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 import type {Source, SourceChange} from '../../../zql/src/ivm/source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
-import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
   AnyQuery,
   HumanReadable,
   Query,
   RunOptions,
-} from '../../../zql/src/query/query.ts';
+} from '../../../zql/src/query/query-builder.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
@@ -55,8 +57,6 @@ import {
   newQueryDelegate,
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
-import {skipYields} from '../../../zql/src/ivm/operator.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -76,7 +76,7 @@ type Delegates = {
   mapper: NameMapper;
 };
 
-type Queries<TSchema extends Schema> = {
+type QueryBuilders<TSchema extends Schema> = {
   [K in keyof TSchema['tables'] & string]: Query<K, TSchema>;
 };
 
@@ -191,14 +191,14 @@ function makeDelegates<TSchema extends Schema>(
 
 function makeQueries<TSchema extends Schema>(
   schema: TSchema,
-): Queries<TSchema> {
+): QueryBuilders<TSchema> {
   const ret: Record<string, Query<string, TSchema>> = {};
 
   for (const table of Object.keys(schema.tables)) {
     ret[table] = new QueryImpl(schema, table, {table}, defaultFormat, 'test');
   }
 
-  return ret as Queries<TSchema>;
+  return ret as QueryBuilders<TSchema>;
 }
 
 type Options<TSchema extends Schema> = {
@@ -250,8 +250,10 @@ export async function createVitests<TSchema extends Schema>(
   }: Options<TSchema>,
   ...testSpecs: (readonly {
     name: string;
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    createQuery: (q: Queries<TSchema>) => Query<string, TSchema, any>;
+    createQuery: (
+      q: QueryBuilders<TSchema>,
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    ) => Query<string, TSchema, any>;
     manualVerification?: unknown;
   }[])[]
 ) {
@@ -285,14 +287,14 @@ export async function runBenchmarks<TSchema extends Schema>(
   {suiteName, type, zqlSchema, pgContent, only}: HydrationOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
+    createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>;
   }[])[]
 ): Promise<void>;
 export async function runBenchmarks<TSchema extends Schema>(
   {suiteName, type, zqlSchema, pgContent, only}: PushOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
+    createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>;
     generatePush: PushGenerator;
   }[])[]
 ): Promise<void>;
@@ -307,7 +309,7 @@ export async function runBenchmarks<TSchema extends Schema>(
   }: BenchOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
+    createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>;
     generatePush?: PushGenerator;
   }[])[]
 ): Promise<void> {
@@ -417,9 +419,9 @@ function makeBenchmark<TSchema extends Schema>({
 }: {
   name: string;
   zqlSchema: TSchema;
-  createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
+  createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>;
   type: 'hydration' | 'push';
-  queries: Queries<TSchema>;
+  queries: QueryBuilders<TSchema>;
   delegates: Delegates;
   dbs: DBs<TSchema>;
   generatePush: PushGenerator | undefined;
@@ -550,7 +552,7 @@ function makeTest<TSchema extends Schema>(
   // Memory can do it by forking the sources as we do in custom mutators on rebase.
   dbs: DBs<TSchema>,
   delegates: Delegates,
-  createQuery: (q: Queries<TSchema>) => Query<string, TSchema>,
+  createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>,
   pushEvery: number,
   manualVerification?: unknown,
 ) {

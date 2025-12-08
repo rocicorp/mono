@@ -28,8 +28,8 @@ const defineUserMutator = defineMutatorTyped<{id: string; name: string}>;
 const defineUserMutators = (def: ReturnType<typeof defineUserMutator>) =>
   defineMutatorsWithType<Schema>()({user: {create: def}});
 
-describe('zero.mutate(mr) with MutationRequest', () => {
-  test('can call mutate with a MutationRequest', async () => {
+describe('zero.mutate(mr) with MutateRequest', () => {
+  test('can call mutate with a MutateRequest', async () => {
     const createUser = defineUserMutator(async ({tx, args}) => {
       await tx.mutate.user.insert(args);
     });
@@ -41,7 +41,7 @@ describe('zero.mutate(mr) with MutationRequest', () => {
       mutators,
     });
 
-    // Create the MutationRequest by calling the mutator
+    // Create the MutateRequest by calling the mutator
     const mr = mutators.user.create({id: '1', name: 'Alice'});
 
     // Call z.mutate(mr) to execute it
@@ -94,7 +94,7 @@ describe('zero.mutate(mr) with MutationRequest', () => {
       mutators: mutators1,
     });
 
-    // Create MutationRequest from mutators2 (not registered with z)
+    // Create MutateRequest from mutators2 (not registered with z)
     const mr = mutators2.user.create({id: '1', name: 'Alice'});
 
     // Should throw because the exact mutator instance doesn't match
@@ -141,7 +141,7 @@ describe('zero.mutate(mr) with MutationRequest', () => {
       mutators,
     });
 
-    // z.mutate is callable with a MutationRequest
+    // z.mutate is callable with a MutateRequest
     expectTypeOf(z.mutate).toBeCallableWith(
       mutators.user.create({id: '1', name: 'Alice'}),
     );
@@ -172,22 +172,22 @@ describe('zero.mutate(mr) with MutationRequest', () => {
       mutators: mutators2,
     });
 
-    // MutationRequest from mutators1 works with z1
+    // MutateRequest from mutators1 works with z1
     const mr1 = mutators1.user.create({id: '1', name: 'Alice'});
     const result1 = z1.mutate(mr1);
     expectTypeOf(result1).toEqualTypeOf<MutatorResult>();
 
-    // MutationRequest from mutators2 works with z2
+    // MutateRequest from mutators2 works with z2
     const mr2 = mutators2.user.create({id: '2', name: 'Bob'});
     const result2 = z2.mutate(mr2);
     expectTypeOf(result2).toEqualTypeOf<MutatorResult>();
 
-    // MutationRequest from mutators1 does NOT work with z2
+    // MutateRequest from mutators1 does NOT work with z2
     expect(() => z2.mutate(mr1)).toThrow(
       'Mutator "user.create" is not registered',
     );
 
-    // MutationRequest from mutators2 does NOT work with z1
+    // MutateRequest from mutators2 does NOT work with z1
     expect(() => z1.mutate(mr2)).toThrow(
       'Mutator "user.create" is not registered',
     );

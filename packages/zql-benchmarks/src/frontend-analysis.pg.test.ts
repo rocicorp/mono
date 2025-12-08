@@ -7,7 +7,7 @@ import type {Row} from '../../zero-protocol/src/data.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
-import type {AnyQuery} from '../../zql/src/query/query.ts';
+import type {AnyQuery} from '../../zql/src/query/query-builder.ts';
 
 const pgContent = await getChinook();
 

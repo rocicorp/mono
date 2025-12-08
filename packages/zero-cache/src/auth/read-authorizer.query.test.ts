@@ -30,14 +30,14 @@ import {
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
+import type {Query, Row} from '../../../zql/src/query/query-builder.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {Query, Row} from '../../../zql/src/query/query.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,

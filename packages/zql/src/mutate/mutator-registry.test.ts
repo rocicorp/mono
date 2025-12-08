@@ -83,7 +83,7 @@ test('defineMutators creates a registry with nested mutators', () => {
   expect(mutators.post.publish.mutatorName).toBe('post.publish');
 });
 
-test('calling a mutator returns a MutationRequest', () => {
+test('calling a mutator returns a MutateRequest', () => {
   const mutators = defineMutators({
     user: {
       create: createUser,
@@ -94,6 +94,22 @@ test('calling a mutator returns a MutationRequest', () => {
 
   expect(mr.mutator).toBe(mutators.user.create);
   expect(mr.args).toEqual({name: 'Alice'});
+});
+
+test('MutateRequest phantom tags carry schema, context, and wrapped transaction', () => {
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    user: {
+      create: createUser,
+    },
+  });
+
+  const mr = mutators.user.create({name: 'Alice'});
+
+  expectTypeOf(mutators['~']['$schema']).toEqualTypeOf<typeof schema>();
+  expectTypeOf(mr['~']['$input']).toEqualTypeOf<{name: string}>();
+  expectTypeOf(mr['~']['$schema']).toEqualTypeOf<typeof schema>();
+  expectTypeOf(mr['~']['$context']).toEqualTypeOf<Context>();
+  expectTypeOf(mr['~']['$wrappedTransaction']).toEqualTypeOf<DbTransaction>();
 });
 
 test('mutator.fn executes the definition with args, ctx, and tx', async () => {
@@ -453,7 +469,7 @@ describe('input/output type separation', () => {
     };
   }
 
-  test('callable accepts input type, MutationRequest.args stores input', () => {
+  test('callable accepts input type, MutateRequest.args stores input', () => {
     // Validator transforms string to number
     const stringToNumberValidator = makeValidator<string, number>(data => {
       const num = parseInt(data as string, 10);
@@ -480,7 +496,7 @@ describe('input/output type separation', () => {
     // Call with string input
     const mr = mutators.item.update('42');
 
-    // MutationRequest.args should be the original input (string)
+    // MutateRequest.args should be the original input (string)
     expect(mr.args).toBe('42');
     expectTypeOf(mr.args).toEqualTypeOf<string>();
   });
@@ -554,7 +570,7 @@ describe('input/output type separation', () => {
     // Call with undefined
     const mr = mutators.item.create(undefined);
 
-    // MutationRequest.args should be the original input (undefined)
+    // MutateRequest.args should be the original input (undefined)
     expect(mr.args).toBe(undefined);
 
     const mockTx = {
@@ -577,9 +593,9 @@ describe('input/output type separation', () => {
     expect(capturedArgs[0]).toBe('default-value'); // transformed
   });
 
-  test('MutationRequest preserves input type for server transmission', () => {
+  test('MutateRequest preserves input type for server transmission', () => {
     // This test verifies that when a mutation is sent to the server,
-    // the args in MutationRequest are the original input (not transformed)
+    // the args in MutateRequest are the original input (not transformed)
 
     const transformValidator = makeValidator<
       {id: string; count: string},
@@ -619,7 +635,7 @@ describe('input/output type separation', () => {
 
     const mr = mutators.item.update({id: 'abc', count: '123'});
 
-    // MutationRequest.args should be input type (count as string)
+    // MutateRequest.args should be input type (count as string)
     // This is what gets sent to the server
     expect(mr.args).toEqual({id: 'abc', count: '123'});
     expectTypeOf(mr.args).toEqualTypeOf<{id: string; count: string}>();
@@ -644,7 +660,7 @@ describe('type inference', () => {
       >();
     });
 
-    expectTypeOf<typeof def>().parameter(0).toEqualTypeOf<{
+    expectTypeOf<typeof def.fn>().parameter(0).toEqualTypeOf<{
       args: {id: string};
       ctx: Context;
       tx: AnyTransaction;

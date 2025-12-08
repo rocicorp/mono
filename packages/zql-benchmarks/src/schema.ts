@@ -8,7 +8,7 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {createBuilder} from '../../zql/src/query/create-builder.ts';
-import type {Row} from '../../zql/src/query/query.ts';
+import type {Row} from '../../zql/src/query/query-builder.ts';
 
 // Table definitions
 const user = table('user')

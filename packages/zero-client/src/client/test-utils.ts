@@ -32,8 +32,8 @@ import type {
 import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {AnyQuery, Query} from '../../../zql/src/query/query-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
 import type {
   ConnectionManager,
   ConnectionManagerState,
@@ -413,8 +413,8 @@ export function waitForPostMessage() {
 }
 
 /**
- * Converts a regular query into a custom query (named query) by associating
- * a name and arguments with it. This is useful for testing custom query tracking.
+ * Converts a regular query into a "named" query by associating
+ * a name and arguments with it. This is useful for testing query tracking.
  */
 export function asCustomQuery<
   T extends keyof S['tables'] & string,

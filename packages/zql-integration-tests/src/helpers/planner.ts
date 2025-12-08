@@ -5,8 +5,8 @@ import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import {completeOrdering} from '../../../zql/src/query/complete-ordering.ts';
+import type {AnyQuery} from '../../../zql/src/query/query-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
 
 export function makeGetPlanAST(
   schema: Schema,

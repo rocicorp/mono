@@ -16,8 +16,8 @@ import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';
+import type {AnyQuery} from '../../../zql/src/query/query-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {createLogContext} from '../logging.ts';
 
 /**

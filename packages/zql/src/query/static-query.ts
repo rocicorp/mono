@@ -6,7 +6,10 @@ import type {Format} from '../ivm/view.ts';
 import {AbstractQuery} from './abstract-query.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import type {PullRow, Query} from './query.ts';
+import type {PullRow, Query} from './query-builder.ts';
+
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyStaticQuery = StaticQuery<string, Schema, any>;
 
 export function staticQuery<
   TTable extends keyof TSchema['tables'] & string,
@@ -22,7 +25,7 @@ export function staticQuery<
 }
 
 /**
- * A query that cannot be run.
+ * A query builder that cannot be run.
  * Only serves to generate ASTs.
  */
 export class StaticQuery<

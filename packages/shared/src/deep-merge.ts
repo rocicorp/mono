@@ -8,27 +8,34 @@ type IsPlainObject<T> = T extends object
     : true
   : false;
 
-// Merge when both are plain objects, otherwise B wins
-type MergeValue<A, B> =
-  IsPlainObject<A> extends true
-    ? IsPlainObject<B> extends true
-      ? DeepMerge<A & {}, B & {}>
-      : B
-    : B;
+type IsLeaf<T, Leaf> = [T] extends [Leaf] ? true : false;
+
+type MergeValue<A, B, Leaf> =
+  IsLeaf<A, Leaf> extends true
+    ? B
+    : IsLeaf<B, Leaf> extends true
+      ? B
+      : IsPlainObject<A> extends true
+        ? IsPlainObject<B> extends true
+          ? DeepMerge<A & {}, B & {}, Leaf>
+          : B
+        : B;
 
 /**
  * Type-level deep merge of two object types. Properties from B override
  * properties from A. When both A[K] and B[K] are objects (not arrays or
  * functions), they are recursively merged.
  */
-export type DeepMerge<A, B> = Simplify<
+export type DeepMerge<A, B, Leaf = never> = Simplify<
   Omit<A, keyof B> & {
-    [K in keyof B]: K extends keyof A ? MergeValue<A[K], B[K]> : B[K];
+    [K in keyof B]: K extends keyof A ? MergeValue<A[K], B[K], Leaf> : B[K];
   }
 >;
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+export function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -44,11 +51,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export function deepMerge<
   A extends Record<string, unknown>,
   B extends Record<string, unknown>,
+  Leaf = never,
 >(
   a: A,
   b: B,
   isLeaf: (value: unknown) => boolean = v => !isPlainObject(v),
-): DeepMerge<A, B> {
+): DeepMerge<A, B, Leaf> {
   const result: Record<string, unknown> = {};
 
   // Copy all keys from a
@@ -62,7 +70,11 @@ export function deepMerge<
     const bVal = b[key];
 
     if (key in a && !isLeaf(aVal) && !isLeaf(bVal)) {
-      result[key] = deepMerge(
+      result[key] = deepMerge<
+        Record<string, unknown>,
+        Record<string, unknown>,
+        Leaf
+      >(
         aVal as Record<string, unknown>,
         bVal as Record<string, unknown>,
         isLeaf,
@@ -72,5 +84,5 @@ export function deepMerge<
     }
   }
 
-  return result as DeepMerge<A, B>;
+  return result as DeepMerge<A, B, Leaf>;
 }

@@ -8,7 +8,7 @@ import {
 import {defaultFormat} from '../../zero-types/src/format.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
-import type {Query} from '../../zql/src/query/query.ts';
+import type {Query} from '../../zql/src/query/query-builder.ts';
 import {StaticQuery} from '../../zql/src/query/static-query.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,

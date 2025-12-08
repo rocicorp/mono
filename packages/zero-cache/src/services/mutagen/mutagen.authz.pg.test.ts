@@ -18,7 +18,7 @@ import {
 } from '../../../../zero-schema/src/permissions.ts';
 import type {Schema as ZeroSchema} from '../../../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
-import type {Row} from '../../../../zql/src/query/query.ts';
+import type {Row} from '../../../../zql/src/query/query-builder.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,

@@ -11,7 +11,7 @@ import type {
   PreloadOptions,
   Query,
   RunOptions,
-} from './query.ts';
+} from './query-builder.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 

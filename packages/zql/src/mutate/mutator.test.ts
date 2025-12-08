@@ -7,6 +7,7 @@ import type {Transaction} from './custom.ts';
 import {defineMutators} from './mutator-registry.ts';
 import {
   defineMutator,
+  defineMutatorWithType,
   isMutator,
   isMutatorDefinition,
   type MutatorDefinition,
@@ -30,7 +31,7 @@ describe('defineMutator', () => {
 
     const def = defineMutator(mutator);
 
-    expect(def).toBe(mutator);
+    expect(def.fn).toBe(mutator);
     expect(def.validator).toBeUndefined();
     expect(isMutatorDefinition(def)).toBe(true);
   });
@@ -60,7 +61,7 @@ describe('defineMutator', () => {
 
     const def = defineMutator(validator, mutator);
 
-    expect(def).toBe(mutator);
+    expect(def.fn).toBe(mutator);
     expect(def.validator).toBe(validator);
     expect(isMutatorDefinition(def)).toBe(true);
   });
@@ -95,8 +96,8 @@ describe('Type Tests', () => {
       unknown
     >;
 
-    // Should be a function
-    expectTypeOf<TestDef>().toBeFunction();
+    // Should have a function
+    expectTypeOf<TestDef['fn']>().toBeFunction();
 
     // Should have validator property
     expectTypeOf<TestDef>().toHaveProperty('validator');
@@ -160,7 +161,7 @@ describe('Mutator callable type tests', () => {
     // Type test: noArgs() should be callable with no arguments
     expectTypeOf(mutators.noArgs).toBeCallableWith();
 
-    // The result should be a MutationRequest with ReadonlyJSONValue | undefined args
+    // The result should be a MutateRequest with ReadonlyJSONValue | undefined args
     const mr = mutators.noArgs();
     expectTypeOf(mr.args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
   });
@@ -306,5 +307,31 @@ describe('Mutator phantom type (~)', () => {
     expectTypeOf(mutator['~']['$input']).toEqualTypeOf<
       {id: string} | undefined
     >();
+  });
+
+  test('MutatorDefinition phantom carries input/output/context/wrapped types', () => {
+    type Ctx = {user: string};
+    type Wrapped = {tx: true};
+    const validator: StandardSchemaV1<{in: number}, {out: string}> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: data => ({value: {out: String((data as {in: number}).in)}}),
+      },
+    };
+
+    const def = defineMutatorWithType<Schema, Ctx, Wrapped>()(
+      validator,
+      async ({args, ctx, tx}) => {
+        void args;
+        void ctx;
+        void tx;
+      },
+    );
+
+    expectTypeOf(def['~']['$input']).toEqualTypeOf<{in: number}>();
+    expectTypeOf(def['~']['$output']).toEqualTypeOf<{out: string}>();
+    expectTypeOf(def['~']['$context']).toEqualTypeOf<Ctx>();
+    expectTypeOf(def['~']['$wrappedTransaction']).toEqualTypeOf<Wrapped>();
   });
 });

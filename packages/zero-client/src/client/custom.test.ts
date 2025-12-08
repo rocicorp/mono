@@ -15,7 +15,7 @@ import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
-import type {Row} from '../../../zql/src/query/query.ts';
+import type {Row} from '../../../zql/src/query/query-builder.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
