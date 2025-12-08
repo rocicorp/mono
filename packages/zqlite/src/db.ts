@@ -230,7 +230,6 @@ export class Statement {
   }
 
   explainQueryPlan() {
-    console.log('EQP');
     return this.#stmt.explainQueryPlan();
   }
 
