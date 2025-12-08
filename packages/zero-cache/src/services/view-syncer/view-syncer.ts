@@ -1476,9 +1476,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const addQueries: (
         | {
             id: string;
-            ast?: AST;
+            ast: AST;
             transformationHash: string;
-            errorMessage?: string;
             remove?: boolean;
             retry?: boolean;
           }
@@ -1592,9 +1591,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     addQueries: (
       | {
           id: string;
-          ast?: AST;
+          ast: AST;
           transformationHash: string;
-          errorMessage?: string;
         }
       | {
           id: string;
@@ -1689,7 +1687,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
-          if (q.errorMessage) {
+          if ('errorMessage' in q) {
             continue;
           }
 
@@ -1713,7 +1711,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           manualSpan(tracer, 'vs.addAndConsumeQuery', elapsed, {
             id: q.id,
             transformationHash: q.transformationHash,
-            errorMessage: q.errorMessage,
           });
         }
         hydrations.add(1);

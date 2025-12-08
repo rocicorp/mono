@@ -33,6 +33,7 @@ import {
   maxVersion,
   oneAfter,
   versionFromString,
+  versionString,
   type ClientQueryRecord,
   type ClientRecord,
   type CustomQueryRecord,
@@ -43,6 +44,7 @@ import {
   type RowRecord,
 } from './schema/types.ts';
 import {ttlClockAsNumber, type TTLClock} from './ttl-clock.ts';
+import {hasOwn} from '../../../../shared/src/has-own.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -341,10 +343,13 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
 
       if (
-        (q.retryErrorVersion
-          ? versionFromString(q.retryErrorVersion).stateVersion
-          : undefined) !== oldClientState.retryErrorVersion?.stateVersion
+        q.retryErrorVersion !==
+        (oldClientState.retryErrorVersion
+          ? versionString(oldClientState.retryErrorVersion)
+          : undefined)
       ) {
+        // Retried query - record for telemetry
+        recordQueryForTelemetry(q);
         needed.add(hash);
       }
     }
@@ -581,7 +586,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       | {
           id: string;
           transformationHash: string;
-          errorMessage?: string;
         }
       | {
           id: string;
@@ -595,7 +599,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     const queryPatches: Patch[] = [
       executed.map(q =>
-        this.#trackExecuted(q.id, q.transformationHash, q.errorMessage),
+        this.#trackExecuted(
+          q.id,
+          q.transformationHash,
+          'errorMessage' in q ? q.errorMessage : undefined,
+        ),
       ),
       removed.map(q => this.#trackRemoved(q.id)),
     ].flat(2);
