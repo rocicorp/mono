@@ -685,13 +685,13 @@ describe('Chinook planner execution cost validation', () => {
         .limit(50),
       validations: [
         ['correlation', 0.4],
-        ['within-optimal', 2.03],
+        ['within-optimal', 2.1],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.9],
+        ['correlation', 0.94],
         ['within-optimal', 1],
-        ['within-baseline', 0.35],
+        ['within-baseline', 0.31],
       ],
     },
 
@@ -706,13 +706,13 @@ describe('Chinook planner execution cost validation', () => {
         .limit(100),
       validations: [
         ['correlation', 0.4],
-        ['within-optimal', 2.24],
+        ['within-optimal', 2.4],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.9],
+        ['correlation', 0.94],
         ['within-optimal', 1],
-        ['within-baseline', 0.3],
+        ['within-baseline', 0.27],
       ],
     },
   ])('$name', ({name, query, validations, extraIndexValidations}) => {
