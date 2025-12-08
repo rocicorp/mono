@@ -123,8 +123,8 @@ if (!dbPath) {
   }
 
   await benchmarkQuery(
-    'full issue scan + join',
-    builder.issue.related('creator').related('assignee'),
+    'full issue scan',
+    builder.issue.related('creator').related('assignee').related('project'),
   );
 
   // run all reads in an explicit tx

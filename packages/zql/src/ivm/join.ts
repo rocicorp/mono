@@ -1,8 +1,25 @@
+import {areEqual} from '../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change, ChildChange} from './change.ts';
-import type {Node} from './data.ts';
+import {normalizeUndefined, type Node, type NormalizedValue} from './data.ts';
+
+/**
+ * After this many cache lookups, check if caching is worthwhile.
+ */
+const CACHE_SAMPLE_SIZE = 100;
+
+/**
+ * Minimum hit rate to continue caching after sample size is reached.
+ */
+const CACHE_MIN_HIT_RATE = 0.1;
+
+/**
+ * Maximum number of nodes to cache across all entries.
+ * Prevents unbounded memory growth.
+ */
+const MAX_CACHED_NODES = 10_000;
 import {
   generateWithOverlay,
   isJoinMatch,
@@ -47,9 +64,21 @@ export class Join implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
 
+  /**
+   * If true, the parent key equals the parent's primary key,
+   * meaning every parent row has a unique key value - no cache benefit.
+   */
+  readonly #parentKeyIsPrimaryKey: boolean;
+
   #output: Output = throwOutput;
 
   #inprogressChildChange: JoinChangeOverlay | undefined;
+
+  // Fetch-time child cache state (only active during fetch)
+  #fetchChildCache: Map<string, Node[]> | undefined;
+  #cacheLookups = 0;
+  #cacheHits = 0;
+  #cachedNodeCount = 0;
 
   constructor({
     parent,
@@ -85,6 +114,12 @@ export class Join implements Input {
       },
     };
 
+    // If parent key equals parent's primary key, every row is unique - no cache benefit
+    this.#parentKeyIsPrimaryKey = areEqual(
+      [...this.#parentKey].sort(),
+      [...parentSchema.primaryKey].sort(),
+    );
+
     parent.setOutput({
       push: (change: Change) => this.#pushParent(change),
     });
@@ -107,12 +142,23 @@ export class Join implements Input {
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    for (const parentNode of this.#parent.fetch(req)) {
-      if (parentNode === 'yield') {
-        yield parentNode;
-        continue;
+    // Initialize cache if it could be useful
+    if (!this.#parentKeyIsPrimaryKey) {
+      this.#fetchChildCache = new Map();
+      this.#cacheLookups = 0;
+      this.#cacheHits = 0;
+      this.#cachedNodeCount = 0;
+    }
+    try {
+      for (const parentNode of this.#parent.fetch(req)) {
+        if (parentNode === 'yield') {
+          yield parentNode;
+          continue;
+        }
+        yield this.#processParentNode(parentNode.row, parentNode.relationships);
       }
-      yield this.#processParentNode(parentNode.row, parentNode.relationships);
+    } finally {
+      this.#fetchChildCache = undefined;
     }
   }
 
@@ -262,7 +308,7 @@ export class Join implements Input {
     parentNodeRow: Row,
     parentNodeRelations: Record<string, () => Stream<Node | 'yield'>>,
   ): Node {
-    const childStream = () => {
+    const childStream = (): Stream<Node | 'yield'> => {
       let anyNull = false;
       const constraint = Object.fromEntries(
         this.#childKey.map((key, i) => {
@@ -273,12 +319,14 @@ export class Join implements Input {
           return [key, value];
         }),
       );
-      const stream = anyNull
-        ? []
-        : this.#child.fetch({
-            constraint,
-          });
 
+      if (anyNull) {
+        return [];
+      }
+
+      const stream = this.#child.fetch({constraint});
+
+      // Overlay logic for push (only active during push, not fetch)
       if (
         this.#inprogressChildChange &&
         isJoinMatch(
@@ -299,6 +347,31 @@ export class Join implements Input {
           this.#child.getSchema(),
         );
       }
+
+      // Cache logic (only active during fetch when cache exists)
+      if (this.#fetchChildCache) {
+        const cacheKey = this.#makeCacheKey(parentNodeRow);
+        const cached = this.#fetchChildCache.get(cacheKey);
+
+        this.#cacheLookups++;
+        if (cached !== undefined) {
+          this.#cacheHits++;
+          return cached;
+        }
+
+        // After sample size, check once if caching is worthwhile
+        if (this.#cacheLookups === CACHE_SAMPLE_SIZE) {
+          const hitRate = this.#cacheHits / this.#cacheLookups;
+          if (hitRate < CACHE_MIN_HIT_RATE) {
+            // Not worth it - disable cache for rest of this fetch
+            this.#fetchChildCache = undefined;
+            return stream;
+          }
+        }
+
+        return this.#generateAndCache(cacheKey, stream);
+      }
+
       return stream;
     };
 
@@ -309,5 +382,37 @@ export class Join implements Input {
         [this.#relationshipName]: childStream,
       },
     };
+  }
+
+  #makeCacheKey(parentRow: Row): string {
+    const values: NormalizedValue[] = [];
+    for (const key of this.#parentKey) {
+      values.push(normalizeUndefined(parentRow[key]));
+    }
+    return JSON.stringify(values);
+  }
+
+  *#generateAndCache(
+    cacheKey: string,
+    stream: Stream<Node | 'yield'>,
+  ): Stream<Node | 'yield'> {
+    const nodes: Node[] = [];
+    for (const node of stream) {
+      if (node === 'yield') {
+        yield 'yield';
+      } else {
+        nodes.push(node);
+        yield node;
+      }
+    }
+
+    // Only cache if within memory budget
+    if (
+      this.#fetchChildCache &&
+      this.#cachedNodeCount + nodes.length <= MAX_CACHED_NODES
+    ) {
+      this.#fetchChildCache.set(cacheKey, nodes);
+      this.#cachedNodeCount += nodes.length;
+    }
   }
 }
