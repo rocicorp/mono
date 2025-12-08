@@ -120,7 +120,8 @@ describe('view-syncer/cvr', () => {
             "patchVersion",
             "deleted",
             "ttlMs" AS "ttl",
-            "inactivatedAtMs" AS "inactivatedAt"
+            "inactivatedAtMs" AS "inactivatedAt",
+            "retryErrorVersion"
             FROM ${db(`${cvrSchema(SHARD)}.` + table)}`),
         ];
       } else {
@@ -182,7 +183,8 @@ describe('view-syncer/cvr', () => {
         "patchVersion",
         "deleted",
         "ttlMs" AS "ttl",
-        "inactivatedAtMs" AS "inactivatedAt"
+        "inactivatedAtMs" AS "inactivatedAt",
+        "retryErrorVersion"
         FROM ${db('dapp_3/cvr.desires')} 
         ORDER BY "clientGroupID", "clientID", "queryHash"`,
       db`SELECT * FROM ${db('dapp_3/cvr.rows')} ORDER BY "clientGroupID", "schema", "table", "rowKey"`,
@@ -6071,6 +6073,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
+            "retryErrorVersion": null,
             "ttl": 300000,
           },
           {
@@ -6080,6 +6083,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": 1709683200000,
             "patchVersion": "1aa:01",
             "queryHash": "oneHash",
+            "retryErrorVersion": null,
             "ttl": 300000,
           },
           {
@@ -6089,6 +6093,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
+            "retryErrorVersion": null,
             "ttl": 300000,
           },
         ],
@@ -6380,323 +6385,329 @@ describe('view-syncer/cvr', () => {
     );
 
     expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
-          {
-            "clients": Result [
-              {
-                "clientGroupID": "abc123",
-                "clientID": "client-a",
-              },
-              {
-                "clientGroupID": "abc123",
-                "clientID": "client-c",
-              },
-              {
-                "clientGroupID": "def456",
-                "clientID": "client-b",
-              },
-            ],
-            "desires": Result [
-              {
-                "clientGroupID": "abc123",
-                "clientID": "client-a",
-                "deleted": null,
-                "inactivatedAt": null,
-                "patchVersion": "1a9:01",
-                "queryHash": "oneHash",
-                "ttl": 300000,
-              },
-              {
-                "clientGroupID": "abc123",
-                "clientID": "client-c",
-                "deleted": null,
-                "inactivatedAt": null,
-                "patchVersion": "1a9:01",
-                "queryHash": "oneHash",
-                "ttl": 300000,
-              },
-              {
-                "clientGroupID": "def456",
-                "clientID": "client-b",
-                "deleted": null,
-                "inactivatedAt": null,
-                "patchVersion": "1a9:01",
-                "queryHash": "oneHash",
-                "ttl": 300000,
-              },
-            ],
-            "instances": Result [
-              {
-                "clientGroupID": "abc123",
-                "clientSchema": null,
-                "grantedAt": 1709251200000,
-                "lastActive": 1713830400000,
-                "owner": "my-task",
-                "replicaVersion": "120",
-                "ttlClock": 1713830400000,
-                "version": "1aa",
-              },
-              {
-                "clientGroupID": "def456",
-                "clientSchema": null,
-                "grantedAt": null,
-                "lastActive": 1713830400000,
-                "owner": null,
-                "replicaVersion": "120",
-                "ttlClock": 1713830400000,
-                "version": "1aa",
-              },
-            ],
-            "queries": Result [
-              {
-                "clientAST": {
-                  "table": "issues",
-                },
-                "clientGroupID": "abc123",
-                "deleted": null,
-                "errorMessage": null,
-                "errorVersion": null,
-                "internal": null,
-                "patchVersion": null,
-                "queryArgs": null,
-                "queryHash": "oneHash",
-                "queryName": null,
-                "transformationHash": null,
-                "transformationVersion": null,
-              },
-              {
-                "clientAST": {
-                  "table": "issues",
-                },
-                "clientGroupID": "def456",
-                "deleted": null,
-                "errorMessage": null,
-                "errorVersion": null,
-                "internal": null,
-                "patchVersion": null,
-                "queryArgs": null,
-                "queryHash": "oneHash",
-                "queryName": null,
-                "transformationHash": null,
-                "transformationVersion": null,
-              },
-            ],
-            "rows": Result [
-              {
-                "clientGroupID": "abc123",
-                "patchVersion": "1a0",
-                "refCounts": {
-                  "oneHash": 2,
-                },
-                "rowKey": {
-                  "id": "123",
-                },
-                "rowVersion": "03",
-                "schema": "public",
+        {
+          "clients": Result [
+            {
+              "clientGroupID": "abc123",
+              "clientID": "client-a",
+            },
+            {
+              "clientGroupID": "abc123",
+              "clientID": "client-c",
+            },
+            {
+              "clientGroupID": "def456",
+              "clientID": "client-b",
+            },
+          ],
+          "desires": Result [
+            {
+              "clientGroupID": "abc123",
+              "clientID": "client-a",
+              "deleted": null,
+              "inactivatedAt": null,
+              "patchVersion": "1a9:01",
+              "queryHash": "oneHash",
+              "retryErrorVersion": null,
+              "ttl": 300000,
+            },
+            {
+              "clientGroupID": "abc123",
+              "clientID": "client-c",
+              "deleted": null,
+              "inactivatedAt": null,
+              "patchVersion": "1a9:01",
+              "queryHash": "oneHash",
+              "retryErrorVersion": null,
+              "ttl": 300000,
+            },
+            {
+              "clientGroupID": "def456",
+              "clientID": "client-b",
+              "deleted": null,
+              "inactivatedAt": null,
+              "patchVersion": "1a9:01",
+              "queryHash": "oneHash",
+              "retryErrorVersion": null,
+              "ttl": 300000,
+            },
+          ],
+          "instances": Result [
+            {
+              "clientGroupID": "abc123",
+              "clientSchema": null,
+              "grantedAt": 1709251200000,
+              "lastActive": 1713830400000,
+              "owner": "my-task",
+              "replicaVersion": "120",
+              "ttlClock": 1713830400000,
+              "version": "1aa",
+            },
+            {
+              "clientGroupID": "def456",
+              "clientSchema": null,
+              "grantedAt": null,
+              "lastActive": 1713830400000,
+              "owner": null,
+              "replicaVersion": "120",
+              "ttlClock": 1713830400000,
+              "version": "1aa",
+            },
+          ],
+          "queries": Result [
+            {
+              "clientAST": {
                 "table": "issues",
               },
-              {
-                "clientGroupID": "abc123",
-                "patchVersion": "1a0",
-                "refCounts": {
-                  "oneHash": 2,
-                },
-                "rowKey": {
-                  "id": "321",
-                },
-                "rowVersion": "03",
-                "schema": "public",
+              "clientGroupID": "abc123",
+              "deleted": null,
+              "errorMessage": null,
+              "errorVersion": null,
+              "internal": null,
+              "patchVersion": null,
+              "queryArgs": null,
+              "queryHash": "oneHash",
+              "queryName": null,
+              "transformationHash": null,
+              "transformationVersion": null,
+            },
+            {
+              "clientAST": {
                 "table": "issues",
               },
-              {
-                "clientGroupID": "def456",
-                "patchVersion": "1a0",
-                "refCounts": {
-                  "oneHash": 1,
-                },
-                "rowKey": {
-                  "id": "123",
-                },
-                "rowVersion": "03",
-                "schema": "public",
-                "table": "issues",
+              "clientGroupID": "def456",
+              "deleted": null,
+              "errorMessage": null,
+              "errorVersion": null,
+              "internal": null,
+              "patchVersion": null,
+              "queryArgs": null,
+              "queryHash": "oneHash",
+              "queryName": null,
+              "transformationHash": null,
+              "transformationVersion": null,
+            },
+          ],
+          "rows": Result [
+            {
+              "clientGroupID": "abc123",
+              "patchVersion": "1a0",
+              "refCounts": {
+                "oneHash": 2,
               },
-              {
-                "clientGroupID": "def456",
-                "patchVersion": "1a0",
-                "refCounts": {
-                  "oneHash": 1,
-                },
-                "rowKey": {
-                  "id": "321",
-                },
-                "rowVersion": "03",
-                "schema": "public",
-                "table": "issues",
+              "rowKey": {
+                "id": "123",
               },
-            ],
-          }
-        `);
+              "rowVersion": "03",
+              "schema": "public",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "abc123",
+              "patchVersion": "1a0",
+              "refCounts": {
+                "oneHash": 2,
+              },
+              "rowKey": {
+                "id": "321",
+              },
+              "rowVersion": "03",
+              "schema": "public",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "def456",
+              "patchVersion": "1a0",
+              "refCounts": {
+                "oneHash": 1,
+              },
+              "rowKey": {
+                "id": "123",
+              },
+              "rowVersion": "03",
+              "schema": "public",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "def456",
+              "patchVersion": "1a0",
+              "refCounts": {
+                "oneHash": 1,
+              },
+              "rowKey": {
+                "id": "321",
+              },
+              "rowVersion": "03",
+              "schema": "public",
+              "table": "issues",
+            },
+          ],
+        }
+      `);
 
     // No-op
     expect(flushed).toBe(false);
 
     expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
-                  {
-                    "clients": Result [
-                      {
-                        "clientGroupID": "abc123",
-                        "clientID": "client-a",
-                      },
-                      {
-                        "clientGroupID": "abc123",
-                        "clientID": "client-c",
-                      },
-                      {
-                        "clientGroupID": "def456",
-                        "clientID": "client-b",
-                      },
-                    ],
-                    "desires": Result [
-                      {
-                        "clientGroupID": "abc123",
-                        "clientID": "client-a",
-                        "deleted": null,
-                        "inactivatedAt": null,
-                        "patchVersion": "1a9:01",
-                        "queryHash": "oneHash",
-                        "ttl": 300000,
-                      },
-                      {
-                        "clientGroupID": "abc123",
-                        "clientID": "client-c",
-                        "deleted": null,
-                        "inactivatedAt": null,
-                        "patchVersion": "1a9:01",
-                        "queryHash": "oneHash",
-                        "ttl": 300000,
-                      },
-                      {
-                        "clientGroupID": "def456",
-                        "clientID": "client-b",
-                        "deleted": null,
-                        "inactivatedAt": null,
-                        "patchVersion": "1a9:01",
-                        "queryHash": "oneHash",
-                        "ttl": 300000,
-                      },
-                    ],
-                    "instances": Result [
-                      {
-                        "clientGroupID": "abc123",
-                        "clientSchema": null,
-                        "grantedAt": 1709251200000,
-                        "lastActive": 1713830400000,
-                        "owner": "my-task",
-                        "replicaVersion": "120",
-                        "ttlClock": 1713830400000,
-                        "version": "1aa",
-                      },
-                      {
-                        "clientGroupID": "def456",
-                        "clientSchema": null,
-                        "grantedAt": null,
-                        "lastActive": 1713830400000,
-                        "owner": null,
-                        "replicaVersion": "120",
-                        "ttlClock": 1713830400000,
-                        "version": "1aa",
-                      },
-                    ],
-                    "queries": Result [
-                      {
-                        "clientAST": {
-                          "table": "issues",
-                        },
-                        "clientGroupID": "abc123",
-                        "deleted": null,
-                        "errorMessage": null,
-                        "errorVersion": null,
-                        "internal": null,
-                        "patchVersion": null,
-                        "queryArgs": null,
-                        "queryHash": "oneHash",
-                        "queryName": null,
-                        "transformationHash": null,
-                        "transformationVersion": null,
-                      },
-                      {
-                        "clientAST": {
-                          "table": "issues",
-                        },
-                        "clientGroupID": "def456",
-                        "deleted": null,
-                        "errorMessage": null,
-                        "errorVersion": null,
-                        "internal": null,
-                        "patchVersion": null,
-                        "queryArgs": null,
-                        "queryHash": "oneHash",
-                        "queryName": null,
-                        "transformationHash": null,
-                        "transformationVersion": null,
-                      },
-                    ],
-                    "rows": Result [
-                      {
-                        "clientGroupID": "abc123",
-                        "patchVersion": "1a0",
-                        "refCounts": {
-                          "oneHash": 2,
-                        },
-                        "rowKey": {
-                          "id": "123",
-                        },
-                        "rowVersion": "03",
-                        "schema": "public",
-                        "table": "issues",
-                      },
-                      {
-                        "clientGroupID": "abc123",
-                        "patchVersion": "1a0",
-                        "refCounts": {
-                          "oneHash": 2,
-                        },
-                        "rowKey": {
-                          "id": "321",
-                        },
-                        "rowVersion": "03",
-                        "schema": "public",
-                        "table": "issues",
-                      },
-                      {
-                        "clientGroupID": "def456",
-                        "patchVersion": "1a0",
-                        "refCounts": {
-                          "oneHash": 1,
-                        },
-                        "rowKey": {
-                          "id": "123",
-                        },
-                        "rowVersion": "03",
-                        "schema": "public",
-                        "table": "issues",
-                      },
-                      {
-                        "clientGroupID": "def456",
-                        "patchVersion": "1a0",
-                        "refCounts": {
-                          "oneHash": 1,
-                        },
-                        "rowKey": {
-                          "id": "321",
-                        },
-                        "rowVersion": "03",
-                        "schema": "public",
-                        "table": "issues",
-                      },
-                    ],
-                  }
-                `);
+      {
+        "clients": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-a",
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
+          },
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
+          },
+        ],
+        "desires": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-a",
+            "deleted": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "retryErrorVersion": null,
+            "ttl": 300000,
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
+            "deleted": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "retryErrorVersion": null,
+            "ttl": 300000,
+          },
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
+            "deleted": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "retryErrorVersion": null,
+            "ttl": 300000,
+          },
+        ],
+        "instances": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientSchema": null,
+            "grantedAt": 1709251200000,
+            "lastActive": 1713830400000,
+            "owner": "my-task",
+            "replicaVersion": "120",
+            "ttlClock": 1713830400000,
+            "version": "1aa",
+          },
+          {
+            "clientGroupID": "def456",
+            "clientSchema": null,
+            "grantedAt": null,
+            "lastActive": 1713830400000,
+            "owner": null,
+            "replicaVersion": "120",
+            "ttlClock": 1713830400000,
+            "version": "1aa",
+          },
+        ],
+        "queries": Result [
+          {
+            "clientAST": {
+              "table": "issues",
+            },
+            "clientGroupID": "abc123",
+            "deleted": null,
+            "errorMessage": null,
+            "errorVersion": null,
+            "internal": null,
+            "patchVersion": null,
+            "queryArgs": null,
+            "queryHash": "oneHash",
+            "queryName": null,
+            "transformationHash": null,
+            "transformationVersion": null,
+          },
+          {
+            "clientAST": {
+              "table": "issues",
+            },
+            "clientGroupID": "def456",
+            "deleted": null,
+            "errorMessage": null,
+            "errorVersion": null,
+            "internal": null,
+            "patchVersion": null,
+            "queryArgs": null,
+            "queryHash": "oneHash",
+            "queryName": null,
+            "transformationHash": null,
+            "transformationVersion": null,
+          },
+        ],
+        "rows": Result [
+          {
+            "clientGroupID": "abc123",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 2,
+            },
+            "rowKey": {
+              "id": "123",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "abc123",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 2,
+            },
+            "rowKey": {
+              "id": "321",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "def456",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 1,
+            },
+            "rowKey": {
+              "id": "123",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "def456",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 1,
+            },
+            "rowKey": {
+              "id": "321",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+        ],
+      }
+    `);
   });
 
   test('ttlClock only updates when we have meaningful flushes', async () => {
