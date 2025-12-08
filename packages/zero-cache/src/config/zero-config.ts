@@ -611,6 +611,19 @@ export const zeroOptions = {
       ],
     },
 
+    busyTimeout: {
+      type: v.string().default('1s'),
+      desc: [
+        `SQLite busy timeout for litestream's database connection, as a duration`,
+        `string (e.g. "5s", "30s", "1m"). When litestream attempts a checkpoint`,
+        `and the database is locked, it will wait up to this duration before`,
+        `giving up.`,
+        ``,
+        `Default is "1s" (litestream's default). Setting a higher value may help`,
+        `prevent checkpoint failures during heavy write operations.`,
+      ],
+    },
+
     incrementalBackupIntervalMinutes: {
       type: v.number().default(15),
       desc: [
