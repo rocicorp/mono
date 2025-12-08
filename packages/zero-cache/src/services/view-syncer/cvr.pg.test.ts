@@ -2641,7 +2641,12 @@ describe('view-syncer/cvr', () => {
       [],
     ));
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 2});
-    expect(queryPatches).toHaveLength(0);
+    // When transformationHash changes for an already-gotten query, a put patch is returned
+    expect(queryPatches).toHaveLength(1);
+    expect(queryPatches[0]).toEqual({
+      patch: {type: 'query', op: 'put', id: 'oneHash'},
+      toVersion: {stateVersion: '1ba', minorVersion: 2},
+    });
 
     ({cvr: updated, flushed} = await updater.flush(
       lc,
