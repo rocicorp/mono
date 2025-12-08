@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1764231867109,
+  "lastUpdate": 1765231443434,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54793,6 +54793,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31798,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "365b06db56d668994058ad36280140f59ac55598",
+          "message": "chore(replicache): replace fetch-mock with extended FetchMocker (#5249)\n\n## Remove fetch-mock dependency\n\nReplace `fetch-mock` with a minimal `FetchMocker` class for replicache\ntests.\n\n### Motivation\n\n- Reduce `node_modules` size (~100MB saved)\n- Remove 9 transitive dependencies\n- Simpler API with direct body access\n\n### Changes\n\n- **Added**: `packages/replicache/src/fetch-mocker.ts` - Vitest-based\nfetch mocking utility\n- **Removed**: `fetch-mock` and `@types/fetch-mock` from devDependencies\n- **Updated**: All replicache test files migrated to FetchMocker\n\n### FetchMocker API\n\n```typescript\n// Setup handlers\nfetchMocker.post(urlSubstring, jsonResponse);\nfetchMocker.post(urlSubstring, (url, body) => response);\nfetchMocker.post(urlSubstring, {status: 500, body: 'error'});\nfetchMocker.postOnce(urlSubstring, jsonResponse);\nfetchMocker.post(undefined, handler); // catch-all for any URL\n\n// Inspect calls\nfetchMocker.bodies(urlSubstring); // Returns parsed JSON bodies\nfetchMocker.lastBody();\nfetchMocker.spy; // vitest spy\n\n// Reset\nfetchMocker.reset();\n```\n\n---------\n\nCo-authored-by: Greg Baker <greg@roci.dev>\nCo-authored-by: Alexander King <alexhking@gmail.com>\nCo-authored-by: Darick Tong <d@roci.dev>\nCo-authored-by: Matt Wonlaw <matt.wonlaw@gmail.com>\nCo-authored-by: Aaron Boodman <aaron@aaronboodman.com>\nCo-authored-by: Chase Adams <c@cadams.io>",
+          "timestamp": "2025-12-08T21:57:14Z",
+          "tree_id": "3416731d776e3b72df3b82c4f0f3ee064c066759",
+          "url": "https://github.com/rocicorp/mono/commit/365b06db56d668994058ad36280140f59ac55598"
+        },
+        "date": 1765231431815,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 301987,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54431,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111258,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31818,
             "unit": "bytes"
           }
         ]
