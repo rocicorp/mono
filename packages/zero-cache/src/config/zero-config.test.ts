@@ -308,6 +308,16 @@ test('zero-cache --help', () => {
                                                                    and requires double the size of the db in disk space. If unspecified, VACUUM                                          
                                                                    operations are not performed.                                                                                         
                                                                                                                                                                                          
+     --replica-page-cache-size-kib number                          optional                                                                                                              
+       ZERO_REPLICA_PAGE_CACHE_SIZE_KIB env                                                                                                                                              
+                                                                   The SQLite page cache size in kibibytes (KiB) for view-syncer connections.                                            
+                                                                   The page cache stores recently accessed database pages in memory to reduce disk I/O.                                  
+                                                                   Larger cache sizes improve performance for workloads that fit in cache.                                               
+                                                                   If unspecified, SQLite's default (~2 MB) is used.                                                                     
+                                                                   Note that the effective memory use of this setting will be:                                                           
+                                                                   2 * cache_size * num_cores as each connection to the replica gets its own cache                                       
+                                                                   and each core maintains 2 connections.                                                                                
+                                                                                                                                                                                         
      --log-level debug,info,warn,error                             default: "info"                                                                                                       
        ZERO_LOG_LEVEL env                                                                                                                                                                
                                                                                                                                                                                          
