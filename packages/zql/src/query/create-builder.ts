@@ -1,8 +1,8 @@
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Query} from './query-builder.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
-import type {Query} from './query.ts';
 import {newRunnableQuery} from './runnable-query-impl.ts';
 import type {SchemaQuery} from './schema-query.ts';
 

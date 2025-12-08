@@ -160,7 +160,7 @@ describe('Mutator callable type tests', () => {
     // Type test: noArgs() should be callable with no arguments
     expectTypeOf(mutators.noArgs).toBeCallableWith();
 
-    // The result should be a MutationRequest with ReadonlyJSONValue | undefined args
+    // The result should be a MutateRequest with ReadonlyJSONValue | undefined args
     const mr = mutators.noArgs();
     expectTypeOf(mr.args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
   });

@@ -1,18 +1,18 @@
 // oxlint-disable no-console
-import type {AST, Condition} from '../../zero-protocol/src/ast.ts';
-import {QueryImpl} from '../../zql/src/query/query-impl.ts';
-import {type Format} from '../../zql/src/ivm/default-format.ts';
-import type {AnyQuery} from '../../zql/src/query/query.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {summary} from 'mitata';
 import {expect, test} from 'vitest';
-import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
+import type {AST, Condition} from '../../zero-protocol/src/ast.ts';
+import {type Format} from '../../zql/src/ivm/default-format.ts';
+import type {AnyQuery} from '../../zql/src/query/query-builder.ts';
+import {QueryImpl} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
-import {schema, builder} from './schema.ts';
-import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {summary} from 'mitata';
+import {builder, schema} from './schema.ts';
 
 const dbPath = process.env.ZBUGS_REPLICA_PATH;
 

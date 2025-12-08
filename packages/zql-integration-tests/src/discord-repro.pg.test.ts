@@ -6,16 +6,16 @@ import {must} from '../../shared/src/must.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
+import type {Query} from '../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import type {Query} from '../../zql/src/query/query.ts';
 import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
-import {consume} from '../../zql/src/ivm/stream.ts';
 
 const lc = createSilentLogContext();
 

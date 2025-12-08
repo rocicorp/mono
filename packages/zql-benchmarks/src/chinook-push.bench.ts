@@ -8,7 +8,7 @@ import {
   runBenchmarks,
   type PushGenerator,
 } from '../../zql-integration-tests/src/helpers/runner.ts';
-import type {PullRow} from '../../zql/src/query/query.ts';
+import type {PullRow} from '../../zql/src/query/query-builder.ts';
 
 const pgContent = await getChinook();
 

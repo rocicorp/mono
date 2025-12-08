@@ -17,7 +17,7 @@ import {
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {createBuilder} from '../../../../zql/src/query/create-builder.ts';
-import type {AnyQuery} from '../../../../zql/src/query/query.ts';
+import type {AnyQuery} from '../../../../zql/src/query/query-builder.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {bindingsForZero} from '../bindings.ts';

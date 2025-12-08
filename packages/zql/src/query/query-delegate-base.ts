@@ -13,18 +13,18 @@ import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricMap} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
 import type {
-  CommitListener,
-  GotCallback,
-  QueryDelegate,
-} from './query-delegate.ts';
-import {asQueryInternals, type QueryInternals} from './query-internals.ts';
-import type {
   HumanReadable,
   MaterializeOptions,
   PreloadOptions,
   Query,
   RunOptions,
-} from './query.ts';
+} from './query-builder.ts';
+import type {
+  CommitListener,
+  GotCallback,
+  QueryDelegate,
+} from './query-delegate.ts';
+import {asQueryInternals, type QueryInternals} from './query-internals.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 

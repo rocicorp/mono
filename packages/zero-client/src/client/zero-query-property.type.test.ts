@@ -5,7 +5,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import type {Query} from '../../../zql/src/query/query-builder.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {Zero} from './zero.ts';
 

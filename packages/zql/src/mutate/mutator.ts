@@ -28,14 +28,19 @@ export type MutatorDefinitionTypes<
   readonly $wrappedTransaction: TWrappedTransaction;
 };
 
-export function isMutatorDefinition<
+export type MutateRequestTypes<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TContext = DefaultContext,
-  TWrappedTransaction = DefaultWrappedTransaction,
->(
-  f: unknown,
-): f is MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> {
+  TSchema extends Schema,
+  TContext,
+  TWrappedTransaction,
+> = 'MutateRequest' & {
+  readonly $input: TInput;
+  readonly $schema: TSchema;
+  readonly $context: TContext;
+  readonly $wrappedTransaction: TWrappedTransaction;
+};
+
+export function isMutatorDefinition(f: unknown): f is AnyMutatorDefinition {
   return typeof f === 'function' && (f as any)['~'] === 'MutatorDefinition';
 }
 
@@ -58,6 +63,9 @@ export type MutatorDefinition<
     MutatorDefinitionTypes<TInput, TOutput, TContext, TWrappedTransaction>
   >;
 };
+
+// oxlint-disable-next-line no-explicit-any
+export type AnyMutatorDefinition = MutatorDefinition<any, any, any, any>;
 
 // Overload 1: Call with validator
 export function defineMutator<
@@ -190,7 +198,7 @@ type TypedDefineMutator<
 };
 
 // ----------------------------------------------------------------------------
-// Mutator and MutationRequest types
+// Mutator and MutateRequest types
 // ----------------------------------------------------------------------------
 
 export type MutatorTypes<
@@ -208,8 +216,8 @@ export type MutatorTypes<
 /**
  * A callable wrapper around a MutatorDefinition, created by `defineMutators()`.
  *
- * Accessed like `mutators.foo.bar`, and called to create a MutationRequest:
- * `mutators.foo.bar(42)` returns a `MutationRequest`.
+ * Accessed like `mutators.foo.bar`, and called to create a MutateRequest:
+ * `mutators.foo.bar(42)` returns a `MutateRequest`.
  *
  * The `fn` property is used for execution and takes raw JSON args (for rebase
  * and server wire format cases) that are validated internally.
@@ -252,14 +260,14 @@ type MutatorCallable<
   TContext,
   TWrappedTransaction,
 > = [TInput] extends [undefined]
-  ? () => MutationRequest<TInput, TSchema, TContext, TWrappedTransaction>
+  ? () => MutateRequest<TInput, TSchema, TContext, TWrappedTransaction>
   : undefined extends TInput
     ? (
         args?: TInput,
-      ) => MutationRequest<TInput, TSchema, TContext, TWrappedTransaction>
+      ) => MutateRequest<TInput, TSchema, TContext, TWrappedTransaction>
     : (
         args: TInput,
-      ) => MutationRequest<TInput, TSchema, TContext, TWrappedTransaction>;
+      ) => MutateRequest<TInput, TSchema, TContext, TWrappedTransaction>;
 
 // oxlint-disable-next-line no-explicit-any
 export type AnyMutator = Mutator<any, any, any, any>;
@@ -274,14 +282,17 @@ export type AnyMutator = Mutator<any, any, any, any>;
  * @template TContext - The context type available during mutation execution
  * @template TWrappedTransaction - The wrapped transaction type
  */
-export type MutationRequest<
+export type MutateRequest<
   TInput extends ReadonlyJSONValue | undefined,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
 > = {
-  readonly mutator: Mutator<TInput, TSchema, TContext, TWrappedTransaction>;
-  readonly args: TInput;
+  readonly 'mutator': Mutator<TInput, TSchema, TContext, TWrappedTransaction>;
+  readonly 'args': TInput;
+  readonly '~': Expand<
+    MutateRequestTypes<TInput, TSchema, TContext, TWrappedTransaction>
+  >;
 };
 
 /**

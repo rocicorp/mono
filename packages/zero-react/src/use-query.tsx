@@ -25,7 +25,10 @@ import {
   type HumanReadable,
   type PullRow,
   type Query,
-  type ToQuery,
+} from '../../zql/src/query/query-builder.ts';
+import {
+  addContextToQuery,
+  type QueryOrQueryRequest,
 } from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
@@ -71,11 +74,12 @@ const suspend: (p: Promise<unknown>) => void = reactUse
 
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
   TSchema extends Schema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 >(
-  query: ToQuery<TTable, TSchema, TReturn, TContext>,
+  query: QueryOrQueryRequest<TTable, TInput, TSchema, TReturn, TContext>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -98,11 +102,12 @@ export function useQuery<
 
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
   TSchema extends Schema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 >(
-  query: ToQuery<TTable, TSchema, TReturn, TContext>,
+  query: QueryOrQueryRequest<TTable, TInput, TSchema, TReturn, TContext>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -315,12 +320,13 @@ export class ViewStore {
   getView<
     TTable extends keyof TSchema['tables'] & string,
     TSchema extends Schema,
+    TInput extends ReadonlyJSONValue | undefined,
     TReturn,
     MD extends CustomMutatorDefs | undefined,
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
-    query: ToQuery<TTable, TSchema, TReturn, TContext>,
+    query: QueryOrQueryRequest<TTable, TInput, TSchema, TReturn, TContext>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -332,7 +338,7 @@ export class ViewStore {
     complete: boolean;
     nonEmpty: boolean;
   } {
-    const q = query.toQuery(zero.context);
+    const q = addContextToQuery(query, zero.context);
     const bindings = bindingsForZero(zero);
     const format = bindings.format(q);
     if (!enabled) {

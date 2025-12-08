@@ -15,10 +15,11 @@ import {
 } from '../../zero-schema/src/builder/table-builder.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
+import type {Query} from '../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
 import type {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
@@ -26,7 +27,6 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
-import {consume} from '../../zql/src/ivm/stream.ts';
 import './helpers/comparePg.ts';
 import {fillPgAndSync} from './helpers/setup.ts';
 

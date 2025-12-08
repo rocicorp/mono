@@ -25,8 +25,9 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import type {Query} from '../../../zql/src/query/query-builder.ts';
 import {
   asStaticQuery,
   staticQuery,
@@ -37,7 +38,6 @@ import type {
 } from '../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 import {
   fromSQLiteTypes,
   TableSource,

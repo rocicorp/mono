@@ -4,7 +4,7 @@ import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format} from '../ivm/view.ts';
 import {AbstractQuery} from './abstract-query.ts';
 import type {CustomQueryID} from './named.ts';
-import {type PullRow, type Query, type ToQuery} from './query.ts';
+import {type PullRow, type Query} from './query-builder.ts';
 
 export function newQuery<
   TTable extends keyof TSchema['tables'] & string,
@@ -19,9 +19,7 @@ export class QueryImpl<
     TReturn = PullRow<TTable, TSchema>,
   >
   extends AbstractQuery<TTable, TSchema, TReturn>
-  implements
-    Query<TTable, TSchema, TReturn>,
-    ToQuery<TTable, TSchema, TReturn, unknown>
+  implements Query<TTable, TSchema, TReturn>
 {
   constructor(
     schema: TSchema,

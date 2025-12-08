@@ -5,7 +5,7 @@ import {describe, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
 import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {AnyQuery, PullRow} from '../../../zql/src/query/query.ts';
+import type {AnyQuery, PullRow} from '../../../zql/src/query/query-builder.ts';
 import {createVitests} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';

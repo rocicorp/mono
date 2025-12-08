@@ -23,7 +23,6 @@ import {
   simplifyCondition,
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import type {
   AnyQuery,
   ExistsOptions,
@@ -33,8 +32,8 @@ import type {
   PullRow,
   Query,
   RunOptions,
-  ToQuery,
-} from './query.ts';
+} from './query-builder.ts';
+import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -59,8 +58,7 @@ export abstract class AbstractQuery<
   >
   implements
     Query<TTable, TSchema, TReturn>,
-    QueryInternals<TTable, TSchema, TReturn>,
-    ToQuery<TTable, TSchema, TReturn, unknown>
+    QueryInternals<TTable, TSchema, TReturn>
 {
   readonly [queryInternalsTag] = true;
 
@@ -525,10 +523,6 @@ export abstract class AbstractQuery<
 
   get ast(): AST {
     return this.#ast;
-  }
-
-  toQuery(_context: unknown): this {
-    return this;
   }
 }
 export function asAbstractQuery<

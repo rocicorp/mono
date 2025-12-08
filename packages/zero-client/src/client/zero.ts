@@ -27,6 +27,7 @@ import {
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {promiseRace} from '../../../shared/src/promise-race.ts';
@@ -88,7 +89,7 @@ import {
 } from '../../../zql/src/mutate/mutator-registry.ts';
 import type {
   AnyMutator,
-  MutationRequest,
+  MutateRequest,
 } from '../../../zql/src/mutate/mutator.ts';
 import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
@@ -96,14 +97,17 @@ import {
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
   type PullRow,
   type RunOptions,
-  type ToQuery,
+} from '../../../zql/src/query/query-builder.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {
+  type QueryOrQueryRequest,
+  addContextToQuery,
 } from '../../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
@@ -680,7 +684,7 @@ export class Zero<
     );
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const callableMutate = (mr: MutationRequest<any, S, C, any>) => {
+    const callableMutate = (mr: MutateRequest<any, S, C, any>) => {
       if (!registeredMutators.has(mr.mutator)) {
         throw new Error(
           `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
@@ -861,9 +865,16 @@ export class Zero<
    */
   preload<
     TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
     TReturn extends PullRow<TTable, S>,
-  >(query: ToQuery<TTable, S, TReturn, C>, options?: PreloadOptions) {
-    return this.#zeroContext.preload(query.toQuery(this.context), options);
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, S, TReturn, C>,
+    options?: PreloadOptions,
+  ) {
+    return this.#zeroContext.preload(
+      addContextToQuery(query, this.context),
+      options,
+    );
   }
 
   /**
@@ -886,11 +897,18 @@ export class Zero<
    * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
    * ```
    */
-  run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<TTable, S, TReturn, C>,
+  run<
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, S, TReturn, C>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.#zeroContext.run(query.toQuery(this.context), runOptions);
+    return this.#zeroContext.run(
+      addContextToQuery(query, this.context),
+      runOptions,
+    );
   }
 
   get context(): C {
@@ -921,21 +939,35 @@ export class Zero<
    * const customView = zero.materialize(userQuery, (query) => new MyCustomView(query));
    * ```
    */
-  materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<TTable, S, TReturn, C>,
+  materialize<
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, S, TReturn, C>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
-  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<TTable, S, TReturn, C>,
+  materialize<
+    T,
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, S, TReturn, C>,
     factory: ViewFactory<TTable, S, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
-  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<TTable, S, TReturn, C>,
+  materialize<
+    T,
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, S, TReturn, C>,
     factoryOrOptions?: ViewFactory<TTable, S, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    const q = query.toQuery(this.context);
+    const q = addContextToQuery(query, this.context);
 
     let factory;
     let options;
@@ -1024,9 +1056,9 @@ export class Zero<
    * ```
    */
   readonly mutate: MakeMutatePropertyType<S, MD, C> &
-    // Also callable with MutationRequest: zero.mutate(mr)
+    // Also callable with MutateRequest: zero.mutate(mr)
     // oxlint-disable-next-line no-explicit-any
-    ((mr: MutationRequest<any, S, C, any>) => MutatorResult);
+    ((mr: MutateRequest<any, S, C, any>) => MutatorResult);
 
   /**
    * Provides a way to batch multiple CRUD mutations together:

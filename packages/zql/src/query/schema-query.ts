@@ -1,5 +1,5 @@
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {Query} from './query.ts';
+import type {Query} from './query-builder.ts';
 
 export type SchemaQuery<S extends Schema> = {
   // Note: Using Query<K, S> without explicit third type parameter is
