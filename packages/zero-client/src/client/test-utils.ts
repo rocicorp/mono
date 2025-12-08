@@ -4,7 +4,7 @@ import {nanoid} from '../util/nanoid.ts';
 // import {type VitestUtils} from 'vitest';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -29,10 +29,11 @@ import type {
   PushResponseBody,
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
+import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
-import {bindingsForZero} from './bindings.ts';
 import type {
   ConnectionManager,
   ConnectionManagerState,
@@ -254,11 +255,15 @@ export class TestZero<
   async triggerGotQueriesPatch(
     q: Query<keyof S['tables'] & string, S>,
   ): Promise<void> {
+    const qi = asQueryInternals(q);
+    const hash = qi.customQueryID
+      ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
+      : qi.hash();
     await this.triggerPoke(null, '1', {
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: bindingsForZero(this as Zero<S, MD, C>).hash(q),
+          hash,
         },
       ],
     });
@@ -293,11 +298,15 @@ export class TestZero<
   markQueryAsGot(q: AnyQuery): Promise<void> {
     // TODO(arv): The cookies here could be better... Not sure if the client
     // ever checks these?
+    const qi = asQueryInternals(q);
+    const hash = qi.customQueryID
+      ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
+      : qi.hash();
     return this.triggerPoke(null, '1', {
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: bindingsForZero(this).hash(q),
+          hash,
         },
       ],
     });
@@ -401,4 +410,33 @@ export function waitForPostMessage() {
       resolve();
     };
   });
+}
+
+/**
+ * Converts a regular query into a custom query (named query) by associating
+ * a name and arguments with it. This is useful for testing custom query tracking.
+ */
+export function asCustomQuery<
+  T extends keyof S['tables'] & string,
+  S extends Schema,
+  R,
+>(
+  query: Query<T, S, R>,
+  name: string,
+  args: ReadonlyJSONValue | undefined,
+): Query<T, S, R> {
+  return asQueryInternals(query).nameAndArgs(
+    name,
+    args === undefined ? [] : [args],
+  );
+}
+
+export function queryID<
+  T extends keyof S['tables'] & string,
+  S extends Schema,
+  R,
+>(query: Query<T, S, R>): string {
+  const id = asQueryInternals(query).customQueryID;
+  assert(id !== undefined);
+  return hashOfNameAndArgs(id.name, id.args);
 }

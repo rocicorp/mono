@@ -59,16 +59,16 @@ export type TableMutator<S extends TableSchema> = {
   delete: (id: DeleteID<S>) => Promise<void>;
 };
 
-export type DBMutator<S extends Schema> =
-  S['enableLegacyMutators'] extends false
-    ? {} // {} is needed here for intersection type identity
-    : {
-        [K in keyof S['tables']]: TableMutator<S['tables'][K]>;
-      };
+export type DBMutator<S extends Schema> = S['enableLegacyMutators'] extends true
+  ? {
+      [K in keyof S['tables']]: TableMutator<S['tables'][K]>;
+    }
+  : {}; // {} is needed here for intersection type identity
 
-export type BatchMutator<S extends Schema> = <R>(
-  body: (m: DBMutator<S>) => MaybePromise<R>,
-) => Promise<R>;
+export type BatchMutator<S extends Schema> =
+  S['enableLegacyMutators'] extends true
+    ? <R>(body: (m: DBMutator<S>) => MaybePromise<R>) => Promise<R>
+    : undefined;
 
 type ZeroCRUDMutate = {
   [CRUD_MUTATION_NAME]: CRUDMutate;
@@ -89,6 +89,10 @@ export function makeCRUDMutate<const S extends Schema>(
   repMutate: ZeroCRUDMutate,
   mutate: object,
 ): BatchMutator<S> {
+  if (schema.enableLegacyMutators !== true) {
+    return undefined as BatchMutator<S>;
+  }
+
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
 
   const mutateBatch = async <R>(body: (m: DBMutator<S>) => R): Promise<R> => {

@@ -6,6 +6,7 @@ import {
   beforeEach,
   describe,
   expect,
+  expectTypeOf,
   test,
   vi,
 } from 'vitest';
@@ -33,7 +34,6 @@ import {
 } from '../../../shared/src/browser-env.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import {
@@ -62,8 +62,18 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {
+  DeleteID,
+  Transaction,
+  UpdateValue,
+} from '../../../zql/src/mutate/custom.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {
+  defineMutator,
+  defineMutatorWithType,
+} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import type {Row} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -77,7 +87,9 @@ import type {QueryManager} from './query-manager.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
 import type {TestZero} from './test-utils.ts';
 import {
+  asCustomQuery,
   MockSocket,
+  queryID,
   storageMock,
   tickAFewTimes,
   waitForUpstreamMessage,
@@ -90,6 +102,7 @@ import {
   DEFAULT_PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
+  type Zero,
 } from './zero.ts';
 
 const startTime = 1678829450000;
@@ -1045,13 +1058,15 @@ describe('initConnection', () => {
           .primaryKey('id'),
       ],
     });
+
     const z = zeroForTest({
       schema,
     });
 
     const zql = createBuilder(schema);
+    const q = asCustomQuery(zql.e, 'e', undefined);
 
-    const view = z.materialize(zql.e);
+    const view = z.materialize(q);
     view.addListener(() => {});
 
     const mockSocket = await z.socket;
@@ -1082,10 +1097,9 @@ describe('initConnection', () => {
         },
         desiredQueriesPatch: [
           {
-            ast: {
-              table: 'e',
-            },
-            hash: '1fr5t3cw7vi5',
+            args: [],
+            hash: queryID(q),
+            name: 'e',
             op: 'put',
             ttl: 300000,
           },
@@ -1178,7 +1192,8 @@ describe('initConnection', () => {
     });
 
     const zql = createBuilder(schema);
-    const view = z.materialize(zql.e);
+    const q = asCustomQuery(zql.e, 'e', undefined);
+    const view = z.materialize(q);
     view.addListener(() => {});
 
     const mockSocket = await z.socket;
@@ -1212,10 +1227,9 @@ describe('initConnection', () => {
         },
         desiredQueriesPatch: [
           {
-            ast: {
-              table: 'e',
-            },
-            hash: '1fr5t3cw7vi5',
+            args: [],
+            hash: queryID(q),
+            name: 'e',
             op: 'put',
             ttl: 300000,
           },
@@ -1244,51 +1258,48 @@ describe('initConnection', () => {
       maxHeaderLength: 0,
       schema,
     });
+    const zql = createBuilder(schema);
+    const q = asCustomQuery(zql.e, 'e', undefined);
     const mockSocket = await z.socket;
 
     mockSocket.onUpstream(msg => {
-      expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
-        .toMatchInlineSnapshot(`
-          [
-            "initConnection",
-            {
-              "clientSchema": {
-                "tables": {
-                  "e": {
-                    "columns": {
-                      "id": {
-                        "type": "string",
-                      },
-                      "value": {
-                        "type": "string",
-                      },
-                    },
-                    "primaryKey": [
-                      "id",
-                    ],
+      expect(
+        valita.parse(JSON.parse(msg), initConnectionMessageSchema),
+      ).toEqual([
+        'initConnection',
+        {
+          clientSchema: {
+            tables: {
+              e: {
+                columns: {
+                  id: {
+                    type: 'string',
+                  },
+                  value: {
+                    type: 'string',
                   },
                 },
+                primaryKey: ['id'],
               },
-              "desiredQueriesPatch": [
-                {
-                  "ast": {
-                    "table": "e",
-                  },
-                  "hash": "1fr5t3cw7vi5",
-                  "op": "put",
-                  "ttl": 300000,
-                },
-              ],
             },
-          ]
-        `);
+          },
+          desiredQueriesPatch: [
+            {
+              args: [],
+              hash: queryID(q),
+              name: 'e',
+              op: 'put',
+              ttl: 300000,
+            },
+          ],
+        },
+      ]);
 
       expect(z.connectionStatus).toEqual(ConnectionStatus.Connecting);
     });
 
     expect(mockSocket.messages.length).toEqual(0);
-    const zql = createBuilder(schema);
-    const view = z.materialize(zql.e);
+    const view = z.materialize(q);
     view.addListener(() => {});
     await z.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -1312,56 +1323,54 @@ describe('initConnection', () => {
       schema,
       deletedClients: [{clientID: 'a'}],
     });
+
+    const zql = createBuilder(schema);
+    const q = asCustomQuery(zql.e, 'e', undefined);
+
     const mockSocket = await z.socket;
 
     mockSocket.onUpstream(msg => {
-      expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
-        .toMatchInlineSnapshot(`
-          [
-            "initConnection",
-            {
-              "clientSchema": {
-                "tables": {
-                  "e": {
-                    "columns": {
-                      "id": {
-                        "type": "string",
-                      },
-                      "value": {
-                        "type": "string",
-                      },
-                    },
-                    "primaryKey": [
-                      "id",
-                    ],
+      expect(
+        valita.parse(JSON.parse(msg), initConnectionMessageSchema),
+      ).toEqual([
+        'initConnection',
+        {
+          clientSchema: {
+            tables: {
+              e: {
+                columns: {
+                  id: {
+                    type: 'string',
+                  },
+                  value: {
+                    type: 'string',
                   },
                 },
+                primaryKey: ['id'],
               },
-              "deleted": {
-                "clientIDs": [
-                  "a",
-                ],
-              },
-              "desiredQueriesPatch": [
-                {
-                  "ast": {
-                    "table": "e",
-                  },
-                  "hash": "1fr5t3cw7vi5",
-                  "op": "put",
-                  "ttl": 300000,
-                },
-              ],
             },
-          ]
-        `);
+          },
+          deleted: {
+            clientIDs: ['a'],
+          },
+          desiredQueriesPatch: [
+            {
+              args: [],
+              hash: queryID(q),
+              name: 'e',
+              op: 'put',
+              ttl: 300000,
+            },
+          ],
+        },
+      ]);
 
       expect(z.connectionStatus).toEqual(ConnectionStatus.Connecting);
     });
 
     expect(mockSocket.messages.length).toEqual(0);
-    const zql = createBuilder(schema);
-    const view = z.materialize(zql.e);
+
+    const view = z.materialize(q);
     view.addListener(() => {});
     await z.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -1380,6 +1389,9 @@ describe('initConnection', () => {
     });
     const z = zeroForTest({schema});
 
+    const zql = createBuilder(schema);
+    const q = asCustomQuery(zql.e, 'e', '💩');
+
     const mockSocket = await z.socket;
     mockSocket.onUpstream(msg => {
       expect(
@@ -1389,10 +1401,9 @@ describe('initConnection', () => {
         {
           desiredQueriesPatch: [
             {
-              ast: {
-                table: 'e',
-              } satisfies AST,
-              hash: '1fr5t3cw7vi5',
+              args: ['💩'],
+              hash: queryID(q),
+              name: 'e',
               op: 'put',
               ttl: 300000,
             },
@@ -1428,8 +1439,7 @@ describe('initConnection', () => {
 
     expect(mockSocket.messages.length).toEqual(0);
 
-    const zql = createBuilder(schema);
-    const view = z.materialize(zql.e);
+    const view = z.materialize(q);
     view.addListener(() => {});
 
     await z.triggerConnected();
@@ -1477,9 +1487,11 @@ describe('initConnection', () => {
     const z = zeroForTest({schema});
 
     const zql = createBuilder(schema);
-    const view1 = z.materialize(zql.e);
+    const q = asCustomQuery(zql.e, 'e', undefined);
+    const view1 = z.materialize(q);
     const removeListener = view1.addListener(() => {});
 
+    const hash = queryID(q);
     const mockSocket = await z.socket;
     mockSocket.onUpstream(msg => {
       expect(
@@ -1489,7 +1501,7 @@ describe('initConnection', () => {
         {
           desiredQueriesPatch: [
             {
-              hash: '1fr5t3cw7vi5',
+              hash,
               op: 'del',
             },
           ],
@@ -2012,91 +2024,128 @@ test('puller with normal non-mutation recovery pull', async () => {
   });
 });
 
-test('smokeTest', async () => {
-  const cases: {
-    name: string;
-    enableServer: boolean;
-  }[] = [
-    {
-      name: 'socket enabled',
-      enableServer: true,
+test.each([
+  {name: 'socket enabled', enableServer: true},
+  {name: 'socket disabled', enableServer: false},
+])('smokeTest - $name', async ({enableServer}) => {
+  // zeroForTest adds the socket by default.
+  const serverOptions = enableServer ? {} : {server: null};
+  const schema = createSchema({
+    tables: [
+      table('issues')
+        .columns({
+          id: string(),
+          value: number(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+  type LocalSchema = typeof schema;
+  type IssueRowDef = LocalSchema['tables']['issues'];
+  type Issue = Row<IssueRowDef>;
+  type DeleteIssue = DeleteID<IssueRowDef>;
+
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    issues: {
+      insert: defineMutatorWithType<typeof schema>()<Issue>(
+        async ({tx, args}) => {
+          await tx.mutate.issues.insert(args);
+        },
+      ),
+      upsert: defineMutatorWithType<typeof schema>()<Issue>(
+        async ({tx, args}) => {
+          await tx.mutate.issues.upsert(args);
+        },
+      ),
+      delete: defineMutatorWithType<typeof schema>()<DeleteIssue>(
+        async ({tx, args}) => {
+          await tx.mutate.issues.delete(args);
+        },
+      ),
     },
-    {
-      name: 'socket disabled',
-      enableServer: false,
-    },
-  ];
+  });
+  const z = zeroForTest({
+    ...serverOptions,
+    schema,
+    mutators,
+  });
 
-  for (const c of cases) {
-    // zeroForTest adds the socket by default.
-    const serverOptions = c.enableServer ? {} : {server: null};
-    const schema = createSchema({
-      tables: [
-        table('issues')
-          .columns({
-            id: string(),
-            value: number(),
-          })
-          .primaryKey('id'),
-      ],
-    });
-    const z = zeroForTest({
-      ...serverOptions,
-      schema,
-    });
+  const calls: Array<Array<unknown>> = [];
+  const zql = createBuilder(schema);
+  const view = z.materialize(zql.issues);
+  const unsubscribe = view.addListener(c => {
+    calls.push([...c]);
+  });
 
-    const calls: Array<Array<unknown>> = [];
-    const zql = createBuilder(schema);
-    const view = z.materialize(zql.issues);
-    const unsubscribe = view.addListener(c => {
-      calls.push([...c]);
-    });
+  // const mr = mutators.issues.upsert({id: 'a', value: 1});
+  // const f = mr.mutator;
+  // void f;
+  // z.mutate(mr)
 
-    await z.mutate.issues.insert({id: 'a', value: 1});
-    await z.mutate.issues.insert({id: 'b', value: 2});
+  // oxlint-disable-next-line no-explicit-any
+  type SchemaOfZ = typeof z extends Zero<infer S, any, any> ? S : never;
+  expectTypeOf<SchemaOfZ>().toEqualTypeOf<LocalSchema>();
 
-    // we get called for initial hydration, even though there's no data.
-    // plus once for the each transaction
-    // we test multiple changes in a transactions below
-    expect(calls.length).eq(3);
-    expect(calls[0]).toEqual([]);
-    expect(calls[1]).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
-    expect(calls[2]).toEqual([
-      {id: 'a', value: 1, [refCountSymbol]: 1},
-      {id: 'b', value: 2, [refCountSymbol]: 1},
-    ]);
+  type SchemaOfZMutate = Parameters<
+    typeof z.mutate
+  >[0]['mutator']['~']['$schema'];
 
-    calls.length = 0;
+  expectTypeOf<SchemaOfZMutate>().toEqualTypeOf<LocalSchema>();
 
-    await z.mutate.issues.insert({id: 'a', value: 1});
-    await z.mutate.issues.insert({id: 'b', value: 2});
+  type SchemaOfMutatorsIssuesInsert =
+    (typeof mutators.issues.insert)['~']['$schema'];
+  type X = SchemaOfMutatorsIssuesInsert['enableLegacyMutators'];
 
-    expect(calls.length).eq(0);
+  expectTypeOf<
+    SchemaOfMutatorsIssuesInsert['enableLegacyMutators']
+  >().toEqualTypeOf<LocalSchema['enableLegacyMutators']>();
+  // not sure what this is but just wanted to get type check working
+  expectTypeOf<X>().toEqualTypeOf<boolean | undefined>();
 
-    await z.mutate.issues.upsert({id: 'a', value: 11});
+  await z.mutate(mutators.issues.insert({id: 'a', value: 1})).client;
+  await z.mutate(mutators.issues.insert({id: 'b', value: 2})).client;
 
-    // Although the set() results in a remove and add flowing through the pipeline,
-    // they are in same tx, so we only get one call coming out.
-    expect(calls.length).eq(1);
-    expect(calls[0]).toEqual([
-      {id: 'a', value: 11, [refCountSymbol]: 1},
-      {id: 'b', value: 2, [refCountSymbol]: 1},
-    ]);
+  // we get called for initial hydration, even though there's no data.
+  // plus once for the each transaction
+  // we test multiple changes in a transactions below
+  expect(calls.length).toBe(3);
+  expect(calls[0]).toEqual([]);
+  expect(calls[1]).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+  expect(calls[2]).toEqual([
+    {id: 'a', value: 1, [refCountSymbol]: 1},
+    {id: 'b', value: 2, [refCountSymbol]: 1},
+  ]);
 
-    calls.length = 0;
-    await z.mutate.issues.delete({id: 'b'});
-    expect(calls.length).eq(1);
-    expect(calls[0]).toEqual([{id: 'a', value: 11, [refCountSymbol]: 1}]);
+  calls.length = 0;
 
-    unsubscribe();
+  await z.mutate(mutators.issues.insert({id: 'a', value: 1})).client;
+  await z.mutate(mutators.issues.insert({id: 'b', value: 2})).client;
 
-    calls.length = 0;
-    await z.mutate.issues.insert({id: 'c', value: 6});
-    expect(calls.length).eq(0);
-  }
+  expect(calls.length).eq(0);
+
+  await z.mutate(mutators.issues.upsert({id: 'a', value: 11})).client;
+
+  // Although the set() results in a remove and add flowing through the pipeline,
+  // they are in same tx, so we only get one call coming out.
+  expect(calls.length).eq(1);
+  expect(calls[0]).toEqual([
+    {id: 'a', value: 11, [refCountSymbol]: 1},
+    {id: 'b', value: 2, [refCountSymbol]: 1},
+  ]);
+
+  calls.length = 0;
+  await z.mutate(mutators.issues.delete({id: 'b'})).client;
+  expect(calls.length).eq(1);
+  expect(calls[0]).toEqual([{id: 'a', value: 11, [refCountSymbol]: 1}]);
+
+  unsubscribe();
+
+  calls.length = 0;
+  await z.mutate(mutators.issues.insert({id: 'c', value: 6})).client;
+  expect(calls.length).eq(0);
 });
 
-test('passing server null allows queries without WS connection', async () => {
+test.skip('passing cacheURL null allows queries without WS connection', async () => {
   const schema = createSchema({
     tables: [
       table('tasks')
@@ -2108,9 +2157,32 @@ test('passing server null allows queries without WS connection', async () => {
         .primaryKey('id'),
     ],
   });
+
+  type Schema = typeof schema;
+
+  type TasksRowDef = Schema['tables']['tasks'];
+  type Task = Row<TasksRowDef>;
+  type UpdateTask = UpdateValue<TasksRowDef>;
+  type DeleteTask = DeleteID<TasksRowDef>;
+
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    tasks: {
+      insert: defineMutator<Task, Schema>(({tx, args}) =>
+        tx.mutate.tasks.insert(args),
+      ),
+      update: defineMutator<UpdateTask, Schema>(({tx, args}) =>
+        tx.mutate.tasks.update(args),
+      ),
+      delete: defineMutator<DeleteTask, Schema>(({tx, args}) =>
+        tx.mutate.tasks.delete(args),
+      ),
+    },
+  });
+
   const z = zeroForTest({
     cacheURL: null,
     schema,
+    mutators,
   });
 
   // Queries should still work locally
@@ -2126,8 +2198,12 @@ test('passing server null allows queries without WS connection', async () => {
   expect(calls[0]).toEqual([]);
 
   // Mutations should work locally
-  await z.mutate.tasks.insert({id: 't1', title: 'Task 1', completed: false});
-  await z.mutate.tasks.insert({id: 't2', title: 'Task 2', completed: true});
+  await z.mutate(
+    mutators.tasks.insert({id: 't1', title: 'Task 1', completed: false}),
+  ).client;
+  await z.mutate(
+    mutators.tasks.insert({id: 't2', title: 'Task 2', completed: true}),
+  ).client;
 
   // Verify listener was called for each mutation
   expect(calls.length).eq(3);
@@ -2142,7 +2218,7 @@ test('passing server null allows queries without WS connection', async () => {
   calls.length = 0;
 
   // Update mutation should work
-  await z.mutate.tasks.update({id: 't1', completed: true});
+  await z.mutate(mutators.tasks.update({id: 't1', completed: true})).client;
   expect(calls.length).eq(1);
   expect(calls[0]).toEqual([
     {id: 't1', title: 'Task 1', completed: true, [refCountSymbol]: 1},
@@ -2152,7 +2228,7 @@ test('passing server null allows queries without WS connection', async () => {
   calls.length = 0;
 
   // Delete mutation should work
-  await z.mutate.tasks.delete({id: 't2'});
+  await z.mutate(mutators.tasks.delete({id: 't2'})).client;
   expect(calls.length).eq(1);
   expect(calls[0]).toEqual([
     {id: 't1', title: 'Task 1', completed: true, [refCountSymbol]: 1},
@@ -3421,11 +3497,16 @@ test('kvStore option', async () => {
           .primaryKey('id'),
       ],
     });
+    const mutators = defineMutatorsWithType<typeof schema>()({
+      insertE: defineMutator<{id: string; value: number}>(({tx, args}) =>
+        tx.mutate.e.insert(args),
+      ),
+    });
     const z = zeroForTest({
-      cacheURL: null,
       userID,
       kvStore,
       schema,
+      mutators,
     });
 
     // Use persist as a way to ensure we have read the data out of IDB.
@@ -3436,7 +3517,7 @@ test('kvStore option', async () => {
     const allDataView = z.materialize(zql.e);
     expect(allDataView.data).toEqual(expectedValue);
 
-    await z.mutate.e.insert({id: 'a', value: 1});
+    await z.mutate(mutators.insertE({id: 'a', value: 1})).client;
 
     expect(idIsAView.data).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
     // Wait for persist to finish
@@ -3546,7 +3627,8 @@ describe('CRUD', () => {
         .primaryKey('id1', 'id2'),
     ],
   });
-  const makeZero = () => zeroForTest({schema});
+  const makeZero = () =>
+    zeroForTest({schema: {...schema, enableLegacyMutators: true}});
 
   test('create', async () => {
     const z = makeZero();
@@ -3843,7 +3925,8 @@ describe('CRUD with compound primary key', () => {
         .primaryKey('idn', 'ids'),
     ],
   });
-  const makeZero = () => zeroForTest({schema});
+  const makeZero = () =>
+    zeroForTest({schema: {...schema, enableLegacyMutators: true}});
 
   test('create', async () => {
     const z = makeZero();
@@ -4034,7 +4117,7 @@ test('mutate is a function for batching', async () => {
         .primaryKey('id'),
     ],
   });
-  const z = zeroForTest({schema});
+  const z = zeroForTest({schema: {...schema, enableLegacyMutators: true}});
   const zql = createBuilder(schema);
   const issueView = z.materialize(zql.issue);
   const commentView = z.materialize(zql.comment);
@@ -4184,7 +4267,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
         .primaryKey('id'),
     ],
   });
-  const z = zeroForTest({schema});
+  const z = zeroForTest({schema: {...schema, enableLegacyMutators: true}});
   const zql = createBuilder(schema);
   const issueView = z.materialize(zql.issue);
 

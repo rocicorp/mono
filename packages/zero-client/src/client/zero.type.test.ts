@@ -1,6 +1,9 @@
 import {expect, expectTypeOf, test} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {MutationRequest} from '../../../zql/src/mutate/mutator.ts';
+import {
+  defineMutatorWithType,
+  type MutationRequest,
+} from '../../../zql/src/mutate/mutator.ts';
 import type {DBMutator} from './crud.ts';
 import type {MutatorResult} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
@@ -13,6 +16,7 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
 test('run', async () => {
@@ -26,12 +30,28 @@ test('run', async () => {
         .primaryKey('id'),
     ],
   });
+
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    insertIssue: defineMutatorWithType<typeof schema>()(async ({tx}) => {
+      expect('issues' in tx.mutate).toBe(true);
+      await tx.mutate.issues.insert({id: 'a', value: 1});
+
+      expect('noSuchTable' in tx.mutate).toBe(false);
+
+      // oxlint-disable-next-line no-constant-condition
+      if (false) {
+        // @ts-expect-error - noSuchTable does not exist
+        await tx.mutate.noSuchTable.insert({id: 'x'});
+      }
+    }),
+  } as const);
   const z = zeroForTest({
-    cacheURL: null,
     schema,
+    mutators,
   });
+
   const builder = createBuilder(schema);
-  await z.mutate.issues.insert({id: 'a', value: 1});
+  await z.mutate(mutators.insertIssue()).client;
 
   const x = await z.run(builder.issues);
   expectTypeOf(x).toEqualTypeOf<
@@ -54,12 +74,17 @@ test('materialize', async () => {
         .primaryKey('id'),
     ],
   });
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    insertIssue: defineMutatorWithType<typeof schema>()(({tx}) =>
+      tx.mutate.issues.insert({id: 'a', value: 1}),
+    ),
+  });
   const z = zeroForTest({
-    cacheURL: null,
     schema,
+    mutators,
   });
   const builder = createBuilder(schema);
-  await z.mutate.issues.insert({id: 'a', value: 1});
+  await z.mutate(mutators.insertIssue()).client;
 
   const m = z.materialize(builder.issues);
   expectTypeOf(m.data).toEqualTypeOf<
@@ -151,7 +176,7 @@ test('legacy mutators disabled - table mutators do not exist', () => {
   void z.mutate.issues;
 });
 
-test('legacy mutators undefined - defaults to enabled', () => {
+test('legacy mutators undefined - defaults to disabled', () => {
   const schema = createSchema({
     tables: [
       table('issues')
@@ -161,16 +186,16 @@ test('legacy mutators undefined - defaults to enabled', () => {
         })
         .primaryKey('id'),
     ],
-    // enableLegacyMutators not specified - should default to true
+    // enableLegacyMutators not specified - should default to false
   });
 
   const z = zeroForTest({schema});
 
-  // Should have CRUD methods by default
-  expectTypeOf(z.mutate.issues.insert).toBeFunction();
-  expectTypeOf(z.mutate.issues.update).toBeFunction();
-  expectTypeOf(z.mutate.issues.delete).toBeFunction();
-  expectTypeOf(z.mutate.issues.upsert).toBeFunction();
+  // Should not have CRUD methods by default
+  // @ts-expect-error - issues table should not exist when legacy mutators disabled (default)
+  void z.mutate.issues;
+
+  expectTypeOf(z.mutate).toBeFunction();
 });
 
 test('CRUD and custom mutators work together with enableLegacyMutators: true', async () => {

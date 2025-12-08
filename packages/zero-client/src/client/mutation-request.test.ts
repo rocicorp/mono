@@ -107,7 +107,7 @@ describe('zero.mutate(mr) with MutationRequest', () => {
 
   test('mutate still works as an object for CRUD operations', async () => {
     const z = zeroForTest({
-      schema,
+      schema: {...schema, enableLegacyMutators: true},
     });
 
     // TODO(arv): Why is `id` below not readonly?

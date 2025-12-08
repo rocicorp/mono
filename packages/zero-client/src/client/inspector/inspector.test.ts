@@ -23,7 +23,12 @@ import {nanoid} from '../../util/nanoid.ts';
 import {bindingsForZero} from '../bindings.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
 import type {TestZero} from '../test-utils.ts';
-import {MockSocket, zeroForTest} from '../test-utils.ts';
+import {
+  asCustomQuery,
+  MockSocket,
+  queryID,
+  zeroForTest,
+} from '../test-utils.ts';
 import type {Inspector} from './inspector.ts';
 import type {Metrics} from './lazy-inspector.ts';
 import type {Query} from './query.ts';
@@ -450,9 +455,9 @@ describe('query metrics', () => {
     const zql = createBuilder(schema);
 
     // Execute queries with different characteristics to test metrics collection
-    await z.run(zql.issue); // Simple table query
-    await z.run(zql.issue.where('id', '1')); // Filtered query
-    await z.run(zql.issue.where('id', '2')); // Another filtered query
+    await z.run(asCustomQuery(zql.issue, 'a', undefined)); // Simple table query
+    await z.run(asCustomQuery(zql.issue.where('id', '1'), 'b', undefined)); // Filtered query
+    await z.run(asCustomQuery(zql.issue.where('id', '2'), 'c', undefined)); // Another filtered query
 
     // Test that the inspector can access the real metrics
 
@@ -481,7 +486,7 @@ describe('query metrics', () => {
 
     ensureRealData(globalMetricsQueryMaterializationClient);
 
-    const q = zql.issue;
+    const q = asCustomQuery(zql.issue, 'a', undefined);
     const view = z.materialize(q);
     await z.triggerGotQueriesPatch(q);
 
@@ -570,8 +575,9 @@ describe('query metrics', () => {
     const zql = createBuilder(schema);
 
     const issueQuery = zql.issue.orderBy('id', 'desc');
-    const view = z.materialize(issueQuery);
-    await z.triggerGotQueriesPatch(issueQuery);
+    const customQuery = asCustomQuery(issueQuery, 'myCustomQuery', []);
+    const view = z.materialize(customQuery);
+    await z.triggerGotQueriesPatch(customQuery);
 
     // Trigger row updates to generate query-update metrics for this specific query
     await z.triggerPoke(null, '2', {
@@ -612,13 +618,13 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: bindingsForZero(z).hash(issueQuery),
+            queryID: queryID(customQuery),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
             },
-            name: null,
-            args: null,
+            name: 'customQuery',
+            args: [],
             deleted: false,
             got: true,
             inactivatedAt: null,
@@ -635,7 +641,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(bindingsForZero(z).hash(issueQuery)).toBe(queries[0].id);
+    expect(queryID(customQuery)).toBe(queries[0].id);
 
     const {metrics} = queries[0];
     expect(metrics).toMatchInlineSnapshot(`
@@ -695,11 +701,14 @@ test('server version', async () => {
   await z.close();
 });
 
-test('clientZQL', async () => {
-  const z = zeroForTest({schema});
+// clientZQL is only populated for legacy queries since the QueryManager only
+// tracks the client-side AST when legacy queries are enabled.
+test('clientZQL with legacy queries', async () => {
+  const legacySchema = {...schema, enableLegacyQueries: true} as const;
+  const z = zeroForTest({schema: legacySchema});
   await z.triggerConnected();
 
-  const zql = createBuilder(schema);
+  const zql = createBuilder(legacySchema);
 
   // Trigger QueryManager.#add by materializing a query and marking it as got
   const issueQuery = zql.issue.where('ownerId', 'arv');
@@ -745,6 +754,71 @@ test('clientZQL', async () => {
   const queries = await queriesP;
   expect(queries).toHaveLength(1);
   expect(queries[0].id).toBe(bindingsForZero(z).hash(issueQuery));
+  expect(queries[0].clientZQL).toBe("issue.where('ownerId', 'arv')");
+  expect(queries[0].serverZQL).toBe("issues.where('owner_id', 'arv')");
+
+  view.destroy();
+  await z.close();
+});
+
+// Custom queries (named queries) always track the client-side AST in the
+// QueryManager, so clientZQL is always populated for them.
+test('clientZQL with custom queries', async () => {
+  const z = zeroForTest({schema});
+  await z.triggerConnected();
+
+  const zql = createBuilder(schema);
+
+  // Create a custom query by adding name and args to a regular query
+  const baseQuery = zql.issue.where('ownerId', 'arv');
+  const customQuery = asCustomQuery(baseQuery, 'myCustomQuery', 'arv');
+  const customQueryID = queryID(customQuery);
+
+  // Trigger QueryManager.addCustom by materializing a custom query and marking it as got
+  const view = z.materialize(customQuery);
+  await z.triggerGotQueriesPatch(customQuery);
+
+  const idPromise = waitForID(z.socket, 'queries');
+  const queriesP = z.inspector.client.queries();
+  const id = await idPromise;
+
+  // Send fake inspect/queries response for this custom query
+  await z.triggerMessage([
+    'inspect',
+    {
+      op: 'queries',
+      id,
+      value: [
+        {
+          clientID: z.clientID,
+          queryID: customQueryID,
+          ast: {
+            table: 'issues',
+            where: {
+              type: 'simple',
+              left: {type: 'column', name: 'owner_id'},
+              op: '=',
+              right: {type: 'literal', value: 'arv'},
+            },
+          },
+          name: 'myCustomQuery',
+          args: ['arv'],
+          deleted: false,
+          got: true,
+          inactivatedAt: null,
+          rowCount: 0,
+          ttl: 60_000,
+          metrics: null,
+        },
+      ],
+    },
+  ] satisfies InspectDownMessage);
+
+  const queries = await queriesP;
+  expect(queries).toHaveLength(1);
+  expect(queries[0].id).toBe(customQueryID);
+  expect(queries[0].name).toBe('myCustomQuery');
+  expect(queries[0].args).toEqual(['arv']);
   expect(queries[0].clientZQL).toBe("issue.where('ownerId', 'arv')");
   expect(queries[0].serverZQL).toBe("issues.where('owner_id', 'arv')");
 

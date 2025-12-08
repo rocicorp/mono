@@ -48,17 +48,17 @@ export type Schema = {
   /**
    * Enables legacy query support.
    * When this is true, old-style queries that do not require server side implementations will be enabled.
-   * This will flip to false in the future and what we currently call "custom queries" will become "queries" and
+   * What we currently call "custom queries" will become "queries" and
    * the only option for reading data.
-   * The default is true, but will flip to false in the future.
+   * The default is false.
    */
   readonly enableLegacyQueries?: boolean | undefined;
   /**
    * Enables legacy mutator support.
    * When this is true, old-style mutations that do not require server side implementations will be enabled.
-   * This will flip to false in the future and what we currently call "custom mutations" will become "mutations" and
+   * What we currently call "custom mutations" will become "mutations" and
    * the only option for writing data.
-   * The default is true, but will flip to false in the future.
+   * The default is false.
    */
   readonly enableLegacyMutators?: boolean | undefined;
 };
