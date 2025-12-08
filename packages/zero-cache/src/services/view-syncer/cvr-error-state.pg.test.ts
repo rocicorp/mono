@@ -240,10 +240,6 @@ describe('view-syncer/cvr-error-state', () => {
 
   test('persist retryErrorVersion in desires', async () => {
     const cvr = await store.load(lc, CONNECT_TIME);
-    const client = {
-      id: 'client1',
-      desiredQueryIDs: ['q1'],
-    };
 
     // Put desired query with retryErrorVersion
     // Use ConfigDrivenUpdater to handle it properly
