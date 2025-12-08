@@ -7,7 +7,14 @@ import {buildPipeline} from '../builder/builder.ts';
 import {ArrayView} from '../ivm/array-view.ts';
 import type {FilterInput} from '../ivm/filter-operators.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
-import type {Input, InputBase, Storage} from '../ivm/operator.ts';
+import type {
+  FetchRequest,
+  Input,
+  InputBase,
+  Output,
+  Storage,
+} from '../ivm/operator.ts';
+import type {Change} from '../ivm/change.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricMap} from './metrics-delegate.ts';
@@ -388,7 +395,7 @@ export function materializeImpl<
     ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
     : delegate.addServerQuery(ast, ttl, gotCallback);
 
-  const input = buildPipeline(ast, delegate, queryID);
+  const input = new ViewInputWrapper(buildPipeline(ast, delegate, queryID));
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(
@@ -437,4 +444,45 @@ function arrayViewFactory<
     v.flush();
   });
   return v;
+}
+
+/**
+ * Wraps an Input to make it suitable for views:
+ * - Filters out 'yield' values from fetch so views never see them
+ * - Wraps setOutput to handle views that return undefined from push
+ */
+class ViewInputWrapper implements Input {
+  readonly #input: Input;
+
+  constructor(input: Input) {
+    this.#input = input;
+  }
+
+  getSchema() {
+    return this.#input.getSchema();
+  }
+
+  destroy() {
+    this.#input.destroy();
+  }
+
+  setOutput(output: Output) {
+    this.#input.setOutput({
+      push(change: Change, pusher: InputBase) {
+        const result = output.push(change, pusher);
+        if (result === undefined) {
+          return [];
+        }
+        return result;
+      },
+    });
+  }
+
+  *fetch(req: FetchRequest) {
+    for (const node of this.#input.fetch(req)) {
+      if (node !== 'yield') {
+        yield node;
+      }
+    }
+  }
 }

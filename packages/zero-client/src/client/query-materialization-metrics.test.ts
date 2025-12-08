@@ -18,6 +18,7 @@ import {
   type UpdateQuery,
 } from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
@@ -521,8 +522,8 @@ describe('query materialization metrics', () => {
 
       // Add some test data to the source
       const source = queryDelegate.getSource('users') as MemorySource;
-      source.push({type: 'add', row: {id: 'user1', name: 'John'}});
-      source.push({type: 'add', row: {id: 'user2', name: 'Jane'}});
+      consume(source.push({type: 'add', row: {id: 'user1', name: 'John'}}));
+      consume(source.push({type: 'add', row: {id: 'user2', name: 'Jane'}}));
 
       const query = createTestQuery();
 

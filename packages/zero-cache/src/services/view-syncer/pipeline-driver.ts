@@ -81,14 +81,19 @@ type Pipeline = {
 };
 
 type AdvanceContext = {
-  readonly timer: {totalElapsed: () => number};
+  readonly timer: Timer;
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
   pos: number;
 };
 
 type HydrateContext = {
-  readonly timer: {elapsedLap: () => number};
+  readonly timer: Timer;
+};
+
+export type Timer = {
+  elapsedLap: () => number;
+  totalElapsed: () => number;
 };
 
 /**
@@ -96,7 +101,7 @@ type HydrateContext = {
  * complete before doing a pipeline reset.
  */
 const MIN_ADVANCEMENT_TIME_LIMIT_MS = 30;
-export const HYDRATE_YIELD_THRESHOLD_MS = 200;
+export const YIELD_THRESHOLD_MS = 200;
 
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
@@ -343,7 +348,7 @@ export class PipelineDriver {
     transformationHash: string,
     queryID: string,
     query: AST,
-    timer: {totalElapsed: () => number; elapsedLap: () => number},
+    timer: Timer,
   ): Iterable<RowChange | 'yield'> {
     assert(this.initialized());
     this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
@@ -386,6 +391,7 @@ export class PipelineDriver {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
         streamer.accumulate(transformationHash, schema, [change]);
+        return [];
       },
     });
 
@@ -471,10 +477,10 @@ export class PipelineDriver {
    *         `changes` must be iterated over in their entirety in order to
    *         advance the database snapshot.
    */
-  advance(timer: {totalElapsed: () => number}): {
+  advance(timer: Timer): {
     version: string;
     numChanges: number;
-    changes: Iterable<RowChange>;
+    changes: Iterable<RowChange | 'yield'>;
   } {
     assert(this.initialized());
     const diff = this.#snapshotter.advance(this.#tableSpecs);
@@ -492,9 +498,9 @@ export class PipelineDriver {
 
   *#advance(
     diff: SnapshotDiff,
-    timer: {totalElapsed: () => number},
+    timer: Timer,
     numChanges: number,
-  ): Iterable<RowChange> {
+  ): Iterable<RowChange | 'yield'> {
     assert(this.#hydrateContext === null);
     this.#advanceContext = {
       timer,
@@ -508,7 +514,9 @@ export class PipelineDriver {
         // from a TableSource during push processing, but some pushes
         // don't read any rows.  Check progress here before processing
         // the next change.
-        this.#checkAdvanceProgress();
+        if (this.#shouldAdvanceYieldMaybeAbortAdvance()) {
+          yield 'yield';
+        }
         const start = performance.now();
         let type;
         try {
@@ -602,14 +610,12 @@ export class PipelineDriver {
 
   #shouldYield(): boolean {
     if (this.#hydrateContext) {
-      return (
-        this.#hydrateContext.timer.elapsedLap() > HYDRATE_YIELD_THRESHOLD_MS
-      );
+      return this.#hydrateContext.timer.elapsedLap() > YIELD_THRESHOLD_MS;
     }
     if (this.#advanceContext) {
-      this.#checkAdvanceProgress();
+      return this.#shouldAdvanceYieldMaybeAbortAdvance();
     }
-    return false;
+    throw new Error('shouldYield called outside of hydration or advancement');
   }
 
   /**
@@ -625,7 +631,7 @@ export class PipelineDriver {
    * 1. before starting to process each change in an advancement is processed
    * 2. whenever a row is fetched from a TableSource during push processing
    */
-  #checkAdvanceProgress() {
+  #shouldAdvanceYieldMaybeAbortAdvance(): boolean {
     const {
       pos,
       numChanges,
@@ -644,6 +650,7 @@ export class PipelineDriver {
           `hydration time of ${totalHydrationTimeMs} ms.`,
       );
     }
+    return advanceTimer.elapsedLap() > YIELD_THRESHOLD_MS;
   }
 
   /** Implements `BuilderDelegate.createStorage()` */
@@ -651,16 +658,18 @@ export class PipelineDriver {
     return this.#storage.createStorage();
   }
 
-  *#push(source: TableSource, change: SourceChange): Iterable<RowChange> {
+  *#push(
+    source: TableSource,
+    change: SourceChange,
+  ): Iterable<RowChange | 'yield'> {
     this.#startAccumulating();
     try {
-      for (const _ of source.genPush(change)) {
-        for (const change of this.#stopAccumulating().stream()) {
-          // PipelineDriver's shouldYield implementation never yields during
-          // push processing, so we can assert that we never see a 'yield'
-          // here.
-          assert(change !== 'yield');
-          yield change;
+      for (const val of source.genPush(change)) {
+        if (val === 'yield') {
+          yield 'yield';
+        }
+        for (const changeOrYield of this.#stopAccumulating().stream()) {
+          yield changeOrYield;
         }
         this.#startAccumulating();
       }

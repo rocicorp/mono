@@ -1,4 +1,5 @@
 import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
@@ -285,10 +286,12 @@ export async function insertImpl(
     );
     await tx.set(key, val);
     if (ivmBranch) {
-      must(ivmBranch.getSource(arg.tableName)).push({
-        type: 'add',
-        row: arg.value,
-      });
+      consume(
+        must(ivmBranch.getSource(arg.tableName)).push({
+          type: 'add',
+          row: arg.value,
+        }),
+      );
     }
   }
 }
@@ -335,11 +338,13 @@ export async function updateImpl(
   }
   await tx.set(key, next);
   if (ivmBranch) {
-    must(ivmBranch.getSource(arg.tableName)).push({
-      type: 'edit',
-      oldRow: prev as Row,
-      row: next,
-    });
+    consume(
+      must(ivmBranch.getSource(arg.tableName)).push({
+        type: 'edit',
+        oldRow: prev as Row,
+        row: next,
+      }),
+    );
   }
 }
 
@@ -360,9 +365,11 @@ export async function deleteImpl(
   }
   await tx.del(key);
   if (ivmBranch) {
-    must(ivmBranch.getSource(arg.tableName)).push({
-      type: 'remove',
-      row: prev as Row,
-    });
+    consume(
+      must(ivmBranch.getSource(arg.tableName)).push({
+        type: 'remove',
+        row: prev as Row,
+      }),
+    );
   }
 }

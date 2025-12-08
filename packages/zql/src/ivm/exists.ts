@@ -10,6 +10,7 @@ import {
   type FilterOutput,
 } from './filter-operators.ts';
 import type {SourceSchema} from './schema.ts';
+import {type Stream} from './stream.ts';
 
 /**
  * The Exists operator filters data based on whether or not a relationship is
@@ -74,13 +75,13 @@ export class Exists implements FilterOperator {
     this.#output.endFilter();
   }
 
-  filter(node: Node): boolean {
+  *filter(node: Node): Generator<'yield', boolean> {
     let exists: boolean | undefined;
     if (!this.#noSizeReuse && !this.#inPush) {
       const key = this.#getCacheKey(node, this.#parentJoinKey);
       exists = this.#cache.get(key);
       if (exists === undefined) {
-        exists = this.#fetchExists(node);
+        exists = yield* this.#fetchExists(node);
         this.#cache.set(key, exists);
       } else if (this.#cacheHitCountsForTesting) {
         this.#cacheHitCountsForTesting.set(
@@ -90,7 +91,8 @@ export class Exists implements FilterOperator {
       }
     }
 
-    const result = this.#filter(node, exists) && this.#output.filter(node);
+    const result =
+      (yield* this.#filter(node, exists)) && (yield* this.#output.filter(node));
     return result;
   }
 
@@ -102,7 +104,7 @@ export class Exists implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  push(change: Change) {
+  *push(change: Change): Stream<'yield'> {
     assert(!this.#inPush, 'Unexpected re-entrancy');
     this.#inPush = true;
     try {
@@ -112,7 +114,7 @@ export class Exists implements FilterOperator {
         case 'add':
         case 'edit':
         case 'remove': {
-          this.#pushWithFilter(change);
+          yield* this.#pushWithFilter(change);
           return;
         }
         case 'child':
@@ -125,19 +127,19 @@ export class Exists implements FilterOperator {
             change.child.change.type === 'edit' ||
             change.child.change.type === 'child'
           ) {
-            this.#pushWithFilter(change);
+            yield* this.#pushWithFilter(change);
             return;
           }
           switch (change.child.change.type) {
             case 'add': {
-              const size = this.#fetchSize(change.node);
+              const size = yield* this.#fetchSize(change.node);
               if (size === 1) {
                 if (this.#not) {
                   // Since the add child change currently being processed is not
                   // pushed to output, the added child needs to be excluded from
                   // the remove being pushed to output (since the child has
                   // never been added to the output).
-                  this.#output.push(
+                  yield* this.#output.push(
                     {
                       type: 'remove',
                       node: {
@@ -151,7 +153,7 @@ export class Exists implements FilterOperator {
                     this,
                   );
                 } else {
-                  this.#output.push(
+                  yield* this.#output.push(
                     {
                       type: 'add',
                       node: change.node,
@@ -160,15 +162,15 @@ export class Exists implements FilterOperator {
                   );
                 }
               } else {
-                this.#pushWithFilter(change, size > 0);
+                yield* this.#pushWithFilter(change, size > 0);
               }
               return;
             }
             case 'remove': {
-              const size = this.#fetchSize(change.node);
+              const size = yield* this.#fetchSize(change.node);
               if (size === 0) {
                 if (this.#not) {
-                  this.#output.push(
+                  yield* this.#output.push(
                     {
                       type: 'add',
                       node: change.node,
@@ -179,7 +181,7 @@ export class Exists implements FilterOperator {
                   // Since the remove child change currently being processed is
                   // not pushed to output, the removed child needs to be added to
                   // the remove being pushed to output.
-                  this.#output.push(
+                  yield* this.#output.push(
                     {
                       type: 'remove',
                       node: {
@@ -196,7 +198,7 @@ export class Exists implements FilterOperator {
                   );
                 }
               } else {
-                this.#pushWithFilter(change, size > 0);
+                yield* this.#pushWithFilter(change, size > 0);
               }
               return;
             }
@@ -219,8 +221,8 @@ export class Exists implements FilterOperator {
    * relationship with this.#relationshipName (this computed size is also
    * stored).
    */
-  #filter(node: Node, exists?: boolean): boolean {
-    exists = exists ?? this.#fetchExists(node);
+  *#filter(node: Node, exists?: boolean): Generator<'yield', boolean> {
+    exists = exists ?? (yield* this.#fetchExists(node));
     return this.#not ? !exists : exists;
   }
 
@@ -235,25 +237,27 @@ export class Exists implements FilterOperator {
   /**
    * Pushes a change if this.#filter is true for its row.
    */
-  #pushWithFilter(change: Change, exists?: boolean): void {
-    if (this.#filter(change.node, exists)) {
-      this.#output.push(change, this);
+  *#pushWithFilter(change: Change, exists?: boolean): Stream<'yield'> {
+    if (yield* this.#filter(change.node, exists)) {
+      yield* this.#output.push(change, this);
     }
   }
 
-  #fetchExists(node: Node): boolean {
+  *#fetchExists(node: Node): Generator<'yield', boolean> {
     // While it seems like this should be able to fetch just 1 node
     // to check for exists, we can't because Take does not support
     // early return during initial fetch.
-    return this.#fetchSize(node) > 0;
+    return (yield* this.#fetchSize(node)) > 0;
   }
 
-  #fetchSize(node: Node): number {
+  *#fetchSize(node: Node): Generator<'yield', number> {
     const relationship = node.relationships[this.#relationshipName];
     assert(relationship);
     let size = 0;
     for (const n of relationship()) {
-      if (n !== 'yield') {
+      if (n === 'yield') {
+        yield 'yield';
+      } else {
         size++;
       }
     }

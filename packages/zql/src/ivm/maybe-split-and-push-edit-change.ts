@@ -7,7 +7,7 @@ import type {InputBase, Output} from './operator.ts';
  * should be present based on the row's data. It then splits the change and
  * pushes the appropriate changes to the output based on the predicate.
  */
-export function maybeSplitAndPushEditChange(
+export function* maybeSplitAndPushEditChange(
   change: EditChange,
   predicate: (row: Row) => boolean,
   output: Output,
@@ -17,9 +17,9 @@ export function maybeSplitAndPushEditChange(
   const newIsPresent = predicate(change.node.row);
 
   if (oldWasPresent && newIsPresent) {
-    output.push(change, pusher);
+    yield* output.push(change, pusher);
   } else if (oldWasPresent && !newIsPresent) {
-    output.push(
+    yield* output.push(
       {
         type: 'remove',
         node: change.oldNode,
@@ -27,7 +27,7 @@ export function maybeSplitAndPushEditChange(
       pusher,
     );
   } else if (!oldWasPresent && newIsPresent) {
-    output.push(
+    yield* output.push(
       {
         type: 'add',
         node: change.node,

@@ -21,6 +21,7 @@ import type {
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import {skipYields} from '../../zql/src/ivm/operator.ts';
+import {emptyArray} from '../../shared/src/sentinels.ts';
 
 export type State = [Entry, QueryResultDetails];
 
@@ -147,7 +148,7 @@ export class SolidView implements Output {
     }
   };
 
-  push(change: Change): void {
+  push(change: Change) {
     // Delay updating the solid store state until the transaction commit
     // (because each update of the solid store is quite expensive).  If
     // this.#builderRoot is defined apply the changes to it (we are building
@@ -159,6 +160,7 @@ export class SolidView implements Output {
     } else {
       this.#pendingChanges.push(materializeRelationships(change));
     }
+    return emptyArray;
   }
 
   #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => ViewChange): void {

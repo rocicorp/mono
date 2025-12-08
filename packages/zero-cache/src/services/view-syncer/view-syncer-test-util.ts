@@ -105,6 +105,11 @@ export const ISSUES_QUERY: AST = {
   orderBy: [['id', 'asc']],
 };
 
+export const ALL_ISSUES_QUERY: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+};
+
 export const COMMENTS_QUERY: AST = {
   table: 'comments',
   orderBy: [['id', 'asc']],
@@ -312,6 +317,25 @@ export const ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED: AST = {
           ['issueID', 'asc'],
           ['id', 'asc'],
         ],
+      },
+    },
+  ],
+};
+
+export const ISSUES_QUERY_WITH_OWNER: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  related: [
+    {
+      system: 'client',
+      correlation: {
+        parentField: ['owner'],
+        childField: ['id'],
+      },
+      subquery: {
+        table: 'users',
+        alias: 'owner',
+        orderBy: [['id', 'asc']],
       },
     },
   ],

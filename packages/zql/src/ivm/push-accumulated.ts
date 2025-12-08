@@ -76,14 +76,14 @@ import type {Stream} from './stream.ts';
  * If an edit enters and is converted to only add or only remove, it exits as that change.
  * If an edit enters and exits as edits only, it exits as a single edit.
  */
-export function pushAccumulatedChanges(
+export function* pushAccumulatedChanges(
   accumulatedPushes: Change[],
   output: Output,
   pusher: InputBase,
   fanOutChangeType: Change['type'],
   mergeRelationships: (existing: Change, incoming: Change) => Change,
   addEmptyRelationships: (change: Change) => Change,
-) {
+): Stream<'yield'> {
   if (accumulatedPushes.length === 0) {
     // It is possible for no forks to pass along the push.
     // E.g., if no filters match in any fork.
@@ -129,7 +129,7 @@ export function pushAccumulatedChanges(
         types.length === 1 && types[0] === 'remove',
         'Fan-in:remove expected all removes',
       );
-      output.push(
+      yield* output.push(
         addEmptyRelationships(must(candidatesToPush.get('remove'))),
         pusher,
       );
@@ -139,7 +139,7 @@ export function pushAccumulatedChanges(
         types.length === 1 && types[0] === 'add',
         'Fan-in:add expected all adds',
       );
-      output.push(
+      yield* output.push(
         addEmptyRelationships(must(candidatesToPush.get('add'))),
         pusher,
       );
@@ -164,7 +164,7 @@ export function pushAccumulatedChanges(
         if (removeChange) {
           editChange = mergeRelationships(editChange, removeChange);
         }
-        output.push(addEmptyRelationships(editChange), pusher);
+        yield* output.push(addEmptyRelationships(editChange), pusher);
         return;
       }
 
@@ -186,7 +186,7 @@ export function pushAccumulatedChanges(
       // The left filter converts the edit into a remove.
       // The right filter converts the edit into an add.
       if (addChange && removeChange) {
-        output.push(
+        yield* output.push(
           addEmptyRelationships({
             type: 'edit',
             node: addChange.node,
@@ -197,7 +197,7 @@ export function pushAccumulatedChanges(
         return;
       }
 
-      output.push(
+      yield* output.push(
         addEmptyRelationships(must(addChange ?? removeChange)),
         pusher,
       );
@@ -221,7 +221,7 @@ export function pushAccumulatedChanges(
       // If any branch preserved the original child change, that takes precedence over all other changes.
       const childChange = candidatesToPush.get('child');
       if (childChange) {
-        output.push(childChange, pusher);
+        yield* output.push(childChange, pusher);
         return;
       }
 
@@ -233,7 +233,7 @@ export function pushAccumulatedChanges(
         'Fan-in:child expected either add or remove, not both',
       );
 
-      output.push(
+      yield* output.push(
         addEmptyRelationships(must(addChange ?? removeChange)),
         pusher,
       );
