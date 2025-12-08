@@ -2024,8 +2024,8 @@ test('puller with normal non-mutation recovery pull', async () => {
   });
 });
 
-test.only.each([
-  // {name: 'socket enabled', enableServer: true},
+test.each([
+  {name: 'socket enabled', enableServer: true},
   {name: 'socket disabled', enableServer: false},
 ])('smokeTest - $name', async ({enableServer}) => {
   // zeroForTest adds the socket by default.

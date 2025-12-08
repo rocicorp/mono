@@ -1,4 +1,6 @@
 import {assert} from '../../shared/src/asserts.ts';
+import {mapValues} from '../../shared/src/objects.ts';
+import {recordProxy} from '../../shared/src/record-proxy.ts';
 import {
   formatPgInternalConvert,
   sql,
@@ -186,53 +188,29 @@ export function makeSchemaCRUD<S extends Schema>(
   dbTransaction: DBTransaction<unknown>,
   serverSchema: ServerSchema,
 ) => SchemaCRUD<S> {
-  const schemaCRUDs: Record<string, TableCRUD<TableSchema>> = {};
-  for (const tableSchema of Object.values(schema.tables)) {
-    schemaCRUDs[tableSchema.name] = makeTableCRUD(tableSchema);
-  }
-
   /**
    * For users with very large schemas it is expensive to re-create
    * all the CRUD mutators for each transaction. Instead, we create
    * them all once up-front and then bind them to the transaction
    * as requested.
    */
-  class CRUDHandler {
-    readonly #dbTransaction: DBTransaction<unknown>;
-    readonly #serverSchema: ServerSchema;
-    constructor(
-      dbTransaction: DBTransaction<unknown>,
-      serverSchema: ServerSchema,
-    ) {
-      this.#dbTransaction = dbTransaction;
-      this.#serverSchema = serverSchema;
-    }
-
-    get(target: Record<string, TableCRUD<TableSchema>>, prop: string) {
-      if (prop in target) {
-        return target[prop];
-      }
-
-      const txHolder: WithHiddenTxAndSchema = {
-        [dbTxSymbol]: this.#dbTransaction,
-        [serverSchemaSymbol]: this.#serverSchema,
-      };
-      target[prop] = Object.fromEntries(
-        Object.entries(schemaCRUDs[prop]).map(([name, method]) => [
-          name,
-          method.bind(txHolder),
-        ]),
-      ) as TableCRUD<TableSchema>;
-
-      return target[prop];
-    }
+  const schemaCRUDs: Record<string, TableCRUD<TableSchema>> = {};
+  for (const tableSchema of Object.values(schema.tables)) {
+    schemaCRUDs[tableSchema.name] = makeTableCRUD(tableSchema);
   }
 
-  return (dbTransaction: DBTransaction<unknown>, serverSchema: ServerSchema) =>
-    new Proxy(
-      {},
-      new CRUDHandler(dbTransaction, serverSchema),
-    ) as SchemaCRUD<S>;
+  return (
+    dbTransaction: DBTransaction<unknown>,
+    serverSchema: ServerSchema,
+  ) => {
+    const txHolder: WithHiddenTxAndSchema = {
+      [dbTxSymbol]: dbTransaction,
+      [serverSchemaSymbol]: serverSchema,
+    };
+    return recordProxy(schemaCRUDs, tableCRUD =>
+      mapValues(tableCRUD, method => method.bind(txHolder)),
+    ) as unknown as SchemaCRUD<S>;
+  };
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): T {

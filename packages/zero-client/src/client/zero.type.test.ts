@@ -33,15 +33,23 @@ test('run', async () => {
 
   const mutators = defineMutatorsWithType<typeof schema>()({
     insertIssue: defineMutatorWithType<typeof schema>()(async ({tx}) => {
+      expect('issues' in tx.mutate).toBe(true);
       await tx.mutate.issues.insert({id: 'a', value: 1});
-      // @ts-expect-error no such table
-      await tx.mutate.noSuchTable.insert({id: 'a', value: 1});
+
+      expect('noSuchTable' in tx.mutate).toBe(false);
+
+      // oxlint-disable-next-line no-constant-condition
+      if (false) {
+        // @ts-expect-error - noSuchTable does not exist
+        await tx.mutate.noSuchTable.insert({id: 'x'});
+      }
     }),
   } as const);
   const z = zeroForTest({
     schema,
     mutators,
   });
+
   const builder = createBuilder(schema);
   await z.mutate(mutators.insertIssue()).client;
 

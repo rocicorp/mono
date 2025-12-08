@@ -5,6 +5,7 @@ import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
@@ -14,7 +15,6 @@ import type {
   DeleteID,
   InsertValue,
   SchemaCRUD,
-  TableCRUD,
   Transaction,
   UpdateValue,
   UpsertValue,
@@ -204,18 +204,8 @@ function makeSchemaCRUD<S extends Schema>(
 ) {
   // Only creates the CRUD mutators on demand
   // rather than creating them all up-front for each mutation.
-  return new Proxy(
-    {},
-    {
-      get(target: Record<string, TableCRUD<TableSchema>>, prop: string) {
-        if (prop in target) {
-          return target[prop];
-        }
-
-        target[prop] = makeTableCRUD(schema, prop, tx, ivmBranch);
-        return target[prop];
-      },
-    },
+  return recordProxy(schema.tables, (_tableSchema, tableName) =>
+    makeTableCRUD(schema, tableName, tx, ivmBranch),
   ) as SchemaCRUD<S>;
 }
 

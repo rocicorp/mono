@@ -180,3 +180,32 @@ describe('mutate', () => {
     await z.mutate.issues.insert({id: '1', title: 'test'});
   });
 });
+
+describe('both legacy flags undefined (default behavior)', () => {
+  test('schema with neither enableLegacyMutators nor enableLegacyQueries set defaults to disabled', () => {
+    const schema = createSchema({
+      tables: [
+        table('issues')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+      // Neither enableLegacyMutators nor enableLegacyQueries specified
+    });
+
+    const z = zeroForTest({schema});
+
+    // Both should default to disabled behavior
+
+    // mutateBatch should be undefined
+    expect(z.mutateBatch).toBe(undefined);
+
+    // CRUD mutators should not exist on z.mutate
+    expect('issues' in z.mutate).toBe(false);
+
+    // z.mutate should still be callable (for custom mutators)
+    expect(typeof z.mutate).toBe('function');
+  });
+});
