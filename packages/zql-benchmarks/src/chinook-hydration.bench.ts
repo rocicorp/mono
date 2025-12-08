@@ -11,6 +11,7 @@ await runBenchmarks(
     type: 'hydration',
     pgContent,
     zqlSchema: schema,
+    only: 'all playlists',
   },
   [
     {

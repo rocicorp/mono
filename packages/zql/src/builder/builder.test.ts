@@ -2825,7 +2825,7 @@ test('graceful fallback when planner encounters too many joins', () => {
   } as unknown as typeof lc;
 
   // Create an AST with 10 EXISTS conditions (MAX_FLIPPABLE_JOINS is 9)
-  // This should trigger the planner to throw PlannerException
+  // This should trigger the planner to skip optimization
   const existsConditions: Condition[] = [];
   for (let i = 0; i < 10; i++) {
     existsConditions.push({
@@ -2860,10 +2860,10 @@ test('graceful fallback when planner encounters too many joins', () => {
     buildPipeline(ast, delegate, 'query-id', simpleCostModel, testLc),
   );
 
-  // Verify the warning was logged with the exception kind
+  // Verify the warning was logged
   expect(warnSpy).toHaveBeenCalledWith(
     expect.stringMatching(
-      /Query planner failed \(max_flippable_joins\).*10 EXISTS checks/,
+      /Query has 10 EXISTS checks which would require 1024 plan evaluations/,
     ),
   );
 
