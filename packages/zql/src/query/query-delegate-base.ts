@@ -7,14 +7,7 @@ import {buildPipeline} from '../builder/builder.ts';
 import {ArrayView} from '../ivm/array-view.ts';
 import type {FilterInput} from '../ivm/filter-operators.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
-import type {
-  FetchRequest,
-  Input,
-  InputBase,
-  Output,
-  Storage,
-} from '../ivm/operator.ts';
-import type {Change} from '../ivm/change.ts';
+import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricMap} from './metrics-delegate.ts';
