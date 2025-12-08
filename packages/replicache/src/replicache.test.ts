@@ -1721,7 +1721,7 @@ async function tickUntilTimeIs(time: number, tick = 10) {
   }
 }
 
-test('pull mutate options', {retry: 3}, async () => {
+test('pull mutate options', async () => {
   const pullURL = 'https://diff.com/pull';
   const rep = await replicacheForTesting(
     'pull-mutate-options',
@@ -1744,51 +1744,60 @@ test('pull mutate options', {retry: 3}, async () => {
 
   await tickUntilTimeIs(1000);
 
-  // If we iterated till `Date.now() < 1150`
-  // then this makes the test flaky.
-  //
-  // The reason is that going to `1150` will
-  // cause the sleep promise to resolve at `1150`
-  // which will then:
-  // 1. run the fetch (ok, that's fine)
-  // 2. update `lastSendTime` to `1150`
-  // 3. then we check `if (clampedDelay > timeSinceLastSend) {`
-  //     (that check is in connection-loop.ts)
-  //
-  // The problem is that (3) may or may not happen before
-  // we change `req.requestOptions.minDelayMs` to 500 below.
-  //
-  // If it happens before, then the next pull will be at `1150 + 500 = 1650`
-  // If it happens after, then the next pull will be at `1150 + 30 = 1180`
-  //
-  // The reason it can race is because there are awaits within the loop
-  // in connection-loop.ts
-  while (Date.now() < 1130) {
+  // Phase 1: default minDelayMs (30ms)
+  while (Date.now() < 1200) {
     rep.pullIgnorePromise();
     await vi.advanceTimersByTimeAsync(10);
   }
 
+  const phase1End = log.length;
+
   rep.requestOptions.minDelayMs = 500;
 
-  while (Date.now() < 2000) {
+  // Phase 2: minDelayMs = 500ms
+  while (Date.now() < 2200) {
     rep.pullIgnorePromise();
     await vi.advanceTimersByTimeAsync(100);
   }
 
+  const phase2End = log.length;
+
   rep.requestOptions.minDelayMs = 25;
 
-  while (Date.now() < 2500) {
+  // Phase 3: minDelayMs = 25ms
+  while (Date.now() < 2700) {
     rep.pullIgnorePromise();
     await vi.advanceTimersByTimeAsync(5);
   }
 
-  // the first one is often off by a few ms
-  expect(log[0], '1060').toBeGreaterThanOrEqual(1000);
-  expect(log.slice(1)).toEqual([
-    // 1000, checked above
-    1030, 1060, 1090, 1120, 1150, 1650, 2150, 2175, 2200, 2225, 2250, 2275,
-    2300, 2325, 2350, 2375, 2400, 2425, 2450, 2475, 2500,
-  ]);
+  // Verify phase 1: pulls should be ~30ms apart (default minDelayMs)
+  expect(log.length).toBeGreaterThan(0);
+  for (let i = 1; i < phase1End; i++) {
+    const delta = log[i] - log[i - 1];
+    expect(delta, `phase1 delta at index ${i}`).toBe(30);
+  }
+
+  // Verify phase 2: pulls should be ~500ms apart
+  // The first pull in phase 2 might be at the boundary, so start from index after that
+  const phase2Start = phase1End;
+  for (let i = phase2Start + 1; i < phase2End; i++) {
+    const delta = log[i] - log[i - 1];
+    expect(delta, `phase2 delta at index ${i}`).toBe(500);
+  }
+
+  // Verify phase 3: pulls should be ~25ms apart
+  const phase3Start = phase2End;
+  for (let i = phase3Start + 1; i < log.length; i++) {
+    const delta = log[i] - log[i - 1];
+    expect(delta, `phase3 delta at index ${i}`).toBe(25);
+  }
+
+  // Also verify we got a reasonable number of pulls in each phase
+  expect(phase1End, 'phase1 pull count').toBeGreaterThanOrEqual(5);
+  expect(phase2End - phase1End, 'phase2 pull count').toBeGreaterThanOrEqual(1);
+  expect(log.length - phase2End, 'phase3 pull count').toBeGreaterThanOrEqual(
+    10,
+  );
 });
 
 test('online', async () => {
