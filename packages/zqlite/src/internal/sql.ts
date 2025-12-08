@@ -24,6 +24,14 @@ function isNamedValue(v: unknown): v is NamedValue {
   return v !== null && typeof v === 'object' && NAMED_VALUE in v;
 }
 
+/**
+ * Unwraps a NamedValue to get the underlying value.
+ * Returns the original value if not a NamedValue.
+ */
+export function unwrapNamedValue(v: unknown): unknown {
+  return isNamedValue(v) ? v.value : v;
+}
+
 const sqliteFormat: FormatConfig = {
   escapeIdentifier: str => escapeSQLiteIdentifier(str),
   formatValue: value => {

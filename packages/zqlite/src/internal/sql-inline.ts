@@ -1,6 +1,7 @@
 import type {FormatConfig} from '@databases/sql';
 import type {SQLQuery} from '@databases/sql';
 import {escapeSQLiteIdentifier} from '@databases/escape-identifier';
+import {unwrapNamedValue} from './sql.ts';
 
 /**
  * Escapes a SQLite string value by doubling single quotes.
@@ -52,19 +53,22 @@ function inlineValue(value: unknown): string {
  */
 const sqliteInlineFormat: FormatConfig = {
   escapeIdentifier: str => escapeSQLiteIdentifier(str),
-  formatValue: value =>
+  formatValue: value => {
+    // Unwrap NamedValue to get the underlying value
+    const unwrapped = unwrapNamedValue(value);
     // undefined is our signal to use a placeholder
     // IMPORTANT. Changing this will break the planner as it will assume `NULL`
     // for constraints!
-    value === undefined
+    return unwrapped === undefined
       ? {
           placeholder: '?',
-          value,
+          value: unwrapped,
         }
       : {
-          placeholder: inlineValue(value),
+          placeholder: inlineValue(unwrapped),
           value: undefined, // No binding needed since value is inlined
-        },
+        };
+  },
 };
 
 /**
