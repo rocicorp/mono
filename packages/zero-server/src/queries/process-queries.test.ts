@@ -5,22 +5,22 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import * as nameMapperModule from '../../../zero-schema/src/name-mapper.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';
+import type {AnyQueryBuilder} from '../../../zql/src/query/query-builder.ts';
 import {queryInternalsTag} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {schema} from '../test/schema.ts';
 import {
   handleGetQueriesRequest,
   handleQueryRequest,
 } from './process-queries.ts';
 
-function makeQuery(ast: AST): AnyQuery {
+function makeQuery(ast: AST): AnyQueryBuilder {
   const query = {
     [queryInternalsTag]: true,
     ast,
     withContext(_ctx: unknown) {
       return query;
     },
-  } as unknown as AnyQuery;
+  } as unknown as AnyQueryBuilder;
   return query;
 }
 

@@ -1,12 +1,12 @@
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
-  Query,
-} from '../../../zql/src/query/query.ts';
+  QueryBuilder,
+} from '../../../zql/src/query/query-builder.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {Zero} from './zero.ts';
@@ -54,7 +54,7 @@ export interface BindingsForZero<TSchema extends Schema> {
    * Returns a TypedView that automatically updates when underlying data changes.
    */
   materialize<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
@@ -64,7 +64,7 @@ export interface BindingsForZero<TSchema extends Schema> {
    * The factory can transform the view into a framework-specific reactive object.
    */
   materialize<TTable extends keyof TSchema['tables'] & string, TReturn, T>(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
@@ -73,14 +73,14 @@ export interface BindingsForZero<TSchema extends Schema> {
    * Compute the hash of a query for caching and deduplication purposes.
    */
   hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
   ): string;
 
   /**
    * Get the format/schema of a query's result set.
    */
   format<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
   ): Format;
 }
 
@@ -99,7 +99,7 @@ export function bindingsForZero<
 
   return {
     materialize<TTable extends keyof TSchema['tables'] & string, TReturn, T>(
-      query: Query<TTable, TSchema, TReturn>,
+      query: QueryBuilder<TTable, TSchema, TReturn>,
       factory?: ViewFactory<TTable, TSchema, TReturn, T>,
       options?: MaterializeOptions,
     ) {
@@ -107,14 +107,14 @@ export function bindingsForZero<
     },
 
     hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
-      query: Query<TTable, TSchema, TReturn>,
+      query: QueryBuilder<TTable, TSchema, TReturn>,
     ): string {
       const queryInternals = asQueryInternals(query);
       return queryInternals.hash();
     },
 
     format<TTable extends keyof TSchema['tables'] & string, TReturn>(
-      query: Query<TTable, TSchema, TReturn>,
+      query: QueryBuilder<TTable, TSchema, TReturn>,
     ): Format {
       const queryInternals = asQueryInternals(query);
       return queryInternals.format;

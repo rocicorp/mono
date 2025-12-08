@@ -4,8 +4,8 @@ import type {
 } from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
 import {formatPlannerEvents} from '../../../../zql/src/planner/planner-debug.ts';
+import type {AnyQueryBuilder} from '../../../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../../../zql/src/query/query-delegate.ts';
-import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import type {ClientGroup} from './client-group.ts';
 import {Client} from './client.ts';
 import type {
@@ -69,7 +69,7 @@ export class Inspector {
   }
 
   async analyzeQuery(
-    query: AnyQuery,
+    query: AnyQueryBuilder,
     options?: AnalyzeQueryOptions,
   ): Promise<AnalyzeQueryResult> {
     return (await this.#delegate.lazy).analyzeQuery(

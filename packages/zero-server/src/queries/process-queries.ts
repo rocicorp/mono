@@ -16,8 +16,8 @@ import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';
+import type {AnyQueryBuilder} from '../../../zql/src/query/query-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {createLogContext} from '../logging.ts';
 
 /**
@@ -33,7 +33,7 @@ export function handleGetQueriesRequest<S extends Schema>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
-  ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
+  ) => MaybePromise<{query: AnyQueryBuilder} | AnyQueryBuilder>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
   logLevel: LogLevel = 'info',
@@ -54,7 +54,7 @@ export function handleTransformRequest<S extends Schema>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
-  ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
+  ) => MaybePromise<{query: AnyQueryBuilder} | AnyQueryBuilder>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
   logLevel: LogLevel = 'info',
@@ -93,7 +93,7 @@ async function transform<S extends Schema>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
-  ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
+  ) => MaybePromise<{query: AnyQueryBuilder} | AnyQueryBuilder>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
   apiName: 'query' | 'getQueries' | 'transform',
@@ -137,7 +137,7 @@ async function transform<S extends Schema>(
 
     const responses: TransformResponseBody = await Promise.all(
       parsed[1].map(async req => {
-        let finalQuery: AnyQuery;
+        let finalQuery: AnyQueryBuilder;
         try {
           const result = await cb(req.name, req.args);
           finalQuery = 'query' in result ? result.query : result;
@@ -190,13 +190,13 @@ async function transform<S extends Schema>(
 }
 
 /**
- * A function that transforms a query by name and arguments into a Query object.
+ * A function that transforms a query by name and arguments into a QueryBuilder object.
  *
  * @param name - The name of the query (can be dot-separated for nested queries)
  * @param args - The arguments to pass to the query (can be undefined)
- * @returns A Query object
+ * @returns A QueryBuilder object
  */
 export type TransformQueryFunction = (
   name: string,
   args: ReadonlyJSONValue | undefined,
-) => AnyQuery;
+) => AnyQueryBuilder;

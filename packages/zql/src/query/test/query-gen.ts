@@ -4,9 +4,9 @@ import type {Schema} from '../../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../../zero-types/src/server-schema.ts';
 import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 import {NotImplementedError} from '../../error.ts';
+import type {AnyQueryBuilder} from '../query-builder.ts';
 import {asQueryInternals} from '../query-internals.ts';
-import type {AnyQuery} from '../query.ts';
-import {staticQuery} from '../static-query.ts';
+import {staticQueryBuilder} from '../static-query.ts';
 import {randomValueForType, selectRandom, shuffle, type Rng} from './util.ts';
 export type Dataset = {
   [table: string]: Row[];
@@ -18,13 +18,13 @@ export function generateQuery(
   rng: Rng,
   faker: Faker,
   serverSchema?: ServerSchema,
-): AnyQuery {
+): AnyQueryBuilder {
   return augmentQuery(
     schema,
     data,
     rng,
     faker,
-    staticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
+    staticQueryBuilder(schema, selectRandom(rng, Object.keys(schema.tables))),
     serverSchema,
     [],
   );
@@ -36,21 +36,21 @@ export function generateShrinkableQuery(
   rng: Rng,
   faker: Faker,
   serverSchema?: ServerSchema,
-): [AnyQuery, Generation[]] {
+): [AnyQueryBuilder, Generation[]] {
   const generations: Generation[] = [];
   const q = augmentQuery(
     schema,
     data,
     rng,
     faker,
-    staticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
+    staticQueryBuilder(schema, selectRandom(rng, Object.keys(schema.tables))),
     serverSchema,
     generations,
   );
   return [q, generations];
 }
 
-type Generation = AnyQuery;
+type Generation = AnyQueryBuilder;
 
 const maxDepth = 6;
 function augmentQuery(
@@ -58,12 +58,12 @@ function augmentQuery(
   data: Dataset,
   rng: Rng,
   faker: Faker,
-  query: AnyQuery,
+  query: AnyQueryBuilder,
   serverSchema: ServerSchema | undefined,
   generations: Generation[],
   depth = 0,
   inExists = false,
-): AnyQuery {
+): AnyQueryBuilder {
   if (depth > maxDepth) {
     return query;
   }
@@ -81,7 +81,7 @@ function augmentQuery(
 
   return addLimit(addOrderBy(addWhere(addExists(addRelated(query)))));
 
-  function addLimit(query: AnyQuery) {
+  function addLimit(query: AnyQueryBuilder) {
     if (rng() < 0.2) {
       return query;
     }
@@ -99,7 +99,7 @@ function augmentQuery(
     }
   }
 
-  function addOrderBy(query: AnyQuery) {
+  function addOrderBy(query: AnyQueryBuilder) {
     const tableName = asQueryInternals(query).ast.table;
     const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
@@ -133,7 +133,7 @@ function augmentQuery(
     return query;
   }
 
-  function addWhere(query: AnyQuery) {
+  function addWhere(query: AnyQueryBuilder) {
     const numConditions = Math.floor(rng() * 5);
     if (numConditions === 0) {
       return query;
@@ -181,7 +181,7 @@ function augmentQuery(
     return query;
   }
 
-  function addRelated(query: AnyQuery) {
+  function addRelated(query: AnyQueryBuilder) {
     // the deeper we go, the less likely we are to add a related table
     if (rng() * maxDepth < depth / 1.5) {
       return query;
@@ -222,7 +222,7 @@ function augmentQuery(
     return query;
   }
 
-  function addExists(query: AnyQuery) {
+  function addExists(query: AnyQueryBuilder) {
     // the deeper we go, the less likely we are to add an exists check
     if (rng() * maxDepth < depth / 1.5) {
       return query;

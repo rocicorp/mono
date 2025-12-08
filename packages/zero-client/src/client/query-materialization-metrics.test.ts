@@ -6,9 +6,9 @@ import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
+import type {AnyQueryBuilder} from '../../../zql/src/query/query-builder.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {
   ZeroContext,
   type AddCustomQuery,
@@ -63,7 +63,7 @@ function createTestQuery() {
     {singular: false, relationships: {}},
     'test' as System,
     undefined,
-  ) as AnyQuery;
+  ) as AnyQueryBuilder;
 }
 
 const schema = createSchema({

@@ -24,9 +24,9 @@ import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts'
 import {
   type HumanReadable,
   type PullRow,
-  type Query,
-  type ToQuery,
-} from '../../zql/src/query/query.ts';
+  type QueryBuilder,
+  type ToZQL,
+} from '../../zql/src/query/query-builder.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
@@ -75,7 +75,7 @@ export function useQuery<
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 >(
-  query: ToQuery<TTable, TSchema, TReturn, TContext>,
+  query: ToZQL<TTable, TSchema, TReturn, TContext>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -102,7 +102,7 @@ export function useSuspenseQuery<
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 >(
-  query: ToQuery<TTable, TSchema, TReturn, TContext>,
+  query: ToZQL<TTable, TSchema, TReturn, TContext>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -320,7 +320,7 @@ export class ViewStore {
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
-    query: ToQuery<TTable, TSchema, TReturn, TContext>,
+    query: ToZQL<TTable, TSchema, TReturn, TContext>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -332,7 +332,7 @@ export class ViewStore {
     complete: boolean;
     nonEmpty: boolean;
   } {
-    const q = query.toQuery(zero.context);
+    const q = query.toZQL(zero.context);
     const bindings = bindingsForZero(zero);
     const format = bindings.format(q);
     if (!enabled) {
@@ -402,7 +402,7 @@ class ViewWrapper<
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
-  readonly #query: Query<TTable, TSchema, TReturn>;
+  readonly #query: QueryBuilder<TTable, TSchema, TReturn>;
   readonly #format: Format;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
@@ -415,7 +415,7 @@ class ViewWrapper<
 
   constructor(
     bindings: BindingsForZero<TSchema>,
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     format: Format,
     ttl: TTL,
     onDematerialized: (

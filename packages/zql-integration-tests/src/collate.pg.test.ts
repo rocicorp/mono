@@ -15,10 +15,10 @@ import {
 } from '../../zero-schema/src/builder/table-builder.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import type {QueryBuilder} from '../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
 import type {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
@@ -211,9 +211,9 @@ describe('collation behavior', () => {
       expect(memoryResult).toEqualPg(pgResult);
 
       function makeQuery(
-        query: Query<'item', Schema>,
+        query: QueryBuilder<'item', Schema>,
         i: number,
-      ): Query<'item', Schema> {
+      ): QueryBuilder<'item', Schema> {
         return query
           .where(col, '>', memoryResult[i].name)
           .limit(1)
@@ -350,7 +350,7 @@ describe('collation behavior', () => {
 });
 
 async function runAsSQL(
-  q: Query<'item', Schema>,
+  q: QueryBuilder<'item', Schema>,
   runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
   const c = compile(serverSchema, schema, asQueryInternals(q).ast);

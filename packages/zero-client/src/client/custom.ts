@@ -22,9 +22,9 @@ import type {
 import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
   type HumanReadable,
-  type Query,
+  type QueryBuilder,
   type RunOptions,
-} from '../../../zql/src/query/query.ts';
+} from '../../../zql/src/query/query-builder.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
@@ -163,7 +163,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query, options);

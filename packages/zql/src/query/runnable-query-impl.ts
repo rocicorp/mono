@@ -4,16 +4,16 @@ import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {AbstractQuery} from './abstract-query.ts';
 import type {CustomQueryID} from './named.ts';
-import type {QueryDelegate} from './query-delegate.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
   PreloadOptions,
   PullRow,
-  Query,
+  QueryBuilder,
   RunOptions,
-  ToQuery,
-} from './query.ts';
+  ToZQL,
+} from './query-builder.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -24,7 +24,7 @@ export function newRunnableQuery<
   delegate: QueryDelegate,
   schema: TSchema,
   table: TTable,
-): Query<TTable, TSchema> {
+): QueryBuilder<TTable, TSchema> {
   return new RunnableQueryImpl(
     delegate,
     schema,
@@ -42,8 +42,8 @@ export class RunnableQueryImpl<
   >
   extends AbstractQuery<TTable, TSchema, TReturn>
   implements
-    Query<TTable, TSchema, TReturn>,
-    ToQuery<TTable, TSchema, TReturn, unknown>
+    QueryBuilder<TTable, TSchema, TReturn>,
+    ToZQL<TTable, TSchema, TReturn, unknown>
 {
   readonly #delegate: QueryDelegate;
 

@@ -26,10 +26,10 @@ import {
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import type {QueryBuilder} from '../../../zql/src/query/query-builder.ts';
 import {
-  asStaticQuery,
-  staticQuery,
+  asStaticQueryBuilder,
+  staticQueryBuilder,
 } from '../../../zql/src/query/static-query.ts';
 import type {
   ClientGroupStorage,
@@ -354,7 +354,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       op.tableName
     ];
     const rowPolicies = rules?.row;
-    let rowQuery = staticQuery(this.#schema, op.tableName);
+    let rowQuery = staticQueryBuilder(this.#schema, op.tableName);
 
     const primaryKeyValues = this.#getPrimaryKey(op.tableName, op.value);
 
@@ -486,7 +486,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     applicableRowPolicy: Policy | undefined,
     applicableCellPolicies: Policy[],
     authData: JWTPayload | undefined,
-    rowQuery: Query<string, Schema>,
+    rowQuery: QueryBuilder<string, Schema>,
   ) {
     if (!(await this.#passesPolicy(applicableRowPolicy, authData, rowQuery))) {
       return false;
@@ -508,7 +508,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   #passesPolicy(
     policy: Policy | undefined,
     authData: JWTPayload | undefined,
-    rowQuery: Query<string, Schema>,
+    rowQuery: QueryBuilder<string, Schema>,
   ): MaybePromise<boolean> {
     if (policy === undefined) {
       return false;
@@ -516,7 +516,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = asStaticQuery(rowQuery).ast;
+    let rowQueryAst = asStaticQueryBuilder(rowQuery).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

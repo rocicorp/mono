@@ -1,20 +1,20 @@
 import {bench, run, summary} from 'mitata';
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {mapAST} from '../../zero-protocol/src/ast.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {TableSchema} from '../../zero-types/src/schema.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {planQuery} from '../../zql/src/planner/planner-builder.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import type {Query} from '../../zql/src/query/query.ts';
-import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
-import {must} from '../../shared/src/must.ts';
-import type {TableSchema} from '../../zero-types/src/schema.ts';
+import type {QueryBuilder} from '../../zql/src/query/query-builder.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 
 const pgContent = await getChinook();
 
@@ -41,7 +41,7 @@ const clientToServerMapper = clientToServer(schema.tables);
 // Helper to benchmark planning time
 function benchmarkPlanning<TTable extends keyof typeof schema.tables & string>(
   name: string,
-  query: Query<TTable, typeof schema>,
+  query: QueryBuilder<TTable, typeof schema>,
 ) {
   const unplannedAST = asQueryInternals(query).ast;
   const completeOrderAst = completeOrdering(

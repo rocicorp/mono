@@ -9,9 +9,9 @@ import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import {MeasurePushOperator} from '../../../zql/src/query/measure-push-operator.ts';
 import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
+import type {RunOptions} from '../../../zql/src/query/query-builder.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {CommitListener} from '../../../zql/src/query/query-delegate.ts';
-import type {RunOptions} from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 

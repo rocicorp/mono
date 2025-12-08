@@ -9,7 +9,11 @@ import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts'
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
-import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
+import type {
+  HumanReadable,
+  QueryBuilder,
+  RunOptions,
+} from '../query/query-builder.ts';
 import type {SchemaQuery} from '../query/schema-query.ts';
 
 type ClientID = string;
@@ -46,7 +50,7 @@ export interface TransactionBase<S extends Schema> {
   readonly query: SchemaQuery<S>;
 
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<TTable, S, TReturn>,
+    query: QueryBuilder<TTable, S, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 }

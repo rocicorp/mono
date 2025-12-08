@@ -1,387 +1,358 @@
-/* oxlint-disable @typescript-eslint/no-explicit-any */
-import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
-import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
-import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
+// oxlint-disable no-explicit-any
+import type {StandardSchemaV1} from '@standard-schema/spec';
+import type {Expand} from '../../../shared/src/expand.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {
-  SchemaValueToTSType,
-  SchemaValueWithCustomType,
-} from '../../../zero-types/src/schema-value.ts';
-import type {
-  LastInTuple,
-  Schema,
-  TableSchema,
-  Schema as ZeroSchema,
-} from '../../../zero-types/src/schema.ts';
-import type {ViewFactory} from '../ivm/view.ts';
-import type {ExpressionFactory, ParameterReference} from './expression.ts';
-import type {TTL} from './ttl.ts';
-import type {TypedView} from './typed-view.ts';
-
-type Selector<E extends TableSchema> = keyof E['columns'];
-
-export type NoCompoundTypeSelector<T extends TableSchema> = Exclude<
-  Selector<T>,
-  JsonSelectors<T> | ArraySelectors<T>
->;
-
-type JsonSelectors<E extends TableSchema> = {
-  [K in keyof E['columns']]: E['columns'][K] extends {type: 'json'} ? K : never;
-}[keyof E['columns']];
-
-type ArraySelectors<E extends TableSchema> = {
-  [K in keyof E['columns']]: E['columns'][K] extends SchemaValueWithCustomType<
-    any[]
-  >
-    ? K
-    : never;
-}[keyof E['columns']];
-
-export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
-
-export type QueryTable<Q> = Q extends Query<infer T, any, any> ? T : never;
-
-export type ExistsOptions = {flip: boolean};
-
-export type GetFilterType<
-  TSchema extends TableSchema,
-  TColumn extends keyof TSchema['columns'],
-  TOperator extends SimpleOperator,
-> = TOperator extends 'IS' | 'IS NOT'
-  ? // SchemaValueToTSType adds null if the type is optional, but we add null
-    // no matter what for dx reasons. See:
-    // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
-    SchemaValueToTSType<TSchema['columns'][TColumn]> | null
-  : TOperator extends 'IN' | 'NOT IN'
-    ? // We don't want to compare to null in where clauses because it causes
-      // confusing results:
-      // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
-      readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
-    : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>;
-
-export type AvailableRelationships<
-  TTable extends string,
-  TSchema extends ZeroSchema,
-> = keyof TSchema['relationships'][TTable] & string;
-
-export type DestTableName<
-  TTable extends string,
-  TSchema extends ZeroSchema,
-  TRelationship extends string,
-> = LastInTuple<TSchema['relationships'][TTable][TRelationship]>['destSchema'];
-
-type DestRow<
-  TTable extends string,
-  TSchema extends ZeroSchema,
-  TRelationship extends string,
-> = TSchema['relationships'][TTable][TRelationship][0]['cardinality'] extends 'many'
-  ? PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>
-  : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | undefined;
-
-type AddSubreturn<TExistingReturn, TSubselectReturn, TAs extends string> = {
-  readonly [K in TAs]: undefined extends TSubselectReturn
-    ? TSubselectReturn
-    : readonly TSubselectReturn[];
-} extends infer TNewRelationship
-  ? undefined extends TExistingReturn
-    ? (Exclude<TExistingReturn, undefined> & TNewRelationship) | undefined
-    : TExistingReturn & TNewRelationship
-  : never;
-
-export type PullTableSchema<
-  TTable extends keyof ZeroSchema['tables'] & string,
-  TSchemas extends ZeroSchema,
-> = TSchemas['tables'][TTable];
-
-export type PullRow<
-  TTable extends keyof ZeroSchema['tables'] & string,
-  TSchema extends ZeroSchema = DefaultSchema,
-> = {
-  readonly [K in keyof PullTableSchema<
-    TTable,
-    TSchema
-  >['columns']]: SchemaValueToTSType<
-    PullTableSchema<TTable, TSchema>['columns'][K]
-  >;
-} & {};
-
-type RowNamespace<S extends Schema | TypeError> = S extends Schema
-  ? {
-      readonly [K in keyof S['tables'] &
-        string]: S['tables'][K] extends TableSchema
-        ? Row<S['tables'][K]>
-        : {
-            error: `The table schema for table ${K & string} you have registered with \`declare module '@rocicorp/zero'\` is incorrect.`;
-            registeredTableSchema: S['tables'][K];
-          };
-    }
-  : S;
-
-export type Row<T extends Schema | TableSchema | AnyQueryLike = DefaultSchema> =
-  T extends Schema
-    ? RowNamespace<T>
-    : T extends TableSchema
-      ? {
-          readonly [K in keyof T['columns']]: SchemaValueToTSType<
-            T['columns'][K]
-          >;
-        }
-      : T extends AnyQueryLike
-        ? QueryRowType<T>
-        : never;
+  DefaultContext,
+  DefaultSchema,
+} from '../../../zero-types/src/default-types.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {PullRow, QueryBuilder} from './query-builder.ts';
 
 /**
- * The shape of a CustomQuery's phantom type property.
- * CustomQuery has '~' containing QueryTypes which extends 'Query' & {...}
+ * Query is returned from defineQueries. It is a callable that captures
+ * args and can be turned into a QueryBuilder via {@link QueryRequest}.
  */
-type CustomQueryPhantom = {
-  '~': {
-    readonly $return: unknown;
-  };
+export type Query<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined = TInput,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+> = {
+  /**
+   * Type-only phantom property to surface query types in a covariant position.
+   */
+  '~': Expand<QueryTypes<TTable, TInput, TOutput, TSchema, TReturn, TContext>>;
+  'queryName': string;
+  'fn': (options: {
+    args: TInput;
+    ctx: TContext;
+  }) => QueryBuilder<TTable, TSchema, TReturn>;
+} & (undefined extends TInput
+  ? {
+      (): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
+      (
+        args?: TInput,
+      ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
+    }
+  : {
+      (
+        args: TInput,
+      ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
+    });
+
+export type AnyQuery = Query<string, any, any, Schema, any, any>;
+
+export function isQuery(value: unknown): value is AnyQuery {
+  return (
+    typeof value === 'function' &&
+    typeof (value as {queryName?: unknown}).queryName === 'string' &&
+    typeof (value as {fn?: unknown}).fn === 'function'
+  );
+}
+
+export type QueryTypes<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput,
+  TSchema extends Schema,
+  TReturn,
+  TContext,
+> = 'Query' & {
+  readonly $tableName: TTable;
+  readonly $input: TInput;
+  readonly $output: TOutput;
+  readonly $schema: TSchema;
+  readonly $return: TReturn;
+  readonly $context: TContext;
 };
 
+export type QueryRequestTypes<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput,
+  TSchema extends Schema,
+  TReturn,
+  TContext,
+> = 'QueryRequest' & {
+  readonly $tableName: TTable;
+  readonly $input: TInput;
+  readonly $output: TOutput;
+  readonly $schema: TSchema;
+  readonly $return: TReturn;
+  readonly $context: TContext;
+};
+
+export type QueryDefinitionTypes<
+  TTable extends string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput,
+  TReturn,
+  TContext,
+> = 'QueryDefinition' & {
+  readonly $tableName: TTable;
+  readonly $input: TInput;
+  readonly $output: TOutput;
+  readonly $return: TReturn;
+  readonly $context: TContext;
+};
+
+export type QueryRegistryTypes<TSchema extends Schema> = 'QueryRegistry' & {
+  readonly $schema: TSchema;
+};
+
+export type QueryRequest<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema,
+  TReturn,
+  TContext,
+> = {
+  readonly 'args': TInput;
+  readonly 'toZQL': (ctx: TContext) => QueryBuilder<TTable, TSchema, TReturn>;
+  readonly '~': Expand<
+    QueryRequestTypes<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+  >;
+};
+
+export type AnyQueryDefinition = QueryDefinition<any, any, any, any, any>;
+
+type QueryDefinitionFunction<
+  TTable extends string,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TReturn,
+  TContext,
+> = (options: {
+  args: TOutput;
+  ctx: TContext;
+}) => QueryBuilder<TTable, Schema, TReturn>;
+
 /**
- * A Query, CustomQuery, or a function returning either.
+ * A query definition is the return type of `defineQuery()`.
  */
-export type AnyQueryLike =
-  | Query<string, ZeroSchema, any>
-  | ((...args: any) => Query<string, ZeroSchema, any>)
-  | CustomQueryPhantom;
+export type QueryDefinition<
+  TTable extends string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TReturn,
+  TContext = DefaultContext,
+> = QueryDefinitionFunction<TTable, TOutput, TReturn, TContext> & {
+  'validator': StandardSchemaV1<TInput, TOutput> | undefined;
 
-export type QueryRowType<Q extends AnyQueryLike> = Q extends (
-  ...args: any
-) => Query<any, any, infer R>
-  ? R
-  : Q extends Query<any, any, infer R>
-    ? R
-    : Q extends CustomQueryPhantom
-      ? Q['~']['$return']
-      : never;
+  /**
+   * Type-only phantom property to surface query types in a covariant position.
+   */
+  readonly '~': Expand<
+    QueryDefinitionTypes<TTable, TInput, TOutput, TReturn, TContext>
+  >;
+};
 
-export type ZeRow<Q extends AnyQueryLike> = QueryRowType<Q>;
-
-export type QueryResultType<Q extends AnyQueryLike> = Q extends
-  | Query<string, ZeroSchema, any>
-  | ((...args: any) => Query<string, ZeroSchema, any>)
-  ? HumanReadable<QueryRowType<Q>>
-  : Q extends CustomQueryPhantom
-    ? HumanReadable<Q['~']['$return']>
-    : never;
+export function isQueryDefinition(f: unknown): f is AnyQueryDefinition {
+  return typeof f === 'function' && (f as any)['~'] === 'QueryDefinition';
+}
 
 /**
- * A hybrid query that runs on both client and server.
- * Results are returned immediately from the client followed by authoritative
- * results from the server.
+ * Defines a query to be used with {@link defineQueries}.
  *
- * Queries are transactional in that all queries update at once when a new transaction
- * has been committed on the client or server. No query results will reflect stale state.
+ * The query function receives an object with `args` (the query arguments) and
+ * `ctx` (the context). It should return a {@link Query} built using a builder
+ * created from {@link createBuilder}.
  *
- * Queries are executed through the Zero instance methods:
- * - `zero.run(query)` - Execute once and return results
- * - `zero.materialize(query)` - Create a live view that updates automatically
- * - `zero.preload(query)` - Preload data into the cache
+ * Note: A query defined with `defineQuery` must be passed to
+ * {@link defineQueries} to be usable. The query name is derived from its
+ * position in the `defineQueries` object.
  *
- * The normal way to use a query is through your UI framework's bindings (e.g., `useQuery(query)`)
- * or within a custom mutator.
- *
- * Example:
- *
+ * @example
  * ```ts
- * const query = z.query.issue.where('status', 'open').limit(10);
- * const result = await z.run(query);
+ * const builder = createBuilder(schema);
+ *
+ * const queries = defineQueries({
+ *   // Simple query with no arguments
+ *   allIssues: defineQuery(() => builder.issue.orderBy('created', 'desc')),
+ *
+ *   // Query with typed arguments
+ *   issueById: defineQuery(({args}: {args: {id: string}}) =>
+ *     builder.issue.where('id', args.id).one(),
+ *   ),
+ *
+ *   // Query with validation using a Standard Schema validator (e.g., Zod)
+ *   issuesByStatus: defineQuery(
+ *     z.object({status: z.enum(['open', 'closed'])}),
+ *     ({args}) => builder.issue.where('status', args.status),
+ *   ),
+ *
+ *   // Query using context
+ *   myIssues: defineQuery(({ctx}: {ctx: {userID: string}}) =>
+ *     builder.issue.where('creatorID', ctx.userID),
+ *   ),
+ * });
  * ```
  *
- * For more information on how to use queries, see the documentation:
- * https://zero.rocicorp.dev/docs/reading-data
+ * @param queryFn - A function that receives `{args, ctx}` and returns a Query.
+ * @returns A {@link QueryDefinition} that can be passed to {@link defineQueries}.
  *
- * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
- * @typeParam TSchema The database schema type extending ZeroSchema
- * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
+ * @overload
+ * @param validator - A Standard Schema validator for the arguments.
+ * @param queryFn - A function that receives `{args, ctx}` and returns a Query.
+ * @returns A {@link QueryDefinition} with validated arguments.
  */
-export interface Query<
-  TTable extends keyof TSchema['tables'] & string,
-  TSchema extends ZeroSchema = DefaultSchema,
+// Overload for no validator parameter with default inference for untyped functions
+export function defineQuery<
+  TInput extends ReadonlyJSONValue | undefined,
+  TContext = DefaultContext,
+  TSchema extends Schema = DefaultSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
   TReturn = PullRow<TTable, TSchema>,
-> extends ToQuery<TTable, TSchema, TReturn, unknown> {
-  related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
-    relationship: TRelationship,
-  ): Query<
+>(
+  queryFn: (options: {
+    args: TInput;
+    ctx: TContext;
+  }) => QueryBuilder<TTable, TSchema, TReturn>,
+): QueryDefinition<TTable, TInput, TInput, TReturn, TContext> & {};
+
+// Overload for validator parameter - Input and Output can be different
+export function defineQuery<
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TContext = DefaultContext,
+  TSchema extends Schema = DefaultSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
+  TReturn = PullRow<TTable, TSchema>,
+>(
+  validator: StandardSchemaV1<TInput, TOutput>,
+  queryFn: (options: {
+    args: TOutput;
+    ctx: TContext;
+  }) => QueryBuilder<TTable, TSchema, TReturn>,
+): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext> & {};
+
+// Implementation
+export function defineQuery<
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TContext = DefaultContext,
+  TSchema extends Schema = DefaultSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
+  TReturn = PullRow<TTable, TSchema>,
+>(
+  validatorOrQueryFn:
+    | StandardSchemaV1<TInput, TOutput>
+    | QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
+  queryFn?: QueryDefinitionFunction<TTable, TOutput, TReturn, TContext>,
+): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext> {
+  // Handle different parameter patterns
+  let validator: StandardSchemaV1<TInput, TOutput> | undefined;
+  let actualQueryFn: QueryDefinitionFunction<
     TTable,
-    TSchema,
-    AddSubreturn<
-      TReturn,
-      DestRow<TTable, TSchema, TRelationship>,
-      TRelationship
-    >
+    TOutput,
+    TReturn,
+    TContext
   >;
-  related<
-    TRelationship extends AvailableRelationships<TTable, TSchema>,
-    TSub extends Query<string, TSchema, any>,
-  >(
-    relationship: TRelationship,
-    cb: (
-      q: Query<
-        DestTableName<TTable, TSchema, TRelationship>,
-        TSchema,
-        DestRow<TTable, TSchema, TRelationship>
-      >,
-    ) => TSub,
-  ): Query<
+
+  if (typeof validatorOrQueryFn === 'function') {
+    // defineQuery(queryFn) - no validator
+    validator = undefined;
+    actualQueryFn = validatorOrQueryFn;
+  } else {
+    // defineQuery(validator, queryFn) - with validator
+    validator = validatorOrQueryFn;
+    actualQueryFn = must(queryFn);
+  }
+
+  // We wrap the function to add the tag and validator and ensure we do not mutate it in place.
+  const f = (options: {args: TOutput; ctx: TContext}) => actualQueryFn(options);
+  f.validator = validator;
+  f['~'] = 'QueryDefinition' as unknown as QueryDefinitionTypes<
     TTable,
-    TSchema,
-    AddSubreturn<
-      TReturn,
-      TSub extends Query<string, TSchema, infer TSubReturn>
-        ? TSubReturn
-        : never,
-      TRelationship
-    >
+    TInput,
+    TOutput,
+    TReturn,
+    TContext
   >;
 
-  where<
-    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
-    TOperator extends SimpleOperator,
-  >(
-    field: TSelector,
-    op: TOperator,
-    value:
-      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
-      | ParameterReference,
-  ): Query<TTable, TSchema, TReturn>;
-  where<
-    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
-  >(
-    field: TSelector,
-    value:
-      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
-      | ParameterReference,
-  ): Query<TTable, TSchema, TReturn>;
-  where(
-    expressionFactory: ExpressionFactory<TTable, TSchema>,
-  ): Query<TTable, TSchema, TReturn>;
-
-  whereExists(
-    relationship: AvailableRelationships<TTable, TSchema>,
-    options?: ExistsOptions,
-  ): Query<TTable, TSchema, TReturn>;
-  whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
-    relationship: TRelationship,
-    cb: (
-      q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
-    ) => Query<string, TSchema>,
-    options?: ExistsOptions,
-  ): Query<TTable, TSchema, TReturn>;
-
-  start(
-    row: Partial<PullRow<TTable, TSchema>>,
-    opts?: {inclusive: boolean},
-  ): Query<TTable, TSchema, TReturn>;
-
-  limit(limit: number): Query<TTable, TSchema, TReturn>;
-
-  orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
-    field: TSelector,
-    direction: 'asc' | 'desc',
-  ): Query<TTable, TSchema, TReturn>;
-
-  one(): Query<TTable, TSchema, TReturn | undefined>;
-
-  /**
-   * @deprecated Use {@linkcode RunOptions} with {@linkcode zero.run} instead.
-   */
-  run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
-
-  /**
-   * @deprecated Use {@linkcode PreloadOptions} with {@linkcode zero.preload} instead.
-   */
-  preload(options?: PreloadOptions): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  };
-
-  /**
-   * @deprecated Use {@linkcode MaterializeOptions} with {@linkcode zero.materialize} instead.
-   */
-  materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
-  /**
-   * @deprecated Use {@linkcode MaterializeOptions} with {@linkcode zero.materialize} instead.
-   */
-  materialize<T>(
-    factory: ViewFactory<TTable, TSchema, TReturn, T>,
-    ttl?: TTL,
-  ): T;
+  return f;
 }
 
-export type PreloadOptions = {
-  /**
-   * Time To Live. This is the amount of time to keep the rows associated with
-   * this query after {@linkcode cleanup} has been called.
-   */
-  ttl?: TTL | undefined;
-};
-
-export type MaterializeOptions = PreloadOptions;
-
 /**
- * A helper type that tries to make the type more readable.
+ * Returns a typed version of {@link defineQuery} with the schema and context
+ * types pre-specified. This enables better type inference when defining
+ * queries.
+ *
+ * @example
+ * ```ts
+ * const builder = createBuilder(schema);
+ *
+ * // With both Schema and Context types
+ * const defineAppQuery = defineQueryWithType<AppSchema, AppContext>();
+ * const myQuery = defineAppQuery(({ctx}) =>
+ *   builder.issue.where('userID', ctx.userID),
+ * );
+ *
+ * // With just Context type (Schema inferred)
+ * const defineAppQuery = defineQueryWithType<AppContext>();
+ * ```
+ *
+ * @typeParam S - The Zero schema type.
+ * @typeParam C - The context type passed to query functions.
+ * @returns A function equivalent to {@link defineQuery} but with types
+ *   pre-bound.
  */
-export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
-
-/**
- * A helper type that tries to make the type more readable.
- */
-// Note: opaque types expand incorrectly.
-export type HumanReadableRecursive<T> = undefined extends T
-  ? ExpandRecursive<T>
-  : ExpandRecursive<T>[];
-
-/**
- * The kind of results we want to wait for when using {@linkcode run} on {@linkcode Query}.
- *
- * `unknown` means we don't want to wait for the server to return results. The result is a
- * snapshot of the data at the time the query was run.
- *
- * `complete` means we want to ensure that we have the latest result from the server. The
- * result is a complete and up-to-date view of the data. In some cases this means that we
- * have to wait for the server to return results. To ensure that we have the result for
- * this query you can preload it before calling run. See {@link preload}.
- *
- * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
- *
- * The `ttl` option is used to specify the time to live for the query. This is the amount of
- * time to keep the rows associated with this query after the promise has resolved.
- */
-export type RunOptions = {
-  type: 'unknown' | 'complete';
-  ttl?: TTL | undefined;
-};
-
-export const DEFAULT_RUN_OPTIONS_UNKNOWN = {
-  type: 'unknown',
-} as const;
-
-export const DEFAULT_RUN_OPTIONS_COMPLETE = {
-  type: 'complete',
-} as const;
-
-export type AnyQuery = Query<string, Schema, any>;
-
-/**
- * An interface for objects that can be converted to a {@link Query}.
- *
- * This is useful for creating lazy or deferred queries that are only
- * materialized when needed, allowing the query to be constructed with
- * runtime context.
- *
- * @template T - The table name (must be a key of S['tables'])
- * @template S - The schema type
- * @template R - The return type of the query
- * @template C - The context type passed to {@link toQuery}
- */
-export interface ToQuery<
-  T extends keyof S['tables'] & string,
+export function defineQueryWithType<
   S extends Schema,
-  R,
-  C,
-> {
-  toQuery(context: C): Query<T, S, R>;
+  C = unknown,
+>(): TypedDefineQuery<S, C>;
+
+/**
+ * Returns a typed version of {@link defineQuery} with the context type
+ * pre-specified.
+ *
+ * @typeParam C - The context type passed to query functions.
+ * @returns A function equivalent to {@link defineQuery} but with the context
+ *   type pre-bound.
+ */
+export function defineQueryWithType<C>(): TypedDefineQuery<Schema, C>;
+
+export function defineQueryWithType() {
+  return defineQuery;
 }
+
+/**
+ * The return type of defineQueryWithType. A function matching the
+ * defineQuery overloads but with Schema and Context pre-bound.
+ */
+type TypedDefineQuery<TSchema extends Schema, TContext> = {
+  // Without validator
+  <
+    TArgs extends ReadonlyJSONValue | undefined,
+    TReturn,
+    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+      string,
+  >(
+    queryFn: (options: {
+      args: TArgs;
+      ctx: TContext;
+    }) => QueryBuilder<TTable, TSchema, TReturn>,
+  ): QueryDefinition<TTable, TArgs, TArgs, TReturn, TContext>;
+
+  // With validator
+  <
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+    TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+      string,
+  >(
+    validator: StandardSchemaV1<TInput, TOutput>,
+    queryFn: (options: {
+      args: TOutput;
+      ctx: TContext;
+    }) => QueryBuilder<TTable, TSchema, TReturn>,
+  ): QueryDefinition<TTable, TInput, TOutput, TReturn, TContext>;
+};

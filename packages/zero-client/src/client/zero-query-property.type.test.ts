@@ -5,7 +5,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import type {QueryBuilder} from '../../../zql/src/query/query-builder.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {Zero} from './zero.ts';
 
@@ -41,12 +41,12 @@ test('Zero.query.user equals Query<"user", Schema>', () => {
   type ZeroInstance = Zero<Schema>;
   type UserQuery = ZeroInstance['query']['user'];
 
-  expectTypeOf<UserQuery>().toEqualTypeOf<Query<'user', Schema>>();
+  expectTypeOf<UserQuery>().toEqualTypeOf<QueryBuilder<'user', Schema>>();
 });
 
 test('Zero.query.post equals Query<"post", Schema>', () => {
   type ZeroInstance = Zero<Schema>;
   type PostQuery = ZeroInstance['query']['post'];
 
-  expectTypeOf<PostQuery>().toEqualTypeOf<Query<'post', Schema>>();
+  expectTypeOf<PostQuery>().toEqualTypeOf<QueryBuilder<'post', Schema>>();
 });

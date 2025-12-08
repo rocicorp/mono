@@ -5,7 +5,10 @@ import {describe, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
 import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {AnyQuery, PullRow} from '../../../zql/src/query/query.ts';
+import type {
+  AnyQueryBuilder,
+  PullRow,
+} from '../../../zql/src/query/query-builder.ts';
 import {createVitests} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
@@ -361,7 +364,7 @@ describe(
                 name: `${table} pk lookup`,
                 createQuery: q => {
                   const pk = schema.tables[table].primaryKey;
-                  let ret = q[table] as AnyQuery;
+                  let ret = q[table] as AnyQueryBuilder;
                   for (const column of pk) {
                     ret = ret.where(column, '=', 1);
                   }
@@ -395,7 +398,7 @@ describe(
             return {
               name: `${table}.where(someCol, 'someVal')`,
               createQuery: q =>
-                (q[table] as AnyQuery).where(
+                (q[table] as AnyQueryBuilder).where(
                   rrc().randomColumn,
                   '=',
                   rrc().randomRow[rrc().randomColumn] as any,
@@ -428,7 +431,7 @@ describe(
                 ({
                   name: `${table}.related('${relationship}')`,
                   createQuery: q =>
-                    (q[table] as AnyQuery).related(relationship),
+                    (q[table] as AnyQueryBuilder).related(relationship),
                 }) as const,
             ),
           ))(),
@@ -442,7 +445,7 @@ describe(
                   ({
                     name: `${table}.related('${relationship}', q => q.limit(100))`,
                     createQuery: q =>
-                      (q[table] as AnyQuery).related(relationship, q =>
+                      (q[table] as AnyQueryBuilder).related(relationship, q =>
                         q.limit(100),
                       ),
                   }) as const,

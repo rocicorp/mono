@@ -6,9 +6,9 @@ import {must} from '../../shared/src/must.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import type {QueryBuilder} from '../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import type {Query} from '../../zql/src/query/query.ts';
 import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {
@@ -22,7 +22,7 @@ const lc = createSilentLogContext();
 let pg: PostgresDB;
 let sqlite: Database;
 type Schema = typeof schema;
-let issueQuery: Query<'issue', Schema>;
+let issueQuery: QueryBuilder<'issue', Schema>;
 let queryDelegate: QueryDelegate;
 
 beforeAll(async () => {

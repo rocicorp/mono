@@ -9,9 +9,9 @@ import type {
   HumanReadable,
   MaterializeOptions,
   PreloadOptions,
-  Query,
+  QueryBuilder,
   RunOptions,
-} from './query.ts';
+} from './query-builder.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -28,7 +28,7 @@ export interface NewQueryDelegate {
     table: TTable,
     ast: AST,
     format: Format,
-  ): Query<TTable, TSchema, TReturn>;
+  ): QueryBuilder<TTable, TSchema, TReturn>;
 }
 
 /**
@@ -82,7 +82,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
@@ -93,7 +93,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TReturn,
     T,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
@@ -107,7 +107,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TReturn,
     T,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
@@ -120,7 +120,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 
@@ -132,7 +132,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;

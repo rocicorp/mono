@@ -23,18 +23,18 @@ import {
   simplifyCondition,
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import type {
-  AnyQuery,
+  AnyQueryBuilder,
   ExistsOptions,
   GetFilterType,
   HumanReadable,
   PreloadOptions,
   PullRow,
-  Query,
+  QueryBuilder,
   RunOptions,
-  ToQuery,
-} from './query.ts';
+  ToZQL,
+} from './query-builder.ts';
+import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -50,7 +50,7 @@ type NewQueryFunction<TSchema extends Schema> = <
   format: Format,
   customQueryID: CustomQueryID | undefined,
   currentJunction: string | undefined,
-) => Query<TTable, TSchema, TReturn>;
+) => QueryBuilder<TTable, TSchema, TReturn>;
 
 export abstract class AbstractQuery<
     TTable extends keyof TSchema['tables'] & string,
@@ -58,9 +58,9 @@ export abstract class AbstractQuery<
     TReturn = PullRow<TTable, TSchema>,
   >
   implements
-    Query<TTable, TSchema, TReturn>,
+    QueryBuilder<TTable, TSchema, TReturn>,
     QueryInternals<TTable, TSchema, TReturn>,
-    ToQuery<TTable, TSchema, TReturn, unknown>
+    ToZQL<TTable, TSchema, TReturn, unknown>
 {
   readonly [queryInternalsTag] = true;
 
@@ -120,7 +120,7 @@ export abstract class AbstractQuery<
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TTable, TSchema, TReturn> {
+  ): QueryBuilder<TTable, TSchema, TReturn> {
     return this.#newQuery(
       this.#tableName,
       this.#ast,
@@ -140,7 +140,7 @@ export abstract class AbstractQuery<
     return this.#hash;
   }
 
-  one = (): Query<TTable, TSchema, TReturn | undefined> =>
+  one = (): QueryBuilder<TTable, TSchema, TReturn | undefined> =>
     this.#newQuery(
       this.#tableName,
       {
@@ -157,9 +157,9 @@ export abstract class AbstractQuery<
 
   whereExists = (
     relationship: string,
-    cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
+    cbOrOptions?: ((q: AnyQueryBuilder) => AnyQueryBuilder) | ExistsOptions,
     options?: ExistsOptions,
-  ): Query<TTable, TSchema, TReturn> => {
+  ): QueryBuilder<TTable, TSchema, TReturn> => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
     const flipped = opts?.flip;
@@ -169,13 +169,13 @@ export abstract class AbstractQuery<
         cb,
         flipped !== undefined ? {flip: flipped} : undefined,
       ),
-    ) as Query<TTable, TSchema, TReturn>;
+    ) as QueryBuilder<TTable, TSchema, TReturn>;
   };
 
   related = (
     relationship: string,
-    cb?: (q: AnyQuery) => AnyQuery,
-  ): Query<TTable, TSchema, any> => {
+    cb?: (q: AnyQueryBuilder) => AnyQueryBuilder,
+  ): QueryBuilder<TTable, TSchema, any> => {
     if (relationship.startsWith(SUBQ_PREFIX)) {
       throw new Error(
         `Relationship names may not start with "${SUBQ_PREFIX}". That is a reserved prefix.`,
@@ -187,7 +187,7 @@ export abstract class AbstractQuery<
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
-      const q: AnyQuery = this.#newQuery(
+      const q: AnyQueryBuilder = this.#newQuery(
         destSchema,
         {
           table: destSchema,
@@ -199,7 +199,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         undefined,
-      ) as AnyQuery;
+      ) as AnyQueryBuilder;
       // Intentionally not setting to `one` as it is a perf degradation
       // and the user should not be making the mistake of setting cardinality to
       // `one` when it is actually not.
@@ -245,7 +245,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         this.#currentJunction,
-      ) as AnyQuery;
+      ) as AnyQueryBuilder;
     }
 
     if (isTwoHop(related)) {
@@ -314,7 +314,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         this.#currentJunction,
-      ) as AnyQuery;
+      ) as AnyQueryBuilder;
     }
 
     throw new Error(`Invalid relationship ${relationship}`);
@@ -324,7 +324,7 @@ export abstract class AbstractQuery<
     fieldOrExpressionFactory: string | ExpressionFactory<TTable, TSchema>,
     opOrValue?: SimpleOperator | GetFilterTypeAny | Parameter,
     value?: GetFilterTypeAny | Parameter,
-  ): Query<TTable, TSchema, TReturn> => {
+  ): QueryBuilder<TTable, TSchema, TReturn> => {
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
@@ -361,7 +361,7 @@ export abstract class AbstractQuery<
   start = (
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
-  ): Query<TTable, TSchema, TReturn> =>
+  ): QueryBuilder<TTable, TSchema, TReturn> =>
     this.#newQuery(
       this.#tableName,
       {
@@ -376,7 +376,7 @@ export abstract class AbstractQuery<
       this.#currentJunction,
     );
 
-  limit = (limit: number): Query<TTable, TSchema, TReturn> => {
+  limit = (limit: number): QueryBuilder<TTable, TSchema, TReturn> => {
     if (limit < 0) {
       throw new Error('Limit must be non-negative');
     }
@@ -405,7 +405,7 @@ export abstract class AbstractQuery<
   orderBy = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TTable, TSchema, TReturn> => {
+  ): QueryBuilder<TTable, TSchema, TReturn> => {
     if (this.#currentJunction) {
       throw new NotImplementedError(
         'Order by is not supported in junction relationships yet. Junction relationship being ordered: ' +
@@ -426,7 +426,7 @@ export abstract class AbstractQuery<
 
   protected _exists = (
     relationship: string,
-    cb: ((query: AnyQuery) => AnyQuery) | undefined,
+    cb: ((query: AnyQueryBuilder) => AnyQueryBuilder) | undefined,
     options?: ExistsOptions,
   ): Condition => {
     cb = cb ?? (q => q);
@@ -486,7 +486,7 @@ export abstract class AbstractQuery<
           defaultFormat,
           this.customQueryID,
           relationship,
-        ) as AnyQuery,
+        ) as AnyQueryBuilder,
       );
 
       return {
@@ -527,7 +527,7 @@ export abstract class AbstractQuery<
     return this.#ast;
   }
 
-  toQuery(_context: unknown): this {
+  toZQL(_context: unknown): this {
     return this;
   }
 }
@@ -535,7 +535,9 @@ export function asAbstractQuery<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn,
->(q: Query<TTable, TSchema, TReturn>): AbstractQuery<TTable, TSchema, TReturn> {
+>(
+  q: QueryBuilder<TTable, TSchema, TReturn>,
+): AbstractQuery<TTable, TSchema, TReturn> {
   assert(q instanceof AbstractQuery);
   return q;
 }

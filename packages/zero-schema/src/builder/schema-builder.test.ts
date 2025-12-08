@@ -1,11 +1,11 @@
 import {expect, expectTypeOf, test} from 'vitest';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
-  AnyQuery,
+  AnyQueryBuilder,
   HumanReadable,
-  Query,
+  QueryBuilder,
   QueryReturn,
-} from '../../../zql/src/query/query.ts';
+} from '../../../zql/src/query/query-builder.ts';
 import {relationships} from './relationship-builder.ts';
 import {clientSchemaFrom, createSchema} from './schema-builder.ts';
 import {boolean, json, number, string, table} from './table-builder.ts';
@@ -44,11 +44,11 @@ const mockQueryInst = {
 function mockQuery<
   T extends keyof S['tables'] & string,
   S extends Schema,
->(): Query<T, S> {
-  return mockQueryInst as unknown as Query<T, S>;
+>(): QueryBuilder<T, S> {
+  return mockQueryInst as unknown as QueryBuilder<T, S>;
 }
 
-function run<Q extends AnyQuery>(
+function run<Q extends AnyQueryBuilder>(
   _q: Q,
 ): Promise<HumanReadable<QueryReturn<Q>>> {
   return {} as unknown as Promise<HumanReadable<QueryReturn<Q>>>;

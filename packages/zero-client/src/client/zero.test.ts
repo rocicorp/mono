@@ -73,7 +73,7 @@ import {
   defineMutatorWithType,
 } from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
-import type {Row} from '../../../zql/src/query/query.ts';
+import type {Row} from '../../../zql/src/query/query-builder.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -87,7 +87,7 @@ import type {QueryManager} from './query-manager.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
 import type {TestZero} from './test-utils.ts';
 import {
-  asCustomQuery,
+  asNamedQueryBuilder,
   MockSocket,
   queryID,
   storageMock,
@@ -1064,7 +1064,7 @@ describe('initConnection', () => {
     });
 
     const zql = createBuilder(schema);
-    const q = asCustomQuery(zql.e, 'e', undefined);
+    const q = asNamedQueryBuilder(zql.e, 'e', undefined);
 
     const view = z.materialize(q);
     view.addListener(() => {});
@@ -1192,7 +1192,7 @@ describe('initConnection', () => {
     });
 
     const zql = createBuilder(schema);
-    const q = asCustomQuery(zql.e, 'e', undefined);
+    const q = asNamedQueryBuilder(zql.e, 'e', undefined);
     const view = z.materialize(q);
     view.addListener(() => {});
 
@@ -1259,7 +1259,7 @@ describe('initConnection', () => {
       schema,
     });
     const zql = createBuilder(schema);
-    const q = asCustomQuery(zql.e, 'e', undefined);
+    const q = asNamedQueryBuilder(zql.e, 'e', undefined);
     const mockSocket = await z.socket;
 
     mockSocket.onUpstream(msg => {
@@ -1325,7 +1325,7 @@ describe('initConnection', () => {
     });
 
     const zql = createBuilder(schema);
-    const q = asCustomQuery(zql.e, 'e', undefined);
+    const q = asNamedQueryBuilder(zql.e, 'e', undefined);
 
     const mockSocket = await z.socket;
 
@@ -1390,7 +1390,7 @@ describe('initConnection', () => {
     const z = zeroForTest({schema});
 
     const zql = createBuilder(schema);
-    const q = asCustomQuery(zql.e, 'e', '💩');
+    const q = asNamedQueryBuilder(zql.e, 'e', '💩');
 
     const mockSocket = await z.socket;
     mockSocket.onUpstream(msg => {
@@ -1487,7 +1487,7 @@ describe('initConnection', () => {
     const z = zeroForTest({schema});
 
     const zql = createBuilder(schema);
-    const q = asCustomQuery(zql.e, 'e', undefined);
+    const q = asNamedQueryBuilder(zql.e, 'e', undefined);
     const view1 = z.materialize(q);
     const removeListener = view1.addListener(() => {});
 

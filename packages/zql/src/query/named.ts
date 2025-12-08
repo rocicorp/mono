@@ -1,14 +1,14 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {QueryParseError} from './error.ts';
+import {type AnyQueryBuilder} from './query-builder.ts';
 import {asQueryInternals} from './query-internals.ts';
-import {type AnyQuery} from './query.ts';
 
 /** @deprecated */
 export type QueryFn<
   TContext,
   TTakesContext extends boolean,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends AnyQuery,
+  TReturnQuery extends AnyQueryBuilder,
 > = TTakesContext extends false
   ? {(...args: TArg): TReturnQuery}
   : {(context: TContext, ...args: TArg): TReturnQuery};
@@ -19,7 +19,7 @@ export type SyncedQuery<
   TContext,
   TTakesContext extends boolean,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends AnyQuery,
+  TReturnQuery extends AnyQueryBuilder,
 > = QueryFn<TContext, TTakesContext, TArg, TReturnQuery> & {
   queryName: TName;
   parse: ParseFn<TArg> | undefined;
@@ -44,7 +44,7 @@ function normalizeParser<T extends ReadonlyJSONValue[]>(
 export function syncedQuery<
   TName extends string,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends AnyQuery,
+  TReturnQuery extends AnyQueryBuilder,
 >(
   name: TName,
   parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
@@ -66,7 +66,7 @@ export function syncedQueryWithContext<
   TName extends string,
   TContext,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends AnyQuery,
+  TReturnQuery extends AnyQueryBuilder,
 >(
   name: TName,
   parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,

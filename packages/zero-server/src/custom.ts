@@ -20,13 +20,13 @@ import type {
   TableCRUD,
 } from '../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
-import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
-  Query,
+  QueryBuilder,
   RunOptions,
-} from '../../zql/src/query/query.ts';
+} from '../../zql/src/query/query-builder.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {getServerSchema} from './schema.ts';
 
@@ -76,7 +76,7 @@ class ServerTransactionQueryDelegate extends QueryDelegateBase {
     TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     const queryInternals = asQueryInternals(query);
@@ -134,7 +134,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     const queryInternals = asQueryInternals(query);

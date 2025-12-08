@@ -1,4 +1,5 @@
 import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
+import {emptyArray} from '../../shared/src/sentinels.ts';
 import {
   applyChange,
   type AnyViewFactory,
@@ -8,7 +9,7 @@ import {
   type Input,
   type Node,
   type Output,
-  type Query,
+  type QueryBuilder,
   type Schema,
   type Stream,
   type TTL,
@@ -19,9 +20,8 @@ import type {
   QueryResultDetails,
 } from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import {skipYields} from '../../zql/src/ivm/operator.ts';
-import {emptyArray} from '../../shared/src/sentinels.ts';
+import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 
 export type State = [Entry, QueryResultDetails];
 
@@ -259,7 +259,7 @@ export function createSolidViewFactory(
     TSchema extends Schema,
     TReturn,
   >(
-    _query: Query<TTable, TSchema, TReturn>,
+    _query: QueryBuilder<TTable, TSchema, TReturn>,
     input: Input,
     format: Format,
     onDestroy: () => void,

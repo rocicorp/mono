@@ -1,7 +1,9 @@
 import {test} from 'vitest';
 import {defaultFormat} from '../../../zero-types/src/format.ts';
-import {StaticQuery} from '../../../zql/src/query/static-query.ts';
-import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
+import {
+  StaticQueryBuilder,
+  type AnyStaticQueryBuilder,
+} from '../../../zql/src/query/static-query.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
@@ -25,7 +27,7 @@ const z = {
   query: Object.fromEntries(
     Object.entries(schema.tables).map(([name]) => [
       name,
-      new StaticQuery(
+      new StaticQueryBuilder(
         schema,
         name as keyof typeof schema.tables,
         {table: name},
@@ -36,7 +38,7 @@ const z = {
 };
 
 const f = new Function('z', `return z.query.${QUERY_STRING};`);
-const query: AnyStaticQuery = f(z);
+const query: AnyStaticQueryBuilder = f(z);
 
 test('manual zql string', async () => {
   await runAndCompare(schema, harness.delegates, query, undefined);

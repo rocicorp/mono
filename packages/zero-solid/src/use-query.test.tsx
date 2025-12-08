@@ -18,16 +18,18 @@ import {
   string,
   table,
   type CustomMutatorDefs,
-  type Query,
   type Schema,
   type TTL,
   type ViewFactory,
 } from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
+import type {
+  MaterializeOptions,
+  QueryBuilder,
+} from '../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import type {MaterializeOptions} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {useQuery, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
@@ -67,7 +69,7 @@ function newMockZero<MD extends CustomMutatorDefs | undefined = undefined>(
   queryDelegate: QueryDelegate,
 ): Zero<Schema, MD, C> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
-    query: Query<TTable, Schema, TReturn>,
+    query: QueryBuilder<TTable, Schema, TReturn>,
     factoryOrOptions?:
       | ViewFactory<TTable, Schema, TReturn, T>
       | MaterializeOptions,
@@ -97,7 +99,7 @@ function useQueryWithZeroProvider<
   zeroOrZeroSignal:
     | Zero<TSchema, MD, TContext>
     | Accessor<Zero<TSchema, MD, TContext>>,
-  querySignal: () => Query<TTable, TSchema, TReturn>,
+  querySignal: () => QueryBuilder<TTable, TSchema, TReturn>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {
   const isZeroSignal = typeof zeroOrZeroSignal === 'function';

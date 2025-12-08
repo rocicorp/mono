@@ -32,8 +32,11 @@ import type {
 import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {
+  AnyQueryBuilder,
+  QueryBuilder,
+} from '../../../zql/src/query/query-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
 import type {
   ConnectionManager,
   ConnectionManagerState,
@@ -253,7 +256,7 @@ export class TestZero<
   }
 
   async triggerGotQueriesPatch(
-    q: Query<keyof S['tables'] & string, S>,
+    q: QueryBuilder<keyof S['tables'] & string, S>,
   ): Promise<void> {
     const qi = asQueryInternals(q);
     const hash = qi.customQueryID
@@ -295,7 +298,7 @@ export class TestZero<
     return getInternalReplicacheImplForTesting(this).persist();
   }
 
-  markQueryAsGot(q: AnyQuery): Promise<void> {
+  markQueryAsGot(q: AnyQueryBuilder): Promise<void> {
     // TODO(arv): The cookies here could be better... Not sure if the client
     // ever checks these?
     const qi = asQueryInternals(q);
@@ -413,18 +416,18 @@ export function waitForPostMessage() {
 }
 
 /**
- * Converts a regular query into a custom query (named query) by associating
- * a name and arguments with it. This is useful for testing custom query tracking.
+ * Converts a regular query into a "named" query by associating
+ * a name and arguments with it. This is useful for testing query tracking.
  */
-export function asCustomQuery<
+export function asNamedQueryBuilder<
   T extends keyof S['tables'] & string,
   S extends Schema,
   R,
 >(
-  query: Query<T, S, R>,
+  query: QueryBuilder<T, S, R>,
   name: string,
   args: ReadonlyJSONValue | undefined,
-): Query<T, S, R> {
+): QueryBuilder<T, S, R> {
   return asQueryInternals(query).nameAndArgs(
     name,
     args === undefined ? [] : [args],
@@ -435,7 +438,7 @@ export function queryID<
   T extends keyof S['tables'] & string,
   S extends Schema,
   R,
->(query: Query<T, S, R>): string {
+>(query: QueryBuilder<T, S, R>): string {
   const id = asQueryInternals(query).customQueryID;
   assert(id !== undefined);
   return hashOfNameAndArgs(id.name, id.args);

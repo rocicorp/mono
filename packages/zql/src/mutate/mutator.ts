@@ -28,14 +28,19 @@ export type MutatorDefinitionTypes<
   readonly $wrappedTransaction: TWrappedTransaction;
 };
 
-export function isMutatorDefinition<
+export type MutationRequestTypes<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TContext = DefaultContext,
-  TWrappedTransaction = DefaultWrappedTransaction,
->(
-  f: unknown,
-): f is MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> {
+  TSchema extends Schema,
+  TContext,
+  TWrappedTransaction,
+> = 'MutationRequest' & {
+  readonly $input: TInput;
+  readonly $schema: TSchema;
+  readonly $context: TContext;
+  readonly $wrappedTransaction: TWrappedTransaction;
+};
+
+export function isMutatorDefinition(f: unknown): f is AnyMutatorDefinition {
   return typeof f === 'function' && (f as any)['~'] === 'MutatorDefinition';
 }
 
@@ -58,6 +63,9 @@ export type MutatorDefinition<
     MutatorDefinitionTypes<TInput, TOutput, TContext, TWrappedTransaction>
   >;
 };
+
+// oxlint-disable-next-line no-explicit-any
+export type AnyMutatorDefinition = MutatorDefinition<any, any, any, any>;
 
 // Overload 1: Call with validator
 export function defineMutator<
@@ -280,8 +288,11 @@ export type MutationRequest<
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
 > = {
-  readonly mutator: Mutator<TInput, TSchema, TContext, TWrappedTransaction>;
-  readonly args: TInput;
+  readonly 'mutator': Mutator<TInput, TSchema, TContext, TWrappedTransaction>;
+  readonly 'args': TInput;
+  readonly '~': Expand<
+    MutationRequestTypes<TInput, TSchema, TContext, TWrappedTransaction>
+  >;
 };
 
 /**

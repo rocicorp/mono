@@ -17,14 +17,14 @@ import {
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {createBuilder} from '../../../../zql/src/query/create-builder.ts';
-import type {AnyQuery} from '../../../../zql/src/query/query.ts';
+import type {AnyQueryBuilder} from '../../../../zql/src/query/query-builder.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {bindingsForZero} from '../bindings.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
 import type {TestZero} from '../test-utils.ts';
 import {
-  asCustomQuery,
+  asNamedQueryBuilder,
   MockSocket,
   queryID,
   zeroForTest,
@@ -455,9 +455,13 @@ describe('query metrics', () => {
     const zql = createBuilder(schema);
 
     // Execute queries with different characteristics to test metrics collection
-    await z.run(asCustomQuery(zql.issue, 'a', undefined)); // Simple table query
-    await z.run(asCustomQuery(zql.issue.where('id', '1'), 'b', undefined)); // Filtered query
-    await z.run(asCustomQuery(zql.issue.where('id', '2'), 'c', undefined)); // Another filtered query
+    await z.run(asNamedQueryBuilder(zql.issue, 'a', undefined)); // Simple table query
+    await z.run(
+      asNamedQueryBuilder(zql.issue.where('id', '1'), 'b', undefined),
+    ); // Filtered query
+    await z.run(
+      asNamedQueryBuilder(zql.issue.where('id', '2'), 'c', undefined),
+    ); // Another filtered query
 
     // Test that the inspector can access the real metrics
 
@@ -486,7 +490,7 @@ describe('query metrics', () => {
 
     ensureRealData(globalMetricsQueryMaterializationClient);
 
-    const q = asCustomQuery(zql.issue, 'a', undefined);
+    const q = asNamedQueryBuilder(zql.issue, 'a', undefined);
     const view = z.materialize(q);
     await z.triggerGotQueriesPatch(q);
 
@@ -575,7 +579,7 @@ describe('query metrics', () => {
     const zql = createBuilder(schema);
 
     const issueQuery = zql.issue.orderBy('id', 'desc');
-    const customQuery = asCustomQuery(issueQuery, 'myCustomQuery', []);
+    const customQuery = asNamedQueryBuilder(issueQuery, 'myCustomQuery', []);
     const view = z.materialize(customQuery);
     await z.triggerGotQueriesPatch(customQuery);
 
@@ -771,7 +775,7 @@ test('clientZQL with custom queries', async () => {
 
   // Create a custom query by adding name and args to a regular query
   const baseQuery = zql.issue.where('ownerId', 'arv');
-  const customQuery = asCustomQuery(baseQuery, 'myCustomQuery', 'arv');
+  const customQuery = asNamedQueryBuilder(baseQuery, 'myCustomQuery', 'arv');
   const customQueryID = queryID(customQuery);
 
   // Trigger QueryManager.addCustom by materializing a custom query and marking it as got
@@ -2103,7 +2107,7 @@ describe('authenticate', () => {
 describe('inspector.analyzeQuery name mapping', () => {
   async function testAnalyzeQuery<S extends Schema>(
     z: TestZero<S>,
-    query: AnyQuery,
+    query: AnyQueryBuilder,
     options: AnalyzeQueryOptions | undefined,
     mockResult: AnalyzeQueryResult,
   ): Promise<{result: AnalyzeQueryResult; sentAst: AST | undefined}> {

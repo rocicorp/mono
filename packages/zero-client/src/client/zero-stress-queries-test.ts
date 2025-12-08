@@ -6,10 +6,8 @@
 
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
-import {
-  defineQueriesWithType,
-  defineQueryWithType,
-} from '../../../zql/src/query/query-registry.ts';
+import {defineQueriesWithType} from '../../../zql/src/query/query-registry.ts';
+import {defineQueryWithType} from '../../../zql/src/query/query.ts';
 import {zeroStressSchema} from './zero-stress-schema-test.ts';
 import type {StressContext} from './zero-stress-shared-test.ts';
 

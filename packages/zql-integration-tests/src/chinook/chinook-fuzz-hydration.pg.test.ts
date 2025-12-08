@@ -4,8 +4,8 @@ import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import type {AnyQueryBuilder} from '../../../zql/src/query/query-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
@@ -73,7 +73,7 @@ async function runCase({
   query,
   seed,
 }: {
-  query: [AnyQuery, AnyQuery[]];
+  query: [AnyQueryBuilder, AnyQueryBuilder[]];
   seed: number;
 }) {
   try {
@@ -88,7 +88,7 @@ async function runCase({
   }
 }
 
-async function shrink(generations: AnyQuery[], seed: number) {
+async function shrink(generations: AnyQueryBuilder[], seed: number) {
   console.log('Found failure at seed', seed);
   console.log('Shrinking', generations.length, 'generations');
   let low = 0;

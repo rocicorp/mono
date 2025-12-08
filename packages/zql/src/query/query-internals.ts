@@ -4,7 +4,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import type {Format} from '../ivm/view.ts';
 import type {CustomQueryID} from './named.ts';
-import type {Query} from './query.ts';
+import type {QueryBuilder} from './query-builder.ts';
 
 export const queryInternalsTag = Symbol();
 
@@ -66,7 +66,7 @@ export interface QueryInternals<
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TTable, TSchema, TReturn>;
+  ): QueryBuilder<TTable, TSchema, TReturn>;
 }
 
 /**
@@ -82,7 +82,7 @@ export function asQueryInternals<
   TSchema extends ZeroSchema,
   TReturn,
 >(
-  query: Query<TTable, TSchema, TReturn>,
+  query: QueryBuilder<TTable, TSchema, TReturn>,
 ): QueryInternals<TTable, TSchema, TReturn> {
   assert(queryInternalsTag in query, 'Query does not implement QueryInternals');
   return query as unknown as QueryInternals<TTable, TSchema, TReturn>;
@@ -96,15 +96,15 @@ export function isQueryInternals<
   return typeof obj === 'object' && obj !== null && queryInternalsTag in obj;
 }
 
-export function asQuery<
+export function asQueryBuilder<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends ZeroSchema,
   TReturn,
 >(
   queryInternals: QueryInternals<TTable, TSchema, TReturn>,
-): Query<TTable, TSchema, TReturn> {
+): QueryBuilder<TTable, TSchema, TReturn> {
   assert(queryInternalsTag in queryInternals);
-  return queryInternals as unknown as Query<TTable, TSchema, TReturn>;
+  return queryInternals as unknown as QueryBuilder<TTable, TSchema, TReturn>;
 }
 
 // oxlint-disable-next-line no-explicit-any

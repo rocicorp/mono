@@ -1,4 +1,4 @@
-import type {Query, Transaction} from '@rocicorp/zero';
+import type {QueryBuilder, Transaction} from '@rocicorp/zero';
 import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
@@ -39,7 +39,7 @@ export function isAdmin(token: AuthData | undefined) {
 export async function assertIsCreatorOrAdmin(
   tx: Transaction,
   authData: AuthData | undefined,
-  query: Query<'comment' | 'issue' | 'emoji'>,
+  query: QueryBuilder<'comment' | 'issue' | 'emoji'>,
   id: string,
 ) {
   assertIsLoggedIn(authData);

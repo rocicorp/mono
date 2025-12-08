@@ -36,10 +36,10 @@ import {
   runtimeDebugFlags,
 } from '../../zql/src/builder/debug-delegate.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
+import type {PullRow, QueryBuilder} from '../../zql/src/query/query-builder.ts';
 import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {explainQueries} from './explain-queries.ts';
@@ -264,7 +264,7 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   };
 
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<string, Schema, PullRow<string, Schema>> = f(z);
+  const q: QueryBuilder<string, Schema, PullRow<string, Schema>> = f(z);
 
   const ast = asQueryInternals(q).ast;
   return runAst(lc, clientSchema, ast, false, {

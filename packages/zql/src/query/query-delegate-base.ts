@@ -13,18 +13,18 @@ import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricMap} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
 import type {
+  HumanReadable,
+  MaterializeOptions,
+  PreloadOptions,
+  QueryBuilder,
+  RunOptions,
+} from './query-builder.ts';
+import type {
   CommitListener,
   GotCallback,
   QueryDelegate,
 } from './query-delegate.ts';
 import {asQueryInternals, type QueryInternals} from './query-internals.ts';
-import type {
-  HumanReadable,
-  MaterializeOptions,
-  PreloadOptions,
-  Query,
-  RunOptions,
-} from './query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -58,7 +58,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
@@ -69,7 +69,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TReturn,
     T,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
@@ -83,7 +83,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TReturn,
     T,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
@@ -94,7 +94,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TReturn,
     T,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T {
@@ -110,7 +110,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return runImpl(query, this, options);
@@ -125,7 +125,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TTable, TSchema, TReturn>,
+    query: QueryBuilder<TTable, TSchema, TReturn>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;
@@ -251,7 +251,7 @@ export async function runImpl<
   TSchema extends Schema,
   TReturn,
 >(
-  query: Query<TTable, TSchema, TReturn>,
+  query: QueryBuilder<TTable, TSchema, TReturn>,
   delegate: QueryDelegate,
   options?: RunOptions,
 ): Promise<HumanReadable<TReturn>> {
@@ -290,7 +290,7 @@ export function preloadImpl<
   TSchema extends Schema,
   TReturn,
 >(
-  query: Query<TTable, TSchema, TReturn>,
+  query: QueryBuilder<TTable, TSchema, TReturn>,
   delegate: QueryDelegate,
   options?: PreloadOptions,
 ): {
@@ -330,7 +330,7 @@ export function materializeImpl<
   TReturn,
   T,
 >(
-  query: Query<TTable, TSchema, TReturn>,
+  query: QueryBuilder<TTable, TSchema, TReturn>,
   delegate: QueryDelegate,
   factory: ViewFactory<
     TTable,

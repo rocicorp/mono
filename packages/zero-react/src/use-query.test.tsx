@@ -17,12 +17,12 @@ import type {QueryResultDetails} from '../../zero-client/src/types/query-result.
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {type AbstractQuery} from '../../zql/src/query/abstract-query.ts';
+import type {QueryBuilder} from '../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {
   queryInternalsTag,
   type QueryInternals,
 } from '../../zql/src/query/query-internals.ts';
-import type {Query} from '../../zql/src/query/query.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {
   getAllViewsSizeForTesting,
@@ -31,14 +31,17 @@ import {
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
 
-function newMockQuery(query: string, singular = false): Query<string, Schema> {
+function newMockQuery(
+  query: string,
+  singular = false,
+): QueryBuilder<string, Schema> {
   const ret = {
     [queryInternalsTag]: true,
     hash() {
       return query;
     },
     format: {singular},
-    toQuery: () => ret,
+    toZQL: () => ret,
   } as unknown as AbstractQuery<string, Schema>;
   return ret;
 }
@@ -65,7 +68,7 @@ function newMockDelegate(): QueryDelegate {
       TTable extends keyof TSchema['tables'] & string,
       TReturn,
     >(
-      q: Query<TTable, TSchema, TReturn>,
+      q: QueryBuilder<TTable, TSchema, TReturn>,
     ): QueryInternals<TTable, TSchema, TReturn> {
       return {
         hash() {

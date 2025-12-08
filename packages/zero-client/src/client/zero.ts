@@ -96,15 +96,15 @@ import {
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
   type PullRow,
   type RunOptions,
-  type ToQuery,
-} from '../../../zql/src/query/query.ts';
+  type ToZQL,
+} from '../../../zql/src/query/query-builder.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -862,8 +862,8 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: ToQuery<TTable, S, TReturn, C>, options?: PreloadOptions) {
-    return this.#zeroContext.preload(query.toQuery(this.context), options);
+  >(query: ToZQL<TTable, S, TReturn, C>, options?: PreloadOptions) {
+    return this.#zeroContext.preload(query.toZQL(this.context), options);
   }
 
   /**
@@ -887,10 +887,10 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<TTable, S, TReturn, C>,
+    query: ToZQL<TTable, S, TReturn, C>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.#zeroContext.run(query.toQuery(this.context), runOptions);
+    return this.#zeroContext.run(query.toZQL(this.context), runOptions);
   }
 
   get context(): C {
@@ -922,20 +922,20 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<TTable, S, TReturn, C>,
+    query: ToZQL<TTable, S, TReturn, C>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<TTable, S, TReturn, C>,
+    query: ToZQL<TTable, S, TReturn, C>,
     factory: ViewFactory<TTable, S, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<TTable, S, TReturn, C>,
+    query: ToZQL<TTable, S, TReturn, C>,
     factoryOrOptions?: ViewFactory<TTable, S, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    const q = query.toQuery(this.context);
+    const q = query.toZQL(this.context);
 
     let factory;
     let options;

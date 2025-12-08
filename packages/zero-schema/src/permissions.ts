@@ -8,8 +8,8 @@ import {
 import {defaultFormat} from '../../zero-types/src/format.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
-import type {Query} from '../../zql/src/query/query.ts';
-import {StaticQuery} from '../../zql/src/query/static-query.ts';
+import type {QueryBuilder} from '../../zql/src/query/query-builder.ts';
+import {StaticQueryBuilder} from '../../zql/src/query/static-query.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
@@ -41,7 +41,7 @@ export const NOBODY_CAN = [];
 export type Anchor = 'authData' | 'preMutationRow';
 
 export type Queries<TSchema extends Schema> = {
-  [K in keyof TSchema['tables']]: Query<K & string, TSchema>;
+  [K in keyof TSchema['tables']]: QueryBuilder<K & string, TSchema>;
 };
 
 export type PermissionRule<
@@ -110,7 +110,7 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
     ExpressionBuilder<string, Schema>
   >;
   for (const name of Object.keys(schema.tables)) {
-    expressionBuilders[name] = new StaticQuery(
+    expressionBuilders[name] = new StaticQueryBuilder(
       schema,
       name,
       {table: name},

@@ -18,8 +18,8 @@ import type {Schema} from '../../zero-types/src/schema.ts';
 import type {
   HumanReadable,
   PullRow,
-  ToQuery,
-} from '../../zql/src/query/query.ts';
+  ToZQL,
+} from '../../zql/src/query/query-builder.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
 import {useZero} from './use-zero.ts';
@@ -51,7 +51,7 @@ export function createQuery<
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 >(
-  querySignal: Accessor<ToQuery<TTable, TSchema, TReturn, TContext>>,
+  querySignal: Accessor<ToZQL<TTable, TSchema, TReturn, TContext>>,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
 ): QueryResult<TReturn> {
   return useQuery(querySignal, options);
@@ -63,7 +63,7 @@ export function useQuery<
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 >(
-  querySignal: Accessor<ToQuery<TTable, TSchema, TReturn, TContext>>,
+  querySignal: Accessor<ToZQL<TTable, TSchema, TReturn, TContext>>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ): QueryResult<TReturn> {
   const [state, setState] = createStore<State>([
@@ -81,7 +81,7 @@ export function useQuery<
 
   const zero = useZero<TSchema, undefined, TContext>();
 
-  const query = createMemo(() => querySignal().toQuery(zero().context));
+  const query = createMemo(() => querySignal().toZQL(zero().context));
   const bindings = createMemo(() => bindingsForZero(zero()));
   const hash = createMemo(() => bindings().hash(query()));
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);

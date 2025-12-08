@@ -6,14 +6,17 @@ import type {Format} from '../ivm/view.ts';
 import {AbstractQuery} from './abstract-query.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import type {PullRow, Query} from './query.ts';
+import type {PullRow, QueryBuilder} from './query-builder.ts';
 
-export function staticQuery<
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyStaticQueryBuilder = StaticQueryBuilder<string, Schema, any>;
+
+export function staticQueryBuilder<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn = PullRow<TTable, TSchema>,
->(schema: TSchema, tableName: TTable): Query<TTable, TSchema, TReturn> {
-  return new StaticQuery<TTable, TSchema, TReturn>(
+>(schema: TSchema, tableName: TTable): QueryBuilder<TTable, TSchema, TReturn> {
+  return new StaticQueryBuilder<TTable, TSchema, TReturn>(
     schema,
     tableName,
     {table: tableName},
@@ -22,10 +25,10 @@ export function staticQuery<
 }
 
 /**
- * A query that cannot be run.
+ * A query builder that cannot be run.
  * Only serves to generate ASTs.
  */
-export class StaticQuery<
+export class StaticQueryBuilder<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn = PullRow<TTable, TSchema>,
@@ -48,7 +51,7 @@ export class StaticQuery<
       customQueryID,
       currentJunction,
       (tableName, ast, format, _customQueryID, _currentJunction) =>
-        new StaticQuery(
+        new StaticQueryBuilder(
           schema,
           tableName,
           ast,
@@ -65,11 +68,13 @@ export class StaticQuery<
   }
 }
 
-export function asStaticQuery<
+export function asStaticQueryBuilder<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn,
->(q: Query<TTable, TSchema, TReturn>): StaticQuery<TTable, TSchema, TReturn> {
-  assert(q instanceof StaticQuery);
+>(
+  q: QueryBuilder<TTable, TSchema, TReturn>,
+): StaticQueryBuilder<TTable, TSchema, TReturn> {
+  assert(q instanceof StaticQueryBuilder);
   return q;
 }

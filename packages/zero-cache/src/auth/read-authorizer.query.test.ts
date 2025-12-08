@@ -33,11 +33,11 @@ import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
+import type {QueryBuilder, Row} from '../../../zql/src/query/query-builder.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {Query, Row} from '../../../zql/src/query/query.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
@@ -932,7 +932,7 @@ describe('issue permissions', () => {
 
 function runReadQueryWithPermissions(
   authData: AuthData,
-  query: Query<string, ZeroSchema>,
+  query: QueryBuilder<string, ZeroSchema>,
   queryDelegate: QueryDelegate,
 ) {
   const updatedAst = bindStaticParameters(

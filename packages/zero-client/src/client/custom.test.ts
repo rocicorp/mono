@@ -15,7 +15,7 @@ import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
-import type {Row} from '../../../zql/src/query/query.ts';
+import type {Row} from '../../../zql/src/query/query-builder.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -27,7 +27,12 @@ import {
 import {ClientError} from './error.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import {asCustomQuery, MockSocket, queryID, zeroForTest} from './test-utils.ts';
+import {
+  asNamedQueryBuilder,
+  MockSocket,
+  queryID,
+  zeroForTest,
+} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
 
@@ -527,7 +532,7 @@ describe('rebasing custom mutators', () => {
 
     const zql = createBuilder(schema);
 
-    const q = asCustomQuery(zql.issue.where('id', '1').one(), 'a', '1');
+    const q = asNamedQueryBuilder(zql.issue.where('id', '1').one(), 'a', '1');
     const issue = await z.run(q, {type: 'unknown'});
     expect(issue?.title).toEqual('foo updated');
     expect(issue?.description).toEqual('updated');
@@ -953,7 +958,7 @@ describe('server results and keeping read queries', () => {
 
     const zql = createBuilder(schema);
 
-    const q = asCustomQuery(zql.issue.limit(1), 'a', undefined);
+    const q = asNamedQueryBuilder(zql.issue.limit(1), 'a', undefined);
     const view = z.materialize(q);
     const create = z.mutate.issue.create({
       id: '1',
@@ -1013,7 +1018,7 @@ describe('server results and keeping read queries', () => {
     messages.length = 0;
 
     // check the error case
-    const q2 = asCustomQuery(zql.issue, 'b', undefined);
+    const q2 = asNamedQueryBuilder(zql.issue, 'b', undefined);
     const view2 = z.materialize(q2);
     const close = z.mutate.issue.close({});
     await close.client;
