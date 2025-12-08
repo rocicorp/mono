@@ -486,7 +486,7 @@ export class CVRStore {
         deleted: true,
         transformationHash: null,
         transformationVersion: null,
-        internalError: null,
+        errorMessage: null,
         errorVersion: null,
       })}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryPatch.id}`,

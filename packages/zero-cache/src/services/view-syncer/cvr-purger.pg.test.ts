@@ -134,6 +134,8 @@ describe('view-syncer/cvr', () => {
             patchVersion: null,
             internal: null,
             deleted: null,
+            errorMessage: null,
+            errorVersion: null,
           },
         ],
         desires: [
@@ -145,6 +147,7 @@ describe('view-syncer/cvr', () => {
             deleted: null,
             inactivatedAt: null,
             ttl: DEFAULT_TTL_MS,
+            retryErrorVersion: null,
           },
         ],
         rows: [
