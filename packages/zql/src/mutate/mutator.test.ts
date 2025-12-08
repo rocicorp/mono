@@ -270,7 +270,7 @@ describe('Mutator phantom type (~)', () => {
       title: string;
     }>();
     expectTypeOf(mutator['~']['$schema']).toEqualTypeOf<Schema>();
-    expectTypeOf(mutator['~']['$context']).toEqualTypeOf<unknown>();
+    expectTypeOf(mutator['~']['$context']).toEqualTypeOf<TestContext>();
     expectTypeOf(mutator['~']['$wrappedTransaction']).toEqualTypeOf<unknown>();
   });
 
