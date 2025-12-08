@@ -1803,7 +1803,13 @@ test('pull mutate options', async () => {
 
   // Verify phase 2: pulls should respect minDelayMs of 500ms
   expect(phase2End - phase1End, 'phase2 pull count').toBeGreaterThanOrEqual(2);
-  const phase2Valid = checkDeltas(phase1End + 1, phase2End, 500, 1000, 'phase2');
+  const phase2Valid = checkDeltas(
+    phase1End + 1,
+    phase2End,
+    500,
+    1000,
+    'phase2',
+  );
   expect(phase2Valid, 'phase2 valid deltas').toBeGreaterThanOrEqual(1);
 
   // Verify phase 3: pulls should respect minDelayMs of 25ms
