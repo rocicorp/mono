@@ -268,7 +268,7 @@ export class CVRStore {
           "deleted",
           "ttlMs" AS "ttl",
           "inactivatedAtMs" AS "inactivatedAt",
-          "retryAfterVersion"
+          "retryErrorVersion"
           FROM ${this.#cvr('desires')}
           WHERE "clientGroupID" = ${id}`,
       ]);
@@ -371,10 +371,10 @@ export class CVRStore {
           inactivatedAt: row.inactivatedAt ?? undefined,
           ttl: clampTTL(row.ttl ?? DEFAULT_TTL_MS),
           version: versionFromString(row.patchVersion),
-          retryAfterVersion:
-            row.retryAfterVersion === null
+          retryErrorVersion:
+            row.retryErrorVersion === null
               ? undefined
-              : versionFromString(row.retryAfterVersion),
+              : versionFromString(row.retryErrorVersion),
         };
       }
     }
@@ -609,7 +609,7 @@ export class CVRStore {
     deleted: boolean,
     inactivatedAt: TTLClock | undefined,
     ttl: number,
-    retryAfterVersion?: CVRVersion | undefined,
+    retryErrorVersion?: CVRVersion | undefined,
   ): void {
     const change: DesiresRow = {
       clientGroupID: this.#id,
@@ -621,8 +621,8 @@ export class CVRStore {
 
       // ttl is in ms in JavaScript
       ttl: ttl < 0 ? null : ttl,
-      retryAfterVersion: retryAfterVersion
-        ? versionString(retryAfterVersion)
+      retryErrorVersion: retryErrorVersion
+        ? versionString(retryErrorVersion)
         : null,
     };
 
@@ -642,11 +642,11 @@ export class CVRStore {
       write: tx => tx`
       INSERT INTO ${this.#cvr('desires')} (
         "clientGroupID", "clientID", "queryHash", "patchVersion", "deleted",
-        "ttl", "ttlMs", "inactivatedAt", "inactivatedAtMs", "retryAfterVersion"
+        "ttl", "ttlMs", "inactivatedAt", "inactivatedAtMs", "retryErrorVersion"
       ) VALUES (
         ${change.clientGroupID}, ${change.clientID}, ${change.queryHash}, 
         ${change.patchVersion}, ${change.deleted}, ${ttlInterval}, ${ttlMs},
-        ${inactivatedAtTimestamp}, ${inactivatedAtMs}, ${change.retryAfterVersion}
+        ${inactivatedAtTimestamp}, ${inactivatedAtMs}, ${change.retryErrorVersion}
       )
       ON CONFLICT ("clientGroupID", "clientID", "queryHash")
       DO UPDATE SET
@@ -656,7 +656,7 @@ export class CVRStore {
         "ttlMs" = ${ttlMs},
         "inactivatedAt" = ${inactivatedAtTimestamp},
         "inactivatedAtMs" = ${inactivatedAtMs},
-        "retryAfterVersion" = ${change.retryAfterVersion}
+        "retryErrorVersion" = ${change.retryErrorVersion}
       `,
     });
   }

@@ -189,7 +189,7 @@ export async function initViewSyncerSchema(
       await sql`ALTER TABLE ${sql(schema)}.queries 
         ADD COLUMN "errorVersion" TEXT`;
       await sql`ALTER TABLE ${sql(schema)}.desires 
-        ADD COLUMN "retryAfterVersion" TEXT`;
+        ADD COLUMN "retryErrorVersion" TEXT`;
     },
   };
 
@@ -222,7 +222,7 @@ export async function initViewSyncerSchema(
     // directly as DOUBLE PRECISION, avoiding postgres.js TIMESTAMPTZ
     // type conversion issues
     15: migratedV14ToV15,
-    // V16 adds queries."errorMessage", queries."errorVersion", and desires."retryAfterVersion"
+    // V16 adds queries."errorMessage", queries."errorVersion", and desires."retryErrorVersion"
     16: migrateV15ToV16,
   };
 

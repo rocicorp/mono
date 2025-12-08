@@ -153,7 +153,7 @@ export type DesiresRow = {
   deleted: boolean | null;
   ttl: number | null;
   inactivatedAt: TTLClock | null;
-  retryAfterVersion: string | null;
+  retryErrorVersion: string | null;
 };
 
 function createDesiresTable(shard: ShardID) {
@@ -168,7 +168,7 @@ CREATE TABLE ${schema(shard)}.desires (
   "ttlMs"              DOUBLE PRECISION,  -- Time to live in milliseconds
   "inactivatedAt"      TIMESTAMPTZ,  -- DEPRECATED: Use inactivatedAtMs instead. Time at which this row was inactivated
   "inactivatedAtMs"    DOUBLE PRECISION,  -- Time at which this row was inactivated (milliseconds since client group start)
-  "retryAfterVersion"  TEXT,  -- The CVR version after which the query should be retried
+  "retryErrorVersion"  TEXT,  -- The CVR version after which the query should be retried
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
 

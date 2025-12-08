@@ -238,21 +238,21 @@ describe('view-syncer/cvr-error-state', () => {
     expect(queries[0].errorVersion).toBeNull();
   });
 
-  test('persist retryAfterVersion in desires', async () => {
+  test('persist retryErrorVersion in desires', async () => {
     const cvr = await store.load(lc, CONNECT_TIME);
     const client = {
       id: 'client1',
       desiredQueryIDs: ['q1'],
     };
 
-    // Put desired query with retryAfterVersion
+    // Put desired query with retryErrorVersion
     // Use ConfigDrivenUpdater to handle it properly
     const configUpdater = new CVRConfigDrivenUpdater(store, cvr, SHARD);
     configUpdater.putDesiredQueries('client1', [
       {
         hash: 'q1',
         ast: {table: 'issues'},
-        retryAfterVersion: '05',
+        retryErrorVersion: '01',
       },
     ]);
 
@@ -266,13 +266,13 @@ describe('view-syncer/cvr-error-state', () => {
     const desires =
       await db`SELECT * FROM "roze_1/cvr".desires WHERE "queryHash" = 'q1'`;
     expect(desires).toHaveLength(1);
-    expect(desires[0].retryAfterVersion).toBe('05');
+    expect(desires[0].retryErrorVersion).toBe('01');
 
     // Load CVR and verify
     const cvr2 = await store.load(lc, CONNECT_TIME);
     const q1 = cvr2.queries['q1'] as ClientQueryRecord;
     const clientState = q1.clientState['client1'];
-    expect(clientState.retryAfterVersion).toEqual({stateVersion: '05'});
+    expect(clientState.retryErrorVersion).toEqual({stateVersion: '01'});
   });
 
   test('track error without transformationHash', async () => {
@@ -314,5 +314,66 @@ describe('view-syncer/cvr-error-state', () => {
     expect(queries[0].errorVersion).toBe('02');
     // transformationHash should be null (it was never set)
     expect(queries[0].transformationHash).toBeNull();
+  });
+
+  test('retry query when errorVersion matches retryErrorVersion', async () => {
+    let cvr = await store.load(lc, CONNECT_TIME);
+
+    // 1. Setup: Query in error state
+    const configUpdater = new CVRConfigDrivenUpdater(store, cvr, SHARD);
+    configUpdater.putDesiredQueries('client1', [
+      {hash: 'q1', ast: {table: 'issues'}},
+    ]);
+    const {cvr: cvr1} = await configUpdater.flush(
+      lc,
+      CONNECT_TIME,
+      CONNECT_TIME,
+      ttlClockFromNumber(CONNECT_TIME),
+    );
+
+    const updater1 = new CVRQueryDrivenUpdater(store, cvr1, '02', '01');
+    updater1.trackQueries(
+      lc,
+      [{id: 'q1', transformationHash: undefined, errorMessage: 'fail'}],
+      [],
+    );
+    const {cvr: cvr2} = await updater1.flush(
+      lc,
+      CONNECT_TIME,
+      CONNECT_TIME,
+      ttlClockFromNumber(CONNECT_TIME),
+    );
+
+    // Verify error state
+    let queries =
+      await db`SELECT * FROM "roze_1/cvr".queries WHERE "queryHash" = 'q1'`;
+    expect(queries[0].errorMessage).toBe('fail');
+    expect(queries[0].errorVersion).toBe('02');
+
+    // 2. Client requests retry for version '02'
+    const configUpdater2 = new CVRConfigDrivenUpdater(store, cvr2, SHARD);
+    configUpdater2.putDesiredQueries('client1', [
+      {
+        hash: 'q1',
+        ast: {table: 'issues'},
+        retryErrorVersion: '02',
+      },
+    ]);
+    const {cvr: cvr3} = await configUpdater2.flush(
+      lc,
+      CONNECT_TIME,
+      CONNECT_TIME,
+      ttlClockFromNumber(CONNECT_TIME),
+    );
+
+    // 3. Verify that ViewSyncer would see this as a retry
+    // We can't easily test ViewSyncer logic directly here without mocking,
+    // but we can verify the CVR state is correct for ViewSyncer to consume.
+    const q1 = cvr3.queries['q1'];
+    if (q1.type !== 'client') throw new Error('Expected client query');
+    const clientState = q1.clientState['client1'];
+    expect(clientState.retryErrorVersion).toEqual({stateVersion: '02'});
+    expect(q1.errorVersion).toEqual({stateVersion: '02'});
+    // ViewSyncer logic: errorVersion === retryErrorVersion -> retry = true
   });
 });

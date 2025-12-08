@@ -202,9 +202,9 @@ const clientStateSchema = v.object({
   version: cvrVersionSchema,
 
   /**
-   * The error version after which the query should be retried.
+   * The error version for which the query should be retried.
    */
-  retryAfterVersion: cvrVersionSchema.optional(),
+  retryErrorVersion: cvrVersionSchema.optional(),
 });
 
 const externalQueryRecordSchema = baseQueryRecordSchema.extend({

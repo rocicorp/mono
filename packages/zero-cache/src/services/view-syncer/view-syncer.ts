@@ -1436,6 +1436,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         transformationHash: string;
         remove: boolean;
         errorMessage?: string;
+        retry?: boolean;
       }[] = transformedQueries.map(({id, origQuery, transformed}) => {
         const ids = hashToIDs.get(transformed.transformationHash);
         if (ids) {
@@ -1443,13 +1444,34 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         } else {
           hashToIDs.set(transformed.transformationHash, [id]);
         }
+        let retry = false;
+        if (origQuery.type !== 'internal' && origQuery.clientState) {
+          for (const state of Object.values(origQuery.clientState)) {
+            if (
+              origQuery.errorMessage !== undefined &&
+              origQuery.errorVersion !== undefined &&
+              state.retryErrorVersion !== undefined &&
+              origQuery.errorVersion.stateVersion ===
+                state.retryErrorVersion.stateVersion
+            ) {
+              retry = true;
+              break;
+            }
+          }
+        }
+
         return {
           id,
           ast: transformed.transformedAst,
           transformationHash: transformed.transformationHash,
           remove: expired(ttlClock, origQuery),
+          retry,
         };
       });
+
+      const retryHashes = new Set(
+        serverQueries.filter(q => q.retry).map(q => q.transformationHash),
+      );
 
       const addQueries: (
         | {
@@ -1458,6 +1480,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             transformationHash: string;
             errorMessage?: string;
             remove?: boolean;
+            retry?: boolean;
           }
         | {
             id: string;
@@ -1465,16 +1488,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             transformationHash?: undefined;
             errorMessage: string;
             remove?: boolean;
+            retry?: boolean;
           }
       )[] = serverQueries.filter(
-        q => !q.remove && !hydratedQueries.has(q.transformationHash),
+        q =>
+          !q.remove &&
+          (!hydratedQueries.has(q.transformationHash) ||
+            retryHashes.has(q.transformationHash)),
       );
       const removeQueries: {
         id: string;
         transformationHash: string | undefined;
       }[] = serverQueries.filter(q => q.remove);
       const desiredQueries = new Set(
-        serverQueries.filter(q => !q.remove).map(q => q.transformationHash),
+        serverQueries
+          .filter(q => !q.remove)
+          .map(q => q.transformationHash)
+          .filter(h => !retryHashes.has(h)),
       );
       const unhydrateQueries = [...hydratedQueries].filter(
         transformationHash => !desiredQueries.has(transformationHash),

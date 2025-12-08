@@ -293,7 +293,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       name?: string | undefined;
       args?: readonly ReadonlyJSONValue[] | undefined;
       ttl?: number | undefined;
-      retryAfterVersion?: string | undefined;
+      retryErrorVersion?: string | undefined;
     }>[],
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
@@ -337,6 +337,15 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       if (compareTTL(ttl, oldClientState.ttl) > 0) {
         // TTL update only - don't record for telemetry
         needed.add(hash);
+        continue;
+      }
+
+      if (
+        (q.retryErrorVersion
+          ? versionFromString(q.retryErrorVersion).stateVersion
+          : undefined) !== oldClientState.retryErrorVersion?.stateVersion
+      ) {
+        needed.add(hash);
       }
     }
 
@@ -361,6 +370,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         inactivatedAt,
         ttl,
         version: newVersion,
+        retryErrorVersion: q.retryErrorVersion
+          ? versionFromString(q.retryErrorVersion)
+          : undefined,
       };
       this._cvr.queries[id] = query;
       patches.push({
@@ -376,8 +388,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         false,
         inactivatedAt,
         ttl,
-        q.retryAfterVersion
-          ? versionFromString(q.retryAfterVersion)
+        q.retryErrorVersion
+          ? versionFromString(q.retryErrorVersion)
           : undefined,
       );
     }
