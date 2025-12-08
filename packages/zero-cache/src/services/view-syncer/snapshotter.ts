@@ -91,13 +91,20 @@ export class Snapshotter {
   readonly #lc: LogContext;
   readonly #dbFile: string;
   readonly #appID: string;
+  readonly #pageCacheSizeKib: number | undefined;
   #curr: Snapshot | undefined;
   #prev: Snapshot | undefined;
 
-  constructor(lc: LogContext, dbFile: string, {appID}: AppID) {
+  constructor(
+    lc: LogContext,
+    dbFile: string,
+    {appID}: AppID,
+    pageCacheSizeKib?: number | undefined,
+  ) {
     this.#lc = lc;
     this.#dbFile = dbFile;
     this.#appID = appID;
+    this.#pageCacheSizeKib = pageCacheSizeKib;
   }
 
   /**
@@ -107,7 +114,12 @@ export class Snapshotter {
    */
   init(): this {
     assert(this.#curr === undefined, 'Already initialized');
-    this.#curr = Snapshot.create(this.#lc, this.#dbFile, this.#appID);
+    this.#curr = Snapshot.create(
+      this.#lc,
+      this.#dbFile,
+      this.#appID,
+      this.#pageCacheSizeKib,
+    );
     this.#lc.debug?.(`Initial snapshot at version ${this.#curr.version}`);
     return this;
   }
@@ -168,7 +180,12 @@ export class Snapshotter {
     assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     const next = this.#prev
       ? this.#prev.resetToHead()
-      : Snapshot.create(this.#lc, this.#curr.db.db.name, this.#appID);
+      : Snapshot.create(
+          this.#lc,
+          this.#curr.db.db.name,
+          this.#appID,
+          this.#pageCacheSizeKib,
+        );
     this.#prev = this.#curr;
     this.#curr = next;
     return {prev: this.#prev, curr: this.#curr};
@@ -249,9 +266,17 @@ function getSchemaVersions(db: StatementRunner, appID: string): SchemaVersions {
 }
 
 class Snapshot {
-  static create(lc: LogContext, dbFile: string, appID: string) {
+  static create(
+    lc: LogContext,
+    dbFile: string,
+    appID: string,
+    pageCacheSizeKib: number | undefined,
+  ) {
     const conn = new Database(lc, dbFile);
     conn.pragma('synchronous = OFF'); // Applied changes are ephemeral; COMMIT is never called.
+    if (pageCacheSizeKib !== undefined) {
+      conn.pragma(`cache_size = -${pageCacheSizeKib}`); // Negative = size in KiB
+    }
     const [{journal_mode: mode}] = conn.pragma('journal_mode') as [
       {journal_mode: string},
     ];
