@@ -55,23 +55,7 @@ export function setupOtelDiagnosticLogger(
       debug: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
       info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
       warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
-      error: (msg: string, ...args: unknown[]) => {
-        // Check if this is a known non-critical error that should be a warning
-        if (
-          msg.includes('Request Timeout') ||
-          msg.includes('Unexpected server response: 502') ||
-          msg.includes('Export failed with retryable status') ||
-          msg.includes('Export took longer than') ||
-          msg.includes('Method Not Allowed') ||
-          msg.includes('socket hang up') ||
-          msg.includes('Payment Required') ||
-          msg.includes('metrics export failed')
-        ) {
-          log.warn?.(msg, ...args);
-        } else {
-          log.error?.(msg, ...args);
-        }
-      },
+      error: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
     },
     {
       logLevel:

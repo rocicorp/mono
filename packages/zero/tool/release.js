@@ -143,7 +143,8 @@ function parseArgs() {
       name: 'version',
       alias: 'v',
       type: String,
-      description: 'Version for release (e.g., 0.24.0). If not provided, creates next canary',
+      description:
+        'Version for release (e.g., 0.24.0). If not provided, creates next canary',
     },
   ];
 
