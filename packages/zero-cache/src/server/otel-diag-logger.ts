@@ -63,7 +63,9 @@ export function setupOtelDiagnosticLogger(
           msg.includes('Export failed with retryable status') ||
           msg.includes('Export took longer than') ||
           msg.includes('Method Not Allowed') ||
-          msg.includes('socket hang up')
+          msg.includes('socket hang up') ||
+          msg.includes('Payment Required') ||
+          msg.includes('metrics export failed')
         ) {
           log.warn?.(msg, ...args);
         } else {
