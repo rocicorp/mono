@@ -90,6 +90,7 @@ const NON_CRITICAL_OTEL_ERRORS = [
   'metrics export failed',
   'method not allowed',
   'socket hang up',
+  'payment required',
 ];
 
 function shouldWarnForOtelError(msg: string): boolean {
