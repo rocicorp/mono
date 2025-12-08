@@ -2,6 +2,7 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {beforeAll, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
@@ -14,6 +15,7 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -105,23 +107,25 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
       ]
     `);
 
-  queryDelegate.getSource('issues')?.push({
-    type: 'edit',
-    oldRow: {
-      id: 'issue1',
-      title: 'Test Issue 1',
-      description: 'Description for issue 1',
-      closed: false,
-      ownerId: 'user1',
-    },
-    row: {
-      id: 'issue1',
-      title: 'Test Issue 1',
-      description: 'Description for issue 1',
-      closed: true,
-      ownerId: 'user1',
-    },
-  });
+  consume(
+    must(queryDelegate.getSource('issues')).push({
+      type: 'edit',
+      oldRow: {
+        id: 'issue1',
+        title: 'Test Issue 1',
+        description: 'Description for issue 1',
+        closed: false,
+        ownerId: 'user1',
+      },
+      row: {
+        id: 'issue1',
+        title: 'Test Issue 1',
+        description: 'Description for issue 1',
+        closed: true,
+        ownerId: 'user1',
+      },
+    }),
+  );
 
   expect(mapResultToClientNames(view.data, schema, 'issue')).toEqual(
     queryDelegate.materialize(q).data,

@@ -29,12 +29,14 @@ export interface Input extends InputBase {
    * Fetch data. May modify the data in place.
    * Returns nodes sorted in order of `SourceSchema.compareRows`.
    *
-   * The stream may contain 'yield' to indicate the operator has yielded control.
+   * The stream may contain 'yield' to yield control to the caller for purposes
+   * of responsiveness.
    *
    * Contract:
    * - During fetch: If an input yields 'yield', 'yield' must be yielded to the
    * caller of fetch immediately.
-   * - During push: If a fetch to an input yields 'yield', it can be skipped/ignored.
+   * - During push: If a fetch to an input consumed by the push logic yields
+   * 'yield', it must be yielded to the caller of push immediately.
    */
   fetch(req: FetchRequest): Stream<Node | 'yield'>;
 }
@@ -65,8 +67,13 @@ export interface Output {
    * Callers must maintain some invariants for correct operation:
    * - Only add rows which do not already exist (by deep equality).
    * - Only remove rows which do exist (by deep equality).
+   * Implmentation can yield 'yield' to yield control to the caller for purposes
+   * of responsiveness.
+   * Yield contract:
+   * - During a push: If a push call to an output yields 'yield', it must be
+   * yielded to the caller of push immediately.
    */
-  push(change: Change, pusher: InputBase): void;
+  push(change: Change, pusher: InputBase): Stream<'yield'>;
 }
 
 /**
@@ -74,7 +81,7 @@ export interface Output {
  * initial value for for an operator's output before it is set.
  */
 export const throwOutput: Output = {
-  push(_change: Change): void {
+  push(_change: Change): Stream<'yield'> {
     throw new Error('Output not set');
   },
 };

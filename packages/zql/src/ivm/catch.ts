@@ -1,4 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
@@ -74,6 +75,7 @@ export class Catch implements Output {
       });
     }
     this.pushes.push(expandedChange);
+    return emptyArray;
   }
 
   reset() {

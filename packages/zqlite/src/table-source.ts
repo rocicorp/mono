@@ -362,9 +362,11 @@ export class TableSource implements Source {
     }
   }
 
-  push(change: SourceChange): void {
-    for (const _ of this.genPush(change)) {
-      // Nothing to do.
+  *push(change: SourceChange): Stream<'yield'> {
+    for (const result of this.genPush(change)) {
+      if (result === 'yield') {
+        yield result;
+      }
     }
   }
 

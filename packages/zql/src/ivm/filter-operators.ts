@@ -2,7 +2,7 @@ import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
 import {type Node} from './data.ts';
 import type {Change} from './change.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {type Stream} from './stream.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 
 /**
@@ -34,7 +34,7 @@ export interface FilterOutput extends Output {
   // nodes. E.g., so the operator can cache results for the
   // duration of the loop.
   beginFilter(): void;
-  filter(node: Node): boolean;
+  filter(node: Node): Generator<'yield', boolean>;
   endFilter(): void;
 }
 
@@ -46,11 +46,11 @@ export interface FilterOperator extends FilterInput, FilterOutput {}
  * set.
  */
 export const throwFilterOutput: FilterOutput = {
-  push(_change: Change): void {
+  *push(_change: Change): Stream<'yield'> {
     throw new Error('Output not set');
   },
 
-  filter(_node: Node): boolean {
+  *filter(_node: Node): Generator<'yield', boolean> {
     throw new Error('Output not set');
   },
 
@@ -79,8 +79,8 @@ export class FilterStart implements FilterInput, Output {
     return this.#input.getSchema();
   }
 
-  push(change: Change) {
-    this.#output.push(change, this);
+  *push(change: Change) {
+    yield* this.#output.push(change, this);
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
@@ -91,7 +91,7 @@ export class FilterStart implements FilterInput, Output {
           yield node;
           continue;
         }
-        if (this.#output.filter(node)) {
+        if (yield* this.#output.filter(node)) {
           yield node;
         }
       }
@@ -124,7 +124,7 @@ export class FilterEnd implements Input, FilterOutput {
   beginFilter() {}
   endFilter() {}
 
-  filter(_node: Node) {
+  *filter(_node: Node) {
     return true;
   }
 
@@ -140,8 +140,8 @@ export class FilterEnd implements Input, FilterOutput {
     return this.#input.getSchema();
   }
 
-  push(change: Change) {
-    this.#output.push(change, this);
+  *push(change: Change) {
+    yield* this.#output.push(change, this);
   }
 }
 

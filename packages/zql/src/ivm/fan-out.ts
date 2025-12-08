@@ -59,10 +59,10 @@ export class FanOut implements FilterOperator {
     }
   }
 
-  filter(node: Node): boolean {
+  *filter(node: Node): Generator<'yield', boolean> {
     let result = false;
     for (const output of this.#outputs) {
-      result = output.filter(node) || result;
+      result = (yield* output.filter(node)) || result;
       if (result) {
         return true;
       }
@@ -70,11 +70,11 @@ export class FanOut implements FilterOperator {
     return result;
   }
 
-  push(change: Change) {
+  *push(change: Change) {
     for (const out of this.#outputs) {
-      out.push(change, this);
+      yield* out.push(change, this);
     }
-    must(
+    yield* must(
       this.#fanIn,
       'fan-out must have a corresponding fan-in set!',
     ).fanOutDonePushingToAllBranches(change.type);

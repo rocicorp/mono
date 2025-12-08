@@ -56,6 +56,7 @@ import {
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
 import {skipYields} from '../../../zql/src/ivm/operator.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -156,10 +157,12 @@ async function makeDatabases<TSchema extends Schema>(
       ) as Row[];
       raw.set(table.name, rows);
       for (const row of rows) {
-        memory[table.name].push({
-          type: 'add',
-          row,
-        });
+        consume(
+          memory[table.name].push({
+            type: 'add',
+            row,
+          }),
+        );
       }
     }),
   );
@@ -530,7 +533,7 @@ function benchPush(
       for (const change of changes) {
         const [source, changeData] = change;
         const sourceInstance = sourceGetter(source);
-        sourceInstance.push(changeData);
+        consume(sourceInstance.push(changeData));
       }
     };
 
@@ -775,14 +778,18 @@ async function checkRemove(
 
     await crud[table].delete(row);
 
-    must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
-      type: 'remove',
-      row: mappedRow,
-    });
-    must(delegates.memory.getSource(table)).push({
-      type: 'remove',
-      row,
-    });
+    consume(
+      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
+        type: 'remove',
+        row: mappedRow,
+      }),
+    );
+    consume(
+      must(delegates.memory.getSource(table)).push({
+        type: 'remove',
+        row,
+      }),
+    );
 
     // pg cannot be materialized.
     const pgResult = await delegates.pg.run(query);
@@ -827,14 +834,18 @@ async function checkAddBack(
     const mappedRow = mapRow(row, table, delegates.mapper);
     await crud[table].insert(row);
 
-    must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
-      type: 'add',
-      row: mappedRow,
-    });
-    must(delegates.memory.getSource(table)).push({
-      type: 'add',
-      row,
-    });
+    consume(
+      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
+        type: 'add',
+        row: mappedRow,
+      }),
+    );
+    consume(
+      must(delegates.memory.getSource(table)).push({
+        type: 'add',
+        row,
+      }),
+    );
 
     const pgResult = await delegates.pg.run(query);
     expect(
@@ -906,16 +917,20 @@ async function checkEditToRandom(
     const mappedEditedRow = mapRow(editedRow, table, delegates.mapper);
 
     await crud[table].update(editedRow);
-    must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
-      type: 'edit',
-      oldRow: mappedRow,
-      row: mappedEditedRow,
-    });
-    must(delegates.memory.getSource(table)).push({
-      type: 'edit',
-      oldRow: row,
-      row: editedRow,
-    });
+    consume(
+      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
+        type: 'edit',
+        oldRow: mappedRow,
+        row: mappedEditedRow,
+      }),
+    );
+    consume(
+      must(delegates.memory.getSource(table)).push({
+        type: 'edit',
+        oldRow: row,
+        row: editedRow,
+      }),
+    );
 
     const pgResult = await delegates.pg.run(query);
     expect(
@@ -981,16 +996,20 @@ async function checkEditToMatch(
     const mappedEdited = mapRow(edited, table, delegates.mapper);
     await crud[table].update(original);
 
-    must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
-      type: 'edit',
-      oldRow: mappedEdited,
-      row: mappedOriginal,
-    });
-    must(delegates.memory.getSource(table)).push({
-      type: 'edit',
-      oldRow: edited,
-      row: original,
-    });
+    consume(
+      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
+        type: 'edit',
+        oldRow: mappedEdited,
+        row: mappedOriginal,
+      }),
+    );
+    consume(
+      must(delegates.memory.getSource(table)).push({
+        type: 'edit',
+        oldRow: edited,
+        row: original,
+      }),
+    );
 
     const pgResult = await delegates.pg.run(query);
     expect(

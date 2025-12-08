@@ -4,11 +4,12 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {Catch} from './catch.ts';
 import {createSource} from './test/source-factory.ts';
 import {UnionFanOut} from './union-fan-out.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 const mockFanIn = {
   fanOutStartedPushing() {},
-  fanOutDonePushing() {},
+  *fanOutDonePushing() {},
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
@@ -28,9 +29,11 @@ test('push broadcasts change to all outputs', () => {
   const catch2 = new Catch(fanOut);
   const catch3 = new Catch(fanOut);
 
-  s.push({type: 'add', row: {a: 1, b: 'foo'}});
-  s.push({type: 'edit', oldRow: {a: 1, b: 'foo'}, row: {a: 1, b: 'bar'}});
-  s.push({type: 'remove', row: {a: 1, b: 'bar'}});
+  consume(s.push({type: 'add', row: {a: 1, b: 'foo'}}));
+  consume(
+    s.push({type: 'edit', oldRow: {a: 1, b: 'foo'}, row: {a: 1, b: 'bar'}}),
+  );
+  consume(s.push({type: 'remove', row: {a: 1, b: 'bar'}}));
 
   expect(catch1.pushes).toMatchInlineSnapshot(`
     [
@@ -82,11 +85,11 @@ test('setOutput adds new output to list', () => {
   fanOut.setFanIn(mockFanIn);
   const catch1 = new Catch(fanOut);
 
-  s.push({type: 'add', row: {a: 1}});
+  consume(s.push({type: 'add', row: {a: 1}}));
 
   const catch2 = new Catch(fanOut);
 
-  s.push({type: 'add', row: {a: 2}});
+  consume(s.push({type: 'add', row: {a: 2}}));
 
   expect(catch1.pushes).toHaveLength(2);
   expect(catch2.pushes).toHaveLength(1);
@@ -133,9 +136,9 @@ test('fetch delegates to input', () => {
     ['a'],
   );
 
-  s.push({type: 'add', row: {a: 1, b: 'foo'}});
-  s.push({type: 'add', row: {a: 2, b: 'bar'}});
-  s.push({type: 'add', row: {a: 3, b: 'baz'}});
+  consume(s.push({type: 'add', row: {a: 1, b: 'foo'}}));
+  consume(s.push({type: 'add', row: {a: 2, b: 'bar'}}));
+  consume(s.push({type: 'add', row: {a: 3, b: 'baz'}}));
 
   const connector = s.connect([['a', 'asc']]);
   const fanOut = new UnionFanOut(connector);

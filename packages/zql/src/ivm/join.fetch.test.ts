@@ -13,6 +13,7 @@ import {Snitch, type SnitchMessage} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -2080,7 +2081,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
       t.primaryKeys[i],
     );
     for (const row of rows) {
-      source.push({type: 'add', row});
+      consume(source.push({type: 'add', row}));
     }
     const snitch = new Snitch(source.connect(ordering), String(i), log);
     return {
