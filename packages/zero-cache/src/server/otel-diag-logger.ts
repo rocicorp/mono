@@ -55,13 +55,7 @@ export function setupOtelDiagnosticLogger(
       debug: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
       info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
       warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
-      error: (msg: string, ...args: unknown[]) => {
-        if (shouldWarnForOtelError(msg)) {
-          log.warn?.(msg, ...args);
-        } else {
-          log.error?.(msg, ...args);
-        }
-      },
+      error: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
     },
     {
       logLevel:
@@ -80,21 +74,4 @@ export function setupOtelDiagnosticLogger(
  */
 export function resetOtelDiagnosticLogger(): void {
   diagLoggerConfigured = false;
-}
-
-const NON_CRITICAL_OTEL_ERRORS = [
-  'request timeout',
-  'unexpected server response: 502',
-  'export failed with retryable status',
-  'export took longer than',
-  'metrics export failed',
-  'method not allowed',
-  'socket hang up',
-];
-
-function shouldWarnForOtelError(msg: string): boolean {
-  const errorMessage = String(msg ?? '').toLowerCase();
-  return NON_CRITICAL_OTEL_ERRORS.some(pattern =>
-    errorMessage.includes(pattern),
-  );
 }
