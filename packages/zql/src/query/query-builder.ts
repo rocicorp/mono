@@ -203,7 +203,7 @@ export interface QueryBuilder<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends ZeroSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-> extends ToZQL<TTable, TSchema, TReturn, unknown> {
+> {
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
   ): QueryBuilder<
@@ -366,30 +366,47 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
 } as const;
 
 export type AnyQueryBuilder = QueryBuilder<string, Schema, any>;
-export type ToQuery<T extends string, S extends Schema, R, C> = ToZQL<
-  T & (keyof S['tables'] & string),
-  S,
+
+export type ToZQL<
+  T extends keyof S['tables'] & string,
+  S extends Schema,
   R,
-  C
->;
+  C,
+> = {
+  readonly toZQL: (context: C) => QueryBuilder<T, S, R>;
+};
 
 /**
- * An interface for objects that can be converted to a {@link QueryBuilder}.
+ * A shared type that can be a query request or a query builder.
  *
- * This is useful for creating lazy or deferred queries that are only
- * materialized when needed, allowing the query to be constructed with
- * runtime context.
+ * If it is a query request, it will be converted to a {@link QueryBuilder} using the context.
+ * Otherwise, it will be returned as is.
  *
  * @template T - The table name (must be a key of S['tables'])
  * @template S - The schema type
  * @template R - The return type of the query
  * @template C - The context type passed to {@link toZQL}
  */
-export interface ToZQL<
+export type QueryRequestOrBuilder<
   T extends keyof S['tables'] & string,
   S extends Schema,
   R,
   C,
-> {
-  toZQL(context: C): QueryBuilder<T, S, R>;
-}
+> = ToZQL<T, S, R, C> | QueryBuilder<T, S, R>;
+
+/**
+ * Converts a query request to a {@link QueryBuilder} using the context,
+ * or returns the query builder as is.
+ *
+ * @param query - The query request or query builder to convert
+ * @param context - The context to use to convert the query request
+ */
+export const getQueryBuilder = <
+  T extends keyof S['tables'] & string,
+  S extends Schema,
+  R,
+  C,
+>(
+  query: QueryRequestOrBuilder<T, S, R, C>,
+  context: C,
+): QueryBuilder<T, S, R> => ('toZQL' in query ? query.toZQL(context) : query);

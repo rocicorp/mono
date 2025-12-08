@@ -176,7 +176,6 @@ export type {
   QueryRowType,
   Row,
   RunOptions,
-  ToQuery,
   ToZQL,
   ZeRow,
 } from '../../zql/src/query/query-builder.ts';

@@ -8,7 +8,7 @@ import type {
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {PullRow, QueryBuilder} from './query-builder.ts';
+import type {PullRow, QueryBuilder, ToZQL} from './query-builder.ts';
 
 /**
  * Query is returned from defineQueries. It is a callable that captures
@@ -113,11 +113,10 @@ export type QueryRequest<
   TContext,
 > = {
   readonly 'args': TInput;
-  readonly 'toZQL': (ctx: TContext) => QueryBuilder<TTable, TSchema, TReturn>;
   readonly '~': Expand<
     QueryRequestTypes<TTable, TInput, TOutput, TSchema, TReturn, TContext>
   >;
-};
+} & ToZQL<TTable, TSchema, TReturn, TContext>;
 
 export type AnyQueryDefinition = QueryDefinition<any, any, any, any, any>;
 

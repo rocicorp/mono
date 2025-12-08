@@ -22,10 +22,11 @@ import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {
+  getQueryBuilder,
   type HumanReadable,
   type PullRow,
   type QueryBuilder,
-  type ToZQL,
+  type QueryRequestOrBuilder,
 } from '../../zql/src/query/query-builder.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
@@ -75,7 +76,7 @@ export function useQuery<
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 >(
-  query: ToZQL<TTable, TSchema, TReturn, TContext>,
+  query: QueryRequestOrBuilder<TTable, TSchema, TReturn, TContext>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -102,7 +103,7 @@ export function useSuspenseQuery<
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
 >(
-  query: ToZQL<TTable, TSchema, TReturn, TContext>,
+  query: QueryRequestOrBuilder<TTable, TSchema, TReturn, TContext>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -320,7 +321,7 @@ export class ViewStore {
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
-    query: ToZQL<TTable, TSchema, TReturn, TContext>,
+    query: QueryRequestOrBuilder<TTable, TSchema, TReturn, TContext>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -332,7 +333,7 @@ export class ViewStore {
     complete: boolean;
     nonEmpty: boolean;
   } {
-    const q = query.toZQL(zero.context);
+    const q = getQueryBuilder(query, zero.context);
     const bindings = bindingsForZero(zero);
     const format = bindings.format(q);
     if (!enabled) {

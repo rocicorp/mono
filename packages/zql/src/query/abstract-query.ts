@@ -32,7 +32,6 @@ import type {
   PullRow,
   QueryBuilder,
   RunOptions,
-  ToZQL,
 } from './query-builder.ts';
 import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import type {TTL} from './ttl.ts';
@@ -59,8 +58,7 @@ export abstract class AbstractQuery<
   >
   implements
     QueryBuilder<TTable, TSchema, TReturn>,
-    QueryInternals<TTable, TSchema, TReturn>,
-    ToZQL<TTable, TSchema, TReturn, unknown>
+    QueryInternals<TTable, TSchema, TReturn>
 {
   readonly [queryInternalsTag] = true;
 
@@ -525,10 +523,6 @@ export abstract class AbstractQuery<
 
   get ast(): AST {
     return this.#ast;
-  }
-
-  toZQL(_context: unknown): this {
-    return this;
   }
 }
 export function asAbstractQuery<

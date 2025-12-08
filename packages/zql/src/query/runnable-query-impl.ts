@@ -11,7 +11,6 @@ import type {
   PullRow,
   QueryBuilder,
   RunOptions,
-  ToZQL,
 } from './query-builder.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import type {TTL} from './ttl.ts';
@@ -41,9 +40,7 @@ export class RunnableQueryImpl<
     TReturn = PullRow<TTable, TSchema>,
   >
   extends AbstractQuery<TTable, TSchema, TReturn>
-  implements
-    QueryBuilder<TTable, TSchema, TReturn>,
-    ToZQL<TTable, TSchema, TReturn, unknown>
+  implements QueryBuilder<TTable, TSchema, TReturn>
 {
   readonly #delegate: QueryDelegate;
 

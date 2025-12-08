@@ -101,8 +101,9 @@ import {
   type MaterializeOptions,
   type PreloadOptions,
   type PullRow,
+  type QueryRequestOrBuilder,
   type RunOptions,
-  type ToZQL,
+  getQueryBuilder,
 } from '../../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
@@ -862,8 +863,14 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: ToZQL<TTable, S, TReturn, C>, options?: PreloadOptions) {
-    return this.#zeroContext.preload(query.toZQL(this.context), options);
+  >(
+    query: QueryRequestOrBuilder<TTable, S, TReturn, C>,
+    options?: PreloadOptions,
+  ) {
+    return this.#zeroContext.preload(
+      getQueryBuilder(query, this.context),
+      options,
+    );
   }
 
   /**
@@ -887,10 +894,13 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToZQL<TTable, S, TReturn, C>,
+    query: QueryRequestOrBuilder<TTable, S, TReturn, C>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.#zeroContext.run(query.toZQL(this.context), runOptions);
+    return this.#zeroContext.run(
+      getQueryBuilder(query, this.context),
+      runOptions,
+    );
   }
 
   get context(): C {
@@ -922,20 +932,20 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToZQL<TTable, S, TReturn, C>,
+    query: QueryRequestOrBuilder<TTable, S, TReturn, C>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToZQL<TTable, S, TReturn, C>,
+    query: QueryRequestOrBuilder<TTable, S, TReturn, C>,
     factory: ViewFactory<TTable, S, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToZQL<TTable, S, TReturn, C>,
+    query: QueryRequestOrBuilder<TTable, S, TReturn, C>,
     factoryOrOptions?: ViewFactory<TTable, S, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    const q = query.toZQL(this.context);
+    const q = getQueryBuilder(query, this.context);
 
     let factory;
     let options;
