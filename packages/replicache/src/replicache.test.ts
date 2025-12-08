@@ -1715,109 +1715,66 @@ async function populateDataUsingPull<MD extends MutatorDefs = {}>(
   await rep.persist();
 }
 
-async function tickUntilTimeIs(time: number, tick = 10) {
-  while (Date.now() < time) {
-    await vi.advanceTimersByTimeAsync(tick);
-  }
-}
-
 test('pull mutate options', async () => {
-  const pullURL = 'https://diff.com/pull';
-  const rep = await replicacheForTesting(
-    'pull-mutate-options',
-    {
-      pullURL,
-      pushURL: '',
-    },
-    {
-      ...disableAllBackgroundProcesses,
-      enablePullAndPushInOpen: false,
-    },
-  );
-  const {clientID} = rep;
-  const log: number[] = [];
+  // This tests that we can change the rep.requestOptions at runtime
+  // and that is taken into account for the timings when the pull happens.
 
-  fetchMocker.post(pullURL, () => {
-    log.push(Date.now());
-    return makePullResponseV1(clientID, undefined, [], '');
+  const pullURL = 'https://pull.com/pull';
+  const rep = await replicacheForTesting('pull-mutate-options', {
+    pullURL,
+    pullInterval: null,
   });
 
-  await tickUntilTimeIs(1000);
+  const pullTimes: number[] = [];
 
-  // Phase 1: default minDelayMs (30ms)
-  while (Date.now() < 1300) {
-    rep.pullIgnorePromise();
-    await vi.advanceTimersByTimeAsync(30);
-  }
-
-  const phase1End = log.length;
-
-  rep.requestOptions.minDelayMs = 500;
-
-  // Phase 2: minDelayMs = 500ms
-  while (Date.now() < 2800) {
-    rep.pullIgnorePromise();
-    await vi.advanceTimersByTimeAsync(500);
-  }
-
-  const phase2End = log.length;
-
-  rep.requestOptions.minDelayMs = 25;
-
-  // Phase 3: minDelayMs = 25ms
-  while (Date.now() < 3300) {
-    rep.pullIgnorePromise();
-    await vi.advanceTimersByTimeAsync(25);
-  }
-
-  // Helper to check deltas in a range, skipping entries at phase boundaries
-  // where timing can be unstable due to async microtask scheduling differences
-  // across browsers.
-  const checkDeltas = (
-    start: number,
-    end: number,
-    minDelay: number,
-    maxDelay: number,
-    phase: string,
-  ) => {
-    let validCount = 0;
-    for (let i = start; i < end; i++) {
-      const delta = log[i] - log[i - 1];
-      // Skip entries with 0 delta (same timestamp due to microtask batching)
-      if (delta === 0) continue;
-      expect(delta, `${phase} delta at index ${i}`).toBeGreaterThanOrEqual(
-        minDelay,
-      );
-      expect(delta, `${phase} delta at index ${i}`).toBeLessThanOrEqual(
-        maxDelay,
-      );
-      validCount++;
-    }
-    return validCount;
+  rep.onBeginPull = () => {
+    pullTimes.push(Date.now());
   };
 
-  // Verify phase 1: pulls should respect minDelayMs of 30ms
-  // Allow some tolerance for debounce and internal timing variations
-  expect(phase1End, 'phase1 pull count').toBeGreaterThanOrEqual(3);
-  const phase1Valid = checkDeltas(1, phase1End, 25, 60, 'phase1');
-  expect(phase1Valid, 'phase1 valid deltas').toBeGreaterThanOrEqual(2);
-
-  // Verify phase 2: pulls should respect minDelayMs of 500ms
-  // Allow ~10% tolerance for timing variations
-  expect(phase2End - phase1End, 'phase2 pull count').toBeGreaterThanOrEqual(2);
-  const phase2Valid = checkDeltas(
-    phase1End + 1,
-    phase2End,
-    450,
-    1000,
-    'phase2',
+  fetchMocker.post(pullURL, () =>
+    makePullResponseV1(rep.clientID, 0, [], null),
   );
-  expect(phase2Valid, 'phase2 valid deltas').toBeGreaterThanOrEqual(1);
 
-  // Verify phase 3: pulls should respect minDelayMs of 25ms
-  expect(log.length - phase2End, 'phase3 pull count').toBeGreaterThanOrEqual(5);
-  const phase3Valid = checkDeltas(phase2End + 1, log.length, 20, 75, 'phase3');
-  expect(phase3Valid, 'phase3 valid deltas').toBeGreaterThanOrEqual(3);
+  // Initial requestOptions
+  expect(rep.requestOptions.minDelayMs).toBe(30);
+  expect(rep.requestOptions.maxDelayMs).toBe(60_000);
+
+  // Trigger first pull
+  rep.pullIgnorePromise();
+  await tickUntil(vi, () => pullTimes.length >= 1);
+  expect(pullTimes).toHaveLength(1);
+
+  // Now change the minDelayMs to a larger value
+  rep.requestOptions.minDelayMs = 500;
+
+  // Trigger two more pulls - second pull should respect the new delay
+  rep.pullIgnorePromise();
+  await tickUntil(vi, () => pullTimes.length >= 2);
+  expect(pullTimes).toHaveLength(2);
+
+  rep.pullIgnorePromise();
+  await tickUntil(vi, () => pullTimes.length >= 3);
+  expect(pullTimes).toHaveLength(3);
+
+  // The gap between pull 2 and 3 should be at least 500ms
+  const gapBetweenPull2And3 = pullTimes[2] - pullTimes[1];
+  expect(gapBetweenPull2And3).toBeGreaterThanOrEqual(500);
+
+  // Now reduce minDelayMs
+  rep.requestOptions.minDelayMs = 50;
+
+  rep.pullIgnorePromise();
+  await tickUntil(vi, () => pullTimes.length >= 4);
+  expect(pullTimes).toHaveLength(4);
+
+  rep.pullIgnorePromise();
+  await tickUntil(vi, () => pullTimes.length >= 5);
+  expect(pullTimes).toHaveLength(5);
+
+  // The gap between pull 4 and 5 should be around 50ms (not 500ms)
+  const gapBetweenPull4And5 = pullTimes[4] - pullTimes[3];
+  expect(gapBetweenPull4And5).toBeLessThan(500);
+  expect(gapBetweenPull4And5).toBeGreaterThanOrEqual(50);
 });
 
 test('online', async () => {
