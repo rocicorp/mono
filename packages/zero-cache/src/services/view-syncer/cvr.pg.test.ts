@@ -2308,7 +2308,12 @@ describe('view-syncer/cvr', () => {
       [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
-    expect(queryPatches).toHaveLength(0);
+    // When transformationHash changes for an already-gotten query, a put patch is returned
+    expect(queryPatches).toHaveLength(1);
+    expect(queryPatches[0]).toEqual({
+      patch: {type: 'query', op: 'put', id: 'oneHash'},
+      toVersion: {stateVersion: '1ba', minorVersion: 1},
+    });
 
     expect(
       await updater.received(
@@ -2901,7 +2906,16 @@ describe('view-syncer/cvr', () => {
       [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
-    expect(queryPatches).toHaveLength(0);
+    // When transformationHash changes for already-gotten queries, put patches are returned
+    expect(queryPatches).toHaveLength(2);
+    expect(queryPatches[0]).toEqual({
+      patch: {type: 'query', op: 'put', id: 'oneHash'},
+      toVersion: {stateVersion: '1ba', minorVersion: 1},
+    });
+    expect(queryPatches[1]).toEqual({
+      patch: {type: 'query', op: 'put', id: 'twoHash'},
+      toVersion: {stateVersion: '1ba', minorVersion: 1},
+    });
 
     expect(
       await updater.received(
