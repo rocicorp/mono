@@ -1430,24 +1430,43 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
-      const serverQueries = transformedQueries.map(
-        ({id, origQuery, transformed}) => {
-          const ids = hashToIDs.get(transformed.transformationHash);
-          if (ids) {
-            ids.push(id);
-          } else {
-            hashToIDs.set(transformed.transformationHash, [id]);
-          }
-          return {
-            id,
-            ast: transformed.transformedAst,
-            transformationHash: transformed.transformationHash,
-            remove: expired(ttlClock, origQuery),
-          };
-        },
-      );
+      const serverQueries: {
+        id: string;
+        ast?: AST;
+        transformationHash: string;
+        remove: boolean;
+        errorMessage?: string;
+      }[] = transformedQueries.map(({id, origQuery, transformed}) => {
+        const ids = hashToIDs.get(transformed.transformationHash);
+        if (ids) {
+          ids.push(id);
+        } else {
+          hashToIDs.set(transformed.transformationHash, [id]);
+        }
+        return {
+          id,
+          ast: transformed.transformedAst,
+          transformationHash: transformed.transformationHash,
+          remove: expired(ttlClock, origQuery),
+        };
+      });
 
-      const addQueries = serverQueries.filter(
+      const addQueries: (
+        | {
+            id: string;
+            ast?: AST;
+            transformationHash: string;
+            errorMessage?: string;
+            remove?: boolean;
+          }
+        | {
+            id: string;
+            ast?: AST;
+            transformationHash?: undefined;
+            errorMessage: string;
+            remove?: boolean;
+          }
+      )[] = serverQueries.filter(
         q => !q.remove && !hydratedQueries.has(q.transformationHash),
       );
       const removeQueries: {
@@ -1474,32 +1493,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // These are queries we need to remove from `desired`, not `got`, because they never transformed.
       if (erroredQueryIDs) {
         // Build a set of transformation hashes that succeeded
-        const successfulHashes = new Set(
-          transformedQueries.map(
-            ({transformed}) => transformed.transformationHash,
-          ),
-        );
-
         for (const queryID of erroredQueryIDs) {
-          // Try to get the last known transformation hash for this query
-          let lastKnownHash: string | undefined;
-
-          // Check if the query exists in the CVR with a transformation hash
-          const cvrQuery = cvr.queries[queryID];
-          if (cvrQuery?.transformationHash) {
-            lastKnownHash = cvrQuery.transformationHash;
-          }
-
-          // If a successfully transformed query has the same hash, we can't remove it
-          // because that would remove the pipeline for the successful query
-          const transformationHash =
-            lastKnownHash && successfulHashes.has(lastKnownHash)
-              ? undefined
-              : lastKnownHash;
-
-          removeQueries.push({
+          addQueries.push({
             id: queryID,
-            transformationHash,
+            transformationHash: undefined,
+            errorMessage: 'Transformation failed',
+            remove: false,
           });
         }
       }
@@ -1560,7 +1559,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #addAndRemoveQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
-    addQueries: {id: string; ast: AST; transformationHash: string}[],
+    addQueries: (
+      | {
+          id: string;
+          ast?: AST;
+          transformationHash: string;
+          errorMessage?: string;
+        }
+      | {
+          id: string;
+          ast?: AST;
+          transformationHash?: undefined;
+          errorMessage: string;
+        }
+    )[],
     removeQueries: {id: string; transformationHash: string | undefined}[],
     unhydrateQueries: string[],
     hashToIDs: Map<string, string[]>,
@@ -1647,17 +1659,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
+          if (q.errorMessage) {
+            continue;
+          }
+
           yield* pipelines.addQuery(
-            q.transformationHash,
+            q.transformationHash as string,
             q.id,
-            q.ast,
+            q.ast as AST,
             timer.startWithoutYielding(),
           );
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
 
           self.#addQueryMaterializationServerMetric(
-            q.transformationHash,
+            q.transformationHash as string,
             elapsed,
           );
 
@@ -1665,8 +1681,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             lc.warn?.('Slow query materialization', elapsed, q.ast);
           }
           manualSpan(tracer, 'vs.addAndConsumeQuery', elapsed, {
-            hash: q.id,
+            id: q.id,
             transformationHash: q.transformationHash,
+            errorMessage: q.errorMessage,
           });
         }
         hydrations.add(1);

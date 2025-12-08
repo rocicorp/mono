@@ -6,6 +6,7 @@ export const putOpSchema = v.object({
   op: v.literal('put'),
   hash: v.string(),
   ttl: v.number().optional(),
+  retryAfterVersion: v.string().optional(),
 });
 
 export const upPutOpSchema = putOpSchema.extend({
