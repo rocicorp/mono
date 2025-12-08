@@ -9,6 +9,7 @@ import type {PatchOperation} from './patch-operation.ts';
 import type {ScanOptions} from './scan-options.ts';
 import {
   disableAllBackgroundProcesses,
+  fetchMocker,
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
@@ -16,10 +17,6 @@ import {
   tickUntil,
 } from './test-util.ts';
 import type {ReadTransaction, WriteTransaction} from './transactions.ts';
-
-// fetch-mock has invalid d.ts file so we removed that on npm install.
-// @ts-expect-error
-import fetchMock from 'fetch-mock/esm/client';
 
 initReplicacheTesting();
 
@@ -687,7 +684,7 @@ test('subscribe pull and index update', async () => {
     }
     log.length = 0;
     const {clientID} = rep;
-    fetchMock.post(
+    fetchMocker.post(
       pullURL,
       makePullResponseV1(clientID, lastMutationID++, opt.patch, cookie++),
     );

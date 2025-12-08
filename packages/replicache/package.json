@@ -28,8 +28,7 @@
     "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
     "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
-    "postpack": "mv README.md README-external.md && mv README-org.md README.md",
-    "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts"
+    "postpack": "mv README.md README-external.md && mv README-org.md README.md"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
@@ -48,7 +47,6 @@
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.25.10",
     "expo-sqlite": ">=15",
-    "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
     "typescript": "~5.9.3",

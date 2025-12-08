@@ -8,6 +8,7 @@ import type {Puller} from './puller.ts';
 import {
   disableAllBackgroundProcesses,
   expectConsoleLogContextStub,
+  fetchMocker,
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
@@ -17,10 +18,6 @@ import {
 } from './test-util.ts';
 import type {WriteTransaction} from './transactions.ts';
 import type {UpdateNeededReason} from './types.ts';
-
-// fetch-mock has invalid d.ts file so we removed that on npm install.
-// @ts-expect-error
-import fetchMock from 'fetch-mock/esm/client';
 
 initReplicacheTesting();
 
@@ -75,7 +72,7 @@ test('pull', async () => {
   let cookie = 1;
   expect(deleteCount).toBe(2);
   const {clientID} = rep;
-  fetchMock.postOnce(
+  fetchMocker.postOnce(
     pullURL,
     makePullResponseV1(
       clientID,
@@ -95,7 +92,7 @@ test('pull', async () => {
   await tickAFewTimes(vi);
   expect(deleteCount).toBe(2);
 
-  fetchMock.postOnce(
+  fetchMocker.postOnce(
     pullURL,
     makePullResponseV1(clientID, 2, undefined, cookie),
   );
@@ -113,7 +110,7 @@ test('pull', async () => {
     ((await rep.query(tx => tx.get(`/todo/${id1}`))) as {text: string}).text,
   ).toBe('Test');
 
-  fetchMock.postOnce(
+  fetchMocker.postOnce(
     pullURL,
     makePullResponseV1(
       clientID,
@@ -147,7 +144,7 @@ test('pull', async () => {
     ((await rep.query(tx => tx.get(`/todo/${id2}`))) as {text: string}).text,
   ).toBe('Test 2');
 
-  fetchMock.postOnce(
+  fetchMocker.postOnce(
     pullURL,
     makePullResponseV1(clientID, 3, undefined, ++cookie),
   );
@@ -164,7 +161,7 @@ test('pull', async () => {
   expect(deleteCount).toBe(4);
   expect(createCount).toBe(3);
 
-  fetchMock.postOnce(
+  fetchMocker.postOnce(
     pullURL,
     makePullResponseV1(
       clientID,
@@ -197,7 +194,7 @@ test('reauth pull', async () => {
     },
   );
 
-  fetchMock.post(pullURL, {body: 'xxx', status: httpStatusUnauthorized});
+  fetchMocker.post(pullURL, {body: 'xxx', status: httpStatusUnauthorized});
 
   const consoleErrorStub = vi.spyOn(console, 'error');
 
@@ -250,37 +247,37 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   );
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
 
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
+  fetchMocker.reset();
 
   rep.pullURL = 'https://diff.com/pull';
-  fetchMock.post(rep.pullURL, {lastMutationID: 0, patch: []});
+  fetchMocker.post(rep.pullURL, {lastMutationID: 0, patch: []});
 
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
-  expect(fetchMock.calls().length).toBeGreaterThan(0);
+  expect(fetchMocker.spy.mock.calls.length).toBeGreaterThan(0);
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
 
   rep.pullURL = '';
 
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
 
   let pullerCallCount = 0;
 
@@ -299,7 +296,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
   expect(pullerCallCount).toBeGreaterThan(0);
 
   expectConsoleLogContextStub(
@@ -311,8 +308,8 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   consoleErrorStub.mockRestore();
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
   pullerCallCount = 0;
 
   rep.puller = getDefaultPuller(rep);
@@ -320,7 +317,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
   expect(pullerCallCount).toBe(0);
 });
 
