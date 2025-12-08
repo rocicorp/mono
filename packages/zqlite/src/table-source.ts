@@ -26,7 +26,7 @@ import {
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import {skipYields, type FetchRequest} from '../../zql/src/ivm/operator.ts';
+import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {
   type Source,
@@ -82,6 +82,7 @@ export class TableSource implements Source {
   readonly #shouldYield: () => boolean;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
+  #pushEpoch = 0;
 
   /**
    * @param shouldYield a function called after each row is read from the database,
@@ -227,7 +228,6 @@ export class TableSource implements Source {
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
-      cleanup: req => this.#cleanup(req, connection),
       setOutput: output => {
         connection.output = output;
       },
@@ -252,6 +252,7 @@ export class TableSource implements Source {
           }
         : undefined,
       compareRows: makeComparator(sort),
+      lastPushedEpoch: 0,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -269,10 +270,6 @@ export class TableSource implements Source {
     ) as Row;
   }
 
-  #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
-    return skipYields(this.#fetch(req, connection));
-  }
-
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
@@ -285,9 +282,6 @@ export class TableSource implements Source {
       const rowIterator = cachedStatement.statement.iterate<Row>(
         ...sqlAndBindings.values,
       );
-
-      const callingConnectionIndex = this.#connections.indexOf(connection);
-      assert(callingConnectionIndex !== -1, 'Connection not found');
 
       const comparator = makeComparator(sort, req.reverse);
 
@@ -305,7 +299,7 @@ export class TableSource implements Source {
             ),
             req.constraint,
             this.#overlay,
-            callingConnectionIndex,
+            connection.lastPushedEpoch,
             comparator,
             connection.filters?.predicate,
           ),
@@ -368,9 +362,11 @@ export class TableSource implements Source {
     }
   }
 
-  push(change: SourceChange): void {
-    for (const _ of this.genPush(change)) {
-      // Nothing to do.
+  *push(change: SourceChange): Stream<'yield'> {
+    for (const result of this.genPush(change)) {
+      if (result === 'yield') {
+        yield result;
+      }
     }
   }
 
@@ -388,6 +384,7 @@ export class TableSource implements Source {
       exists,
       setOverlay,
       writeChange,
+      () => ++this.#pushEpoch,
     );
   }
 

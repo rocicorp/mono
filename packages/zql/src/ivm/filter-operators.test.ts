@@ -12,7 +12,6 @@ describe('FilterStart', () => {
         yield {row: {id: 2}, relationships: {}};
         yield {row: {id: 3}, relationships: {}};
       },
-      cleanup: vi.fn(),
       destroy: vi.fn(),
       getSchema: vi.fn(() => ({}) as SourceSchema),
     };
@@ -20,7 +19,7 @@ describe('FilterStart', () => {
     const mockFilterOutput: FilterOutput = {
       push: vi.fn(),
       beginFilter: vi.fn(),
-      filter: vi.fn(() => true),
+      filter: filterGenerator,
       endFilter: vi.fn(),
     };
 
@@ -37,3 +36,7 @@ describe('FilterStart', () => {
     expect(mockFilterOutput.endFilter).toHaveBeenCalledTimes(1);
   });
 });
+
+function* filterGenerator(): Generator<'yield', boolean> {
+  return true;
+}

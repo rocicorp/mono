@@ -17,6 +17,8 @@ import type {
   ServerTransaction,
   TableCRUD,
 } from '../../zql/src/mutate/custom.ts';
+import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
@@ -39,6 +41,60 @@ export type CustomMutatorImpl<
   Context = unknown,
 > = (tx: TDBTransaction, args: TArgs, ctx: Context) => Promise<void>;
 
+/**
+ * QueryDelegate implementation for server-side transactions.
+ * Extends QueryDelegateBase to satisfy the QueryDelegate interface,
+ * but overrides run() to execute against Postgres and throws on
+ * preload()/materialize() which don't make sense server-side.
+ */
+class ServerTransactionQueryDelegate extends QueryDelegateBase {
+  readonly #dbTransaction: DBTransaction<unknown>;
+  readonly #schema: Schema;
+  readonly #serverSchema: ServerSchema;
+
+  readonly defaultQueryComplete = true;
+
+  constructor(
+    dbTransaction: DBTransaction<unknown>,
+    schema: Schema,
+    serverSchema: ServerSchema,
+  ) {
+    super();
+    this.#dbTransaction = dbTransaction;
+    this.#schema = schema;
+    this.#serverSchema = serverSchema;
+  }
+
+  getSource(): never {
+    throw new Error('not implemented');
+  }
+
+  override run<
+    TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
+    TReturn,
+  >(
+    query: Query<TTable, TSchema, TReturn>,
+    _options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    const queryInternals = asQueryInternals(query);
+    return this.#dbTransaction.runQuery<TReturn>(
+      queryInternals.ast,
+      queryInternals.format,
+      this.#schema,
+      this.#serverSchema,
+    );
+  }
+
+  override preload(): never {
+    throw new Error('preload() is not supported in server transactions');
+  }
+
+  override materialize(): never {
+    throw new Error('materialize() is not supported in server transactions');
+  }
+}
+
 export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   implements ServerTransaction<TSchema, TWrappedTransaction>
 {
@@ -57,7 +113,6 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
     clientID: string,
     mutationID: number,
     mutate: SchemaCRUD<TSchema>,
-    query: SchemaQuery<TSchema>,
     schema: TSchema,
     serverSchema: ServerSchema,
   ) {
@@ -65,9 +120,15 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
     this.clientID = clientID;
     this.mutationID = mutationID;
     this.mutate = mutate;
-    this.query = query;
     this.#schema = schema;
     this.#serverSchema = serverSchema;
+
+    const delegate = new ServerTransactionQueryDelegate(
+      dbTransaction,
+      schema,
+      serverSchema,
+    );
+    this.query = createRunnableBuilder(delegate, schema);
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
@@ -107,7 +168,6 @@ export async function makeServerTransaction<
     dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
   ) => SchemaCRUD<TSchema>,
-  query: SchemaQuery<TSchema>,
 ) {
   const serverSchema = await getServerSchema(dbTransaction, schema);
   return new TransactionImpl(
@@ -115,7 +175,6 @@ export async function makeServerTransaction<
     clientID,
     mutationID,
     mutate(dbTransaction, serverSchema),
-    query,
     schema,
     serverSchema,
   );

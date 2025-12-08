@@ -1,8 +1,8 @@
 import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
-import {drainStreams, type Node} from './data.ts';
+import {type Node} from './data.ts';
 import type {Change} from './change.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {type Stream} from './stream.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 
 /**
@@ -11,8 +11,8 @@ import type {BuilderDelegate} from '../builder/builder.ts';
  * that adapts from the normal `Operator` `Output`, to the
  * `FilterOperator` `FilterInput`, and ends with a `FilterEnd` operator that
  * adapts from a `FilterOperator` `FilterOutput` to a normal `Operator` `Input`.
- * `FilterOperator'`s do not have `fetch` or `cleanup` instead they have a
- * `filter(node: Node, cleanup: boolean): boolean` method.
+ * `FilterOperator`'s do not have `fetch` instead they have a
+ * `filter(node: Node): boolean` method.
  * They also have `push` which is just like normal `Operator` push.
  * Not having a `fetch` means these `FilterOperator`'s cannot modify
  * `Node` `row`s or `relationship`s, but they shouldn't, they should just
@@ -34,7 +34,7 @@ export interface FilterOutput extends Output {
   // nodes. E.g., so the operator can cache results for the
   // duration of the loop.
   beginFilter(): void;
-  filter(node: Node, cleanup: boolean): boolean;
+  filter(node: Node): Generator<'yield', boolean>;
   endFilter(): void;
 }
 
@@ -46,11 +46,11 @@ export interface FilterOperator extends FilterInput, FilterOutput {}
  * set.
  */
 export const throwFilterOutput: FilterOutput = {
-  push(_change: Change): void {
+  *push(_change: Change): Stream<'yield'> {
     throw new Error('Output not set');
   },
 
-  filter(_node: Node, _cleanup): boolean {
+  *filter(_node: Node): Generator<'yield', boolean> {
     throw new Error('Output not set');
   },
 
@@ -79,8 +79,8 @@ export class FilterStart implements FilterInput, Output {
     return this.#input.getSchema();
   }
 
-  push(change: Change) {
-    this.#output.push(change, this);
+  *push(change: Change) {
+    yield* this.#output.push(change, this);
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
@@ -91,7 +91,7 @@ export class FilterStart implements FilterInput, Output {
           yield node;
           continue;
         }
-        if (this.#output.filter(node, false)) {
+        if (yield* this.#output.filter(node)) {
           yield node;
         }
       }
@@ -100,18 +100,6 @@ export class FilterStart implements FilterInput, Output {
       // if the stream is not fully consumed.
       this.#output.endFilter();
     }
-  }
-
-  *cleanup(req: FetchRequest): Stream<Node> {
-    this.#output.beginFilter();
-    for (const node of this.#input.cleanup(req)) {
-      if (this.#output.filter(node, true)) {
-        yield node;
-      } else {
-        drainStreams(node);
-      }
-    }
-    this.#output.endFilter();
   }
 }
 
@@ -136,13 +124,7 @@ export class FilterEnd implements Input, FilterOutput {
   beginFilter() {}
   endFilter() {}
 
-  *cleanup(req: FetchRequest): Stream<Node> {
-    for (const node of this.#start.cleanup(req)) {
-      yield node;
-    }
-  }
-
-  filter(_node: Node, _cleanup: boolean) {
+  *filter(_node: Node) {
     return true;
   }
 
@@ -158,8 +140,8 @@ export class FilterEnd implements Input, FilterOutput {
     return this.#input.getSchema();
   }
 
-  push(change: Change) {
-    this.#output.push(change, this);
+  *push(change: Change) {
+    yield* this.#output.push(change, this);
   }
 }
 

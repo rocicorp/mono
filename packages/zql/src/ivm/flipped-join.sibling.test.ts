@@ -12,6 +12,7 @@ import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {FlippedJoin} from './flipped-join.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -1111,13 +1112,12 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
       t.primaryKeys[i],
     );
     for (const row of rows) {
-      source.push({type: 'add', row});
+      consume(source.push({type: 'add', row}));
     }
     const snitch = new Snitch(source.connect(ordering), String(i), log, [
       'fetch',
       'fetchCount',
       'push',
-      'cleanup',
     ]);
     return {
       source,
@@ -1154,7 +1154,7 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
   log.length = 0;
 
   for (const [sourceIndex, change] of t.pushes) {
-    sources[sourceIndex].source.push(change);
+    consume(sources[sourceIndex].source.push(change));
   }
 
   return {

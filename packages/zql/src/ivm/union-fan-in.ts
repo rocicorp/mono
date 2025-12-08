@@ -91,11 +91,6 @@ export class UnionFanIn implements Operator {
     this.#inputs = inputs;
   }
 
-  cleanup(_req: FetchRequest): Stream<Node> {
-    // Cleanup is going away. Not implemented.
-    return [];
-  }
-
   destroy(): void {
     for (const input of this.#inputs) {
       input.destroy();
@@ -113,9 +108,9 @@ export class UnionFanIn implements Operator {
     return this.#schema;
   }
 
-  push(change: Change, pusher: InputBase): void {
+  *push(change: Change, pusher: InputBase): Stream<'yield'> {
     if (!this.#fanOutPushStarted) {
-      this.#pushInternalChange(change, pusher);
+      yield* this.#pushInternalChange(change, pusher);
     } else {
       this.#accumulatedPushes.push(change);
     }
@@ -142,9 +137,9 @@ export class UnionFanIn implements Operator {
    * 4. Edits will always come through as child changes as flip join will flip them into children.
    *    An edit that would result in a remove or add will have been split into an add/remove pair rather than being an edit.
    */
-  #pushInternalChange(change: Change, pusher: InputBase): void {
+  *#pushInternalChange(change: Change, pusher: InputBase): Stream<'yield'> {
     if (change.type === 'child') {
-      this.#output.push(change, this);
+      yield* this.#output.push(change, this);
       return;
     }
 
@@ -174,7 +169,7 @@ export class UnionFanIn implements Operator {
     assert(hadMatch, 'Pusher was not one of the inputs to union-fan-in!');
 
     // No other branches have the row, so we can push the change.
-    this.#output.push(change, this);
+    yield* this.#output.push(change, this);
   }
 
   fanOutStartedPushing() {
@@ -182,7 +177,7 @@ export class UnionFanIn implements Operator {
     this.#fanOutPushStarted = true;
   }
 
-  fanOutDonePushing(fanOutChangeType: Change['type']) {
+  *fanOutDonePushing(fanOutChangeType: Change['type']): Stream<'yield'> {
     assert(this.#fanOutPushStarted);
     this.#fanOutPushStarted = false;
     if (this.#inputs.length === 0) {
@@ -195,7 +190,7 @@ export class UnionFanIn implements Operator {
       return;
     }
 
-    pushAccumulatedChanges(
+    yield* pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
       this,

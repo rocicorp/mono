@@ -38,6 +38,11 @@ export type OfflineError = ClientError<{
   kind: ClientErrorKind.Offline;
   message: string;
 }>;
+export type NoSocketOriginError = ClientError<{
+  kind: ClientErrorKind.NoSocketOrigin;
+  message: string;
+}>;
+export type DisconnectedReason = OfflineError | NoSocketOriginError;
 export type ServerError = ProtocolError<ErrorBody>;
 export type ZeroError = ServerError | ClientError;
 export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
@@ -127,7 +132,7 @@ export type ErrorConnectionTransition =
   | {status: typeof NO_STATUS_TRANSITION; reason: ZeroError}
   | {status: ConnectionStatus.NeedsAuth; reason: AuthError}
   | {status: ConnectionStatus.Error; reason: ZeroError}
-  | {status: ConnectionStatus.Disconnected; reason: OfflineError}
+  | {status: ConnectionStatus.Disconnected; reason: DisconnectedReason}
   | {status: ConnectionStatus.Closed; reason: ZeroError};
 
 /**
@@ -154,7 +159,6 @@ export function getErrorConnectionTransition(
       case ClientErrorKind.PingTimeout:
       case ClientErrorKind.PullTimeout:
       case ClientErrorKind.Hidden:
-      case ClientErrorKind.NoSocketOrigin:
         return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
       // Fatal errors that should transition to error state
@@ -166,9 +170,10 @@ export function getErrorConnectionTransition(
 
       // Disconnected error (this should already result in a disconnected state)
       case ClientErrorKind.Offline:
+      case ClientErrorKind.NoSocketOrigin:
         return {
           status: ConnectionStatus.Disconnected,
-          reason: ex as OfflineError,
+          reason: ex as DisconnectedReason,
         } as const;
 
       // Closed error (this should already result in a closed state)

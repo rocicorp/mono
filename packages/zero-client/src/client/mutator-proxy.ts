@@ -1,7 +1,9 @@
+import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {wrapWithApplicationError} from '../../../zero-protocol/src/application-error.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import type {
   ConnectionManager,
   ConnectionManagerState,
@@ -26,14 +28,17 @@ type CachedMutationRejection = {
 };
 
 export class MutatorProxy {
+  readonly #lc: LogContext;
   readonly #connectionManager: ConnectionManager;
   readonly #mutationTracker: MutationTracker;
   #mutationRejection: CachedMutationRejection | undefined;
 
   constructor(
+    lc: LogContext,
     connectionManager: ConnectionManager,
     mutationTracker: MutationTracker,
   ) {
+    this.#lc = lc;
     this.#connectionManager = connectionManager;
     this.#mutationTracker = mutationTracker;
 
@@ -55,6 +60,16 @@ export class MutatorProxy {
    * the mutation tracker are rejected with the error.
    */
   #onConnectionStateChange(state: ConnectionManagerState) {
+    // we short circuit the rejection if the error is due to a missing cacheURL
+    // this allows local writes to continue
+    if (
+      state.name === ConnectionStatus.Disconnected &&
+      state.reason.kind === ClientErrorKind.NoSocketOrigin
+    ) {
+      this.#mutationRejection = undefined;
+      return;
+    }
+
     switch (state.name) {
       case ConnectionStatus.Disconnected:
       case ConnectionStatus.Error:
@@ -82,7 +97,7 @@ export class MutatorProxy {
       client: Promise<unknown>;
       server: Promise<unknown>;
     },
-  >(f: F): (...args: Parameters<F>) => MutatorResult {
+  >(name: string, f: F): (...args: Parameters<F>) => MutatorResult {
     return (...args) => {
       if (this.#mutationRejection) {
         return {
@@ -107,6 +122,12 @@ export class MutatorProxy {
           if (cachedPromise) {
             return cachedPromise;
           }
+
+          this.#lc.error?.(
+            `Mutator "${name}" error on ${origin}`,
+            args[0],
+            error,
+          );
 
           if (isZeroError(error)) {
             const zeroErrorPromise = this.#makeZeroErrorResultDetails(error);

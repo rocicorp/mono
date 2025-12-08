@@ -2237,8 +2237,8 @@ test.skip('passing cacheURL null allows queries without WS connection', async ()
   unsubscribe();
 
   // Verify connection state indicates no server connection
-  // The connection status should be in Error state when server is null
-  expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+  // The connection status should be in Disconnected state when server is null
+  expect(z.connectionStatus).toBe(ConnectionStatus.Disconnected);
 });
 
 test('Authentication', async () => {
@@ -2751,7 +2751,9 @@ test('socketOrigin', async () => {
     await tickAFewTimes(vi);
 
     expect(z.connectionStatus, c.name).toBe(
-      c.socketEnabled ? ConnectionStatus.Connecting : ConnectionStatus.Error,
+      c.socketEnabled
+        ? ConnectionStatus.Connecting
+        : ConnectionStatus.Disconnected,
     );
   }
 });

@@ -1,13 +1,13 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {beforeEach, describe, expect, test} from 'vitest';
-import {identity} from '../../../shared/src/sentinels.ts';
+import {emptyArray, identity} from '../../../shared/src/sentinels.ts';
 import type {Change} from './change.js';
 import type {InputBase, Output} from './operator.js';
 import {
   makeAddEmptyRelationships,
   mergeEmpty,
   mergeRelationships,
-  pushAccumulatedChanges,
+  pushAccumulatedChanges as genPushAccumulatedChanges,
 } from './push-accumulated.js';
 import type {SourceSchema} from './schema.js';
 
@@ -15,6 +15,26 @@ const mockPusher: InputBase = {
   getSchema: () => mockSchema as any,
   destroy: () => {},
 };
+
+function pushAccumulatedChanges(
+  accumulatedPushes: Change[],
+  output: Output,
+  pusher: InputBase,
+  fanOutChangeType: Change['type'],
+  mergeRelationships: (existing: Change, incoming: Change) => Change,
+  addEmptyRelationships: (change: Change) => Change,
+) {
+  [
+    ...genPushAccumulatedChanges(
+      accumulatedPushes,
+      output,
+      pusher,
+      fanOutChangeType,
+      mergeRelationships,
+      addEmptyRelationships,
+    ),
+  ];
+}
 
 const mockChildChange: Change = {
   type: 'child',
@@ -51,6 +71,7 @@ describe('pushAccumulatedChanges', () => {
     output = {
       push: (change: Change) => {
         pushedChanges.push(change);
+        return emptyArray;
       },
     } as Output;
   });

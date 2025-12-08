@@ -1,19 +1,18 @@
 import {expect, suite, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
 import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtChange} from './catch.ts';
 import {Join} from './join.ts';
-import {MemoryStorage} from './memory-storage.ts';
 import type {Input} from './operator.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import type {SourceChange} from './source.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -40,7 +39,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
   } as const;
 
   test('create two issues, two comments each, one owner each, push a new issue with existing owner', () => {
-    const {log, storage, output} = pushSiblingTest({
+    const {log, output} = pushSiblingTest({
       ...base,
       sources: [
         [
@@ -110,20 +109,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
         ],
       ]
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-          ""pKeySet","i3","i3",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-          ""pKeySet","o2","i3",": true,
-        },
-      ]
-    `);
     expect(output).toMatchInlineSnapshot(`
       [
         {
@@ -151,7 +136,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
   });
 
   test('push owner', () => {
-    const {log, storage, output} = pushSiblingTest({
+    const {log, output} = pushSiblingTest({
       ...base,
       sources: [
         [
@@ -201,18 +186,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
         ],
       ]
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-        },
-      ]
-    `);
     expect(output).toMatchInlineSnapshot(`
       [
         {
@@ -239,7 +212,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
   });
 
   test('push comment', () => {
-    const {log, storage, output} = pushSiblingTest({
+    const {log, output} = pushSiblingTest({
       ...base,
       sources: [
         [
@@ -290,18 +263,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
         ],
       ]
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-        },
-      ]
-    `);
     expect(output).toMatchInlineSnapshot(`
       [
         {
@@ -329,7 +290,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
   });
 
   test('remove owner', () => {
-    const {log, storage, output} = pushSiblingTest({
+    const {log, output} = pushSiblingTest({
       ...base,
       sources: [
         [
@@ -379,18 +340,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
         ],
       ]
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-        },
-      ]
-    `);
     expect(output).toMatchInlineSnapshot(`
       [
         {
@@ -417,7 +366,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
   });
 
   test('remove comment', () => {
-    const {log, storage, output} = pushSiblingTest({
+    const {log, output} = pushSiblingTest({
       ...base,
       sources: [
         [
@@ -466,18 +415,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           },
           1,
         ],
-      ]
-    `);
-    expect(storage).toMatchInlineSnapshot(`
-      [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-        },
       ]
     `);
     expect(output).toMatchInlineSnapshot(`
@@ -543,7 +480,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     } as const;
 
     test('edit issue', () => {
-      const {log, storage, output} = pushSiblingTest({
+      const {log, output} = pushSiblingTest({
         ...base,
         pushes: [
           [
@@ -577,18 +514,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           ],
         ]
       `);
-      expect(storage).toMatchInlineSnapshot(`
-        [
-          {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-          {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
-          },
-        ]
-      `);
       expect(output).toMatchInlineSnapshot(`
         [
           {
@@ -609,7 +534,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     });
 
     test('edit comment', () => {
-      const {log, storage, output} = pushSiblingTest({
+      const {log, output} = pushSiblingTest({
         ...base,
         pushes: [
           [
@@ -662,18 +587,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           ],
         ]
       `);
-      expect(storage).toMatchInlineSnapshot(`
-        [
-          {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-          {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
-          },
-        ]
-      `);
       expect(output).toMatchInlineSnapshot(`
         [
           {
@@ -705,7 +618,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     });
 
     test('edit owner', () => {
-      const {log, storage, output} = pushSiblingTest({
+      const {log, output} = pushSiblingTest({
         ...base,
         pushes: [
           [
@@ -756,18 +669,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           ],
         ]
       `);
-      expect(storage).toMatchInlineSnapshot(`
-        [
-          {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-          {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
-          },
-        ]
-      `);
       expect(output).toMatchInlineSnapshot(`
         [
           {
@@ -814,13 +715,12 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
       t.primaryKeys[i],
     );
     for (const row of rows) {
-      source.push({type: 'add', row});
+      consume(source.push({type: 'add', row}));
     }
     const snitch = new Snitch(source.connect(ordering), String(i), log, [
       'fetch',
       'fetchCount',
       'push',
-      'cleanup',
     ]);
     return {
       source,
@@ -828,54 +728,40 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
     };
   });
 
-  const joins: {
-    join: Join;
-    storage: MemoryStorage;
-  }[] = [];
+  const joins: Join[] = [];
 
   let parent: Input = sources[0].snitch;
 
   for (let i = 0; i < t.joins.length; i++) {
     const info = t.joins[i];
     const child = sources[i + 1].snitch;
-    const storage = new MemoryStorage();
 
     const join = new Join({
       parent,
       child,
-      storage,
       ...info,
       hidden: false,
       system: 'client',
     });
 
-    joins[i] = {
-      join,
-      storage,
-    };
+    joins[i] = join;
 
     parent = join;
   }
 
   const finalJoin = joins[joins.length - 1];
 
-  const c = new Catch(finalJoin.join);
+  const c = new Catch(finalJoin);
   c.fetch();
 
   log.length = 0;
 
   for (const [sourceIndex, change] of t.pushes) {
-    sources[sourceIndex].source.push(change);
-  }
-
-  const storage: Record<string, JSONValue>[] = [];
-  for (const j of joins.values()) {
-    storage.push(j.storage.cloneData());
+    consume(sources[sourceIndex].source.push(change));
   }
 
   return {
     log,
-    storage,
     output: c.pushes,
   };
 }
@@ -895,6 +781,5 @@ type PushTestSibling = {
 
 type PushTestSiblingResults = {
   log: SnitchMessage[];
-  storage: Record<string, JSONValue>[];
   output: CaughtChange[];
 };

@@ -26,3 +26,17 @@ export function first<T>(stream: Stream<T>): T | undefined {
   it.return?.();
   return value;
 }
+
+export function consume<T>(stream: Stream<T>) {
+  [...stream];
+}
+
+export function drainGenerator<Yield, Return>(
+  gen: Generator<Yield, Return, unknown>,
+): Return {
+  let result = gen.next();
+  while (!result.done) {
+    result = gen.next();
+  }
+  return result.value;
+}

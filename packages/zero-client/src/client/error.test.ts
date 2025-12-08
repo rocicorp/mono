@@ -349,6 +349,18 @@ describe('getErrorConnectionTransition', () => {
     });
   });
 
+  test('returns disconnected status for missing socket origin', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.NoSocketOrigin,
+      message: 'no socket origin',
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Disconnected,
+      reason: error,
+    });
+  });
+
   test('returns closed status for client closed', () => {
     const error = new ClientError({
       kind: ClientErrorKind.ClientClosed,

@@ -11,6 +11,7 @@ import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {FlippedJoin} from './flipped-join.ts';
+import {consume} from './stream.ts';
 
 /**
  * These tests are based on join.fetch.test.ts.  Uses same cases.
@@ -1913,7 +1914,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
       t.primaryKeys[i],
     );
     for (const row of rows) {
-      source.push({type: 'add', row});
+      consume(source.push({type: 'add', row}));
     }
     const snitch = new Snitch(source.connect(ordering), String(i), log);
     return {

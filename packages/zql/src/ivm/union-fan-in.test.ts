@@ -23,7 +23,6 @@ const mockOperator = (schema: SourceSchema, data: Node[] = []): Operator => ({
   push: vi.fn(),
   setOutput: vi.fn(),
   destroy: vi.fn(),
-  cleanup: (_req: FetchRequest) => [],
 });
 
 const mockUnionFanOut = (schema: SourceSchema): UnionFanOut =>
@@ -34,7 +33,6 @@ const mockUnionFanOut = (schema: SourceSchema): UnionFanOut =>
     push: vi.fn(),
     setOutput: vi.fn(),
     destroy: vi.fn(),
-    cleanup: (_req: FetchRequest) => [],
   }) as any;
 
 describe('UnionFanIn', () => {
@@ -244,16 +242,6 @@ describe('UnionFanIn', () => {
 
       expect(result).toHaveLength(3);
       expect(result.map(n => n.row.id)).toEqual([1, 2, 3]);
-    });
-  });
-
-  describe('cleanup', () => {
-    test('returns empty array', () => {
-      const fanOut = mockUnionFanOut(mockSchema);
-      const fanIn = new UnionFanIn(fanOut, []);
-
-      const result = fanIn.cleanup({} as FetchRequest);
-      expect(result).toEqual([]);
     });
   });
 

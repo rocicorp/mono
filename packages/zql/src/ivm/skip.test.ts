@@ -6,6 +6,7 @@ import type {SourceChange} from './source.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -23,34 +24,48 @@ suite('fetch', () => {
       ['id'],
     );
 
-    ms.push({
-      type: 'add',
-      row: {id: 1, name: 'Aaron', startDate: '2019-06-18'},
-    });
-    ms.push({
-      type: 'add',
-      row: {id: 2, name: 'Erik', startDate: '2020-08-01'},
-    });
-    ms.push({
-      type: 'add',
-      row: {id: 3, name: 'Greg', startDate: '2021-12-07'},
-    });
-    ms.push({
-      type: 'add',
-      row: {id: 4, name: 'Cesar', startDate: '2022-12-01'},
-    });
-    ms.push({
-      type: 'add',
-      row: {id: 5, name: 'Alex', startDate: '2023-04-01'},
-    });
-    ms.push({
-      type: 'add',
-      row: {id: 6, name: 'Darick', startDate: '2023-09-01'},
-    });
-    ms.push({
-      type: 'add',
-      row: {id: 7, name: 'Matt', startDate: '2024-06-01'},
-    });
+    consume(
+      ms.push({
+        type: 'add',
+        row: {id: 1, name: 'Aaron', startDate: '2019-06-18'},
+      }),
+    );
+    consume(
+      ms.push({
+        type: 'add',
+        row: {id: 2, name: 'Erik', startDate: '2020-08-01'},
+      }),
+    );
+    consume(
+      ms.push({
+        type: 'add',
+        row: {id: 3, name: 'Greg', startDate: '2021-12-07'},
+      }),
+    );
+    consume(
+      ms.push({
+        type: 'add',
+        row: {id: 4, name: 'Cesar', startDate: '2022-12-01'},
+      }),
+    );
+    consume(
+      ms.push({
+        type: 'add',
+        row: {id: 5, name: 'Alex', startDate: '2023-04-01'},
+      }),
+    );
+    consume(
+      ms.push({
+        type: 'add',
+        row: {id: 6, name: 'Darick', startDate: '2023-09-01'},
+      }),
+    );
+    consume(
+      ms.push({
+        type: 'add',
+        row: {id: 7, name: 'Matt', startDate: '2024-06-01'},
+      }),
+    );
 
     const conn = ms.connect([
       ['startDate', 'asc'],
@@ -901,7 +916,7 @@ suite('push', () => {
     const out = new Catch(skip);
 
     for (const push of c.pushes) {
-      ms.push(push);
+      consume(ms.push(push));
     }
 
     return out.pushes;

@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import type {
   ConnectionManager,
   ConnectionManagerState,
@@ -125,6 +126,18 @@ export class ConnectionImpl implements Connection {
     if (opts && 'auth' in opts) {
       lc.debug?.('Updating auth credential from connect()');
       this.#setAuth(opts.auth);
+    }
+
+    // if the connection is disconnected due to a missing cacheURL, we don't allow a reconnect
+    if (
+      this.#connectionManager.state.name === ConnectionStatus.Disconnected &&
+      this.#connectionManager.state.reason.kind ===
+        ClientErrorKind.NoSocketOrigin
+    ) {
+      lc.error?.(
+        'connect() called but the connection is disconnected due to a missing cacheURL. No reconnect will be attempted.',
+      );
+      return;
     }
 
     // only allow connect() to be called from a terminal state

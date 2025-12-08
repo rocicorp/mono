@@ -1,4 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
@@ -62,10 +63,6 @@ export class Catch implements Output {
     return [...this.#input.fetch(req)].map(expandNode);
   }
 
-  cleanup(req: FetchRequest = {}) {
-    return [...this.#input.cleanup(req)].map(expandNode);
-  }
-
   push(change: Change) {
     const fetch = this.#fetchOnPush
       ? [...this.#input.fetch({})].map(expandNode)
@@ -78,6 +75,7 @@ export class Catch implements Output {
       });
     }
     this.pushes.push(expandedChange);
+    return emptyArray;
   }
 
   reset() {

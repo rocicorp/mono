@@ -665,6 +665,7 @@ export class Zero<
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
     const mutatorProxy = new MutatorProxy(
+      this.#lc,
       this.#connectionManager,
       this.#mutationTracker,
     );
@@ -689,7 +690,10 @@ export class Zero<
       const repMutator = rep.mutate[mr.mutator.mutatorName] as unknown as (
         args?: unknown,
       ) => MutatorResult;
-      return mutatorProxy.wrapCustomMutator(repMutator)(mr.args);
+      return mutatorProxy.wrapCustomMutator(
+        mr.mutator.mutatorName,
+        repMutator,
+      )(mr.args);
     };
 
     const mutateBatch = makeCRUDMutate<S>(schema, rep.mutate, callableMutate);
@@ -1792,7 +1796,7 @@ export class Zero<
 
     if (this.#server === null) {
       this.#lc.info?.('No socket origin provided, not starting connect loop.');
-      this.#connectionManager.error(
+      this.#connectionManager.disconnected(
         new ClientError({
           kind: ClientErrorKind.NoSocketOrigin,
           message: 'No server socket origin provided',

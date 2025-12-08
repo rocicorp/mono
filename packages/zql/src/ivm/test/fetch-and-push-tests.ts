@@ -14,6 +14,7 @@ import type {Input} from '../operator.ts';
 import type {Source, SourceChange} from '../source.ts';
 import type {Format} from '../view.ts';
 import {createSource} from './source-factory.ts';
+import {consume} from '../stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -31,7 +32,7 @@ function makeSource(
     primaryKeys,
   );
   for (const row of rows) {
-    source.push({type: 'add', row});
+    consume(source.push({type: 'add', row}));
   }
   return source;
 }
@@ -79,7 +80,7 @@ export function runPushTest(t: PushTest) {
     builderDelegate.clearLog();
 
     for (const [name, change] of t.pushes) {
-      must(builderDelegate.getSource(name)).push(change);
+      consume(must(builderDelegate.getSource(name)).push(change));
     }
 
     return {
@@ -114,7 +115,9 @@ export function runPushTest(t: PushTest) {
     data = v;
   });
 
-  expect(log).toEqual(log2);
+  // ArrayView does not expand relationships of removed nodes, so
+  // its logs should be a subset of the catch operator's logs.
+  expect(log).toEqual(expect.arrayContaining(log2));
   expect(actualStorage).toEqual(actualStorage2);
 
   view.flush();
