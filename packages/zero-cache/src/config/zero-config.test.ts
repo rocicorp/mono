@@ -529,6 +529,18 @@ test('zero-cache --help', () => {
                                                                    may improve read performance, at the expense of creating more files to download                                       
                                                                    when restoring the replica from the backup.                                                                           
                                                                                                                                                                                          
+     --litestream-min-checkpoint-page-count number                 optional                                                                                                              
+       ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT env                                                                                                                                     
+                                                                   The WAL page count at which SQLite attempts a PASSIVE checkpoint, which                                               
+                                                                   transfers pages to the main database file without blocking writers.                                                   
+                                                                   Defaults to checkpointThresholdMB * 250 (since SQLite page size is 4KB).                                              
+                                                                                                                                                                                         
+     --litestream-max-checkpoint-page-count number                 optional                                                                                                              
+       ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT env                                                                                                                                     
+                                                                   The WAL page count at which SQLite performs a RESTART checkpoint, which                                               
+                                                                   blocks writers until complete. Defaults to minCheckpointPageCount * 10.                                               
+                                                                   Set to 0 to disable RESTART checkpoints entirely.                                                                     
+                                                                                                                                                                                         
      --litestream-incremental-backup-interval-minutes number       default: 15                                                                                                           
        ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES env                                                                                                                           
                                                                    The interval between incremental backups of the replica. Shorter intervals                                            
