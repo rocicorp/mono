@@ -79,7 +79,7 @@ export type UpdateValue<S extends TableSchema> = Expand<
  */
 export type TableMutator<TS extends TableSchema> = {
   /**
-   * Writes a row if a row with the same primary key doesn't already exists.
+   * Writes a row if a row with the same primary key doesn't already exist.
    * Non-primary-key fields that are 'optional' can be omitted or set to
    * `undefined`. Such fields will be assigned the value `null` optimistically
    * and then the default value as defined by the server.
