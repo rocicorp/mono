@@ -4,22 +4,12 @@ import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
-import {wrapSourcesWithRandomYield} from '../../../zql/src/ivm/test/random-yield-source.ts';
-import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
+import {createRandomYieldWrapper} from '../../../zql/src/ivm/test/random-yield-source.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
-import {
-  bootstrap,
-  lc,
-  runAndCompare,
-  TestPGQueryDelegate,
-  testLogConfig,
-  type Delegates,
-} from '../helpers/runner.ts';
-import {Database} from '../../../zqlite/src/db.ts';
-import {newQueryDelegate} from '../../../zqlite/src/test/source-factory.ts';
+import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
@@ -49,21 +39,20 @@ class FuzzTimeoutError extends Error {
 }
 
 /**
- * Creates a shouldYield function that throws FuzzTimeoutError when the
+ * Creates a checkAbort function that throws FuzzTimeoutError when the
  * elapsed time exceeds the timeout. This allows synchronous query execution
  * to be aborted when it takes too long.
  */
-function createTimeoutShouldYield(
+function createCheckAbort(
   startTime: number,
   timeoutMs: number,
   label: string,
-): () => boolean {
+): () => void {
   return () => {
     const elapsed = performance.now() - startTime;
     if (elapsed > timeoutMs) {
       throw new FuzzTimeoutError(label, elapsed);
     }
-    return false; // Don't actually yield, just check timeout
   };
 }
 
@@ -126,20 +115,16 @@ async function runCase({
 }) {
   const label = `fuzz-hydration ${seed}`;
   const startTime = performance.now();
-  const shouldYield = createTimeoutShouldYield(
-    startTime,
-    TEST_TIMEOUT_MS,
-    label,
-  );
+  const checkAbort = createCheckAbort(startTime, TEST_TIMEOUT_MS, label);
+
+  // Create a source wrapper that injects random yields and timeout checking
+  // for both memory and sqlite sources
+  const sourceWrapper = createRandomYieldWrapper(rng, 0.3, checkAbort);
 
   try {
-    await transactWithRandomYields(
-      rng,
-      async delegates => {
-        await runAndCompare(schema, delegates, query[0], undefined);
-      },
-      shouldYield,
-    );
+    await harness.transact(async delegates => {
+      await runAndCompare(schema, delegates, query[0], undefined);
+    }, sourceWrapper);
   } catch (e) {
     // Timeouts pass with a warning
     if (e instanceof FuzzTimeoutError) {
@@ -154,50 +139,6 @@ async function runCase({
     }
     throw new Error('Mismatch. Repro seed: ' + seed + '\nshrunk zql: ' + zql);
   }
-}
-
-/**
- * Creates a transact function that wraps memory sources with random yields.
- * This tests that the IVM pipeline correctly handles cooperative scheduling
- * via yield points during hydration and push operations.
- */
-async function transactWithRandomYields(
-  rng: () => number,
-  cb: (delegates: Delegates) => Promise<void>,
-  shouldYield?: () => boolean,
-) {
-  await harness.dbs.pg.begin(async tx => {
-    // Fork memory sources and wrap them with random yield injection
-    const forkedSources = Object.fromEntries(
-      Object.entries(harness.dbs.memory).map(([key, source]) => [
-        key,
-        source.fork(),
-      ]),
-    );
-
-    // Wrap sources with random yield injection (30% probability at each yield point)
-    const yieldingSources = wrapSourcesWithRandomYield(forkedSources, rng, 0.3);
-
-    const scopedDelegates: Delegates = {
-      ...harness.delegates,
-      pg: new TestPGQueryDelegate(tx, schema, harness.dbs.pgSchema),
-      memory: new TestMemoryQueryDelegate({
-        sources: yieldingSources,
-      }),
-      sqlite: newQueryDelegate(
-        lc,
-        testLogConfig,
-        (() => {
-          const db = new Database(lc, harness.dbs.sqliteFile);
-          db.exec('BEGIN CONCURRENT');
-          return db;
-        })(),
-        schema,
-        shouldYield,
-      ),
-    };
-    await cb(scopedDelegates);
-  });
 }
 
 async function shrink(generations: AnyQuery[], seed: number) {

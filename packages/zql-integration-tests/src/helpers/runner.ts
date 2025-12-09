@@ -383,19 +383,25 @@ export async function bootstrap<TSchema extends Schema>({
 
   async function transact(
     cb: (delegates: Delegates) => Promise<void>,
-    shouldYield?: () => boolean,
+    sourceWrapper?: (source: Source) => Source,
   ) {
     await dbs.pg.begin(async tx => {
+      // Fork memory sources and optionally wrap them
+      const forkedMemorySources = Object.fromEntries(
+        Object.entries(dbs.memory).map(([key, source]) => {
+          let forked: Source = source.fork();
+          if (sourceWrapper) {
+            forked = sourceWrapper(forked);
+          }
+          return [key, forked];
+        }),
+      );
+
       const scopedDelegates: Delegates = {
         ...delegates,
         pg: new TestPGQueryDelegate(tx, zqlSchema, dbs.pgSchema),
         memory: new TestMemoryQueryDelegate({
-          sources: Object.fromEntries(
-            Object.entries(dbs.memory).map(([key, source]) => [
-              key,
-              source.fork(),
-            ]),
-          ),
+          sources: forkedMemorySources,
         }),
         sqlite: newQueryDelegate(
           lc,
@@ -406,7 +412,7 @@ export async function bootstrap<TSchema extends Schema>({
             return db;
           })(),
           zqlSchema,
-          shouldYield,
+          sourceWrapper,
         ),
       };
       await cb(scopedDelegates);
