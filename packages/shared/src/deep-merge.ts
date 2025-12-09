@@ -35,7 +35,7 @@ export type DeepMerge<A, B, Leaf = never> = Simplify<
 export function isPlainObject(
   value: unknown,
 ): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null;
 }
 
 /**
