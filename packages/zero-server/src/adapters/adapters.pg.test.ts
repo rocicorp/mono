@@ -75,6 +75,7 @@ const user = table('user')
 
 const schema = createSchema({
   tables: [user],
+  enableLegacyMutators: true,
 });
 
 const getRandomUser = () => {
