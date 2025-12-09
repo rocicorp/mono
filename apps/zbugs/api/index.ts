@@ -219,7 +219,7 @@ async function queryHandler(
       await handleQueryRequest(
         (name: string, args: ReadonlyJSONValue | undefined) => {
           const query = mustGetQuery(queries, name);
-          return query(args).toQuery(authData);
+          return query.fn({args, ctx: authData});
         },
         schema,
         request.body,

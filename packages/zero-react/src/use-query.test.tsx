@@ -38,7 +38,6 @@ function newMockQuery(query: string, singular = false): Query<string, Schema> {
       return query;
     },
     format: {singular},
-    toQuery: () => ret,
   } as unknown as AbstractQuery<string, Schema>;
   return ret;
 }

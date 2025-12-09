@@ -1,27 +1,27 @@
 import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
-import {
-  applyChange,
-  type AnyViewFactory,
-  type Change,
-  type Entry,
-  type Format,
-  type Input,
-  type Node,
-  type Output,
-  type Query,
-  type Schema,
-  type Stream,
-  type TTL,
-  type ViewChange,
-} from '../../zero-client/src/mod.js';
+import {emptyArray} from '../../shared/src/sentinels.ts';
 import type {
   QueryErrorDetails,
   QueryResultDetails,
 } from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
-import {skipYields} from '../../zql/src/ivm/operator.ts';
-import {emptyArray} from '../../shared/src/sentinels.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import type {Change} from '../../zql/src/ivm/change.ts';
+import type {Node} from '../../zql/src/ivm/data.ts';
+import {
+  skipYields,
+  type Input,
+  type Output,
+} from '../../zql/src/ivm/operator.ts';
+import type {Stream} from '../../zql/src/ivm/stream.ts';
+import {
+  applyChange,
+  idSymbol,
+  type ViewChange,
+} from '../../zql/src/ivm/view-apply-change.ts';
+import type {AnyViewFactory, Entry, Format} from '../../zql/src/ivm/view.ts';
+import type {Query} from '../../zql/src/query/query.ts';
+import type {TTL} from '../../zql/src/query/ttl.ts';
 
 export type State = [Entry, QueryResultDetails];
 
