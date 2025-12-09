@@ -611,9 +611,14 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   await tickAFewTimes(vi);
 });
 
+const mockProfileID = 'pProfID1';
+
 const mockRep = {
   query() {
     return Promise.resolve(new Map());
+  },
+  get profileID() {
+    return Promise.resolve(mockProfileID);
   },
 } as unknown as ReplicacheImpl;
 const mockQueryManager = {
@@ -633,31 +638,182 @@ const mockDeleteClientsManager = {
 } as unknown as DeleteClientsManager;
 
 describe('createSocket', () => {
-  const t = (
-    socketURL: WSString,
-    baseCookie: NullableVersion,
-    clientID: string,
-    userID: string,
-    auth: string | undefined,
-    lmid: number,
-    debugPerf: boolean,
-    now: number,
-    expectedURL: string,
-    additionalConnectParams?: Record<string, string>,
-    activeClients = new Set([clientID]),
-  ) => {
-    const clientSchema: ClientSchema = {
-      tables: {
-        foo: {
-          columns: {
-            bar: {type: 'string'},
-          },
-          primaryKey: ['bar'],
+  const clientSchema: ClientSchema = {
+    tables: {
+      foo: {
+        columns: {
+          bar: {type: 'string'},
         },
+        primaryKey: ['bar'],
       },
-    };
+    },
+  };
 
-    test(expectedURL, async () => {
+  test.each([
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/prefix' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/prefix/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/prefix/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/prefix/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: '1234',
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: '1234',
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 123,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: undefined,
+      lmid: 123,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: 'auth with []',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: 'auth with []',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: 'auth with []',
+      lmid: 0,
+      debugPerf: true,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}&debugPerf=true`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 456,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: 'userID',
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 456,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&profileID=${mockProfileID}&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
+      additionalConnectParams: {
+        reason: 'rehome',
+        backoff: '100',
+        lastTask: 'foo/bar&baz',
+        clientID: 'conflicting-parameter-ignored',
+      },
+    },
+  ] satisfies {
+    socketURL: WSString;
+    baseCookie: NullableVersion;
+    clientID: string;
+    userID: string;
+    auth: string | undefined;
+    lmid: number;
+    debugPerf: boolean;
+    now: number;
+    expectedURL: string;
+    additionalConnectParams?: Record<string, string> | undefined;
+  }[])(
+    '$expectedURL',
+    async ({
+      socketURL,
+      baseCookie,
+      clientID,
+      userID,
+      auth,
+      lmid,
+      debugPerf,
+      now,
+      expectedURL,
+      additionalConnectParams,
+    }) => {
+      const activeClients = new Set([clientID]);
       vi.spyOn(performance, 'now').mockReturnValue(now);
       const [mockSocket, queriesPatch, deletedClients] = await createSocket(
         mockRep,
@@ -724,154 +880,6 @@ describe('createSocket', () => {
       // if we did not encode queries into the sec-protocol header, we should not have a queriesPatch
       expect(queriesPatch2).toBeUndefined();
       expect(deletedClients2?.clientIDs).toEqual(['old-deleted-client']);
-    });
-  };
-
-  t(
-    'ws://example.com/',
-    null,
-    'clientID',
-    'userID',
-    '',
-    0,
-    false,
-    0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
-  );
-  t(
-    'ws://example.com/prefix',
-    null,
-    'clientID',
-    'userID',
-    '',
-    0,
-    false,
-    0,
-    `ws://example.com/prefix/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
-  );
-  t(
-    'ws://example.com/prefix/',
-    null,
-    'clientID',
-    'userID',
-    '',
-    0,
-    false,
-    0,
-    `ws://example.com/prefix/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
-  );
-
-  t(
-    'ws://example.com/',
-    '1234',
-    'clientID',
-    'userID',
-    '',
-    0,
-    false,
-    0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx`,
-  );
-
-  t(
-    'ws://example.com/',
-    '1234',
-    'clientID',
-    'userID',
-    '',
-    0,
-    false,
-    0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx`,
-  );
-
-  t(
-    'ws://example.com/',
-    null,
-    'clientID',
-    'userID',
-    '',
-    123,
-    false,
-    0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx`,
-  );
-
-  t(
-    'ws://example.com/',
-    null,
-    'clientID',
-    'userID',
-    undefined,
-    123,
-    false,
-    0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx`,
-  );
-
-  t(
-    'ws://example.com/',
-    null,
-    'clientID',
-    'userID',
-    'auth with []',
-    0,
-    false,
-    0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
-  );
-
-  t(
-    'ws://example.com/',
-    null,
-    'clientID',
-    'userID',
-    'auth with []',
-    0,
-    false,
-    0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
-  );
-
-  t(
-    'ws://example.com/',
-    null,
-    'clientID',
-    'userID',
-    'auth with []',
-    0,
-    true,
-    0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true`,
-  );
-
-  t(
-    'ws://example.com/',
-    null,
-    'clientID',
-    'userID',
-    '',
-    0,
-    false,
-    456,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx`,
-  );
-
-  t(
-    'ws://example.com/',
-    null,
-    'clientID',
-    'userID',
-    '',
-    0,
-    false,
-    456,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
-    {
-      reason: 'rehome',
-      backoff: '100',
-      lastTask: 'foo/bar&baz',
-      clientID: 'conflicting-parameter-ignored',
     },
   );
 });

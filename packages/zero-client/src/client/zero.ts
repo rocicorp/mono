@@ -2332,6 +2332,7 @@ export async function createSocket(
   searchParams.set('ts', String(performance.now()));
   searchParams.set('lmid', String(lmid));
   searchParams.set('wsid', wsid);
+  searchParams.set('profileID', await rep.profileID);
   if (debugPerf) {
     searchParams.set('debugPerf', true.toString());
   }
