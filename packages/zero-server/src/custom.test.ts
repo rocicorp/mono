@@ -605,7 +605,7 @@ describe('CRUDMutatorFactory', () => {
       const queries: unknown[][] = [];
       const mockTx: DBTransaction<unknown> = {
         wrappedTransaction: null,
-        query: vi.fn((...args: unknown[]) => {
+        query: (...args: unknown[]) => {
           const sql = args[0] as string;
           if (sql.includes('information_schema')) {
             serverSchemaFetchCount++;
@@ -613,7 +613,7 @@ describe('CRUDMutatorFactory', () => {
           }
           queries.push(args);
           return Promise.resolve([]);
-        }) as DBTransaction<unknown>['query'],
+        },
         runQuery: () => Promise.reject(new Error('not implemented')),
       };
       return {mockTx, queries};
@@ -699,14 +699,14 @@ describe('CRUDMutatorFactory', () => {
     const createMockTxWithSchemaQuery = () => {
       const mockTx: DBTransaction<unknown> = {
         wrappedTransaction: null,
-        query: vi.fn((...args: unknown[]) => {
+        query: (...args: unknown[]) => {
           const sql = args[0] as string;
           if (sql.includes('information_schema')) {
             serverSchemaFetchCount++;
             return Promise.resolve(mockSchemaRows);
           }
           return Promise.resolve([]);
-        }) as DBTransaction<unknown>['query'],
+        },
         runQuery: () => Promise.reject(new Error('not implemented')),
       };
       return {mockTx};
