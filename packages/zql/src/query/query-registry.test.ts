@@ -10,21 +10,19 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {createBuilder} from './create-builder.ts';
-import {
-  addContextToQuery,
-  defineQuery,
-  defineQueryWithType,
-  type CustomQuery,
-  type QueryRequest,
-} from './define-query.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {
+  addContextToQuery,
   createQuery,
   defineQueries,
   defineQueriesWithType,
+  defineQuery,
+  defineQueryWithType,
   getQuery,
   isQueryRegistry,
   mustGetQuery,
+  type CustomQuery,
+  type QueryRequest,
 } from './query-registry.ts';
 import type {PullRow, Query} from './query.ts';
 

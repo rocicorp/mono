@@ -93,15 +93,15 @@ import type {
 } from '../../../zql/src/mutate/mutator.ts';
 import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
-  type QueryOrQueryRequest,
-  addContextToQuery,
-} from '../../../zql/src/query/define-query.ts';
-import {
   type ClientMetricMap,
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {
+  type QueryOrQueryRequest,
+  addContextToQuery,
+} from '../../../zql/src/query/query-registry.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,

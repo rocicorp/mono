@@ -24,7 +24,7 @@ import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts'
 import {
   addContextToQuery,
   type QueryOrQueryRequest,
-} from '../../zql/src/query/define-query.ts';
+} from '../../zql/src/query/query-registry.ts';
 import {
   type HumanReadable,
   type PullRow,
