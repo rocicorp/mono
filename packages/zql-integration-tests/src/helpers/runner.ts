@@ -369,7 +369,10 @@ export async function bootstrap<TSchema extends Schema>({
   const delegates = makeDelegates(dbs, zqlSchema);
   const queries = makeQueries(zqlSchema);
 
-  async function transact(cb: (delegates: Delegates) => Promise<void>) {
+  async function transact(
+    cb: (delegates: Delegates) => Promise<void>,
+    shouldYield?: () => boolean,
+  ) {
     await dbs.pg.begin(async tx => {
       const scopedDelegates: Delegates = {
         ...delegates,
@@ -391,6 +394,7 @@ export async function bootstrap<TSchema extends Schema>({
             return db;
           })(),
           zqlSchema,
+          shouldYield,
         ),
       };
       await cb(scopedDelegates);

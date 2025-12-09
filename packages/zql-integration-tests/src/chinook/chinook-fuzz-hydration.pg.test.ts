@@ -27,37 +27,33 @@ const harness = await bootstrap({
 const TEST_TIMEOUT_MS = 55_000;
 
 /**
- * Wraps a function with a timeout that logs a warning instead of failing.
- * This allows fuzz tests to pass even if they take too long, while still
- * logging for visibility.
+ * Error thrown when a fuzz test query exceeds the time limit.
+ * This is caught and treated as a pass (with warning) rather than a failure.
  */
-async function withTimeout<T>(
-  fn: () => Promise<T>,
+class FuzzTimeoutError extends Error {
+  constructor(label: string, elapsedMs: number) {
+    super(`Fuzz test "${label}" timed out after ${elapsedMs}ms`);
+    this.name = 'FuzzTimeoutError';
+  }
+}
+
+/**
+ * Creates a shouldYield function that throws FuzzTimeoutError when the
+ * elapsed time exceeds the timeout. This allows synchronous query execution
+ * to be aborted when it takes too long.
+ */
+function createTimeoutShouldYield(
+  startTime: number,
   timeoutMs: number,
   label: string,
-): Promise<T | 'timed-out'> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<'timed-out'>(resolve => {
-    timeoutId = setTimeout(() => resolve('timed-out'), timeoutMs);
-  });
-
-  try {
-    const result = await Promise.race([fn(), timeoutPromise]);
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
+): () => boolean {
+  return () => {
+    const elapsed = performance.now() - startTime;
+    if (elapsed > timeoutMs) {
+      throw new FuzzTimeoutError(label, elapsed);
     }
-    if (result === 'timed-out') {
-      console.warn(
-        `⚠️ Test "${label}" timed out after ${timeoutMs}ms - passing anyway`,
-      );
-    }
-    return result;
-  } catch (e) {
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
-    }
-    throw e; // Re-throw actual errors (non-timeouts should still fail)
-  }
+    return false; // Don't actually yield, just check timeout
+  };
 }
 
 // oxlint-disable-next-line expect-expect
@@ -114,30 +110,31 @@ async function runCase({
   query: [AnyQuery, AnyQuery[]];
   seed: number;
 }) {
-  const result = await withTimeout(
-    async () => {
-      try {
-        await harness.transact(async delegates => {
-          await runAndCompare(schema, delegates, query[0], undefined);
-        });
-        return 'success' as const;
-      } catch (e) {
-        const zql = await shrink(query[1], seed);
-        if (seed === REPRO_SEED) {
-          throw e;
-        }
-        throw new Error(
-          'Mismatch. Repro seed: ' + seed + '\nshrunk zql: ' + zql,
-        );
-      }
-    },
+  const label = `fuzz-hydration ${seed}`;
+  const startTime = performance.now();
+  const shouldYield = createTimeoutShouldYield(
+    startTime,
     TEST_TIMEOUT_MS,
-    `fuzz-hydration ${seed}`,
+    label,
   );
 
-  // Timeouts pass with a warning (logged by withTimeout)
-  if (result === 'timed-out') {
-    return;
+  try {
+    await harness.transact(async delegates => {
+      await runAndCompare(schema, delegates, query[0], undefined);
+    }, shouldYield);
+  } catch (e) {
+    // Timeouts pass with a warning
+    if (e instanceof FuzzTimeoutError) {
+      console.warn(`⚠️ ${e.message} - passing anyway`);
+      return;
+    }
+
+    // Actual test failures get shrunk and re-thrown
+    const zql = await shrink(query[1], seed);
+    if (seed === REPRO_SEED) {
+      throw e;
+    }
+    throw new Error('Mismatch. Repro seed: ' + seed + '\nshrunk zql: ' + zql);
   }
 }
 
