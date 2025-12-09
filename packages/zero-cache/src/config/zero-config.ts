@@ -624,6 +624,24 @@ export const zeroOptions = {
       ],
     },
 
+    minCheckpointPageCount: {
+      type: v.number().optional(),
+      desc: [
+        `The WAL page count at which SQLite attempts a PASSIVE checkpoint, which`,
+        `transfers pages to the main database file without blocking writers.`,
+        `Defaults to {bold checkpointThresholdMB * 250} (since SQLite page size is 4KB).`,
+      ],
+    },
+
+    maxCheckpointPageCount: {
+      type: v.number().optional(),
+      desc: [
+        `The WAL page count at which SQLite performs a RESTART checkpoint, which`,
+        `blocks writers until complete. Defaults to {bold minCheckpointPageCount * 10}.`,
+        `Set to {bold 0} to disable RESTART checkpoints entirely.`,
+      ],
+    },
+
     incrementalBackupIntervalMinutes: {
       type: v.number().default(15),
       desc: [

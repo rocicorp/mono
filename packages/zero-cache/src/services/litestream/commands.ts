@@ -72,6 +72,8 @@ function getLitestream(
     configPath,
     port = config.port + 2,
     checkpointThresholdMB,
+    minCheckpointPageCount = checkpointThresholdMB * 250, // SQLite page size is 4KB
+    maxCheckpointPageCount = minCheckpointPageCount * 10,
     incrementalBackupIntervalMinutes,
     snapshotBackupIntervalHours,
     multipartConcurrency,
@@ -81,8 +83,6 @@ function getLitestream(
   // Set the snapshot interval to something smaller than x hours so that
   // the hourly check triggers on the hour, rather than the hour after.
   const snapshotBackupIntervalMinutes = snapshotBackupIntervalHours * 60 - 5;
-  const minCheckpointPageCount = checkpointThresholdMB * 250; // SQLite page size is 4k
-  const maxCheckpointPageCount = minCheckpointPageCount * 10;
 
   return {
     litestream: must(executable, `Missing --litestream-executable`),
