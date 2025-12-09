@@ -152,10 +152,10 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         );
 
       case 'queryplan':
-        return result?.remoteRunResult?.plans ? (
+        return result?.remoteRunResult?.sqlitePlans ? (
           <div className="results-content">
             <div className="tables-container">
-              {Object.entries(result.remoteRunResult.plans).map(
+              {Object.entries(result.remoteRunResult.sqlitePlans).map(
                 ([queryName, planSteps]) => (
                   <div key={queryName} className="table-section">
                     <h3 className="table-title">Query Plan</h3>

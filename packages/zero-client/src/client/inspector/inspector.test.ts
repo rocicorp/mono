@@ -919,7 +919,7 @@ describe('query analyze', () => {
           'SELECT * FROM issues': 5,
         },
       },
-      plans: {
+      sqlitePlans: {
         'SELECT * FROM issues': ['SCAN issues'],
       },
     };
@@ -1023,7 +1023,7 @@ describe('query analyze', () => {
       },
       readRowCount: 10,
       readRowCountsByQuery: {},
-      plans: {},
+      sqlitePlans: {},
     };
 
     await z.triggerMessage([
@@ -1253,10 +1253,10 @@ describe('query analyze', () => {
     await z.close();
   });
 
-  test('analyze result includes plans when readRowCountsByQuery is populated (regression)', async () => {
-    // This test verifies the fix for the bug where result.plans was not being populated
+  test('analyze result includes sqlitePlans when readRowCountsByQuery is populated (regression)', async () => {
+    // This test verifies the fix for the bug where result.sqlitePlans was not being populated
     // because the server code was using deprecated vendedRowCounts instead of readRowCountsByQuery.
-    // The server should populate plans based on readRowCountsByQuery, and the client should receive it.
+    // The server should populate sqlitePlans based on readRowCountsByQuery, and the client should receive it.
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
@@ -1324,9 +1324,9 @@ describe('query analyze', () => {
           'SELECT * FROM issues': 5,
         },
       },
-      // The bug was that plans would be empty because the server was using
+      // The bug was that sqlitePlans would be empty because the server was using
       // vendedRowCounts (undefined) instead of readRowCountsByQuery
-      plans: {
+      sqlitePlans: {
         'SELECT * FROM issues': ['SCAN issues'],
       },
     };
@@ -1342,8 +1342,8 @@ describe('query analyze', () => {
 
     const result = await analyzePromise;
 
-    // Critical assertion: plans should be populated
-    expect(result.plans).toEqual({
+    // Critical assertion: sqlitePlans should be populated
+    expect(result.sqlitePlans).toEqual({
       'SELECT * FROM issues': ['SCAN issues'],
     });
 
@@ -1426,7 +1426,7 @@ describe('query analyze', () => {
           'SELECT * FROM issues': 5,
         },
       },
-      plans: {
+      sqlitePlans: {
         'SELECT * FROM issues': ['SCAN issues'],
       },
     };
