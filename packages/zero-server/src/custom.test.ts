@@ -8,7 +8,7 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
-import {createCRUDBuilder} from '../../zql/src/mutate/create-mutators.ts';
+import {createCRUDBuilder} from '../../zql/src/mutate/crud.ts';
 import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {CRUDMutatorFactory, makeMutateCRUD, makeSchemaCRUD} from './custom.ts';

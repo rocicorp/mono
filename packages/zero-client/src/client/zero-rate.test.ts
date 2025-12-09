@@ -9,7 +9,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {createCRUDBuilder} from '../../../zql/src/mutate/create-mutators.ts';
+import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {ConnectionStatus} from './connection-status.ts';

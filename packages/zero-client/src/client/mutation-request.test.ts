@@ -1,7 +1,7 @@
 import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {createCRUDBuilder} from '../../../zql/src/mutate/create-mutators.ts';
+import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
