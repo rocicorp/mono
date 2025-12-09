@@ -245,9 +245,7 @@ export function makeTableCRUDRequestBuilder<
  * await tx.mutate(crud.user.insert({name: 'Alice'}));
  * ```
  */
-export function createCRUDBuilder<S extends Schema>(
-  schema: S,
-): SchemaCRUDMutators<S> {
+export function createCRUDBuilder<S extends Schema>(schema: S): CRUDBuilder<S> {
   return recordProxy(
     schema.tables,
     (_tableSchema, tableName) =>
@@ -258,8 +256,10 @@ export function createCRUDBuilder<S extends Schema>(
     prop => {
       throw new Error(`Table ${prop} does not exist in schema`);
     },
-  ) as unknown as SchemaCRUDMutators<S>;
+  ) as unknown as CRUDBuilder<S>;
 }
+
+export type CRUDBuilder<S extends Schema> = SchemaCRUDMutators<S>;
 
 export type SchemaCRUDMutators<S extends Schema> = {
   [T in keyof S['tables'] & string]: TableCRUDMutators<S, T>;
