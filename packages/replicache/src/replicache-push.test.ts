@@ -1,18 +1,15 @@
 import {expect, test, vi} from 'vitest';
 import type {VersionNotSupportedResponse} from './error-responses.ts';
+import {getDefaultPusher} from './get-default-pusher.ts';
 import type {Pusher} from './pusher.ts';
 import {
   disableAllBackgroundProcesses,
+  fetchMocker,
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
 } from './test-util.ts';
 import type {WriteTransaction} from './transactions.ts';
-
-// fetch-mock has invalid d.ts file so we removed that on npm install.
-// @ts-expect-error
-import fetchMock from 'fetch-mock/esm/client';
-import {getDefaultPusher} from './get-default-pusher.ts';
 import type {UpdateNeededReason} from './types.ts';
 
 initReplicacheTesting();
@@ -48,14 +45,16 @@ test('push', async () => {
   await deleteTodo({id: id1});
   await deleteTodo({id: id2});
 
-  fetchMock.postOnce(pushURL, {
+  fetchMocker.postOnce(pushURL, {
     mutationInfos: [
       {id: 1, error: 'deleteTodo: todo not found'},
       {id: 2, error: 'deleteTodo: todo not found'},
     ],
   });
   await tickAFewTimes(vi);
-  const {mutations} = await fetchMock.lastCall().request.json();
+  const {mutations} = fetchMocker.lastBody() as {
+    mutations: unknown[];
+  };
   const {clientID} = rep;
   expect(mutations).toEqual([
     {
@@ -86,12 +85,14 @@ test('push', async () => {
     ).text,
   ).toBe('Test');
 
-  fetchMock.postOnce(pushURL, {
+  fetchMocker.postOnce(pushURL, {
     mutationInfos: [{id: 3, error: 'mutation has already been processed'}],
   });
   await tickAFewTimes(vi);
   {
-    const {mutations} = await fetchMock.lastCall().request.json();
+    const {mutations} = fetchMocker.lastBody() as {
+      mutations: unknown[];
+    };
     expect(mutations).toEqual([
       {
         clientID,
@@ -129,12 +130,14 @@ test('push', async () => {
   await deleteTodo({id: id1});
   await deleteTodo({id: id2});
 
-  fetchMock.postOnce(pushURL, {
+  fetchMocker.postOnce(pushURL, {
     mutationInfos: [],
   });
   await tickAFewTimes(vi);
   {
-    const {mutations} = await fetchMock.lastCall().request.json();
+    const {mutations} = fetchMocker.lastBody() as {
+      mutations: unknown[];
+    };
     expect(mutations).toEqual([
       {
         clientID,
@@ -205,37 +208,37 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   const {createTodo} = rep.mutate;
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
 
   await createTodo({id: 'id1'});
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
 
   rep.pushURL = 'https://diff.com/push';
 
   await createTodo({id: 'id2'});
   await tickAFewTimes(vi);
-  expect(fetchMock.calls()).toHaveLength(1);
+  expect(fetchMocker.spy).toHaveBeenCalledOnce();
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
 
   rep.pushURL = '';
 
   await createTodo({id: 'id3'});
   await tickAFewTimes(vi);
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
   let pusherCallCount = 0;
 
   // oxlint-disable-next-line require-await
@@ -252,12 +255,12 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   await createTodo({id: 'id4'});
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
   expect(pusherCallCount).toBe(1);
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
-  fetchMock.postAny({});
+  fetchMocker.reset();
+  fetchMocker.post(undefined, {});
   pusherCallCount = 0;
 
   rep.pusher = getDefaultPusher(rep);
@@ -265,7 +268,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   await createTodo({id: 'id5'});
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
   expect(pusherCallCount).toBe(0);
 });
 

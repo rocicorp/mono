@@ -14,6 +14,7 @@ import {must} from '../../shared/src/must.ts';
 import {randomUint64} from '../../shared/src/random-uint64.ts';
 import type {Cookie} from './cookies.ts';
 import type {Store} from './dag/store.ts';
+import {FetchMocker} from './fetch-mocker.ts';
 import type {Hash} from './hash.ts';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
 import {MemStore} from './kv/mem-store.ts';
@@ -35,10 +36,6 @@ import type {DiffComputationConfig} from './sync/diff.ts';
 import type {ClientID} from './sync/ids.ts';
 import type {WriteTransaction} from './transactions.ts';
 import type {BeginPullResult, MutatorDefs} from './types.ts';
-
-// fetch-mock has invalid d.ts file so we removed that on npm install.
-// @ts-expect-error
-import fetchMock from 'fetch-mock/esm/client';
 
 export class ReplicacheTest<
   MD extends MutatorDefs = {},
@@ -212,16 +209,30 @@ export async function replicacheForTesting<MD extends MutatorDefs = {}>(
   const {clientID} = rep;
   // Wait for open to be done.
   await rep.clientGroupID;
-  fetchMock.post(pullURL, makePullResponseV1(clientID, undefined, [], null));
-  fetchMock.post(pushURL, 'ok');
+  if (pullURL) {
+    fetchMocker.post(
+      pullURL,
+      makePullResponseV1(clientID, undefined, [], null),
+    );
+  }
+  if (pushURL) {
+    fetchMocker.post(pushURL, 'ok');
+  }
   await tickAFewTimes(vi);
   return rep;
 }
 
-export function initReplicacheTesting(): void {
-  fetchMock.config.overwriteRoutes = true;
+export let fetchMocker: FetchMocker;
 
+export function initReplicacheTesting(): void {
   beforeEach(() => {
+    fetchMocker = new FetchMocker(vi);
+    // Set up a default response that looks like a valid pull response
+    fetchMocker.post(undefined, {
+      cookie: null,
+      lastMutationIDChanges: {},
+      patch: [],
+    });
     vi.useFakeTimers({now: 0});
     setupIDBDatabasesStoreForTest();
   });
@@ -229,7 +240,6 @@ export function initReplicacheTesting(): void {
   afterEach(async () => {
     restoreMakeImplForTest();
     vi.useRealTimers();
-    fetchMock.restore();
     vi.restoreAllMocks();
     await closeAllReps();
     await closeAllCloseables();
