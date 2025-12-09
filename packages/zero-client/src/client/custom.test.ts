@@ -16,7 +16,7 @@ import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
-import {legacySchema as schema} from '../../../zql/src/query/test/test-schemas.ts';
+import {legacySchema} from '../../../zql/src/query/test/test-schemas.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {
@@ -31,7 +31,7 @@ import {asCustomQuery, MockSocket, queryID, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
 
-type Schema = typeof schema;
+type Schema = typeof legacySchema;
 type MutatorTx = Transaction<Schema>;
 
 afterEach(() => vi.restoreAllMocks());
@@ -142,11 +142,11 @@ test('argument types are preserved with arbitrary depth nesting', () => {
 test('supports mutators without a namespace', async () => {
   const z = zeroForTest({
     logLevel: 'debug',
-    schema,
+    schema: legacySchema,
     mutators: {
       createIssue: async (
         tx: Transaction<Schema>,
-        args: InsertValue<typeof schema.tables.issue>,
+        args: InsertValue<typeof legacySchema.tables.issue>,
       ) => {
         await tx.mutate.issue.insert(args);
       },
@@ -162,7 +162,7 @@ test('supports mutators without a namespace', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  const zql = createBuilder(schema);
+  const zql = createBuilder(legacySchema);
   const issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('no-namespace');
 });
@@ -170,14 +170,14 @@ test('supports mutators without a namespace', async () => {
 test('supports arbitrary depth nesting of mutators', async () => {
   const z = zeroForTest({
     logLevel: 'debug',
-    schema,
+    schema: legacySchema,
     mutators: {
       level1: {
         level2: {
           level3: {
             createIssue: async (
               tx: Transaction<Schema>,
-              args: InsertValue<typeof schema.tables.issue>,
+              args: InsertValue<typeof legacySchema.tables.issue>,
             ) => {
               await tx.mutate.issue.insert(args);
             },
@@ -190,7 +190,7 @@ test('supports arbitrary depth nesting of mutators', async () => {
           },
           anotherMutator: async (
             tx: Transaction<Schema>,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
           },
@@ -215,7 +215,7 @@ test('supports arbitrary depth nesting of mutators', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  const zql = createBuilder(schema);
+  const zql = createBuilder(legacySchema);
 
   await z.markQueryAsGot(zql.issue);
   let issues = await z.run(zql.issue);
@@ -257,19 +257,19 @@ test('detects collisions in mutator names', () => {
   expect(() =>
     zeroForTest({
       logLevel: 'debug',
-      schema,
+      schema: legacySchema,
       mutators: {
         'issue': {
           create: async (
             tx: Transaction<Schema>,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
           },
         },
         'issue|create': async (
           tx: Transaction<Schema>,
-          args: InsertValue<typeof schema.tables.issue>,
+          args: InsertValue<typeof legacySchema.tables.issue>,
         ) => {
           await tx.mutate.issue.insert(args);
         },
@@ -283,7 +283,7 @@ test('detects collisions in mutator names', () => {
 test('custom mutators write to the local store', async () => {
   const z = zeroForTest({
     logLevel: 'debug',
-    schema,
+    schema: legacySchema,
     mutators: {
       issue: {
         setTitle: async (
@@ -303,7 +303,7 @@ test('custom mutators write to the local store', async () => {
         },
         create: async (
           tx: MutatorTx,
-          args: InsertValue<typeof schema.tables.issue>,
+          args: InsertValue<typeof legacySchema.tables.issue>,
         ) => {
           await tx.mutate.issue.insert(args);
         },
@@ -325,7 +325,7 @@ test('custom mutators write to the local store', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  const zql = createBuilder(schema);
+  const zql = createBuilder(legacySchema);
 
   await z.markQueryAsGot(zql.issue);
   let issues = await z.run(zql.issue);
@@ -361,15 +361,17 @@ describe('custom mutators can query the local store during an optimistic mutatio
     ['tx.run(tx.query.issue)', (tx: MutatorTx) => tx.run(tx.query.issue)],
     ['tx.query.issue.run()', (tx: MutatorTx) => tx.query.issue.run()],
   ] as const)('%s can read data', async (_, runQuery) => {
-    let queryResult: readonly Row<typeof schema.tables.issue>[] | undefined;
+    let queryResult:
+      | readonly Row<typeof legacySchema.tables.issue>[]
+      | undefined;
 
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           createAndQuery: async (
             tx: MutatorTx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
             queryResult = await runQuery(tx);
@@ -394,12 +396,12 @@ describe('custom mutators can query the local store during an optimistic mutatio
 
   test('closeAll using tx.run', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             tx: MutatorTx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
           },
@@ -428,7 +430,7 @@ describe('custom mutators can query the local store during an optimistic mutatio
       }),
     );
 
-    const zql = createBuilder(schema);
+    const zql = createBuilder(legacySchema);
 
     const q = zql.issue.where('closed', false);
     await z.markQueryAsGot(q);
@@ -446,7 +448,7 @@ describe('rebasing custom mutators', () => {
   let branch: IVMSourceBranch;
   beforeEach(async () => {
     const {syncHash} = await createDb([], 42);
-    branch = new IVMSourceBranch(schema.tables);
+    branch = new IVMSourceBranch(legacySchema.tables);
     await branch.advance(undefined, syncHash, []);
   });
 
@@ -461,7 +463,7 @@ describe('rebasing custom mutators', () => {
           ivmSources: branch,
         },
       } as unknown as WriteTransaction,
-      schema,
+      legacySchema,
     ) as unknown as Transaction<Schema>;
 
     await tx1.mutate.issue.insert({
@@ -496,12 +498,12 @@ describe('rebasing custom mutators', () => {
 
   test('mutations can read their own writes', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           createAndReadCreated: async (
             tx: MutatorTx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
             const readIssue = must(
@@ -525,7 +527,7 @@ describe('rebasing custom mutators', () => {
       createdAt: 1743018138477,
     }).client;
 
-    const zql = createBuilder(schema);
+    const zql = createBuilder(legacySchema);
 
     const q = asCustomQuery(zql.issue.where('id', '1').one(), 'a', '1');
     const issue = await z.run(q, {type: 'unknown'});
@@ -561,12 +563,12 @@ describe('rebasing custom mutators', () => {
 
   test('the writes of a mutation are immediately available after awaiting the client promise', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             tx: MutatorTx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
           },
@@ -583,7 +585,7 @@ describe('rebasing custom mutators', () => {
         createdAt: 1743018138477,
       }).client;
 
-      const zql = createBuilder(schema);
+      const zql = createBuilder(legacySchema);
 
       const result = await z.run(zql.issue.where('id', String(i)).one());
       expect(result?.title).toEqual('foo ' + i);
@@ -594,15 +596,15 @@ describe('rebasing custom mutators', () => {
   test('mutations on main do not change main until they are committed', async () => {
     let mutationRun = false;
 
-    const zql = createBuilder(schema);
+    const zql = createBuilder(legacySchema);
 
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             tx: MutatorTx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
@@ -632,7 +634,7 @@ describe('rebasing custom mutators', () => {
 describe('error handling', () => {
   test('client-side errors surface as application errors on the client/server promises', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           // oxlint-disable-next-line require-await
@@ -668,7 +670,7 @@ describe('error handling', () => {
   test('rejects outstanding custom mutation server promises when connection goes offline', async () => {
     const noop = vi.fn(async (_tx: MutatorTx) => {});
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           noop,
@@ -707,7 +709,7 @@ describe('error handling', () => {
     const namespaced = vi.fn(async (_tx: MutatorTx, _args: {id: string}) => {});
 
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         topLevel,
         issue: {
@@ -785,7 +787,7 @@ describe('error handling', () => {
 
   test('run waiting for complete results throws in custom mutations', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (tx: MutatorTx) => {
@@ -811,7 +813,7 @@ describe('error handling', () => {
 
   test('cannot await the promise directly', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       logLevel: 'warn',
       mutators: {
         issue: {
@@ -845,12 +847,12 @@ describe('server results and keeping read queries', () => {
 
   test('waiting for server results', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             _tx: MutatorTx,
-            _args: InsertValue<typeof schema.tables.issue>,
+            _args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {},
 
           close: async (_tx: MutatorTx, _args: object) => {},
@@ -925,12 +927,12 @@ describe('server results and keeping read queries', () => {
     }
 
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             tx: MutatorTx,
-            _args: InsertValue<typeof schema.tables.issue>,
+            _args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.query.issue;
           },
@@ -951,7 +953,7 @@ describe('server results and keeping read queries', () => {
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-    const zql = createBuilder(schema);
+    const zql = createBuilder(legacySchema);
 
     const q = asCustomQuery(zql.issue.limit(1), 'a', undefined);
     const view = z.materialize(q);
@@ -1078,12 +1080,12 @@ describe('server results and keeping read queries', () => {
 
   test('after the server promise resolves (via poke), reads from the store return the data from the server', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             _tx: MutatorTx,
-            _args: InsertValue<typeof schema.tables.issue>,
+            _args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {},
         },
       } as const,
@@ -1108,9 +1110,9 @@ describe('server results and keeping read queries', () => {
     });
     await create.client;
 
-    const zql = createBuilder(schema);
+    const zql = createBuilder(legacySchema);
 
-    let foundIssue: Row<typeof schema.tables.issue> | undefined;
+    let foundIssue: Row<typeof legacySchema.tables.issue> | undefined;
     void create.server.then(async () => {
       foundIssue = await z.run(zql.issue.where('id', '1').one());
     });
@@ -1170,7 +1172,7 @@ describe('server results and keeping read queries', () => {
 test('crud mutators are not available if `enableLegacyMutators` is set to false', async () => {
   const z = zeroForTest({
     schema: {
-      ...schema,
+      ...legacySchema,
       enableLegacyMutators: false,
     },
   });
@@ -1182,7 +1184,7 @@ test('crud mutators are not available if `enableLegacyMutators` is set to false'
 
 test('crud mutators work if `enableLegacyMutators` is set to true (or not set)', async () => {
   const z = zeroForTest({
-    schema: {...schema, enableLegacyMutators: true},
+    schema: {...legacySchema, enableLegacyMutators: true},
   });
 
   await z.mutate.issue.insert({
@@ -1194,7 +1196,7 @@ test('crud mutators work if `enableLegacyMutators` is set to true (or not set)',
     createdAt: 1743018138477,
   });
 
-  const zql = createBuilder(schema);
+  const zql = createBuilder(legacySchema);
 
   // read a row
   await expect(z.run(zql.issue.where('id', '1').one())).resolves.toEqual({
@@ -1220,10 +1222,10 @@ describe('enableLegacyQueries', () => {
   });
 
   test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
-    const zql = createBuilder(schema);
+    const zql = createBuilder(legacySchema);
     const z = zeroForTest({
       schema: {
-        ...schema,
+        ...legacySchema,
         enableLegacyQueries: false,
       },
     });
@@ -1245,9 +1247,9 @@ describe('enableLegacyQueries', () => {
   });
 
   test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
-    const zql = createBuilder(schema);
+    const zql = createBuilder(legacySchema);
     const z = zeroForTest({
-      schema: {...schema, enableLegacyQueries: true},
+      schema: {...legacySchema, enableLegacyQueries: true},
     });
 
     await z.triggerConnected();
