@@ -141,7 +141,9 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
       txData.ivmSources as IVMSourceBranch,
     );
 
-    this.query = createRunnableBuilder(zeroContext, schema);
+    this.query = schema.enableLegacyQueries
+      ? createRunnableBuilder(zeroContext, schema)
+      : ({} as SchemaQuery<TSchema>);
     this.#zeroContext = zeroContext;
   }
 

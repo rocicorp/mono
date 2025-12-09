@@ -141,7 +141,9 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
       schema,
       serverSchema,
     );
-    this.query = createRunnableBuilder(delegate, schema);
+    this.query = schema.enableLegacyQueries
+      ? createRunnableBuilder(delegate, schema)
+      : ({} as SchemaQuery<TSchema>);
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(

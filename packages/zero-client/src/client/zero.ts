@@ -593,9 +593,9 @@ export class Zero<
     // This avoids exposing the delegate as a public API on Zero.
     registerZeroDelegate(this, this.#zeroContext);
 
-    this.query = (schema.enableLegacyQueries
+    this.query = schema.enableLegacyQueries
       ? createRunnableBuilder(this.#zeroContext, schema)
-      : {}) as unknown as SchemaQuery<S>;
+      : ({} as SchemaQuery<S>);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
