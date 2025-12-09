@@ -153,18 +153,6 @@ export {
   type MutatorDefinition,
 } from '../../zql/src/mutate/mutator.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
-export {
-  defineQuery,
-  defineQueryWithType,
-  isQuery,
-  isQueryDefinition,
-  type AnyCustomQuery,
-  type AnyQueryDefinition,
-  type CustomQuery,
-  type QueryDefinition,
-  type QueryOrQueryRequest,
-  type QueryRequest,
-} from '../../zql/src/query/define-query.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
@@ -185,13 +173,23 @@ export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export {
   defineQueries,
   defineQueriesWithType,
+  defineQuery,
+  defineQueryWithType,
   getQuery,
+  isQuery,
+  isQueryDefinition,
   isQueryRegistry,
   mustGetQuery,
+  type AnyCustomQuery,
+  type AnyQueryDefinition,
   type AnyQueryRegistry,
+  type CustomQuery,
   type FromQueryTree,
+  type QueryDefinition,
   type QueryDefinitions,
+  type QueryOrQueryRequest,
   type QueryRegistry,
+  type QueryRequest,
 } from '../../zql/src/query/query-registry.ts';
 export type {
   AnyQuery,

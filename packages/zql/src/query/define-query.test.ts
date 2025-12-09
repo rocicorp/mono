@@ -9,12 +9,12 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {createBuilder} from './create-builder.ts';
+import {asQueryInternals} from './query-internals.ts';
 import {
   defineQuery,
   defineQueryWithType,
   isQueryDefinition,
-} from './define-query.ts';
-import {asQueryInternals} from './query-internals.ts';
+} from './query-registry.ts';
 import type {PullRow, Query} from './query.ts';
 
 const schema = createSchema({
