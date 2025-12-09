@@ -25,7 +25,7 @@ export function staticQuery<
 }
 
 /**
- * A query builder that cannot be run.
+ * A query that cannot be run.
  * Only serves to generate ASTs.
  */
 export class StaticQuery<

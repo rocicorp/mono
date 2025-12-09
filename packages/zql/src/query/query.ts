@@ -130,10 +130,10 @@ export type Row<T extends Schema | TableSchema | AnyQueryLike = DefaultSchema> =
         : never;
 
 /**
- * The shape of a Query's phantom type property.
- * Query has '~' containing QueryTypes which extends 'Query' & {...}
+ * The shape of a CustomQuery's phantom type property.
+ * CustomQuery has '~' containing CustomQueryTypes which extends 'Query' & {...}
  */
-type QueryPhantom = {
+type CustomQueryPhantom = {
   readonly '~': {
     readonly $return: unknown;
   };
@@ -145,7 +145,7 @@ type QueryPhantom = {
 export type AnyQueryLike =
   | Query<string, ZeroSchema, any>
   | ((...args: any) => Query<string, ZeroSchema, any>)
-  | QueryPhantom;
+  | CustomQueryPhantom;
 
 export type QueryRowType<Q extends AnyQueryLike> = Q extends (
   ...args: any
@@ -153,7 +153,7 @@ export type QueryRowType<Q extends AnyQueryLike> = Q extends (
   ? R
   : Q extends Query<any, any, infer R>
     ? R
-    : Q extends QueryPhantom
+    : Q extends CustomQueryPhantom
       ? Q['~']['$return']
       : never;
 
@@ -163,7 +163,7 @@ export type QueryResultType<Q extends AnyQueryLike> = Q extends
   | Query<string, ZeroSchema, any>
   | ((...args: any) => Query<string, ZeroSchema, any>)
   ? HumanReadable<QueryRowType<Q>>
-  : Q extends QueryPhantom
+  : Q extends CustomQueryPhantom
     ? HumanReadable<Q['~']['$return']>
     : never;
 

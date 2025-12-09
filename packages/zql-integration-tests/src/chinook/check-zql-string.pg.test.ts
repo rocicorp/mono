@@ -1,9 +1,7 @@
 import {test} from 'vitest';
 import {defaultFormat} from '../../../zero-types/src/format.ts';
-import {
-  StaticQuery,
-  type AnyStaticQuery,
-} from '../../../zql/src/query/static-query.ts';
+import {StaticQuery} from '../../../zql/src/query/static-query.ts';
+import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';

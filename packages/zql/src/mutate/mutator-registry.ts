@@ -3,7 +3,6 @@ import {
   isPlainObject,
   type DeepMerge,
 } from '../../../shared/src/deep-merge.ts';
-import type {Expand} from '../../../shared/src/expand.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   getValueAtPath,
@@ -210,7 +209,7 @@ export type MutatorRegistry<
   MD extends MutatorDefinitions,
   TSchema extends Schema,
 > = ToMutatorTree<MD, TSchema> & {
-  ['~']: Expand<MutatorRegistryTypes<TSchema>>;
+  ['~']: MutatorRegistryTypes<TSchema>;
 };
 
 /**
@@ -219,7 +218,7 @@ export type MutatorRegistry<
  * the complex ToMutatorTree structure and hitting variance issues.
  */
 export type AnyMutatorRegistry = {
-  ['~']: Expand<MutatorRegistryTypes<Schema>>;
+  ['~']: MutatorRegistryTypes<Schema>;
   [key: string]: unknown;
 };
 

@@ -5,20 +5,25 @@ import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {unreachable} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
-import {createSchema, number, string, table} from '../../zero/src/zero.ts';
+import {
+  createSchema,
+  number,
+  string,
+  table,
+  type Query,
+} from '../../zero/src/zero.ts';
 import type {Change} from '../../zql/src/ivm/change.ts';
 import {Join} from '../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
-import {consume} from '../../zql/src/ivm/stream.ts';
 import {Take} from '../../zql/src/ivm/take.ts';
 import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {EntryList} from '../../zql/src/ivm/view.ts';
-import type {Query} from '../../zql/src/query/query.ts';
 import {SolidView, createSolidViewFactory, type State} from './solid-view.ts';
 
 const lc = createSilentLogContext();

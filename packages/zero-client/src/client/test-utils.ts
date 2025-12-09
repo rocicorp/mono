@@ -413,8 +413,8 @@ export function waitForPostMessage() {
 }
 
 /**
- * Converts a regular query into a "named" query by associating
- * a name and arguments with it. This is useful for testing query tracking.
+ * Converts a regular query into a custom query (named query) by associating
+ * a name and arguments with it. This is useful for testing custom query tracking.
  */
 export function asCustomQuery<
   T extends keyof S['tables'] & string,

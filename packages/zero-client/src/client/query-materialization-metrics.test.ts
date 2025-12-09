@@ -4,7 +4,6 @@ import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
@@ -19,6 +18,7 @@ import {
   type UpdateQuery,
 } from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();

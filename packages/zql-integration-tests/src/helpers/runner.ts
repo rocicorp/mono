@@ -77,7 +77,7 @@ type Delegates = {
   mapper: NameMapper;
 };
 
-type QueryBuilders<TSchema extends Schema> = {
+type Queries<TSchema extends Schema> = {
   [K in keyof TSchema['tables'] & string]: Query<K, TSchema>;
 };
 
@@ -202,14 +202,14 @@ function makeDelegates<TSchema extends Schema>(
 
 function makeQueries<TSchema extends Schema>(
   schema: TSchema,
-): QueryBuilders<TSchema> {
+): Queries<TSchema> {
   const ret: Record<string, Query<string, TSchema>> = {};
 
   for (const table of Object.keys(schema.tables)) {
     ret[table] = new QueryImpl(schema, table, {table}, defaultFormat, 'test');
   }
 
-  return ret as QueryBuilders<TSchema>;
+  return ret as Queries<TSchema>;
 }
 
 type Options<TSchema extends Schema> = {
@@ -261,10 +261,8 @@ export async function createVitests<TSchema extends Schema>(
   }: Options<TSchema>,
   ...testSpecs: (readonly {
     name: string;
-    createQuery: (
-      q: QueryBuilders<TSchema>,
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    ) => Query<string, TSchema, any>;
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    createQuery: (q: Queries<TSchema>) => Query<string, TSchema, any>;
     manualVerification?: unknown;
   }[])[]
 ) {
@@ -298,14 +296,14 @@ export async function runBenchmarks<TSchema extends Schema>(
   {suiteName, type, zqlSchema, pgContent, only}: HydrationOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>;
+    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
   }[])[]
 ): Promise<void>;
 export async function runBenchmarks<TSchema extends Schema>(
   {suiteName, type, zqlSchema, pgContent, only}: PushOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>;
+    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
     generatePush: PushGenerator;
   }[])[]
 ): Promise<void>;
@@ -320,7 +318,7 @@ export async function runBenchmarks<TSchema extends Schema>(
   }: BenchOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
-    createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>;
+    createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
     generatePush?: PushGenerator;
   }[])[]
 ): Promise<void> {
@@ -430,9 +428,9 @@ function makeBenchmark<TSchema extends Schema>({
 }: {
   name: string;
   zqlSchema: TSchema;
-  createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>;
+  createQuery: (q: Queries<TSchema>) => Query<string, TSchema>;
   type: 'hydration' | 'push';
-  queries: QueryBuilders<TSchema>;
+  queries: Queries<TSchema>;
   delegates: Delegates;
   dbs: DBs<TSchema>;
   generatePush: PushGenerator | undefined;
@@ -563,7 +561,7 @@ function makeTest<TSchema extends Schema>(
   // Memory can do it by forking the sources as we do in custom mutators on rebase.
   dbs: DBs<TSchema>,
   delegates: Delegates,
-  createQuery: (q: QueryBuilders<TSchema>) => Query<string, TSchema>,
+  createQuery: (q: Queries<TSchema>) => Query<string, TSchema>,
   pushEvery: number,
   manualVerification?: unknown,
 ) {

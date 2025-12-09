@@ -18,19 +18,20 @@ import {
   string,
   table,
   type CustomMutatorDefs,
+  type Query,
   type Schema,
   type TTL,
   type ViewFactory,
 } from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
-import {consume} from '../../zql/src/ivm/stream.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import type {MaterializeOptions, Query} from '../../zql/src/query/query.ts';
+import type {MaterializeOptions} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {useQuery, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({
