@@ -2,7 +2,13 @@ import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {
+  DeleteID,
+  InsertValue,
+  Transaction,
+  UpdateValue,
+  UpsertValue,
+} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import type {MutatorResult} from './custom.ts';
@@ -409,27 +415,19 @@ describe('CRUD patterns on client', () => {
 
       // Verify UserMutators has all CRUD operations
       type UserMutators = TxMutateType['user'];
-      type HasInsert = 'insert' extends keyof UserMutators ? true : false;
-      type HasUpdate = 'update' extends keyof UserMutators ? true : false;
-      type HasUpsert = 'upsert' extends keyof UserMutators ? true : false;
-      type HasDelete = 'delete' extends keyof UserMutators ? true : false;
-      expectTypeOf<HasInsert>().toEqualTypeOf<true>();
-      expectTypeOf<HasUpdate>().toEqualTypeOf<true>();
-      expectTypeOf<HasUpsert>().toEqualTypeOf<true>();
-      expectTypeOf<HasDelete>().toEqualTypeOf<true>();
+      type UserTableSchema = (typeof schemaLegacy)['tables']['user'];
 
-      // Verify return types are Promise<void>
-      expectTypeOf<ReturnType<UserMutators['insert']>>().toEqualTypeOf<
-        Promise<void>
+      expectTypeOf<UserMutators['insert']>().toEqualTypeOf<
+        (value: InsertValue<UserTableSchema>) => Promise<void>
       >();
-      expectTypeOf<ReturnType<UserMutators['update']>>().toEqualTypeOf<
-        Promise<void>
+      expectTypeOf<UserMutators['update']>().toEqualTypeOf<
+        (value: UpdateValue<UserTableSchema>) => Promise<void>
       >();
-      expectTypeOf<ReturnType<UserMutators['upsert']>>().toEqualTypeOf<
-        Promise<void>
+      expectTypeOf<UserMutators['upsert']>().toEqualTypeOf<
+        (value: UpsertValue<UserTableSchema>) => Promise<void>
       >();
-      expectTypeOf<ReturnType<UserMutators['delete']>>().toEqualTypeOf<
-        Promise<void>
+      expectTypeOf<UserMutators['delete']>().toEqualTypeOf<
+        (id: DeleteID<UserTableSchema>) => Promise<void>
       >();
 
       await z.close();
