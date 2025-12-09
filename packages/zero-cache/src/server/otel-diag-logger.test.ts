@@ -114,50 +114,36 @@ describe('otel-diag-logger', () => {
     expect(mockLog.debug).toHaveBeenCalledWith('debug message', 'arg2');
     expect(mockLog.info).toHaveBeenCalledWith('info message', 'arg3');
     expect(mockLog.warn).toHaveBeenCalledWith('warn message', 'arg4');
-    expect(mockLog.error).toHaveBeenCalledWith('error message', 'arg5');
+    // All OTEL errors are logged as warnings
+    expect(mockLog.warn).toHaveBeenCalledWith('error message', 'arg5');
   });
 
-  test('diagnostic logger downgrades known errors to warnings', () => {
+  test('diagnostic logger logs all errors as warnings', () => {
     setupOtelDiagnosticLogger(mockLogContext);
 
     const [logger] = mockSetLogger.mock.calls[0] as [DiagLogger, unknown];
 
-    // Test known non-critical errors that should become warnings
-    const knownErrors = [
+    // Test various error messages - all should be logged as warnings
+    const errorMessages = [
       'Request Timeout occurred',
       'Unexpected server response: 502',
       'Export failed with retryable status',
       'Method Not Allowed',
+      'Real error message',
+      'Another critical error',
     ];
 
-    knownErrors.forEach(errorMsg => {
+    errorMessages.forEach(errorMsg => {
       logger.error(errorMsg, 'extra-arg');
     });
 
-    // All should have been routed to warn instead of error
-    expect(mockLog.warn).toHaveBeenCalledTimes(4);
+    // All OTEL errors are logged as warnings
+    expect(mockLog.warn).toHaveBeenCalledTimes(6);
     expect(mockLog.error).not.toHaveBeenCalled();
 
-    knownErrors.forEach(errorMsg => {
+    errorMessages.forEach(errorMsg => {
       expect(mockLog.warn).toHaveBeenCalledWith(errorMsg, 'extra-arg');
     });
-  });
-
-  test('diagnostic logger keeps real errors as errors', () => {
-    setupOtelDiagnosticLogger(mockLogContext);
-
-    const [logger] = mockSetLogger.mock.calls[0] as [DiagLogger, unknown];
-
-    logger.error('Real error message', 'arg1');
-    logger.error('Another critical error', 'arg2');
-
-    expect(mockLog.error).toHaveBeenCalledTimes(2);
-    expect(mockLog.warn).not.toHaveBeenCalled();
-    expect(mockLog.error).toHaveBeenCalledWith('Real error message', 'arg1');
-    expect(mockLog.error).toHaveBeenCalledWith(
-      'Another critical error',
-      'arg2',
-    );
   });
 
   test('respects OTEL_LOG_LEVEL environment variable', () => {
