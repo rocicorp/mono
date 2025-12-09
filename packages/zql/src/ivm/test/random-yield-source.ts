@@ -145,5 +145,6 @@ export function createRandomYieldWrapper(
   yieldProbability: number = 0.3,
   checkAbort?: () => void,
 ): (source: Source) => Source {
-  return source => new RandomYieldSource(source, rng, yieldProbability, checkAbort);
+  return source =>
+    new RandomYieldSource(source, rng, yieldProbability, checkAbort);
 }
