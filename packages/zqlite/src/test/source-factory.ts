@@ -104,12 +104,14 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
   readonly #db: Database;
   readonly #schema: Schema;
   readonly #cgs;
+  readonly #shouldYield: () => boolean;
 
   constructor(
     lc: LogContext,
     logConfig: LogConfig,
     db: Database,
     schema: Schema,
+    shouldYield: () => boolean = () => false,
   ) {
     super();
     this.#lc = lc;
@@ -122,6 +124,7 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
     this.#schema = schema;
     this.#clientToServerMapper = clientToServer(schema.tables);
     this.#serverToClientMapper = serverToClient(schema.tables);
+    this.#shouldYield = shouldYield;
   }
 
   override createStorage(): Storage {
@@ -173,6 +176,7 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
       tableSchema.primaryKey.map(k =>
         this.#clientToServerMapper.columnName(clientTableName, k),
       ) as unknown as CompoundKey,
+      this.#shouldYield,
     );
 
     this.#sources.set(serverTableName, source);
@@ -189,6 +193,7 @@ export function newQueryDelegate(
   logConfig: LogConfig,
   db: Database,
   schema: Schema,
+  shouldYield: () => boolean = () => false,
 ): QueryDelegate {
-  return new SourceFactoryQueryDelegate(lc, logConfig, db, schema);
+  return new SourceFactoryQueryDelegate(lc, logConfig, db, schema, shouldYield);
 }

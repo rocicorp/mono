@@ -50,7 +50,7 @@ export class StaticQuery<
       system,
       customQueryID,
       currentJunction,
-      (tableName, ast, format, _customQueryID, _currentJunction) =>
+      (tableName, ast, format, _customQueryID, currentJunction) =>
         new StaticQuery(
           schema,
           tableName,
