@@ -194,22 +194,6 @@ export type CRUDMutator = (
   crudArg: CRUDMutationArg,
 ) => Promise<void>;
 
-// Zero crud mutators cannot function at the same
-// time as custom mutators as the rebase of crud mutators will not
-// update the IVM branch. That's ok, we're removing crud mutators
-// in favor of custom mutators.
-export function makeCRUDMutator(schema: Schema): CRUDMutator {
-  return async (
-    tx: WriteTransaction,
-    crudArg: CRUDMutationArg,
-  ): Promise<void> => {
-    for (const op of crudArg.ops) {
-      // oxlint-disable-next-line no-explicit-any
-      await crudImpl[op.op](tx, op as any, schema, undefined);
-    }
-  };
-}
-
 export function makeCRUDExecutor(
   tx: WriteTransaction,
   schema: Schema,
@@ -224,5 +208,21 @@ export function makeCRUDExecutor(
       schema,
       ivmBranch,
     );
+  };
+}
+
+// Zero crud mutators cannot function at the same
+// time as custom mutators as the rebase of crud mutators will not
+// update the IVM branch. That's ok, we're removing crud mutators
+// in favor of custom mutators.
+export function makeCRUDMutator(schema: Schema): CRUDMutator {
+  return async (
+    tx: WriteTransaction,
+    crudArg: CRUDMutationArg,
+  ): Promise<void> => {
+    const executor = makeCRUDExecutor(tx, schema, undefined);
+    for (const op of crudArg.ops) {
+      await executor(op.tableName, op.op, op.value);
+    }
   };
 }

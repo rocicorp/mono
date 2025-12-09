@@ -118,6 +118,7 @@ export type {
   ViewFactory,
 } from '../../zql/src/ivm/view.ts';
 export {createCRUDBuilder} from '../../zql/src/mutate/crud.ts';
+export type {TableMutator} from '../../zql/src/mutate/crud.ts';
 export type {
   AnyTransaction,
   DeleteID,
@@ -209,7 +210,7 @@ export type {
   ConnectionState,
   Source,
 } from './client/connection.ts';
-export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';
+export type {BatchMutator, DBMutator} from './client/crud.ts';
 export type {
   CustomMutatorDefs,
   CustomMutatorImpl,
