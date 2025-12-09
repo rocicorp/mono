@@ -4,11 +4,22 @@ import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {wrapSourcesWithRandomYield} from '../../../zql/src/ivm/test/random-yield-source.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
-import {bootstrap, runAndCompare} from '../helpers/runner.ts';
+import {
+  bootstrap,
+  lc,
+  runAndCompare,
+  TestPGQueryDelegate,
+  testLogConfig,
+  type Delegates,
+} from '../helpers/runner.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {newQueryDelegate} from '../../../zqlite/src/test/source-factory.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
@@ -93,6 +104,7 @@ function createCase(seed?: number) {
   });
   return {
     seed,
+    rng,
     query: generateShrinkableQuery(
       schema,
       {},
@@ -106,9 +118,11 @@ function createCase(seed?: number) {
 async function runCase({
   query,
   seed,
+  rng,
 }: {
   query: [AnyQuery, AnyQuery[]];
   seed: number;
+  rng: () => number;
 }) {
   const label = `fuzz-hydration ${seed}`;
   const startTime = performance.now();
@@ -119,9 +133,13 @@ async function runCase({
   );
 
   try {
-    await harness.transact(async delegates => {
-      await runAndCompare(schema, delegates, query[0], undefined);
-    }, shouldYield);
+    await transactWithRandomYields(
+      rng,
+      async delegates => {
+        await runAndCompare(schema, delegates, query[0], undefined);
+      },
+      shouldYield,
+    );
   } catch (e) {
     // Timeouts pass with a warning
     if (e instanceof FuzzTimeoutError) {
@@ -136,6 +154,50 @@ async function runCase({
     }
     throw new Error('Mismatch. Repro seed: ' + seed + '\nshrunk zql: ' + zql);
   }
+}
+
+/**
+ * Creates a transact function that wraps memory sources with random yields.
+ * This tests that the IVM pipeline correctly handles cooperative scheduling
+ * via yield points during hydration and push operations.
+ */
+async function transactWithRandomYields(
+  rng: () => number,
+  cb: (delegates: Delegates) => Promise<void>,
+  shouldYield?: () => boolean,
+) {
+  await harness.dbs.pg.begin(async tx => {
+    // Fork memory sources and wrap them with random yield injection
+    const forkedSources = Object.fromEntries(
+      Object.entries(harness.dbs.memory).map(([key, source]) => [
+        key,
+        source.fork(),
+      ]),
+    );
+
+    // Wrap sources with random yield injection (30% probability at each yield point)
+    const yieldingSources = wrapSourcesWithRandomYield(forkedSources, rng, 0.3);
+
+    const scopedDelegates: Delegates = {
+      ...harness.delegates,
+      pg: new TestPGQueryDelegate(tx, schema, harness.dbs.pgSchema),
+      memory: new TestMemoryQueryDelegate({
+        sources: yieldingSources,
+      }),
+      sqlite: newQueryDelegate(
+        lc,
+        testLogConfig,
+        (() => {
+          const db = new Database(lc, harness.dbs.sqliteFile);
+          db.exec('BEGIN CONCURRENT');
+          return db;
+        })(),
+        schema,
+        shouldYield,
+      ),
+    };
+    await cb(scopedDelegates);
+  });
 }
 
 async function shrink(generations: AnyQuery[], seed: number) {

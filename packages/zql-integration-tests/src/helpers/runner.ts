@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {afterAll, expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+export {testLogConfig};
 import {unreachable} from '../../../shared/src/asserts.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -59,7 +60,7 @@ import {
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
 
-const lc = createSilentLogContext();
+export const lc = createSilentLogContext();
 
 type DBs<TSchema extends Schema> = {
   pg: PostgresDB;
@@ -70,7 +71,7 @@ type DBs<TSchema extends Schema> = {
   sqliteFile: string;
 };
 
-type Delegates = {
+export type Delegates = {
   pg: TestPGQueryDelegate;
   sqlite: QueryDelegate;
   memory: QueryDelegate;
@@ -1050,7 +1051,7 @@ async function checkEditToMatch(
   zqlMaterialized.destroy();
 }
 
-class TestPGQueryDelegate extends QueryDelegateBase {
+export class TestPGQueryDelegate extends QueryDelegateBase {
   readonly #pg: PostgresDB;
   readonly #schema: Schema;
   readonly serverSchema: ServerSchema;
