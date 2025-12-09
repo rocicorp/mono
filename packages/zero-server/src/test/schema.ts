@@ -88,6 +88,7 @@ export const schema = createSchema({
       .primaryKey('id'),
   ],
   relationships: [],
+  enableLegacyMutators: true,
 });
 
 export const schemaSql = `CREATE TABLE basic (

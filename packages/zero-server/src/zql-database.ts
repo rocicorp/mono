@@ -1,19 +1,13 @@
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
-import type {
-  DBConnection,
-  DBTransaction,
-  SchemaCRUD,
-} from '../../zql/src/mutate/custom.ts';
+import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {
   HumanReadable,
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
-import type {TransactionImpl} from './custom.ts';
-import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
+import {CRUDMutatorFactory, type TransactionImpl} from './custom.ts';
 import type {
   Database,
   TransactionProviderHooks,
@@ -31,16 +25,11 @@ export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
   implements Database<TransactionImpl<TSchema, TWrappedTransaction>>
 {
   readonly connection: DBConnection<TWrappedTransaction>;
-  readonly #mutate: (
-    dbTransaction: DBTransaction<TWrappedTransaction>,
-    serverSchema: ServerSchema,
-  ) => SchemaCRUD<TSchema>;
-  readonly #schema: TSchema;
+  readonly #crudFactory: CRUDMutatorFactory<TSchema>;
 
   constructor(connection: DBConnection<TWrappedTransaction>, schema: TSchema) {
     this.connection = connection;
-    this.#mutate = makeSchemaCRUD(schema);
-    this.#schema = schema;
+    this.#crudFactory = new CRUDMutatorFactory(schema);
   }
 
   transaction<R>(
@@ -98,18 +87,12 @@ export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
     });
   }
 
-  async #makeServerTransaction(
+  #makeServerTransaction(
     dbTx: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
   ) {
-    return await makeServerTransaction(
-      dbTx,
-      clientID,
-      mutationID,
-      this.#schema,
-      this.#mutate,
-    );
+    return this.#crudFactory.createTransaction(dbTx, clientID, mutationID);
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(

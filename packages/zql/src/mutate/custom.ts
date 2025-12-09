@@ -1,16 +1,23 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import type {Expand} from '../../../shared/src/expand.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {
   DefaultSchema,
   DefaultWrappedTransaction,
 } from '../../../zero-types/src/default-types.ts';
-import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
-import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
 import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
 import type {SchemaQuery} from '../query/schema-query.ts';
+import type {CRUDMutateRequest, SchemaCRUD} from './crud.ts';
+export type {
+  DeleteID,
+  InsertValue,
+  SchemaCRUD,
+  TableCRUD,
+  UpdateValue,
+  UpsertValue,
+} from './crud.ts';
 
 type ClientID = string;
 
@@ -42,7 +49,7 @@ export interface TransactionBase<S extends Schema> {
    */
   readonly reason: TransactionReason;
 
-  readonly mutate: SchemaCRUD<S>;
+  readonly mutate: MutateCRUD<S>;
   readonly query: SchemaQuery<S>;
 
   run<TTable extends keyof S['tables'] & string, TReturn>(
@@ -100,71 +107,15 @@ interface Queryable {
   query: (query: string, args: unknown[]) => Promise<Iterable<Row>>;
 }
 
-export type SchemaCRUD<S extends Schema> = {
-  [Table in keyof S['tables']]: TableCRUD<S['tables'][Table]>;
-};
-
-export type TableCRUD<S extends TableSchema> = {
-  /**
-   * Writes a row if a row with the same primary key doesn't already exists.
-   * Non-primary-key fields that are 'optional' can be omitted or set to
-   * `undefined`. Such fields will be assigned the value `null` optimistically
-   * and then the default value as defined by the server.
-   */
-  insert: (value: InsertValue<S>) => Promise<void>;
-
-  /**
-   * Writes a row unconditionally, overwriting any existing row with the same
-   * primary key. Non-primary-key fields that are 'optional' can be omitted or
-   * set to `undefined`. Such fields will be assigned the value `null`
-   * optimistically and then the default value as defined by the server.
-   */
-  upsert: (value: UpsertValue<S>) => Promise<void>;
-
-  /**
-   * Updates a row with the same primary key. If no such row exists, this
-   * function does nothing. All non-primary-key fields can be omitted or set to
-   * `undefined`. Such fields will be left unchanged from previous value.
-   */
-  update: (value: UpdateValue<S>) => Promise<void>;
-
-  /**
-   * Deletes the row with the specified primary key. If no such row exists, this
-   * function does nothing.
-   */
-  delete: (id: DeleteID<S>) => Promise<void>;
-};
-
-export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;
-
-type PrimaryKeyFields<S extends TableSchema> = {
-  [K in Extract<
-    S['primaryKey'][number],
-    keyof S['columns']
-  >]: SchemaValueToTSType<S['columns'][K]>;
-};
-
-export type InsertValue<S extends TableSchema> = Expand<
-  PrimaryKeyFields<S> & {
-    [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
-      ? K
-      : never]?: SchemaValueToTSType<S['columns'][K]> | undefined;
-  } & {
-    [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
-      ? never
-      : K]: SchemaValueToTSType<S['columns'][K]>;
-  }
->;
-
-export type UpsertValue<S extends TableSchema> = InsertValue<S>;
-
-export type UpdateValue<S extends TableSchema> = Expand<
-  PrimaryKeyFields<S> & {
-    [K in keyof S['columns']]?:
-      | SchemaValueToTSType<S['columns'][K]>
-      | undefined;
-  }
->;
+/**
+ * The type of `tx.mutate` which is:
+ * 1. A callable function that accepts a `CRUDMutateRequest`
+ * 2. When `enableLegacyMutators` is true, also an object with CRUD methods per table
+ */
+export type MutateCRUD<S extends Schema> = {
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  (request: CRUDMutateRequest<S, any, any, any>): Promise<void>;
+} & (S['enableLegacyMutators'] extends true ? SchemaCRUD<S> : {});
 
 export function customMutatorKey(sep: string, parts: string[]) {
   for (const part of parts) {
@@ -174,8 +125,4 @@ export function customMutatorKey(sep: string, parts: string[]) {
     );
   }
   return parts.join(sep);
-}
-
-export function splitMutatorKey(key: string, sep: string | RegExp): string[] {
-  return key.split(sep);
 }
