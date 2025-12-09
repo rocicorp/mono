@@ -49,6 +49,9 @@ export function setupOtelDiagnosticLogger(
   }
 
   const log = lc.withContext('component', 'otel');
+
+  // Log level ERROR is reserved for unforced application errors. Since otel
+  // errors do not affect application functionality, they are limited to WARN.
   diag.setLogger(
     {
       verbose: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
