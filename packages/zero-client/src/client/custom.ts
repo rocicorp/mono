@@ -5,19 +5,14 @@ import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import {makeMutateCRUDFunction} from '../../../zql/src/mutate/crud.ts';
 import type {
   ClientTransaction,
-  DeleteID,
-  InsertValue,
-  SchemaCRUD,
+  MutateCRUD,
   Transaction,
-  UpdateValue,
-  UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
@@ -28,7 +23,7 @@ import {
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
-import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
+import {makeCRUDExecutor} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 
@@ -121,7 +116,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   implements ClientTransaction<TSchema>
 {
   readonly location = 'client';
-  readonly mutate: SchemaCRUD<TSchema>;
+  readonly mutate: MutateCRUD<TSchema>;
   readonly query: SchemaQuery<TSchema>;
   readonly #repTx: WriteTransaction;
   readonly #zeroContext: ZeroContext;
@@ -129,13 +124,12 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   constructor(lc: LogContext, repTx: WriteTransaction, schema: TSchema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     const txData = getZeroTxData(repTx);
+    const ivmBranch = txData.ivmSources as IVMSourceBranch;
 
     this.#repTx = repTx;
-    this.mutate = makeSchemaCRUD(
-      schema,
-      repTx,
-      txData.ivmSources as IVMSourceBranch,
-    );
+
+    const executor = makeCRUDExecutor(repTx, schema, ivmBranch);
+    this.mutate = makeMutateCRUDFunction(schema, executor);
 
     const zeroContext = newZeroContext(
       lc,
@@ -197,18 +191,6 @@ export function makeReplicacheMutator<
   };
 }
 
-function makeSchemaCRUD<S extends Schema>(
-  schema: S,
-  tx: WriteTransaction,
-  ivmBranch: IVMSourceBranch,
-) {
-  // Only creates the CRUD mutators on demand
-  // rather than creating them all up-front for each mutation.
-  return recordProxy(schema.tables, (_tableSchema, tableName) =>
-    makeTableCRUD(schema, tableName, tx, ivmBranch),
-  ) as SchemaCRUD<S>;
-}
-
 function assertValidRunOptions(options: RunOptions | undefined): void {
   // TODO(arv): We should enforce this with the type system too.
   assert(
@@ -230,44 +212,4 @@ function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
     emptyFunction,
     assertValidRunOptions,
   );
-}
-
-function makeTableCRUD(
-  schema: Schema,
-  tableName: string,
-  tx: WriteTransaction,
-  ivmBranch: IVMSourceBranch,
-) {
-  const table = must(schema.tables[tableName]);
-  const {primaryKey} = table;
-  return {
-    insert: (value: InsertValue<TableSchema>) =>
-      insertImpl(
-        tx,
-        {op: 'insert', tableName, primaryKey, value},
-        schema,
-        ivmBranch,
-      ),
-    upsert: (value: UpsertValue<TableSchema>) =>
-      upsertImpl(
-        tx,
-        {op: 'upsert', tableName, primaryKey, value},
-        schema,
-        ivmBranch,
-      ),
-    update: (value: UpdateValue<TableSchema>) =>
-      updateImpl(
-        tx,
-        {op: 'update', tableName, primaryKey, value},
-        schema,
-        ivmBranch,
-      ),
-    delete: (id: DeleteID<TableSchema>) =>
-      deleteImpl(
-        tx,
-        {op: 'delete', tableName, primaryKey, value: id},
-        schema,
-        ivmBranch,
-      ),
-  };
 }

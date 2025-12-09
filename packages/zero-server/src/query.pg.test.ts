@@ -1,7 +1,7 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
+import {makeServerTransaction} from './custom.ts';
 import {schema, schemaSql, seedDataSql} from './test/schema.ts';
 import {Transaction} from './test/util.ts';
 
@@ -17,13 +17,11 @@ describe('makeSchemaQuery', () => {
   test('select', async () => {
     await pg.begin(async tx => {
       const dbTransaction = new Transaction(tx);
-      const mutate = makeSchemaCRUD(schema);
       const transaction = await makeServerTransaction(
         dbTransaction,
         'test-client',
         1,
         schema,
-        mutate,
       );
 
       const result = await transaction.run(transaction.query.basic);
@@ -40,13 +38,11 @@ describe('makeSchemaQuery', () => {
   test('select singular', async () => {
     await pg.begin(async tx => {
       const dbTransaction = new Transaction(tx);
-      const mutate = makeSchemaCRUD(schema);
       const transaction = await makeServerTransaction(
         dbTransaction,
         'test-client',
         1,
         schema,
-        mutate,
       );
 
       const result = await transaction.run(transaction.query.basic.one());
@@ -57,13 +53,11 @@ describe('makeSchemaQuery', () => {
   test('select singular with no results', async () => {
     await pg.begin(async tx => {
       const dbTransaction = new Transaction(tx);
-      const mutate = makeSchemaCRUD(schema);
       const transaction = await makeServerTransaction(
         dbTransaction,
         'test-client',
         1,
         schema,
-        mutate,
       );
 
       const result = await transaction.run(
@@ -76,13 +70,11 @@ describe('makeSchemaQuery', () => {
   test('tx.query.table.run() works', async () => {
     await pg.begin(async tx => {
       const dbTransaction = new Transaction(tx);
-      const mutate = makeSchemaCRUD(schema);
       const transaction = await makeServerTransaction(
         dbTransaction,
         'test-client',
         1,
         schema,
-        mutate,
       );
 
       // Test that tx.query.table.run() works (the fix for the bug)

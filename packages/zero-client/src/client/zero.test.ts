@@ -2036,6 +2036,7 @@ test.each([
         })
         .primaryKey('id'),
     ],
+    enableLegacyMutators: true,
   });
   type LocalSchema = typeof schema;
   type IssueRowDef = LocalSchema['tables']['issues'];
@@ -2097,7 +2098,7 @@ test.each([
     SchemaOfMutatorsIssuesInsert['enableLegacyMutators']
   >().toEqualTypeOf<LocalSchema['enableLegacyMutators']>();
   // not sure what this is but just wanted to get type check working
-  expectTypeOf<X>().toEqualTypeOf<boolean | undefined>();
+  expectTypeOf<X>().toEqualTypeOf<true>();
 
   await z.mutate(mutators.issues.insert({id: 'a', value: 1})).client;
   await z.mutate(mutators.issues.insert({id: 'b', value: 2})).client;
@@ -2153,6 +2154,7 @@ test.skip('passing cacheURL null allows queries without WS connection', async ()
         })
         .primaryKey('id'),
     ],
+    enableLegacyMutators: true,
   });
 
   type Schema = typeof schema;
@@ -3417,6 +3419,7 @@ describe('Mutation responses poked down', () => {
           .columns({id: string(), value: number()})
           .primaryKey('id'),
       ],
+      enableLegacyMutators: true,
     });
     const z = zeroForTest({
       logLevel: 'debug',
@@ -3478,38 +3481,41 @@ test('kvStore option', async () => {
     [refCountSymbol]: number;
   };
 
+  const localSchema = createSchema({
+    tables: [
+      table('e')
+        .columns({
+          id: string(),
+          value: number(),
+        })
+        .primaryKey('id'),
+    ],
+    enableLegacyMutators: true,
+  });
+  const mutators = defineMutatorsWithType<typeof localSchema>()({
+    insertE: defineMutatorWithType<typeof localSchema>()<{
+      id: string;
+      value: number;
+    }>(({tx, args}) => tx.mutate.e.insert(args)),
+  });
+
   const t = async (
-    kvStore: ZeroOptions<Schema>['kvStore'],
+    kvStore: ZeroOptions<typeof localSchema>['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
     expectedValue: E[],
   ) => {
-    const schema = createSchema({
-      tables: [
-        table('e')
-          .columns({
-            id: string(),
-            value: number(),
-          })
-          .primaryKey('id'),
-      ],
-    });
-    const mutators = defineMutatorsWithType<typeof schema>()({
-      insertE: defineMutator<{id: string; value: number}>(({tx, args}) =>
-        tx.mutate.e.insert(args),
-      ),
-    });
     const z = zeroForTest({
       userID,
       kvStore,
-      schema,
+      schema: localSchema,
       mutators,
     });
 
     // Use persist as a way to ensure we have read the data out of IDB.
     await z.persist();
 
-    const zql = createBuilder(schema);
+    const zql = createBuilder(localSchema);
     const idIsAView = z.materialize(zql.e.where('id', '=', 'a'));
     const allDataView = z.materialize(zql.e);
     expect(allDataView.data).toEqual(expectedValue);
@@ -4158,6 +4164,7 @@ test('custom mutations get pushed', async () => {
     tables: [
       table('issues').columns({id: string(), value: number()}).primaryKey('id'),
     ],
+    enableLegacyMutators: true,
   });
   const z = zeroForTest({
     schema,
