@@ -174,6 +174,7 @@ export const schema = createSchema(schemaOptions);
 export const legacySchema = createSchema({
   ...schemaOptions,
   enableLegacyMutators: true,
+  enableLegacyQueries: true,
 });
 
 /**

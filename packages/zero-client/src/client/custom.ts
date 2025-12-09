@@ -117,7 +117,12 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
 {
   readonly location = 'client';
   readonly mutate: MutateCRUD<TSchema>;
-  readonly query: SchemaQuery<TSchema>;
+  /**
+   * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
+   */
+  readonly query: TSchema['enableLegacyQueries'] extends true
+    ? SchemaQuery<TSchema>
+    : {};
   readonly #repTx: WriteTransaction;
   readonly #zeroContext: ZeroContext;
 

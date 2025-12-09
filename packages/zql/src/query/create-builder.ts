@@ -30,7 +30,14 @@ function createBuilderWithQueryFactory<S extends Schema>(
 ): SchemaQuery<S> {
   return recordProxy(
     schema.tables,
-    (_tableSchema, prop) => queryFactory(prop),
+    (_tableSchema, prop) => {
+      if (!schema.enableLegacyQueries) {
+        throw new Error(
+          `Legacy queries are disabled for your schema - use \`z.run(zql.${prop}.where(...))\` instead.`,
+        );
+      }
+      return queryFactory(prop);
+    },
     prop => {
       throw new Error(`Table ${prop} does not exist in schema`);
     },

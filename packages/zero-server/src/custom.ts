@@ -112,7 +112,12 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   readonly clientID: string;
   readonly mutationID: number;
   readonly mutate: MutateCRUD<TSchema>;
-  readonly query: SchemaQuery<TSchema>;
+  /**
+   * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
+   */
+  readonly query: TSchema['enableLegacyQueries'] extends true
+    ? SchemaQuery<TSchema>
+    : {};
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
 
