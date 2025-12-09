@@ -117,6 +117,7 @@ export type {
   View,
   ViewFactory,
 } from '../../zql/src/ivm/view.ts';
+export {createCRUDBuilder} from '../../zql/src/mutate/crud.ts';
 export type {
   AnyTransaction,
   DeleteID,

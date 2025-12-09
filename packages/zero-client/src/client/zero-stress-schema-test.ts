@@ -11826,6 +11826,6 @@ export const zeroStressSchema = createSchema({
     workspaceRelationships,
     workspaceMemberRelationships,
   ],
-  enableLegacyMutators: false,
+  enableLegacyMutators: true,
   enableLegacyQueries: false,
 });

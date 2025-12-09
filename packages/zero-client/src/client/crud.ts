@@ -1,5 +1,4 @@
 import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
@@ -15,6 +14,8 @@ import {
 } from '../../../zero-protocol/src/push.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
+import type {TableMutator} from '../../../zql/src/mutate/crud.ts';
 import type {
   DeleteID,
   InsertValue,
@@ -24,40 +25,7 @@ import type {
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import {toPrimaryKeyString} from './keys.ts';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
-
-/**
- * This is the type of the generated mutate.<name>.<verb> function.
- */
-export type TableMutator<S extends TableSchema> = {
-  /**
-   * Writes a row if a row with the same primary key doesn't already exists.
-   * Non-primary-key fields that are 'optional' can be omitted or set to
-   * `undefined`. Such fields will be assigned the value `null` optimistically
-   * and then the default value as defined by the server.
-   */
-  insert: (value: InsertValue<S>) => Promise<void>;
-
-  /**
-   * Writes a row unconditionally, overwriting any existing row with the same
-   * primary key. Non-primary-key fields that are 'optional' can be omitted or
-   * set to `undefined`. Such fields will be assigned the value `null`
-   * optimistically and then the default value as defined by the server.
-   */
-  upsert: (value: UpsertValue<S>) => Promise<void>;
-
-  /**
-   * Updates a row with the same primary key. If no such row exists, this
-   * function does nothing. All non-primary-key fields can be omitted or set to
-   * `undefined`. Such fields will be left unchanged from previous value.
-   */
-  update: (value: UpdateValue<S>) => Promise<void>;
-
-  /**
-   * Deletes the row with the specified primary key. If no such row exists, this
-   * function does nothing.
-   */
-  delete: (id: DeleteID<S>) => Promise<void>;
-};
+export type {TableMutator} from '../../../zql/src/mutate/crud.ts';
 
 export type DBMutator<S extends Schema> = S['enableLegacyMutators'] extends true
   ? {
@@ -236,10 +204,10 @@ export type CRUDMutator = (
 // update the IVM branch. That's ok, we're removing crud mutators
 // in favor of custom mutators.
 export function makeCRUDMutator(schema: Schema): CRUDMutator {
-  return async function zeroCRUDMutator(
+  return async (
     tx: WriteTransaction,
     crudArg: CRUDMutationArg,
-  ): Promise<void> {
+  ): Promise<void> => {
     for (const op of crudArg.ops) {
       switch (op.op) {
         case 'insert':
@@ -256,6 +224,36 @@ export function makeCRUDMutator(schema: Schema): CRUDMutator {
           break;
       }
     }
+  };
+}
+
+export type CRUDExecutor = (
+  tableName: string,
+  kind: 'insert' | 'upsert' | 'update' | 'delete',
+  value: unknown,
+) => Promise<void>;
+
+const crudImpl = {
+  insert: insertImpl,
+  upsert: upsertImpl,
+  update: updateImpl,
+  delete: deleteImpl,
+};
+
+export function makeCRUDExecutor(
+  tx: WriteTransaction,
+  schema: Schema,
+  ivmBranch: IVMSourceBranch | undefined,
+): CRUDExecutor {
+  return (tableName, kind, value) => {
+    const {primaryKey} = schema.tables[tableName];
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    return (crudImpl[kind] as any)(
+      tx,
+      {op: kind, tableName, primaryKey, value},
+      schema,
+      ivmBranch,
+    );
   };
 }
 
