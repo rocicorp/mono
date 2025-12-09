@@ -101,7 +101,7 @@ describe('defineQueries', () => {
     expect(result).toBe(builtQuery);
   });
 
-  test('should support (args).toZQL(ctx)', () => {
+  test('should support addContextToQuery(query, context)', () => {
     const queries = defineQueries({
       getUser: defineQuery(
         ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
@@ -210,19 +210,6 @@ describe('defineQueries', () => {
         type: 'simple',
       },
     });
-  });
-
-  test('query callable should not expose toZQL without args', () => {
-    const queries = defineQueries({
-      getUser: defineQuery(
-        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
-          builder.foo.where('id', '=', args),
-      ),
-    });
-
-    // oxlint-disable-next-line no-explicit-any -- testing runtime shape
-    const q = queries.getUser as any;
-    expect(q.toZQL).toBeUndefined();
   });
 
   test('should allow optional args when Args type is undefined', () => {
@@ -464,7 +451,7 @@ describe('isQueryRegistry', () => {
 });
 
 describe('defineQueries types', () => {
-  test('defineQueries keeps validator input for callable and context for toZQL', () => {
+  test('defineQueries keeps validator input for callable and context', () => {
     type Context = {userId: string};
     const stringToNumberValidator = makeValidator<
       {raw: string},
@@ -500,7 +487,7 @@ describe('defineQueries types', () => {
     >();
   });
 
-  test('initial Query should have args callable but no toZQL', () => {
+  test('initial Query should have args callable but no query', () => {
     const queries = defineQueries({
       getUser: defineQuery(
         ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
@@ -515,11 +502,8 @@ describe('defineQueries types', () => {
     // And retain types
     expectTypeOf(queries.getUser['~'].$context).toExtend<{userId: string}>();
 
-    // Should NOT have context method
-    expectTypeOf(queries.getUser).not.toHaveProperty('context');
-
-    // Should NOT have toZQL method (args not set)
-    expectTypeOf(queries.getUser).not.toHaveProperty('toZQL');
+    // Should NOT have query (args not set)
+    expectTypeOf(queries.getUser).not.toHaveProperty('query');
   });
 
   test('initial query should have fn that takes args and ctx', () => {
@@ -535,7 +519,7 @@ describe('defineQueries types', () => {
     >();
   });
 
-  test('after setting args, should have toZQL but not be callable again', () => {
+  test('after setting args, should have query but not be callable again', () => {
     const queries = defineQueriesWithType<typeof schema>()({
       getUser: defineQuery(
         ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
@@ -545,7 +529,7 @@ describe('defineQueries types', () => {
 
     const withArgs = queries.getUser('test-id');
 
-    // Should have toZQL method that takes context
+    // Should have query that takes context
     expectTypeOf<(typeof withArgs)['~']['$context']>().toEqualTypeOf<{
       userId: string;
     }>();
@@ -569,7 +553,7 @@ describe('defineQueries types', () => {
     >();
   });
 
-  test('context type should be enforced on toZQL', () => {
+  test('context type should be enforced on query', () => {
     const queries = defineQueries({
       getUser: defineQuery(
         ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
@@ -928,7 +912,7 @@ describe('defineQueries merging types', () => {
     }>();
   });
 
-  test('toZQL context types should be preserved', () => {
+  test('query context types should be preserved', () => {
     const base = defineQueries({
       queryA: defineQuery(
         ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>

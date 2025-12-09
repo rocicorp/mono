@@ -42,8 +42,8 @@ import {validateInput} from './validate-input.ts';
  * });
  *
  * // Usage:
- * const q = queries.issues().toZQL(ctx);
- * const q2 = queries.users.byId({id: '123'}).toZQL(ctx);
+ * const request = queries.issues.byId({id: '123'});
+ * const [data] = zero.useQuery(request);
  * ```
  *
  * @param defs - An object containing query definitions or nested objects of
