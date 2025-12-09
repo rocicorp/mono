@@ -34,9 +34,9 @@ export function extendReplicacheMutators<S extends Schema, C>(
         continue;
       }
 
-      const nextPath = [...path, key];
+      path.push(key);
       if (isMutator(mutator)) {
-        const fullKey = customMutatorKey('.', nextPath);
+        const fullKey = customMutatorKey('.', path);
         mutateObject[fullKey] = makeReplicacheMutator(
           lc,
           mutator,
@@ -44,7 +44,7 @@ export function extendReplicacheMutators<S extends Schema, C>(
           context,
         );
       } else if (typeof mutator === 'function') {
-        const fullKey = customMutatorKey('|', nextPath);
+        const fullKey = customMutatorKey('|', path);
         mutateObject[fullKey] = makeReplicacheMutatorLegacy(
           lc,
           // oxlint-disable-next-line no-explicit-any
@@ -53,8 +53,9 @@ export function extendReplicacheMutators<S extends Schema, C>(
           context,
         );
       } else if (mutator !== null && typeof mutator === 'object') {
-        processMutators(mutator, nextPath);
+        processMutators(mutator, path);
       }
+      path.pop();
     }
   };
 
