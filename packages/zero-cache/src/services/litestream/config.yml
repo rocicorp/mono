@@ -2,6 +2,7 @@ dbs:
   - path: ${ZERO_REPLICA_FILE}
     min-checkpoint-page-count: ${ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT}
     max-checkpoint-page-count: ${ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT}
+    busy-timeout: ${ZERO_LITESTREAM_BUSY_TIMEOUT}
     watermark-table: _zero.replicationState
     watermark-column: stateVersion
     replicas:
