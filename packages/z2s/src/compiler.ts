@@ -65,6 +65,9 @@ export type Spec = {
 const ZQL_RESULT_KEY = 'zql_result';
 const ZQL_RESULT_KEY_IDENT = sql.ident(ZQL_RESULT_KEY);
 
+const ZQL_RESULT_TABLE_KEY = 'zql_root';
+const ZQL_RESULT_TABLE_IDENT = sql.ident(ZQL_RESULT_TABLE_KEY);
+
 export function compile(
   serverSchema: ServerSchema,
   zqlSchema: Schema,
@@ -84,8 +87,8 @@ export function compile(
     zql: zqlSchema.tables,
   };
   return sql`SELECT 
-    ${toJSON('root', format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
-    FROM (${select(spec, ast, format)}) ${sql.ident('root')}`;
+    ${toJSON(ZQL_RESULT_TABLE_KEY, format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
+    FROM (${select(spec, ast, format)}) ${ZQL_RESULT_TABLE_IDENT}`;
 }
 
 function select(
