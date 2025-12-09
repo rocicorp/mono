@@ -27,7 +27,7 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
-import type {Query} from '../../../zql/src/query/query-builder.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
 import {
   asStaticQuery,
   staticQuery,

@@ -10,8 +10,8 @@ import {
   definePermissions,
 } from '../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
-import type {AnyQuery} from '../../../zql/src/query/query-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {staticQuery} from '../../../zql/src/query/static-query.ts';
 import {transformQuery} from './read-authorizer.ts';
 

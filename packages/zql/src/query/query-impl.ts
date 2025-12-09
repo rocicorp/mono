@@ -4,7 +4,7 @@ import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format} from '../ivm/view.ts';
 import {AbstractQuery} from './abstract-query.ts';
 import type {CustomQueryID} from './named.ts';
-import {type PullRow, type Query} from './query-builder.ts';
+import {type PullRow, type Query} from './query.ts';
 
 export function newQuery<
   TTable extends keyof TSchema['tables'] & string,

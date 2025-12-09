@@ -14,7 +14,7 @@ import type {
   DBTransaction,
   Row,
 } from '../../../zql/src/mutate/custom.ts';
-import type {HumanReadable} from '../../../zql/src/query/query-builder.ts';
+import type {HumanReadable} from '../../../zql/src/query/query.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 

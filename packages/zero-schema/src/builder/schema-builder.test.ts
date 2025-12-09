@@ -5,7 +5,7 @@ import type {
   HumanReadable,
   Query,
   QueryReturn,
-} from '../../../zql/src/query/query-builder.ts';
+} from '../../../zql/src/query/query.ts';
 import {relationships} from './relationship-builder.ts';
 import {clientSchemaFrom, createSchema} from './schema-builder.ts';
 import {boolean, json, number, string, table} from './table-builder.ts';

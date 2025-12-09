@@ -1,9 +1,9 @@
 import {describe, expect, test} from 'vitest';
 import type {TableSchema} from '../../../zero-types/src/schema.ts';
 import {completeOrdering} from './complete-ordering.ts';
-import {type AnyQuery} from './query-builder.ts';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
+import {type AnyQuery} from './query.ts';
 import {schema} from './test/test-schemas.ts';
 
 function ast(q: AnyQuery) {

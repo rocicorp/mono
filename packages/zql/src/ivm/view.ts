@@ -2,7 +2,7 @@ import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Value} from '../../../zero-protocol/src/data.ts';
 import type {Format} from '../../../zero-types/src/format.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {Query} from '../query/query-builder.ts';
+import type {Query} from '../query/query.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Input} from './operator.ts';
 

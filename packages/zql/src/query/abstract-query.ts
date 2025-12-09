@@ -22,6 +22,7 @@ import {
   simplifyCondition,
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
+import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import type {
   AnyQuery,
   ExistsOptions,
@@ -31,8 +32,7 @@ import type {
   PullRow,
   Query,
   RunOptions,
-} from './query-builder.ts';
-import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
+} from './query.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 

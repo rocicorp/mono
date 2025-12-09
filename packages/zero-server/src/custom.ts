@@ -20,13 +20,13 @@ import type {
   TableCRUD,
 } from '../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   Query,
   RunOptions,
-} from '../../zql/src/query/query-builder.ts';
-import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+} from '../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {getServerSchema} from './schema.ts';
 

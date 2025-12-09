@@ -12,8 +12,8 @@ import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {planQuery} from '../../zql/src/planner/planner-builder.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
-import type {Query} from '../../zql/src/query/query-builder.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 
 const pgContent = await getChinook();

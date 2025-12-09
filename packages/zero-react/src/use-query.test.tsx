@@ -17,12 +17,12 @@ import type {QueryResultDetails} from '../../zero-client/src/types/query-result.
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {type AbstractQuery} from '../../zql/src/query/abstract-query.ts';
-import type {Query} from '../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {
   queryInternalsTag,
   type QueryInternals,
 } from '../../zql/src/query/query-internals.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {
   getAllViewsSizeForTesting,

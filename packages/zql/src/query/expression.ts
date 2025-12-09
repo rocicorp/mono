@@ -16,7 +16,7 @@ import type {
   NoCompoundTypeSelector,
   PullTableSchema,
   Query,
-} from './query-builder.ts';
+} from './query.ts';
 
 export type ParameterReference = {
   [toStaticParam](): Parameter;

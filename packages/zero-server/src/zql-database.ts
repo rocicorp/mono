@@ -11,7 +11,7 @@ import type {
   HumanReadable,
   Query,
   RunOptions,
-} from '../../zql/src/query/query-builder.ts';
+} from '../../zql/src/query/query.ts';
 import type {TransactionImpl} from './custom.ts';
 import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
 import type {

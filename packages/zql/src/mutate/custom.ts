@@ -9,7 +9,7 @@ import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts'
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
-import type {HumanReadable, Query, RunOptions} from '../query/query-builder.ts';
+import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
 import type {SchemaQuery} from '../query/schema-query.ts';
 
 type ClientID = string;

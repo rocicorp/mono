@@ -17,13 +17,10 @@ import type {
 } from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
-  type HumanReadable,
-  type PullRow,
-} from '../../zql/src/query/query-builder.ts';
-import {
   addContextToQuery,
   type QueryOrQueryRequest,
-} from '../../zql/src/query/query.ts';
+} from '../../zql/src/query/define-query.ts';
+import {type HumanReadable, type PullRow} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
 import {useZero} from './use-zero.ts';

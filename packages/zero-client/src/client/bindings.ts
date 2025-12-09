@@ -1,12 +1,12 @@
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
   Query,
-} from '../../../zql/src/query/query-builder.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+} from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {Zero} from './zero.ts';

@@ -7,7 +7,7 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
-import type {Row} from '../query-builder.ts';
+import type {Row} from '../query.ts';
 
 const issue = table('issue')
   .from('issues')

@@ -73,7 +73,7 @@ import {
   defineMutatorWithType,
 } from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
-import type {Row} from '../../../zql/src/query/query-builder.ts';
+import type {Row} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';

@@ -7,7 +7,6 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {getValueAtPath} from '../../../shared/src/object-traversal.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {asQueryInternals} from './query-internals.ts';
 import {
   isQuery,
   isQueryDefinition,
@@ -18,7 +17,8 @@ import {
   type QueryDefinitionFunction,
   type QueryRequest,
   type QueryRequestTypes,
-} from './query.ts';
+} from './define-query.ts';
+import {asQueryInternals} from './query-internals.ts';
 import {validateInput} from './validate-input.ts';
 
 /**

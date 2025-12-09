@@ -8,7 +8,7 @@ export type {
   TableSchema,
 } from '../../zero-schema/src/table-schema.ts';
 export type {Schema} from '../../zero-types/src/schema.ts';
-export type {HumanReadable} from '../../zql/src/query/query-builder.ts';
+export type {HumanReadable} from '../../zql/src/query/query.ts';
 export type {ResultType} from '../../zql/src/query/typed-view.ts';
 export {ZeroInspector} from './components/zero-inspector.tsx';
 export {

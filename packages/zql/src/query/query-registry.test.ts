@@ -10,7 +10,13 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {createBuilder} from './create-builder.ts';
-import type {PullRow, Query} from './query-builder.ts';
+import {
+  addContextToQuery,
+  defineQuery,
+  defineQueryWithType,
+  type CustomQuery,
+  type QueryRequest,
+} from './define-query.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {
   createQuery,
@@ -20,13 +26,7 @@ import {
   isQueryRegistry,
   mustGetQuery,
 } from './query-registry.ts';
-import {
-  addContextToQuery,
-  defineQuery,
-  defineQueryWithType,
-  type CustomQuery,
-  type QueryRequest,
-} from './query.ts';
+import type {PullRow, Query} from './query.ts';
 
 const schema = createSchema({
   tables: [

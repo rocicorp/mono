@@ -20,7 +20,7 @@ import {
   type ViewChange,
 } from '../../zql/src/ivm/view-apply-change.ts';
 import type {AnyViewFactory, Entry, Format} from '../../zql/src/ivm/view.ts';
-import type {Query} from '../../zql/src/query/query-builder.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import type {TTL} from '../../zql/src/query/ttl.ts';
 
 export type State = [Entry, QueryResultDetails];

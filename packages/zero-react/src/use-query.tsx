@@ -22,13 +22,13 @@ import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {
+  addContextToQuery,
+  type QueryOrQueryRequest,
+} from '../../zql/src/query/define-query.ts';
+import {
   type HumanReadable,
   type PullRow,
   type Query,
-} from '../../zql/src/query/query-builder.ts';
-import {
-  addContextToQuery,
-  type QueryOrQueryRequest,
 } from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';

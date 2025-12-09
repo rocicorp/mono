@@ -18,7 +18,7 @@ import {Take} from '../../zql/src/ivm/take.ts';
 import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {EntryList} from '../../zql/src/ivm/view.ts';
-import type {Query} from '../../zql/src/query/query-builder.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import {SolidView, createSolidViewFactory, type State} from './solid-view.ts';
 
 const lc = createSilentLogContext();

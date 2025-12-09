@@ -9,13 +9,8 @@ import {
   syncedQueryWithContext,
   withValidation,
 } from './named.ts';
-import type {
-  QueryResultType,
-  QueryReturn,
-  QueryRowType,
-  Row,
-} from './query-builder.ts';
 import {asQueryInternals} from './query-internals.ts';
+import type {QueryResultType, QueryReturn, QueryRowType, Row} from './query.ts';
 import {schema} from './test/test-schemas.ts';
 
 const builder = createBuilder(schema);

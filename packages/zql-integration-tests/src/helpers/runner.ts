@@ -40,16 +40,16 @@ import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 import type {Source, SourceChange} from '../../../zql/src/ivm/source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
   AnyQuery,
   HumanReadable,
   Query,
   RunOptions,
-} from '../../../zql/src/query/query-builder.ts';
-import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+} from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {

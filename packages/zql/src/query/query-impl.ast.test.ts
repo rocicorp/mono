@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
 import type {ExpressionFactory} from './expression.ts';
-import {type AnyQuery} from './query-builder.ts';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
+import {type AnyQuery} from './query.ts';
 import {staticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 

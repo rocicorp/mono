@@ -4,6 +4,7 @@ import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {AbstractQuery} from './abstract-query.ts';
 import type {CustomQueryID} from './named.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -11,8 +12,7 @@ import type {
   PullRow,
   Query,
   RunOptions,
-} from './query-builder.ts';
-import type {QueryDelegate} from './query-delegate.ts';
+} from './query.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 

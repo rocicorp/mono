@@ -7,9 +7,9 @@ import {initialSync} from '../../zero-cache/src/services/change-source/pg/initia
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
-import type {Query} from '../../zql/src/query/query-builder.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {

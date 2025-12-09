@@ -6,7 +6,7 @@ import type {Format} from '../ivm/view.ts';
 import {AbstractQuery} from './abstract-query.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import type {PullRow, Query} from './query-builder.ts';
+import type {PullRow, Query} from './query.ts';
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyStaticQuery = StaticQuery<string, Schema, any>;
