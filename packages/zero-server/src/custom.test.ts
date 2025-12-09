@@ -9,7 +9,13 @@ import {
 } from '../../zero-schema/src/builder/table-builder.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import {createCRUDBuilder} from '../../zql/src/mutate/crud.ts';
-import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
+import type {
+  DBTransaction,
+  DeleteID,
+  InsertValue,
+  UpdateValue,
+  UpsertValue,
+} from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {CRUDMutatorFactory, makeMutateCRUD, makeSchemaCRUD} from './custom.ts';
 import {schema} from './test/schema.ts';
@@ -149,16 +155,20 @@ describe('server CRUD patterns', () => {
 
       // Test that the method signatures match TableCRUD
       type BasicCRUD = MutateType['basic'];
-      type InsertFn = BasicCRUD['insert'];
-      type UpdateFn = BasicCRUD['update'];
-      type UpsertFn = BasicCRUD['upsert'];
-      type DeleteFn = BasicCRUD['delete'];
 
-      // Verify return types are Promise<void>
-      expectTypeOf<ReturnType<InsertFn>>().toEqualTypeOf<Promise<void>>();
-      expectTypeOf<ReturnType<UpdateFn>>().toEqualTypeOf<Promise<void>>();
-      expectTypeOf<ReturnType<UpsertFn>>().toEqualTypeOf<Promise<void>>();
-      expectTypeOf<ReturnType<DeleteFn>>().toEqualTypeOf<Promise<void>>();
+      type BasicTable = (typeof schema)['tables']['basic'];
+      expectTypeOf<BasicCRUD['insert']>().toEqualTypeOf<
+        (value: InsertValue<BasicTable>) => Promise<void>
+      >();
+      expectTypeOf<BasicCRUD['update']>().toEqualTypeOf<
+        (value: UpdateValue<BasicTable>) => Promise<void>
+      >();
+      expectTypeOf<BasicCRUD['upsert']>().toEqualTypeOf<
+        (value: UpsertValue<BasicTable>) => Promise<void>
+      >();
+      expectTypeOf<BasicCRUD['delete']>().toEqualTypeOf<
+        (id: DeleteID<BasicTable>) => Promise<void>
+      >();
     });
 
     test('works when enableLegacyMutators: false', () => {
