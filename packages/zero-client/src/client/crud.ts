@@ -1,8 +1,5 @@
-import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
 import {
   CRUD_MUTATION_NAME,
   type CRUDMutationArg,
@@ -14,18 +11,16 @@ import {
 } from '../../../zero-protocol/src/push.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
-import type {TableMutator} from '../../../zql/src/mutate/crud.ts';
+import type {CRUDExecutor, TableMutator} from '../../../zql/src/mutate/crud.ts';
 import type {
   DeleteID,
   InsertValue,
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
+import * as crudImpl from './crud-impl.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
-import {toPrimaryKeyString} from './keys.ts';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
-export type {TableMutator} from '../../../zql/src/mutate/crud.ts';
 
 export type DBMutator<S extends Schema> = S['enableLegacyMutators'] extends true
   ? {
@@ -135,7 +130,7 @@ function makeEntityCRUDMutate<S extends TableSchema>(
 }
 
 /**
- * Creates the `{inesrt, upsert, update, delete}` object for use inside a
+ * Creates the `{insert, upsert, update, delete}` object for use inside a
  * batch.
  */
 export function makeBatchCRUDMutate<S extends TableSchema>(
@@ -209,36 +204,11 @@ export function makeCRUDMutator(schema: Schema): CRUDMutator {
     crudArg: CRUDMutationArg,
   ): Promise<void> => {
     for (const op of crudArg.ops) {
-      switch (op.op) {
-        case 'insert':
-          await insertImpl(tx, op, schema, undefined);
-          break;
-        case 'upsert':
-          await upsertImpl(tx, op, schema, undefined);
-          break;
-        case 'update':
-          await updateImpl(tx, op, schema, undefined);
-          break;
-        case 'delete':
-          await deleteImpl(tx, op, schema, undefined);
-          break;
-      }
+      // oxlint-disable-next-line no-explicit-any
+      await crudImpl[op.op](tx, op as any, schema, undefined);
     }
   };
 }
-
-export type CRUDExecutor = (
-  tableName: string,
-  kind: 'insert' | 'upsert' | 'update' | 'delete',
-  value: unknown,
-) => Promise<void>;
-
-const crudImpl = {
-  insert: insertImpl,
-  upsert: upsertImpl,
-  update: updateImpl,
-  delete: deleteImpl,
-};
 
 export function makeCRUDExecutor(
   tx: WriteTransaction,
@@ -247,131 +217,12 @@ export function makeCRUDExecutor(
 ): CRUDExecutor {
   return (tableName, kind, value) => {
     const {primaryKey} = schema.tables[tableName];
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    return (crudImpl[kind] as any)(
+    return crudImpl[kind](
       tx,
-      {op: kind, tableName, primaryKey, value},
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      {op: kind, tableName, primaryKey, value} as any,
       schema,
       ivmBranch,
     );
   };
-}
-
-function defaultOptionalFieldsToNull(
-  schema: TableSchema,
-  value: ReadonlyJSONObject,
-): ReadonlyJSONObject {
-  let rv = value;
-  for (const name in schema.columns) {
-    if (rv[name] === undefined) {
-      rv = {...rv, [name]: null};
-    }
-  }
-  return rv;
-}
-
-export async function insertImpl(
-  tx: WriteTransaction,
-  arg: InsertOp,
-  schema: Schema,
-  ivmBranch: IVMSourceBranch | undefined,
-): Promise<void> {
-  const key = toPrimaryKeyString(
-    arg.tableName,
-    schema.tables[arg.tableName].primaryKey,
-    arg.value,
-  );
-  if (!(await tx.has(key))) {
-    const val = defaultOptionalFieldsToNull(
-      schema.tables[arg.tableName],
-      arg.value,
-    );
-    await tx.set(key, val);
-    if (ivmBranch) {
-      consume(
-        must(ivmBranch.getSource(arg.tableName)).push({
-          type: 'add',
-          row: arg.value,
-        }),
-      );
-    }
-  }
-}
-
-export async function upsertImpl(
-  tx: WriteTransaction,
-  arg: InsertOp | UpsertOp,
-  schema: Schema,
-  ivmBranch: IVMSourceBranch | undefined,
-): Promise<void> {
-  const key = toPrimaryKeyString(
-    arg.tableName,
-    schema.tables[arg.tableName].primaryKey,
-    arg.value,
-  );
-  if (await tx.has(key)) {
-    await updateImpl(tx, {...arg, op: 'update'}, schema, ivmBranch);
-  } else {
-    await insertImpl(tx, {...arg, op: 'insert'}, schema, ivmBranch);
-  }
-}
-
-export async function updateImpl(
-  tx: WriteTransaction,
-  arg: UpdateOp,
-  schema: Schema,
-  ivmBranch: IVMSourceBranch | undefined,
-): Promise<void> {
-  const key = toPrimaryKeyString(
-    arg.tableName,
-    schema.tables[arg.tableName].primaryKey,
-    arg.value,
-  );
-  const prev = await tx.get(key);
-  if (prev === undefined) {
-    return;
-  }
-  const update = arg.value;
-  const next = {...(prev as ReadonlyJSONObject)};
-  for (const k in update) {
-    if (update[k] !== undefined) {
-      next[k] = update[k];
-    }
-  }
-  await tx.set(key, next);
-  if (ivmBranch) {
-    consume(
-      must(ivmBranch.getSource(arg.tableName)).push({
-        type: 'edit',
-        oldRow: prev as Row,
-        row: next,
-      }),
-    );
-  }
-}
-
-export async function deleteImpl(
-  tx: WriteTransaction,
-  arg: DeleteOp,
-  schema: Schema,
-  ivmBranch: IVMSourceBranch | undefined,
-): Promise<void> {
-  const key = toPrimaryKeyString(
-    arg.tableName,
-    schema.tables[arg.tableName].primaryKey,
-    arg.value,
-  );
-  const prev = await tx.get(key);
-  if (prev === undefined) {
-    return;
-  }
-  await tx.del(key);
-  if (ivmBranch) {
-    consume(
-      must(ivmBranch.getSource(arg.tableName)).push({
-        type: 'remove',
-        row: prev as Row,
-      }),
-    );
-  }
 }
