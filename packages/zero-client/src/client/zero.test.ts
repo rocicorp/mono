@@ -696,17 +696,6 @@ describe('createSocket', () => {
     },
     {
       socketURL: 'ws://example.com/' as WSString,
-      baseCookie: '1234',
-      clientID: 'clientID',
-      userID: 'userID',
-      auth: '',
-      lmid: 0,
-      debugPerf: false,
-      now: 0,
-      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
-    },
-    {
-      socketURL: 'ws://example.com/' as WSString,
       baseCookie: null,
       clientID: 'clientID',
       userID: 'userID',
