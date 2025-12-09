@@ -1,6 +1,5 @@
 import {logs} from '@opentelemetry/api-logs';
 import {getNodeAutoInstrumentations} from '@opentelemetry/auto-instrumentations-node';
-import type {Instrumentation} from '@opentelemetry/instrumentation';
 import {resourceFromAttributes} from '@opentelemetry/resources';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
@@ -16,7 +15,6 @@ import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
 class OtelManager {
   static #instance: OtelManager;
   #started = false;
-  #autoInstrumentations: Instrumentation[] | null = null;
 
   private constructor() {}
 
@@ -47,11 +45,6 @@ class OtelManager {
       [ATTR_SERVICE_VERSION]: process.env.ZERO_SERVER_VERSION ?? 'unknown',
     });
 
-    // Lazy load the auto-instrumentations module
-    // avoid MODULE_NOT_FOUND errors in environments where it's not being used
-    if (!this.#autoInstrumentations) {
-      this.#autoInstrumentations = getNodeAutoInstrumentations();
-    }
     // Set defaults to be backwards compatible with the previously
     // hard-coded exporters
     process.env.OTEL_EXPORTER_OTLP_PROTOCOL ??= 'http/json';
@@ -64,9 +57,11 @@ class OtelManager {
     const sdk = new NodeSDK({
       resource,
       autoDetectResources: true,
-      instrumentations: this.#autoInstrumentations
-        ? [this.#autoInstrumentations]
-        : [],
+      instrumentations:
+        process.env.OTEL_NODE_ENABLED_INSTRUMENTATIONS ||
+        process.env.OTEL_NODE_DISABLED_INSTRUMENTATIONS
+          ? [getNodeAutoInstrumentations()]
+          : [],
     });
 
     try {
