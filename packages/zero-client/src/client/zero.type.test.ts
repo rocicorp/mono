@@ -29,6 +29,7 @@ test('run', async () => {
         })
         .primaryKey('id'),
     ],
+    enableLegacyMutators: true,
   });
 
   const mutators = defineMutatorsWithType<typeof schema>()({
@@ -73,6 +74,7 @@ test('materialize', async () => {
         })
         .primaryKey('id'),
     ],
+    enableLegacyMutators: true,
   });
   const mutators = defineMutatorsWithType<typeof schema>()({
     insertIssue: defineMutatorWithType<typeof schema>()(({tx}) =>
@@ -292,4 +294,37 @@ test('Custom mutators still work when enableLegacyMutators: false', async () => 
 
   // Runtime: Verify custom mutator can be called
   await z.mutate.issue.customCreate({id: '1', title: 'Test'});
+});
+
+test('tx.mutate has no table properties when enableLegacyMutators: false', async () => {
+  const schema = createSchema({
+    tables: [
+      table('issues')
+        .columns({
+          id: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+    ],
+    enableLegacyMutators: false,
+  });
+
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    testMutator: defineMutatorWithType<typeof schema>()(({tx}) => {
+      // Runtime test: 'issues' should NOT be in tx.mutate when legacy mutators disabled
+      expect('issues' in tx.mutate).toBe(false);
+
+      // Also verify a non-existent table is also false
+      expect('noSuchTable' in tx.mutate).toBe(false);
+
+      return Promise.resolve();
+    }),
+  } as const);
+
+  const z = zeroForTest({
+    schema,
+    mutators,
+  });
+
+  await z.mutate(mutators.testMutator()).client;
 });
