@@ -12,7 +12,6 @@ import type {
   PullRow,
   Query,
   RunOptions,
-  ToQuery,
 } from './query.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
@@ -41,9 +40,7 @@ export class RunnableQueryImpl<
     TReturn = PullRow<TTable, TSchema>,
   >
   extends AbstractQuery<TTable, TSchema, TReturn>
-  implements
-    Query<TTable, TSchema, TReturn>,
-    ToQuery<TTable, TSchema, TReturn, unknown>
+  implements Query<TTable, TSchema, TReturn>
 {
   readonly #delegate: QueryDelegate;
 

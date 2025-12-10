@@ -131,10 +131,10 @@ export type Row<T extends Schema | TableSchema | AnyQueryLike = DefaultSchema> =
 
 /**
  * The shape of a CustomQuery's phantom type property.
- * CustomQuery has '~' containing QueryTypes which extends 'Query' & {...}
+ * CustomQuery has '~' containing CustomQueryTypes which extends 'Query' & {...}
  */
 type CustomQueryPhantom = {
-  '~': {
+  readonly '~': {
     readonly $return: unknown;
   };
 };
@@ -201,7 +201,7 @@ export interface Query<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends ZeroSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-> extends ToQuery<TTable, TSchema, TReturn, unknown> {
+> {
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
   ): Query<
@@ -364,24 +364,3 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
 } as const;
 
 export type AnyQuery = Query<string, Schema, any>;
-
-/**
- * An interface for objects that can be converted to a {@link Query}.
- *
- * This is useful for creating lazy or deferred queries that are only
- * materialized when needed, allowing the query to be constructed with
- * runtime context.
- *
- * @template T - The table name (must be a key of S['tables'])
- * @template S - The schema type
- * @template R - The return type of the query
- * @template C - The context type passed to {@link toQuery}
- */
-export interface ToQuery<
-  T extends keyof S['tables'] & string,
-  S extends Schema,
-  R,
-  C,
-> {
-  toQuery(context: C): Query<T, S, R>;
-}

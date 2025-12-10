@@ -209,6 +209,28 @@ describe('extendReplicacheMutators', () => {
     expect(Object.keys(mutateObject)).toHaveLength(0);
   });
 
+  test('ignores non-object and non-function entries', () => {
+    const lc = createSilentLogContext();
+    const context = {};
+    const mutateObject: Record<string, unknown> = {};
+
+    const mutators = {
+      'valid': async (
+        _tx: Transaction<Schema>,
+        _args: unknown,
+        _ctx: unknown,
+      ) => {},
+      'invalid': null,
+      'text': 'noop',
+      '~': 'phantom',
+    } as unknown as CustomMutatorDefs;
+
+    expect(() =>
+      extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject),
+    ).not.toThrow();
+    expect(Object.keys(mutateObject)).toEqual(['valid']);
+  });
+
   test('context is shared across mutators', async () => {
     const lc = createSilentLogContext();
     const sharedContext = {counter: 0};

@@ -104,12 +104,14 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
   readonly #db: Database;
   readonly #schema: Schema;
   readonly #cgs;
+  readonly #sourceWrapper: ((source: Source) => Source) | undefined;
 
   constructor(
     lc: LogContext,
     logConfig: LogConfig,
     db: Database,
     schema: Schema,
+    sourceWrapper?: (source: Source) => Source,
   ) {
     super();
     this.#lc = lc;
@@ -122,6 +124,7 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
     this.#schema = schema;
     this.#clientToServerMapper = clientToServer(schema.tables);
     this.#serverToClientMapper = serverToClient(schema.tables);
+    this.#sourceWrapper = sourceWrapper;
   }
 
   override createStorage(): Storage {
@@ -159,7 +162,7 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
           .join(', ')})
       )`);
 
-    source = new TableSource(
+    let tableSource: Source = new TableSource(
       this.#lc,
       this.#logConfig,
       this.#db,
@@ -175,6 +178,12 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
       ) as unknown as CompoundKey,
     );
 
+    // Apply wrapper if provided (e.g., for random yield injection)
+    if (this.#sourceWrapper) {
+      tableSource = this.#sourceWrapper(tableSource);
+    }
+
+    source = tableSource;
     this.#sources.set(serverTableName, source);
     return source;
   }
@@ -189,6 +198,13 @@ export function newQueryDelegate(
   logConfig: LogConfig,
   db: Database,
   schema: Schema,
+  sourceWrapper?: (source: Source) => Source,
 ): QueryDelegate {
-  return new SourceFactoryQueryDelegate(lc, logConfig, db, schema);
+  return new SourceFactoryQueryDelegate(
+    lc,
+    logConfig,
+    db,
+    schema,
+    sourceWrapper,
+  );
 }

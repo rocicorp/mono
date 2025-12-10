@@ -118,7 +118,12 @@ export type {
   ViewFactory,
 } from '../../zql/src/ivm/view.ts';
 export {createCRUDBuilder} from '../../zql/src/mutate/crud.ts';
-export type {TableMutator} from '../../zql/src/mutate/crud.ts';
+export type {
+  CRUDMutator,
+  SchemaCRUDMutators,
+  TableCRUDMutators,
+  TableMutator,
+} from '../../zql/src/mutate/crud.ts';
 export type {
   AnyTransaction,
   DeleteID,
@@ -132,10 +137,10 @@ export type {
 } from '../../zql/src/mutate/custom.ts';
 export {
   defineMutators,
+  defineMutatorsWithType,
   getMutator,
   isMutatorRegistry,
   mustGetMutator,
-  type AnyMutatorDefinitions,
   type AnyMutatorRegistry,
   type AssertMutatorDefinitions,
   type EnsureMutatorDefinitions,
@@ -145,14 +150,12 @@ export {
 } from '../../zql/src/mutate/mutator-registry.ts';
 export {
   defineMutator,
+  defineMutatorWithType,
   isMutator,
   isMutatorDefinition,
+  type MutateRequest,
+  type Mutator,
   type MutatorDefinition,
-} from '../../zql/src/mutate/mutator.ts';
-export type {
-  MutationRequest,
-  Mutator,
-  MutatorDefinitionTypes,
 } from '../../zql/src/mutate/mutator.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
@@ -174,15 +177,24 @@ export {
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export {
   defineQueries,
+  defineQueriesWithType,
   defineQuery,
+  defineQueryWithType,
   getQuery,
+  isQuery,
   isQueryDefinition,
+  isQueryRegistry,
   mustGetQuery,
+  type AnyCustomQuery,
+  type AnyQueryDefinition,
+  type AnyQueryRegistry,
   type CustomQuery,
   type FromQueryTree,
   type QueryDefinition,
   type QueryDefinitions,
+  type QueryOrQueryRequest,
   type QueryRegistry,
+  type QueryRequest,
 } from '../../zql/src/query/query-registry.ts';
 export type {
   AnyQuery,
@@ -193,7 +205,6 @@ export type {
   QueryRowType,
   Row,
   RunOptions,
-  ToQuery,
   ZeRow,
 } from '../../zql/src/query/query.ts';
 export type {SchemaQuery} from '../../zql/src/query/schema-query.ts';

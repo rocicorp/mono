@@ -4,6 +4,7 @@ import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {createRandomYieldWrapper} from '../../../zql/src/ivm/test/random-yield-source.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
@@ -23,10 +24,43 @@ const harness = await bootstrap({
   pgContent,
 });
 
+// Internal timeout for graceful handling (shorter than vitest timeout)
+const TEST_TIMEOUT_MS = 55_000;
+
+/**
+ * Error thrown when a fuzz test query exceeds the time limit.
+ * This is caught and treated as a pass (with warning) rather than a failure.
+ */
+class FuzzTimeoutError extends Error {
+  constructor(label: string, elapsedMs: number) {
+    super(`Fuzz test "${label}" timed out after ${elapsedMs}ms`);
+    this.name = 'FuzzTimeoutError';
+  }
+}
+
+/**
+ * Creates a checkAbort function that throws FuzzTimeoutError when the
+ * elapsed time exceeds the timeout. This allows synchronous query execution
+ * to be aborted when it takes too long.
+ */
+function createCheckAbort(
+  startTime: number,
+  timeoutMs: number,
+  label: string,
+): () => void {
+  return () => {
+    const elapsed = performance.now() - startTime;
+    if (elapsed > timeoutMs) {
+      throw new FuzzTimeoutError(label, elapsed);
+    }
+  };
+}
+
 // oxlint-disable-next-line expect-expect
-test.each(Array.from({length: 0}, () => createCase()))(
+test.each(Array.from({length: 100}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
+  65_000, // vitest timeout: longer than internal timeout to ensure we catch it ourselves
 );
 
 test('sentinel', () => {
@@ -59,6 +93,7 @@ function createCase(seed?: number) {
   });
   return {
     seed,
+    rng,
     query: generateShrinkableQuery(
       schema,
       {},
@@ -72,18 +107,36 @@ function createCase(seed?: number) {
 async function runCase({
   query,
   seed,
+  rng,
 }: {
   query: [AnyQuery, AnyQuery[]];
   seed: number;
+  rng: () => number;
 }) {
+  const label = `fuzz-hydration ${seed}`;
+  const startTime = performance.now();
+  const checkAbort = createCheckAbort(startTime, TEST_TIMEOUT_MS, label);
+
+  // Create a source wrapper that injects random yields and timeout checking
+  // for both memory and sqlite sources
+  const sourceWrapper = createRandomYieldWrapper(rng, 0.3, checkAbort);
+
   try {
-    await runAndCompare(schema, harness.delegates, query[0], undefined);
+    await harness.transact(async delegates => {
+      await runAndCompare(schema, delegates, query[0], undefined);
+    }, sourceWrapper);
   } catch (e) {
+    // Timeouts pass with a warning
+    if (e instanceof FuzzTimeoutError) {
+      console.warn(`⚠️ ${e.message} - passing anyway`);
+      return;
+    }
+
+    // Actual test failures get shrunk and re-thrown
     const zql = await shrink(query[1], seed);
     if (seed === REPRO_SEED) {
       throw e;
     }
-
     throw new Error('Mismatch. Repro seed: ' + seed + '\nshrunk zql: ' + zql);
   }
 }

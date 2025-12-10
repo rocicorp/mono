@@ -29,6 +29,11 @@ export function extendReplicacheMutators<S extends Schema, C>(
   // Recursively process mutator definitions at arbitrary depth
   const processMutators = (mutators: object, path: string[]) => {
     for (const [key, mutator] of Object.entries(mutators)) {
+      if (key === '~') {
+        // Skip phantom type
+        continue;
+      }
+
       path.push(key);
       if (isMutator(mutator)) {
         const fullKey = customMutatorKey('.', path);
@@ -47,7 +52,7 @@ export function extendReplicacheMutators<S extends Schema, C>(
           schema,
           context,
         );
-      } else {
+      } else if (mutator !== null && typeof mutator === 'object') {
         processMutators(mutator, path);
       }
       path.pop();

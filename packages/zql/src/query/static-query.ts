@@ -8,6 +8,9 @@ import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
 import type {PullRow, Query} from './query.ts';
 
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyStaticQuery = StaticQuery<string, Schema, any>;
+
 export function staticQuery<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
@@ -47,7 +50,7 @@ export class StaticQuery<
       system,
       customQueryID,
       currentJunction,
-      (tableName, ast, format, _customQueryID, _currentJunction) =>
+      (tableName, ast, format, _customQueryID, currentJunction) =>
         new StaticQuery(
           schema,
           tableName,
