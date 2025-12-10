@@ -1,12 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {AST, System} from '../../../zero-protocol/src/ast.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
-import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {
@@ -18,7 +19,6 @@ import {
   type UpdateQuery,
 } from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
@@ -50,20 +50,8 @@ function mockEndToEndTiming(
 }
 
 // Helper function to create a standard query
-function createTestQuery() {
-  const ast = {
-    table: 'users',
-    orderBy: [['id', 'asc'] as [string, 'asc' | 'desc']],
-  } as const;
-
-  return new QueryImpl(
-    schema,
-    ast.table,
-    ast,
-    {singular: false, relationships: {}},
-    'test' as System,
-    undefined,
-  ) as AnyQuery;
+function createTestQuery(): AnyQuery {
+  return newQuery(schema, 'users');
 }
 
 const schema = createSchema({
@@ -331,7 +319,6 @@ describe('query materialization metrics', () => {
           expect.any(String),
           expect.objectContaining({
             table: 'users',
-            orderBy: [['id', 'asc']],
           }),
         );
 
@@ -421,7 +408,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       ]);
 
@@ -431,7 +417,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       ]);
 
@@ -477,7 +462,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       );
 
@@ -509,7 +493,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       );
 
@@ -555,7 +538,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       );
 

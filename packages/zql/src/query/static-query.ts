@@ -1,21 +1,16 @@
-import {assert} from '../../../shared/src/asserts.ts';
 import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format} from '../ivm/view.ts';
-import {AbstractQuery} from './abstract-query.ts';
-import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import type {PullRow, Query} from './query.ts';
+import {QueryImpl} from './query-impl.ts';
+import type {PullRow} from './query.ts';
 
-// oxlint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyStaticQuery = StaticQuery<string, Schema, any>;
-
-export function staticQuery<
+export function newStaticQuery<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn = PullRow<TTable, TSchema>,
->(schema: TSchema, tableName: TTable): Query<TTable, TSchema, TReturn> {
+>(schema: TSchema, tableName: TTable): StaticQuery<TTable, TSchema, TReturn> {
   return new StaticQuery<TTable, TSchema, TReturn>(
     schema,
     tableName,
@@ -32,7 +27,7 @@ export class StaticQuery<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn = PullRow<TTable, TSchema>,
-> extends AbstractQuery<TTable, TSchema, TReturn> {
+> extends QueryImpl<TTable, TSchema, TReturn> {
   constructor(
     schema: TSchema,
     tableName: TTable,
@@ -50,7 +45,7 @@ export class StaticQuery<
       system,
       customQueryID,
       currentJunction,
-      (tableName, ast, format, _customQueryID, currentJunction) =>
+      (tableName, ast, format, customQueryID, currentJunction) =>
         new StaticQuery(
           schema,
           tableName,
@@ -62,17 +57,4 @@ export class StaticQuery<
         ),
     );
   }
-
-  expressionBuilder() {
-    return new ExpressionBuilder(this._exists);
-  }
-}
-
-export function asStaticQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
-  TReturn,
->(q: Query<TTable, TSchema, TReturn>): StaticQuery<TTable, TSchema, TReturn> {
-  assert(q instanceof StaticQuery);
-  return q;
 }

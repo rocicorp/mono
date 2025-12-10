@@ -25,19 +25,17 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
-import {
-  asStaticQuery,
-  staticQuery,
-} from '../../../zql/src/query/static-query.ts';
+import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
 import type {
   ClientGroupStorage,
   DatabaseStorage,
 } from '../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 import {
   fromSQLiteTypes,
   TableSource,
@@ -354,7 +352,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       op.tableName
     ];
     const rowPolicies = rules?.row;
-    let rowQuery = staticQuery(this.#schema, op.tableName);
+    let rowQuery: Query<string, Schema> = newStaticQuery(
+      this.#schema,
+      op.tableName,
+    );
 
     const primaryKeyValues = this.#getPrimaryKey(op.tableName, op.value);
 
@@ -516,7 +517,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = asStaticQuery(rowQuery).ast;
+    let rowQueryAst = asQueryInternals(rowQuery).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

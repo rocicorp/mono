@@ -5,11 +5,10 @@ import {
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
-import {defaultFormat} from '../../zero-types/src/format.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import type {Query} from '../../zql/src/query/query.ts';
-import {StaticQuery} from '../../zql/src/query/static-query.ts';
+import {newStaticQuery} from '../../zql/src/query/static-query.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
@@ -107,15 +106,10 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
 ): Promise<CompiledPermissionsConfig | undefined> {
   const expressionBuilders = {} as Record<
     string,
-    ExpressionBuilder<string, Schema>
+    ExpressionBuilder<string, TSchema>
   >;
   for (const name of Object.keys(schema.tables)) {
-    expressionBuilders[name] = new StaticQuery(
-      schema,
-      name,
-      {table: name},
-      defaultFormat,
-    ).expressionBuilder();
+    expressionBuilders[name] = newStaticQuery(schema, name).expressionBuilder();
   }
 
   const config = await definer();
@@ -125,7 +119,7 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
 function compilePermissions<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   authz: PermissionsConfig<TAuthDataShape, TSchema> | undefined,
-  expressionBuilders: Record<string, ExpressionBuilder<string, Schema>>,
+  expressionBuilders: Record<string, ExpressionBuilder<string, TSchema>>,
 ): CompiledPermissionsConfig | undefined {
   if (!authz) {
     return undefined;
