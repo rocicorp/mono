@@ -352,10 +352,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       op.tableName
     ];
     const rowPolicies = rules?.row;
-    let rowQuery: Query<string, Schema> = newStaticQuery(
-      this.#schema,
-      op.tableName,
-    );
+    let rowQuery = newStaticQuery(this.#schema, op.tableName);
 
     const primaryKeyValues = this.#getPrimaryKey(op.tableName, op.value);
 

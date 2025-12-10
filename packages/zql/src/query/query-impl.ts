@@ -39,7 +39,7 @@ import type {TypedView} from './typed-view.ts';
 
 type GetFilterTypeAny = GetFilterType<any, any, any>;
 
-export type NewQueryFunction<TSchema extends Schema> = <
+type NewQueryFunction<TSchema extends Schema> = <
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
@@ -49,7 +49,7 @@ export type NewQueryFunction<TSchema extends Schema> = <
   format: Format,
   customQueryID: CustomQueryID | undefined,
   currentJunction: string | undefined,
-) => Query<TTable, TSchema, TReturn>;
+) => QueryImpl<TTable, TSchema, TReturn>;
 
 export function newQuery<
   TTable extends keyof TSchema['tables'] & string,
@@ -68,7 +68,7 @@ export function newQueryImpl<
   ast: AST,
   format: Format,
   system: System,
-): Query<TTable, TSchema, TReturn> {
+): QueryImpl<TTable, TSchema, TReturn> {
   const inner: NewQueryFunction<TSchema> = (
     tableName,
     ast,
@@ -558,7 +558,6 @@ export class QueryImpl<
   get ast(): AST {
     return this.#ast;
   }
-
 
   expressionBuilder() {
     return new ExpressionBuilder(this.#exists);

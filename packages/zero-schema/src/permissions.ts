@@ -8,7 +8,7 @@ import {
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import type {Query} from '../../zql/src/query/query.ts';
-import {newStaticQuery} from '../../zql/src/query/static-query.ts';
+import {newExpressionBuilder} from '../../zql/src/query/static-query.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
@@ -109,7 +109,7 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
     ExpressionBuilder<string, TSchema>
   >;
   for (const name of Object.keys(schema.tables)) {
-    expressionBuilders[name] = newStaticQuery(schema, name).expressionBuilder();
+    expressionBuilders[name] = newExpressionBuilder(schema, name);
   }
 
   const config = await definer();
