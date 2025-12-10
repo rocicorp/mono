@@ -5,20 +5,6 @@ import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
-import {
-  idSymbol,
-  refCountSymbol,
-  unreachable,
-} from '../../zero/src/bindings.ts';
-import type {EntryList} from '../../zero/src/zero.ts';
-import {
-  createSchema,
-  number,
-  string,
-  table,
-  type Change,
-  type Query,
-} from '../../zero/src/zero.ts';
 import {Join} from '../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
@@ -27,7 +13,17 @@ import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
 import {Take} from '../../zql/src/ivm/take.ts';
 import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
+import {idSymbol, refCountSymbol, unreachable} from './bindings.ts';
 import {SolidView, createSolidViewFactory, type State} from './solid-view.ts';
+import type {EntryList} from './zero.ts';
+import {
+  createSchema,
+  number,
+  string,
+  table,
+  type Change,
+  type Query,
+} from './zero.ts';
 
 const lc = createSilentLogContext();
 

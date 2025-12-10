@@ -12,7 +12,9 @@ import {
   addContextToQuery,
   asQueryInternals,
   DEFAULT_TTL_MS,
-} from '../../zero/src/bindings.ts';
+} from './bindings.ts';
+import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
+import {useZero} from './use-zero.ts';
 import {
   type DefaultContext,
   type DefaultSchema,
@@ -23,9 +25,7 @@ import {
   type ReadonlyJSONValue,
   type Schema,
   type TTL,
-} from '../../zero/src/zero.ts';
-import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
-import {useZero} from './use-zero.ts';
+} from './zero.ts';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,

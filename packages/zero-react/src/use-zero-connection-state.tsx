@@ -1,6 +1,6 @@
 import {useSyncExternalStore} from 'react';
-import type {ConnectionState} from '../../zero/src/zero.ts';
 import {useZero} from './zero-provider.tsx';
+import type {ConnectionState} from './zero.ts';
 
 /**
  * Hook to subscribe to the connection status of the Zero instance.

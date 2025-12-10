@@ -7,6 +7,8 @@ import {
   type JSX,
 } from 'solid-js';
 import {afterEach, expect, test, vi} from 'vitest';
+import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {
   assert,
   consume,
@@ -15,7 +17,9 @@ import {
   newQuery,
   refCountSymbol,
   type QueryDelegate,
-} from '../../zero/src/bindings.ts';
+} from './bindings.ts';
+import {useQuery, type UseQueryOptions} from './use-query.ts';
+import {ZeroProvider} from './use-zero.ts';
 import {
   createSchema,
   number,
@@ -29,11 +33,7 @@ import {
   type TTL,
   type ViewFactory,
   type Zero,
-} from '../../zero/src/zero.ts';
-import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
-import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
-import {useQuery, type UseQueryOptions} from './use-query.ts';
-import {ZeroProvider} from './use-zero.ts';
+} from './zero.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({

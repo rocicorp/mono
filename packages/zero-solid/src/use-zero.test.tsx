@@ -1,15 +1,16 @@
 import {renderHook} from '@solidjs/testing-library';
 import {createSignal, type JSX} from 'solid-js';
 import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
+
+import {createUseZero, useZero, ZeroProvider} from './use-zero.ts';
 import {
   Zero as ZeroConstructor,
   type Schema,
   type Zero,
   type ZeroOptions,
-} from '../../zero/src/zero.ts';
-import {createUseZero, useZero, ZeroProvider} from './use-zero.ts';
+} from './zero.ts';
 
-vi.mock('../../zero/src/zero.ts', () => ({
+vi.mock('./zero.ts', () => ({
   Zero: vi.fn(),
 }));
 

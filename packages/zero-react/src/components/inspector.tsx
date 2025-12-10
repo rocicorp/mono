@@ -4,7 +4,7 @@ import type {
   DefaultSchema,
   Schema,
   Zero,
-} from '../../../zero/src/zero.ts';
+} from '../zero.ts';
 import {MarkIcon} from './mark-icon.tsx';
 
 export default function Inspector<

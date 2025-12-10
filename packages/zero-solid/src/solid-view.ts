@@ -5,7 +5,7 @@ import {
   idSymbol,
   skipYields,
   type ViewChange,
-} from '../../zero/src/bindings.ts';
+} from './bindings.ts';
 import {
   type AnyViewFactory,
   type Change,
@@ -21,7 +21,7 @@ import {
   type Schema,
   type Stream,
   type TTL,
-} from '../../zero/src/zero.ts';
+} from './zero.ts';
 
 export type State = [Entry, QueryResultDetails];
 

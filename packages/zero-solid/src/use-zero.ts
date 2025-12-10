@@ -17,7 +17,7 @@ import {
   type DefaultSchema,
   type Schema,
   type ZeroOptions,
-} from '../../zero/src/zero.ts';
+} from './zero.ts';
 
 const ZeroContext = createContext<
   // oxlint-disable-next-line no-explicit-any

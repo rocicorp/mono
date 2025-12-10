@@ -1,10 +1,9 @@
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {Schema, Zero, ZeroOptions} from '../../zero/src/zero.ts';
 import {createUseZero, useZero, ZeroProvider} from './zero-provider.tsx';
-
-import type * as ZeroModule from '../../zero/src/zero.ts';
+import type * as ZeroModule from './zero.ts';
+import type {Schema, Zero, ZeroOptions} from './zero.ts';
 
 // Mock the Zero constructor
 vi.mock('../../zero/src/zero.ts', async importOriginal => {

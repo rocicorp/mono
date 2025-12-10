@@ -9,7 +9,13 @@ import {
   vi,
   type Mock,
 } from 'vitest';
-import {queryInternalsTag, type QueryImpl} from '../../zero/src/bindings.ts';
+import {queryInternalsTag, type QueryImpl} from './bindings.ts';
+import {
+  getAllViewsSizeForTesting,
+  useSuspenseQuery,
+  ViewStore,
+} from './use-query.tsx';
+import {ZeroProvider} from './zero-provider.tsx';
 import type {
   CustomMutatorDefs,
   ErroredQuery,
@@ -19,13 +25,7 @@ import type {
   ResultType,
   Schema,
   Zero,
-} from '../../zero/src/zero.ts';
-import {
-  getAllViewsSizeForTesting,
-  useSuspenseQuery,
-  ViewStore,
-} from './use-query.tsx';
-import {ZeroProvider} from './zero-provider.tsx';
+} from './zero.ts';
 
 function newMockQuery(query: string, singular = false): Query<string, Schema> {
   const ret = {

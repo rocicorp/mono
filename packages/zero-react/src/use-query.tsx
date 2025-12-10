@@ -6,7 +6,8 @@ import {
   asQueryInternals,
   deepClone,
   DEFAULT_TTL_MS,
-} from '../../zero/src/bindings.ts';
+} from './bindings.ts';
+import {useZero} from './zero-provider.tsx';
 import type {
   AnyMutatorRegistry,
   CustomMutatorDefs,
@@ -25,8 +26,7 @@ import type {
   TTL,
   TypedView,
   Zero,
-} from '../../zero/src/zero.ts';
-import {useZero} from './zero-provider.tsx';
+} from './zero.ts';
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,

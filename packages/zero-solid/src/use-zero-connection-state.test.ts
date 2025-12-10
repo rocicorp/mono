@@ -1,7 +1,7 @@
 import {renderHook} from '@solidjs/testing-library';
 import {createSignal} from 'solid-js';
 import {afterEach, describe, expect, test, vi, type Mock} from 'vitest';
-import {ConnectionStatus, type ConnectionState} from '../../zero/src/zero.ts';
+import {ConnectionStatus, type ConnectionState} from './zero.ts';
 
 vi.mock('./use-zero.ts', () => ({
   useZero: vi.fn(),
