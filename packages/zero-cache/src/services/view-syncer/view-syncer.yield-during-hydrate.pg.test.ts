@@ -22,14 +22,15 @@ import {
   SHARD,
   TASK_ID,
   USERS_QUERY,
+  YIELD_THRESHOLD_MS,
 } from './view-syncer-test-util.ts';
 import {
   type SyncContext,
   TimeSliceTimer,
   type ViewSyncerService,
 } from './view-syncer.ts';
-import {YIELD_THRESHOLD_MS} from './pipeline-driver.ts';
 import {CVRStore} from './cvr-store.ts';
+
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {CVRConfigDrivenUpdater, CVRQueryDrivenUpdater} from './cvr.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';

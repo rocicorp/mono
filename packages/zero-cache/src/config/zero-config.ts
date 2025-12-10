@@ -377,6 +377,14 @@ export const zeroOptions = {
     ],
   },
 
+  yieldThresholdMs: {
+    type: v.number().default(200),
+    desc: [
+      `The ammount of time in milliseconds that a single client's view hydration
+      or advancement can take before yielding to the event loop.`,
+    ],
+  },
+
   change: {
     db: {
       type: v.string().optional(),
