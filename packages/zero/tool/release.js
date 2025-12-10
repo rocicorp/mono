@@ -345,13 +345,13 @@ try {
 
   // Get remote ref hash
   try {
-    // For branches, check origin/branch
+    // For branches, check remote/branch
     // For tags, just check the tag (tags are fetched from remote)
     remoteRefHash = execute(`git rev-parse ${remote}/${from}`, {
       stdio: 'pipe',
     });
   } catch {
-    // If origin/from doesn't exist, try just the ref (works for tags)
+    // If remote/from doesn't exist, try just the ref (works for tags)
     try {
       // For tags, we need to ensure we have the latest from remote
       execute(`git fetch ${remote} tag ${from}`, {stdio: 'pipe'});
@@ -386,7 +386,7 @@ try {
   execute('git reset --hard');
   execute(`git fetch ${remote}`);
 
-  // Try to checkout as origin/branch first, fall back to tag/commit
+  // Try to checkout as remote/branch first, fall back to tag/commit
   try {
     execute(`git checkout ${remote}/${from}`);
   } catch {
