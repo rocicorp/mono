@@ -114,7 +114,6 @@ import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
-import {registerZeroDelegate} from './bindings.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {
   ConnectionManager,
@@ -588,10 +587,6 @@ export class Zero<
       this.#addMetric,
       assertValidRunOptions,
     );
-
-    // Register the delegate for bindings to access via WeakMap.
-    // This avoids exposing the delegate as a public API on Zero.
-    registerZeroDelegate(this, this.#zeroContext);
 
     this.query = createRunnableBuilder(this.#zeroContext, schema);
 

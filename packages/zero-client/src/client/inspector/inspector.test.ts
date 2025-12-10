@@ -17,10 +17,10 @@ import {
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {createBuilder} from '../../../../zql/src/query/create-builder.ts';
+import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
-import {bindingsForZero} from '../bindings.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
 import type {TestZero} from '../test-utils.ts';
 import {
@@ -373,7 +373,7 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: bindingsForZero(z).hash(issueQuery),
+            queryID: asQueryInternals(issueQuery).hash(),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
@@ -393,7 +393,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(bindingsForZero(z).hash(issueQuery)).toBe(queries[0].id);
+    expect(asQueryInternals(issueQuery).hash()).toBe(queries[0].id);
 
     // We should have metrics for all.. even if empty
     expect(queries[0].metrics).toMatchInlineSnapshot(`
@@ -728,7 +728,7 @@ test('clientZQL with legacy queries', async () => {
       value: [
         {
           clientID: z.clientID,
-          queryID: bindingsForZero(z).hash(issueQuery),
+          queryID: asQueryInternals(issueQuery).hash(),
           ast: {
             table: 'issues',
             where: {
@@ -753,7 +753,7 @@ test('clientZQL with legacy queries', async () => {
 
   const queries = await queriesP;
   expect(queries).toHaveLength(1);
-  expect(queries[0].id).toBe(bindingsForZero(z).hash(issueQuery));
+  expect(queries[0].id).toBe(asQueryInternals(issueQuery).hash());
   expect(queries[0].clientZQL).toBe("issue.where('ownerId', 'arv')");
   expect(queries[0].serverZQL).toBe("issues.where('owner_id', 'arv')");
 

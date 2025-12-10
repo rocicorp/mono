@@ -1,6 +1,6 @@
 import {createEffect, createSignal, onCleanup, type Accessor} from 'solid-js';
-import type {ConnectionState} from '../../zero-client/src/client/connection.ts';
 import {useZero} from './use-zero.ts';
+import type {ConnectionState} from './zero.ts';
 
 /**
  * Tracks the connection status of the current Zero instance.
