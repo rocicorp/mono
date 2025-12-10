@@ -3,7 +3,7 @@ import {expect, test} from 'vitest';
 import {type AST} from '../../zero-protocol/src/ast.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
-import {staticQuery} from '../../zql/src/query/static-query.ts';
+import {newStaticQuery} from '../../zql/src/query/static-query.ts';
 import {generateQuery} from '../../zql/src/query/test/query-gen.ts';
 import {generateSchema} from '../../zql/src/query/test/schema-gen.ts';
 import {astToZQL} from './ast-to-zql.ts';
@@ -655,11 +655,11 @@ test('round trip', () => {
     codes.push(code);
 
     const q2 = new Function(
-      'staticQuery',
+      'newStaticQuery',
       'schema',
       'tableName',
-      `return staticQuery(schema, tableName)${code}`,
-    )(staticQuery, schema, ast(q).table);
+      `return newStaticQuery(schema, tableName)${code}`,
+    )(newStaticQuery, schema, ast(q).table);
     expect(ast(q2)).toEqual(ast(q));
   }
 

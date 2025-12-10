@@ -4,6 +4,7 @@ import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {createRandomYieldWrapper} from '../../../zql/src/ivm/test/random-yield-source.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
@@ -38,21 +39,20 @@ class FuzzTimeoutError extends Error {
 }
 
 /**
- * Creates a shouldYield function that throws FuzzTimeoutError when the
+ * Creates a checkAbort function that throws FuzzTimeoutError when the
  * elapsed time exceeds the timeout. This allows synchronous query execution
  * to be aborted when it takes too long.
  */
-function createTimeoutShouldYield(
+function createCheckAbort(
   startTime: number,
   timeoutMs: number,
   label: string,
-): () => boolean {
+): () => void {
   return () => {
     const elapsed = performance.now() - startTime;
     if (elapsed > timeoutMs) {
       throw new FuzzTimeoutError(label, elapsed);
     }
-    return false; // Don't actually yield, just check timeout
   };
 }
 
@@ -93,6 +93,7 @@ function createCase(seed?: number) {
   });
   return {
     seed,
+    rng,
     query: generateShrinkableQuery(
       schema,
       {},
@@ -106,22 +107,24 @@ function createCase(seed?: number) {
 async function runCase({
   query,
   seed,
+  rng,
 }: {
   query: [AnyQuery, AnyQuery[]];
   seed: number;
+  rng: () => number;
 }) {
   const label = `fuzz-hydration ${seed}`;
   const startTime = performance.now();
-  const shouldYield = createTimeoutShouldYield(
-    startTime,
-    TEST_TIMEOUT_MS,
-    label,
-  );
+  const checkAbort = createCheckAbort(startTime, TEST_TIMEOUT_MS, label);
+
+  // Create a source wrapper that injects random yields and timeout checking
+  // for both memory and sqlite sources
+  const sourceWrapper = createRandomYieldWrapper(rng, 0.3, checkAbort);
 
   try {
     await harness.transact(async delegates => {
       await runAndCompare(schema, delegates, query[0], undefined);
-    }, shouldYield);
+    }, sourceWrapper);
   } catch (e) {
     // Timeouts pass with a warning
     if (e instanceof FuzzTimeoutError) {

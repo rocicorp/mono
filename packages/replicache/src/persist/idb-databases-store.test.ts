@@ -1,7 +1,9 @@
-import {afterEach, expect, test, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {randomUint64} from '../../../shared/src/random-uint64.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
 import {
   IDBDatabasesStore,
+  PROFILE_ID_KEY,
   type IndexedDBDatabase,
 } from './idb-databases-store.ts';
 
@@ -169,11 +171,68 @@ test('clear', async () => {
   });
 });
 
-test('getProfileID', async () => {
-  const store = new IDBDatabasesStore(_ => new TestMemStore());
-  const profileID = await store.getProfileID();
-  expect(profileID).toBeTypeOf('string');
-  expect(profileID).toMatch(/^p[a-zA-Z0-9]+$/);
-  const profileID2 = await store.getProfileID();
-  expect(profileID2).toBe(profileID);
+describe('getProfileID', () => {
+  // mock import {randomUint64} from '../../../shared/src/random-uint64.ts'; to return predictable values
+  vi.mock('../../../shared/src/random-uint64.ts', async importOriginal => {
+    const original = await importOriginal<
+      // oxlint-disable-next-line consistent-type-imports
+      typeof import('../../../shared/src/random-uint64.ts')
+    >();
+
+    return {
+      randomUint64: vi.fn(() => original.randomUint64()),
+    };
+  });
+
+  beforeEach(() => {
+    // mock localStorage.getItem to return a predictable value
+    const localStorageMock = {
+      getItem: vi.fn().mockReturnValue('p00000g000000000099'),
+      setItem: vi.fn(),
+    };
+    vi.stubGlobal('localStorage', localStorageMock);
+    return () => {
+      vi.unstubAllGlobals();
+    };
+  });
+
+  test('empty KV Store, empty localStorage', async () => {
+    vi.mocked(localStorage.getItem).mockReturnValueOnce(null);
+    vi.mocked(randomUint64)
+      .mockReturnValueOnce(1234n)
+      .mockReturnValueOnce(5678n);
+    const store = new IDBDatabasesStore(_ => new TestMemStore());
+    const profileID = await store.getProfileID();
+    expect(profileID).toBe('p000j900000000005he');
+
+    const profileID2 = await store.getProfileID();
+    expect(profileID2).toBe(profileID);
+  });
+
+  test('Fallback to localStorage', async () => {
+    const mockedProfileID = 'pMockedProfileID1234567';
+    vi.mocked(localStorage.getItem).mockReturnValue(mockedProfileID);
+
+    const store = new IDBDatabasesStore(_ => new TestMemStore());
+    const profileID = await store.getProfileID();
+    expect(profileID).toBe(mockedProfileID);
+
+    expect(vi.mocked(localStorage.getItem)).toBeCalledTimes(1);
+    expect(vi.mocked(localStorage.getItem)).toHaveBeenCalledWith(
+      PROFILE_ID_KEY,
+    );
+    expect(vi.mocked(localStorage.setItem)).toHaveBeenCalledWith(
+      PROFILE_ID_KEY,
+      mockedProfileID,
+    );
+
+    vi.mocked(localStorage.getItem).mockClear();
+    vi.mocked(localStorage.setItem).mockClear();
+    const profileID2 = await store.getProfileID();
+    expect(profileID2).toBe(profileID);
+
+    // not called again
+    expect(vi.mocked(localStorage.getItem)).not.toHaveBeenCalled();
+    expect(vi.mocked(localStorage.setItem)).not.toHaveBeenCalled();
+  });
 });

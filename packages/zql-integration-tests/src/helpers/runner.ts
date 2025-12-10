@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {afterAll, expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+export {testLogConfig};
 import {unreachable} from '../../../shared/src/asserts.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -43,7 +44,7 @@ import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {newQueryImpl} from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
   AnyQuery,
@@ -59,7 +60,7 @@ import {
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
 
-const lc = createSilentLogContext();
+export const lc = createSilentLogContext();
 
 type DBs<TSchema extends Schema> = {
   pg: PostgresDB;
@@ -70,7 +71,7 @@ type DBs<TSchema extends Schema> = {
   sqliteFile: string;
 };
 
-type Delegates = {
+export type Delegates = {
   pg: TestPGQueryDelegate;
   sqlite: QueryDelegate;
   memory: QueryDelegate;
@@ -206,7 +207,7 @@ function makeQueries<TSchema extends Schema>(
   const ret: Record<string, Query<string, TSchema>> = {};
 
   for (const table of Object.keys(schema.tables)) {
-    ret[table] = new QueryImpl(schema, table, {table}, defaultFormat, 'test');
+    ret[table] = newQueryImpl(schema, table, {table}, defaultFormat, 'test');
   }
 
   return ret as Queries<TSchema>;
@@ -382,19 +383,25 @@ export async function bootstrap<TSchema extends Schema>({
 
   async function transact(
     cb: (delegates: Delegates) => Promise<void>,
-    shouldYield?: () => boolean,
+    sourceWrapper?: (source: Source) => Source,
   ) {
     await dbs.pg.begin(async tx => {
+      // Fork memory sources and optionally wrap them
+      const forkedMemorySources = Object.fromEntries(
+        Object.entries(dbs.memory).map(([key, source]) => {
+          let forked: Source = source.fork();
+          if (sourceWrapper) {
+            forked = sourceWrapper(forked);
+          }
+          return [key, forked];
+        }),
+      );
+
       const scopedDelegates: Delegates = {
         ...delegates,
         pg: new TestPGQueryDelegate(tx, zqlSchema, dbs.pgSchema),
         memory: new TestMemoryQueryDelegate({
-          sources: Object.fromEntries(
-            Object.entries(dbs.memory).map(([key, source]) => [
-              key,
-              source.fork(),
-            ]),
-          ),
+          sources: forkedMemorySources,
         }),
         sqlite: newQueryDelegate(
           lc,
@@ -405,7 +412,7 @@ export async function bootstrap<TSchema extends Schema>({
             return db;
           })(),
           zqlSchema,
-          shouldYield,
+          sourceWrapper,
         ),
       };
       await cb(scopedDelegates);
@@ -1050,7 +1057,7 @@ async function checkEditToMatch(
   zqlMaterialized.destroy();
 }
 
-class TestPGQueryDelegate extends QueryDelegateBase {
+export class TestPGQueryDelegate extends QueryDelegateBase {
   readonly #pg: PostgresDB;
   readonly #schema: Schema;
   readonly serverSchema: ServerSchema;

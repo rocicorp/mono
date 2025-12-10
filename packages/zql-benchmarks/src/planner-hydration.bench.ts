@@ -1,6 +1,7 @@
 import {bench, run, summary} from 'mitata';
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
@@ -9,18 +10,17 @@ import {
   clientToServer,
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
+import type {TableSchema} from '../../zero-types/src/schema.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
 import {planQuery} from '../../zql/src/planner/planner-builder.ts';
-import {QueryImpl} from '../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import type {PullRow, Query} from '../../zql/src/query/query.ts';
-import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
-import type {TableSchema} from '../../zero-types/src/schema.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
-import {must} from '../../shared/src/must.ts';
+import {newQueryImpl} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../zql/src/query/query.ts';
+import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 
 const pgContent = await getChinook();
 
@@ -46,19 +46,18 @@ const clientToServerMapper = clientToServer(schema.tables);
 const serverToClientMapper = serverToClient(schema.tables);
 
 // Helper to create a query from an AST
-function createQuery<TTable extends keyof typeof schema.tables>(
-  tableName: TTable,
-  queryAST: AST,
-) {
-  const q = new QueryImpl(schema, tableName, queryAST, defaultFormat, 'test');
-  return q as Query<TTable, typeof schema, PullRow<TTable, typeof schema>>;
+function createQuery(tableName: string, queryAST: AST): AnyQuery {
+  return newQueryImpl(
+    schema,
+    tableName as keyof typeof schema.tables & string,
+    queryAST,
+    defaultFormat,
+    'test',
+  );
 }
 
 // Helper to benchmark planned vs unplanned
-function benchmarkQuery<TTable extends keyof typeof schema.tables>(
-  name: string,
-  query: Query<TTable, typeof schema>,
-) {
+function benchmarkQuery(name: string, query: AnyQuery) {
   const unplannedAST = asQueryInternals(query).ast;
   const completeOrderAst = completeOrdering(
     unplannedAST,
@@ -72,7 +71,7 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables>(
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   const delegate = delegates.sqlite;
-  const tableName = unplannedAST.table as TTable;
+  const tableName = unplannedAST.table;
   const unplannedQuery = createQuery(tableName, unplannedAST);
   const plannedQuery = createQuery(tableName, plannedClientAST);
 

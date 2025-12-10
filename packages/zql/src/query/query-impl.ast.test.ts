@@ -3,7 +3,7 @@ import type {ExpressionFactory} from './expression.ts';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {type AnyQuery} from './query.ts';
-import {staticQuery} from './static-query.ts';
+import {newStaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
 function ast(q: AnyQuery) {
@@ -1668,7 +1668,7 @@ describe('exists', () => {
   });
 
   test('negated existence - permission', () => {
-    const issueQuery = staticQuery(schema, 'issue');
+    const issueQuery = newStaticQuery(schema, 'issue');
 
     expect(ast(issueQuery.where(({not, exists}) => not(exists('comments')))))
       .toMatchInlineSnapshot(`
@@ -1698,7 +1698,7 @@ describe('exists', () => {
   });
 
   test('negated existence over junction edge - permission', () => {
-    const issueQuery = staticQuery(schema, 'issue');
+    const issueQuery = newStaticQuery(schema, 'issue');
 
     expect(
       ast(issueQuery.where(({not, exists}) => not(exists('labels')))),

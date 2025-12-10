@@ -11,8 +11,8 @@ import {
 } from '../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
-import {staticQuery} from '../../../zql/src/query/static-query.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
 import {transformQuery} from './read-authorizer.ts';
 
 const lc = createSilentLogContext();
@@ -180,7 +180,7 @@ describe('unreadable tables', () => {
   ];
   test('top-level', () => {
     for (const tableName of unreadables) {
-      const query = staticQuery(schema, tableName);
+      const query = newStaticQuery(schema, tableName);
       expect(
         transformQuery(lc, ast(query), permissionRules, authData),
       ).toStrictEqual({
@@ -195,7 +195,7 @@ describe('unreadable tables', () => {
   });
 
   test('related', () => {
-    const query = staticQuery(schema, 'readable')
+    const query = newStaticQuery(schema, 'readable')
       .related('unreadable')
       .related('readable');
 
@@ -309,7 +309,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').related('readable', q =>
+          newStaticQuery(schema, 'readable').related('readable', q =>
             q.related('readable', q => q.related('unreadable')),
           ),
         ),
@@ -394,7 +394,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').related('readable', q =>
+          newStaticQuery(schema, 'readable').related('readable', q =>
             q.related('readable', q => q.related('unreadable')),
           ),
         ),
@@ -478,7 +478,7 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         lc,
-        ast(staticQuery(schema, 'readable').related('unreadable')),
+        ast(newStaticQuery(schema, 'readable').related('unreadable')),
         permissionRules,
         authData,
       ),
@@ -516,7 +516,7 @@ describe('unreadable tables', () => {
   });
 
   test('subqueries in conditions are replaced by `const true` or `const false` expressions', () => {
-    const query = staticQuery(schema, 'readable').whereExists('unreadable');
+    const query = newStaticQuery(schema, 'readable').whereExists('unreadable');
 
     // `unreadable` should be replaced by `false` condition.
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
@@ -599,7 +599,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').where(({not, exists}) =>
+          newStaticQuery(schema, 'readable').where(({not, exists}) =>
             not(exists('unreadable')),
           ),
         ),
@@ -645,7 +645,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').where(({not, exists}) =>
+          newStaticQuery(schema, 'readable').where(({not, exists}) =>
             not(exists('unreadable')),
           ),
         ),
@@ -693,7 +693,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').whereExists('readable', q =>
+          newStaticQuery(schema, 'readable').whereExists('readable', q =>
             q.whereExists('unreadable', q => q.where('id', '1')),
           ),
         ),
@@ -767,7 +767,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').whereExists('readable', q =>
+          newStaticQuery(schema, 'readable').whereExists('readable', q =>
             q.whereExists('unreadable', q => q.where('id', '1')),
           ),
         ),
@@ -842,7 +842,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable')
+          newStaticQuery(schema, 'readable')
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
@@ -914,7 +914,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable')
+          newStaticQuery(schema, 'readable')
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
@@ -988,7 +988,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
       lc,
-      ast(staticQuery(schema, 'readableThruUnreadable')),
+      ast(newStaticQuery(schema, 'readableThruUnreadable')),
       permissionRules,
       undefined,
     ),
@@ -1028,7 +1028,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
       lc,
-      ast(staticQuery(schema, 'readable').related('readableThruUnreadable')),
+      ast(newStaticQuery(schema, 'readable').related('readableThruUnreadable')),
       permissionRules,
       undefined,
     ),
@@ -1093,7 +1093,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'adminReadable')
+          newStaticQuery(schema, 'adminReadable')
             .related('self1')
             .related('self2'),
         ),
@@ -1182,7 +1182,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'adminReadable')
+          newStaticQuery(schema, 'adminReadable')
             .related('self1', q => q.where('id', '1'))
             .related('self2', q =>
               q.where('id', '2').related('self1', q => q.where('id', '3')),
@@ -1370,7 +1370,7 @@ describe('admin readable', () => {
     expect(
       transformQuery(
         lc,
-        ast(staticQuery(schema, 'adminReadable').whereExists('self1')),
+        ast(newStaticQuery(schema, 'adminReadable').whereExists('self1')),
         permissionRules,
         authData,
       ),
@@ -1435,7 +1435,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'adminReadable').whereExists('self1', q =>
+          newStaticQuery(schema, 'adminReadable').whereExists('self1', q =>
             q.where('id', '1'),
           ),
         ),
@@ -1520,7 +1520,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'adminReadable').whereExists('self1', q =>
+          newStaticQuery(schema, 'adminReadable').whereExists('self1', q =>
             q.whereExists('self2'),
           ),
         ),
@@ -1624,6 +1624,8 @@ describe('admin readable', () => {
   });
 });
 
-function ast(query: AnyQuery): AST {
+function ast<T extends keyof S['tables'] & string, S extends Schema, R>(
+  query: Query<T, S, R>,
+): AST {
   return asQueryInternals(query).ast;
 }
