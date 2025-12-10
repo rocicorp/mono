@@ -115,9 +115,8 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
-  readonly query: TSchema['enableLegacyQueries'] extends true
-    ? SchemaQuery<TSchema>
-    : {};
+  readonly query: SchemaQuery<TSchema>;
+
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
 
@@ -141,9 +140,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
       schema,
       serverSchema,
     );
-    this.query = schema.enableLegacyQueries
-      ? createRunnableBuilder(delegate, schema)
-      : ({} as SchemaQuery<TSchema>);
+    this.query = createRunnableBuilder(delegate, schema);
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(

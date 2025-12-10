@@ -7,7 +7,6 @@ import type {Mutator} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {mustGetQuery} from '../../../zql/src/query/query-registry.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
-import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
 import {mutators} from './zero-stress-mutators-test.ts';
@@ -168,9 +167,7 @@ describe('stress test types', () => {
   });
 
   test('complex nested JSON types are preserved', () => {
-    type UserRow = QueryResultType<
-      SchemaQuery<typeof zeroStressSchema>['user']
-    >[number];
+    type UserRow = QueryResultType<typeof zql.user>[number];
 
     expectTypeOf<UserRow['metadata']>().toEqualTypeOf<{
       readonly preferences: {
@@ -275,7 +272,7 @@ describe('stress test types', () => {
   });
 
   test('enum types are preserved across different tables', () => {
-    type Queries = SchemaQuery<typeof zeroStressSchema>;
+    type Queries = typeof zql;
 
     type UserRow = QueryResultType<Queries['user']>[number];
     type WorkspaceRow = QueryResultType<Queries['workspace']>[number];

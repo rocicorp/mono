@@ -53,7 +53,7 @@ export interface TransactionBase<S extends Schema> {
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
-  readonly query: S['enableLegacyQueries'] extends true ? SchemaQuery<S> : {};
+  readonly query: SchemaQuery<S>;
 
   run<TTable extends keyof S['tables'] & string, TReturn>(
     query: Query<TTable, S, TReturn>,

@@ -120,9 +120,8 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
-  readonly query: TSchema['enableLegacyQueries'] extends true
-    ? SchemaQuery<TSchema>
-    : {};
+  readonly query: SchemaQuery<TSchema>;
+
   readonly #repTx: WriteTransaction;
   readonly #zeroContext: ZeroContext;
 
@@ -141,9 +140,8 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
       txData.ivmSources as IVMSourceBranch,
     );
 
-    this.query = schema.enableLegacyQueries
-      ? createRunnableBuilder(zeroContext, schema)
-      : ({} as SchemaQuery<TSchema>);
+    this.query = createRunnableBuilder(zeroContext, schema);
+
     this.#zeroContext = zeroContext;
   }
 

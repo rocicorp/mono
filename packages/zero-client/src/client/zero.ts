@@ -421,7 +421,7 @@ export class Zero<
    *
    * @deprecated Use {@linkcode createBuilder} to create query builders instead.
    */
-  readonly query: S['enableLegacyQueries'] extends true ? SchemaQuery<S> : {};
+  readonly query: SchemaQuery<S>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -593,9 +593,7 @@ export class Zero<
     // This avoids exposing the delegate as a public API on Zero.
     registerZeroDelegate(this, this.#zeroContext);
 
-    this.query = schema.enableLegacyQueries
-      ? createRunnableBuilder(this.#zeroContext, schema)
-      : ({} as SchemaQuery<S>);
+    this.query = createRunnableBuilder(this.#zeroContext, schema);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,

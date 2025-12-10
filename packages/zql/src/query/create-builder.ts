@@ -9,30 +9,40 @@ import type {SchemaQuery} from './schema-query.ts';
 /**
  * Returns a set of query builders for the given schema.
  */
-export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
-  return createBuilderWithQueryFactory(schema, table =>
+export function createBuilder<S extends Schema>(
+  schema: S,
+): SchemaQuery<S, true> {
+  return createBuilderWithQueryFactory<S, true>(schema, table =>
     newQuery(schema, table),
   );
 }
 
+/** @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead. */
 export function createRunnableBuilder<S extends Schema>(
   delegate: QueryDelegate,
   schema: S,
-): SchemaQuery<S> {
-  return createBuilderWithQueryFactory(schema, table =>
+): SchemaQuery<S, false> {
+  if (!schema.enableLegacyQueries) {
+    return undefined as SchemaQuery<S, false>;
+  }
+
+  return createBuilderWithQueryFactory<S, false>(schema, table =>
     newRunnableQuery(delegate, schema, table),
   );
 }
 
-function createBuilderWithQueryFactory<S extends Schema>(
+function createBuilderWithQueryFactory<
+  S extends Schema,
+  ForceEnable extends boolean,
+>(
   schema: S,
   queryFactory: (table: keyof S['tables'] & string) => Query<string, S>,
-): SchemaQuery<S> {
+): SchemaQuery<S, ForceEnable> {
   return recordProxy(
     schema.tables,
     (_tableSchema, prop) => queryFactory(prop),
     prop => {
       throw new Error(`Table ${prop} does not exist in schema`);
     },
-  ) as unknown as SchemaQuery<S>;
+  ) as unknown as SchemaQuery<S, ForceEnable>;
 }
