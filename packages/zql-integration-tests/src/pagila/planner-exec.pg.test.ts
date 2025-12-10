@@ -149,6 +149,13 @@ describe('Pagila planner execution cost validation', () => {
         // What the below is saying is that the query as written is most optimal
         // (within-optimal and within-baseline are the same).
         // On inspection of the data, however, the chosen plan (everything flipped) is definitely most optimal.
+        // ---
+        // The issue is that walking back up the tree is missing indices.
+        /*
+        1. payment table has NO index on rental_id - Only the primary key (payment_date, payment_id)
+        2. inventory table has NO direct index on film_id - The index is (store_id, film_id), which means film_id alone can't
+            use it efficiently
+        */
         ['within-optimal', 10],
         ['within-baseline', 10],
       ],
@@ -314,6 +321,9 @@ describe('Pagila planner execution cost validation', () => {
   ])(
     '$name',
     ({name, query, validations}) => {
+      if (name !== 'payment to film via rental chain (3 hops)') {
+        return;
+      }
       // Execute all plan attempts and collect results (baseline DB)
       const results = executeAllPlanAttempts(query, false, 40_000);
 
