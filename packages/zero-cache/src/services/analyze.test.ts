@@ -151,7 +151,7 @@ describe('analyzeQuery', () => {
 
     expect(result).toEqual({
       ...mockResult,
-      plans: mockPlans,
+      sqlitePlans: mockPlans,
     });
   });
 
@@ -190,7 +190,7 @@ describe('analyzeQuery', () => {
 
     expect(result).toEqual({
       ...mockResult,
-      plans: {},
+      sqlitePlans: {},
     });
   });
 
@@ -259,7 +259,7 @@ describe('analyzeQuery', () => {
     );
 
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
-    expect(result.plans).toEqual({});
+    expect(result.sqlitePlans).toEqual({});
   });
 
   test('handles empty read row counts by query', async () => {
@@ -282,7 +282,7 @@ describe('analyzeQuery', () => {
     );
 
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
-    expect(result.plans).toEqual({});
+    expect(result.sqlitePlans).toEqual({});
   });
 
   test('propagates errors from runAst', async () => {
@@ -456,10 +456,10 @@ describe('analyzeQuery', () => {
     );
   });
 
-  test('plans are populated when readRowCountsByQuery is set (regression test)', async () => {
+  test('sqlitePlans are populated when readRowCountsByQuery is set (regression test)', async () => {
     // This test simulates the actual bug: vendedRowCounts was deprecated and no longer set,
     // but the code was using it. When readRowCountsByQuery is undefined, explainQueries
-    // would be called with undefined/empty object, resulting in no plans.
+    // would be called with undefined/empty object, resulting in no sqlitePlans.
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
       syncedRowCount: 10,
@@ -492,18 +492,18 @@ describe('analyzeQuery', () => {
     );
 
     // Critical assertion: explainQueries must be called with readRowCountsByQuery
-    // If it were called with vendedRowCounts (undefined), we'd get no plans
+    // If it were called with vendedRowCounts (undefined), we'd get no sqlitePlans
     expect(explainQueries).toHaveBeenCalledWith(
       mockResult.readRowCountsByQuery,
       expect.any(Object),
     );
 
-    // Verify plans are actually populated in the result
-    expect(result.plans).toEqual(expectedPlans);
-    expect(Object.keys(result.plans ?? {})).toHaveLength(1);
+    // Verify sqlitePlans are actually populated in the result
+    expect(result.sqlitePlans).toEqual(expectedPlans);
+    expect(Object.keys(result.sqlitePlans ?? {})).toHaveLength(1);
   });
 
-  test('plans default to empty object when readRowCountsByQuery is undefined', async () => {
+  test('sqlitePlans default to empty object when readRowCountsByQuery is undefined', async () => {
     // Edge case: when readRowCountsByQuery is undefined, we should default to {}
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
@@ -525,10 +525,10 @@ describe('analyzeQuery', () => {
 
     // Should call explainQueries with empty object (due to ?? {} in the code)
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
-    expect(result.plans).toEqual({});
+    expect(result.sqlitePlans).toEqual({});
   });
 
-  test('real integration: explainQueries produces actual plans from readRowCountsByQuery', async () => {
+  test('real integration: explainQueries produces actual sqlitePlans from readRowCountsByQuery', async () => {
     // This test bypasses the mock for explainQueries to verify real plan generation
     const {explainQueries: realExplainQueries} = await vi.importActual<
       // oxlint-disable-next-line consistent-type-imports
@@ -643,7 +643,7 @@ describe('analyzeQuery', () => {
   });
 
   describe('planner debug', () => {
-    test('includes planner events when plannerDebug is true', async () => {
+    test('includes join plans when joinPlans is true', async () => {
       const mockDebugEvents = [
         {type: 'attempt-start', attemptNumber: 0, totalAttempts: 1} as const,
         {
@@ -686,7 +686,7 @@ describe('analyzeQuery', () => {
         false,
         undefined,
         undefined,
-        true, // plannerDebug = true
+        true, // joinPlans = true
       );
 
       // Verify AccumulatorDebugger was created
@@ -714,11 +714,11 @@ describe('analyzeQuery', () => {
       // Verify serializePlanDebugEvents was called
       expect(serializePlanDebugEvents).toHaveBeenCalledWith(mockDebugEvents);
 
-      // Verify result includes plannerEvents
-      expect(result.plannerEvents).toEqual(mockDebugEvents);
+      // Verify result includes joinPlans
+      expect(result.joinPlans).toEqual(mockDebugEvents);
     });
 
-    test('does not include planner events when plannerDebug is false', async () => {
+    test('does not include join plans when joinPlans is false', async () => {
       vi.clearAllMocks();
 
       const mockResult: AnalyzeQueryResult = {
@@ -741,7 +741,7 @@ describe('analyzeQuery', () => {
         false,
         undefined,
         undefined,
-        false, // plannerDebug = false
+        false, // joinPlans = false
       );
 
       // Verify AccumulatorDebugger was NOT created
@@ -766,11 +766,11 @@ describe('analyzeQuery', () => {
       // Verify serializePlanDebugEvents was NOT called
       expect(serializePlanDebugEvents).not.toHaveBeenCalled();
 
-      // Verify result does not include plannerEvents
-      expect(result.plannerEvents).toBeUndefined();
+      // Verify result does not include joinPlans
+      expect(result.joinPlans).toBeUndefined();
     });
 
-    test('defaults plannerDebug to false when not provided', async () => {
+    test('defaults joinPlans to false when not provided', async () => {
       vi.clearAllMocks();
 
       const mockResult: AnalyzeQueryResult = {
@@ -784,7 +784,7 @@ describe('analyzeQuery', () => {
       vi.mocked(runAst).mockResolvedValue(mockResult);
       vi.mocked(explainQueries).mockReturnValue({});
 
-      // Call without plannerDebug parameter
+      // Call without joinPlans parameter
       const result = await analyzeQuery(
         lc,
         mockConfig,
@@ -796,8 +796,8 @@ describe('analyzeQuery', () => {
       expect(AccumulatorDebugger).not.toHaveBeenCalled();
       expect(createSQLiteCostModel).not.toHaveBeenCalled();
 
-      // Verify result does not include plannerEvents
-      expect(result.plannerEvents).toBeUndefined();
+      // Verify result does not include joinPlans
+      expect(result.joinPlans).toBeUndefined();
     });
   });
 });

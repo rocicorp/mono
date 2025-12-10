@@ -140,7 +140,6 @@ test('mutator.fn executes the definition with args, ctx, and tx', async () => {
     mutationID: 1,
     reason: 'optimistic',
     mutate: {},
-    query: {},
   } as Transaction<typeof schema, unknown>;
   const mockCtx = {user: 'testuser'};
 
@@ -188,7 +187,6 @@ test('mutator.fn validates args when validator is provided', async () => {
     mutationID: 1,
     reason: 'optimistic',
     mutate: {},
-    query: {},
   } as Transaction<typeof schema, unknown>;
 
   await mutators.item.test.fn({
@@ -528,7 +526,6 @@ describe('input/output type separation', () => {
       mutationID: 1,
       reason: 'optimistic',
       mutate: {},
-      query: {},
     } as Transaction<typeof schema, unknown>;
 
     // Call fn with string input (simulating server receiving raw args)
@@ -579,7 +576,6 @@ describe('input/output type separation', () => {
       mutationID: 1,
       reason: 'optimistic',
       mutate: {},
-      query: {},
     } as Transaction<typeof schema, unknown>;
 
     // When fn is called, it should transform undefined to 'default-value'

@@ -50,6 +50,9 @@ export interface TransactionBase<S extends Schema> {
   readonly reason: TransactionReason;
 
   readonly mutate: MutateCRUD<S>;
+  /**
+   * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
+   */
   readonly query: SchemaQuery<S>;
 
   run<TTable extends keyof S['tables'] & string, TReturn>(

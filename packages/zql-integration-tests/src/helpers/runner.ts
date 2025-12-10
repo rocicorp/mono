@@ -638,7 +638,7 @@ export async function runAndCompare(
   }
 }
 
-async function checkPush(
+export async function checkPush(
   zqlSchema: Schema,
   delegates: Delegates,
   query: AnyQuery,

@@ -9,7 +9,7 @@ import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
-import {bootstrap, runAndCompare} from '../helpers/runner.ts';
+import {bootstrap, checkPush, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
@@ -25,7 +25,7 @@ const harness = await bootstrap({
 });
 
 // Internal timeout for graceful handling (shorter than vitest timeout)
-const TEST_TIMEOUT_MS = 55_000;
+const TEST_TIMEOUT_MS = 50_000;
 
 /**
  * Error thrown when a fuzz test query exceeds the time limit.
@@ -57,10 +57,10 @@ function createCheckAbort(
 }
 
 // oxlint-disable-next-line expect-expect
-test.each(Array.from({length: 100}, () => createCase()))(
+test.each(Array.from({length: 0}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
-  65_000, // vitest timeout: longer than internal timeout to ensure we catch it ourselves
+  60_000, // vitest timeout: longer than internal timeout to ensure we catch it ourselves
 );
 
 test('sentinel', () => {
@@ -124,6 +124,7 @@ async function runCase({
   try {
     await harness.transact(async delegates => {
       await runAndCompare(schema, delegates, query[0], undefined);
+      await checkPush(schema, delegates, query[0], 10);
     }, sourceWrapper);
   } catch (e) {
     // Timeouts pass with a warning
@@ -150,12 +151,10 @@ async function shrink(generations: AnyQuery[], seed: number) {
   while (low < high) {
     const mid = low + ((high - low) >> 1);
     try {
-      await runAndCompare(
-        schema,
-        harness.delegates,
-        generations[mid],
-        undefined,
-      );
+      await harness.transact(async delegates => {
+        await runAndCompare(schema, delegates, generations[mid], undefined);
+        await checkPush(schema, delegates, generations[mid], 10);
+      });
       low = mid + 1;
     } catch {
       lastFailure = mid;

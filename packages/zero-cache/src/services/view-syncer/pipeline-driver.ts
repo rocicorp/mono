@@ -100,8 +100,7 @@ export type Timer = {
  * No matter how fast hydration is, advancement is given at least this long to
  * complete before doing a pipeline reset.
  */
-const MIN_ADVANCEMENT_TIME_LIMIT_MS = 30;
-export const YIELD_THRESHOLD_MS = 200;
+const MIN_ADVANCEMENT_TIME_LIMIT_MS = 50;
 
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
@@ -120,6 +119,7 @@ export class PipelineDriver {
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
+  readonly #yieldThresholdMs: number;
   #streamer: Streamer | null = null;
   #hydrateContext: HydrateContext | null = null;
   #advanceContext: AdvanceContext | null = null;
@@ -149,6 +149,7 @@ export class PipelineDriver {
     storage: ClientGroupStorage,
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
+    yieldThresholdMs: number,
     enablePlanner?: boolean,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
@@ -158,6 +159,7 @@ export class PipelineDriver {
     this.#logConfig = logConfig;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
+    this.#yieldThresholdMs = yieldThresholdMs;
   }
 
   /**
@@ -610,7 +612,7 @@ export class PipelineDriver {
 
   #shouldYield(): boolean {
     if (this.#hydrateContext) {
-      return this.#hydrateContext.timer.elapsedLap() > YIELD_THRESHOLD_MS;
+      return this.#hydrateContext.timer.elapsedLap() > this.#yieldThresholdMs;
     }
     if (this.#advanceContext) {
       return this.#shouldAdvanceYieldMaybeAbortAdvance();
@@ -650,7 +652,7 @@ export class PipelineDriver {
           `hydration time of ${totalHydrationTimeMs} ms.`,
       );
     }
-    return advanceTimer.elapsedLap() > YIELD_THRESHOLD_MS;
+    return advanceTimer.elapsedLap() > this.#yieldThresholdMs;
   }
 
   /** Implements `BuilderDelegate.createStorage()` */

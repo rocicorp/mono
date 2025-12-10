@@ -18,13 +18,13 @@ import {
   nextPoke,
   permissionsAll,
   setup,
+  YIELD_THRESHOLD_MS,
 } from './view-syncer-test-util.ts';
 import {
   type SyncContext,
   TimeSliceTimer,
   type ViewSyncerService,
 } from './view-syncer.ts';
-import {YIELD_THRESHOLD_MS} from './pipeline-driver.ts';
 
 describe('view-syncer/yield-during-advance', () => {
   let replicaDbFile: DbFile;

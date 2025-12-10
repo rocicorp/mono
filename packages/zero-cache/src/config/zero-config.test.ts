@@ -283,6 +283,11 @@ test('zero-cache --help', () => {
                                                                                                                                                                                          
                                                                    You can disable the planner if it is picking bad strategies.                                                          
                                                                                                                                                                                          
+     --yield-threshold-ms number                                   default: 200                                                                                                          
+       ZERO_YIELD_THRESHOLD_MS env                                                                                                                                                       
+                                                                   The ammount of time in milliseconds that a single client's view hydration                                             
+                                                                         or advancement can take before yielding to the event loop.                                                      
+                                                                                                                                                                                         
      --change-db string                                            optional                                                                                                              
        ZERO_CHANGE_DB env                                                                                                                                                                
                                                                    The Postgres database used to store recent replication log entries, in order                                          
