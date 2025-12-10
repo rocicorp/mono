@@ -9,7 +9,7 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
-import {sql} from './internal/sql.ts';
+import {named, sql} from './internal/sql.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
 import type {Start} from '../../zql/src/ivm/operator.ts';
 
@@ -41,6 +41,9 @@ export function buildSelectQuery(
     constraints.push(gatherStartConstraints(start, reverse, order, columns));
   }
 
+  // Note: do filters first
+  // Perma-bind them
+  // Get max index so we know where to start constraints and start from
   if (filters) {
     constraints.push(filtersToSQL(filters));
   }
@@ -60,14 +63,15 @@ export function constraintsToSQL(
     return [];
   }
 
-  const constraints: SQLQuery[] = [];
-  for (const [key, value] of Object.entries(constraint)) {
-    constraints.push(
-      sql`${sql.ident(key)} = ${toSQLiteType(value, columns[key].type)}`,
-    );
-  }
-
-  return constraints;
+  // Sort keys for consistent ordering - enables cache key matching
+  const sortedKeys = Object.keys(constraint).sort();
+  return sortedKeys.map(
+    key =>
+      sql`${sql.ident(key)} = ${named(
+        `c_${key}`,
+        toSQLiteType(constraint[key], columns[key].type),
+      )}`,
+  );
 }
 
 export function orderByToSQL(order: Ordering, reverse: boolean): SQLQuery {
@@ -94,16 +98,22 @@ export function orderByToSQL(order: Ordering, reverse: boolean): SQLQuery {
 /**
  * Converts filters (conditions) to SQL WHERE clause.
  * This applies all filters present in the AST for a query to the source.
+ *
+ * Named placeholder scheme: `f_{n}` where n is incremented for each value.
+ * Pass a counter object to track the current index across recursive calls.
  */
-export function filtersToSQL(filters: NoSubqueryCondition): SQLQuery {
+export function filtersToSQL(
+  filters: NoSubqueryCondition,
+  counter: {n: number} = {n: 0},
+): SQLQuery {
   switch (filters.type) {
     case 'simple':
-      return simpleConditionToSQL(filters);
+      return simpleConditionToSQL(filters, counter);
     case 'and':
       return filters.conditions.length > 0
         ? sql`(${sql.join(
             filters.conditions.map(condition =>
-              filtersToSQL(condition as NoSubqueryCondition),
+              filtersToSQL(condition as NoSubqueryCondition, counter),
             ),
             sql` AND `,
           )})`
@@ -112,7 +122,7 @@ export function filtersToSQL(filters: NoSubqueryCondition): SQLQuery {
       return filters.conditions.length > 0
         ? sql`(${sql.join(
             filters.conditions.map(condition =>
-              filtersToSQL(condition as NoSubqueryCondition),
+              filtersToSQL(condition as NoSubqueryCondition, counter),
             ),
             sql` OR `,
           )})`
@@ -120,17 +130,22 @@ export function filtersToSQL(filters: NoSubqueryCondition): SQLQuery {
   }
 }
 
-function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
+function simpleConditionToSQL(
+  filter: SimpleCondition,
+  counter: {n: number},
+): SQLQuery {
   const {op} = filter;
   if (op === 'IN' || op === 'NOT IN') {
     switch (filter.right.type) {
       case 'literal':
         return sql`${valuePositionToSQL(
           filter.left,
+          counter,
         )} ${sql.__dangerous__rawValue(
           filter.op,
-        )} (SELECT value FROM json_each(${JSON.stringify(
-          filter.right.value,
+        )} (SELECT value FROM json_each(${named(
+          `f_${counter.n++}`,
+          JSON.stringify(filter.right.value),
         )}))`;
       case 'static':
         throw new Error(
@@ -138,7 +153,7 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
         );
     }
   }
-  return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
+  return sql`${valuePositionToSQL(filter.left, counter)} ${sql.__dangerous__rawValue(
     // SQLite's LIKE operator is case-insensitive by default, so we
     // convert ILIKE to LIKE and NOT ILIKE to NOT LIKE.
     filter.op === 'ILIKE'
@@ -146,15 +161,21 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
       : filter.op === 'NOT ILIKE'
         ? 'NOT LIKE'
         : filter.op,
-  )} ${valuePositionToSQL(filter.right)}`;
+  )} ${valuePositionToSQL(filter.right, counter)}`;
 }
 
-function valuePositionToSQL(value: ValuePosition): SQLQuery {
+function valuePositionToSQL(
+  value: ValuePosition,
+  counter: {n: number},
+): SQLQuery {
   switch (value.type) {
     case 'column':
       return sql.ident(value.name);
     case 'literal':
-      return sql`${toSQLiteType(value.value, getJsType(value.value))}`;
+      return sql`${named(
+        `f_${counter.n++}`,
+        toSQLiteType(value.value, getJsType(value.value)),
+      )}`;
     case 'static':
       throw new Error(
         'Static parameters must be replaced before conversion to SQL',
@@ -203,6 +224,9 @@ export function toSQLiteType(v: unknown, type: ValueType): unknown {
  *
  * - after vs before flips the comparison operators.
  * - inclusive adds a final `OR` clause for the exact match.
+ *
+ * Named placeholder scheme: `s_{colName}` for each column in start row.
+ * SQLite binds the same value to all occurrences of the same param name.
  */
 function gatherStartConstraints(
   start: Start,
@@ -222,36 +246,37 @@ function gatherStartConstraints(
           from[iField],
           columnTypes[iField].type,
         );
+        const paramName = `s_${iField}`;
         if (iDirection === 'asc') {
           if (!reverse) {
             group.push(
-              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
+              sql`(${named(paramName, constraintValue)} IS NULL OR ${sql.ident(iField)} > ${named(paramName, constraintValue)})`,
             );
           } else {
             reverse satisfies true;
             group.push(
-              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
+              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${named(paramName, constraintValue)})`,
             );
           }
         } else {
           iDirection satisfies 'desc';
           if (!reverse) {
             group.push(
-              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
+              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${named(paramName, constraintValue)})`,
             );
           } else {
             reverse satisfies true;
             group.push(
-              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
+              sql`(${named(paramName, constraintValue)} IS NULL OR ${sql.ident(iField)} > ${named(paramName, constraintValue)})`,
             );
           }
         }
       } else {
         const [jField] = order[j];
         group.push(
-          sql`${sql.ident(jField)} IS ${toSQLiteType(
-            from[jField],
-            columnTypes[jField].type,
+          sql`${sql.ident(jField)} IS ${named(
+            `s_${jField}`,
+            toSQLiteType(from[jField], columnTypes[jField].type),
           )}`,
         );
       }
@@ -264,9 +289,9 @@ function gatherStartConstraints(
       sql`(${sql.join(
         order.map(
           s =>
-            sql`${sql.ident(s[0])} IS ${toSQLiteType(
-              from[s[0]],
-              columnTypes[s[0]].type,
+            sql`${sql.ident(s[0])} IS ${named(
+              `s_${s[0]}`,
+              toSQLiteType(from[s[0]], columnTypes[s[0]].type),
             )}`,
         ),
         sql` AND `,

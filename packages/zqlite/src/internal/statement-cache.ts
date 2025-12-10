@@ -50,6 +50,11 @@ export class StatementCache {
     return this.#size;
   }
 
+  // the database connection used to prepare statements
+  get db() {
+    return this.#db;
+  }
+
   drop(n: number) {
     assert(n >= 0, 'Cannot drop a negative number of items');
     assert(n <= this.#size, 'Cannot drop more items than are in the cache');
