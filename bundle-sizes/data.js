@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1765231443434,
+  "lastUpdate": 1765364287789,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54837,6 +54837,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31818,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8a10d34ef18d0f4bc7d34a1507a697313ed2cecf",
+          "message": "feat(zero): Add profileID fallback and include in URL (#5310)\n\nThis consists of two parts.\n\n## Replicache\n\nReplicache now falls back to read `localStorage` if the `profileID` is\nnot in the `KVStore`. It also writes to `localStorage` when writing the\n`profileID`. This means that the profile ID will be persisted even when\nwe use mem store.\n\n## Zero Client\n\nNow we pass the profileID as a search param when we connect the web\nsocket.\n\n## TODO\n\n@darkgnotic Is going to do the zero-cache part and use this new id.\n\n---------\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+          "timestamp": "2025-12-10T10:48:48Z",
+          "tree_id": "42b72877d3609e85c1aadae4b65f21bef880ebeb",
+          "url": "https://github.com/rocicorp/mono/commit/8a10d34ef18d0f4bc7d34a1507a697313ed2cecf"
+        },
+        "date": 1765364275817,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302328,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54468,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111346,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31858,
             "unit": "bytes"
           }
         ]
