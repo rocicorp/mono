@@ -32,6 +32,7 @@ import {
   cmpVersions,
   maxVersion,
   oneAfter,
+  versionFromString,
   type ClientQueryRecord,
   type ClientRecord,
   type CustomQueryRecord,
@@ -292,6 +293,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       name?: string | undefined;
       args?: readonly ReadonlyJSONValue[] | undefined;
       ttl?: number | undefined;
+      retryErrorVersion?: string | undefined;
     }>[],
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
@@ -335,6 +337,15 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       if (compareTTL(ttl, oldClientState.ttl) > 0) {
         // TTL update only - don't record for telemetry
         needed.add(hash);
+        continue;
+      }
+
+      if (
+        (q.retryErrorVersion
+          ? versionFromString(q.retryErrorVersion).stateVersion
+          : undefined) !== oldClientState.retryErrorVersion?.stateVersion
+      ) {
+        needed.add(hash);
       }
     }
 
@@ -359,6 +370,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         inactivatedAt,
         ttl,
         version: newVersion,
+        retryErrorVersion: q.retryErrorVersion
+          ? versionFromString(q.retryErrorVersion)
+          : undefined,
       };
       this._cvr.queries[id] = query;
       patches.push({
@@ -374,6 +388,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         false,
         inactivatedAt,
         ttl,
+        q.retryErrorVersion
+          ? versionFromString(q.retryErrorVersion)
+          : undefined,
       );
     }
     return patches;
@@ -560,13 +577,26 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    */
   trackQueries(
     lc: LogContext,
-    executed: {id: string; transformationHash: string}[],
+    executed: (
+      | {
+          id: string;
+          transformationHash: string;
+          errorMessage?: string;
+        }
+      | {
+          id: string;
+          transformationHash?: undefined;
+          errorMessage: string;
+        }
+    )[],
     removed: {id: string; transformationHash: string | undefined}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
     const queryPatches: Patch[] = [
-      executed.map(q => this.#trackExecuted(q.id, q.transformationHash)),
+      executed.map(q =>
+        this.#trackExecuted(q.id, q.transformationHash, q.errorMessage),
+      ),
       removed.map(q => this.#trackRemoved(q.id)),
     ].flat(2);
 
@@ -621,28 +651,59 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    *
    * This must be called for all executed queries.
    */
-  #trackExecuted(queryID: string, transformationHash: string): Patch[] {
-    assert(!this.#removedOrExecutedQueryIDs.has(queryID));
-    this.#removedOrExecutedQueryIDs.add(queryID);
+  #trackExecuted(
+    id: string,
+    transformationHash: string | undefined,
+    errorMessage?: string | undefined,
+  ): Patch[] {
+    assert(!this.#removedOrExecutedQueryIDs.has(id));
+    this.#removedOrExecutedQueryIDs.add(id);
 
     let gotQueryPatch: Patch | undefined;
-    const query = this._cvr.queries[queryID];
-    if (query.transformationHash !== transformationHash) {
+    const queryToUpdate = this._cvr.queries[id];
+    assert(queryToUpdate, `Query ${id} not found in CVR`);
+
+    if (
+      (transformationHash !== undefined &&
+        queryToUpdate.transformationHash !== transformationHash) ||
+      queryToUpdate.errorMessage !== (errorMessage ?? undefined) ||
+      // If there is an error message, we always update the query to ensure
+      // the errorVersion is bumped, indicating a failed retry.
+      errorMessage !== undefined
+    ) {
       const transformationVersion = this._ensureNewVersion();
 
-      if (query.type !== 'internal' && query.patchVersion === undefined) {
+      if (queryToUpdate.type === 'internal') {
+        if (transformationHash !== undefined) {
+          queryToUpdate.transformationHash = transformationHash;
+        }
+        queryToUpdate.transformationVersion = transformationVersion;
+        // Internal queries cannot be in an error state.
+        this._cvrStore.updateQuery(queryToUpdate);
+        return [];
+      }
+
+      if (queryToUpdate.patchVersion === undefined) {
         // client query: desired -> gotten
-        query.patchVersion = transformationVersion;
+        queryToUpdate.patchVersion = transformationVersion;
         gotQueryPatch = {
           type: 'query',
           op: 'put',
-          id: query.id,
+          id,
+        };
+      } else {
+        // client query: gotten -> gotten (changed)
+        gotQueryPatch = {
+          type: 'query',
+          op: 'put',
+          id,
         };
       }
-
-      query.transformationHash = transformationHash;
-      query.transformationVersion = transformationVersion;
-      this._cvrStore.updateQuery(query);
+      queryToUpdate.transformationHash = transformationHash;
+      queryToUpdate.transformationVersion = transformationVersion;
+      queryToUpdate.errorMessage = errorMessage;
+      queryToUpdate.errorVersion = errorMessage ? this._cvr.version : undefined;
+      this._cvrStore.updateQuery(queryToUpdate);
     }
     return gotQueryPatch ? [gotQueryPatch] : [];
   }

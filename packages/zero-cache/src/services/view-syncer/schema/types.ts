@@ -152,6 +152,16 @@ export const baseQueryRecordSchema = v.object({
    * queries with a newer `transformationVersion`.
    */
   transformationVersion: cvrVersionSchema.optional(),
+
+  /**
+   * If present, the query execution failed.
+   */
+  errorMessage: v.string().optional(),
+
+  /**
+   * The CVR version at which the error occurred.
+   */
+  errorVersion: cvrVersionSchema.optional(),
 });
 
 /**
@@ -190,6 +200,11 @@ const clientStateSchema = v.object({
    * The version at which the client state changed (i.e. individual `patchVersion`s).
    */
   version: cvrVersionSchema,
+
+  /**
+   * The error version for which the query should be retried.
+   */
+  retryErrorVersion: cvrVersionSchema.optional(),
 });
 
 const externalQueryRecordSchema = baseQueryRecordSchema.extend({
@@ -336,6 +351,8 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: true,
         deleted: false, // put vs del "got" query
+        errorMessage: query.errorMessage ?? null,
+        errorVersion: maybeVersionString(query.errorVersion),
       };
     case 'client':
       return {
@@ -349,6 +366,8 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: null,
         deleted: false, // put vs del "got" query
+        errorMessage: query.errorMessage ?? null,
+        errorVersion: maybeVersionString(query.errorVersion),
       };
     case 'custom':
       return {
@@ -362,6 +381,8 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: null,
         deleted: false, // put vs del "got" query
+        errorMessage: query.errorMessage ?? null,
+        errorVersion: maybeVersionString(query.errorVersion),
       };
   }
 }

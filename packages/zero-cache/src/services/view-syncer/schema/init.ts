@@ -182,6 +182,17 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migrateV15ToV16: Migration = {
+    migrateSchema: async (_, sql) => {
+      await sql`ALTER TABLE ${sql(schema)}.queries 
+        ADD COLUMN "errorMessage" TEXT`;
+      await sql`ALTER TABLE ${sql(schema)}.queries 
+        ADD COLUMN "errorVersion" TEXT`;
+      await sql`ALTER TABLE ${sql(schema)}.desires 
+        ADD COLUMN "retryErrorVersion" TEXT`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -211,6 +222,8 @@ export async function initViewSyncerSchema(
     // directly as DOUBLE PRECISION, avoiding postgres.js TIMESTAMPTZ
     // type conversion issues
     15: migratedV14ToV15,
+    // V16 adds queries."errorMessage", queries."errorVersion", and desires."retryErrorVersion"
+    16: migrateV15ToV16,
   };
 
   await runSchemaMigrations(

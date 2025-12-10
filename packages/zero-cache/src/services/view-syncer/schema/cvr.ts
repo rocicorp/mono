@@ -103,6 +103,8 @@ export type QueriesRow = {
   transformationVersion: string | null;
   internal: boolean | null;
   deleted: boolean | null;
+  errorMessage: string | null;
+  errorVersion: string | null;
 };
 
 function createQueriesTable(shard: ShardID) {
@@ -118,6 +120,8 @@ CREATE TABLE ${schema(shard)}.queries (
   "transformationVersion" TEXT,
   "internal"              BOOL,  -- If true, no need to track / send patches
   "deleted"               BOOL,  -- put vs del "got" query
+  "errorMessage"          TEXT,  -- If present, the query execution failed
+  "errorVersion"          TEXT,  -- The CVR version at which the error occurred
 
   PRIMARY KEY ("clientGroupID", "queryHash"),
 
@@ -149,6 +153,7 @@ export type DesiresRow = {
   deleted: boolean | null;
   ttl: number | null;
   inactivatedAt: TTLClock | null;
+  retryErrorVersion: string | null;
 };
 
 function createDesiresTable(shard: ShardID) {
@@ -163,6 +168,7 @@ CREATE TABLE ${schema(shard)}.desires (
   "ttlMs"              DOUBLE PRECISION,  -- Time to live in milliseconds
   "inactivatedAt"      TIMESTAMPTZ,  -- DEPRECATED: Use inactivatedAtMs instead. Time at which this row was inactivated
   "inactivatedAtMs"    DOUBLE PRECISION,  -- Time at which this row was inactivated (milliseconds since client group start)
+  "retryErrorVersion"  TEXT,  -- The CVR version after which the query should be retried
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
 
