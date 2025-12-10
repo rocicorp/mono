@@ -1249,6 +1249,20 @@ test('profileID persists with mem store', async () => {
   await rep2.close();
 });
 
+test('profileID persists shared between different stores', async () => {
+  const rep1 = await replicacheForTesting('profile-1');
+  const profileID = await rep1.profileID;
+  expect(profileID).toBeTypeOf('string');
+  await rep1.close();
+
+  // Open again with a new mem store and verify profileID is the same
+  // (it persists via localStorage even though other data is lost)
+  const rep2 = await replicacheForTesting('profile-2');
+  const profileID2 = await rep2.profileID;
+  expect(profileID2).toBe(profileID);
+  await rep2.close();
+});
+
 test('isEmpty', async () => {
   const rep = await replicacheForTesting('test-is-empty', {
     mutators: {
