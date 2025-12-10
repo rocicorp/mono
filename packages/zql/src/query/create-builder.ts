@@ -21,9 +21,9 @@ export function createBuilder<S extends Schema>(
 export function createRunnableBuilder<S extends Schema>(
   delegate: QueryDelegate,
   schema: S,
-): SchemaQuery<S, false> {
+): SchemaQuery<S> {
   if (!schema.enableLegacyQueries) {
-    return undefined as SchemaQuery<S, false>;
+    return undefined as SchemaQuery<S>;
   }
 
   return createBuilderWithQueryFactory<S, false>(schema, table =>
@@ -44,5 +44,5 @@ function createBuilderWithQueryFactory<
     prop => {
       throw new Error(`Table ${prop} does not exist in schema`);
     },
-  ) as unknown as SchemaQuery<S, ForceEnable>;
+  ) as SchemaQuery<S, ForceEnable>;
 }
