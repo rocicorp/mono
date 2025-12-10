@@ -162,13 +162,18 @@ export class FlippedJoin implements Input {
         // TODO: consider adding the ability to pass a set of
         // ids to fetch, and have them applied to sqlite using IN.
         const constraintFromChild: Writable<Constraint> = {};
+        let anyNull = false;
         for (let i = 0; i < this.#parentKey.length; i++) {
-          constraintFromChild[this.#parentKey[i]] =
-            childNode.row[this.#childKey[i]];
+          const value = childNode.row[this.#childKey[i]];
+          if (value === null) {
+            anyNull = true;
+          }
+          constraintFromChild[this.#parentKey[i]] = value;
         }
         if (
-          req.constraint &&
-          !constraintsAreCompatible(constraintFromChild, req.constraint)
+          anyNull ||
+          (req.constraint &&
+            !constraintsAreCompatible(constraintFromChild, req.constraint))
         ) {
           parentIterators.push(emptyArray[Symbol.iterator]());
         } else {
@@ -338,14 +343,17 @@ export class FlippedJoin implements Input {
       position: undefined,
     };
     try {
-      const parentNodeStream = this.#parent.fetch({
-        constraint: Object.fromEntries(
-          this.#parentKey.map((key, i) => [
-            key,
-            change.node.row[this.#childKey[i]],
-          ]),
-        ),
-      });
+      let anyNull = false;
+      const constraint = Object.fromEntries(
+        this.#parentKey.map((key, i) => {
+          const value = change.node.row[this.#childKey[i]];
+          if (value === null) {
+            anyNull = true;
+          }
+          return [key, value];
+        }),
+      );
+      const parentNodeStream = anyNull ? [] : this.#parent.fetch({constraint});
       for (const parentNode of parentNodeStream) {
         if (parentNode === 'yield') {
           yield 'yield';
@@ -355,15 +363,19 @@ export class FlippedJoin implements Input {
           change,
           position: parentNode.row,
         };
-        const childNodeStream = () =>
-          this.#child.fetch({
-            constraint: Object.fromEntries(
-              this.#childKey.map((key, i) => [
-                key,
-                parentNode.row[this.#parentKey[i]],
-              ]),
-            ),
-          });
+        const childNodeStream = () => {
+          let anyNull = false;
+          const constraint = Object.fromEntries(
+            this.#childKey.map((key, i) => {
+              const value = parentNode.row[this.#parentKey[i]];
+              if (value === null) {
+                anyNull = true;
+              }
+              return [key, value];
+            }),
+          );
+          return anyNull ? [] : this.#child.fetch({constraint});
+        };
         if (!exists) {
           for (const childNode of childNodeStream()) {
             if (childNode === 'yield') {
@@ -420,12 +432,19 @@ export class FlippedJoin implements Input {
   }
 
   *#pushParent(change: Change): Stream<'yield'> {
-    const childNodeStream = (node: Node) => () =>
-      this.#child.fetch({
-        constraint: Object.fromEntries(
-          this.#childKey.map((key, i) => [key, node.row[this.#parentKey[i]]]),
-        ),
-      });
+    const childNodeStream = (node: Node) => () => {
+      let anyNull = false;
+      const constraint = Object.fromEntries(
+        this.#childKey.map((key, i) => {
+          const value = node.row[this.#parentKey[i]];
+          if (value === null) {
+            anyNull = true;
+          }
+          return [key, value];
+        }),
+      );
+      return anyNull ? [] : this.#child.fetch({constraint});
+    };
 
     const flip = (node: Node) => ({
       ...node,
