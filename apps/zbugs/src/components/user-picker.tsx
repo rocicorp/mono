@@ -14,6 +14,7 @@ type Props = {
   onSelect?: ((user: User | undefined) => void) | undefined;
   selected?: {login?: string | undefined} | undefined;
   disabled?: boolean | undefined;
+  enabledOffline?: boolean | undefined;
   unselectedLabel?: string | undefined;
   placeholder?: string | undefined;
   allowNone?: boolean | undefined;
@@ -25,6 +26,7 @@ export function UserPicker({
   onSelect,
   selected,
   disabled,
+  enabledOffline,
   unselectedLabel,
   placeholder,
   allowNone = true,
@@ -95,6 +97,7 @@ export function UserPicker({
 
   return (
     <Combobox
+      enabledOffline={enabledOffline}
       disabled={disabled}
       onChange={c => handleSelect(c)}
       items={items}

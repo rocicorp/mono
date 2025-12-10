@@ -5,6 +5,7 @@ import {
   type ForwardedRef,
   type ReactNode,
 } from 'react';
+import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {isPrimaryMouseButton} from '../is-primary-mouse-button.ts';
 import {umami} from '../umami.ts';
 
@@ -14,6 +15,7 @@ export interface ButtonProps {
   children?: ReactNode | undefined;
   className?: string | undefined;
   disabled?: boolean | undefined;
+  enabledOffline?: boolean | undefined;
   style?: CSSProperties | undefined;
   title?: string | undefined;
   autoFocus?: boolean | undefined;
@@ -22,7 +24,10 @@ export interface ButtonProps {
 
 export const Button = memo(
   forwardRef((props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => {
-    const {onAction, eventName, children, ...rest} = props;
+    const {onAction, eventName, children, disabled, enabledOffline, ...rest} =
+      props;
+
+    const isOffline = useIsOffline();
 
     const handleMouseDown = (e: React.MouseEvent) => {
       if (isPrimaryMouseButton(e.nativeEvent)) {
@@ -64,8 +69,16 @@ export const Button = memo(
         }
       : {};
 
+    const isDisabled = enabledOffline ? disabled : isOffline || disabled;
+
     return (
-      <button {...actionProps} {...rest} ref={ref}>
+      <button
+        {...actionProps}
+        {...rest}
+        ref={ref}
+        aria-disabled={isDisabled}
+        disabled={isDisabled}
+      >
         {children}
       </button>
     );
