@@ -6,7 +6,7 @@ import type * as ZeroModule from './zero.ts';
 import type {Schema, Zero, ZeroOptions} from './zero.ts';
 
 // Mock the Zero constructor
-vi.mock('../../zero/src/zero.ts', async importOriginal => {
+vi.mock('./zero.ts', async importOriginal => {
   const original = await importOriginal<typeof ZeroModule>();
   return {
     ...original,
@@ -14,7 +14,7 @@ vi.mock('../../zero/src/zero.ts', async importOriginal => {
   };
 });
 
-import {Zero as ZeroConstructor} from '../../zero/src/zero.ts';
+import {Zero as ZeroConstructor} from './zero.ts';
 
 function createMockZero(clientID = 'test-client'): Zero<Schema> {
   const closeMock = vi.fn().mockResolvedValue(undefined);
