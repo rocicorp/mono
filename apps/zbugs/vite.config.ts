@@ -26,6 +26,9 @@ export default defineConfig({
     },
   ],
   define: makeDefine(),
+  server: {
+    allowedHosts: ['macbook.cormo-turtle.ts.net'],
+  },
   build: {
     target: 'esnext',
     rollupOptions: {
