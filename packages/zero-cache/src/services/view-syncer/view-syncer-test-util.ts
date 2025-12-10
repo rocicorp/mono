@@ -54,6 +54,7 @@ import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
 export const APP_ID = 'this_app';
 export const SHARD_NUM = 2;
 export const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
+export const YIELD_THRESHOLD_MS = 200;
 
 export const EXPECTED_LMIDS_AST: AST = {
   schema: '',
@@ -741,6 +742,7 @@ export async function setup(
       operatorStorage,
       'view-syncer.pg.test.ts',
       inspectorDelegate,
+      YIELD_THRESHOLD_MS,
     ),
     stateChanges,
     drainCoordinator,
