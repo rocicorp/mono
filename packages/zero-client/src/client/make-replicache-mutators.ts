@@ -8,7 +8,7 @@ import {
   isMutatorRegistry,
   type AnyMutatorRegistry,
 } from '../../../zql/src/mutate/mutator-registry.ts';
-import {type Mutator} from '../../../zql/src/mutate/mutator.ts';
+import {isMutator, type Mutator} from '../../../zql/src/mutate/mutator.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {makeCRUDMutator, type CRUDMutator} from './crud.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
@@ -156,23 +156,6 @@ export function makeReplicacheMutators<const S extends Schema, C>(
 }
 
 /**
- * Checks if a value is a Mutator (from MutatorRegistry).
- * Mutators have `mutatorName` and `fn` properties.
- */
-function isMutator(
-  value: unknown,
-  // oxlint-disable-next-line no-explicit-any
-): value is Mutator<any, any, any> {
-  return (
-    typeof value === 'function' &&
-    'mutatorName' in value &&
-    typeof value.mutatorName === 'string' &&
-    'fn' in value &&
-    typeof value.fn === 'function'
-  );
-}
-
-/**
  * Extends replicache mutators from a MutatorRegistry.
  * Walks the registry tree and wraps each Mutator.fn for Replicache.
  */
@@ -188,7 +171,7 @@ function extendFromMutatorRegistry<S extends Schema, C>(
       return;
     }
     for (const value of Object.values(node)) {
-      if (isMutator(value)) {
+      if (isMutator<S>(value)) {
         // Mutator.fn already handles validation internally
         mutateObject[value.mutatorName] = (
           repTx: WriteTransaction,

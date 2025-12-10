@@ -111,7 +111,7 @@ export function defineMutators(
         result[key] = createMutator(name, value);
       } else {
         // Nested definitions
-        result[key] = processDefinitions(value as MutatorDefinitions, path);
+        result[key] = processDefinitions(value, path);
       }
       path.pop();
     }
@@ -344,7 +344,7 @@ export function* iterateMutators(
  */
 export function getMutator<
   MD extends MutatorDefinitions,
-  TSchema extends Schema = DefaultSchema,
+  TSchema extends Schema,
 >(
   registry: MutatorRegistry<MD, TSchema>,
   name: string,
@@ -359,7 +359,7 @@ export function getMutator<
  */
 export function mustGetMutator<
   MD extends MutatorDefinitions,
-  TSchema extends Schema = DefaultSchema,
+  TSchema extends Schema,
 >(
   registry: MutatorRegistry<MD, TSchema>,
   name: string,

@@ -26,6 +26,7 @@ const schema = createSchema({
       })
       .primaryKey('id'),
   ],
+  enableLegacyQueries: true,
 });
 
 type Schema = typeof schema;

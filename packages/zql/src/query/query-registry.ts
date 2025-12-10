@@ -55,9 +55,9 @@ type CustomQueryCallable<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
+  TSchema extends Schema,
+  TReturn,
+  TContext,
 > = [TInput] extends [undefined]
   ? () => QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
   : undefined extends TInput
@@ -76,7 +76,10 @@ type CustomQueryCallable<
 // oxlint-disable-next-line no-explicit-any
 export type AnyCustomQuery = CustomQuery<string, any, any, Schema, any, any>;
 
-export function isQuery(value: unknown): value is AnyCustomQuery {
+export function isQuery<S extends Schema>(
+  value: unknown,
+  // oxlint-disable-next-line no-explicit-any
+): value is CustomQuery<string, any, any, S, any, any> {
   return (
     typeof value === 'function' &&
     typeof (value as {queryName?: unknown}).queryName === 'string' &&
@@ -663,7 +666,7 @@ export function defineQueries<QD extends QueryDefinitions, S extends Schema>(
 
     let base: Record<string | symbol, unknown>;
     if (!isQueryRegistry(defsOrBase)) {
-      base = processDefinitions(defsOrBase as QD, []);
+      base = processDefinitions(defsOrBase, []);
     } else {
       base = defsOrBase;
     }

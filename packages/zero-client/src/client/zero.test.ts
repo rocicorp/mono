@@ -179,6 +179,7 @@ test('query property provides table query builders', async () => {
         })
         .primaryKey('id'),
     ],
+    enableLegacyQueries: true,
   });
 
   const z = zeroForTest({schema});

@@ -1235,6 +1235,7 @@ describe('enableLegacyQueries', () => {
 
     const mockSocket = await z.socket;
 
+    // @ts-expect-error - this is testing the legacy query property when it's disabled
     await z.run(zql.issue.where('id', '1').one());
     z.queryDelegate.flushQueryChanges();
 

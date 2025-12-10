@@ -273,7 +273,10 @@ export type AnyMutator = Mutator<any, any, any, any>;
  * Checks if a value is a Mutator (the result of processing a MutatorDefinition
  * through defineMutators).
  */
-export function isMutator(value: unknown): value is AnyMutator {
+export function isMutator<S extends Schema>(
+  value: unknown,
+  // oxlint-disable-next-line no-explicit-any
+): value is Mutator<any, S, any, any> {
   return (
     typeof value === 'function' &&
     typeof (value as {mutatorName?: unknown}).mutatorName === 'string' &&
