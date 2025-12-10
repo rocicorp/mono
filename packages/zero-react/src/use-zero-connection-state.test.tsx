@@ -1,13 +1,12 @@
 import {act, useEffect, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, describe, expect, test, vi, type Mock} from 'vitest';
-import {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
+import {ConnectionStatus, type ConnectionState} from '../../zero/src/zero.ts';
 
 vi.mock('./zero-provider.tsx', () => ({
   useZero: vi.fn(),
 }));
 
-import type {ConnectionState} from '../../zero-client/src/client/connection.ts';
 import {useZeroConnectionState} from './use-zero-connection-state.tsx';
 import {useZero} from './zero-provider.tsx';
 

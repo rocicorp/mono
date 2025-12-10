@@ -8,14 +8,14 @@ import {
   type ReactNode,
 } from 'react';
 import {stringCompare} from '../../shared/src/string-compare.ts';
-import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
-import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
-import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {
-  DefaultContext,
-  DefaultSchema,
-} from '../../zero-types/src/default-types.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
+import {
+  Zero,
+  type CustomMutatorDefs,
+  type DefaultContext,
+  type DefaultSchema,
+  type Schema,
+  type ZeroOptions,
+} from '../../zero/src/zero.ts';
 
 // oxlint-disable-next-line no-explicit-any
 export const ZeroContext = createContext<Zero<any, any, any> | undefined>(

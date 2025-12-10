@@ -119,6 +119,10 @@
       "types": "./out/zero/src/zero.d.ts",
       "default": "./out/zero/src/zero.js"
     },
+    "./bindings": {
+      "types": "./out/zero/src/bindings.d.ts",
+      "default": "./out/zero/src/bindings.js"
+    },
     "./change-protocol/v0": {
       "types": "./out/zero/src/change-protocol/v0.d.ts",
       "default": "./out/zero/src/change-protocol/v0.js"

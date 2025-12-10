@@ -1,27 +1,27 @@
 import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
 import {emptyArray} from '../../shared/src/sentinels.ts';
-import type {
-  QueryErrorDetails,
-  QueryResultDetails,
-} from '../../zero-client/src/types/query-result.ts';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import type {Change} from '../../zql/src/ivm/change.ts';
-import type {Node} from '../../zql/src/ivm/data.ts';
-import {
-  skipYields,
-  type Input,
-  type Output,
-} from '../../zql/src/ivm/operator.ts';
-import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {
   applyChange,
   idSymbol,
+  skipYields,
   type ViewChange,
-} from '../../zql/src/ivm/view-apply-change.ts';
-import type {AnyViewFactory, Entry, Format} from '../../zql/src/ivm/view.ts';
-import type {Query} from '../../zql/src/query/query.ts';
-import type {TTL} from '../../zql/src/query/ttl.ts';
+} from '../../zero/src/bindings.ts';
+import {
+  type AnyViewFactory,
+  type Change,
+  type Entry,
+  type ErroredQuery,
+  type Format,
+  type Input,
+  type Node,
+  type Output,
+  type Query,
+  type QueryErrorDetails,
+  type QueryResultDetails,
+  type Schema,
+  type Stream,
+  type TTL,
+} from '../../zero/src/zero.ts';
 
 export type State = [Entry, QueryResultDetails];
 

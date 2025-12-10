@@ -1,10 +1,10 @@
-import type {CustomMutatorDefs} from '../../../zero-client/src/client/custom.ts';
-import type {Zero} from '../../../zero-client/src/client/zero.ts';
 import type {
+  CustomMutatorDefs,
   DefaultContext,
   DefaultSchema,
-} from '../../../zero-types/src/default-types.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
+  Schema,
+  Zero,
+} from '../../../zero/src/zero.ts';
 import {MarkIcon} from './mark-icon.tsx';
 
 export default function Inspector<

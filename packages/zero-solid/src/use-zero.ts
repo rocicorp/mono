@@ -10,14 +10,14 @@ import {
   type Accessor,
   type JSX,
 } from 'solid-js';
-import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
-import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
-import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {
-  DefaultContext,
-  DefaultSchema,
-} from '../../zero-types/src/default-types.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
+import {
+  Zero,
+  type CustomMutatorDefs,
+  type DefaultContext,
+  type DefaultSchema,
+  type Schema,
+  type ZeroOptions,
+} from '../../zero/src/zero.ts';
 
 const ZeroContext = createContext<
   // oxlint-disable-next-line no-explicit-any

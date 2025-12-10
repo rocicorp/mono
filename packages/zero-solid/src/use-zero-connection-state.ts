@@ -1,5 +1,5 @@
 import {createEffect, createSignal, onCleanup, type Accessor} from 'solid-js';
-import type {ConnectionState} from '../../zero-client/src/client/connection.ts';
+import type {ConnectionState} from '../../zero/src/zero.ts';
 import {useZero} from './use-zero.ts';
 
 /**

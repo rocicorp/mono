@@ -15,6 +15,7 @@ export {
 } from '../../replicache/src/persist/collect-idb-databases.ts';
 export type {ClientGroupID, ClientID} from '../../replicache/src/sync/ids.ts';
 export {TransactionClosedError} from '../../replicache/src/transaction-closed-error.ts';
+export type {Expand} from '../../shared/src/expand.ts';
 export type {
   JSONObject,
   JSONValue,
@@ -55,11 +56,13 @@ export type {
 export {
   transformRequestMessageSchema,
   transformResponseMessageSchema,
+  type ErroredQuery,
   type TransformRequestBody,
   type TransformRequestMessage,
   type TransformResponseBody,
   type TransformResponseMessage,
 } from '../../zero-protocol/src/custom-queries.ts';
+export type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 export {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 export {
@@ -106,13 +109,10 @@ export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
 export type {Input, Output} from '../../zql/src/ivm/operator.ts';
 export type {Stream} from '../../zql/src/ivm/stream.ts';
-export {
-  applyChange,
-  type ViewChange,
-} from '../../zql/src/ivm/view-apply-change.ts';
 export type {
   AnyViewFactory,
   Entry,
+  EntryList,
   Format,
   View,
   ViewFactory,
@@ -196,6 +196,7 @@ export {
   type QueryRegistry,
   type QueryRequest,
 } from '../../zql/src/query/query-registry.ts';
+export {type MaterializeOptions} from '../../zql/src/query/query.ts';
 export type {
   AnyQuery,
   HumanReadable,
@@ -210,11 +211,7 @@ export type {
 export type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
-export {
-  bindingsForZero,
-  registerZeroDelegate,
-  type BindingsForZero,
-} from './client/bindings.ts';
+export {ConnectionStatus} from './client/connection-status.ts';
 export type {
   Connection,
   ConnectionSource,

@@ -8,20 +8,22 @@ import {
   type Accessor,
 } from 'solid-js';
 import {createStore} from 'solid-js/store';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
-import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
-import type {
-  DefaultContext,
-  DefaultSchema,
-} from '../../zero-types/src/default-types.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   addContextToQuery,
+  asQueryInternals,
+  DEFAULT_TTL_MS,
+} from '../../zero/src/bindings.ts';
+import {
+  type DefaultContext,
+  type DefaultSchema,
+  type HumanReadable,
+  type PullRow,
   type QueryOrQueryRequest,
-} from '../../zql/src/query/query-registry.ts';
-import {type HumanReadable, type PullRow} from '../../zql/src/query/query.ts';
-import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
+  type QueryResultDetails,
+  type ReadonlyJSONValue,
+  type Schema,
+  type TTL,
+} from '../../zero/src/zero.ts';
 import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
 import {useZero} from './use-zero.ts';
 
@@ -89,12 +91,9 @@ export function useQuery<
   };
 
   const zero = useZero<TSchema, undefined, TContext>();
-
-  const query = createMemo(() =>
-    addContextToQuery(querySignal(), zero().context),
-  );
-  const bindings = createMemo(() => bindingsForZero(zero()));
-  const hash = createMemo(() => bindings().hash(query()));
+  const q = createMemo(() => addContextToQuery(querySignal(), zero().context));
+  const qi = createMemo(() => asQueryInternals(q()));
+  const hash = createMemo(() => qi().hash());
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
 
   const initialTTL = ttl();
@@ -104,12 +103,15 @@ export function useQuery<
     // query object changes but the hash is the same.
     hash();
     refetchKey();
-    const b = bindings();
-    const q = untrack(query);
+    const untrackedQuery = untrack(q);
 
-    const v = b.materialize(q, createSolidViewFactory(setState, refetch), {
-      ttl: initialTTL,
-    });
+    const v = zero().materialize(
+      untrackedQuery,
+      createSolidViewFactory(setState, refetch),
+      {
+        ttl: initialTTL,
+      },
+    );
 
     onCleanup(() => v.destroy());
 
