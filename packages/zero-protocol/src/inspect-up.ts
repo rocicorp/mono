@@ -37,7 +37,7 @@ export type InspectAuthenticateUpBody = v.Infer<
 const analyzeQueryOptionsSchema = v.object({
   vendedRows: v.boolean().optional(),
   syncedRows: v.boolean().optional(),
-  plannerDebug: v.boolean().optional(),
+  joinPlans: v.boolean().optional(),
 });
 
 export type AnalyzeQueryOptions = v.Infer<typeof analyzeQueryOptionsSchema>;

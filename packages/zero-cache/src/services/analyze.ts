@@ -30,7 +30,7 @@ export async function analyzeQuery(
   vendedRows = false,
   permissions?: PermissionsConfig,
   authData?: TokenData,
-  plannerDebug = false,
+  joinPlans = false,
 ): Promise<AnalyzeQueryResult> {
   using db = new Database(lc, config.replica.file);
   const fullTables = new Map<string, LiteTableSpec>();
@@ -39,8 +39,8 @@ export async function analyzeQuery(
 
   computeZqlSpecs(lc, db, tableSpecs, fullTables);
 
-  const planDebugger = plannerDebug ? new AccumulatorDebugger() : undefined;
-  const costModel = plannerDebug
+  const planDebugger = joinPlans ? new AccumulatorDebugger() : undefined;
+  const costModel = joinPlans
     ? createSQLiteCostModel(db, tableSpecs)
     : undefined;
   const timer = await new TimeSliceTimer().start();
@@ -96,10 +96,10 @@ export async function analyzeQuery(
     yieldProcess,
   );
 
-  result.plans = explainQueries(result.readRowCountsByQuery ?? {}, db);
+  result.sqlitePlans = explainQueries(result.readRowCountsByQuery ?? {}, db);
 
   if (planDebugger) {
-    result.plannerEvents = serializePlanDebugEvents(planDebugger.events);
+    result.joinPlans = serializePlanDebugEvents(planDebugger.events);
   }
 
   return result;

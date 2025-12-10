@@ -151,7 +151,7 @@ export async function handleInspect(
           body.options?.vendedRows,
           permissions,
           authData,
-          body.options?.plannerDebug,
+          body.options?.joinPlans,
         );
         client.sendInspectResponse(lc, {
           op: 'analyze-query',

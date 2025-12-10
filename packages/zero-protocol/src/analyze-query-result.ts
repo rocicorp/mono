@@ -173,12 +173,12 @@ export const analyzeQueryResultSchema = v.object({
   vendedRowCounts: rowCountsBySourceSchema.optional(),
   /** @deprecated Use readRows */
   vendedRows: rowsBySourceSchema.optional(),
-  plans: v.record(v.array(v.string())).optional(),
+  sqlitePlans: v.record(v.array(v.string())).optional(),
   readRows: rowsBySourceSchema.optional(),
   readRowCountsByQuery: rowCountsBySourceSchema.optional(),
   readRowCount: v.number().optional(),
   dbScansByQuery: rowCountsBySourceSchema.optional(),
-  plannerEvents: v.array(planDebugEventJSONSchema).optional(),
+  joinPlans: v.array(planDebugEventJSONSchema).optional(),
 });
 
 export type AnalyzeQueryResult = v.Infer<typeof analyzeQueryResultSchema>;

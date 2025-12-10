@@ -468,9 +468,9 @@ export function serializePlanDebugEvents(
  *
  * @example
  * ```typescript
- * const result = await inspector.analyzeQuery(query, { plannerDebug: true });
- * if (result.plannerEvents) {
- *   console.log(formatPlannerEvents(result.plannerEvents));
+ * const result = await inspector.analyzeQuery(query, { joinPlans: true });
+ * if (result.joinPlans) {
+ *   console.log(formatPlannerEvents(result.joinPlans));
  * }
  * ```
  */
