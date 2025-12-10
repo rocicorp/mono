@@ -4,7 +4,7 @@ import {sleep} from '../../../../shared/src/sleep.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {DesiredQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
@@ -47,12 +47,12 @@ let viewSyncerDone: Promise<void>;
 let replicator: FakeReplicator;
 let connect: (
   ctx: SyncContext,
-  desiredQueriesPatch: UpQueriesPatch,
+  desiredQueriesPatch: DesiredQueriesPatch,
   clientSchema?: ClientSchema,
 ) => Queue<Downstream>;
 let connectWithQueueAndSource: (
   ctx: SyncContext,
-  desiredQueriesPatch: UpQueriesPatch,
+  desiredQueriesPatch: DesiredQueriesPatch,
   clientSchema?: ClientSchema,
   activeClients?: string[],
 ) => {

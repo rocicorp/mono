@@ -5,10 +5,25 @@ import {astSchema} from './ast.ts';
 export const putOpSchemaBase = v.object({
   op: v.literal('put'),
   hash: v.string(),
-  ttl: v.number().optional(),
 });
 
-export const putOpSchema = putOpSchemaBase.extend({
+export const putDesiredQueryOpSchema = putOpSchemaBase.extend({
+  // All fields are optional in this transitional period.
+  // - ast is filled in for client queries
+  // - name and args are filled in for custom queries
+  ast: astSchema.optional(),
+  name: v.string().optional(),
+  args: v.readonly(v.array(jsonSchema)).optional(),
+  ttl: v.number().optional(),
+  // If set, the client requests a retry for this query. The retry will only be
+  // attempted if the server's current error version for the query matches this
+  // value. A mismatch implies that the server has already retried (and either
+  // succeeded or failed with a new error version) since the client received
+  // the error, so the request is ignored to prevent redundant retries.
+  retryErrorVersion: v.string().optional(),
+});
+
+export const putGotQueryOpSchema = putOpSchemaBase.extend({
   // If set, the query is in an error state, and errorVersion is set.
   errorMessage: v.string().optional(),
   // An opaque orderable version string representing the version at which
@@ -17,21 +32,6 @@ export const putOpSchema = putOpSchemaBase.extend({
   // has occurred subsequent to the error the client is attempting to retry,
   // meaning the retry attempt has failed.
   errorVersion: v.string().optional(),
-});
-
-export const upPutOpSchema = putOpSchemaBase.extend({
-  // All fields are optional in this transitional period.
-  // - ast is filled in for client queries
-  // - name and args are filled in for custom queries
-  ast: astSchema.optional(),
-  name: v.string().optional(),
-  args: v.readonly(v.array(jsonSchema)).optional(),
-  // If set, the client requests a retry for this query. The retry will only be
-  // attempted if the server's current error version for the query matches this
-  // value. A mismatch implies that the server has already retried (and either
-  // succeeded or failed with a new error version) since the client received
-  // the error, so the request is ignored to prevent redundant retries.
-  retryErrorVersion: v.string().optional(),
 });
 
 const delOpSchema = v.object({
@@ -43,16 +43,22 @@ const clearOpSchema = v.object({
   op: v.literal('clear'),
 });
 
-const patchOpSchema = v.union(putOpSchema, delOpSchema, clearOpSchema);
-const upPatchOpSchema = v.union(upPutOpSchema, delOpSchema, clearOpSchema);
+const patchGotQueryOpSchema = v.union(
+  putGotQueryOpSchema,
+  delOpSchema,
+  clearOpSchema,
+);
+const patchDesiredQueryOpSchema = v.union(
+  putDesiredQueryOpSchema,
+  delOpSchema,
+  clearOpSchema,
+);
 
-export const queriesPatchSchema = v.array(patchOpSchema);
-export const upQueriesPatchSchema = v.array(upPatchOpSchema);
+export type DesiredQueriesPatchOp = v.Infer<typeof patchDesiredQueryOpSchema>;
+export type GotQueriesPatchOp = v.Infer<typeof patchGotQueryOpSchema>;
 
-export type QueriesPutOp = v.Infer<typeof putOpSchema>;
-export type QueriesDelOp = v.Infer<typeof delOpSchema>;
-export type QueriesClearOp = v.Infer<typeof clearOpSchema>;
-export type QueriesPatchOp = v.Infer<typeof patchOpSchema>;
-export type UpQueriesPatchOp = v.Infer<typeof upPatchOpSchema>;
-export type QueriesPatch = v.Infer<typeof queriesPatchSchema>;
-export type UpQueriesPatch = v.Infer<typeof upQueriesPatchSchema>;
+export const gotQueriesPatchSchema = v.array(patchGotQueryOpSchema);
+export const desiredQueriesPatchSchema = v.array(patchDesiredQueryOpSchema);
+
+export type DesiredQueriesPatch = v.Infer<typeof desiredQueriesPatchSchema>;
+export type GotQueriesPatch = v.Infer<typeof gotQueriesPatchSchema>;

@@ -1350,12 +1350,18 @@ describe('poke handler', () => {
           {
             op: 'put',
             key: 'd/c1/h1',
-            value: null,
+            value: {
+              hash: 'h1',
+              op: 'put',
+            },
           },
           {
             op: 'put',
             key: 'g/h1',
-            value: null,
+            value: {
+              hash: 'h1',
+              op: 'put',
+            },
           },
           {
             op: 'put',
@@ -1371,12 +1377,18 @@ describe('poke handler', () => {
           {
             op: 'put',
             key: 'd/c1/h2',
-            value: null,
+            value: {
+              hash: 'h2',
+              op: 'put',
+            },
           },
           {
             op: 'put',
             key: 'g/h2',
-            value: null,
+            value: {
+              hash: 'h2',
+              op: 'put',
+            },
           },
           {
             op: 'put',
@@ -1495,7 +1507,10 @@ describe('poke handler', () => {
           {
             op: 'put',
             key: 'g/h1',
-            value: null,
+            value: {
+              hash: 'h1',
+              op: 'put',
+            },
           },
           {
             op: 'put',
@@ -1511,7 +1526,10 @@ describe('poke handler', () => {
           {
             op: 'put',
             key: 'd/c1/h2',
-            value: null,
+            value: {
+              hash: 'h2',
+              op: 'put',
+            },
           },
           {
             op: 'del',

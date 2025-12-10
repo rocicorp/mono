@@ -3,7 +3,7 @@ import {beforeEach, describe, expect, type MockInstance, vi} from 'vitest';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {DesiredQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import type {Subscription} from '../../types/subscription.ts';
 
@@ -43,7 +43,7 @@ describe('view-syncer/yield-during-hydrate', () => {
   let viewSyncerDone: Promise<void>;
   let connect: (
     ctx: SyncContext,
-    desiredQueriesPatch: UpQueriesPatch,
+    desiredQueriesPatch: DesiredQueriesPatch,
   ) => Queue<Downstream>;
 
   const CLIENT_ID = 'client1';

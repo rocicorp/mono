@@ -9,7 +9,7 @@ import type {
   InspectDownMessage,
 } from '../../../../zero-protocol/src/inspect-down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {DesiredQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
@@ -44,7 +44,7 @@ describe('view-syncer/service', () => {
   let replicator: FakeReplicator;
   let connectWithQueueAndSource: (
     ctx: SyncContext,
-    desiredQueriesPatch: UpQueriesPatch,
+    desiredQueriesPatch: DesiredQueriesPatch,
     clientSchema?: ClientSchema,
     activeClients?: string[],
   ) => {
@@ -635,7 +635,7 @@ describe('view-syncer/service', () => {
     let restrictiveViewSyncerDone: Promise<void>;
     let restrictiveConnectWithQueueAndSource: (
       ctx: SyncContext,
-      desiredQueriesPatch: UpQueriesPatch,
+      desiredQueriesPatch: DesiredQueriesPatch,
       clientSchema?: ClientSchema,
       activeClients?: string[],
     ) => {

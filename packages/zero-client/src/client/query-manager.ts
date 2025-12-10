@@ -16,7 +16,7 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
-import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {DesiredQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import {
   hashOfAST,
   hashOfNameAndArgs,
@@ -71,7 +71,7 @@ export class QueryManager implements InspectorDelegate {
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
   readonly #mutationTracker: MutationTracker;
-  readonly #pendingQueryChanges: UpQueriesPatchOp[] = [];
+  readonly #pendingQueryChanges: DesiredQueriesPatchOp[] = [];
   readonly #queryChangeThrottleMs: number;
   #pendingRemovals: Array<() => void> = [];
   #batchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -165,19 +165,19 @@ export class QueryManager implements InspectorDelegate {
    * the `initConnectionMessage`.
    *
    * While we're waiting for the `connected` response to come back from the server,
-   * the client may have registered more queries. We need to diff the `initConnectionMessage`
+   * the client may have registered/deregistered queries. We need to diff the `initConnectionMessage`
    * queries with the current set of queries to understand what those were.
    */
   async getQueriesPatch(
     tx: ReadTransaction,
-    lastPatch?: Map<string, UpQueriesPatchOp>,
-  ): Promise<Map<string, UpQueriesPatchOp>> {
+    lastPatch?: Map<string, DesiredQueriesPatchOp>,
+  ): Promise<Map<string, DesiredQueriesPatchOp>> {
     const existingQueryHashes = new Set<string>();
     const prefix = desiredQueriesPrefixForClient(this.#clientID);
     for await (const key of tx.scan({prefix}).keys()) {
       existingQueryHashes.add(key.substring(prefix.length, key.length));
     }
-    const patch: Map<string, UpQueriesPatchOp> = new Map();
+    const patch: Map<string, DesiredQueriesPatchOp> = new Map();
     for (const hash of existingQueryHashes) {
       if (!this.#queries.has(hash)) {
         patch.set(hash, {op: 'del', hash});
@@ -393,7 +393,7 @@ export class QueryManager implements InspectorDelegate {
     }
   }
 
-  #queueQueryChange(op: UpQueriesPatchOp) {
+  #queueQueryChange(op: DesiredQueriesPatchOp) {
     this.#pendingQueryChanges.push(op);
     this.#scheduleBatch();
   }

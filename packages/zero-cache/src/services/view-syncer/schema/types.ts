@@ -389,3 +389,8 @@ export function queryRecordToQueryRow(
 
 export const maybeVersionString = (v: CVRVersion | undefined) =>
   v ? versionString(v) : null;
+
+export const maybeVersionFromString = (
+  str: string | undefined,
+): CVRVersion | undefined =>
+  str === undefined ? undefined : versionFromString(str);
