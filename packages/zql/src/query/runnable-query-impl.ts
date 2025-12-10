@@ -2,9 +2,9 @@ import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
-import {AbstractQuery} from './abstract-query.ts';
 import type {CustomQueryID} from './named.ts';
 import type {QueryDelegate} from './query-delegate.ts';
+import {QueryImpl} from './query-impl.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -39,7 +39,7 @@ export class RunnableQueryImpl<
     TSchema extends Schema,
     TReturn = PullRow<TTable, TSchema>,
   >
-  extends AbstractQuery<TTable, TSchema, TReturn>
+  extends QueryImpl<TTable, TSchema, TReturn>
   implements Query<TTable, TSchema, TReturn>
 {
   readonly #delegate: QueryDelegate;
@@ -77,23 +77,23 @@ export class RunnableQueryImpl<
     this.#delegate = delegate;
   }
 
-  run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
+  override run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
     return this.#delegate.run(this, options);
   }
 
-  preload(options?: PreloadOptions): {
+  override preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
     return this.#delegate.preload(this, options);
   }
 
-  materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
-  materialize<T>(
+  override materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
+  override materialize<T>(
     factory: ViewFactory<TTable, TSchema, TReturn, T>,
     ttl?: TTL,
   ): T;
-  materialize<T>(
+  override materialize<T>(
     factory?: unknown,
     ttl?: unknown,
   ): T | TypedView<HumanReadable<TReturn>> {
