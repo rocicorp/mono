@@ -1,3 +1,4 @@
+import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {MockInstance} from 'vitest';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
@@ -11,6 +12,16 @@ import {
   CRUD_MUTATION_NAME,
   type MutationResponse,
 } from '../../zero-protocol/src/push.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
+import {
+  defineMutatorsWithType,
+  mustGetMutator,
+} from '../../zql/src/mutate/mutator-registry.ts';
+import {
+  defineMutatorWithType,
+  type AnyMutator,
+} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {
   getMutation,
@@ -793,3 +804,194 @@ describe('getMutation', () => {
     );
   });
 });
+
+const testSchema = createSchema({
+  tables: [table('item').columns({id: string()}).primaryKey('id')],
+});
+
+type MutatorInvoker = (
+  // oxlint-disable-next-line no-explicit-any
+  mutators: any,
+  name: string,
+  tx: unknown,
+  args: unknown,
+) => Promise<void>;
+
+const mutatorInvokers: Array<{name: string; invoke: MutatorInvoker}> = [
+  {
+    name: 'mustGetMutator',
+    invoke: (mutators, name, tx, args) => {
+      const mutator = mustGetMutator(mutators, name) as AnyMutator;
+      // oxlint-disable-next-line no-explicit-any
+      return mutator.fn({tx: tx as any, args, ctx: undefined});
+    },
+  },
+  {
+    name: 'getMutation (deprecated)',
+    invoke: (mutators, name, tx, args) => {
+      const mutator = getMutation(mutators, name);
+      return mutator(tx, args, undefined);
+    },
+  },
+];
+
+describe.each(mutatorInvokers)(
+  'handleMutateRequest with MutatorDefinition validator ($name)',
+  ({invoke}) => {
+    test('validator is invoked when processing mutation', async () => {
+      const validator: StandardSchemaV1<{id: string}, {id: string}> = {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: vi.fn(input => ({value: input})),
+        },
+      };
+
+      const mutatorFn = vi.fn(() => Promise.resolve());
+
+      const testMutator = defineMutatorWithType<typeof testSchema>()(
+        validator,
+        mutatorFn,
+      );
+
+      const mutators = defineMutatorsWithType<typeof testSchema>()({
+        item: {
+          update: testMutator,
+        },
+      });
+
+      const {db: trackingDb} = createTrackingDatabase();
+
+      await handleMutateRequest(
+        trackingDb,
+        (transact, _mutation) =>
+          transact((tx, name, args) => invoke(mutators, name, tx, args)),
+        baseQuery,
+        makePushBody([
+          makeCustomMutation({name: 'item.update', args: [{id: 'test-123'}]}),
+        ]),
+      );
+
+      expect(validator['~standard'].validate).toHaveBeenCalledWith({
+        id: 'test-123',
+      });
+      expect(mutatorFn).toHaveBeenCalled();
+    });
+
+    test('validation failure returns application error response', async () => {
+      const validator: StandardSchemaV1<{id: string}, {id: string}> = {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: () => ({
+            issues: [{message: 'id must be a valid UUID'}],
+          }),
+        },
+      };
+
+      const mutatorFn = vi.fn(() => Promise.resolve());
+
+      const testMutator = defineMutatorWithType<typeof testSchema>()(
+        validator,
+        mutatorFn,
+      );
+
+      const mutators = defineMutatorsWithType<typeof testSchema>()({
+        item: {
+          update: testMutator,
+        },
+      });
+
+      const {
+        db: trackingDb,
+        recordedLMIDs,
+        recordedResults,
+      } = createTrackingDatabase();
+
+      const response = await handleMutateRequest(
+        trackingDb,
+        (transact, _mutation) =>
+          transact((tx, name, args) => invoke(mutators, name, tx, args)),
+        baseQuery,
+        makePushBody([
+          makeCustomMutation({name: 'item.update', args: [{id: 'invalid'}]}),
+        ]),
+      );
+
+      // The mutator function should NOT have been called due to validation failure
+      expect(mutatorFn).not.toHaveBeenCalled();
+
+      // LMID should still be advanced for the failed mutation
+      expect(recordedLMIDs).toEqual([1]);
+
+      // The response should contain the application error
+      expect(response).toEqual({
+        mutations: [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {
+              error: 'app',
+              message: expect.stringContaining('id must be a valid UUID'),
+            },
+          },
+        ],
+      });
+
+      // writeMutationResult should be called with the error
+      expect(recordedResults).toEqual([
+        {
+          id: {clientID: 'cid', id: 1},
+          result: {
+            error: 'app',
+            message: expect.stringContaining('id must be a valid UUID'),
+          },
+        },
+      ]);
+    });
+
+    test('validator transforms args before passing to mutator', async () => {
+      const capturedArgs: unknown[] = [];
+
+      // Validator transforms string id to uppercase
+      const uppercaseValidator: StandardSchemaV1<{id: string}, {id: string}> = {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: input => ({
+            value: {id: ((input as {id: string}).id ?? '').toUpperCase()},
+          }),
+        },
+      };
+
+      const testMutator = defineMutatorWithType<typeof testSchema>()(
+        uppercaseValidator,
+        ({args}) => {
+          capturedArgs.push(args);
+          return Promise.resolve();
+        },
+      );
+
+      const mutators = defineMutatorsWithType<typeof testSchema>()({
+        item: {
+          update: testMutator,
+        },
+      });
+
+      const {db: trackingDb} = createTrackingDatabase();
+
+      await handleMutateRequest(
+        trackingDb,
+        (transact, _mutation) =>
+          transact((tx, name, args) => invoke(mutators, name, tx, args)),
+        baseQuery,
+        makePushBody([
+          makeCustomMutation({name: 'item.update', args: [{id: 'lowercase'}]}),
+        ]),
+      );
+
+      // The mutator should receive the transformed (uppercased) args
+      expect(capturedArgs).toHaveLength(1);
+      expect(capturedArgs[0]).toEqual({id: 'LOWERCASE'});
+    });
+  },
+);
