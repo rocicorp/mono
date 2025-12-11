@@ -227,8 +227,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   // auth and cookie headers directly
   #authData: TokenData | undefined;
 
-  // Not sure why lint can't see that this is used?
-  // oxlint-disable-next-line no-unused-private-class-members
   #httpCookie: string | undefined;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
