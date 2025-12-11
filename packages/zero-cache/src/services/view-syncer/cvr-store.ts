@@ -206,9 +206,11 @@ export class CVRStore {
         return result;
       }
       assert(err);
-      throw new ClientNotFoundError(
-        `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
-      );
+      throw new ProtocolErrorWithLevel({
+        kind: ErrorKind.ClientNotFound,
+        message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+        origin: ErrorOrigin.ZeroCache,
+      });
     });
   }
 
@@ -228,17 +230,12 @@ export class CVRStore {
       clients: {},
       queries: {},
       clientSchema: null,
-      profileID: null,
     };
 
     const [instance, clientsRows, queryRows, desiresRows] =
       await this.#db.begin(Mode.READONLY, tx => [
         tx<
-          (Omit<InstancesRow, 'clientGroupID'> & {
-            profileID: string | null;
-            deleted: boolean;
-            rowsVersion: string | null;
-          })[]
+          (Omit<InstancesRow, 'clientGroupID'> & {rowsVersion: string | null})[]
         >`SELECT cvr."version", 
                  "lastActive",
                  "ttlClock",
@@ -246,8 +243,6 @@ export class CVRStore {
                  "owner", 
                  "grantedAt",
                  "clientSchema", 
-                 "profileID",
-                 "deleted",
                  rows."version" as "rowsVersion"
             FROM ${this.#cvr('instances')} AS cvr
             LEFT JOIN ${this.#cvr('rowsVersion')} AS rows 
@@ -279,7 +274,6 @@ export class CVRStore {
         ttlClock: ttlClockFromNumber(0), // TTL clock starts at 0 for new instances
         replicaVersion: null,
         clientSchema: null,
-        profileID: null,
       });
     } else {
       assert(instance.length === 1);
@@ -292,15 +286,7 @@ export class CVRStore {
         grantedAt,
         rowsVersion,
         clientSchema,
-        profileID,
-        deleted,
       } = instance[0];
-
-      if (deleted) {
-        throw new ClientNotFoundError(
-          'Client has been purged due to inactivity',
-        );
-      }
 
       if (owner !== this.#taskID) {
         if ((grantedAt ?? 0) > lastConnectTime) {
@@ -333,7 +319,6 @@ export class CVRStore {
       cvr.lastActive = lastActive;
       cvr.ttlClock = ttlClock;
       cvr.replicaVersion = replicaVersion;
-      cvr.profileID = profileID;
 
       try {
         cvr.clientSchema =
@@ -457,16 +442,10 @@ export class CVRStore {
     replicaVersion,
     lastActive,
     clientSchema,
-    profileID,
     ttlClock,
   }: Pick<
     CVRSnapshot,
-    | 'version'
-    | 'replicaVersion'
-    | 'lastActive'
-    | 'clientSchema'
-    | 'profileID'
-    | 'ttlClock'
+    'version' | 'replicaVersion' | 'lastActive' | 'clientSchema' | 'ttlClock'
   >): void {
     this.#writes.add({
       stats: {instances: 1},
@@ -480,7 +459,6 @@ export class CVRStore {
           owner: this.#taskID,
           grantedAt: lastConnectTime,
           clientSchema,
-          profileID,
         };
         return tx`
         INSERT INTO ${this.#cvr('instances')} ${tx(change)} 
@@ -978,16 +956,6 @@ export async function checkVersion(
     result.length > 0 ? result[0] : {version: EMPTY_CVR_VERSION.stateVersion};
   if (version !== expected) {
     throw new ConcurrentModificationException(expected, version);
-  }
-}
-
-export class ClientNotFoundError extends ProtocolErrorWithLevel {
-  constructor(message: string) {
-    super({
-      kind: ErrorKind.ClientNotFound,
-      message,
-      origin: ErrorOrigin.ZeroCache,
-    });
   }
 }
 

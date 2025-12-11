@@ -37,11 +37,10 @@ export type InstancesRow = {
   owner: string | null;
   grantedAt: number | null;
   clientSchema: ClientSchema | null;
-  profileID: string | null;
 };
 
 function createInstancesTable(shard: ShardID) {
-  return /*sql*/ `
+  return `
 CREATE TABLE ${schema(shard)}.instances (
   "clientGroupID"  TEXT PRIMARY KEY,
   "version"        TEXT NOT NULL,             -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
@@ -50,22 +49,12 @@ CREATE TABLE ${schema(shard)}.instances (
   "replicaVersion" TEXT,                      -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
   "owner"          TEXT,                      -- The ID of the task / server that has been granted ownership of the CVR.
   "grantedAt"      TIMESTAMPTZ,               -- The time at which the current owner was last granted ownership (most recent connection time).
-  "clientSchema"   JSONB,                     -- ClientSchema of the client group
-  "profileID"      TEXT,                      -- Stable profile id ("p..."), falling back to the clientGroupID ("cg{clientGroupID}") for old clients
-  "deleted"        BOOL DEFAULT FALSE         -- Tombstone column for deleted CVRs; instances rows are kept longer for usage stats
+  "clientSchema"   JSONB                      -- ClientSchema of the client group
 );
 
 -- For garbage collection.
 CREATE INDEX instances_last_active
-  ON ${schema(shard)}.instances ("lastActive") WHERE NOT "deleted";
-CREATE INDEX tombstones_last_active
-  ON ${schema(shard)}.instances ("lastActive") WHERE "deleted";
-
--- For usage stats; the composite index allows a 
--- SELECT COUNT(DISTINCT("profileID")) query to be answered by
--- an index scan without additional table lookups.
-CREATE INDEX profile_ids_last_active ON ${schema(shard)}.instances ("lastActive", "profileID")
-  WHERE "profileID" IS NOT NULL;
+  ON ${schema(shard)}.instances ("lastActive");
 `;
 }
 

@@ -7,6 +7,7 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
 import type {LogContext} from '@rocicorp/logger';
+import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
 import {execSync} from 'child_process';
 import {randomUUID} from 'crypto';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
@@ -18,17 +19,6 @@ import {
   getZeroConfig,
   type ZeroConfig,
 } from '../config/zero-config.js';
-import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
-
-export type ActiveUsers = {
-  active_users_last_day: number;
-  users_1da: number;
-  users_7da: number;
-  users_30da: number;
-  users_1da_legacy: number;
-  users_7da_legacy: number;
-  users_30da_legacy: number;
-};
 
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
@@ -44,7 +34,7 @@ class AnonymousTelemetryManager {
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
   #activeClientGroupsGetter: (() => number) | undefined;
-  #activeUsersGetter: (() => ActiveUsers) | undefined;
+  #activeUsersGetter: (() => number) | undefined;
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
   #processId: string;
@@ -214,57 +204,15 @@ class AnonymousTelemetryManager {
       },
     );
 
-    const attrs = this.#getAttributes();
-    const active =
-      (metric: keyof ActiveUsers) => (result: ObservableResult) => {
-        const actives = this.#activeUsersGetter?.();
-        if (actives) {
-          const value = actives[metric];
-          result.observe(value, attrs);
-          this.#lc?.debug?.(`telemetry: ${metric}=${value}`);
-        } else {
-          this.#lc?.debug?.(
-            `telemetry: no actives available, skipping observation of ${metric}`,
-          );
-        }
-      };
-    this.#meter
-      .createObservableGauge('zero.active_users_last_day', {
+    const activeUsersGauge = this.#meter.createObservableGauge(
+      'zero.active_users_last_day',
+      {
         description: 'Count of CVR instances active in the last 24h',
-      })
-      .addCallback(active('active_users_last_day'));
-    this.#meter
-      .createObservableGauge('zero.users_1da', {
-        description: 'Count of 1-day active profiles',
-      })
-      .addCallback(active('users_1da'));
-    this.#meter
-      .createObservableGauge('zero.users_7da', {
-        description: 'Count of 7-day active profiles',
-      })
-      .addCallback(active('users_7da'));
-    this.#meter
-      .createObservableGauge('zero.users_30da', {
-        description: 'Count of 30-day active profiles',
-      })
-      .addCallback(active('users_30da'));
-    this.#meter
-      .createObservableGauge('zero.users_1da_legacy', {
-        description: 'Count of 1-day active profiles with CVR fallback',
-      })
-      .addCallback(active('users_1da_legacy'));
-    this.#meter
-      .createObservableGauge('zero.users_7da_legacy', {
-        description: 'Count of 7-day active profiles with CVR fallback',
-      })
-      .addCallback(active('users_7da_legacy'));
-    this.#meter
-      .createObservableGauge('zero.users_30da_legacy', {
-        description: 'Count of 30-day active profiles with CVR fallback',
-      })
-      .addCallback(active('users_30da_legacy'));
+      },
+    );
 
     // Callbacks
+    const attrs = this.#getAttributes();
     uptimeGauge.addCallback((result: ObservableResult) => {
       const uptimeSeconds = Math.floor(process.uptime());
       result.observe(uptimeSeconds, attrs);
@@ -331,6 +279,18 @@ class AnonymousTelemetryManager {
         `telemetry: gauge_active_client_groups=${activeClientGroups}`,
       );
     });
+
+    activeUsersGauge.addCallback((result: ObservableResult) => {
+      if (this.#activeUsersGetter) {
+        const activeUsers = this.#activeUsersGetter();
+        result.observe(activeUsers, attrs);
+        this.#lc?.debug?.(`telemetry: active_users_last_day=${activeUsers}`);
+      } else {
+        this.#lc?.debug?.(
+          'telemetry: no active users getter available, skipping observation',
+        );
+      }
+    });
   }
 
   recordMutation(type: 'crud' | 'custom', count = 1) {
@@ -365,7 +325,7 @@ class AnonymousTelemetryManager {
     this.#activeClientGroupsGetter = getter;
   }
 
-  setActiveUsersGetter(getter: () => ActiveUsers) {
+  setActiveUsersGetter(getter: () => number) {
     this.#activeUsersGetter = getter;
   }
 
@@ -546,6 +506,6 @@ export const recordConnectionAttempted = () =>
   manager().recordConnectionAttempted();
 export const setActiveClientGroupsGetter = (getter: () => number) =>
   manager().setActiveClientGroupsGetter(getter);
-export const setActiveUsersGetter = (getter: () => ActiveUsers) =>
+export const setActiveUsersGetter = (getter: () => number) =>
   manager().setActiveUsersGetter(getter);
 export const shutdownAnonymousTelemetry = () => manager().shutdown();

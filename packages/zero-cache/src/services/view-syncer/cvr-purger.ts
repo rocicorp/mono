@@ -9,9 +9,6 @@ import type {Service} from '../service.ts';
 const MINUTE = 60 * 1000;
 const MAX_PURGE_INTERVAL_MS = 16 * MINUTE;
 
-// Purge tombstones after 31 days to facilitate up to a 30-day actives metric.
-const TOMBSTONE_PURGE_THRESHOLD = 31 * 24 * 60 * 60 * 1000;
-
 type Options = {
   inactivityThresholdMs: number;
   initialBatchSize: number;
@@ -25,7 +22,6 @@ export class CVRPurger implements Service {
   readonly #db: PostgresDB;
   readonly #schema: string;
   readonly #inactivityThresholdMs: number;
-  readonly #tombstonePurgeThresholdMs: number;
   readonly #initialBatchSize: number;
   readonly #initialIntervalMs: number;
   readonly #state = new RunningState('reaper');
@@ -35,16 +31,11 @@ export class CVRPurger implements Service {
     db: PostgresDB,
     shard: ShardID,
     {inactivityThresholdMs, initialBatchSize, initialIntervalMs}: Options,
-    tombstonePurgeThreshold = TOMBSTONE_PURGE_THRESHOLD,
   ) {
     this.#lc = lc;
     this.#db = db;
     this.#schema = cvrSchema(shard);
     this.#inactivityThresholdMs = inactivityThresholdMs;
-    this.#tombstonePurgeThresholdMs = Math.max(
-      tombstonePurgeThreshold,
-      inactivityThresholdMs,
-    );
     this.#initialBatchSize = initialBatchSize;
     this.#initialIntervalMs = initialIntervalMs;
   }
@@ -103,9 +94,7 @@ export class CVRPurger implements Service {
     return this.#db.begin(READ_COMMITTED, async sql => {
       disableStatementTimeout(sql);
 
-      const now = Date.now();
-      const threshold = now - this.#inactivityThresholdMs;
-      const tombstonePurgeThreshold = now - this.#tombstonePurgeThresholdMs;
+      const threshold = Date.now() - this.#inactivityThresholdMs;
       // Implementation note: `FOR UPDATE` will prevent a syncer from
       // concurrently updating the CVR, since the update also performs
       // a `SELECT ... FOR UPDATE`, instead causing that update to
@@ -117,7 +106,7 @@ export class CVRPurger implements Service {
       const ids = (
         await sql<{clientGroupID: string}[]>`
           SELECT "clientGroupID" FROM ${sql(this.#schema)}.instances
-            WHERE NOT "deleted" AND "lastActive" < ${threshold}
+            WHERE "lastActive" < ${threshold}
             ORDER BY "lastActive" ASC
             LIMIT ${maxCVRs}
             FOR UPDATE SKIP LOCKED
@@ -125,54 +114,32 @@ export class CVRPurger implements Service {
       ).flat();
 
       if (ids.length > 0) {
-        // Explicitly delete rows from cvr tables from "bottom" up. Relying on
-        // foreign key cascading deletes can be suboptimal when the foreign key
-        // is not a prefix of the primary key (e.g. the "desires" foreign key
-        // reference to the "queries" table is not a prefix of the "desires"
-        // primary key).
-        const stmts = [
-          'desires',
-          'queries',
-          'clients',
-          'rows',
-          'rowsVersion',
-        ].map(table =>
-          sql`
+        // Explicitly delete rows from cvr tables from "bottom" up. Even
+        // though all tables eventually reference a ("top") ancestor row in the
+        // "instances" or "rowsVersion" tables, relying on foreign key
+        // cascading deletes can be suboptimal when the foreign key is not a
+        // prefix of the primary key (e.g. the "desires" foreign key reference
+        // to the "queries" table is not a prefix of the "desires" primary
+        // key).
+        await Promise.all(
+          [
+            'desires',
+            'queries',
+            'clients',
+            'instances',
+            'rows',
+            'rowsVersion',
+          ].map(table =>
+            sql`
             DELETE FROM ${sql(this.#schema)}.${sql(table)} 
               WHERE "clientGroupID" IN ${sql(ids)}`.execute(),
+          ),
         );
-        // Tombstones are written for the `instances` rows, preserving the
-        // "profileID" and "lastActive" columns for computing usage stats.
-        //
-        // For backwards compatibility (i.e. older zero-caches that do not
-        // check the "deleted" column) reset the "version" to '00' to trigger
-        // the ClientNotFound error via
-        // view-syncer.ts:checkClientAndCVRVersions()
-        stmts.push(
-          sql`
-            UPDATE ${sql(this.#schema)}.instances
-              SET "deleted" = TRUE, 
-                  "version" = '00', 
-                  "ttlClock" = 0,
-                  "replicaVersion" = NULL, 
-                  "owner" = NULL,
-                  "grantedAt" = NULL,
-                  "clientSchema" = NULL
-              WHERE "clientGroupID" IN ${sql(ids)}`.execute(),
-        );
-        // Tombstone rows are deleted after the tombstonePurgeThreshold.
-        stmts.push(
-          sql`
-            DELETE FROM ${sql(this.#schema)}.instances
-              WHERE "deleted" AND "lastActive" < ${tombstonePurgeThreshold}
-          `.execute(),
-        );
-        await Promise.all(stmts);
       }
 
       const [{remaining}] = await sql<[{remaining: bigint}]>`
         SELECT COUNT(*) AS remaining FROM ${sql(this.#schema)}.instances
-          WHERE NOT "deleted" AND "lastActive" < ${threshold}
+          WHERE "lastActive" < ${threshold}
       `;
 
       return {purged: ids.length, remaining: Number(remaining)};
