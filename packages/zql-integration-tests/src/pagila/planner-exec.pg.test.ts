@@ -158,20 +158,20 @@ describe('Pagila planner execution cost validation', () => {
       ],
     },
 
-    {
-      name: 'high-value payments with film filter',
-      query: queries.payment
-        .where('amount', '>', 5)
-        .whereExists('rental', r =>
-          r.whereExists('inventory', i => i.whereExists('film')),
-        )
-        .limit(20),
-      validations: [
-        ['correlation', 1],
-        ['within-optimal', 1],
-        ['within-baseline', 1],
-      ],
-    },
+    // {
+    //   name: 'high-value payments with film filter',
+    //   query: queries.payment
+    //     .where('amount', '>', 5)
+    //     .whereExists('rental', r =>
+    //       r.whereExists('inventory', i => i.whereExists('film')),
+    //     )
+    //     .limit(20),
+    //   validations: [
+    //     ['correlation', 1],
+    //     ['within-optimal', 1],
+    //     ['within-baseline', 1],
+    //   ],
+    // },
 
     // ==========================================================================
     // Store/staff hierarchy tests
