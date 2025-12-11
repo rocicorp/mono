@@ -5,6 +5,7 @@ import type {
   PlanDebugEventJSON,
 } from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import {
   AccumulatorDebugger,
   serializePlanDebugEvents,
@@ -16,7 +17,6 @@ import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {mustGetTableSpec} from '../db/lite-tables.ts';
 import {analyzeQuery} from './analyze.ts';
 import {runAst} from './run-ast.ts';
-import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 
 // Mock the runAst function
 vi.mock('./run-ast.ts', () => ({
@@ -58,9 +58,11 @@ vi.mock('../../../zql/src/builder/debug-delegate.ts', () => ({
 
 // Mock planner debug and cost model
 vi.mock('../../../zql/src/planner/planner-debug.ts', () => ({
-  AccumulatorDebugger: vi.fn(() => ({
-    events: [],
-  })),
+  AccumulatorDebugger: vi.fn(function () {
+    return {
+      events: [],
+    };
+  }),
   serializePlanDebugEvents: vi.fn(events => events),
 }));
 
@@ -302,8 +304,10 @@ describe('analyzeQuery', () => {
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(mustGetTableSpec).mockReturnValue(mockTableSpec as any);
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(TableSource).mockImplementation(() => ({}) as any);
+    vi.mocked(TableSource).mockImplementation(function () {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return {} as any;
+    });
 
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
@@ -354,8 +358,10 @@ describe('analyzeQuery', () => {
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(mustGetTableSpec).mockReturnValue(mockTableSpec as any);
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(TableSource).mockImplementation(() => mockTableSource as any);
+    vi.mocked(TableSource).mockImplementation(function () {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return mockTableSource as any;
+    });
     vi.mocked(explainQueries).mockReturnValue({});
 
     const mockResult: AnalyzeQueryResult = {
@@ -660,8 +666,10 @@ describe('analyzeQuery', () => {
         format: vi.fn().mockReturnValue('formatted debug output'),
       };
 
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(AccumulatorDebugger).mockReturnValue(mockDebugger as any);
+      vi.mocked(AccumulatorDebugger).mockImplementation(function () {
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        return mockDebugger as any;
+      });
       vi.mocked(serializePlanDebugEvents).mockReturnValue(
         mockDebugEvents as unknown as PlanDebugEventJSON[],
       );

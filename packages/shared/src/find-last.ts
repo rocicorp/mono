@@ -1,14 +1,14 @@
-// findLastIndex was added in ES2023
+// findLast was added in ES2023
 
-export function findLastIndex<T>(
+export function findLast<T>(
   array: readonly T[],
   predicate: (value: T, index: number) => unknown,
-): number {
+): T | undefined {
   let index = array.length;
   while (index--) {
     if (predicate(array[index], index)) {
-      return index;
+      return array[index];
     }
   }
-  return -1;
+  return undefined;
 }

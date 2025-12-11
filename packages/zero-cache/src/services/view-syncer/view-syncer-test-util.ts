@@ -692,7 +692,7 @@ export async function setup(
   );
   await initViewSyncerSchema(lc, cvrDB, SHARD);
 
-  const setTimeoutFn = vi.fn();
+  const setTimeoutFn = vi.fn<typeof setTimeout>();
 
   const replicator = fakeReplicator(lc, replica);
   const stateChanges: Subscription<ReplicaState> = Subscription.create();

@@ -199,7 +199,9 @@ describe('ZeroProvider', () => {
     test('constructs zero instance from options', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       let capturedZero: Zero<Schema> | undefined;
 
@@ -238,7 +240,9 @@ describe('ZeroProvider', () => {
     test('calls init callback with constructed zero instance', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       const initMock = vi.fn();
 
@@ -268,7 +272,9 @@ describe('ZeroProvider', () => {
     test('closes zero on unmount when constructed internally', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       const options: ZeroOptions<Schema> = {
         cacheURL: 'https://example.com',
@@ -294,7 +300,9 @@ describe('ZeroProvider', () => {
     test('passes auth to Zero constructor', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       const auth = 'test-token';
 
@@ -325,7 +333,9 @@ describe('ZeroProvider', () => {
     test('calls connection.connect when auth changes', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       const schema = {} as Schema;
 
@@ -395,7 +405,9 @@ describe('ZeroProvider', () => {
     test('does not call connection.connect when auth is the same value', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       const schema = {} as Schema;
 
@@ -435,7 +447,9 @@ describe('ZeroProvider', () => {
     test('calls connection.connect when null auth is provided and then changes', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       const schema = {} as Schema;
 
@@ -477,7 +491,9 @@ describe('ZeroProvider', () => {
     test('calls connection.connect when no auth value is provided and then changes', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       const schema = {} as Schema;
 
@@ -580,7 +596,9 @@ describe('ZeroProvider', () => {
     test('does not render children until zero is ready', () => {
       const mockZero = createMockZero();
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(() => mockZero);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
 
       const childMock = vi.fn(() => <div>child</div>);
 
@@ -615,7 +633,7 @@ describe('ZeroProvider', () => {
       const ZeroMock = vi.mocked(ZeroConstructor);
 
       let callCount = 0;
-      ZeroMock.mockImplementation(() => {
+      ZeroMock.mockImplementation(function () {
         callCount++;
         return callCount === 1 ? mockZero1 : mockZero2;
       });

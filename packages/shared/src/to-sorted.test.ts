@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import data from '../tsconfig.json' with {type: 'json'};
+import data from '../../../tsconfig.json' with {type: 'json'};
 import {toSorted} from './to-sorted.ts';
 
 function getESLibVersion(libs: string[]): number {

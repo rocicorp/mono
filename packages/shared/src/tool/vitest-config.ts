@@ -1,5 +1,6 @@
-import {makeDefine} from '../build.ts';
+import {playwright} from '@vitest/browser-playwright';
 import {defineConfig} from 'vitest/config';
+import {makeDefine} from '../build.ts';
 
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
 
@@ -41,12 +42,12 @@ export default defineConfig({
     silent: 'passed-only',
     browser: {
       enabled: true,
-      provider: 'playwright',
+      provider: playwright(),
       headless: true,
       screenshotFailures: false,
       instances: [
         {browser: 'chromium'},
-        ...(CI ? [{browser: 'firefox'}, {browser: 'webkit'}] : []),
+        ...(CI ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const) : []),
       ],
     },
     coverage: {

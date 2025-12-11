@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "paths": {
       "@rocicorp/zero": ["../../packages/zero/src/zero.ts"],
       "@rocicorp/zero/server": ["../../packages/zero/src/server.ts"],

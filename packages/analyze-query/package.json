@@ -21,7 +21,7 @@
     "ast-to-zql": "0.0.0",
     "otel": "0.0.0",
     "shared": "0.0.0",
-    "vitest": "3.2.4",
+    "vitest": "4.0.15",
     "zero-cache": "0.0.0",
     "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",

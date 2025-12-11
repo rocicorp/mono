@@ -1,14 +1,13 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "jsx": "react-jsx",
     "paths": {
       "@rocicorp/zero": ["../../packages/zero/src/zero.ts"],
-      "@rocicorp/zero/react": ["../../packages/zero/src/react.ts"],
-      "@rocicorp/zero/server": ["../../packages/zero/src/server.ts"]
+      "@rocicorp/zero/react": ["../../packages/zero/src/react.ts"]
     },
     "declaration": true
   },
-  "include": ["src", "shared/*"]
+  "include": ["src", "shared/*"],
+  "exclude": ["src/server"]
 }

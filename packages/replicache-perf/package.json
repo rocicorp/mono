@@ -26,7 +26,7 @@
     "shared": "0.0.0",
     "tsx": "^4.19.1",
     "typescript": "~5.9.3",
-    "vite": "6.2.1",
+    "vite": "7.2.7",
     "xbytes": "^1.7.0"
   },
   "prettier": "@rocicorp/prettier-config"

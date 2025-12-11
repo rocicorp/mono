@@ -7,7 +7,9 @@ import {ConnectionImpl, ConnectionSource} from './connection.ts';
 describe('ConnectionImpl', () => {
   let manager: ConnectionManager;
   let lc: LogContext;
-  let setAuthSpy: ReturnType<typeof vi.fn>;
+  let setAuthSpy: ReturnType<
+    typeof vi.fn<(auth: string | null | undefined) => void>
+  >;
   let isInTerminalStateMock: ReturnType<typeof vi.fn>;
   let connectingMock: ReturnType<typeof vi.fn>;
   let subscribeMock: ReturnType<typeof vi.fn>;

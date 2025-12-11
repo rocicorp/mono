@@ -22,9 +22,11 @@ vi.mock('@opentelemetry/api-logs', () => ({
 }));
 
 vi.mock('@opentelemetry/sdk-node', () => ({
-  NodeSDK: vi.fn().mockImplementation(() => ({
-    start: vi.fn(),
-  })),
+  NodeSDK: vi.fn(function () {
+    return {
+      start: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('@opentelemetry/auto-instrumentations-node', () => ({
@@ -58,17 +60,19 @@ vi.mock('@opentelemetry/exporter-metrics-otlp-http', () => ({
 }));
 
 vi.mock('@opentelemetry/sdk-metrics', () => ({
-  MeterProvider: vi.fn().mockImplementation(() => ({
-    getMeter: vi.fn().mockReturnValue({
-      createObservableGauge: vi.fn().mockReturnValue({
-        addCallback: vi.fn(),
+  MeterProvider: vi.fn(function () {
+    return {
+      getMeter: vi.fn().mockReturnValue({
+        createObservableGauge: vi.fn().mockReturnValue({
+          addCallback: vi.fn(),
+        }),
+        createObservableCounter: vi.fn().mockReturnValue({
+          addCallback: vi.fn(),
+        }),
       }),
-      createObservableCounter: vi.fn().mockReturnValue({
-        addCallback: vi.fn(),
-      }),
-    }),
-    shutdown: vi.fn(),
-  })),
+      shutdown: vi.fn(),
+    };
+  }),
   PeriodicExportingMetricReader: vi.fn(),
 }));
 
