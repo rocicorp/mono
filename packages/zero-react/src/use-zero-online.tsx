@@ -8,7 +8,7 @@ import {useZero} from './zero-provider.tsx';
  *
  * @returns The online status of the Zero instance.
  *
- * @deprecated Use {@linkcode useZeroConnectionState} instead, which provides more detailed connection state.
+ * @deprecated Use {@linkcode useConnectionState} instead, which provides more detailed connection state.
  */
 export function useZeroOnline(): boolean {
   const zero = useZero();

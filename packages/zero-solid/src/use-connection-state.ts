@@ -8,7 +8,7 @@ import type {ConnectionState} from './zero.ts';
  * @returns The connection status of the Zero instance.
  * @see {@link ConnectionState} for more details on the connection state.
  */
-export function useZeroConnectionState(): Accessor<ConnectionState> {
+export function useConnectionState(): Accessor<ConnectionState> {
   const zero = useZero();
 
   const [connectionState, setConnectionState] = createSignal<ConnectionState>(
