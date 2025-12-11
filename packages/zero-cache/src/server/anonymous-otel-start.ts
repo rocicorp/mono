@@ -21,7 +21,6 @@ import {
 import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
 
 export type ActiveUsers = {
-  /* oxlint-disable @typescript/naming-convention */
   active_users_last_day: number;
   users_1da: number;
   users_7da: number;
@@ -29,7 +28,6 @@ export type ActiveUsers = {
   users_1da_legacy: number;
   users_7da_legacy: number;
   users_30da_legacy: number;
-  /* oxlint-enable @typescript/naming-convention */
 };
 
 class AnonymousTelemetryManager {
