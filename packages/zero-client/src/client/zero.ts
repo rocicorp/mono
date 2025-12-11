@@ -1081,7 +1081,7 @@ export class Zero<
    * Executes mutators registered with this `Zero` instance.
    *
    * Create a `MutateRequest` by calling a generated mutator (for example from
-   * `defineMutators`) and pass it to `z.mutate(...)`. The return value
+   * `defineMutators`) and pass it to `zero.mutate(...)`. The return value
    * exposes `client` and `server` promises so you can await optimistic and
    * confirmed results.
    *
@@ -1097,8 +1097,8 @@ export class Zero<
    * ```
    *
    * When `enableLegacyMutators` is true, `mutate` also exposes
-   * table-scoped CRUD helpers (e.g. `z.mutate.issue.insert(...)`).
-   * It is recommended to use the `z.mutate(mutators.table.action(...))`
+   * table-scoped CRUD helpers (e.g. `zero.mutate.issue.insert(...)`).
+   * It is recommended to use the `zero.mutate(mutators.table.action(...))`
    * pattern instead.
    */
   readonly mutate: MakeMutatePropertyType<S, MD, C> &

@@ -102,20 +102,20 @@ export interface ZeroOptions<
    * ```ts
    * import {defineMutator} from '@rocicorp/zero';
    *
-   * const z = new Zero({
+   * const zero = new Zero({
    *   schema,
    *   userID,
    *   mutators: {
    *     // Top-level mutator
-   *     increment: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {id: string}}) =>
+   *     increment: defineMutator(({tx, args}) =>
    *       tx.mutate.counter.update({id: args.id, value: tx.query.counter.where('id', '=', args.id).value + 1})
    *     ),
    *     // Namespace with multiple mutators
    *     issues: {
-   *       create: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {title: string}}) =>
+   *       create: defineMutator(({tx, args}) =>
    *         tx.mutate.issues.insert({id: nanoid(), title: args.title, status: 'open'})
    *       ),
-   *       close: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {id: string}}) =>
+   *       close: defineMutator(({tx, args}) =>
    *         tx.mutate.issues.update({id: args.id, status: 'closed'})
    *       ),
    *     },
@@ -303,9 +303,9 @@ export interface ZeroOptions<
   queryChangeThrottleMs?: number | undefined;
 
   /**
-   * Context is passed to Synced Queries when they are executed
+   * Context is passed to queries and mutators when they are executed
+   * with `zero.run()` and `zero.mutate()`.
    */
-  // TODO(arv): Mutators should also get context.
   context?: C | undefined;
 }
 
