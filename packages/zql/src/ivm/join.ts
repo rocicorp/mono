@@ -4,6 +4,7 @@ import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change, ChildChange} from './change.ts';
 import type {Node} from './data.ts';
 import {
+  buildJoinConstraint,
   generateWithOverlay,
   isJoinMatch,
   rowEqualsForCompoundKey,
@@ -218,21 +219,12 @@ export class Join implements Input {
       position: undefined,
     };
     try {
-      let anyNull = false;
-      const constraint = Object.fromEntries(
-        this.#parentKey.map((key, i) => {
-          const value = childRow[this.#childKey[i]];
-          if (value === null) {
-            anyNull = true;
-          }
-          return [key, value];
-        }),
+      const constraint = buildJoinConstraint(
+        childRow,
+        this.#childKey,
+        this.#parentKey,
       );
-      const parentNodes = anyNull
-        ? []
-        : this.#parent.fetch({
-            constraint,
-          });
+      const parentNodes = constraint ? this.#parent.fetch({constraint}) : [];
 
       for (const parentNode of parentNodes) {
         if (parentNode === 'yield') {
@@ -263,21 +255,12 @@ export class Join implements Input {
     parentNodeRelations: Record<string, () => Stream<Node | 'yield'>>,
   ): Node {
     const childStream = () => {
-      let anyNull = false;
-      const constraint = Object.fromEntries(
-        this.#childKey.map((key, i) => {
-          const value = parentNodeRow[this.#parentKey[i]];
-          if (value === null) {
-            anyNull = true;
-          }
-          return [key, value];
-        }),
+      const constraint = buildJoinConstraint(
+        parentNodeRow,
+        this.#parentKey,
+        this.#childKey,
       );
-      const stream = anyNull
-        ? []
-        : this.#child.fetch({
-            constraint,
-          });
+      const stream = constraint ? this.#child.fetch({constraint}) : [];
 
       if (
         this.#inprogressChildChange &&

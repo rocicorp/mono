@@ -1,4 +1,4 @@
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
@@ -137,4 +137,25 @@ export function isJoinMatch(
     }
   }
   return true;
+}
+
+/**
+ * Builds a constraint object by mapping values from `sourceRow` using `sourceKey`
+ * to keys specified by `targetKey`. Returns `undefined` if any source value is `null`,
+ * since null foreign keys cannot match any rows.
+ */
+export function buildJoinConstraint(
+  sourceRow: Row,
+  sourceKey: CompoundKey,
+  targetKey: CompoundKey,
+): Record<string, Value> | undefined {
+  const constraint: Record<string, Value> = {};
+  for (let i = 0; i < targetKey.length; i++) {
+    const value = sourceRow[sourceKey[i]];
+    if (value === null) {
+      return undefined;
+    }
+    constraint[targetKey[i]] = value;
+  }
+  return constraint;
 }

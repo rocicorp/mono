@@ -1,13 +1,13 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {binarySearch} from '../../../shared/src/binary-search.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Value} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
-import {constraintsAreCompatible, type Constraint} from './constraint.ts';
+import {constraintsAreCompatible} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
+  buildJoinConstraint,
   generateWithOverlayNoYield,
   isJoinMatch,
   rowEqualsForCompoundKey,
@@ -161,17 +161,13 @@ export class FlippedJoin implements Input {
       for (const childNode of childNodes) {
         // TODO: consider adding the ability to pass a set of
         // ids to fetch, and have them applied to sqlite using IN.
-        const constraintFromChild: Writable<Constraint> = {};
-        let anyNull = false;
-        for (let i = 0; i < this.#parentKey.length; i++) {
-          const value = childNode.row[this.#childKey[i]];
-          if (value === null) {
-            anyNull = true;
-          }
-          constraintFromChild[this.#parentKey[i]] = value;
-        }
+        const constraintFromChild = buildJoinConstraint(
+          childNode.row,
+          this.#childKey,
+          this.#parentKey,
+        );
         if (
-          anyNull ||
+          !constraintFromChild ||
           (req.constraint &&
             !constraintsAreCompatible(constraintFromChild, req.constraint))
         ) {
@@ -343,17 +339,14 @@ export class FlippedJoin implements Input {
       position: undefined,
     };
     try {
-      let anyNull = false;
-      const constraint = Object.fromEntries(
-        this.#parentKey.map((key, i) => {
-          const value = change.node.row[this.#childKey[i]];
-          if (value === null) {
-            anyNull = true;
-          }
-          return [key, value];
-        }),
+      const constraint = buildJoinConstraint(
+        change.node.row,
+        this.#childKey,
+        this.#parentKey,
       );
-      const parentNodeStream = anyNull ? [] : this.#parent.fetch({constraint});
+      const parentNodeStream = constraint
+        ? this.#parent.fetch({constraint})
+        : [];
       for (const parentNode of parentNodeStream) {
         if (parentNode === 'yield') {
           yield 'yield';
@@ -364,17 +357,12 @@ export class FlippedJoin implements Input {
           position: parentNode.row,
         };
         const childNodeStream = () => {
-          let anyNull = false;
-          const constraint = Object.fromEntries(
-            this.#childKey.map((key, i) => {
-              const value = parentNode.row[this.#parentKey[i]];
-              if (value === null) {
-                anyNull = true;
-              }
-              return [key, value];
-            }),
+          const constraint = buildJoinConstraint(
+            parentNode.row,
+            this.#parentKey,
+            this.#childKey,
           );
-          return anyNull ? [] : this.#child.fetch({constraint});
+          return constraint ? this.#child.fetch({constraint}) : [];
         };
         if (!exists) {
           for (const childNode of childNodeStream()) {
@@ -433,17 +421,12 @@ export class FlippedJoin implements Input {
 
   *#pushParent(change: Change): Stream<'yield'> {
     const childNodeStream = (node: Node) => () => {
-      let anyNull = false;
-      const constraint = Object.fromEntries(
-        this.#childKey.map((key, i) => {
-          const value = node.row[this.#parentKey[i]];
-          if (value === null) {
-            anyNull = true;
-          }
-          return [key, value];
-        }),
+      const constraint = buildJoinConstraint(
+        node.row,
+        this.#parentKey,
+        this.#childKey,
       );
-      return anyNull ? [] : this.#child.fetch({constraint});
+      return constraint ? this.#child.fetch({constraint}) : [];
     };
 
     const flip = (node: Node) => ({
