@@ -42,57 +42,8 @@ test('zero-cache --help', () => {
                                                                    Note that this number must allow for at least one connection per                                                      
                                                                    sync worker, or zero-cache will fail to start. See num-sync-workers                                                   
                                                                                                                                                                                          
-     --push-url string[]                                           optional                                                                                                              
-       ZERO_PUSH_URL env                                                                                                                                                                 
-                                                                   DEPRECATED. Use mutate-url instead.                                                                                   
-                                                                   The URL of the API server to which zero-cache will push mutations.                                                    
-                                                                                                                                                                                         
-                                                                   IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                                     
-                                                                                                                                                                                         
-                                                                   Pattern Syntax:                                                                                                       
-                                                                     URLPattern uses a simple and intuitive syntax similar to Express routes.                                            
-                                                                     Wildcards and named parameters make it easy to match multiple URLs.                                                 
-                                                                                                                                                                                         
-                                                                   Basic Examples:                                                                                                       
-                                                                     Exact URL match:                                                                                                    
-                                                                       "https://api.example.com/mutate"                                                                                  
-                                                                     Any subdomain using wildcard:                                                                                       
-                                                                       "https://*.example.com/mutate"                                                                                    
-                                                                     Multiple subdomain levels:                                                                                          
-                                                                       "https://*.*.example.com/mutate"                                                                                  
-                                                                     Any path under a domain:                                                                                            
-                                                                       "https://api.example.com/*"                                                                                       
-                                                                     Named path parameters:                                                                                              
-                                                                       "https://api.example.com/:version/mutate"                                                                         
-                                                                       ↳ Matches "https://api.example.com/v1/mutate", "https://api.example.com/v2/mutate", etc.                          
-                                                                                                                                                                                         
-                                                                   Advanced Patterns:                                                                                                    
-                                                                     Optional path segments:                                                                                             
-                                                                       "https://api.example.com/:path?"                                                                                  
-                                                                     Regex in segments (for specific patterns):                                                                          
-                                                                       "https://api.example.com/:version(v\\d+)/mutate"                                                                   
-                                                                       ↳ Matches only "v" followed by digits                                                                             
-                                                                                                                                                                                         
-                                                                   Multiple patterns:                                                                                                    
-                                                                     ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                                              
-                                                                                                                                                                                         
-                                                                   Note: Query parameters and URL fragments (#) are automatically ignored during matching.                               
-                                                                                                                                                                                         
-                                                                   For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern                          
-                                                                                                                                                                                         
-     --push-api-key string                                         optional                                                                                                              
-       ZERO_PUSH_API_KEY env                                                                                                                                                             
-                                                                   An optional secret used to authorize zero-cache to call the API server handling writes.                               
-                                                                                                                                                                                         
-     --push-forward-cookies boolean                                default: false                                                                                                        
-       ZERO_PUSH_FORWARD_COOKIES env                                                                                                                                                     
-                                                                   If true, zero-cache will forward cookies from the request.                                                            
-                                                                   This is useful for passing authentication cookies to the API server.                                                  
-                                                                   If false, cookies are not forwarded.                                                                                  
-                                                                                                                                                                                         
      --mutate-url string[]                                         optional                                                                                                              
        ZERO_MUTATE_URL env                                                                                                                                                               
-                                                                                                                                                                                         
                                                                    The URL of the API server to which zero-cache will push mutations.                                                    
                                                                                                                                                                                          
                                                                    IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                                     
@@ -138,57 +89,8 @@ test('zero-cache --help', () => {
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  
                                                                                                                                                                                          
-     --get-queries-url string[]                                    optional                                                                                                              
-       ZERO_GET_QUERIES_URL env                                                                                                                                                          
-                                                                   DEPRECATED. Use query-url instead.                                                                                    
-                                                                   The URL of the API server to which zero-cache will send synced queries.                                               
-                                                                                                                                                                                         
-                                                                   IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                                     
-                                                                                                                                                                                         
-                                                                   Pattern Syntax:                                                                                                       
-                                                                     URLPattern uses a simple and intuitive syntax similar to Express routes.                                            
-                                                                     Wildcards and named parameters make it easy to match multiple URLs.                                                 
-                                                                                                                                                                                         
-                                                                   Basic Examples:                                                                                                       
-                                                                     Exact URL match:                                                                                                    
-                                                                       "https://api.example.com/mutate"                                                                                  
-                                                                     Any subdomain using wildcard:                                                                                       
-                                                                       "https://*.example.com/mutate"                                                                                    
-                                                                     Multiple subdomain levels:                                                                                          
-                                                                       "https://*.*.example.com/mutate"                                                                                  
-                                                                     Any path under a domain:                                                                                            
-                                                                       "https://api.example.com/*"                                                                                       
-                                                                     Named path parameters:                                                                                              
-                                                                       "https://api.example.com/:version/mutate"                                                                         
-                                                                       ↳ Matches "https://api.example.com/v1/mutate", "https://api.example.com/v2/mutate", etc.                          
-                                                                                                                                                                                         
-                                                                   Advanced Patterns:                                                                                                    
-                                                                     Optional path segments:                                                                                             
-                                                                       "https://api.example.com/:path?"                                                                                  
-                                                                     Regex in segments (for specific patterns):                                                                          
-                                                                       "https://api.example.com/:version(v\\d+)/mutate"                                                                   
-                                                                       ↳ Matches only "v" followed by digits                                                                             
-                                                                                                                                                                                         
-                                                                   Multiple patterns:                                                                                                    
-                                                                     ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                                              
-                                                                                                                                                                                         
-                                                                   Note: Query parameters and URL fragments (#) are automatically ignored during matching.                               
-                                                                                                                                                                                         
-                                                                   For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern                          
-                                                                                                                                                                                         
-     --get-queries-api-key string                                  optional                                                                                                              
-       ZERO_GET_QUERIES_API_KEY env                                                                                                                                                      
-                                                                   An optional secret used to authorize zero-cache to call the API server handling writes.                               
-                                                                                                                                                                                         
-     --get-queries-forward-cookies boolean                         default: false                                                                                                        
-       ZERO_GET_QUERIES_FORWARD_COOKIES env                                                                                                                                              
-                                                                   If true, zero-cache will forward cookies from the request.                                                            
-                                                                   This is useful for passing authentication cookies to the API server.                                                  
-                                                                   If false, cookies are not forwarded.                                                                                  
-                                                                                                                                                                                         
      --query-url string[]                                          optional                                                                                                              
        ZERO_QUERY_URL env                                                                                                                                                                
-                                                                                                                                                                                         
                                                                    The URL of the API server to which zero-cache will send synced queries.                                               
                                                                                                                                                                                          
                                                                    IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                                     
@@ -380,18 +282,6 @@ test('zero-cache --help', () => {
                                                                    which may involve downtime (replication lag) while the new replica is initializing.                                   
                                                                    To change the set of publications without disrupting an existing app, a new app                                       
                                                                    should be created.                                                                                                    
-                                                                                                                                                                                         
-     --auth-jwk string                                             optional                                                                                                              
-       ZERO_AUTH_JWK env                                                                                                                                                                 
-                                                                   A public key in JWK format used to verify JWTs. Only one of jwk, jwksUrl and secret may be set.                       
-                                                                                                                                                                                         
-     --auth-jwks-url string                                        optional                                                                                                              
-       ZERO_AUTH_JWKS_URL env                                                                                                                                                            
-                                                                   A URL that returns a JWK set used to verify JWTs. Only one of jwk, jwksUrl and secret may be set.                     
-                                                                                                                                                                                         
-     --auth-secret string                                          optional                                                                                                              
-       ZERO_AUTH_SECRET env                                                                                                                                                              
-                                                                   A symmetric key used to verify JWTs. Only one of jwk, jwksUrl and secret may be set.                                  
                                                                                                                                                                                          
      --port number                                                 default: 4848                                                                                                         
        ZERO_PORT env                                                                                                                                                                     
