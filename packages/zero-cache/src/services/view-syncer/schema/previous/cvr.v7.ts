@@ -6,12 +6,9 @@ import {
   type JSONValue,
   stringify,
 } from '../../../../../../shared/src/bigint-json.ts';
-import type {ReadonlyJSONValue} from '../../../../../../shared/src/json.ts';
 import {stringCompare} from '../../../../../../shared/src/string-compare.ts';
-import type {ClientSchema} from '../../../../../../zero-protocol/src/client-schema.ts';
 import {normalizedKeyOrder, type RowKey} from '../../../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../../../types/shards.ts';
-import type {TTLClock} from '../../ttl-clock.ts';
 import {
   type RowID,
   type RowRecord,
@@ -32,29 +29,21 @@ export type InstancesRow = {
   clientGroupID: string;
   version: string;
   lastActive: number;
-  ttlClock: TTLClock;
   replicaVersion: string | null;
   owner: string | null;
   grantedAt: number | null;
-  clientSchema: ClientSchema | null;
 };
 
 function createInstancesTable(shard: ShardID) {
   return `
 CREATE TABLE ${schema(shard)}.instances (
   "clientGroupID"  TEXT PRIMARY KEY,
-  "version"        TEXT NOT NULL,             -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
-  "lastActive"     TIMESTAMPTZ NOT NULL,      -- For garbage collection
-  "ttlClock"       DOUBLE PRECISION NOT NULL, -- The ttl clock gets "paused" when disconnected.
-  "replicaVersion" TEXT,                      -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
-  "owner"          TEXT,                      -- The ID of the task / server that has been granted ownership of the CVR.
-  "grantedAt"      TIMESTAMPTZ,               -- The time at which the current owner was last granted ownership (most recent connection time).
-  "clientSchema"   JSONB                      -- ClientSchema of the client group
+  "version"        TEXT NOT NULL,        -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
+  "lastActive"     TIMESTAMPTZ NOT NULL, -- For garbage collection
+  "replicaVersion" TEXT,                 -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
+  "owner"          TEXT,                 -- The ID of the task / server that has been granted ownership of the CVR.
+  "grantedAt"      TIMESTAMPTZ           -- The time at which the current owner was last granted ownership (most recent connection time).
 );
-
--- For garbage collection.
-CREATE INDEX instances_last_active
-  ON ${schema(shard)}.instances ("lastActive");
 `;
 }
 
@@ -65,22 +54,31 @@ export function compareInstancesRows(a: InstancesRow, b: InstancesRow) {
 export type ClientsRow = {
   clientGroupID: string;
   clientID: string;
+  /** @deprecated */
+  patchVersion: string;
+  /** @deprecated */
+  deleted: boolean | null;
 };
 
 function createClientsTable(shard: ShardID) {
+  // patchVersion and deleted are not used. Remove after all readers are migrated.
   return `
 CREATE TABLE ${schema(shard)}.clients (
   "clientGroupID"      TEXT,
   "clientID"           TEXT,
+  "patchVersion"       TEXT NOT NULL,  -- Deprecated
+  "deleted"            BOOL,           -- Deprecated
 
   PRIMARY KEY ("clientGroupID", "clientID"),
 
   CONSTRAINT fk_clients_client_group
     FOREIGN KEY("clientGroupID")
     REFERENCES ${schema(shard)}.instances("clientGroupID")
-    ON DELETE CASCADE
 );
 
+-- For catchup patches.
+CREATE INDEX client_patch_version
+  ON ${schema(shard)}.clients ("patchVersion");
 `;
 }
 export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
@@ -94,10 +92,7 @@ export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
 export type QueriesRow = {
   clientGroupID: string;
   queryHash: string;
-  // This is the client AST _AFTER_ applying server name transformations.
-  clientAST: JSONValue | null;
-  queryName: string | null;
-  queryArgs: readonly ReadonlyJSONValue[] | null;
+  clientAST: JSONValue;
   patchVersion: string | null;
   transformationHash: string | null;
   transformationVersion: string | null;
@@ -109,10 +104,8 @@ function createQueriesTable(shard: ShardID) {
   return `
 CREATE TABLE ${schema(shard)}.queries (
   "clientGroupID"         TEXT,
-  "queryHash"             TEXT, -- this is the hash of the client query AST
-  "clientAST"             JSONB, -- this is nullable as custom queries will not persist an AST
-  "queryName"             TEXT, -- the name of the query if it is a custom query
-  "queryArgs"             JSON, -- the arguments of the query if it is a custom query
+  "queryHash"             TEXT,
+  "clientAST"             JSONB NOT NULL,
   "patchVersion"          TEXT,  -- NULL if only desired but not yet "got"
   "transformationHash"    TEXT,
   "transformationVersion" TEXT,
@@ -124,7 +117,6 @@ CREATE TABLE ${schema(shard)}.queries (
   CONSTRAINT fk_queries_client_group
     FOREIGN KEY("clientGroupID")
     REFERENCES ${schema(shard)}.instances("clientGroupID")
-    ON DELETE CASCADE
 );
 
 -- For catchup patches.
@@ -148,7 +140,9 @@ export type DesiresRow = {
   patchVersion: string;
   deleted: boolean | null;
   ttl: number | null;
-  inactivatedAt: TTLClock | null;
+  inactivatedAt: number | null;
+  /** @deprecated */
+  expiresAt?: number | null;
 };
 
 function createDesiresTable(shard: ShardID) {
@@ -159,12 +153,15 @@ CREATE TABLE ${schema(shard)}.desires (
   "queryHash"          TEXT,
   "patchVersion"       TEXT NOT NULL,
   "deleted"            BOOL,  -- put vs del "desired" query
-  "ttl"                INTERVAL,  -- DEPRECATED: Use ttlMs instead. Time to live for this client
-  "ttlMs"              DOUBLE PRECISION,  -- Time to live in milliseconds
-  "inactivatedAt"      TIMESTAMPTZ,  -- DEPRECATED: Use inactivatedAtMs instead. Time at which this row was inactivated
-  "inactivatedAtMs"    DOUBLE PRECISION,  -- Time at which this row was inactivated (milliseconds since client group start)
+  "ttl"                INTERVAL,  -- Time to live for this client
+  "expiresAt"          TIMESTAMPTZ,  -- DEPRECATED Time at which this row expires
+  "inactivatedAt"      TIMESTAMPTZ,  -- Time at which this row was inactivated
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
+
+  CONSTRAINT fk_desires_client
+    FOREIGN KEY("clientGroupID", "clientID")
+    REFERENCES ${ident(cvrSchema(shard))}.clients("clientGroupID", "clientID"),
 
   CONSTRAINT fk_desires_query
     FOREIGN KEY("clientGroupID", "queryHash")
@@ -175,6 +172,9 @@ CREATE TABLE ${schema(shard)}.desires (
 -- For catchup patches.
 CREATE INDEX desires_patch_version
   ON ${schema(shard)}.desires ("patchVersion");
+
+CREATE INDEX desires_expires_at
+  ON ${schema(shard)}.desires ("expiresAt");
 
 CREATE INDEX desires_inactivated_at
   ON ${schema(shard)}.desires ("inactivatedAt");
@@ -255,6 +255,37 @@ export function compareRowsRows(a: RowsRow, b: RowsRow) {
 }
 
 /**
+ * Note: Although `clientGroupID` logically references the same column in
+ * `cvr.instances`, a FOREIGN KEY constraint must not be declared as the
+ * `cvr.rows` TABLE needs to be updated without affecting the
+ * `SELECT ... FOR UPDATE` lock when `cvr.instances` is updated.
+ */
+function createRowsTable(shard: ShardID) {
+  return `
+CREATE TABLE ${schema(shard)}.rows (
+  "clientGroupID"    TEXT,
+  "schema"           TEXT,
+  "table"            TEXT,
+  "rowKey"           JSONB,
+  "rowVersion"       TEXT NOT NULL,
+  "patchVersion"     TEXT NOT NULL,
+  "refCounts"        JSONB,  -- {[queryHash: string]: number}, NULL for tombstone
+
+  PRIMARY KEY ("clientGroupID", "schema", "table", "rowKey")
+);
+
+-- For catchup patches.
+CREATE INDEX row_patch_version 
+  ON ${schema(shard)}.rows ("patchVersion");
+
+-- For listing rows returned by one or more query hashes. e.g.
+-- SELECT * FROM cvr_shard.rows WHERE "refCounts" ?| array[...queryHashes...];
+CREATE INDEX row_ref_counts ON ${schema(shard)}.rows 
+  USING GIN ("refCounts");
+`;
+}
+
+/**
  * The version of the data in the `cvr.rows` table. This may lag
  * `version` in `cvr.instances` but eventually catches up, modulo
  * exceptional circumstances like a server crash.
@@ -278,41 +309,6 @@ CREATE TABLE ${schema(shard)}."rowsVersion" (
 `;
 }
 
-/**
- * CVR `rows` are updated asynchronously from the CVR metadata
- * (i.e. `instances`). The `rowsVersion` table is updated atomically with
- * updates to the `rows` data.
- */
-function createRowsTable(shard: ShardID) {
-  return `
-CREATE TABLE ${schema(shard)}.rows (
-  "clientGroupID"    TEXT,
-  "schema"           TEXT,
-  "table"            TEXT,
-  "rowKey"           JSONB,
-  "rowVersion"       TEXT NOT NULL,
-  "patchVersion"     TEXT NOT NULL,
-  "refCounts"        JSONB,  -- {[queryHash: string]: number}, NULL for tombstone
-
-  PRIMARY KEY ("clientGroupID", "schema", "table", "rowKey"),
-
-  CONSTRAINT fk_rows_client_group
-    FOREIGN KEY("clientGroupID")
-    REFERENCES ${schema(shard)}."rowsVersion" ("clientGroupID")
-    ON DELETE CASCADE
-);
-
--- For catchup patches.
-CREATE INDEX row_patch_version 
-  ON ${schema(shard)}.rows ("patchVersion");
-
--- For listing rows returned by one or more query hashes. e.g.
--- SELECT * FROM cvr_shard.rows WHERE "refCounts" ?| array[...queryHashes...];
-CREATE INDEX row_ref_counts ON ${schema(shard)}.rows 
-  USING GIN ("refCounts");
-`;
-}
-
 export type RowsVersionRow = {
   clientGroupID: string;
   version: string;
@@ -325,8 +321,8 @@ function createTables(shard: ShardID) {
     createClientsTable(shard) +
     createQueriesTable(shard) +
     createDesiresTable(shard) +
-    createRowsVersionTable(shard) +
-    createRowsTable(shard)
+    createRowsTable(shard) +
+    createRowsVersionTable(shard)
   );
 }
 

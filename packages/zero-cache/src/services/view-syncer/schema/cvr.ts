@@ -44,15 +44,15 @@ function createInstancesTable(shard: ShardID) {
   return /*sql*/ `
 CREATE TABLE ${schema(shard)}.instances (
   "clientGroupID"  TEXT PRIMARY KEY,
-  "version"        TEXT NOT NULL,             -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
-  "lastActive"     TIMESTAMPTZ NOT NULL,      -- For garbage collection
-  "ttlClock"       DOUBLE PRECISION NOT NULL, -- The ttl clock gets "paused" when disconnected.
-  "replicaVersion" TEXT,                      -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
-  "owner"          TEXT,                      -- The ID of the task / server that has been granted ownership of the CVR.
-  "grantedAt"      TIMESTAMPTZ,               -- The time at which the current owner was last granted ownership (most recent connection time).
-  "clientSchema"   JSONB,                     -- ClientSchema of the client group
-  "profileID"      TEXT,                      -- Stable profile id ("p..."), falling back to the clientGroupID ("cg{clientGroupID}") for old clients
-  "deleted"        BOOL DEFAULT FALSE         -- Tombstone column for deleted CVRs; instances rows are kept longer for usage stats
+  "version"        TEXT NOT NULL,                       -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
+  "lastActive"     TIMESTAMPTZ NOT NULL,                -- For garbage collection
+  "ttlClock"       DOUBLE PRECISION NOT NULL DEFAULT 0, -- The ttl clock gets "paused" when disconnected.
+  "replicaVersion" TEXT,                                -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
+  "owner"          TEXT,                                -- The ID of the task / server that has been granted ownership of the CVR.
+  "grantedAt"      TIMESTAMPTZ,                         -- The time at which the current owner was last granted ownership (most recent connection time).
+  "clientSchema"   JSONB,                               -- ClientSchema of the client group
+  "profileID"      TEXT,                                -- Stable profile id ("p..."), falling back to the clientGroupID ("cg{clientGroupID}") for old clients
+  "deleted"        BOOL DEFAULT FALSE                   -- Tombstone column for deleted CVRs; instances rows are kept longer for usage stats
 );
 
 -- For garbage collection.
