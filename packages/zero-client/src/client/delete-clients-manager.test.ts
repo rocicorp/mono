@@ -18,6 +18,7 @@ let dagStore: Store;
 const lc = createSilentLogContext();
 let manager: DeleteClientsManager;
 const clientGroupID = 'cg1';
+const clientID = 'current-client-id';
 
 beforeEach(() => {
   send = vi.fn<(msg: DeleteClientsMessage) => void>();
@@ -27,6 +28,7 @@ beforeEach(() => {
     dagStore,
     lc,
     Promise.resolve(clientGroupID),
+    clientID,
   );
   return async () => {
     await dagStore.close();
@@ -54,4 +56,77 @@ test('clientsDeletedOnServer', async () => {
   expect(await withRead(dagStore, getDeletedClients)).toEqual([
     {clientGroupID: cg, clientID: 'e'},
   ]);
+});
+
+test('onClientsDeleted asserts if trying to delete self', async () => {
+  await expect(
+    manager.onClientsDeleted([
+      {clientGroupID, clientID: 'a'},
+      {clientGroupID, clientID},
+    ]),
+  ).rejects.toThrow('cannot delete self in onClientsDeleted');
+});
+
+test('sendDeletedClientsToServer asserts if trying to delete self', async () => {
+  await withWrite(dagStore, dagWrite =>
+    setDeletedClients(dagWrite, [
+      {clientGroupID, clientID: 'a'},
+      {clientGroupID, clientID},
+    ]),
+  );
+  await expect(manager.sendDeletedClientsToServer()).rejects.toThrow(
+    'cannot delete self in sendDeletedClientsToServer',
+  );
+});
+
+test('getDeletedClients asserts if trying to delete self', async () => {
+  await withWrite(dagStore, dagWrite =>
+    setDeletedClients(dagWrite, [
+      {clientGroupID, clientID: 'a'},
+      {clientGroupID, clientID},
+    ]),
+  );
+  await expect(manager.getDeletedClients()).rejects.toThrow(
+    'cannot delete self in getDeletedClients',
+  );
+});
+
+test('getDeletedClients returns deleted clients for current client group', async () => {
+  await withWrite(dagStore, dagWrite =>
+    setDeletedClients(dagWrite, [
+      {clientGroupID, clientID: 'a'},
+      {clientGroupID, clientID: 'b'},
+      {clientGroupID: 'other-cg', clientID: 'c'},
+    ]),
+  );
+  const deleted = await manager.getDeletedClients();
+  expect(deleted).toEqual([
+    {clientGroupID, clientID: 'a'},
+    {clientGroupID, clientID: 'b'},
+  ]);
+});
+
+test('sendDeletedClientsToServer sends only clients from current client group', async () => {
+  await withWrite(dagStore, dagWrite =>
+    setDeletedClients(dagWrite, [
+      {clientGroupID, clientID: 'a'},
+      {clientGroupID: 'other-cg', clientID: 'b'},
+    ]),
+  );
+  await manager.sendDeletedClientsToServer();
+  expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['a']}]);
+});
+
+test('sendDeletedClientsToServer does not send if no deleted clients', async () => {
+  await manager.sendDeletedClientsToServer();
+  expect(send).not.toBeCalled();
+});
+
+test('onClientsDeleted filters by client group', async () => {
+  await manager.onClientsDeleted([
+    {clientGroupID, clientID: 'a'},
+    {clientGroupID: 'other-cg', clientID: 'b'},
+    {clientGroupID, clientID: 'c'},
+  ]);
+  expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['a', 'c']}]);
 });
