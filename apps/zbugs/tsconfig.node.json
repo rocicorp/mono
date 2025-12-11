@@ -2,12 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "lib": ["ES2022", "DOM"],
-    "baseUrl": "../../packages",
     "paths": {
-      "@rocicorp/zero": ["./zero/src/zero.ts"],
-      "@rocicorp/zero/server": ["./zero/src/server.ts"],
+      "@rocicorp/zero": ["../../packages/zero/src/zero.ts"],
+      "@rocicorp/zero/server": ["../../packages/zero/src/server.ts"],
       "@rocicorp/zero/server/adapters/postgresjs": [
-        "./zero/src/adapters/postgresjs.ts"
+        "../../packages/zero/src/adapters/postgresjs.ts"
       ]
     }
   },

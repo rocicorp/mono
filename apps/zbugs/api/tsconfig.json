@@ -1,9 +1,10 @@
 {
   "extends": "../../../tsconfig.json",
   "compilerOptions": {
-    "baseUrl": "../../packages",
     "paths": {
-      "@rocicorp/zero/pg": ["./zero/src/pg.ts"]
+      "@rocicorp/zero": ["../../packages/zero/src/zero.ts"],
+      "@rocicorp/zero/server": ["../../packages/zero/src/server.ts"],
+      "@rocicorp/zero/pg": ["../../packages/zero/src/pg.ts"]
     },
     "declaration": true
   },
