@@ -1177,7 +1177,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             await timer.start(),
           )) {
             if (change === 'yield') {
+              lc.error?.(
+                `Yielding in hydrateUnchangedQueries. Elapsed lap ${timer.elapsedLap()}ms.  Total ${timer.totalElapsed()}.`,
+              );
+              const start = Date.now();
               await timer.yieldProcess('yield in hydrateUnchangedQueries');
+              lc.error?.('Got control back', Date.now() - start);
             } else {
               count++;
             }
@@ -1853,7 +1858,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await startAsyncSpan(tracer, 'loopingChanges', async span => {
         for (const change of changes) {
           if (change === 'yield') {
+            lc.error?.(
+              `Yielding in processChanges. Elapsed lap ${timer.elapsedLap()}ms.  Total ${timer.totalElapsed()}.`,
+            );
+            const start = Date.now();
             await timer.yieldProcess('yield in processChanges');
+            lc.error?.('Got control back', Date.now() - start);
             continue;
           }
           const {
@@ -2077,7 +2087,9 @@ function createHashToIDs(cvr: CVRSnapshot) {
 const timeSliceQueue = new Lock();
 
 function yieldProcess() {
-  return timeSliceQueue.withLock(() => new Promise(setImmediate));
+  return timeSliceQueue.withLock(
+    () => new Promise(resolve => setTimeout(resolve, 5)),
+  );
 }
 
 function contentsAndVersion(row: Row) {
