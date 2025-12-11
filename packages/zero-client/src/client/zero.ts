@@ -2354,32 +2354,19 @@ export async function createSocket(
     DeleteClientsBody | undefined,
   ]
 > {
-  const url = new URL(
-    appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
+  const url = await createConnectionURL(
+    socketOrigin,
+    clientID,
+    clientGroupID,
+    userID,
+    baseCookie,
+    lmid,
+    wsid,
+    rep,
+    debugPerf,
+    additionalConnectParams,
+    lc,
   );
-  const {searchParams} = url;
-  searchParams.set('clientID', clientID);
-  searchParams.set('clientGroupID', clientGroupID);
-  searchParams.set('userID', userID);
-  searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
-  searchParams.set('ts', String(performance.now()));
-  searchParams.set('lmid', String(lmid));
-  searchParams.set('wsid', wsid);
-  searchParams.set('profileID', await rep.profileID);
-  if (debugPerf) {
-    searchParams.set('debugPerf', true.toString());
-  }
-  if (additionalConnectParams) {
-    for (const k in additionalConnectParams) {
-      if (searchParams.has(k)) {
-        lc.warn?.(`skipping conflicting parameter ${k}`);
-      } else {
-        searchParams.set(k, additionalConnectParams[k]);
-      }
-    }
-  }
-
-  lc.info?.('Connecting to', url.toString());
 
   // Pass auth to the server via the `Sec-WebSocket-Protocol` header by passing
   // it as a `protocol` to the `WebSocket` constructor.  The empty string is an
@@ -2433,6 +2420,48 @@ export async function createSocket(
     queriesPatch,
     skipEmptyDeletedClients(deletedClients),
   ];
+}
+
+export async function createConnectionURL(
+  socketOrigin: HTTPString | WSString,
+  clientID: string,
+  clientGroupID: string,
+  userID: string,
+  baseCookie: string | null,
+  lmid: number,
+  wsid: string,
+  rep: Pick<ReplicacheImpl<{}>, 'profileID'>,
+  debugPerf: boolean,
+  additionalConnectParams: Record<string, string> | undefined,
+  lc: LogContext<unknown[], unknown[], unknown[], unknown[]>,
+) {
+  const url = new URL(
+    appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
+  );
+  const {searchParams} = url;
+  searchParams.set('clientID', clientID);
+  searchParams.set('clientGroupID', clientGroupID);
+  searchParams.set('userID', userID);
+  searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
+  searchParams.set('ts', String(performance.now()));
+  searchParams.set('lmid', String(lmid));
+  searchParams.set('wsid', wsid);
+  searchParams.set('profileID', await rep.profileID);
+  if (debugPerf) {
+    searchParams.set('debugPerf', true.toString());
+  }
+  if (additionalConnectParams) {
+    for (const k in additionalConnectParams) {
+      if (searchParams.has(k)) {
+        lc.warn?.(`skipping conflicting parameter ${k}`);
+      } else {
+        searchParams.set(k, additionalConnectParams[k]);
+      }
+    }
+  }
+
+  lc.info?.('Connecting to', url.toString());
+  return url;
 }
 
 function skipEmptyArray<T>(
