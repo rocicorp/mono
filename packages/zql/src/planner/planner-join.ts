@@ -319,6 +319,13 @@ export class PlannerJoin {
     const scaledChildSelectivity =
       1 - Math.pow(1 - child.selectivity, fanoutFactor.fanout);
 
+    // Why do we not need fanout in the other direction?
+    // E.g., for an `inventory -> film` flipped-join, if each film has 100 inventories (100 copies)
+    // then we're more likely to hit an inventory row compared to if each film has 1 inventory.
+    // Flipped-join already accounts for this because the child selectivity is implicitly accounted
+    // for. The returned row estimate of the child is already representative of how many
+    // rows the child will have post-filtering.
+
     /**
      * How selective is the graph from this point forward?
      * If we are _very_ selective then we must scan more parent rows
@@ -379,8 +386,9 @@ export class PlannerJoin {
         cost:
           child.cost +
           child.scanEst * (parent.startupCost + parent.cost + parent.scanEst),
-        returnedRows:
-          parent.returnedRows * child.returnedRows * child.selectivity,
+        // the child selectivity is not relevant here because it has already been taken into account via the flipping.
+        // I.e., `child.returnedRows` is the estimated number of rows produced by the child _after_ taking filtering into account.
+        returnedRows: parent.returnedRows * child.returnedRows,
         selectivity: parent.selectivity * child.selectivity,
         limit: parent.limit,
         fanout: parent.fanout,
