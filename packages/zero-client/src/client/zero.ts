@@ -1081,13 +1081,13 @@ export class Zero<
    * Executes mutators registered with this `Zero` instance.
    *
    * Create a `MutateRequest` by calling a generated mutator (for example from
-   * `defineMutatorsWithType`) and pass it to `z.mutate(...)`. The return value
+   * `defineMutators`) and pass it to `z.mutate(...)`. The return value
    * exposes `client` and `server` promises so you can await optimistic and
    * confirmed results.
    *
    * ```ts
-   * const mutators = defineMutatorsWithType<typeof schema>()({
-   *   insertIssue: defineMutatorWithType<typeof schema>()(({tx, args}) =>
+   * const mutators = defineMutators({
+   *   insertIssue: defineMutator(({tx, args}) =>
    *     tx.mutate.issues.insert(args),
    *   ),
    * });
