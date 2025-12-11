@@ -35,6 +35,7 @@ export const Comment = memo(
     const z = useZero();
     const [editing, setEditing] = useState(false);
     const login = useLogin();
+
     const [deleteConfirmationShown, setDeleteConfirmationShown] =
       useState(false);
 

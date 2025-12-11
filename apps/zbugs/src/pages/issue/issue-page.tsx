@@ -430,7 +430,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               {!editing ? (
                 <>
                   <Button
-                    disabled={isOffline}
                     className="edit-button"
                     eventName="Edit issue"
                     onAction={() => setEditing(displayed)}
@@ -438,7 +437,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                     Edit
                   </Button>
                   <Button
-                    disabled={isOffline}
                     className="delete-button"
                     eventName="Delete issue"
                     onAction={() => setDeleteConfirmationShown(true)}
@@ -663,7 +661,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             </div>
             <CanEdit ownerID={displayed.creatorID}>
               <LabelPicker
-                disabled={isOffline}
                 selected={labelSet}
                 projectName={projectName}
                 onAssociateLabel={labelID =>

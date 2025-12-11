@@ -111,7 +111,7 @@ export function CommentComposer({
           className="secondary-button"
           eventName={id ? 'Save comment edits' : 'Add new comment'}
           onAction={save}
-          disabled={currentBody.trim().length === 0 || isOffline}
+          disabled={currentBody.trim().length === 0}
         >
           {id ? 'Save' : 'Add comment'}
         </Button>

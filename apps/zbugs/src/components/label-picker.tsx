@@ -13,14 +13,12 @@ const focusInput = (input: HTMLInputElement | null) => {
 };
 
 export function LabelPicker({
-  disabled,
   projectName,
   selected,
   onDisassociateLabel,
   onAssociateLabel,
   onCreateNewLabel,
 }: {
-  disabled: boolean;
   projectName: string;
   selected: Set<string>;
   onDisassociateLabel: (id: string) => void;
@@ -41,7 +39,6 @@ export function LabelPicker({
   return (
     <div className={style.root} ref={ref}>
       <Button
-        disabled={disabled}
         title="Add label"
         eventName="Add issue label toggle"
         className={style.addLabel}

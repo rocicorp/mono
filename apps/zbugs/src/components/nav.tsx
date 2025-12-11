@@ -15,7 +15,6 @@ import {isGigabugs, links, useListContext, useProjectName} from '../routes.tsx';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
-import {ErrorModal} from './error-modal.tsx';
 import {Link} from './link.tsx';
 import {ProjectPicker} from './project-picker.tsx';
 
@@ -198,8 +197,6 @@ export const Nav = memo(() => {
           }}
         />
       )}
-
-      <ErrorModal />
     </>
   );
 });
@@ -218,6 +215,32 @@ const ConnectionStatusPill = () => {
       clearTimeout(timeout);
     };
   });
+
+  // Show error state immediately without delay
+  if (connectionState.name === 'error') {
+    return (
+      <div className="connection-status-container">
+        <div className="connection-status-pill">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span>Error</span>
+        </div>
+      </div>
+    );
+  }
 
   return shouldShowConnecting &&
     (connectionState.name === 'connecting' ||

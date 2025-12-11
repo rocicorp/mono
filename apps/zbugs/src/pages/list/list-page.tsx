@@ -630,6 +630,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         <Filter projectName={projectName} onSelect={onFilter} />
         <div className="sort-control-container">
           <Button
+            enabledOffline
             className="sort-control"
             eventName="Toggle sort type"
             onAction={toggleSortField}
@@ -637,6 +638,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
             {sortField === 'modified' ? 'Modified' : 'Created'}
           </Button>
           <Button
+            enabledOffline
             className={classNames('sort-direction', sortDirection)}
             eventName="Toggle sort direction"
             onAction={toggleSortDirection}
