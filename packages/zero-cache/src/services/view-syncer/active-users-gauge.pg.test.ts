@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import type {Actives} from '../../server/anonymous-otel-start.ts';
+import type {ActiveUsers} from '../../server/anonymous-otel-start.ts';
 import {test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
@@ -39,15 +39,15 @@ describe('view-syncer/active-users-gauge', () => {
   const lc = createSilentLogContext();
   let cvrDb: PostgresDB;
   let gauge: ActiveUsersGauge;
-  let activesGetterPromise: Promise<() => Actives>;
+  let activeUsersGetterPromise: Promise<() => ActiveUsers>;
 
   beforeEach<PgTest>(async ({testDBs}) => {
     cvrDb = await testDBs.create('active_users_gauge_test_db');
     await cvrDb.begin(tx => setupCVRTables(lc, tx, SHARD));
 
-    const actives = resolver<() => Actives>();
-    activesGetterPromise = actives.promise;
-    gauge = new ActiveUsersGauge(lc, cvrDb, SHARD, {}, actives.resolve);
+    const activeUsers = resolver<() => ActiveUsers>();
+    activeUsersGetterPromise = activeUsers.promise;
+    gauge = new ActiveUsersGauge(lc, cvrDb, SHARD, {}, activeUsers.resolve);
 
     const now = Date.now();
     for (const [clientGroupID, lastActive, profileID, deleted] of [
@@ -86,9 +86,9 @@ describe('view-syncer/active-users-gauge', () => {
   });
 
   test('computes active users', async () => {
-    const activesGetter = await activesGetterPromise;
-    const actives = activesGetter();
-    expect(actives).toEqual({
+    const activeUsersGetter = await activeUsersGetterPromise;
+    const activeUsers = activeUsersGetter();
+    expect(activeUsers).toEqual({
       active_users_last_day: 3, // No de-duping
       users_1da: 1, // deduped p92d90asd9fs
       users_1da_legacy: 2, // deduped p92d90asd9fs + cgactive-legacy

@@ -20,7 +20,7 @@ import {
 } from '../config/zero-config.js';
 import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
 
-export type Actives = {
+export type ActiveUsers = {
   /* oxlint-disable @typescript/naming-convention */
   active_users_last_day: number;
   users_1da: number;
@@ -46,7 +46,7 @@ class AnonymousTelemetryManager {
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
   #activeClientGroupsGetter: (() => number) | undefined;
-  #activesGetter: (() => Actives) | undefined;
+  #activeUsersGetter: (() => ActiveUsers) | undefined;
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
   #processId: string;
@@ -217,18 +217,19 @@ class AnonymousTelemetryManager {
     );
 
     const attrs = this.#getAttributes();
-    const active = (metric: keyof Actives) => (result: ObservableResult) => {
-      const actives = this.#activesGetter?.();
-      if (actives) {
-        const value = actives[metric];
-        result.observe(value, attrs);
-        this.#lc?.debug?.(`telemetry: ${metric}=${value}`);
-      } else {
-        this.#lc?.debug?.(
-          `telemetry: no actives available, skipping observation of ${metric}`,
-        );
-      }
-    };
+    const active =
+      (metric: keyof ActiveUsers) => (result: ObservableResult) => {
+        const actives = this.#activeUsersGetter?.();
+        if (actives) {
+          const value = actives[metric];
+          result.observe(value, attrs);
+          this.#lc?.debug?.(`telemetry: ${metric}=${value}`);
+        } else {
+          this.#lc?.debug?.(
+            `telemetry: no actives available, skipping observation of ${metric}`,
+          );
+        }
+      };
     this.#meter
       .createObservableGauge('zero.active_users_last_day', {
         description: 'Count of CVR instances active in the last 24h',
@@ -366,8 +367,8 @@ class AnonymousTelemetryManager {
     this.#activeClientGroupsGetter = getter;
   }
 
-  setActivesGetter(getter: () => Actives) {
-    this.#activesGetter = getter;
+  setActiveUsersGetter(getter: () => ActiveUsers) {
+    this.#activeUsersGetter = getter;
   }
 
   shutdown() {
@@ -547,6 +548,6 @@ export const recordConnectionAttempted = () =>
   manager().recordConnectionAttempted();
 export const setActiveClientGroupsGetter = (getter: () => number) =>
   manager().setActiveClientGroupsGetter(getter);
-export const setActivesGetter = (getter: () => Actives) =>
-  manager().setActivesGetter(getter);
+export const setActiveUsersGetter = (getter: () => ActiveUsers) =>
+  manager().setActiveUsersGetter(getter);
 export const shutdownAnonymousTelemetry = () => manager().shutdown();

@@ -2,8 +2,8 @@ import type {LogContext} from '@rocicorp/logger';
 import {must} from '../../../../shared/src/must.ts';
 import {mapValues} from '../../../../shared/src/objects.ts';
 import {
-  setActivesGetter,
-  type Actives,
+  setActiveUsersGetter,
+  type ActiveUsers,
 } from '../../server/anonymous-otel-start.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema, type ShardID} from '../../types/shards.ts';
@@ -25,23 +25,23 @@ export class ActiveUsersGauge implements Service {
   readonly #schema: string;
   readonly #updateIntervalMs: number;
   readonly #state = new RunningState('active-users-gauge');
-  readonly #setActivesGetter: typeof setActivesGetter;
+  readonly #setActiveUsersGetter: typeof setActiveUsersGetter;
 
   // latest computed value exposed via the observable gauge callback
-  #lastActives: Actives | undefined;
+  #lastActiveUsers: ActiveUsers | undefined;
 
   constructor(
     lc: LogContext,
     db: PostgresDB,
     shard: ShardID,
     opts: Options = {},
-    setActivesGetterFn = setActivesGetter,
+    setActiveUsersGetterFn = setActiveUsersGetter,
   ) {
     this.#lc = lc;
     this.#db = db;
     this.#schema = cvrSchema(shard);
     this.#updateIntervalMs = opts.updateIntervalMs ?? 60 * 1000; // default 1 minute
-    this.#setActivesGetter = setActivesGetterFn;
+    this.#setActiveUsersGetter = setActiveUsersGetterFn;
   }
 
   async run(): Promise<void> {
@@ -60,7 +60,7 @@ export class ActiveUsersGauge implements Service {
         // profileIDs produced by the zero-client (i.e. starting with 'p').
         // The `users_#da_legacy` metrics include back-filled profileIDs (which
         // start with `cg`) and will over-count users on apps using memstore.
-        const [actives] = await this.#db<[Actives]> /*sql*/ `
+        const [actives] = await this.#db<[ActiveUsers]> /*sql*/ `
           SELECT 
             COUNT(*) FILTER (WHERE "lastActive" >= ${since1day}) AS active_users_last_day,
             COUNT(DISTINCT("profileID")) FILTER (WHERE "lastActive" >= ${since1day} AND starts_with("profileID", 'p')) AS users_1da,
@@ -73,15 +73,15 @@ export class ActiveUsersGauge implements Service {
             WHERE "lastActive" >= ${since30day}
         `;
         // Determine if the getter needs to be set (i.e. the first time).
-        const setGetter = this.#lastActives === undefined;
-        this.#lastActives = mapValues(actives, bigVal => Number(bigVal));
+        const setGetter = this.#lastActiveUsers === undefined;
+        this.#lastActiveUsers = mapValues(actives, bigVal => Number(bigVal));
 
         // Set the getter after the first value is computed
         if (setGetter) {
-          this.#setActivesGetter(() => must(this.#lastActives));
+          this.#setActiveUsersGetter(() => must(this.#lastActiveUsers));
         }
 
-        this.#lc.debug?.(`updated active-users gauge`, this.#lastActives);
+        this.#lc.debug?.(`updated active-users gauge`, this.#lastActiveUsers);
       } catch (e) {
         this.#lc.warn?.('error updating active-users gauge', e);
       }
