@@ -34,6 +34,7 @@
     "@vitest/browser-playwright": "^4.0.15",
     "@vitest/coverage-v8": "4.0.15",
     "@vitest/runner": "4.0.15",
+    "baseline-browser-mapping": "^2.9.6",
     "oxlint": "^1.32.0",
     "oxlint-tsgolint": "^0.8.5",
     "prettier": "^3.5.3",
