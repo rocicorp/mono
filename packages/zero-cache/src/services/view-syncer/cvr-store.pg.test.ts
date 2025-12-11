@@ -10,7 +10,7 @@ import {rowIDString, type RowID} from '../../types/row-key.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
-import {ClientNotFoundError, CVRStore, OwnershipError} from './cvr-store.ts';
+import {CVRStore, OwnershipError} from './cvr-store.ts';
 import {
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
@@ -256,11 +256,9 @@ describe('view-syncer/cvr-store', () => {
           {
             "clientGroupID": "my-cvr",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1732233600000,
             "lastActive": 1725408000000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "01",
             "ttlClock": 1725408000000,
             "version": "04",
@@ -284,26 +282,15 @@ describe('view-syncer/cvr-store', () => {
           {
             "clientGroupID": "my-cvr",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1732233600001,
             "lastActive": 1725408000000,
             "owner": "other-task",
-            "profileID": null,
             "replicaVersion": "01",
             "ttlClock": 1725408000000,
             "version": "03",
           },
         ]
       `);
-  });
-
-  test('garbage collected cvr', async () => {
-    // Simulate the CVR being garbage collected
-    await db`UPDATE "roze_1/cvr".instances SET deleted = TRUE`;
-
-    await expect(store.load(lc, CONNECT_TIME)).rejects.toThrow(
-      ClientNotFoundError,
-    );
   });
 
   async function catchupRows(
@@ -536,11 +523,9 @@ describe('view-syncer/cvr-store', () => {
           {
             "clientGroupID": "my-cvr",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1732233600000,
             "lastActive": 1732320000000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "01",
             "ttlClock": 1732320000000,
             "version": "04",
@@ -594,11 +579,9 @@ describe('view-syncer/cvr-store', () => {
           {
             "clientGroupID": "my-cvr",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1732233600000,
             "lastActive": 1732320000000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "01",
             "ttlClock": 1732320000000,
             "version": "05",
@@ -687,11 +670,9 @@ describe('view-syncer/cvr-store', () => {
           {
             "clientGroupID": "my-cvr",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1732233600000,
             "lastActive": 1732320000000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "01",
             "ttlClock": 1732320000000,
             "version": "18m",
@@ -780,11 +761,9 @@ describe('view-syncer/cvr-store', () => {
           {
             "clientGroupID": "my-cvr",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1732233600000,
             "lastActive": 1732320000000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "01",
             "ttlClock": 1732320000000,
             "version": "18m",
@@ -847,11 +826,9 @@ describe('view-syncer/cvr-store', () => {
           {
             "clientGroupID": "my-cvr",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1732233600000,
             "lastActive": 1732320000000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "01",
             "ttlClock": 1732320000000,
             "version": "04",
@@ -911,58 +888,57 @@ describe('view-syncer/cvr-store', () => {
     const cvr = await store.load(lc, CONNECT_TIME);
 
     expect(cvr).toMatchInlineSnapshot(`
-          {
-            "clientSchema": null,
-            "clients": {
+      {
+        "clientSchema": null,
+        "clients": {
+          "client1": {
+            "desiredQueryIDs": [
+              "foo",
+            ],
+            "id": "client1",
+          },
+        },
+        "id": "my-cvr",
+        "lastActive": 1725408000000,
+        "queries": {
+          "foo": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
               "client1": {
-                "desiredQueryIDs": [
-                  "foo",
-                ],
-                "id": "client1",
-              },
-            },
-            "id": "my-cvr",
-            "lastActive": 1725408000000,
-            "profileID": null,
-            "queries": {
-              "foo": {
-                "ast": {
-                  "table": "issues",
-                },
-                "clientState": {
-                  "client1": {
-                    "inactivatedAt": undefined,
-                    "ttl": 300000,
-                    "version": {
-                      "stateVersion": "01",
-                    },
-                  },
-                  "missing-client": {
-                    "inactivatedAt": 1741564800000,
-                    "ttl": 600000,
-                    "version": {
-                      "stateVersion": "01",
-                    },
-                  },
-                },
-                "id": "foo",
-                "patchVersion": {
+                "inactivatedAt": undefined,
+                "ttl": 300000,
+                "version": {
                   "stateVersion": "01",
                 },
-                "transformationHash": "foo-transformed",
-                "transformationVersion": {
+              },
+              "missing-client": {
+                "inactivatedAt": 1741564800000,
+                "ttl": 600000,
+                "version": {
                   "stateVersion": "01",
                 },
-                "type": "client",
               },
             },
-            "replicaVersion": "01",
-            "ttlClock": 1725408000000,
-            "version": {
-              "stateVersion": "03",
+            "id": "foo",
+            "patchVersion": {
+              "stateVersion": "01",
             },
-          }
-        `);
+            "transformationHash": "foo-transformed",
+            "transformationVersion": {
+              "stateVersion": "01",
+            },
+            "type": "client",
+          },
+        },
+        "replicaVersion": "01",
+        "ttlClock": 1725408000000,
+        "version": {
+          "stateVersion": "03",
+        },
+      }
+    `);
   });
 
   test('inspectQueries', async () => {

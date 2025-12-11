@@ -21,13 +21,13 @@ const APP_ID = 'zapp';
 const SHARD_NUM = 3;
 const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
-describe('view-syncer/cvr-purger', () => {
+describe('view-syncer/cvr', () => {
   type DBState = {
     instances: (Partial<InstancesRow> &
       Pick<
         InstancesRow,
         'clientGroupID' | 'version' | 'clientSchema' | 'ttlClock'
-      > & {deleted: boolean})[];
+      >)[];
     clients: ClientsRow[];
     queries: QueriesRow[];
     desires: DesiresRow[];
@@ -82,7 +82,6 @@ describe('view-syncer/cvr-purger', () => {
   }
 
   const INACTIVITY_THRESHOLD_MS = 1000 * 60 * 60 * 24;
-  const TOMBSTONE_THRESHOLD_MS = 1000 * 60 * 60 * 24 * 7;
 
   const lc = createSilentLogContext();
   let cvrDb: PostgresDB;
@@ -92,99 +91,74 @@ describe('view-syncer/cvr-purger', () => {
     cvrDb = await testDBs.create('cvr_purger_test_db');
     await cvrDb.begin(tx => setupCVRTables(lc, tx, SHARD));
 
-    purger = new CVRPurger(
-      lc,
-      cvrDb,
-      SHARD,
-      {
-        inactivityThresholdMs: INACTIVITY_THRESHOLD_MS,
-        initialBatchSize: 25,
-        initialIntervalMs: 60000,
-      },
-      TOMBSTONE_THRESHOLD_MS,
-    );
+    purger = new CVRPurger(lc, cvrDb, SHARD, {
+      inactivityThresholdMs: INACTIVITY_THRESHOLD_MS,
+      initialBatchSize: 25,
+      initialIntervalMs: 60000,
+    });
 
-    for (const [clientGroupID, lastActive, deleted] of [
-      ['new-1', Date.now(), false],
-      ['old-1', Date.now() - INACTIVITY_THRESHOLD_MS - 1000, false],
-      ['new-2', Date.now() - INACTIVITY_THRESHOLD_MS / 2, false],
-      ['old-2', Date.now() - TOMBSTONE_THRESHOLD_MS + 30000, false],
-      ['new-3', Date.now() - INACTIVITY_THRESHOLD_MS + 60000, false],
-      ['old-3', Date.now() - TOMBSTONE_THRESHOLD_MS + 60000, false],
-      ['new-tombstone', Date.now() - TOMBSTONE_THRESHOLD_MS + 10000, true],
-      ['old-tombstone', Date.now() - TOMBSTONE_THRESHOLD_MS - 60000, true],
-    ] as [string, number, boolean][]) {
-      if (deleted) {
-        await addDBState(cvrDb, {
-          instances: [
-            {
-              clientGroupID,
-              version: '1aa',
-              replicaVersion: null,
-              lastActive,
-              ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
-              clientSchema: null,
-              deleted: true,
-            },
-          ],
-        });
-      } else {
-        await addDBState(cvrDb, {
-          instances: [
-            {
-              clientGroupID,
-              version: '1aa',
-              replicaVersion: null,
-              lastActive,
-              ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
-              clientSchema: null,
-              deleted: false,
-            },
-          ],
-          clients: [
-            {
-              clientGroupID,
-              clientID: 'fooClient',
-            },
-          ],
-          queries: [
-            {
-              clientGroupID,
-              queryArgs: null,
-              queryName: null,
-              queryHash: 'oneHash',
-              clientAST: {table: 'issues'},
-              transformationHash: null,
-              transformationVersion: null,
-              patchVersion: null,
-              internal: null,
-              deleted: null,
-            },
-          ],
-          desires: [
-            {
-              clientGroupID,
-              clientID: 'fooClient',
-              queryHash: 'oneHash',
-              patchVersion: '1a9:01',
-              deleted: null,
-              inactivatedAt: null,
-              ttl: DEFAULT_TTL_MS,
-            },
-          ],
-          rows: [
-            {
-              clientGroupID,
-              rowKey: {a: 'b'},
-              rowVersion: '03',
-              refCounts: {oneHash: 1},
-              patchVersion: '1a0',
-              schema: 'public',
-              table: 'issues',
-            },
-          ],
-        });
-      }
+    for (const [clientGroupID, lastActive] of [
+      ['new-1', Date.now()],
+      ['old-1', Date.now() - INACTIVITY_THRESHOLD_MS - 1000],
+      ['new-2', Date.now() - INACTIVITY_THRESHOLD_MS / 2],
+      ['old-2', Date.UTC(2025, 4, 23)],
+      ['new-3', Date.now() - INACTIVITY_THRESHOLD_MS + 60000],
+      ['old-3', Date.UTC(2024, 3, 12)],
+    ] as [string, number][]) {
+      await addDBState(cvrDb, {
+        instances: [
+          {
+            clientGroupID,
+            version: '1aa',
+            replicaVersion: null,
+            lastActive,
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID,
+            clientID: 'fooClient',
+          },
+        ],
+        queries: [
+          {
+            clientGroupID,
+            queryArgs: null,
+            queryName: null,
+            queryHash: 'oneHash',
+            clientAST: {table: 'issues'},
+            transformationHash: null,
+            transformationVersion: null,
+            patchVersion: null,
+            internal: null,
+            deleted: null,
+          },
+        ],
+        desires: [
+          {
+            clientGroupID,
+            clientID: 'fooClient',
+            queryHash: 'oneHash',
+            patchVersion: '1a9:01',
+            deleted: null,
+            inactivatedAt: null,
+            ttl: DEFAULT_TTL_MS,
+          },
+        ],
+        rows: [
+          {
+            clientGroupID,
+            rowKey: {a: 'b'},
+            rowVersion: '03',
+            refCounts: {oneHash: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      });
     }
 
     return () => testDBs.drop(cvrDb);
@@ -207,13 +181,9 @@ describe('view-syncer/cvr-purger', () => {
         {clientGroupID: 'new-3'},
       ],
       instances: [
-        {clientGroupID: 'new-1', deleted: false},
-        {clientGroupID: 'new-2', deleted: false},
-        {clientGroupID: 'new-3', deleted: false},
-        {clientGroupID: 'new-tombstone', deleted: true},
-        {clientGroupID: 'old-1', deleted: true},
-        {clientGroupID: 'old-2', deleted: true},
-        {clientGroupID: 'old-3', deleted: true},
+        {clientGroupID: 'new-1'},
+        {clientGroupID: 'new-2'},
+        {clientGroupID: 'new-3'},
       ],
       queries: [
         {clientGroupID: 'new-1'},
@@ -247,13 +217,10 @@ describe('view-syncer/cvr-purger', () => {
         {clientGroupID: 'new-3'},
       ],
       instances: [
-        {clientGroupID: 'new-1', deleted: false},
-        {clientGroupID: 'old-1', deleted: false},
-        {clientGroupID: 'new-2', deleted: false},
-        {clientGroupID: 'new-3', deleted: false},
-        {clientGroupID: 'new-tombstone', deleted: true},
-        {clientGroupID: 'old-2', deleted: true},
-        {clientGroupID: 'old-3', deleted: true},
+        {clientGroupID: 'new-1'},
+        {clientGroupID: 'old-1'},
+        {clientGroupID: 'new-2'},
+        {clientGroupID: 'new-3'},
       ],
       queries: [
         {clientGroupID: 'new-1'},
@@ -285,13 +252,9 @@ describe('view-syncer/cvr-purger', () => {
         {clientGroupID: 'new-3'},
       ],
       instances: [
-        {clientGroupID: 'new-1', deleted: false},
-        {clientGroupID: 'new-2', deleted: false},
-        {clientGroupID: 'new-3', deleted: false},
-        {clientGroupID: 'new-tombstone', deleted: true},
-        {clientGroupID: 'old-2', deleted: true},
-        {clientGroupID: 'old-3', deleted: true},
-        {clientGroupID: 'old-1', deleted: true},
+        {clientGroupID: 'new-1'},
+        {clientGroupID: 'new-2'},
+        {clientGroupID: 'new-3'},
       ],
       queries: [
         {clientGroupID: 'new-1'},
@@ -325,49 +288,45 @@ describe('view-syncer/cvr-purger', () => {
     });
 
     await rowLocked;
-    try {
-      expect(await purger.purgeInactiveCVRs(1000)).toEqual({
-        purged: 2,
-        remaining: 1,
-      });
-      expect(await getAllState(cvrDb)).toMatchObject({
-        clients: [
-          {clientGroupID: 'new-1'},
-          {clientGroupID: 'new-2'},
-          {clientGroupID: 'new-3'},
-          {clientGroupID: 'old-3'},
-        ],
-        desires: [
-          {clientGroupID: 'new-1'},
-          {clientGroupID: 'new-2'},
-          {clientGroupID: 'new-3'},
-          {clientGroupID: 'old-3'},
-        ],
-        instances: [
-          {clientGroupID: 'new-1', deleted: false},
-          {clientGroupID: 'new-2', deleted: false},
-          {clientGroupID: 'new-3', deleted: false},
-          {clientGroupID: 'old-3', deleted: false},
-          {clientGroupID: 'new-tombstone', deleted: true},
-          {clientGroupID: 'old-1', deleted: true},
-          {clientGroupID: 'old-2', deleted: true},
-        ],
-        queries: [
-          {clientGroupID: 'new-1'},
-          {clientGroupID: 'new-2'},
-          {clientGroupID: 'new-3'},
-          {clientGroupID: 'old-3'},
-        ],
-        rows: [
-          {clientGroupID: 'new-1'},
-          {clientGroupID: 'new-2'},
-          {clientGroupID: 'new-3'},
-          {clientGroupID: 'old-3'},
-        ],
-      });
-    } finally {
-      // Let the locking transaction complete.
-      releaseRowLock();
-    }
+
+    expect(await purger.purgeInactiveCVRs(1000)).toEqual({
+      purged: 2,
+      remaining: 1,
+    });
+    expect(await getAllState(cvrDb)).toMatchObject({
+      clients: [
+        {clientGroupID: 'new-1'},
+        {clientGroupID: 'new-2'},
+        {clientGroupID: 'new-3'},
+        {clientGroupID: 'old-3'},
+      ],
+      desires: [
+        {clientGroupID: 'new-1'},
+        {clientGroupID: 'new-2'},
+        {clientGroupID: 'new-3'},
+        {clientGroupID: 'old-3'},
+      ],
+      instances: [
+        {clientGroupID: 'new-1'},
+        {clientGroupID: 'new-2'},
+        {clientGroupID: 'new-3'},
+        {clientGroupID: 'old-3'},
+      ],
+      queries: [
+        {clientGroupID: 'new-1'},
+        {clientGroupID: 'new-2'},
+        {clientGroupID: 'new-3'},
+        {clientGroupID: 'old-3'},
+      ],
+      rows: [
+        {clientGroupID: 'new-1'},
+        {clientGroupID: 'new-2'},
+        {clientGroupID: 'new-3'},
+        {clientGroupID: 'old-3'},
+      ],
+    });
+
+    // Let the locking transaction complete.
+    releaseRowLock();
   });
 });

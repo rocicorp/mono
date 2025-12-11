@@ -21,6 +21,7 @@ import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
 import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
+import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import type {
   PokeEndBody,
   PokePartBody,
@@ -31,7 +32,6 @@ import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.t
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
-import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
@@ -115,7 +115,6 @@ describe('view-syncer/service', () => {
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
-    profileID: 'p0000g00000003203',
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
@@ -205,52 +204,6 @@ describe('view-syncer/service', () => {
     await expect(client.dequeue()).rejects.toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: The initConnection message for a new client group must include client schema.]`,
     );
-  });
-
-  test('initConnectionMessage sets profileID', async () => {
-    const client = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ]);
-    await client.dequeue();
-
-    const cvrStore = new CVRStore(
-      lc,
-      cvrDB,
-      upstreamDb,
-      SHARD,
-      TASK_ID,
-      serviceID,
-      ON_FAILURE,
-    );
-    const cvr = await cvrStore.load(lc, Date.now());
-    expect(cvr).toMatchObject({
-      profileID: SYNC_CONTEXT.profileID,
-    });
-  });
-
-  test('initConnectionMessage with no profileID sets a default profileID based on the client group ID', async () => {
-    const oldSyncContext = {
-      ...SYNC_CONTEXT,
-      profileID: null,
-    };
-    const client = connect(oldSyncContext, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ]);
-    await client.dequeue();
-
-    const cvrStore = new CVRStore(
-      lc,
-      cvrDB,
-      upstreamDb,
-      SHARD,
-      TASK_ID,
-      serviceID,
-      ON_FAILURE,
-    );
-    const cvr = await cvrStore.load(lc, Date.now());
-    expect(cvr).toMatchObject({
-      profileID: `cg${serviceID}`,
-    });
   });
 
   test('responds to changeDesiredQueries patch', async () => {
@@ -3410,7 +3363,6 @@ describe('view-syncer/service', () => {
     const client2 = connect(
       {
         clientID: 'bar',
-        profileID: 'p0000g00000003203',
         wsID: '9382',
         baseCookie: preAdvancement.cookie,
         protocolVersion: PROTOCOL_VERSION,

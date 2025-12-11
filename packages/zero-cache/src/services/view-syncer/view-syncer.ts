@@ -68,7 +68,7 @@ import {
   type PokeHandler,
   type RowPatch,
 } from './client-handler.ts';
-import {ClientNotFoundError, CVRStore} from './cvr-store.ts';
+import {CVRStore} from './cvr-store.ts';
 import type {CVRUpdater} from './cvr.ts';
 import {
   CVRConfigDrivenUpdater,
@@ -111,7 +111,6 @@ export type TokenData = {
 export type SyncContext = {
   readonly clientID: string;
   readonly wsID: string;
-  readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
   readonly schemaVersion: number | null;
@@ -440,7 +439,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               cvr.replicaVersion
             }, DB=${this.#pipelines.replicaVersion}`;
             lc.info?.(`resetting CVR: ${message}`);
-            throw new ClientNotFoundError(message);
+            throw new ProtocolErrorWithLevel({
+              kind: ErrorKind.ClientNotFound,
+              message,
+              origin: ErrorOrigin.ZeroCache,
+            });
           }
 
           if (this.#pipelinesSynced) {
@@ -607,7 +610,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return startSpan(tracer, 'vs.initConnection', () => {
       const {
         clientID,
-        profileID,
         wsID,
         baseCookie,
         schemaVersion,
@@ -699,17 +701,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               origin: ErrorOrigin.ZeroCache,
             });
           }
-          await this.#handleConfigUpdate(
-            lc,
-            clientID,
-            msg,
-            cvr,
-            // Until the profileID is required in the URL, default it to
-            // `cg${clientGroupID}`, as is done in the schema migration.
-            // As clients update to the zero version with the profileID logic,
-            // the value will be correspondingly in the CVR db.
-            profileID ?? `cg${this.id}`,
-          );
+          await this.#handleConfigUpdate(lc, clientID, msg, cvr);
           // this.#authData  and cvr (in particular cvr.clientSchema) have been
           // initialized, signal the run loop to run.
           this.#initialized.resolve('initialized');
@@ -929,7 +921,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       activeClients,
     }: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
-    profileID?: string,
   ) =>
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
       const deletedClientIDs: string[] = [];
@@ -941,9 +932,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         if (clientSchema) {
           updater.setClientSchema(lc, clientSchema);
-        }
-        if (profileID) {
-          updater.setProfileID(lc, profileID);
         }
 
         // Apply requested patches.
@@ -2101,7 +2089,11 @@ function checkClientAndCVRVersions(
     cmpVersions(client, NEW_CVR_VERSION) > 0
   ) {
     // CVR is empty but client is not.
-    throw new ClientNotFoundError('Client not found');
+    throw new ProtocolErrorWithLevel({
+      kind: ErrorKind.ClientNotFound,
+      message: 'Client not found',
+      origin: ErrorOrigin.ZeroCache,
+    });
   }
 
   if (cmpVersions(client, cvr) > 0) {

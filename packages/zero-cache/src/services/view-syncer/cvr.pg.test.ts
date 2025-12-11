@@ -128,19 +128,11 @@ describe('view-syncer/cvr', () => {
           ...(await db`SELECT * FROM ${db(`${cvrSchema(SHARD)}.` + table)}`),
         ];
       }
-      let tableState: unknown[] = [...(state[table as keyof DBState] || [])];
+      const tableState = [...(state[table as keyof DBState] || [])];
       switch (table) {
         case 'instances': {
           (res as InstancesRow[]).sort(compareInstancesRows);
           (tableState as InstancesRow[]).sort(compareInstancesRows);
-          // Fill in default columns to reduce test boilerplate.
-          tableState = (tableState as Partial<InstancesRow>[]).map(row => ({
-            replicaVersion: null,
-            clientSchema: null,
-            profileID: null,
-            deleted: false,
-            ...row,
-          }));
           break;
         }
         case 'clients': {
@@ -277,7 +269,6 @@ describe('view-syncer/cvr', () => {
       clients: {},
       queries: {},
       clientSchema: null,
-      profileID: null,
       ttlClock: ttlClockFromNumber(0),
     } satisfies CVRSnapshot);
     const flushed = (
@@ -347,7 +338,6 @@ describe('view-syncer/cvr', () => {
       clients: {},
       queries: {},
       clientSchema: null,
-      profileID: null,
       ttlClock: ttlClockFromNumber(0),
     } satisfies CVRSnapshot);
 
@@ -392,7 +382,6 @@ describe('view-syncer/cvr', () => {
         "clients": {},
         "id": "abc123",
         "lastActive": 1713571200000,
-        "profileID": null,
         "queries": {},
         "replicaVersion": null,
         "ttlClock": 1713571200000,
@@ -473,111 +462,6 @@ describe('view-syncer/cvr', () => {
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Provided schema does not match previous schema]`,
     );
-  });
-
-  test('set profile ID', async () => {
-    const pgStore = new CVRStore(
-      lc,
-      cvrDb,
-      upstreamDb,
-      SHARD,
-      'my-task',
-      'abc123',
-      ON_FAILURE,
-    );
-
-    const cvr = await pgStore.load(lc, LAST_CONNECT);
-    expect(cvr).toMatchObject({
-      profileID: null,
-    });
-
-    const updater = new CVRConfigDrivenUpdater(pgStore, cvr, SHARD);
-    updater.setProfileID(lc, 'cgabc123');
-
-    const {cvr: updated} = await updater.flush(
-      lc,
-      LAST_CONNECT,
-      Date.UTC(2024, 3, 20),
-      ttlClockFromNumber(Date.UTC(2024, 3, 20)),
-    );
-    expect(updated).toMatchObject({
-      profileID: 'cgabc123',
-    });
-
-    // Verify round tripping.
-    const pgStore2 = new CVRStore(
-      lc,
-      cvrDb,
-      upstreamDb,
-      SHARD,
-      'my-task',
-      'abc123',
-      ON_FAILURE,
-    );
-    const reloaded = await pgStore2.load(lc, LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
-
-    await expectState(cvrDb, {
-      instances: [
-        {
-          clientGroupID: 'abc123',
-          version: '00',
-          lastActive: 1713571200000,
-          ttlClock: ttlClockFromNumber(1713571200000),
-          replicaVersion: null,
-          owner: 'my-task',
-          grantedAt: 1709251200000,
-          clientSchema: null,
-          profileID: 'cgabc123',
-        },
-      ],
-      clients: [],
-      queries: [],
-      desires: [],
-    });
-
-    const updater2 = new CVRConfigDrivenUpdater(pgStore, updated, SHARD);
-
-    // Setting the same profile ID should be a noop.
-    updater2.setProfileID(lc, 'cgabc123');
-    const {flushed} = await updater2.flush(
-      lc,
-      LAST_CONNECT,
-      Date.UTC(2024, 3, 20),
-      ttlClockFromNumber(Date.UTC(2024, 3, 20)),
-    );
-    expect(flushed).toBe(false);
-
-    // Setting the a new profile ID should result in a change.
-    updater2.setProfileID(lc, 'p0000039s8200d9a0');
-    const {cvr: updated2} = await updater2.flush(
-      lc,
-      LAST_CONNECT,
-      Date.UTC(2024, 3, 20),
-      ttlClockFromNumber(Date.UTC(2024, 3, 20)),
-    );
-    expect(updated2).toMatchObject({
-      profileID: 'p0000039s8200d9a0',
-    });
-
-    await expectState(cvrDb, {
-      instances: [
-        {
-          clientGroupID: 'abc123',
-          version: '00',
-          lastActive: 1713571200000,
-          ttlClock: ttlClockFromNumber(1713571200000),
-          replicaVersion: null,
-          owner: 'my-task',
-          grantedAt: 1709251200000,
-          clientSchema: null,
-          profileID: 'p0000039s8200d9a0',
-        },
-      ],
-      clients: [],
-      queries: [],
-      desires: [],
-    });
   });
 
   test('load existing cvr', async () => {
@@ -667,7 +551,6 @@ describe('view-syncer/cvr', () => {
         },
       },
       clientSchema: null,
-      profileID: null,
     } satisfies CVRSnapshot);
 
     // Relies on an async homing signal (with no explicit flush, so use waitFor)
@@ -781,7 +664,6 @@ describe('view-syncer/cvr', () => {
         },
       },
       clientSchema: null,
-      profileID: null,
     } satisfies CVRSnapshot);
 
     expect(updated).toEqual(cvr);
@@ -1032,7 +914,6 @@ describe('view-syncer/cvr', () => {
         },
       },
       clientSchema: null,
-      profileID: null,
     } satisfies CVRSnapshot);
 
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
@@ -1339,7 +1220,6 @@ describe('view-syncer/cvr', () => {
         },
       },
       clientSchema: null,
-      profileID: null,
     } satisfies CVRSnapshot);
 
     await expectState(cvrDb, {
@@ -2718,7 +2598,7 @@ describe('view-syncer/cvr', () => {
       instances: newState.instances,
       clients: newState.clients,
       queries: newState.queries,
-    }).toMatchObject({
+    }).toEqual({
       instances: [
         {
           clientGroupID: 'abc123',
@@ -3876,7 +3756,6 @@ describe('view-syncer/cvr', () => {
         },
         "id": "abc123",
         "lastActive": 1713830400000,
-        "profileID": null,
         "queries": {
           "oneHash": {
             "ast": {
@@ -5254,7 +5133,6 @@ describe('view-syncer/cvr', () => {
           },
           "id": "abc123",
           "lastActive": 1742256000000,
-          "profileID": null,
           "queries": {
             "oneHash": {
               "ast": {
@@ -5332,7 +5210,6 @@ describe('view-syncer/cvr', () => {
           stateVersion: '1aa',
         },
         clientSchema: null,
-        profileID: null,
       } satisfies CVRSnapshot);
     });
 
@@ -5554,51 +5431,50 @@ describe('view-syncer/cvr', () => {
       );
       const cvr = await cvrStore.load(lc, LAST_CONNECT);
       expect(cvr).toMatchInlineSnapshot(`
-          {
-            "clientSchema": null,
-            "clients": {
-              "fooClient": {
-                "desiredQueryIDs": [
-                  "oneHash",
-                ],
-                "id": "fooClient",
-              },
+        {
+          "clientSchema": null,
+          "clients": {
+            "fooClient": {
+              "desiredQueryIDs": [
+                "oneHash",
+              ],
+              "id": "fooClient",
             },
-            "id": "abc123",
-            "lastActive": 1742256000000,
-            "profileID": null,
-            "queries": {
-              "oneHash": {
-                "ast": {
-                  "table": "issues",
-                },
-                "clientState": {
-                  "fooClient": {
-                    "inactivatedAt": undefined,
-                    "ttl": 300000,
-                    "version": {
-                      "minorVersion": 1,
-                      "stateVersion": "1a9",
-                    },
+          },
+          "id": "abc123",
+          "lastActive": 1742256000000,
+          "queries": {
+            "oneHash": {
+              "ast": {
+                "table": "issues",
+              },
+              "clientState": {
+                "fooClient": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "minorVersion": 1,
+                    "stateVersion": "1a9",
                   },
                 },
-                "id": "oneHash",
-                "patchVersion": undefined,
-                "transformationHash": "oneHashTransformed",
-                "transformationVersion": {
-                  "minorVersion": 1,
-                  "stateVersion": "1a9",
-                },
-                "type": "client",
               },
+              "id": "oneHash",
+              "patchVersion": undefined,
+              "transformationHash": "oneHashTransformed",
+              "transformationVersion": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+              "type": "client",
             },
-            "replicaVersion": "120",
-            "ttlClock": 1742256000000,
-            "version": {
-              "stateVersion": "1aa",
-            },
-          }
-        `);
+          },
+          "replicaVersion": "120",
+          "ttlClock": 1742256000000,
+          "version": {
+            "stateVersion": "1aa",
+          },
+        }
+      `);
 
       const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
       expect(
@@ -5671,7 +5547,6 @@ describe('view-syncer/cvr', () => {
           stateVersion: '1aa',
         },
         clientSchema: null,
-        profileID: null,
       } satisfies CVRSnapshot);
     });
 
@@ -5932,71 +5807,70 @@ describe('view-syncer/cvr', () => {
       ttlClock,
     );
     expect(updated).toMatchInlineSnapshot(`
-        {
-          "clientSchema": null,
-          "clients": {
-            "client-a": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-a",
-            },
-            "client-c": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-c",
-            },
+      {
+        "clientSchema": null,
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
           },
-          "id": "abc123",
-          "lastActive": 1709683200000,
-          "profileID": null,
-          "queries": {
-            "oneHash": {
-              "ast": {
-                "table": "issues",
-              },
-              "clientState": {
-                "client-a": {
-                  "inactivatedAt": undefined,
-                  "ttl": 300000,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
-                },
-                "client-b": {
-                  "inactivatedAt": 1709683200000,
-                  "ttl": 300000,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1aa",
-                  },
-                },
-                "client-c": {
-                  "inactivatedAt": undefined,
-                  "ttl": 300000,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1709683200000,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
+              "client-a": {
+                "inactivatedAt": undefined,
+                "ttl": 300000,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
                 },
               },
-              "id": "oneHash",
-              "patchVersion": undefined,
-              "transformationHash": undefined,
-              "transformationVersion": undefined,
-              "type": "client",
+              "client-b": {
+                "inactivatedAt": 1709683200000,
+                "ttl": 300000,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1aa",
+                },
+              },
+              "client-c": {
+                "inactivatedAt": undefined,
+                "ttl": 300000,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
+                },
+              },
             },
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+            "type": "client",
           },
-          "replicaVersion": "120",
-          "ttlClock": 1709683200000,
-          "version": {
-            "minorVersion": 1,
-            "stateVersion": "1aa",
-          },
-        }
-      `);
+        },
+        "replicaVersion": "120",
+        "ttlClock": 1709683200000,
+        "version": {
+          "minorVersion": 1,
+          "stateVersion": "1aa",
+        },
+      }
+    `);
     expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 1,
@@ -6054,11 +5928,9 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "abc123",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1709251200000,
             "lastActive": 1709683200000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "120",
             "ttlClock": 1709683200000,
             "version": "1aa:01",
@@ -6256,62 +6128,61 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
 
     expect(cvr).toMatchInlineSnapshot(`
-        {
-          "clientSchema": null,
-          "clients": {
-            "client-a": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-a",
-            },
-            "client-c": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-c",
-            },
+      {
+        "clientSchema": null,
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
           },
-          "id": "abc123",
-          "lastActive": 1713830400000,
-          "profileID": null,
-          "queries": {
-            "oneHash": {
-              "ast": {
-                "table": "issues",
-              },
-              "clientState": {
-                "client-a": {
-                  "inactivatedAt": undefined,
-                  "ttl": 300000,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
-                },
-                "client-c": {
-                  "inactivatedAt": undefined,
-                  "ttl": 300000,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1713830400000,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
+              "client-a": {
+                "inactivatedAt": undefined,
+                "ttl": 300000,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
                 },
               },
-              "id": "oneHash",
-              "patchVersion": undefined,
-              "transformationHash": undefined,
-              "transformationVersion": undefined,
-              "type": "client",
+              "client-c": {
+                "inactivatedAt": undefined,
+                "ttl": 300000,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
+                },
+              },
             },
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+            "type": "client",
           },
-          "replicaVersion": "120",
-          "ttlClock": 1713830400000,
-          "version": {
-            "stateVersion": "1aa",
-          },
-        }
-      `);
+        },
+        "replicaVersion": "120",
+        "ttlClock": 1713830400000,
+        "version": {
+          "stateVersion": "1aa",
+        },
+      }
+    `);
 
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
@@ -6376,11 +6247,9 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "abc123",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1709251200000,
             "lastActive": 1713830400000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "120",
             "ttlClock": 1713830400000,
             "version": "1aa",
@@ -6388,11 +6257,9 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "def456",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": null,
             "lastActive": 1713830400000,
             "owner": null,
-            "profileID": null,
             "replicaVersion": "120",
             "ttlClock": 1713830400000,
             "version": "1aa",
@@ -6537,11 +6404,9 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "abc123",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": 1709251200000,
             "lastActive": 1713830400000,
             "owner": "my-task",
-            "profileID": null,
             "replicaVersion": "120",
             "ttlClock": 1713830400000,
             "version": "1aa",
@@ -6549,11 +6414,9 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "def456",
             "clientSchema": null,
-            "deleted": false,
             "grantedAt": null,
             "lastActive": 1713830400000,
             "owner": null,
-            "profileID": null,
             "replicaVersion": "120",
             "ttlClock": 1713830400000,
             "version": "1aa",
@@ -6696,14 +6559,13 @@ describe('view-syncer/cvr', () => {
       },
       id: 'abc123',
       lastActive: t0,
-      profileID: null,
       queries: {},
       replicaVersion: '120',
-      ttlClock: ttlClockFromNumber(t0),
+      ttlClock: t0,
       version: {
         stateVersion: '1aa',
       },
-    } satisfies CVRSnapshot);
+    });
 
     // let an hour pass...
     const t1 = t0 + 60 * 60 * 1000;
@@ -6733,7 +6595,6 @@ describe('view-syncer/cvr', () => {
       },
       id: 'abc123',
       lastActive: t1,
-      profileID: null,
       queries: {
         q1: query,
       },

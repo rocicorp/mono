@@ -29,7 +29,6 @@ function makeCVR(clients: Record<string, QueryDef[]>): CVR {
       stateVersion: '1aa',
     },
     clientSchema: null,
-    profileID: null,
   };
 
   for (const [clientID, queries] of Object.entries(clients)) {

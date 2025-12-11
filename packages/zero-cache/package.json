@@ -12,7 +12,7 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint --quiet --type-aware src/",
+    "lint": "oxlint --type-aware src/",
     "bench": "vitest bench --run --project zero-cache/no-pg",
     "local": "tsx tool/local.ts",
     "start": "tsx ./src/server/runner/main.ts",

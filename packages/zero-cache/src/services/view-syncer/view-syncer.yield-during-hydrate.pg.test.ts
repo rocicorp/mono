@@ -4,16 +4,12 @@ import type {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
-import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
+import type {Subscription} from '../../types/subscription.ts';
 
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
-import {CVRStore} from './cvr-store.ts';
-import {CVRConfigDrivenUpdater, CVRQueryDrivenUpdater} from './cvr.ts';
-import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   ISSUES_QUERY,
   ISSUES_QUERY_WITH_RELATED,
@@ -33,6 +29,11 @@ import {
   TimeSliceTimer,
   type ViewSyncerService,
 } from './view-syncer.ts';
+import {CVRStore} from './cvr-store.ts';
+
+import {ttlClockFromNumber} from './ttl-clock.ts';
+import {CVRConfigDrivenUpdater, CVRQueryDrivenUpdater} from './cvr.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 
 describe('view-syncer/yield-during-hydrate', () => {
   let replicaDbFile: DbFile;
@@ -50,7 +51,6 @@ describe('view-syncer/yield-during-hydrate', () => {
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: CLIENT_ID,
-    profileID: 'p0000g00000003203',
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,

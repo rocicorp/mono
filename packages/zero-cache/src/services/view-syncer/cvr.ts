@@ -59,7 +59,6 @@ export type CVR = {
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
   clientSchema: ClientSchema | null;
-  profileID: string | null;
 };
 
 /** Exported immutable CVR type. */
@@ -73,7 +72,6 @@ export type CVRSnapshot = {
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
   readonly clientSchema: ClientSchema | null;
-  readonly profileID: string | null;
 };
 
 const CLIENT_LMID_QUERY_ID = 'lmids';
@@ -283,24 +281,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         message: `Provided schema does not match previous schema`,
         origin: ErrorOrigin.ZeroCache,
       });
-    }
-  }
-
-  setProfileID(lc: LogContext, profileID: string) {
-    if (this._cvr.profileID !== profileID) {
-      if (
-        this._cvr.profileID !== null &&
-        !this._cvr.profileID.startsWith('cg')
-      ) {
-        // We expect profile ID's to change from null or from the back-filled
-        // "cg..." value. Log a warning otherwise to surface unexpected or
-        // pathological conditions.
-        lc.warn?.(
-          `changing profile ID from ${this._cvr.profileID} to ${profileID}`,
-        );
-      }
-      this._cvr.profileID = profileID;
-      this._cvrStore.putInstance(this._cvr);
     }
   }
 
