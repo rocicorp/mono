@@ -308,11 +308,29 @@ export class Zero<
   MD extends CustomMutatorDefs | undefined = undefined,
   C = DefaultContext,
 > {
+  /**
+   * Version of the `@rocicorp/zero` package, useful for logging and bug reports.
+   */
   readonly version = version;
 
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;
   readonly #server: HTTPString | null;
+
+  /**
+   * Application-level identifier for the current user. This value is sent to
+   * the server on every connection and is included in metrics.
+   */
   readonly userID: string;
+
+  /**
+   * Optional namespace used to scope the underlying storage.
+   *
+   * If you have more than one set of Zero data per-user (i.e., for different apps in the same domain),
+   * you can use `storageKey` to distinguish between them.
+   *
+   * This is concatenated along with `userID` and other internal Zero information
+   * to form a unique IndexedDB database name.
+   */
   readonly storageKey: string;
 
   readonly #lc: LogContext;
@@ -909,6 +927,10 @@ export class Zero<
     );
   }
 
+  /**
+   * Context object that is automatically threaded into queries and mutators.
+   * Provided via `ZeroOptions.context` when constructing the client.
+   */
   get context(): C {
     return this.#options.context as C;
   }
@@ -983,22 +1005,35 @@ export class Zero<
 
   /**
    * The server URL that this Zero instance is configured with.
+   *
+   * @deprecated Use `cacheURL` instead.
    */
   get server(): HTTPString | null {
     return this.#server;
   }
 
   /**
-   * The name of the IndexedDB database in which the data of this
-   * instance of Zero is stored.
+   * The zero cache URL configured for this Zero instance. This is the origin that
+   * WebSocket connections are made against (or `null` if the client was
+   * created without a `cacheURL`).
+   */
+  get cacheURL(): HTTPString | null {
+    return this.#server;
+  }
+
+  /**
+   * Name of the IndexedDB database used for this client. It is derived from
+   * the user ID and storage key so multiple Zero instances stay isolated.
    */
   get idbName(): string {
     return this.#rep.idbName;
   }
 
   /**
-   * The schema version of the data understood by this application.
-   * See [[ZeroOptions.schemaVersion]].
+   * Schema version sent to the server and used to version the local cache.
+   * Derived as `${PROTOCOL_VERSION}.${hash(schema)}` so any protocol bump or
+   * schema change switches to a new IndexedDB database (old data remains on
+   * disk but is no longer used).
    */
   get schemaVersion(): string {
     return this.#rep.schemaVersion;
@@ -1027,34 +1062,44 @@ export class Zero<
   }
 
   /**
-   * The client ID for this instance of Zero. Each instance
-   * gets a unique client ID.
+   * Unique identifier for this specific Zero instance (tab/window). Changes
+   * when local data is cleared or when a new instance is created.
    */
   get clientID(): ClientID {
     return this.#rep.clientID;
   }
 
+  /**
+   * Stable identifier shared by all tabs on the same device/profile. Resolves
+   * after Replicache initialization and stays constant across reconnects.
+   */
   get clientGroupID(): Promise<ClientGroupID> {
     return this.#rep.clientGroupID;
   }
 
   /**
-   * Provides simple "CRUD" mutations for the tables in the schema.
+   * Executes mutators registered with this `Zero` instance.
    *
-   * Each table has `create`, `set`, `update`, and `delete` methods.
-   *
-   * ```ts
-   * await zero.mutate.issue.create({id: '1', title: 'First issue', priority: 'high'});
-   * await zero.mutate.comment.create({id: '1', text: 'First comment', issueID: '1'});
-   * ```
-   *
-   * The `update` methods support partials. Unspecified or `undefined` fields
-   * are left unchanged:
+   * Create a `MutateRequest` by calling a generated mutator (for example from
+   * `defineMutatorsWithType`) and pass it to `z.mutate(...)`. The return value
+   * exposes `client` and `server` promises so you can await optimistic and
+   * confirmed results.
    *
    * ```ts
-   * // Priority left unchanged.
-   * await zero.mutate.issue.update({id: '1', title: 'Updated title'});
+   * const mutators = defineMutatorsWithType<typeof schema>()({
+   *   insertIssue: defineMutatorWithType<typeof schema>()(({tx, args}) =>
+   *     tx.mutate.issues.insert(args),
+   *   ),
+   * });
+   *
+   * const z = new Zero({schema, mutators, ...});
+   * await z.mutate(mutators.insertIssue({id: '1', title: 'First'})).client;
    * ```
+   *
+   * When `enableLegacyMutators` is true, `mutate` also exposes
+   * table-scoped CRUD helpers (e.g. `z.mutate.issue.insert(...)`).
+   * It is recommended to use the `z.mutate(mutators.table.action(...))`
+   * pattern instead.
    */
   readonly mutate: MakeMutatePropertyType<S, MD, C> &
     // Also callable with MutateRequest: zero.mutate(mr)
@@ -1062,10 +1107,11 @@ export class Zero<
     ((mr: MutateRequest<any, S, C, any>) => MutatorResult);
 
   /**
-   * Provides a way to batch multiple CRUD mutations together:
+   * Legacy helper to batch multiple CRUD mutations together when
+   * `schema.enableLegacyMutators === true`.
    *
    * ```ts
-   * await zero.mutateBatch(m => {
+   * await zero.mutateBatch(async m => {
    *   await m.issue.create({id: '1', title: 'First issue'});
    *   await m.comment.create({id: '1', text: 'First comment', issueID: '1'});
    * });
