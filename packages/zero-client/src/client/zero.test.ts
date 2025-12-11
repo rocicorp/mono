@@ -336,8 +336,7 @@ describe('onOnlineChange callback', () => {
     const connectMsg = findLast(
       z.testLogSink.messages,
       ([level, _context, args]) =>
-        level === 'info' &&
-        args.find(arg => /Connecting to/.test(String(arg))),
+        level === 'info' && args.find(arg => /Connecting to/.test(String(arg))),
     );
     expect(connectMsg?.[2][1]).matches(
       /&reason=rehomed&fromServer=foo%2Fbar%2Fbaz/,
