@@ -54,6 +54,7 @@ describe('view-syncer/service', () => {
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
+    profileID: 'p0000g00000003203',
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
