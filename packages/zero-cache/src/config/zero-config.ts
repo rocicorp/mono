@@ -160,11 +160,17 @@ const authOptions = {
     desc: [
       `A public key in JWK format used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
     ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
   },
   jwksUrl: {
     type: v.string().optional(),
     desc: [
       `A URL that returns a JWK set used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
+    ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
     ],
   },
   secret: {
@@ -172,17 +178,19 @@ const authOptions = {
     desc: [
       `A symmetric key used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
     ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
   },
 };
 
 const makeMutatorQueryOptions = (
-  replacement: string | undefined,
+  replacement: 'mutate-url' | 'query-url' | undefined,
   suffix: string,
 ) => ({
   url: {
     type: v.array(v.string()).optional(), // optional until we remove CRUD mutations
     desc: [
-      replacement ? `DEPRECATED. Use ${replacement} instead.` : ``,
       `The URL of the API server to which zero-cache will ${suffix}.`,
       ``,
       `{bold IMPORTANT:} URLs are matched using {bold URLPattern}, a standard Web API.`,
@@ -223,12 +231,18 @@ const makeMutatorQueryOptions = (
       ``,
       `For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern`,
     ],
+    ...(replacement
+      ? {deprecated: [`Use {bold ${replacement}} instead.`]}
+      : {}),
   },
   apiKey: {
     type: v.string().optional(),
     desc: [
       `An optional secret used to authorize zero-cache to call the API server handling writes.`,
     ],
+    ...(replacement
+      ? {deprecated: [`Use {bold ${replacement}-api-key} instead.`]}
+      : {}),
   },
   forwardCookies: {
     type: v.boolean().default(false),
@@ -237,6 +251,9 @@ const makeMutatorQueryOptions = (
       `This is useful for passing authentication cookies to the API server.`,
       `If false, cookies are not forwarded.`,
     ],
+    ...(replacement
+      ? {deprecated: [`Use {bold ${replacement}-forward-cookies} instead.`]}
+      : {}),
   },
 });
 
@@ -248,6 +265,7 @@ const getQueriesOptions = makeMutatorQueryOptions(
   'send synced queries',
 );
 
+/** @deprecated */
 export type AuthConfig = Config<typeof authOptions>;
 
 // Note: --help will list flags in the order in which they are defined here,
@@ -413,6 +431,7 @@ export const zeroOptions = {
 
   shard: shardOptions,
 
+  /** @deprecated */
   auth: authOptions,
 
   port: {
