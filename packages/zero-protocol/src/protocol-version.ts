@@ -49,7 +49,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 41 makes ClientSchema.primaryKey required (0.25)
 // -- version 42 adds planner events to AnalyzeQueryResult (0.25)
 // -- version 43 renames `plans` to `sqlitePlans`, `plannerEvents` to `joinPlans`, and `plannerDebug` option to `joinPlans` (0.25)
-export const PROTOCOL_VERSION = 43;
+// -- version 44 adds profileID to connection URL (0.25)
+export const PROTOCOL_VERSION = 44;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
