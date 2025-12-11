@@ -25,7 +25,7 @@ const harness = await bootstrap({
 });
 
 // Internal timeout for graceful handling (shorter than vitest timeout)
-const TEST_TIMEOUT_MS = 50_000;
+const TEST_TIMEOUT_MS = 15_000;
 
 /**
  * Error thrown when a fuzz test query exceeds the time limit.
@@ -49,7 +49,7 @@ function createCheckAbort(
   label: string,
 ): () => void {
   return () => {
-    const elapsed = performance.now() - startTime;
+    const elapsed = Date.now() - startTime;
     if (elapsed > timeoutMs) {
       throw new FuzzTimeoutError(label, elapsed);
     }
@@ -57,7 +57,7 @@ function createCheckAbort(
 }
 
 // oxlint-disable-next-line expect-expect
-test.each(Array.from({length: 0}, () => createCase()))(
+test.each(Array.from({length: 100}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
   60_000, // vitest timeout: longer than internal timeout to ensure we catch it ourselves
@@ -80,7 +80,7 @@ if (REPRO_SEED) {
       ),
     );
     await runCase(tc);
-  });
+  }, 60_000);
 }
 
 function createCase(seed?: number) {
@@ -114,7 +114,7 @@ async function runCase({
   rng: () => number;
 }) {
   const label = `fuzz-hydration ${seed}`;
-  const startTime = performance.now();
+  const startTime = Date.now();
   const checkAbort = createCheckAbort(startTime, TEST_TIMEOUT_MS, label);
 
   // Create a source wrapper that injects random yields and timeout checking
