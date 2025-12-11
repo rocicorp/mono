@@ -189,7 +189,7 @@ export async function initViewSyncerSchema(
 
       // Recreate the instances_last_active index to exclude tombstones
       await sql`
-        DROP INDEX instances_last_active IF EXISTS`;
+        DROP INDEX IF EXISTS ${sql(schema)}.instances_last_active`;
       await sql`
         CREATE INDEX instances_last_active ON ${sql(schema)}.instances ("lastActive")
           WHERE NOT "deleted"`;
