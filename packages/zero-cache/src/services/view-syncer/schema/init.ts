@@ -182,6 +182,37 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migratedV15ToV16: Migration = {
+    migrateSchema: async (_, sql) => {
+      await sql`ALTER TABLE ${sql(schema)}.instances ADD COLUMN "profileID" TEXT`;
+      await sql`ALTER TABLE ${sql(schema)}.instances ADD COLUMN "deleted" BOOL DEFAULT FALSE`;
+
+      // Recreate the instances_last_active index to exclude tombstones
+      await sql`
+        DROP INDEX IF EXISTS ${sql(schema)}.instances_last_active`;
+      await sql`
+        CREATE INDEX instances_last_active ON ${sql(schema)}.instances ("lastActive")
+          WHERE NOT "deleted"`;
+      await sql`
+        CREATE INDEX tombstones_last_active ON ${sql(schema)}.instances ("lastActive")
+          WHERE "deleted"`;
+      await sql`
+        CREATE INDEX profile_ids_last_active ON ${sql(schema)}.instances ("lastActive", "profileID")
+          WHERE "profileID" IS NOT NULL`;
+    },
+
+    // Backfill profileIDs to the `cg${clientGroupID}`, as is done for
+    // client groups from old zero-clients that don't send a profileID.
+    migrateData: async (lc, sql) => {
+      lc.info?.('Backfilling instance.profileIDs');
+      await sql`
+        UPDATE ${sql(schema)}.instances
+        SET "profileID" = 'cg' || "clientGroupID"
+        WHERE "profileID" IS NULL
+      `;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -211,6 +242,9 @@ export async function initViewSyncerSchema(
     // directly as DOUBLE PRECISION, avoiding postgres.js TIMESTAMPTZ
     // type conversion issues
     15: migratedV14ToV15,
+    // V16 adds instances."profileID" and a corresponding index for estimating
+    // active user counts more accurately for apps that use memstore.
+    16: migratedV15ToV16,
   };
 
   await runSchemaMigrations(

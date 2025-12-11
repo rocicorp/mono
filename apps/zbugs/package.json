@@ -18,7 +18,7 @@
     "check-format": "prettier --check .",
     "lint": "oxlint --type-aware --react-plugin src/",
     "preview": "vite preview",
-    "zero": "tsx ../../packages/zero-cache/src/server/runner/main.ts",
+    "zero": "tsx --trace-warnings ../../packages/zero-cache/src/server/runner/main.ts",
     "zero-cache-dev": "tsx ../../packages/zero/src/zero-cache-dev.ts",
     "zero-brk": "tsx --inspect-brk ../../packages/zero-cache/src/server/debug/single.ts",
     "transform-query": "tsx ../../packages/zero-cache/src/scripts/transform-query.ts",
