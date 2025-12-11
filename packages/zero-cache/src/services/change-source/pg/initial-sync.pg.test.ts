@@ -342,6 +342,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     replicatedIndexes: IndexSpec[];
     replicatedData: Record<string, object[]>;
     resultingPublications: string[];
+    minPgVersion?: number;
   };
 
   const cases: Case[] = [
@@ -1451,6 +1452,193 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       ],
     },
     {
+      name: 'publication with generated columns',
+      minPgVersion: 180000,
+      setupUpstreamQuery: `
+        CREATE TABLE users(
+          "userID" INTEGER, 
+          handle TEXT, 
+          gen INTEGER GENERATED ALWAYS AS ("userID" + 1) STORED,
+          PRIMARY KEY ("userID"));
+        CREATE INDEX on users (handle, gen);
+        CREATE PUBLICATION zero_custom FOR TABLE users WITH (publish_generated_columns=stored);
+      `,
+      requestedPublications: ['zero_custom'],
+      published: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
+        [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
+        ['public.users']: {
+          columns: {
+            userID: {
+              pos: 1,
+              characterMaximumLength: null,
+              dataType: 'int4',
+              typeOID: 23,
+              notNull: true,
+              dflt: null,
+              elemPgTypeClass: null,
+            },
+            handle: {
+              pos: 2,
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              notNull: false,
+              dflt: null,
+              elemPgTypeClass: null,
+            },
+            gen: {
+              pos: 3,
+              characterMaximumLength: null,
+              dataType: 'int4',
+              typeOID: 23,
+              notNull: false,
+              dflt: '("userID" + 1)',
+              elemPgTypeClass: null,
+            },
+          },
+          oid: expect.any(Number),
+          name: 'users',
+          primaryKey: ['userID'],
+          schema: 'public',
+          publications: {['zero_custom']: {rowFilter: null}},
+        },
+      },
+      replicatedSchema: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
+        [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
+        ['users']: {
+          columns: {
+            userID: {
+              pos: 1,
+              characterMaximumLength: null,
+              dataType: 'int4|NOT_NULL',
+              notNull: false,
+              dflt: null,
+              elemPgTypeClass: null,
+            },
+            handle: {
+              pos: 2,
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: false,
+              dflt: null,
+              elemPgTypeClass: null,
+            },
+            gen: {
+              pos: 3,
+              characterMaximumLength: null,
+              dataType: 'int4',
+              notNull: false,
+              dflt: null,
+              elemPgTypeClass: null,
+            },
+            ['_0_version']: {
+              pos: 4,
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: false,
+              elemPgTypeClass: null,
+            },
+          },
+          name: 'users',
+        },
+      },
+      replicatedIndexes: [
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: APP_ID,
+          tableName: 'permissions',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: APP_ID,
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {
+            handle: 'ASC',
+            gen: 'ASC',
+          },
+          name: 'users_handle_gen_idx',
+          schema: 'public',
+          tableName: 'users',
+          unique: false,
+        },
+        {
+          columns: {userID: 'ASC'},
+          name: 'users_pkey',
+          schema: 'public',
+          tableName: 'users',
+          unique: true,
+        },
+      ],
+      upstream: {
+        users: [
+          {userID: 123, handle: '@zoot'},
+          {userID: 456, handle: '@bonk'},
+        ],
+      },
+      replicatedData: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+        users: [
+          {
+            userID: 123n,
+            handle: '@zoot',
+            gen: 124n,
+            ['_0_version']: WATERMARK_REGEX,
+          },
+          {
+            userID: 456n,
+            handle: '@bonk',
+            gen: 457n,
+            ['_0_version']: WATERMARK_REGEX,
+          },
+        ],
+        [`${APP_ID}.schemaVersions`]: [
+          {
+            lock: 1n,
+            minSupportedVersion: 1n,
+            maxSupportedVersion: 1n,
+            ['_0_version']: WATERMARK_REGEX,
+          },
+        ],
+      },
+      resultingPublications: [
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        'zero_custom',
+      ],
+    },
+    {
       name: 'replicates indexes',
       setupUpstreamQuery: `
         CREATE TABLE issues(
@@ -2141,15 +2329,21 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   ];
 
   let upstream: PostgresDB;
+  let pgVersion: number;
 
   beforeEach<PgTest>(async ({testDBs}) => {
     upstream = await testDBs.create('initial_sync_upstream');
+    [{pgVersion}] =
+      await upstream`SELECT current_setting('server_version_num')::int as "pgVersion"`;
 
     return () => testDBs.drop(upstream);
   });
 
   for (const c of cases) {
-    test(c.name, async () => {
+    test(c.name, async ({skip}) => {
+      if (pgVersion < (c.minPgVersion ?? 0)) {
+        skip();
+      }
       await initDB(upstream, c.setupUpstreamQuery, c.upstream);
 
       const lc = createSilentLogContext();
