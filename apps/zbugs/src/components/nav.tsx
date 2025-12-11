@@ -1,4 +1,4 @@
-import {useQuery, useZeroConnectionState} from '@rocicorp/zero/react';
+import {useQuery, useConnectionState} from '@rocicorp/zero/react';
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
@@ -202,7 +202,7 @@ export const Nav = memo(() => {
 });
 
 const ConnectionStatusPill = () => {
-  const connectionState = useZeroConnectionState();
+  const connectionState = useConnectionState();
 
   // we wait to show the connecting status until after a short delay to avoid flickering
   const [shouldShowConnecting, setShouldShowConnecting] = useState(false);

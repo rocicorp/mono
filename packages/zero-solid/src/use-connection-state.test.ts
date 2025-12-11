@@ -7,7 +7,7 @@ vi.mock('./use-zero.ts', () => ({
   useZero: vi.fn(),
 }));
 
-import {useZeroConnectionState} from './use-zero-connection-state.ts';
+import {useConnectionState} from './use-connection-state.ts';
 import {useZero} from './use-zero.ts';
 
 type ZeroLike = {
@@ -62,14 +62,14 @@ function mockZero(
   };
 }
 
-describe('useZeroConnectionState (Solid)', () => {
+describe('useConnectionState (Solid)', () => {
   test('returns the current connection state and updates on changes', () => {
     const initialState: ConnectionState = {
       name: 'connecting',
     };
     const {stateStore, listeners, subscribeMock} = mockZero(initialState);
 
-    const {result, cleanup} = renderHook(useZeroConnectionState);
+    const {result, cleanup} = renderHook(useConnectionState);
 
     expect(subscribeMock).toHaveBeenCalledTimes(1);
     expect(result()).toEqual(initialState);
@@ -95,7 +95,7 @@ describe('useZeroConnectionState (Solid)', () => {
     };
     const {unsubscribeMock, subscribeMock} = mockZero(initialState);
 
-    const {cleanup} = renderHook(useZeroConnectionState);
+    const {cleanup} = renderHook(useConnectionState);
 
     expect(subscribeMock).toHaveBeenCalledTimes(1);
 
@@ -118,7 +118,7 @@ describe('useZeroConnectionState (Solid)', () => {
     const [currentZero, setCurrentZero] = createSignal<ZeroLike>(zeroA.zero);
     useZeroMock.mockReturnValue(currentZero);
 
-    const {result, cleanup} = renderHook(useZeroConnectionState);
+    const {result, cleanup} = renderHook(useConnectionState);
 
     expect(result()).toEqual(initialState);
     expect(zeroA.subscribeMock).toHaveBeenCalledTimes(1);

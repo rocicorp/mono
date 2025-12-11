@@ -7,7 +7,7 @@ vi.mock('./zero-provider.tsx', () => ({
   useZero: vi.fn(),
 }));
 
-import {useZeroConnectionState} from './use-zero-connection-state.tsx';
+import {useConnectionState} from './use-connection-state.tsx';
 import {useZero} from './zero-provider.tsx';
 
 type ZeroLike = {
@@ -65,7 +65,7 @@ function renderWithRoot(children: ReactNode): Root {
   return root;
 }
 
-describe('useZeroConnectionState (React)', () => {
+describe('useConnectionState (React)', () => {
   test('returns the current connection state and updates on changes', () => {
     const initialState: ConnectionState = {
       name: 'connecting',
@@ -78,7 +78,7 @@ describe('useZeroConnectionState (React)', () => {
     }: {
       onState: (state: ConnectionState) => void;
     }) {
-      const state = useZeroConnectionState();
+      const state = useConnectionState();
       useEffect(() => {
         onState(state);
       }, [state, onState]);
@@ -120,7 +120,7 @@ describe('useZeroConnectionState (React)', () => {
     const {unsubscribeMock, subscribeMock} = mockZero(initialState);
 
     function TestComponent() {
-      useZeroConnectionState();
+      useConnectionState();
       return null;
     }
 

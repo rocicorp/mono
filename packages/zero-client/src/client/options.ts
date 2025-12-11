@@ -161,7 +161,7 @@ export interface ZeroOptions<
    * });
    * ```
    *
-   * Or use a hook like {@linkcode useZeroConnectionState} to subscribe to state changes.
+   * Or use a hook like {@linkcode useConnectionState} to subscribe to state changes.
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
 

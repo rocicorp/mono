@@ -8,7 +8,7 @@ import type {ConnectionState} from './zero.ts';
  * @returns The connection status of the Zero instance.
  * @see {@link ConnectionState} for more details on the connection state.
  */
-export function useZeroConnectionState(): ConnectionState {
+export function useConnectionState(): ConnectionState {
   const zero = useZero();
   return useSyncExternalStore(
     zero.connection.state.subscribe,

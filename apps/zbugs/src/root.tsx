@@ -1,4 +1,4 @@
-import {useZeroConnectionState} from '@rocicorp/zero/react';
+import {useConnectionState} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import {Redirect, Route, Switch} from 'wouter';
 import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
@@ -70,7 +70,7 @@ export function Root() {
   useSoftNav();
 
   const login = useLogin();
-  const connectionState = useZeroConnectionState();
+  const connectionState = useConnectionState();
 
   // if we're in needs-auth state, log out the user
   useEffect(() => {
