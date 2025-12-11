@@ -41,7 +41,8 @@ JOIN pg_publication_tables as pb ON
   attname = ANY(pb.attnames)
 LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
 LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
-WHERE pb.pubname IN (${literal(publications)}) AND attgenerated = ''
+WHERE pb.pubname IN (${literal(publications)}) AND 
+      (current_setting('server_version_num')::int >= 160000 OR attgenerated = '')
 ORDER BY nspname, pc.relname),
 
 tables AS (SELECT json_build_object(
@@ -101,7 +102,7 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
   // * The first bit of indoption is 1 for DESC and 0 for ASC:
   //   https://github.com/postgres/postgres/blob/4e1fad37872e49a711adad5d9870516e5c71a375/src/include/catalog/pg_index.h#L89
   // * pg_index.indkey is an int2vector which is 0-based instead of 1-based.
-  // * The additional check fo attgenerated is required for the aforementioned
+  // * The additional check for attgenerated is required for the aforementioned
   //   (in publishedTableQuery) bug in PG15 in which generated columns are
   //   incorrectly included in pg_publication_tables.attnames
   return /*sql*/ `
@@ -140,7 +141,7 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
       AND pg_index.indpred IS NULL
       AND (pg_constraint.contype IS NULL OR pg_constraint.contype IN ('p', 'u'))
       AND indexed.attnames <@ pb.attnames
-      AND false = ALL(indexed.generated)
+      AND (current_setting('server_version_num')::int >= 160000 OR false = ALL(indexed.generated))
     ORDER BY
       pg_indexes.schemaname,
       pg_indexes.tablename,
