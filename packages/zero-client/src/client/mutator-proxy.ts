@@ -123,22 +123,22 @@ export class MutatorProxy {
             return cachedPromise;
           }
 
-          this.#lc.error?.(
-            `Mutator "${name}" error on ${origin}`,
-            args[0],
-            error,
-          );
-
           if (isZeroError(error)) {
+            this.#lc.error?.(`Mutator "${name}" error on ${origin}`, error);
+
             const zeroErrorPromise = this.#makeZeroErrorResultDetails(error);
             cachedMutationPromises[origin] = zeroErrorPromise;
             return zeroErrorPromise;
           }
 
+          const applicationError = wrapWithApplicationError(error);
+          this.#lc.error?.(
+            `Mutator "${name}" app error on ${origin}`,
+            applicationError,
+          );
+
           const applicationErrorPromise =
-            this.#makeApplicationErrorResultDetails(
-              wrapWithApplicationError(error),
-            );
+            this.#makeApplicationErrorResultDetails(applicationError);
           cachedMutationPromises[origin] = applicationErrorPromise;
           return applicationErrorPromise;
         };
