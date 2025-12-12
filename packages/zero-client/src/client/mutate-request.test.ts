@@ -5,6 +5,7 @@ import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
 import type {
   DeleteID,
   InsertValue,
+  SchemaCRUD,
   Transaction,
   UpdateValue,
   UpsertValue,
@@ -462,9 +463,14 @@ describe('CRUD patterns on client', () => {
         },
       );
 
-      // MutateType should NOT have 'user' property
-      type HasUserProp = 'user' extends keyof MutateType ? true : false;
-      expectTypeOf<HasUserProp>().toEqualTypeOf<false>();
+      // tx.mutate.user should exist
+      expectTypeOf<keyof MutateType>().toEqualTypeOf<'user'>();
+
+      expectTypeOf<MutateType['user']>().toEqualTypeOf<
+        SchemaCRUD<typeof schemaModern>['user']
+      >();
+
+      // TODO(arv): tx.mutate should no longer be callable.
     });
   });
 

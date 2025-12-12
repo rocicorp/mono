@@ -126,10 +126,14 @@ export type CRUDExecutor = (
  * @param executor - A function that executes CRUD operations
  * @returns A MutateCRUD function that can be called with CRUDMutateRequest objects
  */
-export function makeMutateCRUDFunction<S extends Schema>(
-  schema: S,
+export function makeMutateCRUDFunction<
+  TSchema extends Schema,
+  TAddSchemaCRUD extends boolean,
+>(
+  schema: TSchema,
+  addSchemaCRUD: TAddSchemaCRUD,
   executor: CRUDExecutor,
-): MutateCRUD<S> {
+): MutateCRUD<TSchema, TAddSchemaCRUD> {
   // Create a callable function that accepts CRUDMutateRequest
   const mutate = (request: AnyCRUDMutateRequest) => {
     const {table, kind, args} = request;
@@ -137,7 +141,7 @@ export function makeMutateCRUDFunction<S extends Schema>(
   };
 
   // Only add table properties when enableLegacyMutators is true
-  if (schema.enableLegacyMutators === true) {
+  if (addSchemaCRUD) {
     // Add table names as keys so the proxy can discover them
     for (const tableName of Object.keys(schema.tables)) {
       (mutate as unknown as Record<string, undefined>)[tableName] = undefined;
@@ -147,10 +151,10 @@ export function makeMutateCRUDFunction<S extends Schema>(
     return recordProxy(
       mutate as unknown as Record<string, undefined>,
       (_value, tableName) => makeTableCRUD(tableName, executor),
-    ) as unknown as MutateCRUD<S>;
+    ) as unknown as MutateCRUD<TSchema, TAddSchemaCRUD>;
   }
 
-  return mutate as MutateCRUD<S>;
+  return mutate as MutateCRUD<TSchema, TAddSchemaCRUD>;
 }
 
 /**

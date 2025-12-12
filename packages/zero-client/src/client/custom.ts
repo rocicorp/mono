@@ -116,7 +116,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   implements ClientTransaction<TSchema>
 {
   readonly location = 'client';
-  readonly mutate: MutateCRUD<TSchema>;
+  readonly mutate: MutateCRUD<TSchema, true>;
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
@@ -133,7 +133,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
     this.#repTx = repTx;
 
     const executor = makeCRUDExecutor(repTx, schema, ivmBranch);
-    this.mutate = makeMutateCRUDFunction(schema, executor);
+    this.mutate = makeMutateCRUDFunction(schema, true, executor);
 
     const zeroContext = newZeroContext(
       lc,

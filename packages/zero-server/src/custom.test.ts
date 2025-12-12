@@ -236,7 +236,12 @@ describe('server CRUD patterns', () => {
       const {mockTx, queries} = createMockTx();
 
       // Use makeMutateCRUD for schemas without legacy mutators
-      const mutate = makeMutateCRUD(mockTx, mockServerSchema, schemaModern);
+      const mutate = makeMutateCRUD(
+        mockTx,
+        mockServerSchema,
+        schemaModern,
+        false,
+      );
 
       // Verify mutate is callable
       type MutateType = typeof mutate;
@@ -274,7 +279,12 @@ describe('server CRUD patterns', () => {
       const {mockTx, queries} = createMockTx();
 
       // Use makeMutateCRUD for schemas without legacy mutators
-      const mutate = makeMutateCRUD(mockTx, mockServerSchema, schemaExplicit);
+      const mutate = makeMutateCRUD(
+        mockTx,
+        mockServerSchema,
+        schemaExplicit,
+        false,
+      );
 
       // All CRUD operations work via modern pattern
       void mutate(crudBuilder.basic.insert({id: '1', a: 1, b: 'test1'}));
@@ -308,7 +318,7 @@ describe('server CRUD patterns', () => {
       const {mockTx, queries} = createMockTx();
 
       // makeMutateCRUD works with both new and legacy schemas
-      const mutate = makeMutateCRUD(mockTx, mockServerSchema, schema);
+      const mutate = makeMutateCRUD(mockTx, mockServerSchema, schema, true);
 
       // Modern pattern works
       void mutate(crudBuilder.basic.insert({id: '1', a: 1, b: 'modern'}));
@@ -395,7 +405,7 @@ describe('CRUDMutatorFactory', () => {
     expect(queries).toHaveLength(4);
   });
 
-  test('createMutateCRUD creates working MutateCRUD', async () => {
+  test('createExecutor works with single insert operation', async () => {
     const factory = new CRUDMutatorFactory(schema);
     const {mockTx, queries} = createMockTx();
 

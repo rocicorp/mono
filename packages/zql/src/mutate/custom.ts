@@ -49,7 +49,7 @@ export interface TransactionBase<S extends Schema> {
    */
   readonly reason: TransactionReason;
 
-  readonly mutate: MutateCRUD<S>;
+  readonly mutate: MutateCRUD<S, true>;
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
@@ -115,10 +115,11 @@ interface Queryable {
  * 1. A callable function that accepts a `CRUDMutateRequest`
  * 2. When `enableLegacyMutators` is true, also an object with CRUD methods per table
  */
-export type MutateCRUD<S extends Schema> = {
+export type MutateCRUD<S extends Schema, AddSchemaCRUD extends boolean> = {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   (request: CRUDMutateRequest<S, any, any, any>): Promise<void>;
-} & (S['enableLegacyMutators'] extends true ? SchemaCRUD<S> : {});
+} & (AddSchemaCRUD extends true ? SchemaCRUD<S> : {});
+// } & (S['enableLegacyMutators'] extends true ? SchemaCRUD<S> : {});
 
 export function customMutatorKey(sep: string, parts: string[]) {
   for (const part of parts) {

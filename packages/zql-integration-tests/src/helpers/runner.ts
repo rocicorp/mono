@@ -4,7 +4,6 @@ import os from 'node:os';
 import path from 'node:path';
 import {afterAll, expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-export {testLogConfig};
 import {unreachable} from '../../../shared/src/asserts.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -59,6 +58,7 @@ import {
   newQueryDelegate,
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
+export {testLogConfig};
 
 export const lc = createSilentLogContext();
 
@@ -115,6 +115,7 @@ async function makeDatabases<TSchema extends Schema>(
         new Transaction(tx),
         serverSchema,
         schema,
+        true,
       );
 
       for (const [table, rows] of Object.entries(testData(serverSchema))) {
@@ -768,6 +769,7 @@ async function checkRemove(
     delegates.pg.transaction,
     delegates.pg.serverSchema,
     zqlSchema,
+    true,
   );
   while (tables.length > 0) {
     ++numOps;
@@ -856,6 +858,7 @@ async function checkAddBack(
     delegates.pg.transaction,
     delegates.pg.serverSchema,
     zqlSchema,
+    true,
   );
   for (const [table, row] of rowsToAdd) {
     const mappedRow = mapRow(row, table, delegates.mapper);
@@ -912,6 +915,7 @@ async function checkEditToRandom(
     delegates.pg.transaction,
     delegates.pg.serverSchema,
     zqlSchema,
+    true,
   );
   while (tables.length > 0) {
     ++numOps;
@@ -1021,6 +1025,7 @@ async function checkEditToMatch(
     delegates.pg.transaction,
     delegates.pg.serverSchema,
     zqlSchema,
+    true,
   );
   for (const [table, [original, edited]] of rowsToEdit) {
     const mappedOriginal = mapRow(original, table, delegates.mapper);
