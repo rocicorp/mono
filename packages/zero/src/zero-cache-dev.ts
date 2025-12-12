@@ -35,11 +35,11 @@ async function main() {
       schema: {
         path: {
           type: v.string().optional(),
-          desc: [
-            'Relative path to the file containing the schema definition.',
-            'The file must have a default export of type SchemaConfig.',
-          ],
+          desc: ['Relative path to the file containing permissions.'],
           alias: 'p',
+          deprecated: [
+            'Permissions are deprecated and will be removed in an upcoming release. See: https://zero.rocicorp.dev/docs/auth.',
+          ],
         },
       },
       ...zeroOptions,
@@ -158,10 +158,6 @@ async function main() {
       );
       process.exit(-1);
     }
-
-    lc.warn?.(
-      'The -p/--path flag is deprecated. See: https://zero.rocicorp.dev/docs/auth.',
-    );
 
     await deployPermissionsAndStartZeroCache();
 
