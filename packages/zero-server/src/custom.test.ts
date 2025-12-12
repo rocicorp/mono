@@ -9,12 +9,12 @@ import {
 } from '../../zero-schema/src/builder/table-builder.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {
-  DBTransaction,
   DeleteID,
   InsertValue,
   UpdateValue,
   UpsertValue,
-} from '../../zql/src/mutate/custom.ts';
+} from '../../zql/src/mutate/crud.ts';
+import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {CRUDMutatorFactory, makeSchemaCRUD} from './custom.ts';
 import {schema} from './test/schema.ts';

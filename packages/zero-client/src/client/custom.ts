@@ -8,8 +8,10 @@ import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {makeSchemaCRUDObject} from '../../../zql/src/mutate/crud.ts';
-import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
+import {
+  makeTransactionMutate,
+  type TransactionMutate,
+} from '../../../zql/src/mutate/crud.ts';
 import type {
   ClientTransaction,
   Transaction,
@@ -116,7 +118,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   implements ClientTransaction<TSchema>
 {
   readonly location = 'client';
-  readonly mutate: SchemaCRUD<TSchema>;
+  readonly mutate: TransactionMutate<TSchema>;
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
@@ -133,7 +135,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
     this.#repTx = repTx;
 
     const executor = makeCRUDExecutor(repTx, schema, ivmBranch);
-    this.mutate = makeSchemaCRUDObject(schema, executor);
+    this.mutate = makeTransactionMutate(schema, executor);
 
     const zeroContext = newZeroContext(
       lc,

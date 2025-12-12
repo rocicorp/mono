@@ -22,7 +22,7 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import {makeMutateCRUD} from '../../../zero-server/src/custom.ts';
+import {makeServerTransaction} from '../../../zero-server/src/custom.ts';
 import {executePostgresQuery} from '../../../zero-server/src/pg-query-executor.ts';
 import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
@@ -108,18 +108,18 @@ async function makeDatabases<TSchema extends Schema>(
   // custom mutator insertion code.
   if (testData) {
     await pg.begin(async tx => {
-      const mutateCRUD = makeMutateCRUD(
+      const serverTx = await makeServerTransaction(
         new Transaction(tx),
-        serverSchema,
+        'test-client',
+        0,
         schema,
-        true,
       );
 
       for (const [table, rows] of Object.entries(testData(serverSchema))) {
         await Promise.all(
           rows.map(row =>
             // oxlint-disable-next-line no-explicit-any
-            mutateCRUD[table].insert(row as any),
+            serverTx.mutate[table].insert(row as any),
           ),
         );
       }
@@ -760,11 +760,11 @@ async function checkRemove(
   const removedRows: [string, Row][] = [];
   const seen = new Set<string>();
 
-  const mutateCRUD = makeMutateCRUD(
+  const serverTx = await makeServerTransaction(
     delegates.pg.transaction,
-    delegates.pg.serverSchema,
+    'test-client',
+    0,
     zqlSchema,
-    true,
   );
   while (tables.length > 0) {
     ++numOps;
@@ -798,7 +798,7 @@ async function checkRemove(
     removedRows.push([table, row]);
     const mappedRow = mapRow(row, table, delegates.mapper);
 
-    await mutateCRUD[table].delete(row);
+    await serverTx.mutate[table].delete(row);
 
     consume(
       must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
@@ -848,15 +848,15 @@ async function checkAddBack(
   const zqliteMaterialized = delegates.sqlite.materialize(query);
   const zqlMaterialized = delegates.memory.materialize(query);
 
-  const mutateCRUD = makeMutateCRUD(
+  const serverTx = await makeServerTransaction(
     delegates.pg.transaction,
-    delegates.pg.serverSchema,
+    'test-client',
+    0,
     zqlSchema,
-    true,
   );
   for (const [table, row] of rowsToAdd) {
     const mappedRow = mapRow(row, table, delegates.mapper);
-    await mutateCRUD[table].insert(row);
+    await serverTx.mutate[table].insert(row);
 
     consume(
       must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
@@ -904,11 +904,11 @@ async function checkEditToRandom(
   const editedRows: [string, [original: Row, edited: Row]][] = [];
   const seen = new Set<string>();
 
-  const mutateCRUD = makeMutateCRUD(
+  const serverTx = await makeServerTransaction(
     delegates.pg.transaction,
-    delegates.pg.serverSchema,
+    'test-client',
+    0,
     zqlSchema,
-    true,
   );
   while (tables.length > 0) {
     ++numOps;
@@ -942,7 +942,7 @@ async function checkEditToRandom(
     const mappedRow = mapRow(row, table, delegates.mapper);
     const mappedEditedRow = mapRow(editedRow, table, delegates.mapper);
 
-    await mutateCRUD[table].update(editedRow);
+    await serverTx.mutate[table].update(editedRow);
     consume(
       must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
         type: 'edit',
@@ -1013,16 +1013,16 @@ async function checkEditToMatch(
   const zqliteMaterialized = delegates.sqlite.materialize(query);
   const zqlMaterialized = delegates.memory.materialize(query);
 
-  const mutateCRUD = makeMutateCRUD(
+  const serverTx = await makeServerTransaction(
     delegates.pg.transaction,
-    delegates.pg.serverSchema,
+    'test-client',
+    0,
     zqlSchema,
-    true,
   );
   for (const [table, [original, edited]] of rowsToEdit) {
     const mappedOriginal = mapRow(original, table, delegates.mapper);
     const mappedEdited = mapRow(edited, table, delegates.mapper);
-    await mutateCRUD[table].update(original);
+    await serverTx.mutate[table].update(original);
 
     consume(
       must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({

@@ -15,7 +15,8 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import type {SchemaCRUD, Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
