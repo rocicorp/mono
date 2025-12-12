@@ -9,7 +9,6 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -72,14 +71,13 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
         .primaryKey('id'),
     ],
   });
-  const crud = createCRUDBuilder(schema);
   const mutators = defineMutatorsWithType<typeof schema>()({
     issue: {
       insert: defineMutatorWithType<typeof schema>()<{
         id: string;
         value: number;
       }>(async ({tx, args}) => {
-        await tx.mutate(crud.issue.insert(args));
+        await tx.mutate.issue.insert(args);
       }),
     },
   });
@@ -136,14 +134,13 @@ test('previously confirmed mutations are not resent after a rate limit error', a
         .primaryKey('id'),
     ],
   });
-  const crud = createCRUDBuilder(schema);
   const mutators = defineMutatorsWithType<typeof schema>()({
     issue: {
       insert: defineMutatorWithType<typeof schema>()<{
         id: string;
         value: number;
       }>(async ({tx, args}) => {
-        await tx.mutate(crud.issue.insert(args));
+        await tx.mutate.issue.insert(args);
       }),
     },
   });

@@ -126,10 +126,14 @@ export type CRUDExecutor = (
  * @param executor - A function that executes CRUD operations
  * @returns A MutateCRUD function that can be called with CRUDMutateRequest objects
  */
-export function makeMutateCRUDFunction<S extends Schema>(
-  schema: S,
+export function makeCRUDMutate<
+  TSchema extends Schema,
+  TAddSchemaCRUD extends boolean,
+>(
+  schema: TSchema,
+  addSchemaCRUD: TAddSchemaCRUD,
   executor: CRUDExecutor,
-): MutateCRUD<S> {
+): MutateCRUD<TSchema, TAddSchemaCRUD> {
   // Create a callable function that accepts CRUDMutateRequest
   const mutate = (request: AnyCRUDMutateRequest) => {
     const {table, kind, args} = request;
@@ -137,7 +141,7 @@ export function makeMutateCRUDFunction<S extends Schema>(
   };
 
   // Only add table properties when enableLegacyMutators is true
-  if (schema.enableLegacyMutators === true) {
+  if (addSchemaCRUD) {
     // Add table names as keys so the proxy can discover them
     for (const tableName of Object.keys(schema.tables)) {
       (mutate as unknown as Record<string, undefined>)[tableName] = undefined;
@@ -147,10 +151,24 @@ export function makeMutateCRUDFunction<S extends Schema>(
     return recordProxy(
       mutate as unknown as Record<string, undefined>,
       (_value, tableName) => makeTableCRUD(tableName, executor),
-    ) as unknown as MutateCRUD<S>;
+    ) as unknown as MutateCRUD<TSchema, TAddSchemaCRUD>;
   }
 
-  return mutate as MutateCRUD<S>;
+  return mutate as MutateCRUD<TSchema, TAddSchemaCRUD>;
+}
+
+export function makeSchemaCRUDObject<TSchema extends Schema>(
+  schema: TSchema,
+  executor: CRUDExecutor,
+): SchemaCRUD<TSchema> {
+  const target: Record<string, undefined> = {};
+  for (const tableName of Object.keys(schema.tables)) {
+    target[tableName] = undefined;
+  }
+
+  return recordProxy(target, (_value, tableName) =>
+    makeTableCRUD(tableName, executor),
+  ) as SchemaCRUD<TSchema>;
 }
 
 /**
@@ -203,64 +221,3 @@ export type CRUDMutateRequest<
 
 // oxlint-disable-next-line no-explicit-any
 export type AnyCRUDMutateRequest = CRUDMutateRequest<any, any, CRUDKind, any>;
-
-export type TableCRUDMutators<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-> = {
-  [K in keyof TableMutator<TSchema['tables'][TTable]>]: CRUDMutator<
-    TSchema,
-    TTable,
-    K,
-    Parameters<TableMutator<TSchema['tables'][TTable]>[K]>[0]
-  >;
-};
-
-/**
- * Creates a table CRUD builder that returns `CRUDMutateRequest` objects.
- * These request objects can be passed to `tx.mutate(request)`.
- */
-export function makeTableCRUDRequestBuilder<
-  S extends Schema,
-  T extends keyof S['tables'] & string,
->(schema: S, table: T): TableCRUDMutators<S, T> {
-  return Object.fromEntries(
-    CRUD_KINDS.map(kind => [
-      kind,
-      (args: unknown) => ({schema, table, kind, args}),
-    ]),
-  ) as TableCRUDMutators<S, T>;
-}
-
-/**
- * Creates a schema CRUD builder where each table has methods that return
- * `CRUDMutateRequest` objects. These can be passed to `tx.mutate(request)`.
- *
- * @example
- *
- * ```ts
- * const crud = createCRUDBuilder(schema);
- *
- * // Inside a custom mutator:
- * await tx.mutate(crud.user.insert({name: 'Alice'}));
- * ```
- */
-export function createCRUDBuilder<S extends Schema>(
-  schema: S,
-): SchemaCRUDMutators<S> {
-  return recordProxy(
-    schema.tables,
-    (_tableSchema, tableName) =>
-      makeTableCRUDRequestBuilder(
-        schema,
-        tableName as keyof S['tables'] & string,
-      ),
-    prop => {
-      throw new Error(`Table ${prop} does not exist in schema`);
-    },
-  ) as unknown as SchemaCRUDMutators<S>;
-}
-
-export type SchemaCRUDMutators<S extends Schema> = {
-  [T in keyof S['tables'] & string]: TableCRUDMutators<S, T>;
-};
