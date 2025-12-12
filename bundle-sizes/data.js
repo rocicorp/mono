@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1765364287789,
+  "lastUpdate": 1765532961953,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54861,6 +54861,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/8a10d34ef18d0f4bc7d34a1507a697313ed2cecf"
         },
         "date": 1765364275817,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302328,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54468,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111346,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31858,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "31689262e18eeff2d83943563a1a7f7548947525",
+          "message": "chore: upgrade vite and vitest (#5329)\n\nThis pull request primarily updates development dependencies across\nmultiple packages to the latest versions, especially the Vite and Vitest\ntoolchains. It also includes several TypeScript configuration cleanups\nand minor code improvements for compatibility and correctness. The most\nimportant changes are grouped below:\n\n**Dependency Upgrades (Vite & Vitest ecosystem):**\n\n* Updated `vitest`, `@vitest/runner`, and `@vitest/coverage-v8` to\nversion `4.0.15` in multiple packages to ensure compatibility and\nconsistency across the monorepo.\n[[1]](diffhunk://#diff-ceba99c88f145984f298b0b7ef22733392494202ffd01f83b3e7d1fe58becc3fL22-R24)\n[[2]](diffhunk://#diff-abb9e8c4103e99eb1bc7c8e28918867a33e491b1a06dbb4f808f12bb1082f424L78-R79)\n[[3]](diffhunk://#diff-abb9e8c4103e99eb1bc7c8e28918867a33e491b1a06dbb4f808f12bb1082f424L90-R94)\n[[4]](diffhunk://#diff-7ae45ad102eab3b6d7e7896acd08c427a9b25b346470d7bc6507b6481575d519L34-R43)\n[[5]](diffhunk://#diff-289c09b8ff1dbe796350d16f5110cdfcc0fc7db51e7b0c9597845afb577031d7L24-R24)\n[[6]](diffhunk://#diff-7bcd3170a661ffcbbd3cd1b0fb987c870f0b6bef7a66d0f1341c5fedc84e9e89L10-R13)\n[[7]](diffhunk://#diff-55e8e9416563e5a98f3f24472fe9d4aba0aaaacd5c5ecdf49fa5cc8c212aedf8L44-R44)\n[[8]](diffhunk://#diff-55e8e9416563e5a98f3f24472fe9d4aba0aaaacd5c5ecdf49fa5cc8c212aedf8L53-R53)\n[[9]](diffhunk://#diff-3752b1e4e3e2032593e21e9268ec0379680a59e4e7b8517d0d5492a71530d3e8L32-R39)\n* Upgraded `vite` and related plugins (`@vitejs/plugin-react`,\n`vite-bundle-analyzer`, `vite-plugin-svgr`) to their latest major\nversions in several app packages for improved performance and features.\n[[1]](diffhunk://#diff-abb9e8c4103e99eb1bc7c8e28918867a33e491b1a06dbb4f808f12bb1082f424L78-R79)\n[[2]](diffhunk://#diff-abb9e8c4103e99eb1bc7c8e28918867a33e491b1a06dbb4f808f12bb1082f424L90-R94)\n[[3]](diffhunk://#diff-eefe89879ccb5ca8d9412d67bac9bcf28b8ee90d9eebfb1a5d734231a81a6e5aL23-R27)\n[[4]](diffhunk://#diff-ea034f125f73c887a627c398b5c4b9e3a9ccc4888ef484615220e8ad0cfc2095L29-R29)\n\n**TypeScript Configuration Cleanups:**\n\n* Removed redundant or unnecessary compiler options from `tsconfig.json`\nfiles in several packages, simplifying configuration and avoiding\npotential build issues.\n[[1]](diffhunk://#diff-bbe84dd6037d5ab0e8e7c6ee872f419cc49593a4c7bb92ec5cc57def677a2629L3-L26)\n[[2]](diffhunk://#diff-ab9778f26878d0a7030c8130b98b1e8e2d11976f3ac16371f8b4e64fe2314495L3-L5)\n[[3]](diffhunk://#diff-5c7ad0402360c6ea3bdb3d08da3c2587fa203e3ed5016855618b812a641e770dL3-L5)\n* Improved project structure by adding an `exclude` for server files and\ncleaning up path mappings in `apps/zbugs/tsconfig.json`.\n* Added explicit `types: [\"node\"]` to `apps/zbugs/tsconfig.node.json`\nfor better Node.js type resolution.\n\n**Code Compatibility and Correctness:**\n\n* Updated type for the `timeout` variable in `useIsScrolling` hook to\nuse `ReturnType<typeof setTimeout>` for better cross-platform\ncompatibility.\n* Adjusted imports in `packages/otel/src/log-options.ts` to reference\nthe correct shared options file.\n* Cast plugin instances to `PluginOption` in `vite.config.ts` to satisfy\ntype requirements with updated Vite versions.\n[[1]](diffhunk://#diff-c441aa28dd3967304663a6304b5bbc4d91f66f3faa7b1f4640fa65eb0369d11cL2-R2)\n[[2]](diffhunk://#diff-c441aa28dd3967304663a6304b5bbc4d91f66f3faa7b1f4640fa65eb0369d11cL21-R22)\n\n**Testing and Utility Improvements:**\n\n* Added new test cases to `find-last-index.test.ts` to verify behavior\nwith predicates returning truthy/falsy values, and updated the predicate\ntype in the implementation to accept any value.\n[[1]](diffhunk://#diff-487cb75325c62d74df83efb5dc667c09df9d7051876fe7b09d9518b8dd8a18b0R67-R73)\n[[2]](diffhunk://#diff-1bd675b03a7d1804ef0a0a291c6f97d133dc46c80adf8f1bfba7abf119e40707L5-R5)\n* Fixed import path for test data in `find-last-index.test.ts` to point\nto the correct `tsconfig.json` location.\n\n**Script Enhancements:**\n\n* Added new NPM scripts for type checking (`check-types`,\n`check-types:watch`) in `apps/zql-viz/package.json` for improved\ndeveloper workflow.\n\nThese changes collectively modernize the development environment,\nimprove build reliability, and enhance code correctness across the\nrepository.",
+          "timestamp": "2025-12-12T09:39:05Z",
+          "tree_id": "9edb054ff3e49472c610bbb04dc9132c6074f902",
+          "url": "https://github.com/rocicorp/mono/commit/31689262e18eeff2d83943563a1a7f7548947525"
+        },
+        "date": 1765532949628,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
