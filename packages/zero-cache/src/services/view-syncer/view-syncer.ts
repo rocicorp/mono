@@ -1161,7 +1161,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       let count = 0;
       await startAsyncSpan(
         tracer,
@@ -1177,12 +1177,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             await timer.start(),
           )) {
             if (change === 'yield') {
-              lc.error?.(
-                `Yielding in hydrateUnchangedQueries. Elapsed lap ${timer.elapsedLap()}ms.  Total ${timer.totalElapsed()}.`,
-              );
-              const start = Date.now();
               await timer.yieldProcess('yield in hydrateUnchangedQueries');
-              lc.error?.('Got control back', Date.now() - start);
             } else {
               count++;
             }
@@ -1644,7 +1639,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let totalProcessTime = 0;
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
@@ -1858,12 +1853,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await startAsyncSpan(tracer, 'loopingChanges', async span => {
         for (const change of changes) {
           if (change === 'yield') {
-            lc.error?.(
-              `Yielding in processChanges. Elapsed lap ${timer.elapsedLap()}ms.  Total ${timer.totalElapsed()}.`,
-            );
-            const start = Date.now();
             await timer.yieldProcess('yield in processChanges');
-            lc.error?.('Got control back', Date.now() - start);
             continue;
           }
           const {
@@ -1941,7 +1931,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       const start = performance.now();
 
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       const {version, numChanges, changes} = this.#pipelines.advance(timer);
       lc = lc.withContext('newVersion', version);
 
@@ -2087,9 +2077,7 @@ function createHashToIDs(cvr: CVRSnapshot) {
 const timeSliceQueue = new Lock();
 
 function yieldProcess() {
-  return timeSliceQueue.withLock(
-    () => new Promise(resolve => setTimeout(resolve, 5)),
-  );
+  return timeSliceQueue.withLock(() => new Promise(setImmediate));
 }
 
 function contentsAndVersion(row: Row) {
@@ -2221,6 +2209,11 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
 export class TimeSliceTimer {
   #total = 0;
   #start = 0;
+  #lc: LogContext | undefined;
+
+  constructor(lc?: LogContext) {
+    this.#lc = lc;
+  }
 
   async start() {
     // yield at the very beginning so that the first time slice
@@ -2236,9 +2229,13 @@ export class TimeSliceTimer {
   }
 
   async yieldProcess(_msgForTesting?: string) {
-    this.#stopLap();
+    const start = this.#stopLap();
+    this.#lc?.error?.(`Yielding process <${_msgForTesting}> at ${start}`);
     await yieldProcess();
     this.#startLap();
+    this.#lc?.error?.(
+      `Resuming process <${_msgForTesting}> at ${start} after ${this.#start - start}ms`,
+    );
   }
 
   #startLap() {
@@ -2253,8 +2250,10 @@ export class TimeSliceTimer {
 
   #stopLap() {
     assert(this.#start !== 0, 'not running');
-    this.#total += performance.now() - this.#start;
+    const now = performance.now();
+    this.#total += now - this.#start;
     this.#start = 0;
+    return now;
   }
 
   /** @returns the total elapsed time */

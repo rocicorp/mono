@@ -34,6 +34,8 @@ import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
+import * as fs from 'node:fs';
+import * as async_hooks from 'node:async_hooks';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -206,3 +208,55 @@ if (!singleProcessMode()) {
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
 }
+
+// Store stack traces mapped to their async ID
+const traces = new Map();
+
+// Filter: Only log these types if you want to reduce noise.
+// Common types: 'TickObject' (process.nextTick), 'Timeout' (setTimeout),
+// 'Immediate' (setImmediate), 'FSReqCallback' (file system), 'TCP' (net).
+// Leave empty to log everything.
+//const TARGET_TYPES = ['TickObject', 'Timeout', 'Immediate'];
+
+const hook = async_hooks.createHook({
+  // 1. When an async resource is created (Scheduled)
+  init(asyncId: number, type: string, _triggerAsyncId: number, _resource: any) {
+    //if (TARGET_TYPES.length && !TARGET_TYPES.includes(type)) return;
+    if (type === 'PROMISE') return;
+
+    // Create a dummy object to capture the stack trace
+    const e = new Error();
+    if (e.stack?.includes('doWrite')) return;
+
+    // Store the stack, removing the first few lines (internal hook noise)
+    traces.set(asyncId, {
+      type,
+      stack: e.stack?.split('\n').slice(2).join('\n'),
+    });
+  },
+
+  // 2. Before the callback for this resource runs (Execution)
+  before(asyncId: number) {
+    const traceInfo = traces.get(asyncId);
+    if (traceInfo) {
+      // Use fs.writeSync to stdout (fd 1) to avoid creating more async events
+      // while trying to log (which causes infinite loops in some cases)
+      fs.writeSync(
+        1,
+        `\n--- LOOP RUN: ${traceInfo.type} (ID: ${asyncId}) ---\n`,
+      );
+      fs.writeSync(1, `Scheduled from:\n${traceInfo.stack}\n`);
+    }
+  },
+
+  // 3. Clean up memory
+  destroy(asyncId: number) {
+    traces.delete(asyncId);
+  },
+});
+
+console.log(hook);
+
+//hook.enable();
+
+//console.log('Async hook tracing enabled...');

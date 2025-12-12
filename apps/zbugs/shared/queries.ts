@@ -222,7 +222,7 @@ export const queries = defineQueries({
       .related('creator', creator => creator.one()),
   ),
 
-  slow: defineQuery(z.object({}), () => builder.comment.limit(500_000)),
+  slow: defineQuery(z.object({}), () => builder.comment.limit(1_000_000)),
 
   // TODO(arv): Remove
 
