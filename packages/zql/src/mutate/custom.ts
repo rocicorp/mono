@@ -9,15 +9,7 @@ import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
 import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
 import type {SchemaQuery} from '../query/schema-query.ts';
-import type {CRUDMutateRequest, SchemaCRUD} from './crud.ts';
-export type {
-  DeleteID,
-  InsertValue,
-  SchemaCRUD,
-  TableCRUD,
-  UpdateValue,
-  UpsertValue,
-} from './crud.ts';
+import type {CRUDMutateRequest, SchemaCRUD, TransactionMutate} from './crud.ts';
 
 type ClientID = string;
 
@@ -49,7 +41,7 @@ export interface TransactionBase<S extends Schema> {
    */
   readonly reason: TransactionReason;
 
-  readonly mutate: SchemaCRUD<S>;
+  readonly mutate: TransactionMutate<S>;
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */

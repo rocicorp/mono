@@ -11,13 +11,14 @@ import {
 } from '../../../zero-protocol/src/push.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {CRUDExecutor, TableMutator} from '../../../zql/src/mutate/crud.ts';
 import type {
+  CRUDExecutor,
   DeleteID,
   InsertValue,
+  TableMutator,
   UpdateValue,
   UpsertValue,
-} from '../../../zql/src/mutate/custom.ts';
+} from '../../../zql/src/mutate/crud.ts';
 import * as crudImpl from './crud-impl.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';

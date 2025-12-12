@@ -3,7 +3,8 @@ import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
-import type {DBTransaction, SchemaCRUD} from '../../zql/src/mutate/custom.ts';
+import type {SchemaCRUD} from '../../zql/src/mutate/crud.ts';
+import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
 import {makeSchemaCRUD} from './custom.ts';
 import {getServerSchema} from './schema.ts';
 import {schema, schemaSql} from './test/schema.ts';

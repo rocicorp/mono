@@ -8,6 +8,8 @@ export type SchemaCRUD<S extends Schema> = {
   [Table in keyof S['tables']]: TableCRUD<S['tables'][Table]>;
 };
 
+export type TransactionMutate<S extends Schema> = SchemaCRUD<S>;
+
 export type TableCRUD<S extends TableSchema> = {
   /**
    * Writes a row if a row with the same primary key doesn't already exist.
@@ -157,10 +159,10 @@ export function makeCRUDMutate<
   return mutate as MutateCRUD<TSchema, TAddSchemaCRUD>;
 }
 
-export function makeSchemaCRUDObject<TSchema extends Schema>(
+export function makeTransactionMutate<TSchema extends Schema>(
   schema: TSchema,
   executor: CRUDExecutor,
-): SchemaCRUD<TSchema> {
+): TransactionMutate<TSchema> {
   const target: Record<string, undefined> = {};
   for (const tableName of Object.keys(schema.tables)) {
     target[tableName] = undefined;
