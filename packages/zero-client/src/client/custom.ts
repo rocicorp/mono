@@ -22,7 +22,7 @@ import {
   type Query,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
-import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
+import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {makeCRUDExecutor} from './crud.ts';
@@ -122,7 +122,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
-  readonly query: SchemaQuery<TSchema>;
+  readonly query: ConditionalSchemaQuery<TSchema>;
 
   readonly #repTx: WriteTransaction;
   readonly #zeroContext: ZeroContext;
