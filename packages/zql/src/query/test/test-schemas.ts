@@ -7,7 +7,6 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
-import {createCRUDBuilder} from '../../mutate/crud.ts';
 import type {Row} from '../query.ts';
 
 const issue = table('issue')
@@ -176,12 +175,6 @@ export const legacySchema = createSchema({
   enableLegacyMutators: true,
   enableLegacyQueries: true,
 });
-
-/**
- * CRUD request builder for the test schema.
- * Use this with tx.mutate(crud.table.operation(args)) pattern.
- */
-export const crud = createCRUDBuilder(schema);
 
 export const issueSchema = schema.tables.issue;
 export const commentSchema = schema.tables.comment;

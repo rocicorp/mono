@@ -236,35 +236,6 @@ export function makeTableCRUDRequestBuilder<
   ) as TableCRUDMutators<S, T>;
 }
 
-/**
- * Creates a schema CRUD builder where each table has methods that return
- * `CRUDMutateRequest` objects. These can be passed to `tx.mutate(request)`.
- *
- * @example
- *
- * ```ts
- * const crud = createCRUDBuilder(schema);
- *
- * // Inside a custom mutator:
- * await tx.mutate(crud.user.insert({name: 'Alice'}));
- * ```
- */
-export function createCRUDBuilder<S extends Schema>(
-  schema: S,
-): SchemaCRUDMutators<S> {
-  return recordProxy(
-    schema.tables,
-    (_tableSchema, tableName) =>
-      makeTableCRUDRequestBuilder(
-        schema,
-        tableName as keyof S['tables'] & string,
-      ),
-    prop => {
-      throw new Error(`Table ${prop} does not exist in schema`);
-    },
-  ) as unknown as SchemaCRUDMutators<S>;
-}
-
 export type SchemaCRUDMutators<S extends Schema> = {
   [T in keyof S['tables'] & string]: TableCRUDMutators<S, T>;
 };

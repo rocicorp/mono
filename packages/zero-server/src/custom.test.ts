@@ -8,7 +8,6 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
-import {createCRUDBuilder} from '../../zql/src/mutate/crud.ts';
 import type {
   DBTransaction,
   DeleteID,
@@ -17,7 +16,7 @@ import type {
   UpsertValue,
 } from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import {CRUDMutatorFactory, makeMutateCRUD, makeSchemaCRUD} from './custom.ts';
+import {CRUDMutatorFactory, makeSchemaCRUD} from './custom.ts';
 import {schema} from './test/schema.ts';
 
 test('server mutator type is compatible with client mutator type', () => {
@@ -215,156 +214,6 @@ describe('server CRUD patterns', () => {
       expect(typeof mutate).toBe('function');
     });
   });
-
-  describe('modern pattern: tx.mutate(crud.table.op(args))', () => {
-    test('works without enableLegacyMutators (default)', () => {
-      const schemaModern = createSchema({
-        tables: [
-          table('basic')
-            .columns({
-              id: string(),
-              a: number(),
-              b: string(),
-              c: boolean().optional(),
-            })
-            .primaryKey('id'),
-        ],
-        // enableLegacyMutators not set - defaults to false
-      });
-
-      const crudBuilder = createCRUDBuilder(schemaModern);
-      const {mockTx, queries} = createMockTx();
-
-      // Use makeMutateCRUD for schemas without legacy mutators
-      const mutate = makeMutateCRUD(
-        mockTx,
-        mockServerSchema,
-        schemaModern,
-        false,
-      );
-
-      // Verify mutate is callable
-      type MutateType = typeof mutate;
-      expectTypeOf<MutateType>().toBeCallableWith(
-        crudBuilder.basic.insert({id: '1', a: 1, b: 'test'}),
-      );
-
-      // Verify CRUD request types are correct
-      const insertReq = crudBuilder.basic.insert({id: '1', a: 1, b: 'test'});
-      expectTypeOf(insertReq.schema).toEqualTypeOf<typeof schemaModern>();
-      expectTypeOf(insertReq.table).toEqualTypeOf<'basic'>();
-      expectTypeOf(insertReq.kind).toEqualTypeOf<'insert'>();
-
-      // Use modern pattern
-      void mutate(insertReq);
-      expect(queries).toHaveLength(1);
-    });
-
-    test('works with enableLegacyMutators: false explicitly', () => {
-      const schemaExplicit = createSchema({
-        tables: [
-          table('basic')
-            .columns({
-              id: string(),
-              a: number(),
-              b: string(),
-              c: boolean().optional(),
-            })
-            .primaryKey('id'),
-        ],
-        enableLegacyMutators: false,
-      });
-
-      const crudBuilder = createCRUDBuilder(schemaExplicit);
-      const {mockTx, queries} = createMockTx();
-
-      // Use makeMutateCRUD for schemas without legacy mutators
-      const mutate = makeMutateCRUD(
-        mockTx,
-        mockServerSchema,
-        schemaExplicit,
-        false,
-      );
-
-      // All CRUD operations work via modern pattern
-      void mutate(crudBuilder.basic.insert({id: '1', a: 1, b: 'test1'}));
-      void mutate(crudBuilder.basic.update({id: '1', b: 'updated'}));
-      void mutate(crudBuilder.basic.upsert({id: '2', a: 2, b: 'test2'}));
-      void mutate(crudBuilder.basic.delete({id: '1'}));
-
-      expect(queries).toHaveLength(4);
-    });
-
-    test('works with enableLegacyMutators: true (both patterns available)', () => {
-      // schema from test/schema.ts has enableLegacyMutators: true
-      const crudBuilder = createCRUDBuilder(schema);
-      const crudProvider = makeSchemaCRUD(schema);
-      const {mockTx, queries} = createMockTx();
-
-      const mutate = crudProvider(mockTx, mockServerSchema);
-
-      // Modern pattern still works
-      void mutate(crudBuilder.basic.insert({id: '1', a: 1, b: 'modern'}));
-      expect(queries).toHaveLength(1);
-
-      // Legacy pattern also works
-      void mutate.basic.insert({id: '2', a: 2, b: 'legacy'});
-      expect(queries).toHaveLength(2);
-    });
-
-    test('makeMutateCRUD works with enableLegacyMutators: true', () => {
-      // schema from test/schema.ts has enableLegacyMutators: true
-      const crudBuilder = createCRUDBuilder(schema);
-      const {mockTx, queries} = createMockTx();
-
-      // makeMutateCRUD works with both new and legacy schemas
-      const mutate = makeMutateCRUD(mockTx, mockServerSchema, schema, true);
-
-      // Modern pattern works
-      void mutate(crudBuilder.basic.insert({id: '1', a: 1, b: 'modern'}));
-      expect(queries).toHaveLength(1);
-
-      // Legacy pattern also works
-      void mutate.basic.insert({id: '2', a: 2, b: 'legacy'});
-      expect(queries).toHaveLength(2);
-    });
-  });
-
-  describe('CRUD request types', () => {
-    test('createCRUDBuilder produces correct request objects', () => {
-      const testSchema = createSchema({
-        tables: [
-          table('user')
-            .columns({
-              id: string(),
-              name: string(),
-            })
-            .primaryKey('id'),
-        ],
-      });
-
-      const crud = createCRUDBuilder(testSchema);
-
-      // Insert request
-      const insertReq = crud.user.insert({id: '1', name: 'Test'});
-      expect(insertReq.schema).toBe(testSchema);
-      expect(insertReq.table).toBe('user');
-      expect(insertReq.kind).toBe('insert');
-      expect(insertReq.args).toEqual({id: '1', name: 'Test'});
-
-      // Update request
-      const updateReq = crud.user.update({id: '1', name: 'Updated'});
-      expect(updateReq.kind).toBe('update');
-
-      // Upsert request
-      const upsertReq = crud.user.upsert({id: '1', name: 'Upserted'});
-      expect(upsertReq.kind).toBe('upsert');
-
-      // Delete request
-      const deleteReq = crud.user.delete({id: '1'});
-      expect(deleteReq.kind).toBe('delete');
-    });
-  });
 });
 
 describe('CRUDMutatorFactory', () => {
@@ -544,8 +393,7 @@ describe('CRUDMutatorFactory', () => {
     expect(tx.reason).toBe('authoritative');
 
     // Verify mutate works
-    const crudBuilder = createCRUDBuilder(simpleSchema);
-    void tx.mutate(crudBuilder.basic.insert({id: '1', a: 1, b: 'test'}));
+    void tx.mutate.basic.insert({id: '1', a: 1, b: 'test'});
 
     // The information_schema query + the insert
     expect(mockTx.query).toHaveBeenCalled();

@@ -39,7 +39,6 @@ import {skipYields} from '../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 import type {Source, SourceChange} from '../../../zql/src/ivm/source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
-import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
@@ -104,8 +103,6 @@ async function makeDatabases<TSchema extends Schema>(
     getServerSchema(new Transaction(tx), schema),
   );
 
-  const crud = createCRUDBuilder(schema);
-
   // If there is test data it is assumed to be in ZQL format.
   // We insert via schemaCRUD which is good since this will flex
   // custom mutator insertion code.
@@ -122,7 +119,7 @@ async function makeDatabases<TSchema extends Schema>(
         await Promise.all(
           rows.map(row =>
             // oxlint-disable-next-line no-explicit-any
-            mutateCRUD(crud[table].insert(row as any)),
+            mutateCRUD[table].insert(row as any),
           ),
         );
       }
@@ -763,8 +760,6 @@ async function checkRemove(
   const removedRows: [string, Row][] = [];
   const seen = new Set<string>();
 
-  const crud = createCRUDBuilder(zqlSchema);
-
   const mutateCRUD = makeMutateCRUD(
     delegates.pg.transaction,
     delegates.pg.serverSchema,
@@ -803,7 +798,7 @@ async function checkRemove(
     removedRows.push([table, row]);
     const mappedRow = mapRow(row, table, delegates.mapper);
 
-    await mutateCRUD(crud[table].delete(row));
+    await mutateCRUD[table].delete(row);
 
     consume(
       must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
@@ -853,7 +848,6 @@ async function checkAddBack(
   const zqliteMaterialized = delegates.sqlite.materialize(query);
   const zqlMaterialized = delegates.memory.materialize(query);
 
-  const crud = createCRUDBuilder(zqlSchema);
   const mutateCRUD = makeMutateCRUD(
     delegates.pg.transaction,
     delegates.pg.serverSchema,
@@ -862,7 +856,7 @@ async function checkAddBack(
   );
   for (const [table, row] of rowsToAdd) {
     const mappedRow = mapRow(row, table, delegates.mapper);
-    await mutateCRUD(crud[table].insert(row));
+    await mutateCRUD[table].insert(row);
 
     consume(
       must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
@@ -910,7 +904,6 @@ async function checkEditToRandom(
   const editedRows: [string, [original: Row, edited: Row]][] = [];
   const seen = new Set<string>();
 
-  const crudBuilder = createCRUDBuilder(zqlSchema);
   const mutateCRUD = makeMutateCRUD(
     delegates.pg.transaction,
     delegates.pg.serverSchema,
@@ -949,7 +942,7 @@ async function checkEditToRandom(
     const mappedRow = mapRow(row, table, delegates.mapper);
     const mappedEditedRow = mapRow(editedRow, table, delegates.mapper);
 
-    await mutateCRUD(crudBuilder[table].update(editedRow));
+    await mutateCRUD[table].update(editedRow);
     consume(
       must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
         type: 'edit',
@@ -1020,7 +1013,6 @@ async function checkEditToMatch(
   const zqliteMaterialized = delegates.sqlite.materialize(query);
   const zqlMaterialized = delegates.memory.materialize(query);
 
-  const crudBuilder = createCRUDBuilder(zqlSchema);
   const mutateCRUD = makeMutateCRUD(
     delegates.pg.transaction,
     delegates.pg.serverSchema,
@@ -1030,7 +1022,7 @@ async function checkEditToMatch(
   for (const [table, [original, edited]] of rowsToEdit) {
     const mappedOriginal = mapRow(original, table, delegates.mapper);
     const mappedEdited = mapRow(edited, table, delegates.mapper);
-    await mutateCRUD(crudBuilder[table].update(original));
+    await mutateCRUD[table].update(original);
 
     consume(
       must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
