@@ -396,10 +396,12 @@ export const zeroOptions = {
   },
 
   yieldThresholdMs: {
-    type: v.number().default(200),
+    type: v.number().default(10),
     desc: [
-      `The ammount of time in milliseconds that a single client's view hydration
-      or advancement can take before yielding to the event loop.`,
+      `The maximum amount of time in milliseconds that a sync worker will`,
+      `spend in IVM (processing query hydration and advancement) before yielding`,
+      `to the event loop. Lower values increase responsiveness and fairness at`,
+      `the cost of reduced throughput.`,
     ],
   },
 
