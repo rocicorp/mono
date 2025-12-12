@@ -98,11 +98,15 @@ describe('Anonymous Telemetry Integration Tests', () => {
     mockExporter = vi.fn();
 
     // Setup mocks
-    vi.mocked(OTLPMetricExporter).mockImplementation(() => mockExporter);
-    vi.mocked(PeriodicExportingMetricReader).mockImplementation(
-      () => mockMetricReader,
-    );
-    vi.mocked(MeterProvider).mockImplementation(() => mockMeterProvider);
+    vi.mocked(OTLPMetricExporter).mockImplementation(function () {
+      return mockExporter;
+    });
+    vi.mocked(PeriodicExportingMetricReader).mockImplementation(function () {
+      return mockMetricReader;
+    });
+    vi.mocked(MeterProvider).mockImplementation(function () {
+      return mockMeterProvider;
+    });
 
     // Clear environment variables that might affect telemetry
     delete process.env.ZERO_UPSTREAM_DB;

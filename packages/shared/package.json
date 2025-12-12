@@ -29,15 +29,14 @@
     "@rocicorp/prettier-config": "^0.4.0",
     "@types/semver": "^7.5.1",
     "@types/strip-ansi": "^3.0.0",
-    "@vitest/browser": "3.2.4",
-    "@vitest/runner": "3.2.4",
+    "@vitest/runner": "4.0.15",
     "compare-utf8": "^0.1.1",
     "fast-check": "^3.18.0",
     "package-up": "^5.0.0",
     "playwright": "^1.53.2",
     "type-fest": "^4.30.0",
     "typescript": "~5.9.3",
-    "vitest": "3.2.4"
+    "vitest": "4.0.15"
   },
   "prettier": "@rocicorp/prettier-config"
 }

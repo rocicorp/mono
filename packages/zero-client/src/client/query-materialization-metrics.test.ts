@@ -122,7 +122,7 @@ describe('query materialization metrics', () => {
       (() => {}) as unknown as UpdateCustomQuery,
       (() => {}) as unknown as FlushQueryChanges,
       testBatchViewUpdates,
-      addMetricSpy,
+      addMetricSpy as ZeroContext['addMetric'],
       assertValidRunOptions,
     );
   });
@@ -563,7 +563,7 @@ describe('query materialization metrics', () => {
         (() => {}) as unknown as UpdateCustomQuery,
         (() => {}) as unknown as FlushQueryChanges,
         testBatchViewUpdates,
-        addMetricSpy,
+        addMetricSpy as ZeroContext['addMetric'],
         assertValidRunOptions,
       );
     });
