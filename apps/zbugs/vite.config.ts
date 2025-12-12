@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import {defineConfig, type ViteDevServer} from 'vite';
+import {defineConfig, type PluginOption, type ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import {makeDefine} from '../../packages/shared/src/build.ts';
@@ -18,8 +18,8 @@ async function configureServer(server: ViteDevServer) {
 export default defineConfig({
   plugins: [
     tsconfigPaths(),
-    svgr(),
-    react(),
+    svgr() as unknown as PluginOption,
+    react() as unknown as PluginOption,
     {
       name: 'api-server',
       configureServer,

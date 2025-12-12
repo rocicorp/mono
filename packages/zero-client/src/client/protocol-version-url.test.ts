@@ -1,6 +1,7 @@
 import {expect, test, vi} from 'vitest';
 import {h64} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {createConnectionURL} from './zero.ts';
 
@@ -24,7 +25,7 @@ test('When the URL changes we need to update the protocol version', async () => 
 
   // The order of query parameters does not matter. Sort them before hashing.
   const sorted = new URLSearchParams(
-    url.searchParams.entries().toArray().sort(),
+    [...url.searchParams.entries()].sort((a, b) => stringCompare(a[0], b[0])),
   );
 
   const hash = h64(sorted.toString()).toString(36);

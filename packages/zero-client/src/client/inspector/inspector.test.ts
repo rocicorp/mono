@@ -94,11 +94,9 @@ async function getMetrics<
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.spyOn(globalThis, 'WebSocket').mockImplementation(
-    () => new MockSocket('ws://localhost:1234') as unknown as WebSocket,
-  );
+  vi.stubGlobal('WebSocket', MockSocket);
   return () => {
-    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   };
 });

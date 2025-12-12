@@ -89,9 +89,11 @@ describe('ZeroProvider', () => {
       const zero1 = createMockZero('client-1');
       const zero2 = createMockZero('client-2');
 
-      ZeroMock.mockImplementationOnce(() => zero1).mockImplementationOnce(
-        () => zero2,
-      );
+      ZeroMock.mockImplementationOnce(function () {
+        return zero1;
+      }).mockImplementationOnce(function () {
+        return zero2;
+      });
 
       const [server, setServer] = createSignal('foo');
       const schema = {} as Schema;
@@ -119,7 +121,9 @@ describe('ZeroProvider', () => {
 
     test('does not recreate zero when only children change', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
 
       const [wrap, setWrap] = createSignal(false);
       const schema = {} as Schema;
@@ -147,7 +151,7 @@ describe('ZeroProvider', () => {
 
     test('does not recreate zero for identical options but does for new references', () => {
       const createdZeros: MockZero[] = [];
-      ZeroMock.mockImplementation(() => {
+      ZeroMock.mockImplementation(function () {
         const zero = createMockZero(`client-${createdZeros.length + 1}`);
         createdZeros.push(zero);
         return zero;
@@ -189,7 +193,9 @@ describe('ZeroProvider', () => {
 
     test('calls init callback with constructed zero', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
       const init = vi.fn();
 
       const schema = {} as Schema;
@@ -244,7 +250,7 @@ describe('ZeroProvider', () => {
     test('passes auth to Zero constructor when provided', () => {
       const zero = createMockZero();
       const capturedOptions: ZeroOptions<Schema>[] = [];
-      ZeroMock.mockImplementation(options => {
+      ZeroMock.mockImplementation(function (options) {
         capturedOptions.push(options as ZeroOptions<Schema>);
         return zero;
       });
@@ -273,7 +279,7 @@ describe('ZeroProvider', () => {
       const zero = createMockZero();
       // oxlint-disable-next-line no-explicit-any
       const capturedOptions: ZeroOptions<any, any, any>[] = [];
-      ZeroMock.mockImplementation(options => {
+      ZeroMock.mockImplementation(function (options) {
         capturedOptions.push(options);
         return zero;
       });
@@ -299,7 +305,9 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect when auth changes', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal('token-1');
@@ -339,7 +347,9 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect when auth changes from undefined to a value', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal<string | undefined>(undefined);
@@ -371,7 +381,9 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect with undefined when auth prop is changed to undefined', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal<string | undefined>('token-initial');

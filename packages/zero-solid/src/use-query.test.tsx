@@ -799,13 +799,13 @@ test('useQuery view disposed when zero instance changes, new view created', () =
   expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(1);
 
   const mockZero1 = newMockZero(clientID + '1', queryDelegate);
-  const mockZero1MaterializeSpy = vi.spyOn(queryDelegate, 'materialize');
 
   setZero(mockZero1);
 
   expect(destroySpy).toHaveBeenCalledTimes(1);
-  expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(1);
-  expect(mockZero1MaterializeSpy).toHaveBeenCalledTimes(1);
+  // In Vitest 4, spyOn on an already spied method returns the same spy,
+  // so we check the total call count increased by 1 (from 1 to 2)
+  expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(2);
 });
 
 test('useQuery view disposed when query changes and new view is created', () => {
