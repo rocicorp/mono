@@ -152,9 +152,9 @@ async function main() {
   }
 
   if (config.schema.path) {
-    if (config.query.url || config.mutate.url) {
+    if (config.query.url && config.mutate.url) {
       lc.error?.(
-        'Cannot use -p/--path flag when using query.url or mutate.url.',
+        'Cannot use -p/--path flag when using ZERO_MUTATE_URL and ZERO_QUERY_URL.',
       );
       process.exit(-1);
     }
