@@ -89,11 +89,10 @@ export async function loadSchemaAndPermissions(
   const dir = dirname(fileURLToPath(import.meta.url));
   const absoluteSchemaPath = resolve(schemaPath);
   const relativeDir = relative(dir, dirname(absoluteSchemaPath));
-  let relativePath = join(
-    // tsImport expects the relativePath to be a path and not just a filename.
-    relativeDir.length ? relativeDir : `.${sep}`,
-    basename(absoluteSchemaPath),
-  );
+  let relativePath =
+    relativeDir.length && relativeDir !== '.'
+      ? join(relativeDir, basename(absoluteSchemaPath))
+      : `.${sep}${basename(absoluteSchemaPath)}`;
 
   // tsImport doesn't expect to receive slashes in the Windows format when running
   // on Windows. They need to be converted to *nix format.
