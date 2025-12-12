@@ -13,9 +13,8 @@ describe('scripts/permissions', () => {
     const result = await loadSchemaAndPermissions(schemaPath);
 
     expect(result?.schema?.tables?.member).toBeDefined();
-    expect(
-      result.permissions?.tables?.['member']?.row?.insert?.[0],
-    ).toMatchInlineSnapshot(`
+    expect(result.permissions?.tables?.['member']?.row?.insert?.[0])
+      .toMatchInlineSnapshot(`
       [
         "allow",
         {
@@ -46,7 +45,6 @@ describe('scripts/permissions', () => {
     );
 
     const result = await loadSchemaAndPermissions(nonExistentPath, true);
-
     expect(result).toBeUndefined();
   });
 });
