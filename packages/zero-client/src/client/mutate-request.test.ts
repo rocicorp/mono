@@ -226,6 +226,7 @@ describe('CRUD patterns on client', () => {
             name: string;
           }>(async ({tx, args}) => {
             // Modern pattern: pass CRUD request to tx.mutate()
+            expect(typeof tx.mutate).not.toBe('function');
             await tx.mutate.user.insert(args);
           }),
           update: defineMutatorWithType<typeof schemaModern>()<{
@@ -279,6 +280,7 @@ describe('CRUD patterns on client', () => {
             id: string;
             name: string;
           }>(async ({tx, args}) => {
+            expect(typeof tx.mutate).not.toBe('function');
             await tx.mutate.user.insert(args);
           }),
         },
@@ -319,6 +321,7 @@ describe('CRUD patterns on client', () => {
             name: string;
           }>(async ({tx, args}) => {
             // Modern pattern also works when legacy is enabled
+            expect(typeof tx.mutate).not.toBe('function');
             await tx.mutate.user.insert(args);
           }),
         },
@@ -362,6 +365,7 @@ describe('CRUD patterns on client', () => {
             name: string;
           }>(async ({tx, args}) => {
             // Legacy pattern: direct method call on tx.mutate
+            expect(typeof tx.mutate).not.toBe('function');
             await tx.mutate.user.insert(args);
           }),
           update: defineMutatorWithType<typeof schemaLegacy>()<{
@@ -425,7 +429,7 @@ describe('CRUD patterns on client', () => {
       await z.close();
     });
 
-    test('tx.mutate has no direct CRUD methods when enableLegacyMutators is false', () => {
+    test('tx.mutate exposes CRUD without a callable signature when enableLegacyMutators is false', () => {
       const schemaModern = createSchema({
         tables: [
           table('user')
@@ -440,80 +444,18 @@ describe('CRUD patterns on client', () => {
 
       type ModernTx = Transaction<typeof schemaModern>;
 
-      // Type test: tx.mutate should NOT have legacy methods when disabled
-      // Instead we verify the type shape
+      // Type test: tx.mutate should expose CRUD helpers (non-callable)
       type MutateType = ModernTx['mutate'];
 
-      // MutateType should be callable
-      expectTypeOf<MutateType>().toBeCallableWith(
-        {} as {
-          schema: typeof schemaModern;
-          table: 'user';
-          kind: 'insert';
-          args: {id: string; name: string};
-        },
-      );
+      expectTypeOf<MutateType>().toEqualTypeOf<
+        SchemaCRUD<typeof schemaModern>
+      >();
 
-      // tx.mutate.user should exist
       expectTypeOf<keyof MutateType>().toEqualTypeOf<'user'>();
 
       expectTypeOf<MutateType['user']>().toEqualTypeOf<
         SchemaCRUD<typeof schemaModern>['user']
       >();
-
-      // TODO(arv): tx.mutate should no longer be callable.
-    });
-  });
-
-  describe('both patterns together', () => {
-    test('can use both modern and legacy patterns in same mutator when enableLegacyMutators: true', async () => {
-      const schemaWithBoth = createSchema({
-        tables: [
-          table('user')
-            .columns({
-              id: string(),
-              name: string(),
-              email: string(),
-            })
-            .primaryKey('id'),
-        ],
-        enableLegacyMutators: true,
-      });
-
-      const mutators = defineMutatorsWithType<typeof schemaWithBoth>()({
-        user: {
-          createWithBothPatterns: defineMutatorWithType<
-            typeof schemaWithBoth
-          >()<{
-            id: string;
-            name: string;
-            email: string;
-          }>(async ({tx, args}) => {
-            // Can use modern pattern
-            await tx.mutate.user.insert(args);
-            // Can also use legacy pattern for update
-            await tx.mutate.user.update({
-              id: args.id,
-              name: args.name + ' (verified)',
-            });
-          }),
-        },
-      });
-
-      const z = zeroForTest({
-        schema: schemaWithBoth,
-        mutators,
-      });
-
-      await z.mutate(
-        mutators.user.createWithBothPatterns({
-          id: '1',
-          name: 'Mixed',
-          email: 'mixed@test.com',
-        }),
-      ).client;
-
-      await z.close();
     });
   });
 });

@@ -16,7 +16,8 @@ import type {
 import {
   type CRUDExecutor,
   type CRUDKind,
-  makeMutateCRUDFunction,
+  makeCRUDMutate,
+  makeSchemaCRUDObject,
   type SchemaCRUD,
   type TableCRUD,
 } from '../../zql/src/mutate/crud.ts';
@@ -111,7 +112,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
   readonly clientID: string;
   readonly mutationID: number;
-  readonly mutate: MutateCRUD<TSchema, true>;
+  readonly mutate: SchemaCRUD<TSchema>;
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
@@ -124,7 +125,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
     dbTransaction: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
-    mutate: MutateCRUD<TSchema, true>,
+    mutate: SchemaCRUD<TSchema>,
     schema: TSchema,
     serverSchema: ServerSchema,
   ) {
@@ -238,7 +239,7 @@ export class CRUDMutatorFactory<S extends Schema> {
   ): Promise<TransactionImpl<S, TWrappedTransaction>> {
     const serverSchema = await this.#getOrFetchServerSchema(dbTransaction);
     const executor = this.createExecutor(dbTransaction, serverSchema);
-    const mutate = makeMutateCRUDFunction(this.#schema, true, executor);
+    const mutate = makeSchemaCRUDObject(this.#schema, executor);
     return new TransactionImpl(
       dbTransaction,
       clientID,
@@ -263,7 +264,7 @@ export async function makeServerTransaction<
   // Use the internal executor and shared function directly,
   // bypassing the validation in makeMutateCRUD/makeSchemaCRUD
   const executor = makeServerCRUDExecutor(schema, dbTransaction, serverSchema);
-  const mutate = makeMutateCRUDFunction(schema, true, executor);
+  const mutate = makeSchemaCRUDObject(schema, executor);
   return new TransactionImpl(
     dbTransaction,
     clientID,
@@ -287,7 +288,7 @@ export function makeMutateCRUD<
   addSchemaCRUD: TAddSchemaCRUD,
 ): MutateCRUD<TSchema, TAddSchemaCRUD> {
   const executor = makeServerCRUDExecutor(schema, dbTransaction, serverSchema);
-  return makeMutateCRUDFunction(schema, addSchemaCRUD, executor);
+  return makeCRUDMutate(schema, addSchemaCRUD, executor);
 }
 
 /**

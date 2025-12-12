@@ -126,7 +126,7 @@ export type CRUDExecutor = (
  * @param executor - A function that executes CRUD operations
  * @returns A MutateCRUD function that can be called with CRUDMutateRequest objects
  */
-export function makeMutateCRUDFunction<
+export function makeCRUDMutate<
   TSchema extends Schema,
   TAddSchemaCRUD extends boolean,
 >(
@@ -155,6 +155,21 @@ export function makeMutateCRUDFunction<
   }
 
   return mutate as MutateCRUD<TSchema, TAddSchemaCRUD>;
+}
+
+export function makeSchemaCRUDObject<TSchema extends Schema>(
+  schema: TSchema,
+  executor: CRUDExecutor,
+): SchemaCRUD<TSchema> {
+  const target: Record<string, undefined> = {};
+  for (const tableName of Object.keys(schema.tables)) {
+    target[tableName] = undefined;
+  }
+
+  return recordProxy(
+    target,
+    (_value, tableName) => makeTableCRUD(tableName, executor),
+  ) as SchemaCRUD<TSchema>;
 }
 
 /**
@@ -207,35 +222,3 @@ export type CRUDMutateRequest<
 
 // oxlint-disable-next-line no-explicit-any
 export type AnyCRUDMutateRequest = CRUDMutateRequest<any, any, CRUDKind, any>;
-
-export type TableCRUDMutators<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-> = {
-  [K in keyof TableMutator<TSchema['tables'][TTable]>]: CRUDMutator<
-    TSchema,
-    TTable,
-    K,
-    Parameters<TableMutator<TSchema['tables'][TTable]>[K]>[0]
-  >;
-};
-
-/**
- * Creates a table CRUD builder that returns `CRUDMutateRequest` objects.
- * These request objects can be passed to `tx.mutate(request)`.
- */
-export function makeTableCRUDRequestBuilder<
-  S extends Schema,
-  T extends keyof S['tables'] & string,
->(schema: S, table: T): TableCRUDMutators<S, T> {
-  return Object.fromEntries(
-    CRUD_KINDS.map(kind => [
-      kind,
-      (args: unknown) => ({schema, table, kind, args}),
-    ]),
-  ) as TableCRUDMutators<S, T>;
-}
-
-export type SchemaCRUDMutators<S extends Schema> = {
-  [T in keyof S['tables'] & string]: TableCRUDMutators<S, T>;
-};

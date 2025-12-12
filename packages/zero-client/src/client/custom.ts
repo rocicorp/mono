@@ -8,12 +8,9 @@ import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {makeMutateCRUDFunction} from '../../../zql/src/mutate/crud.ts';
-import type {
-  ClientTransaction,
-  MutateCRUD,
-  Transaction,
-} from '../../../zql/src/mutate/custom.ts';
+import {makeSchemaCRUDObject} from '../../../zql/src/mutate/crud.ts';
+import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
+import type {ClientTransaction, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
   type HumanReadable,
@@ -116,7 +113,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   implements ClientTransaction<TSchema>
 {
   readonly location = 'client';
-  readonly mutate: MutateCRUD<TSchema, true>;
+  readonly mutate: SchemaCRUD<TSchema>;
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
@@ -133,7 +130,7 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
     this.#repTx = repTx;
 
     const executor = makeCRUDExecutor(repTx, schema, ivmBranch);
-    this.mutate = makeMutateCRUDFunction(schema, true, executor);
+    this.mutate = makeSchemaCRUDObject(schema, executor);
 
     const zeroContext = newZeroContext(
       lc,

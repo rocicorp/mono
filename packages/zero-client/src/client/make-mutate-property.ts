@@ -32,7 +32,7 @@ import type {MutatorProxy} from './mutator-proxy.ts';
  * using different separators ('.' for mutator definitions, '|' for custom functions) and wraps them
  * using the mutator proxy.
  */
-export function makeMutateProperty(
+export function addCustomMutatorsProperties(
   mutators: CustomMutatorDefs,
   mutatorProxy: MutatorProxy,
   mutateObject: Record<string, unknown>,

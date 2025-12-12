@@ -1,7 +1,7 @@
 // oxlint-disable no-explicit-any
 import {describe, expect, test, vi} from 'vitest';
 import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
-import {makeMutateProperty} from './make-mutate-property.ts';
+import {addCustomMutatorsProperties} from './make-mutate-property.ts';
 import type {MutatorProxy} from './mutator-proxy.ts';
 
 describe('makeMutateProperty', () => {
@@ -31,7 +31,12 @@ describe('makeMutateProperty', () => {
       updateUser: vi.fn(),
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect(mutateObject).toHaveProperty('createUser');
     expect(mutateObject).toHaveProperty('updateUser');
@@ -65,7 +70,12 @@ describe('makeMutateProperty', () => {
       },
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect(mutateObject).toHaveProperty('user');
     expect(mutateObject).toHaveProperty('post');
@@ -110,7 +120,12 @@ describe('makeMutateProperty', () => {
       },
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect((mutateObject as any).api.user.profile).toHaveProperty('update');
 
@@ -142,7 +157,12 @@ describe('makeMutateProperty', () => {
       },
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect(mutateObject).toHaveProperty('simpleAction');
     expect(mutateObject).toHaveProperty('user');
@@ -166,7 +186,12 @@ describe('makeMutateProperty', () => {
       newMutator: vi.fn(),
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect(mutateObject).toHaveProperty('existing');
     expect(mutateObject).toHaveProperty('newMutator');
@@ -190,7 +215,12 @@ describe('makeMutateProperty', () => {
       },
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect((mutateObject as any).user).toBe(existingUserObject);
 
@@ -212,7 +242,12 @@ describe('makeMutateProperty', () => {
       customAction: mockCustomMutator,
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect(mutateObject).toHaveProperty('customAction');
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
@@ -233,7 +268,12 @@ describe('makeMutateProperty', () => {
       testMutator: vi.fn(),
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     const wrappedMutator = mutateObject.testMutator as () => MutatorResult;
     const result = wrappedMutator();
@@ -252,7 +292,12 @@ describe('makeMutateProperty', () => {
 
     const mutators = {} as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect(Object.keys(mutateObject)).toHaveLength(0);
     expect(mutatorProxy.wrapCustomMutator).not.toHaveBeenCalled();
@@ -268,7 +313,12 @@ describe('makeMutateProperty', () => {
     } as CustomMutatorDefs;
 
     expect(() => {
-      makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+      addCustomMutatorsProperties(
+        mutators,
+        mutatorProxy,
+        mutateObject,
+        mockRepMutate,
+      );
     }).toThrow('Unexpected undefined value');
   });
 
@@ -289,7 +339,12 @@ describe('makeMutateProperty', () => {
       },
     } as CustomMutatorDefs;
 
-    makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
+    addCustomMutatorsProperties(
+      mutators,
+      mutatorProxy,
+      mutateObject,
+      mockRepMutate,
+    );
 
     expect(mutatorProxy.wrapCustomMutator).toHaveBeenCalledWith(
       'a|b|c',

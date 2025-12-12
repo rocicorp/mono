@@ -117,12 +117,7 @@ export type {
   View,
   ViewFactory,
 } from '../../zql/src/ivm/view.ts';
-export type {
-  CRUDMutator,
-  SchemaCRUDMutators,
-  TableCRUDMutators,
-  TableMutator,
-} from '../../zql/src/mutate/crud.ts';
+export type {CRUDMutator, TableMutator} from '../../zql/src/mutate/crud.ts';
 export type {
   AnyTransaction,
   DeleteID,
