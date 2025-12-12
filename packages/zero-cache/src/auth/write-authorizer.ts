@@ -348,7 +348,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     authData: JWTPayload | undefined,
     op: ActionOpMap[A],
   ) {
-    const rules = must(this.#loadedPermissions).permissions?.tables[
+    const rules = must(this.#loadedPermissions)?.permissions?.tables?.[
       op.tableName
     ];
     const rowPolicies = rules?.row;

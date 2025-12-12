@@ -20,16 +20,16 @@ const assetSchema = v.object({
 
 export type AssetPermissions = v.Infer<typeof assetSchema>;
 
+const tablePermissionsSchema = v.record(
+  v.object({
+    row: assetSchema.optional(),
+    cell: v.record(assetSchema).optional(),
+  }),
+);
+
 export const permissionsConfigSchema = v.object({
-  tables: v.record(
-    v.object({
-      row: assetSchema.optional(),
-      cell: v.record(assetSchema).optional(),
-    }),
-  ),
+  tables: tablePermissionsSchema.optional(),
 });
 
-export type TablePermissions = v.Infer<
-  typeof permissionsConfigSchema.shape.tables
->;
+export type TablePermissions = v.Infer<typeof tablePermissionsSchema>;
 export type PermissionsConfig = v.Infer<typeof permissionsConfigSchema>;

@@ -12,6 +12,7 @@ import {newExpressionBuilder} from '../../zql/src/query/static-query.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
+  TablePermissions,
 } from './compiled-permissions.ts';
 import type {NameMapper} from './name-mapper.ts';
 import {clientToServer} from './name-mapper.ts';
@@ -125,7 +126,7 @@ function compilePermissions<TAuthDataShape, TSchema extends Schema>(
     return undefined;
   }
   const nameMapper = clientToServer(schema.tables);
-  const ret: CompiledPermissionsConfig = {tables: {}};
+  const ret = {tables: {} as TablePermissions};
   for (const [tableName, tableConfig] of Object.entries(authz)) {
     const serverName = schema.tables[tableName].serverName ?? tableName;
     ret.tables[serverName] = {

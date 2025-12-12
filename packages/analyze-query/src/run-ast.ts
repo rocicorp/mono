@@ -9,6 +9,7 @@ import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import {mapAST} from '../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
 import type {PermissionsConfig} from '../../zero-schema/src/compiled-permissions.ts';
@@ -18,7 +19,6 @@ import {
   type BuilderDelegate,
 } from '../../zql/src/builder/builder.ts';
 import type {Database} from '../../zqlite/src/db.ts';
-import type {ClientSchema} from '../../zero-protocol/src/client-schema.ts';
 
 export type RunAstOptions = {
   applyPermissions?: boolean | undefined;
@@ -57,6 +57,10 @@ export async function runAst(
     ast = mapAST(ast, must(clientToServerMapper));
   }
   if (options.applyPermissions) {
+    result.warnings.push(
+      'Permissions are deprecated and will be removed in an upcoming release. See: https://zero.rocicorp.dev/docs/auth.',
+    );
+
     const authData = options.authData ? JSON.parse(options.authData) : {};
     if (!options.authData) {
       result.warnings.push(
@@ -67,7 +71,10 @@ export async function runAst(
       lc,
       'clientGroupIDForAnalyze',
       ast,
-      must(permissions),
+      must(
+        permissions,
+        'Permissions are required when applyPermissions is true',
+      ),
       authData,
       false,
     ).transformedAst;
