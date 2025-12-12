@@ -35,7 +35,7 @@ import type {
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
-import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
+import type {ConditionalSchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {getServerSchema} from './schema.ts';
 
 export type CustomMutatorDefs<TDBTransaction> = {
@@ -117,7 +117,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
-  readonly query: SchemaQuery<TSchema>;
+  readonly query: ConditionalSchemaQuery<TSchema>;
 
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
