@@ -2,7 +2,6 @@ import {expect, test, vi} from 'vitest';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
@@ -51,31 +50,26 @@ test('Zero Junction', async () => {
     relationships: [eventRelation],
   });
 
-  const crud = createCRUDBuilder(schema);
-
   const mutators = defineMutatorsWithType<typeof schema>()({
     doBatch: defineMutatorWithType<typeof schema>()(async ({tx}) => {
-      await tx.mutate(
-        crud.event.insert({id: 'e1', name: 'Buffalo Big Board Classic'}),
-      );
-      await tx.mutate(crud.athlete.insert({id: 'a1', name: 'Mason Ho'}));
-      await tx.mutate(crud.discipline.insert({id: 'd1', name: 'Shortboard'}));
-      await tx.mutate(crud.discipline.insert({id: 'd2', name: 'Supsquatch'}));
+      await tx.mutate.event.insert({
+        id: 'e1',
+        name: 'Buffalo Big Board Classic',
+      });
+      await tx.mutate.athlete.insert({id: 'a1', name: 'Mason Ho'});
+      await tx.mutate.discipline.insert({id: 'd1', name: 'Shortboard'});
+      await tx.mutate.discipline.insert({id: 'd2', name: 'Supsquatch'});
 
-      await tx.mutate(
-        crud.matchup.insert({
-          eventID: 'e1',
-          athleteID: 'a1',
-          disciplineID: 'd1',
-        }),
-      );
-      await tx.mutate(
-        crud.matchup.insert({
-          eventID: 'e1',
-          athleteID: 'a1',
-          disciplineID: 'd2',
-        }),
-      );
+      await tx.mutate.matchup.insert({
+        eventID: 'e1',
+        athleteID: 'a1',
+        disciplineID: 'd1',
+      });
+      await tx.mutate.matchup.insert({
+        eventID: 'e1',
+        athleteID: 'a1',
+        disciplineID: 'd2',
+      });
     }),
   });
   const z = zeroForTest({

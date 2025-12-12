@@ -6,7 +6,6 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import {createCRUDBuilder} from '../../../zql/src/mutate/crud.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
@@ -25,14 +24,12 @@ test('we can create rows with json columns and query those rows', async () => {
     ],
   });
 
-  const crud = createCRUDBuilder(schema);
-
   const mutators = defineMutatorsWithType<typeof schema>()({
     insertTrack: defineMutatorWithType<typeof schema>()<{
       id: string;
       title: string;
       artists: string[];
-    }>(({tx, args}) => tx.mutate(crud.track.insert(args))),
+    }>(({tx, args}) => tx.mutate.track.insert(args)),
   });
 
   const {insertTrack} = mutators;

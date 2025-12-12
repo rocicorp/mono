@@ -1,9 +1,4 @@
-import {
-  createCRUDBuilder,
-  defineMutator,
-  defineMutators,
-  type Transaction,
-} from '@rocicorp/zero';
+import {defineMutator, defineMutators, type Transaction} from '@rocicorp/zero';
 import {z} from 'zod/mini';
 import {
   assertIsCreatorOrAdmin,
@@ -14,7 +9,7 @@ import {
   type AuthData,
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import {builder, schema, ZERO_PROJECT_ID} from './schema.ts';
+import {builder, ZERO_PROJECT_ID} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
@@ -72,8 +67,6 @@ const notificationUpdateSchema = z.object({
   created: z.number(),
 });
 
-const crud = createCRUDBuilder(schema);
-
 export const mutators = defineMutators({
   issue: {
     create: defineMutator(
@@ -82,19 +75,17 @@ export const mutators = defineMutators({
         const {id, title, description, created, modified, projectID} = args;
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
-        await tx.mutate(
-          crud.issue.insert({
-            id,
-            projectID: projectIDWithDefault(projectID),
-            title,
-            description: description ?? '',
-            created,
-            creatorID,
-            modified,
-            open: true,
-            visibility: 'public',
-          }),
-        );
+        await tx.mutate.issue.insert({
+          id,
+          projectID: projectIDWithDefault(projectID),
+          title,
+          description: description ?? '',
+          created,
+          creatorID,
+          modified,
+          open: true,
+          visibility: 'public',
+        });
 
         // subscribe to notifications if the user creates the issue
         await updateIssueNotification(tx, {
@@ -121,7 +112,7 @@ export const mutators = defineMutators({
         }
 
         await assertIsCreatorOrAdmin(tx, authData, builder.issue, change.id);
-        await tx.mutate(crud.issue.update(change));
+        await tx.mutate.issue.update(change);
 
         const isAssigneeChange =
           change.assigneeID !== undefined &&
@@ -154,7 +145,7 @@ export const mutators = defineMutators({
 
     delete: defineMutator(z.string(), async ({tx, args: id, ctx: authData}) => {
       await assertIsCreatorOrAdmin(tx, authData, builder.issue, id);
-      await tx.mutate(crud.issue.delete({id}));
+      await tx.mutate.issue.delete({id});
     }),
 
     addLabel: defineMutator(
@@ -165,13 +156,11 @@ export const mutators = defineMutators({
       }),
       async ({tx, args: {issueID, labelID, projectID}, ctx: authData}) => {
         await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
-        await tx.mutate(
-          crud.issueLabel.insert({
-            issueID,
-            labelID,
-            projectID: projectIDWithDefault(projectID),
-          }),
-        );
+        await tx.mutate.issueLabel.insert({
+          issueID,
+          labelID,
+          projectID: projectIDWithDefault(projectID),
+        });
       },
     ),
 
@@ -182,7 +171,7 @@ export const mutators = defineMutators({
       }),
       async ({tx, args: {issueID, labelID}, ctx: authData}) => {
         await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
-        await tx.mutate(crud.issueLabel.delete({issueID, labelID}));
+        await tx.mutate.issueLabel.delete({issueID, labelID});
       },
     ),
   },
@@ -221,7 +210,7 @@ export const mutators = defineMutators({
 
     remove: defineMutator(z.string(), async ({tx, args: id, ctx: authData}) => {
       await assertIsCreatorOrAdmin(tx, authData, builder.emoji, id);
-      await tx.mutate(crud.emoji.delete({id}));
+      await tx.mutate.emoji.delete({id});
     }),
   },
 
@@ -234,9 +223,7 @@ export const mutators = defineMutators({
 
         await assertUserCanSeeIssue(tx, creatorID, issueID);
 
-        await tx.mutate(
-          crud.comment.insert({id, issueID, creatorID, body, created}),
-        );
+        await tx.mutate.comment.insert({id, issueID, creatorID, body, created});
 
         await updateIssueNotification(tx, {
           userID: creatorID,
@@ -254,13 +241,13 @@ export const mutators = defineMutators({
       }),
       async ({tx, args: {id, body}, ctx: authData}) => {
         await assertIsCreatorOrAdmin(tx, authData, builder.comment, id);
-        await tx.mutate(crud.comment.update({id, body}));
+        await tx.mutate.comment.update({id, body});
       },
     ),
 
     remove: defineMutator(z.string(), async ({tx, args: id, ctx: authData}) => {
       await assertIsCreatorOrAdmin(tx, authData, builder.comment, id);
-      await tx.mutate(crud.comment.delete({id}));
+      await tx.mutate.comment.delete({id});
     }),
   },
 
@@ -280,13 +267,11 @@ export const mutators = defineMutators({
           );
         }
 
-        await tx.mutate(
-          crud.label.insert({
-            id,
-            name,
-            projectID: projectIDWithDefault(projectID),
-          }),
-        );
+        await tx.mutate.label.insert({
+          id,
+          name,
+          projectID: projectIDWithDefault(projectID),
+        });
       },
     ),
 
@@ -311,20 +296,16 @@ export const mutators = defineMutators({
         }
 
         const finalProjectID = projectIDWithDefault(projectID);
-        await tx.mutate(
-          crud.label.insert({
-            id: labelID,
-            name: labelName,
-            projectID: finalProjectID,
-          }),
-        );
-        await tx.mutate(
-          crud.issueLabel.insert({
-            issueID,
-            labelID,
-            projectID: finalProjectID,
-          }),
-        );
+        await tx.mutate.label.insert({
+          id: labelID,
+          name: labelName,
+          projectID: finalProjectID,
+        });
+        await tx.mutate.issueLabel.insert({
+          issueID,
+          labelID,
+          projectID: finalProjectID,
+        });
       },
     ),
   },
@@ -338,7 +319,7 @@ export const mutators = defineMutators({
       async ({tx, args: {issueID, viewed}, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
-        await tx.mutate(crud.viewState.upsert({issueID, userID, viewed}));
+        await tx.mutate.viewState.upsert({issueID, userID, viewed});
       },
     ),
   },
@@ -352,7 +333,7 @@ export const mutators = defineMutators({
       async ({tx, args: {key, value}, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
-        await tx.mutate(crud.userPref.upsert({key, value, userID}));
+        await tx.mutate.userPref.upsert({key, value, userID});
       },
     ),
   },
@@ -373,16 +354,14 @@ async function addEmoji(
     await assertUserCanSeeComment(tx, creatorID, subjectID);
   }
 
-  await tx.mutate(
-    crud.emoji.insert({
-      id,
-      value: unicode,
-      annotation,
-      subjectID,
-      creatorID,
-      created,
-    }),
-  );
+  await tx.mutate.emoji.insert({
+    id,
+    value: unicode,
+    annotation,
+    subjectID,
+    creatorID,
+    created,
+  });
 
   // subscribe to notifications if the user emojis the issue itself
   if (subjectType === 'issue') {
@@ -421,22 +400,18 @@ async function updateIssueNotification(
   // if the user is subscribing to the issue, and they don't already have a preference
   // or the forceUpdate flag is set, we upsert the notification.
   if (subscribed === 'subscribe' && (!existingNotification || forceUpdate)) {
-    await tx.mutate(
-      crud.issueNotifications.upsert({
-        userID,
-        issueID,
-        subscribed: true,
-        created,
-      }),
-    );
+    await tx.mutate.issueNotifications.upsert({
+      userID,
+      issueID,
+      subscribed: true,
+      created,
+    });
   } else if (subscribed === 'unsubscribe') {
-    await tx.mutate(
-      crud.issueNotifications.upsert({
-        userID,
-        issueID,
-        subscribed: false,
-        created,
-      }),
-    );
+    await tx.mutate.issueNotifications.upsert({
+      userID,
+      issueID,
+      subscribed: false,
+      created,
+    });
   }
 }

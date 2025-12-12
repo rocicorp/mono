@@ -38,7 +38,7 @@ type ZeroCRUDMutate = {
 };
 
 /**
- * This is the zero.mutate object part representing the CRUD operations. If the
+ * This is the zero.mutateBatch function part representing the CRUD operations. If the
  * tables are `issue` and `label`, then this object will have `issue` and
  * `label` properties.
  *
@@ -47,10 +47,9 @@ type ZeroCRUDMutate = {
  * @param mutate - The object to use as the mutate object. Properties for each
  *                 table will be assigned to this object.
  */
-export function makeCRUDMutate<const S extends Schema>(
+export function makeCRUDMutateBatch<const S extends Schema>(
   schema: S,
   repMutate: ZeroCRUDMutate,
-  mutate: object,
 ): BatchMutator<S> {
   if (schema.enableLegacyMutators !== true) {
     return undefined as BatchMutator<S>;
@@ -70,6 +69,15 @@ export function makeCRUDMutate<const S extends Schema>(
     return rv;
   };
 
+  return mutateBatch as BatchMutator<S>;
+}
+
+export function addTableCRUDProperties<TSchema extends Schema>(
+  schema: TSchema,
+  mutate: object,
+  repMutate: ZeroCRUDMutate,
+): void {
+  const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
     (mutate as Record<string, unknown>)[name] = makeEntityCRUDMutate(
       name,
@@ -77,7 +85,6 @@ export function makeCRUDMutate<const S extends Schema>(
       zeroCRUD,
     );
   }
-  return mutateBatch as BatchMutator<S>;
 }
 
 /**

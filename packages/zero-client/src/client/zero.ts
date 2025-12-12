@@ -123,7 +123,12 @@ import {
 import {ConnectionStatus} from './connection-status.ts';
 import {type Connection, ConnectionImpl} from './connection.ts';
 import {ZeroContext} from './context.ts';
-import {type BatchMutator, type WithCRUD, makeCRUDMutate} from './crud.ts';
+import {
+  type BatchMutator,
+  type WithCRUD,
+  addTableCRUDProperties,
+  makeCRUDMutateBatch,
+} from './crud.ts';
 import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
@@ -147,7 +152,7 @@ import {Inspector} from './inspector/inspector.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import type {MakeMutatePropertyType} from './make-mutate-property.ts';
-import {makeMutateProperty} from './make-mutate-property.ts';
+import {addCustomMutatorsProperties} from './make-mutate-property.ts';
 import {makeReplicacheMutators} from './make-replicache-mutators.ts';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -695,11 +700,15 @@ export class Zero<
       )(mr.args);
     };
 
-    const mutateBatch = makeCRUDMutate<S>(schema, rep.mutate, callableMutate);
+    const mutateBatch = makeCRUDMutateBatch<S>(schema, rep.mutate);
+
+    if (schema.enableLegacyMutators) {
+      addTableCRUDProperties(schema, callableMutate, rep.mutate);
+    }
 
     // This is the legacy mutators. They are added to zero.mutate.<mutatorName>.
     if (mutators && !isMutatorRegistry(mutators)) {
-      makeMutateProperty(
+      addCustomMutatorsProperties(
         mutators as CustomMutatorDefs,
         mutatorProxy,
         callableMutate as unknown as Record<string, unknown>,
@@ -1039,13 +1048,23 @@ export class Zero<
   }
 
   /**
-   * Provides simple "CRUD" mutations for the tables in the schema.
+   * Use to execute mutations. The primary flow is to call
+   * `zero.mutate(mutationRequest)` with your registered custom mutators:
    *
-   * Each table has `create`, `set`, `update`, and `delete` methods.
+   * ```ts
+   * await zero.mutate(
+   *   mutators.myMutator({id: '1', title: 'First issue'}),
+   * );
+   * ```
+   *
+   * When `schema.enableLegacyMutators` is true, legacy conveniences are added:
+   * - Table-scoped CRUD helpers, e.g. `zero.mutate.issue.create` / `set` / `update` / `delete`
+   * - Your custom mutators exposed directly on `zero.mutate`
    *
    * ```ts
    * await zero.mutate.issue.create({id: '1', title: 'First issue', priority: 'high'});
    * await zero.mutate.comment.create({id: '1', text: 'First comment', issueID: '1'});
+   * await zero.mutate.myMutator({id: '1', title: 'First issue'});
    * ```
    *
    * The `update` methods support partials. Unspecified or `undefined` fields

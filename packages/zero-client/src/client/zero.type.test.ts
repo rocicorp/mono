@@ -15,7 +15,7 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {SchemaCRUD, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
@@ -289,14 +289,14 @@ test('Custom mutators still work when enableLegacyMutators: false', async () => 
 
   // Type-level: Verify table mutators are NOT available but custom mutators ARE
   // @ts-expect-error - issues table should not exist when legacy mutators disabled
-  z.mutate.issues;
+  void z.mutate.issues;
   expectTypeOf(z.mutate.issue.customCreate).toBeFunction();
 
   // Runtime: Verify custom mutator can be called
-  await z.mutate.issue.customCreate({id: '1', title: 'Test'});
+  await z.mutate.issue.customCreate({id: '1', title: 'Test'}).client;
 });
 
-test('tx.mutate has no table properties when enableLegacyMutators: false', async () => {
+test('tx.mutate exposes only CRUD and is not callable when enableLegacyMutators is false', async () => {
   const schema = createSchema({
     tables: [
       table('issues')
@@ -310,15 +310,22 @@ test('tx.mutate has no table properties when enableLegacyMutators: false', async
   });
 
   const mutators = defineMutatorsWithType<typeof schema>()({
-    testMutator: defineMutatorWithType<typeof schema>()(({tx}) => {
-      // Runtime test: 'issues' should NOT be in tx.mutate when legacy mutators disabled
-      expect('issues' in tx.mutate).toBe(false);
+    issue: {
+      insertViaTx: defineMutatorWithType<typeof schema>()(({tx}) => {
+        expect(typeof tx.mutate).not.toBe('function');
+        expect('issues' in tx.mutate).toBe(true);
+        expect(typeof tx.mutate.issues.insert).toBe('function');
 
-      // Also verify a non-existent table is also false
-      expect('noSuchTable' in tx.mutate).toBe(false);
+        // Custom namespaces should not be added to tx.mutate
+        expect('issue' in tx.mutate).toBe(false);
+        expect('noSuchTable' in tx.mutate).toBe(false);
 
-      return Promise.resolve();
-    }),
+        // Type-level: tx.mutate should be a pure CRUD object
+        expectTypeOf(tx.mutate).toEqualTypeOf<SchemaCRUD<typeof schema>>();
+
+        return tx.mutate.issues.insert({id: 'a', title: 'from tx'});
+      }),
+    },
   } as const);
 
   const z = zeroForTest({
@@ -326,5 +333,5 @@ test('tx.mutate has no table properties when enableLegacyMutators: false', async
     mutators,
   });
 
-  await z.mutate(mutators.testMutator()).client;
+  await z.mutate(mutators.issue.insertViaTx()).client;
 });
