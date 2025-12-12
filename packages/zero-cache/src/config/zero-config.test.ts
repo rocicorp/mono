@@ -185,10 +185,12 @@ test('zero-cache --help', () => {
                                                                                                                                                                                          
                                                                    You can disable the planner if it is picking bad strategies.                                                          
                                                                                                                                                                                          
-     --yield-threshold-ms number                                   default: 200                                                                                                          
+     --yield-threshold-ms number                                   default: 10                                                                                                           
        ZERO_YIELD_THRESHOLD_MS env                                                                                                                                                       
-                                                                   The ammount of time in milliseconds that a single client's view hydration                                             
-                                                                         or advancement can take before yielding to the event loop.                                                      
+                                                                   The maximum amount of time in milliseconds that a sync worker will                                                    
+                                                                   spend in IVM (processing query hydration and advancement) before yielding                                             
+                                                                   to the event loop. Lower values increase responsiveness and fairness at                                               
+                                                                   the cost of reduced throughput.                                                                                       
                                                                                                                                                                                          
      --change-db string                                            optional                                                                                                              
        ZERO_CHANGE_DB env                                                                                                                                                                
