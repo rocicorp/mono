@@ -10,7 +10,10 @@ import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {makeSchemaCRUDObject} from '../../../zql/src/mutate/crud.ts';
 import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
-import type {ClientTransaction, Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {
+  ClientTransaction,
+  Transaction,
+} from '../../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
   type HumanReadable,

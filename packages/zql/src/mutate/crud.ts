@@ -166,9 +166,8 @@ export function makeSchemaCRUDObject<TSchema extends Schema>(
     target[tableName] = undefined;
   }
 
-  return recordProxy(
-    target,
-    (_value, tableName) => makeTableCRUD(tableName, executor),
+  return recordProxy(target, (_value, tableName) =>
+    makeTableCRUD(tableName, executor),
   ) as SchemaCRUD<TSchema>;
 }
 
