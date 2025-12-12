@@ -17,10 +17,7 @@ export const deployPermissionsOptions = {
   schema: {
     path: {
       type: v.string().default('schema.ts'),
-      desc: [
-        'Relative path to the file containing the schema definition.',
-        'The file must have a default export of type SchemaConfig.',
-      ],
+      desc: ['Relative path to the file containing the schema definition.'],
       alias: 'p',
     },
   },
