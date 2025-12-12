@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.25.0",
+  "version": "0.25.0-canary.25",
   "description": "Zero is a web framework for serverless web development.",
   "author": "Rocicorp, Inc.",
   "repository": {
