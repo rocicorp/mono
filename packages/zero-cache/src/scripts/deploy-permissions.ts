@@ -90,7 +90,7 @@ async function validatePermissions(
   );
   const validate = validator(tablesToColumns);
   try {
-    for (const [table, perms] of Object.entries(permissions.tables)) {
+    for (const [table, perms] of Object.entries(permissions?.tables ?? {})) {
       const validateRule = ([_, cond]: Rule) => {
         mapCondition(cond, table, validate);
       };
@@ -172,13 +172,17 @@ async function writePermissionsFile(
 }
 
 const ret = await loadSchemaAndPermissions(config.schema.path, true);
-if (!ret) {
+if (!ret || Object.keys(ret?.permissions ?? {}).length === 0) {
   colorConsole.warn(
-    `No schema found at ${config.schema.path}, so could not deploy ` +
+    `No permissions found at ${config.schema.path}, so could not deploy ` +
       `permissions. Replicating data, but no tables will be syncable. ` +
       `Create a schema file with permissions to be able to sync data.`,
   );
 } else {
+  colorConsole.warn(
+    `Permissions are deprecated and will be removed in an upcoming release. See: https://zero.rocicorp.dev/docs/auth.`,
+  );
+
   const {permissions} = ret;
   if (config.output.file) {
     await writePermissionsFile(
