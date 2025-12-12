@@ -172,9 +172,9 @@ async function writePermissionsFile(
 }
 
 const ret = await loadSchemaAndPermissions(config.schema.path, true);
-if (!ret) {
+if (!ret || Object.keys(ret?.permissions ?? {}).length === 0) {
   colorConsole.warn(
-    `No schema found at ${config.schema.path}, so could not deploy ` +
+    `No permissions found at ${config.schema.path}, so could not deploy ` +
       `permissions. Replicating data, but no tables will be syncable. ` +
       `Create a schema file with permissions to be able to sync data.`,
   );
