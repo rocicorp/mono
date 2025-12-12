@@ -1,2 +1,0 @@
-- [ ] tx.mutate should no longer be callable.
-- [x] Remove createCRUDBuilder
