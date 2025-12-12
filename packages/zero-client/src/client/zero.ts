@@ -109,7 +109,7 @@ import {
   type PullRow,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
-import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
+import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
@@ -434,7 +434,7 @@ export class Zero<
    *
    * @deprecated Use {@linkcode createBuilder} to create query builders instead.
    */
-  readonly query: SchemaQuery<S>;
+  readonly query: ConditionalSchemaQuery<S>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.

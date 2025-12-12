@@ -8,7 +8,7 @@ import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
 import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
-import type {SchemaQuery} from '../query/schema-query.ts';
+import type {ConditionalSchemaQuery} from '../query/schema-query.ts';
 import type {CRUDMutateRequest, SchemaCRUD, TransactionMutate} from './crud.ts';
 
 type ClientID = string;
@@ -45,7 +45,7 @@ export interface TransactionBase<S extends Schema> {
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
-  readonly query: SchemaQuery<S>;
+  readonly query: ConditionalSchemaQuery<S>;
 
   run<TTable extends keyof S['tables'] & string, TReturn>(
     query: Query<TTable, S, TReturn>,

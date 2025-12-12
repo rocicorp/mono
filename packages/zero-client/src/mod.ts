@@ -205,7 +205,10 @@ export type {
   RunOptions,
   ZeRow,
 } from '../../zql/src/query/query.ts';
-export type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
+export type {
+  ConditionalSchemaQuery,
+  SchemaQuery,
+} from '../../zql/src/query/schema-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export {ConnectionStatus} from './client/connection-status.ts';
