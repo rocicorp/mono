@@ -179,6 +179,10 @@ if (!ret || Object.keys(ret?.permissions ?? {}).length === 0) {
       `Create a schema file with permissions to be able to sync data.`,
   );
 } else {
+  colorConsole.warn(
+    `Permissions are deprecated and will be removed in an upcoming release. See: https://zero.rocicorp.dev/docs/auth.`,
+  );
+
   const {permissions} = ret;
   if (config.output.file) {
     await writePermissionsFile(
