@@ -87,6 +87,10 @@ export async function loadSchemaAndPermissions(
   const typeModuleErrorMessage = () =>
     `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
 
+  colorConsole.warn?.(
+    'Deploying permissions to zero-cache is deprecated. See: https://zero.rocicorp.dev/docs/auth.',
+  );
+
   colorConsole.info(`Loading permissions from ${schemaPath}`);
   const dir = dirname(fileURLToPath(import.meta.url));
   const absoluteSchemaPath = resolve(schemaPath);

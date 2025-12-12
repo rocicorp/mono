@@ -152,6 +152,16 @@ async function main() {
   }
 
   if (config.schema.path) {
+    if (config.query.url || config.mutate.url) {
+      throw new Error(
+        'Cannot use -p/--path flag when using query.url or mutate.url.',
+      );
+    }
+
+    lc.warn?.(
+      'The -p/--path flag is deprecated. See: https://zero.rocicorp.dev/docs/auth.',
+    );
+
     await deployPermissionsAndStartZeroCache();
 
     // Watch for file changes
