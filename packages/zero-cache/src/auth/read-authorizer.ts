@@ -63,7 +63,7 @@ function transformQueryInternal(
   query: AST,
   permissionRules: PermissionsConfig,
 ): AST {
-  let rowSelectRules = permissionRules.tables[query.table]?.row?.select;
+  let rowSelectRules = permissionRules?.tables?.[query.table]?.row?.select;
 
   if (!rowSelectRules || rowSelectRules.length === 0) {
     // If there are no rules, we default to not allowing any rows to be selected.

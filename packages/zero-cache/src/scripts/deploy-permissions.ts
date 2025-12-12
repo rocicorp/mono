@@ -90,7 +90,7 @@ async function validatePermissions(
   );
   const validate = validator(tablesToColumns);
   try {
-    for (const [table, perms] of Object.entries(permissions.tables)) {
+    for (const [table, perms] of Object.entries(permissions?.tables ?? {})) {
       const validateRule = ([_, cond]: Rule) => {
         mapCondition(cond, table, validate);
       };

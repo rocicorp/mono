@@ -87,11 +87,8 @@ export async function loadSchemaAndPermissions(
   const typeModuleErrorMessage = () =>
     `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
 
-  colorConsole.warn?.(
-    'Deploying permissions to zero-cache is deprecated. See: https://zero.rocicorp.dev/docs/auth.',
-  );
+  colorConsole.info(`Loading schema from ${schemaPath}`);
 
-  colorConsole.info(`Loading permissions from ${schemaPath}`);
   const dir = dirname(fileURLToPath(import.meta.url));
   const absoluteSchemaPath = resolve(schemaPath);
   const relativeDir = relative(dir, dirname(absoluteSchemaPath));
@@ -126,7 +123,7 @@ export async function loadSchemaAndPermissions(
 
   if (!isSchemaConfig(module)) {
     colorConsole.error(
-      `Schema file ${schemaPath} must export [schema] and [permissions].` +
+      `Schema file ${schemaPath} must export [schema].` +
         typeModuleErrorMessage(),
     );
     process.exit(1);
@@ -136,9 +133,16 @@ export async function loadSchemaAndPermissions(
     const perms =
       await (schemaConfig.permissions as unknown as Promise<unknown>);
     const {schema} = schemaConfig;
+
+    if (perms) {
+      colorConsole.warn?.(
+        'Permissions are deprecated and will be removed in an upcoming release. See: https://zero.rocicorp.dev/docs/auth.',
+      );
+    }
+
     return {
       schema,
-      permissions: v.parse(perms, permissionsConfigSchema),
+      permissions: v.parse(perms ?? {}, permissionsConfigSchema),
     };
   } catch (e) {
     colorConsole.error(`Failed to parse Permissions object`);
