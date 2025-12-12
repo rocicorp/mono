@@ -17,9 +17,10 @@ import {
   type CRUDExecutor,
   type CRUDKind,
   makeCRUDMutate,
-  makeSchemaCRUDObject,
+  makeTransactionMutate,
   type SchemaCRUD,
   type TableCRUD,
+  type TransactionMutate,
 } from '../../zql/src/mutate/crud.ts';
 import type {
   DBTransaction,
@@ -112,7 +113,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
   readonly clientID: string;
   readonly mutationID: number;
-  readonly mutate: SchemaCRUD<TSchema>;
+  readonly mutate: TransactionMutate<TSchema>;
   /**
    * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
    */
@@ -125,7 +126,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
     dbTransaction: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
-    mutate: SchemaCRUD<TSchema>,
+    mutate: TransactionMutate<TSchema>,
     schema: TSchema,
     serverSchema: ServerSchema,
   ) {
@@ -239,7 +240,7 @@ export class CRUDMutatorFactory<S extends Schema> {
   ): Promise<TransactionImpl<S, TWrappedTransaction>> {
     const serverSchema = await this.#getOrFetchServerSchema(dbTransaction);
     const executor = this.createExecutor(dbTransaction, serverSchema);
-    const mutate = makeSchemaCRUDObject(this.#schema, executor);
+    const mutate = makeTransactionMutate(this.#schema, executor);
     return new TransactionImpl(
       dbTransaction,
       clientID,
@@ -264,7 +265,7 @@ export async function makeServerTransaction<
   // Use the internal executor and shared function directly,
   // bypassing the validation in makeMutateCRUD/makeSchemaCRUD
   const executor = makeServerCRUDExecutor(schema, dbTransaction, serverSchema);
-  const mutate = makeSchemaCRUDObject(schema, executor);
+  const mutate = makeTransactionMutate(schema, executor);
   return new TransactionImpl(
     dbTransaction,
     clientID,
@@ -276,23 +277,7 @@ export async function makeServerTransaction<
 }
 
 /**
- * Creates a MutateCRUD for server-side use.
- */
-export function makeMutateCRUD<
-  TSchema extends Schema,
-  TAddSchemaCRUD extends boolean,
->(
-  dbTransaction: DBTransaction<unknown>,
-  serverSchema: ServerSchema,
-  schema: TSchema,
-  addSchemaCRUD: TAddSchemaCRUD,
-): MutateCRUD<TSchema, TAddSchemaCRUD> {
-  const executor = makeServerCRUDExecutor(schema, dbTransaction, serverSchema);
-  return makeCRUDMutate(schema, addSchemaCRUD, executor);
-}
-
-/**
- * @deprecated Use {@linkcode makeMutateCRUD} instead.
+ * @deprecated Use transactions instead.
  *
  * Returns a curried function for backwards compatibility.
  */
@@ -303,7 +288,11 @@ export function makeSchemaCRUD<S extends Schema>(
   serverSchema: ServerSchema,
 ) => MutateCRUD<S, true> {
   return (dbTransaction: DBTransaction<unknown>, serverSchema: ServerSchema) =>
-    makeMutateCRUD(dbTransaction, serverSchema, schema, true);
+    makeCRUDMutate(
+      schema,
+      true,
+      makeServerCRUDExecutor(schema, dbTransaction, serverSchema),
+    );
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): T {

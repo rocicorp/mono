@@ -308,6 +308,15 @@ const CLOSE_CODE_NORMAL = 1000;
 const CLOSE_CODE_GOING_AWAY = 1001;
 type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
+export type ZeroMutate<
+  S extends Schema,
+  MD extends CustomMutatorDefs | undefined,
+  C,
+> = MakeMutatePropertyType<S, MD, C> &
+  // Also callable with MutateRequest: zero.mutate(mr)
+  // oxlint-disable-next-line no-explicit-any
+  ((mr: MutateRequest<any, S, C, any>) => MutatorResult);
+
 export class Zero<
   const S extends Schema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
@@ -1075,10 +1084,7 @@ export class Zero<
    * await zero.mutate.issue.update({id: '1', title: 'Updated title'});
    * ```
    */
-  readonly mutate: MakeMutatePropertyType<S, MD, C> &
-    // Also callable with MutateRequest: zero.mutate(mr)
-    // oxlint-disable-next-line no-explicit-any
-    ((mr: MutateRequest<any, S, C, any>) => MutatorResult);
+  readonly mutate: ZeroMutate<S, MD, C>;
 
   /**
    * Provides a way to batch multiple CRUD mutations together:

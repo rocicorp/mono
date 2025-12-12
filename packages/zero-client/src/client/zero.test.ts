@@ -63,11 +63,8 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import type {
-  DeleteID,
-  Transaction,
-  UpdateValue,
-} from '../../../zql/src/mutate/custom.ts';
+import type {DeleteID, UpdateValue} from '../../../zql/src/mutate/crud.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {
   defineMutator,

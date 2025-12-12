@@ -1,7 +1,7 @@
 // This file defines 100 mutators to stress test TS
 
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
+import type {InsertValue} from '../../../zql/src/mutate/crud.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import type {zeroStressSchema} from './zero-stress-schema-test.ts';

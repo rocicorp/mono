@@ -13,7 +13,8 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {must} from '../../../shared/src/must.ts';
 import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {InsertValue} from '../../../zql/src/mutate/crud.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {legacySchema} from '../../../zql/src/query/test/test-schemas.ts';

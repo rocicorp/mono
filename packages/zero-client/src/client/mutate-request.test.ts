@@ -5,10 +5,10 @@ import type {
   DeleteID,
   InsertValue,
   SchemaCRUD,
-  Transaction,
   UpdateValue,
   UpsertValue,
-} from '../../../zql/src/mutate/custom.ts';
+} from '../../../zql/src/mutate/crud.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import type {MutatorResult} from './custom.ts';

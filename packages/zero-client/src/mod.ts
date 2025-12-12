@@ -117,17 +117,20 @@ export type {
   View,
   ViewFactory,
 } from '../../zql/src/ivm/view.ts';
-export type {CRUDMutator, TableMutator} from '../../zql/src/mutate/crud.ts';
 export type {
-  AnyTransaction,
+  CRUDMutator,
   DeleteID,
   InsertValue,
+  TableMutator,
+  UpdateValue,
+  UpsertValue,
+} from '../../zql/src/mutate/crud.ts';
+export type {
+  AnyTransaction,
   Location,
   ServerTransaction,
   Transaction,
   TransactionReason,
-  UpdateValue,
-  UpsertValue,
 } from '../../zql/src/mutate/custom.ts';
 export {
   defineMutators,
@@ -229,7 +232,7 @@ export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
-export {Zero} from './client/zero.ts';
+export {Zero, type ZeroMutate} from './client/zero.ts';
 export type {
   QueryErrorDetails,
   QueryResultDetails,
