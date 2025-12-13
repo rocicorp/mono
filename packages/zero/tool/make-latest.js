@@ -20,6 +20,10 @@ if (process.argv.length < 3) {
 
 const version = process.argv[2];
 
+const gitTag = `zero/v${version}`;
+execute(`git tag --force latest ${gitTag}`);
+execute(`git push --force origin latest`);
+
 execute(
   `docker buildx imagetools create -t rocicorp/zero:latest rocicorp/zero:${version}`,
 );
@@ -31,6 +35,7 @@ console.log(`🎉 Success!`);
 console.log(``);
 console.log(`* Added 'latest' tag to @rocicorp/zero@${version} on npm.`);
 console.log(`* Added 'latest' tag to rocicorp/zero:${version} on dockerhub.`);
+console.log(`* Added 'latest' git tag pointing to ${gitTag}.`);
 console.log(``);
 console.log(``);
 console.log(`Next steps:`);
