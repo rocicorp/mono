@@ -2,7 +2,11 @@ import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {ConnectionManager} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
-import {ConnectionImpl, ConnectionSource} from './connection.ts';
+import {
+  type ConnectionState,
+  ConnectionImpl,
+  ConnectionSource,
+} from './connection.ts';
 
 describe('ConnectionImpl', () => {
   let manager: ConnectionManager;
@@ -119,13 +123,13 @@ describe('ConnectionImpl', () => {
 describe('ConnectionSource', () => {
   let manager: ConnectionManager;
   let subscribeMock: ReturnType<typeof vi.fn>;
-  let listeners: Array<(state: unknown) => void>;
+  let managerListeners: Array<(state: unknown) => void>;
 
   beforeEach(() => {
-    listeners = [];
+    managerListeners = [];
     const unsubscribe = vi.fn();
     subscribeMock = vi.fn((listener: (state: unknown) => void) => {
-      listeners.push(listener);
+      managerListeners.push(listener);
       return unsubscribe;
     });
 
@@ -158,11 +162,55 @@ describe('ConnectionSource', () => {
     const newState = {
       name: ConnectionStatus.Connected,
     };
-    for (const l of listeners) {
+    for (const l of managerListeners) {
       l(newState);
     }
 
     // this must be the exact same object
     expect(receivedState).toBe(source.current);
+  });
+
+  test('current reflects state changes even before external subscribe', () => {
+    // This test verifies the fix for the race condition where connection
+    // completes before React subscribes, causing `current` to return stale state.
+    const source = new ConnectionSource(manager);
+
+    expect(source.current).toStrictEqual({name: 'connecting'});
+
+    // Simulate connection completing BEFORE any external subscription
+    const connectedState = {name: ConnectionStatus.Connected};
+    for (const l of managerListeners) {
+      l(connectedState);
+    }
+
+    // current should reflect the new state even though we never subscribed
+    expect(source.current).toStrictEqual({name: 'connected'});
+  });
+
+  test('subscribes to manager in constructor', () => {
+    new ConnectionSource(manager);
+
+    // ConnectionSource should subscribe to manager immediately in constructor
+    expect(subscribeMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('multiple external subscribers all receive notifications', () => {
+    const source = new ConnectionSource(manager);
+
+    const received1: ConnectionState[] = [];
+    const received2: ConnectionState[] = [];
+
+    source.subscribe(state => received1.push(state));
+    source.subscribe(state => received2.push(state));
+
+    const connectedState = {name: ConnectionStatus.Connected};
+    for (const l of managerListeners) {
+      l(connectedState);
+    }
+
+    expect(received1).toHaveLength(1);
+    expect(received2).toHaveLength(1);
+    expect(received1[0]).toStrictEqual({name: 'connected'});
+    expect(received2[0]).toStrictEqual({name: 'connected'});
   });
 });

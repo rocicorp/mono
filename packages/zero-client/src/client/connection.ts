@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import type {
@@ -160,24 +161,29 @@ export class ConnectionImpl implements Connection {
   }
 }
 
-export class ConnectionSource implements Source<ConnectionState> {
+export class ConnectionSource
+  extends Subscribable<ConnectionState>
+  implements Source<ConnectionState>
+{
   #state: ConnectionState;
-  readonly #connectionManager: ConnectionManager;
 
   constructor(connectionManager: ConnectionManager) {
-    this.#connectionManager = connectionManager;
+    super();
     this.#state = this.#mapConnectionManagerState(connectionManager.state);
+
+    // Subscribe to ConnectionManager immediately to keep #state in sync.
+    // This ensures `current` always returns the correct state, even if
+    // external code hasn't subscribed yet (fixes race condition where
+    // connection completes before React subscribes).
+    connectionManager.subscribe(state => {
+      this.#state = this.#mapConnectionManagerState(state);
+      this.notify(this.#state);
+    });
   }
 
   get current(): ConnectionState {
     return this.#state;
   }
-
-  subscribe = (listener: (s: ConnectionState) => void): (() => void) =>
-    this.#connectionManager.subscribe(state => {
-      this.#state = this.#mapConnectionManagerState(state);
-      listener(this.#state);
-    });
 
   #mapConnectionManagerState(state: ConnectionManagerState): ConnectionState {
     switch (state.name) {
