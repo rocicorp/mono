@@ -191,6 +191,12 @@ function parseArgs() {
       type: String,
       description: 'Git remote to use (default: origin)',
     },
+    {
+      name: 'allow-local-changes',
+      type: Boolean,
+      description:
+        'Allow running with local changes in the working directory (useful for developing script)',
+    },
   ];
 
   let options;
@@ -221,6 +227,7 @@ function parseArgs() {
     from: options.from,
     isCanary,
     remote,
+    allowLocalChanges: Boolean(options['allow-local-changes']),
   };
 }
 
@@ -264,7 +271,7 @@ Maintenance/cherry-pick workflow:
 `);
 }
 
-const {from: fromArg, isCanary, remote} = parseArgs();
+const {from: fromArg, isCanary, remote, allowLocalChanges} = parseArgs();
 
 try {
   // Find the git root directory
@@ -283,13 +290,15 @@ try {
   }
 
   // Check that there are no uncommitted changes
-  const uncommittedChanges = execute('git status --porcelain', {
-    stdio: 'pipe',
-  });
-  if (uncommittedChanges) {
-    console.error(`There are uncommitted changes in the working directory.`);
-    console.error(`Perhaps you need to commit them?`);
-    process.exit(1);
+  if (!allowLocalChanges) {
+    const uncommittedChanges = execute('git status --porcelain', {
+      stdio: 'pipe',
+    });
+    if (uncommittedChanges) {
+      console.error(`There are uncommitted changes in the working directory.`);
+      console.error(`Perhaps you need to commit them?`);
+      process.exit(1);
+    }
   }
 
   const from = fromArg;
@@ -434,7 +443,10 @@ try {
     await getProtocolVersions();
 
   execute('git status');
-  execute(`git commit -am "Bump version to ${nextVersion}"`);
+
+  if (isCanary) {
+    execute(`git commit -am "Bump version to ${nextVersion}"`);
+  }
 
   // Push tag to git before npm so that if npm fails the versioning logic works correctly.
   // Also if npm push succeeds but docker fails we correctly record the tag that the
