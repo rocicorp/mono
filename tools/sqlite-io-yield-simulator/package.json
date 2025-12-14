@@ -13,7 +13,7 @@
   "dependencies": {
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
-    "ws": "^8.18.1",
+    "ws": "^8.18.3",
     "zqlite": "0.0.0"
   },
   "devDependencies": {

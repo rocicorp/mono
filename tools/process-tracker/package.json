@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@rocicorp/logger": "^5.4.0",
-    "find-process": "^1.4.10",
-    "pidusage": "^4.0.0"
+    "find-process": "^2.0.0",
+    "pidusage": "^4.0.1"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",

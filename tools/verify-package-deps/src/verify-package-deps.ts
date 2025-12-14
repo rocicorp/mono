@@ -2,7 +2,7 @@
 import {readdir, readFile, writeFile} from 'node:fs/promises';
 import {dirname, join, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {parseAsync} from 'oxc-parser';
+import {parseSync} from 'oxc-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WORKSPACE_ROOT = join(__dirname, '../../..');
@@ -71,15 +71,15 @@ function getPackageName(filePath: string): string | undefined {
   return undefined;
 }
 
-async function extractImports(
+function extractImports(
   content: string,
   filePath: string,
-): Promise<{path: string; line: number; ignored: boolean}[]> {
+): {path: string; line: number; ignored: boolean}[] {
   const imports: {path: string; line: number; ignored: boolean}[] = [];
   const lines = content.split('\n');
 
   try {
-    const result = await parseAsync(filePath, content);
+    const result = parseSync(filePath, content);
 
     // Extract static imports from the module info
     for (const imp of result.module.staticImports) {
@@ -203,7 +203,7 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
 
       try {
         const content = await readFile(filePath, 'utf-8');
-        const imports = await extractImports(content, filePath);
+        const imports = extractImports(content, filePath);
 
         for (const importInfo of imports) {
           // Skip imports with @circular-dep-ignore comment

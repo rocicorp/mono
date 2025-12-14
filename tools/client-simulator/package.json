@@ -11,10 +11,10 @@
     "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
-    "@dotenvx/dotenvx": "^1.39.0",
+    "@dotenvx/dotenvx": "^1.51.2",
     "@rocicorp/logger": "^5.4.0",
-    "nanoid": "^5.1.2",
-    "ws": "^8.18.1"
+    "nanoid": "^5.1.6",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",

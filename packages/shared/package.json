@@ -20,7 +20,7 @@
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "defu": "^6.1.4",
-    "@dotenvx/dotenvx": "^1.39.0",
+    "@dotenvx/dotenvx": "^1.51.2",
     "js-xxhash": "^4.0.0",
     "kasi": "^1.1.0",
     "semver": "^7.5.4"

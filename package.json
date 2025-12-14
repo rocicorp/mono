@@ -34,12 +34,12 @@
     "@vitest/browser-playwright": "^4.0.15",
     "@vitest/coverage-v8": "4.0.15",
     "@vitest/runner": "4.0.15",
-    "baseline-browser-mapping": "^2.9.6",
+    "baseline-browser-mapping": "^2.9.7",
     "oxlint": "^1.32.0",
-    "oxlint-tsgolint": "^0.8.5",
-    "prettier": "^3.5.3",
-    "tsx": "^4.19.1",
-    "turbo": "^2.4.4",
+    "oxlint-tsgolint": "^0.8.6",
+    "prettier": "^3.7.4",
+    "tsx": "^4.21.0",
+    "turbo": "^2.6.3",
     "vitest": "4.0.15"
   },
   "prettier": "@rocicorp/prettier-config"

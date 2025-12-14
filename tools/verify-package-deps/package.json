@@ -16,11 +16,11 @@
     "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
-    "oxc-parser": "^0.94.0"
+    "oxc-parser": "^0.102.0"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
-    "@types/node": "^22.10.5",
+    "@types/node": "^22.19.3",
     "typescript": "~5.9.3"
   },
   "prettier": "@rocicorp/prettier-config"

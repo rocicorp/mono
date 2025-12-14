@@ -14,11 +14,11 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@vercel/node": "^3.0.0"
+    "@vercel/node": "^5.5.15"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
-    "@types/node": "^22.10.5",
+    "@types/node": "^22.19.3",
     "@vitest/coverage-v8": "4.0.15",
     "typescript": "~5.9.3",
     "vitest": "4.0.15"

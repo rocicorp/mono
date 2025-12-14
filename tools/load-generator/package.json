@@ -11,9 +11,9 @@
     "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
-    "@dotenvx/dotenvx": "^1.39.0",
+    "@dotenvx/dotenvx": "^1.51.2",
     "@rocicorp/logger": "^5.4.0",
-    "nanoid": "^5.1.2",
+    "nanoid": "^5.1.6",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "postgres": "^3.4.4"
   },
