@@ -290,6 +290,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: NormalizedZeroConfig;
+  #runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>;
 
   constructor(
     config: NormalizedZeroConfig,
@@ -305,6 +306,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     slowHydrateThreshold: number,
     inspectorDelegate: InspectorDelegate,
     customQueryTransformer: CustomQueryTransformer | undefined,
+    runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
@@ -333,7 +335,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.#setTimeout = setTimeoutFn;
-
+    this.#runPriorityOp = runPriorityOp;
     // Wait for the first connection to init.
     this.keepalive();
   }
@@ -376,7 +378,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       if (!this.#cvr) {
         this.#lc.debug?.('loading CVR');
-        this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
+        this.#cvr = await this.#runPriorityOp(() =>
+          this.#cvrStore.load(lc, this.#lastConnectTime),
+        );
         this.#ttlClock = this.#cvr.ttlClock;
         this.#ttlClockBase = Date.now();
       } else {
@@ -756,25 +760,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return ttlClock as TTLClock;
   }
 
-  async #flushUpdater(
-    lc: LogContext,
-    updater: CVRUpdater,
-  ): Promise<CVRSnapshot> {
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
-    const {cvr, flushed} = await updater.flush(
-      lc,
-      this.#lastConnectTime,
-      now,
-      ttlClock,
-    );
+  #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
+    return this.#runPriorityOp(async () => {
+      const now = Date.now();
+      const ttlClock = this.#getTTLClock(now);
+      const {cvr, flushed} = await updater.flush(
+        lc,
+        this.#lastConnectTime,
+        now,
+        ttlClock,
+      );
 
-    if (flushed) {
-      // If the CVR was flushed, we restart the ttlClock interval.
-      this.#startTTLClockInterval(lc);
-    }
+      if (flushed) {
+        // If the CVR was flushed, we restart the ttlClock interval.
+        this.#startTTLClockInterval(lc);
+      }
 
-    return cvr;
+      return cvr;
+    });
   }
 
   #startTTLClockInterval(lc: LogContext): void {
@@ -1124,23 +1127,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    if (this.#customQueryTransformer && customQueries.size > 0) {
-      // Always transform custom queries, even during initialization,
-      // to ensure authorization validation with current auth context.
-      const transformedCustomQueries =
-        await this.#customQueryTransformer.transform(
-          this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-          customQueries.values(),
-          this.userQueryURL,
-        );
+    await this.#runPriorityOp(async () => {
+      if (this.#customQueryTransformer && customQueries.size > 0) {
+        // Always transform custom queries, even during initialization,
+        // to ensure authorization validation with current auth context.
+        const transformedCustomQueries =
+          await this.#customQueryTransformer.transform(
+            this.#getHeaderOptions(this.#queryConfig.forwardCookies),
+            customQueries.values(),
+            this.userQueryURL,
+          );
 
-      this.#processTransformedCustomQueries(
-        lc,
-        transformedCustomQueries,
-        (q: TransformedAndHashed) => transformedQueries.push(q),
-        customQueries,
-      );
-    }
+        this.#processTransformedCustomQueries(
+          lc,
+          transformedCustomQueries,
+          (q: TransformedAndHashed) => transformedQueries.push(q),
+          customQueries,
+        );
+      }
+    });
 
     for (const q of otherQueries) {
       const transformed = transformAndHashQuery(

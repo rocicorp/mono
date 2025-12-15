@@ -123,6 +123,11 @@ export default function runWorker(
 
     const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
 
+    const priorityOpRunningYieldThresholdMs = Math.max(
+      config.yieldThresholdMs / 4,
+      2,
+    );
+    const normalYieldThresholdMs = Math.max(config.yieldThresholdMs, 2);
     return new ViewSyncerService(
       config,
       logger,
@@ -144,7 +149,10 @@ export default function runWorker(
         operatorStorage.createClientGroupStorage(id),
         id,
         inspectorDelegate,
-        config.yieldThresholdMs,
+        () =>
+          isPriorityOpRunning()
+            ? priorityOpRunningYieldThresholdMs
+            : normalYieldThresholdMs,
         config.enableQueryPlanner,
       ),
       sub,
@@ -152,6 +160,7 @@ export default function runWorker(
       config.log.slowHydrateThreshold,
       inspectorDelegate,
       customQueryTransformer,
+      runPriorityOp,
     );
   };
 
@@ -205,4 +214,23 @@ if (!singleProcessMode()) {
   void exitAfter(() =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
+}
+
+let priorityOpCounter = 0;
+
+/**
+ * Run an operation with priority, indicating that IVM should use smaller time
+ * slices to allow this operation to proceed more quickly
+ */
+async function runPriorityOp<T>(op: () => Promise<T>) {
+  priorityOpCounter++;
+  try {
+    return await op();
+  } finally {
+    priorityOpCounter--;
+  }
+}
+
+export function isPriorityOpRunning() {
+  return priorityOpCounter > 0;
 }
