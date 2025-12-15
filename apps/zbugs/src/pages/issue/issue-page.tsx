@@ -214,9 +214,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     sortDirection: 'asc',
   };
 
-  const [_, cResult] = useQuery(queries.slow({}));
-  console.log(cResult);
-
   const [[next]] = useQuery(
     queries.issueListV2({
       listContext: listContextParams,

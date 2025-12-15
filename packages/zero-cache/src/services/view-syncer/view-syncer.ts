@@ -2266,10 +2266,8 @@ export class TimeSliceTimer {
 
   #stopLap() {
     assert(this.#start !== 0, 'not running');
-    const now = performance.now();
-    this.#total += now - this.#start;
+    this.#total += performance.now() - this.#start;
     this.#start = 0;
-    return now;
   }
 
   /** @returns the total elapsed time */

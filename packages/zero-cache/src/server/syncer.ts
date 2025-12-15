@@ -21,7 +21,6 @@ import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
 import {
   isPriorityOpRunning,
-  //isPriorityOpRunning,
   ViewSyncerService,
 } from '../services/view-syncer/view-syncer.ts';
 import {pgClient} from '../types/pg.ts';
@@ -38,8 +37,6 @@ import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
-import * as fs from 'node:fs';
-import * as async_hooks from 'node:async_hooks';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
