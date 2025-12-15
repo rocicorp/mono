@@ -19,10 +19,7 @@ import type {ReplicaState} from '../services/replicator/replicator.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
-import {
-  isPriorityOpRunning,
-  ViewSyncerService,
-} from '../services/view-syncer/view-syncer.ts';
+import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
 import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -163,6 +160,7 @@ export default function runWorker(
       config.log.slowHydrateThreshold,
       inspectorDelegate,
       customQueryTransformer,
+      runPriorityOp,
     );
   };
 
@@ -216,4 +214,23 @@ if (!singleProcessMode()) {
   void exitAfter(() =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
+}
+
+let priorityOpCounter = 0;
+
+/**
+ * Run an operation with priority, indicating that IVM should use smaller time
+ * slices to allow this operation to proceed more quickly
+ */
+async function runPriorityOp<T>(op: () => Promise<T>) {
+  priorityOpCounter++;
+  try {
+    return await op();
+  } finally {
+    priorityOpCounter--;
+  }
+}
+
+export function isPriorityOpRunning() {
+  return priorityOpCounter > 0;
 }

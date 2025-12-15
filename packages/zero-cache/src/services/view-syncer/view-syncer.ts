@@ -289,6 +289,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: NormalizedZeroConfig;
+  #runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>;
 
   constructor(
     config: NormalizedZeroConfig,
@@ -304,6 +305,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     slowHydrateThreshold: number,
     inspectorDelegate: InspectorDelegate,
     customQueryTransformer: CustomQueryTransformer | undefined,
+    runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
@@ -332,7 +334,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.#setTimeout = setTimeoutFn;
-
+    this.#runPriorityOp = runPriorityOp;
     // Wait for the first connection to init.
     this.keepalive();
   }
@@ -374,7 +376,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       if (!this.#cvr) {
         this.#lc.debug?.('loading CVR');
-        this.#cvr = await runPriorityOp(() =>
+        this.#cvr = await this.#runPriorityOp(() =>
           this.#cvrStore.load(lc, this.#lastConnectTime),
         );
         this.#ttlClock = this.#cvr.ttlClock;
@@ -759,7 +761,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     updater: CVRUpdater,
   ): Promise<CVRSnapshot> {
-    return runPriorityOp(async () => {
+    return this.#runPriorityOp(async () => {
       const now = Date.now();
       const ttlClock = this.#getTTLClock(now);
       const {cvr, flushed} = await updater.flush(
@@ -1125,7 +1127,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    await runPriorityOp(async () => {
+    await this.#runPriorityOp(async () => {
       if (this.#customQueryTransformer && customQueries.size > 0) {
         // Always transform custom queries, even during initialization,
         // to ensure authorization validation with current auth context.
@@ -2065,25 +2067,6 @@ function createHashToIDs(cvr: CVRSnapshot) {
     }
   }
   return hashToIDs;
-}
-
-let priorityOpCounter = 0;
-
-/**
- * Run an operation with priority, indicating that IVM should use smaller time
- * slices to allow this operation to proceed more quickly
- */
-async function runPriorityOp<T>(op: () => Promise<T>) {
-  priorityOpCounter++;
-  try {
-    return await op();
-  } finally {
-    priorityOpCounter--;
-  }
-}
-
-export function isPriorityOpRunning() {
-  return priorityOpCounter > 0;
 }
 
 // A global Lock acts as a queue to run a single IVM time slice per iteration
