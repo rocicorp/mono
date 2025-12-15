@@ -757,10 +757,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return ttlClock as TTLClock;
   }
 
-  async #flushUpdater(
-    lc: LogContext,
-    updater: CVRUpdater,
-  ): Promise<CVRSnapshot> {
+  #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
     return this.#runPriorityOp(async () => {
       const now = Date.now();
       const ttlClock = this.#getTTLClock(now);
