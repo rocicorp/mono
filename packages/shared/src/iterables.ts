@@ -55,18 +55,17 @@ type IteratorConstructor = {
   from<T>(iter: Iterable<T>): IteratorWithHelpers<T>;
 };
 
-// Check if native Iterator.from is available
+// Check if native Iterator.from is available and bind it once at startup
 // We use globalThis to access the runtime value safely
-const hasNativeIteratorFrom = (() => {
+const nativeIteratorFrom: IteratorConstructor['from'] | undefined = (() => {
   try {
-    const IteratorObj = (globalThis as {Iterator?: unknown}).Iterator;
-    if (typeof IteratorObj === 'undefined') {
-      return false;
-    }
-    const fromMethod = (IteratorObj as {from?: unknown}).from;
-    return typeof fromMethod === 'function';
+    const fromMethod = (globalThis as {Iterator?: {from?: unknown}}).Iterator
+      ?.from;
+    return typeof fromMethod === 'function'
+      ? (fromMethod as IteratorConstructor['from'])
+      : undefined;
   } catch {
-    return false;
+    return undefined;
   }
 })();
 
@@ -93,13 +92,9 @@ class IterWrapper<T> implements Iterable<T> {
 export function wrapIterable<T>(
   iter: Iterable<T>,
 ): IterWrapper<T> | IteratorWithHelpers<T> {
-  if (hasNativeIteratorFrom) {
-    // Use native ES2024 Iterator.from
-    // hasNativeIteratorFrom already verified Iterator.from exists
-    const IteratorCtor = (
-      globalThis as unknown as {Iterator: IteratorConstructor}
-    ).Iterator;
-    return IteratorCtor.from(iter);
+  if (nativeIteratorFrom) {
+    // Use native ES2024 Iterator.from (bound at startup)
+    return nativeIteratorFrom(iter);
   }
   // Fallback to custom implementation
   return new IterWrapper(iter);
