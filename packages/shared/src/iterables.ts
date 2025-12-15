@@ -52,50 +52,44 @@ type IteratorWithHelpers<T> = Iterator<T> & {
 };
 
 type IteratorConstructor = {
-  from<T>(iter: Iterable<T>): IteratorWithHelpers<T>;
+  from<T>(this: void, iter: Iterable<T>): IteratorWithHelpers<T>;
 };
 
 // Check if native Iterator.from is available and bind it once at startup
 // We use globalThis to access the runtime value safely
-const nativeIteratorFrom: IteratorConstructor['from'] | undefined = (() => {
-  try {
-    const fromMethod = (globalThis as {Iterator?: {from?: unknown}}).Iterator
-      ?.from;
-    return typeof fromMethod === 'function'
-      ? (fromMethod as IteratorConstructor['from'])
-      : undefined;
-  } catch {
-    return undefined;
-  }
-})();
+const iteratorCtor = (globalThis as {Iterator?: IteratorConstructor}).Iterator;
+const nativeIteratorFrom = iteratorCtor?.from as
+  | (<T>(iter: Iterable<T>) => IteratorWithHelpers<T>)
+  | undefined;
+
+const iteratorFrom: <T>(e: Iterable<T>) => IteratorWithHelpers<T> =
+  nativeIteratorFrom ?? (e => new IterWrapper(e));
 
 // Fallback implementation for environments without ES2024 Iterator helpers
-class IterWrapper<T> implements Iterable<T> {
-  iter: Iterable<T>;
-  constructor(iter: Iterable<T>) {
-    this.iter = iter;
+class IterWrapper<T> implements IteratorWithHelpers<T>, IterableIterator<T> {
+  readonly #iterator: Iterator<T>;
+
+  constructor(iterable: Iterable<T>) {
+    this.#iterator = iterable[Symbol.iterator]();
   }
 
-  [Symbol.iterator]() {
-    return this.iter[Symbol.iterator]();
+  next(): IteratorResult<T> {
+    return this.#iterator.next();
+  }
+
+  [Symbol.iterator](): IteratorWithHelpers<T> {
+    return this;
   }
 
   map<U>(f: (t: T, index: number) => U): IterWrapper<U> {
-    return new IterWrapper(mapIter(this.iter, f));
+    return new IterWrapper(mapIter(this, f));
   }
 
   filter(p: (t: T, index: number) => boolean): IterWrapper<T> {
-    return new IterWrapper(filterIter(this.iter, p));
+    return new IterWrapper(filterIter(this, p));
   }
 }
 
-export function wrapIterable<T>(
-  iter: Iterable<T>,
-): IterWrapper<T> | IteratorWithHelpers<T> {
-  if (nativeIteratorFrom) {
-    // Use native ES2024 Iterator.from (bound at startup)
-    return nativeIteratorFrom(iter);
-  }
-  // Fallback to custom implementation
-  return new IterWrapper(iter);
+export function wrapIterable<T>(iter: Iterable<T>): IteratorWithHelpers<T> {
+  return iteratorFrom(iter);
 }
