@@ -396,6 +396,8 @@ describe('custom mutators can query the local store during an optimistic mutatio
   });
 
   test('closeAll using tx.run', async () => {
+    const zql = createBuilder(legacySchema);
+
     const z = zeroForTest({
       schema: legacySchema,
       mutators: {
@@ -405,9 +407,18 @@ describe('custom mutators can query the local store during an optimistic mutatio
             args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
+
+            // test if the issue was created
+            const createdIssue = await tx.run(
+              zql.issue.where('id', args.id).one(),
+            );
+
+            expect(createdIssue).toEqual(
+              expect.objectContaining({id: args.id}),
+            );
           },
           closeAll: async (tx: MutatorTx) => {
-            const issues = await tx.run(tx.query.issue);
+            const issues = await tx.run(zql.issue);
             await Promise.all(
               issues.map(issue =>
                 tx.mutate.issue.update({id: issue.id, closed: true}),
@@ -430,8 +441,6 @@ describe('custom mutators can query the local store during an optimistic mutatio
         }).client;
       }),
     );
-
-    const zql = createBuilder(legacySchema);
 
     const q = zql.issue.where('closed', false);
     await z.markQueryAsGot(q);

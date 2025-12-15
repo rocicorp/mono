@@ -106,7 +106,6 @@ import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
-  type PullRow,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
 import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
@@ -881,7 +880,7 @@ export class Zero<
     TTable extends keyof S['tables'] & string,
     TInput extends ReadonlyJSONValue | undefined,
     TOutput extends ReadonlyJSONValue | undefined,
-    TReturn extends PullRow<TTable, S>,
+    TReturn,
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
     options?: PreloadOptions,
