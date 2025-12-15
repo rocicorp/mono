@@ -1,4 +1,11 @@
-import {expect, expectTypeOf, test} from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  expectTypeOf,
+  test,
+} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   defineMutatorWithType,
@@ -19,50 +26,114 @@ import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {
+  defineQueriesWithType,
+  defineQueryWithType,
+} from '../../../zql/src/query/query-registry.ts';
 
-test('run', async () => {
-  const schema = createSchema({
-    tables: [
-      table('issues')
-        .columns({
-          id: string(),
-          value: number(),
-        })
-        .primaryKey('id'),
-    ],
-    enableLegacyMutators: true,
-  });
+const schema = createSchema({
+  tables: [
+    table('issues')
+      .columns({
+        id: string(),
+        value: number(),
+      })
+      .primaryKey('id'),
+  ],
+  enableLegacyMutators: true,
+});
 
-  const mutators = defineMutatorsWithType<typeof schema>()({
-    insertIssue: defineMutatorWithType<typeof schema>()(async ({tx}) => {
-      expect('issues' in tx.mutate).toBe(true);
-      await tx.mutate.issues.insert({id: 'a', value: 1});
+const mutators = defineMutatorsWithType<typeof schema>()({
+  insertIssue: defineMutatorWithType<typeof schema>()(async ({tx}) => {
+    expect('issues' in tx.mutate).toBe(true);
+    await tx.mutate.issues.insert({id: 'a', value: 1});
 
-      expect('noSuchTable' in tx.mutate).toBe(false);
+    expect('noSuchTable' in tx.mutate).toBe(false);
 
-      // oxlint-disable-next-line no-constant-condition
-      if (false) {
-        // @ts-expect-error - noSuchTable does not exist
-        await tx.mutate.noSuchTable.insert({id: 'x'});
-      }
-    }),
-  } as const);
-  const z = zeroForTest({
-    schema,
-    mutators,
-  });
+    // oxlint-disable-next-line no-constant-condition
+    if (false) {
+      // @ts-expect-error - noSuchTable does not exist
+      await tx.mutate.noSuchTable.insert({id: 'x'});
+    }
+  }),
+});
 
-  const builder = createBuilder(schema);
+const zql = createBuilder(schema);
+
+const queries = defineQueriesWithType<typeof schema>()({
+  issues: defineQueryWithType<typeof schema>()(() => zql.issues),
+  issue: defineQueryWithType<typeof schema>()(() => zql.issues.one()),
+});
+
+const z = zeroForTest({
+  schema,
+  mutators,
+});
+
+beforeAll(async () => {
   await z.mutate(mutators.insertIssue()).client;
+});
 
-  const x = await z.run(builder.issues);
-  expectTypeOf(x).toEqualTypeOf<
-    {
-      readonly id: string;
-      readonly value: number;
-    }[]
-  >();
-  expect(x).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+afterAll(async () => {
+  await z.close();
+});
+
+describe('run', () => {
+  test('run with many rows', async () => {
+    const x = await z.run(zql.issues);
+    expectTypeOf(x).toEqualTypeOf<
+      {
+        readonly id: string;
+        readonly value: number;
+      }[]
+    >();
+    expect(x).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+
+    const y = await z.run(queries.issues());
+    expectTypeOf(y).toEqualTypeOf<
+      {
+        readonly id: string;
+        readonly value: number;
+      }[]
+    >();
+    expect(y).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+  });
+
+  test('run with one row', async () => {
+    const x = await z.run(zql.issues.one());
+    expectTypeOf(x).toEqualTypeOf<
+      | {
+          readonly id: string;
+          readonly value: number;
+        }
+      | undefined
+    >();
+    expect(x).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
+
+    const y = await z.run(queries.issue());
+    expectTypeOf(y).toEqualTypeOf<
+      | {
+          readonly id: string;
+          readonly value: number;
+        }
+      | undefined
+    >();
+    expect(y).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
+  });
+});
+
+describe('preload', () => {
+  test('preload with many rows', async () => {
+    const result = await z.preload(zql.issues);
+    expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
+    await z.preload(queries.issues());
+  });
+
+  test('preload with one row', async () => {
+    const result = await z.preload(zql.issues.one());
+    expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
+    await z.preload(queries.issue());
+  });
 });
 
 test('materialize', async () => {
@@ -107,6 +178,32 @@ test('materialize', async () => {
       }>
     >();
   });
+
+  const m2 = z.materialize(builder.issues.one());
+  expectTypeOf(m2.data).toEqualTypeOf<
+    | {
+        readonly id: string;
+        readonly value: number;
+      }
+    | undefined
+  >();
+
+  const m3 = z.materialize(queries.issue());
+  expectTypeOf(m3.data).toEqualTypeOf<
+    | {
+        readonly id: string;
+        readonly value: number;
+      }
+    | undefined
+  >();
+
+  const m4 = z.materialize(queries.issues());
+  expectTypeOf(m4.data).toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly value: number;
+    }[]
+  >();
 
   expect(gotData).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
 });
