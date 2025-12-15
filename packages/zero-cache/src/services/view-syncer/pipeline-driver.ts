@@ -119,7 +119,7 @@ export class PipelineDriver {
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
-  readonly #yieldThresholdMs: number;
+  readonly #yieldThresholdMs: () => number;
   #streamer: Streamer | null = null;
   #hydrateContext: HydrateContext | null = null;
   #advanceContext: AdvanceContext | null = null;
@@ -149,7 +149,7 @@ export class PipelineDriver {
     storage: ClientGroupStorage,
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
-    yieldThresholdMs: number,
+    yieldThresholdMs: () => number,
     enablePlanner?: boolean,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
@@ -612,7 +612,7 @@ export class PipelineDriver {
 
   #shouldYield(): boolean {
     if (this.#hydrateContext) {
-      return this.#hydrateContext.timer.elapsedLap() > this.#yieldThresholdMs;
+      return this.#hydrateContext.timer.elapsedLap() > this.#yieldThresholdMs();
     }
     if (this.#advanceContext) {
       return this.#shouldAdvanceYieldMaybeAbortAdvance();
@@ -652,7 +652,7 @@ export class PipelineDriver {
           `hydration time of ${totalHydrationTimeMs} ms.`,
       );
     }
-    return advanceTimer.elapsedLap() > this.#yieldThresholdMs;
+    return advanceTimer.elapsedLap() > this.#yieldThresholdMs();
   }
 
   /** Implements `BuilderDelegate.createStorage()` */
