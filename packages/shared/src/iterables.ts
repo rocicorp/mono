@@ -42,7 +42,7 @@ export function* once<T>(stream: Iterable<T>): Iterable<T> {
   it.return?.();
 }
 
-// ES2024 Iterator helpers are available in Node 22+
+// ES2024 Iterator helpers are available in Node 22+ and part of ES2024.
 // https://github.com/tc39/proposal-iterator-helpers
 
 type IteratorWithHelpers<T> = Iterator<T> & {
