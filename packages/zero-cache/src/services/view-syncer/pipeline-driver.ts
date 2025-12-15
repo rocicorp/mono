@@ -149,7 +149,7 @@ export class PipelineDriver {
     storage: ClientGroupStorage,
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
-    yieldThresholdMs: (() => number) | number,
+    yieldThresholdMs: () => number,
     enablePlanner?: boolean,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
@@ -159,10 +159,7 @@ export class PipelineDriver {
     this.#logConfig = logConfig;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
-    this.#yieldThresholdMs =
-      typeof yieldThresholdMs === 'number'
-        ? () => yieldThresholdMs
-        : yieldThresholdMs;
+    this.#yieldThresholdMs = yieldThresholdMs;
   }
 
   /**

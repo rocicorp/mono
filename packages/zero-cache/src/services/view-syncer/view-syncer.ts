@@ -1167,7 +1167,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
-      const timer = new TimeSliceTimer(lc);
+      const timer = new TimeSliceTimer();
       let count = 0;
       await startAsyncSpan(
         tracer,
@@ -1645,7 +1645,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let totalProcessTime = 0;
-      const timer = new TimeSliceTimer(lc);
+      const timer = new TimeSliceTimer();
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
@@ -1937,7 +1937,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       const start = performance.now();
 
-      const timer = new TimeSliceTimer(lc);
+      const timer = new TimeSliceTimer();
       const {version, numChanges, changes} = this.#pipelines.advance(timer);
       lc = lc.withContext('newVersion', version);
 
@@ -2069,6 +2069,10 @@ function createHashToIDs(cvr: CVRSnapshot) {
 
 let priorityOpCounter = 0;
 
+/**
+ * Run an operation with priority, indicating that IVM should use smaller time
+ * slices to allow this operation to proceed more quickly
+ */
 async function runPriorityOp<T>(op: () => Promise<T>) {
   priorityOpCounter++;
   try {
@@ -2230,11 +2234,6 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
 export class TimeSliceTimer {
   #total = 0;
   #start = 0;
-  #lc: LogContext | undefined;
-
-  constructor(lc?: LogContext) {
-    this.#lc = lc;
-  }
 
   async start() {
     // yield at the very beginning so that the first time slice
@@ -2250,15 +2249,9 @@ export class TimeSliceTimer {
   }
 
   async yieldProcess(_msgForTesting?: string) {
-    this.#lc?.error?.(
-      `Yielding process <${_msgForTesting}>, elapsed lap: ${this.elapsedLap()}`,
-    );
-    const start = this.#stopLap();
+    this.#stopLap();
     await yieldProcess();
     this.#startLap();
-    this.#lc?.error?.(
-      `Resuming process <${_msgForTesting}> at ${start} after ${this.#start - start}ms`,
-    );
   }
 
   #startLap() {
