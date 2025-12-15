@@ -61,7 +61,7 @@ describe('view-syncer/pipeline-driver', () => {
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
       new InspectorDelegate(undefined),
-      200 /** yield threshold */,
+      () => 200 /** yield threshold */,
     );
 
     db = dbFile.connect(lc);
