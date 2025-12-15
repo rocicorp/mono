@@ -19,7 +19,10 @@ import type {ReplicaState} from '../services/replicator/replicator.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
-import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
+import {
+  //isPriorityOpRunning,
+  ViewSyncerService,
+} from '../services/view-syncer/view-syncer.ts';
 import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -146,7 +149,7 @@ export default function runWorker(
         operatorStorage.createClientGroupStorage(id),
         id,
         inspectorDelegate,
-        config.yieldThresholdMs,
+        () => config.yieldThresholdMs,
         config.enableQueryPlanner,
       ),
       sub,

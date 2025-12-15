@@ -374,7 +374,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       if (!this.#cvr) {
         this.#lc.debug?.('loading CVR');
-        this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
+        this.#cvr = await runPriorityOp(() =>
+          this.#cvrStore.load(lc, this.#lastConnectTime),
+        );
         this.#ttlClock = this.#cvr.ttlClock;
         this.#ttlClockBase = Date.now();
       } else {
@@ -757,21 +759,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     updater: CVRUpdater,
   ): Promise<CVRSnapshot> {
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
-    const {cvr, flushed} = await updater.flush(
-      lc,
-      this.#lastConnectTime,
-      now,
-      ttlClock,
-    );
+    return runPriorityOp(async () => {
+      const now = Date.now();
+      const ttlClock = this.#getTTLClock(now);
+      const {cvr, flushed} = await updater.flush(
+        lc,
+        this.#lastConnectTime,
+        now,
+        ttlClock,
+      );
 
-    if (flushed) {
-      // If the CVR was flushed, we restart the ttlClock interval.
-      this.#startTTLClockInterval(lc);
-    }
+      if (flushed) {
+        // If the CVR was flushed, we restart the ttlClock interval.
+        this.#startTTLClockInterval(lc);
+      }
 
-    return cvr;
+      return cvr;
+    });
   }
 
   #startTTLClockInterval(lc: LogContext): void {
@@ -1121,23 +1125,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    if (this.#customQueryTransformer && customQueries.size > 0) {
-      // Always transform custom queries, even during initialization,
-      // to ensure authorization validation with current auth context.
-      const transformedCustomQueries =
-        await this.#customQueryTransformer.transform(
-          this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-          customQueries.values(),
-          this.userQueryURL,
-        );
+    await runPriorityOp(async () => {
+      if (this.#customQueryTransformer && customQueries.size > 0) {
+        // Always transform custom queries, even during initialization,
+        // to ensure authorization validation with current auth context.
+        const transformedCustomQueries =
+          await this.#customQueryTransformer.transform(
+            this.#getHeaderOptions(this.#queryConfig.forwardCookies),
+            customQueries.values(),
+            this.userQueryURL,
+          );
 
-      this.#processTransformedCustomQueries(
-        lc,
-        transformedCustomQueries,
-        (q: TransformedAndHashed) => transformedQueries.push(q),
-        customQueries,
-      );
-    }
+        this.#processTransformedCustomQueries(
+          lc,
+          transformedCustomQueries,
+          (q: TransformedAndHashed) => transformedQueries.push(q),
+          customQueries,
+        );
+      }
+    });
 
     for (const q of otherQueries) {
       const transformed = transformAndHashQuery(
@@ -2061,6 +2067,21 @@ function createHashToIDs(cvr: CVRSnapshot) {
   return hashToIDs;
 }
 
+let priorityOpCounter = 0;
+
+async function runPriorityOp<T>(op: () => Promise<T>) {
+  priorityOpCounter++;
+  try {
+    return await op();
+  } finally {
+    priorityOpCounter--;
+  }
+}
+
+export function isPriorityOpRunning() {
+  return priorityOpCounter > 0;
+}
+
 // A global Lock acts as a queue to run a single IVM time slice per iteration
 // of the node event loop, thus bounding I/O delay to the duration of a single
 // time slice.
@@ -2229,8 +2250,10 @@ export class TimeSliceTimer {
   }
 
   async yieldProcess(_msgForTesting?: string) {
+    this.#lc?.error?.(
+      `Yielding process <${_msgForTesting}>, elapsed lap: ${this.elapsedLap()}`,
+    );
     const start = this.#stopLap();
-    this.#lc?.error?.(`Yielding process <${_msgForTesting}> at ${start}`);
     await yieldProcess();
     this.#startLap();
     this.#lc?.error?.(
