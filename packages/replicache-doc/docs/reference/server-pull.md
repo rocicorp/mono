@@ -9,7 +9,7 @@ For more information, see [How Replicache Works — Pull](/concepts/how-it-works
 
 ## Configuration
 
-Specify the URL with the [`pullURL`](/api/interfaces/ReplicacheOptions#pullURL) constructor option:
+Specify the URL with the [`pullURL`](/api/interfaces/ReplicacheOptions#pullurl) constructor option:
 
 ```js
 const rep = new Replicache({
@@ -59,7 +59,7 @@ its current state.
 
 ## HTTP Request Body
 
-When pulling we `POST` an HTTP request with a [JSON encoded body](/api#pullrequest).
+When pulling we `POST` an HTTP request with a [JSON encoded body](/api/type-aliases/PullRequest).
 
 ```ts
 type PullRequest = {
@@ -77,7 +77,7 @@ Version of the type Replicache uses for the response JSON. The current version i
 
 ### `clientGroupID`
 
-The [`clientGroupID`](/api/classes/Replicache#clientGroupID) of the requesting Replicache
+The [`clientGroupID`](/api/classes/Replicache#clientgroupid) of the requesting Replicache
 client group.
 
 ### `cookie`
@@ -94,7 +94,7 @@ This is something that you control and should identify the schema of your client
 view. This ensures that you are sending data of the correct type so that the
 client can correctly handle the data.
 
-The [`schemaVersion`](/api/interfaces/ReplicacheOptions#schemaVersion) can be set
+The [`schemaVersion`](/api/interfaces/ReplicacheOptions#schemaversion) can be set
 in the [`ReplicacheOptions`](/api/interfaces/ReplicacheOptions) when creating
 your instance of [`Replicache`](/api/classes/Replicache).
 
@@ -103,7 +103,7 @@ your instance of [`Replicache`](/api/classes/Replicache).
 ### HTTP Response Status
 
 - `200` for success
-- `401` for auth error — Replicache will reauthenticate using [`getAuth`](/api/classes/Replicache#getAuth) if available
+- `401` for auth error — Replicache will reauthenticate using [`getAuth`](/api/classes/Replicache#getauth) if available
 - All other status codes considered errors
 
 Replicache will exponentially back off sending pushes in the case of both network level and HTTP level errors.
