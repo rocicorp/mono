@@ -106,7 +106,6 @@ import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
-  type PullRow,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
 import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
@@ -235,10 +234,8 @@ export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5_000;
 /**
  * The amount of time we allow for continuous connecting attempts before
  * transitioning to disconnected state.
- *
- * Default to 5 minutes.
  */
-export const DEFAULT_DISCONNECT_TIMEOUT_MS = 5 * 60 * 1_000;
+export const DEFAULT_DISCONNECT_TIMEOUT_MS = 60 * 1_000;
 
 /**
  * The amount of time we wait for a connection to be established before we
@@ -881,7 +878,7 @@ export class Zero<
     TTable extends keyof S['tables'] & string,
     TInput extends ReadonlyJSONValue | undefined,
     TOutput extends ReadonlyJSONValue | undefined,
-    TReturn extends PullRow<TTable, S>,
+    TReturn,
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
     options?: PreloadOptions,

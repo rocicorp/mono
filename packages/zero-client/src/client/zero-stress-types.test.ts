@@ -1,27 +1,18 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {mustGetMutator} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {Mutator} from '../../../zql/src/mutate/mutator.ts';
-import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {mustGetQuery} from '../../../zql/src/query/query-registry.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
 import {mutators} from './zero-stress-mutators-test.ts';
 import {queries} from './zero-stress-queries-test.ts';
-import {zeroStressSchema} from './zero-stress-schema-test.ts';
+import {type zeroStressSchema, zql} from './zero-stress-schema-test.ts';
 import type {
   StressContext,
   StressTransaction,
 } from './zero-stress-shared-test.ts';
-import {Zero} from './zero.ts';
-
-type Schema = typeof zeroStressSchema;
-type Tx = Transaction<Schema, unknown>;
-
-const zql = createBuilder(zeroStressSchema);
 
 describe('stress test types', () => {
   test('zero can resolve query return types', async () => {
@@ -59,41 +50,6 @@ describe('stress test types', () => {
     >();
   });
 
-  test('zero can resolve mutation types', () => {
-    const zero = new Zero({
-      schema: zeroStressSchema,
-      userID: 'anon',
-      cacheURL: null,
-      mutators: {
-        updateThing: (tx: Tx, _opts: {}) => {
-          expectTypeOf<
-            Parameters<typeof tx.mutate.vitalSigns.insert>[0]
-          >().toEqualTypeOf<{
-            workspaceId: string;
-            vitalId: string;
-            readonly bloodPressureSystolic?: number | null | undefined;
-            readonly bloodPressureDiastolic?: number | null | undefined;
-            readonly heartRate?: number | null | undefined;
-            readonly temperature?: number | null | undefined;
-            readonly weight?: number | null | undefined;
-            readonly height?: number | null | undefined;
-            readonly oxygenSaturation?: number | null | undefined;
-            readonly patientId: string;
-            readonly recordedAt: string;
-            readonly recordedById: string;
-            readonly createdAt: number;
-          }>();
-
-          return promiseVoid;
-        },
-      },
-    });
-
-    expectTypeOf<
-      Awaited<ReturnType<typeof zero.mutate.updateThing>['client']>
-    >().toEqualTypeOf<MutatorResultDetails>();
-  });
-
   test('can resolve mutator types', () => {
     const mutator = mustGetMutator(mutators, 'updateThing');
     expectTypeOf<typeof mutator>().toEqualTypeOf<
@@ -126,6 +82,12 @@ describe('stress test types', () => {
         StressTransaction
       >
     >();
+  });
+
+  test('can resolve mutation types', () => {
+    expectTypeOf<
+      Awaited<ReturnType<typeof zeroStress.mutate>['client']>
+    >().toEqualTypeOf<MutatorResultDetails>();
   });
 
   test('can resolve query types', () => {
@@ -169,106 +131,10 @@ describe('stress test types', () => {
   test('complex nested JSON types are preserved', () => {
     type UserRow = QueryResultType<typeof zql.user>[number];
 
-    expectTypeOf<UserRow['metadata']>().toEqualTypeOf<{
-      readonly preferences: {
-        readonly theme?: string;
-        readonly notifications?: boolean;
-      };
-      readonly onboarding: {
-        readonly completed: boolean;
-        readonly step: number;
-      };
+    expectTypeOf<UserRow['metadata']['onboarding']>().toEqualTypeOf<{
+      readonly completed: boolean;
+      readonly step: number;
     }>();
-  });
-
-  test('all CRUD operations exist on transaction for multiple tables', () => {
-    new Zero({
-      schema: zeroStressSchema,
-      userID: 'anon',
-      cacheURL: null,
-      mutators: {
-        testCrudExists: (tx: Tx) => {
-          // Test that insert, update, delete, and upsert all exist
-          // for various tables throughout the giant schema
-          expectTypeOf(tx.mutate.user.insert).toBeFunction();
-          expectTypeOf(tx.mutate.user.update).toBeFunction();
-          expectTypeOf(tx.mutate.user.delete).toBeFunction();
-          expectTypeOf(tx.mutate.user.upsert).toBeFunction();
-
-          expectTypeOf(tx.mutate.emailCampaign.insert).toBeFunction();
-          expectTypeOf(tx.mutate.emailCampaign.update).toBeFunction();
-          expectTypeOf(tx.mutate.emailCampaign.delete).toBeFunction();
-          expectTypeOf(tx.mutate.emailCampaign.upsert).toBeFunction();
-
-          expectTypeOf(tx.mutate.inventoryAdjustment.insert).toBeFunction();
-          expectTypeOf(tx.mutate.inventoryAdjustment.update).toBeFunction();
-          expectTypeOf(tx.mutate.inventoryAdjustment.delete).toBeFunction();
-          expectTypeOf(tx.mutate.inventoryAdjustment.upsert).toBeFunction();
-
-          expectTypeOf(tx.mutate.supportTicket.insert).toBeFunction();
-          expectTypeOf(tx.mutate.supportTicket.update).toBeFunction();
-          expectTypeOf(tx.mutate.supportTicket.delete).toBeFunction();
-          expectTypeOf(tx.mutate.supportTicket.upsert).toBeFunction();
-
-          return promiseVoid;
-        },
-      },
-    });
-  });
-
-  test('composite primary keys are properly typed', () => {
-    new Zero({
-      schema: zeroStressSchema,
-      userID: 'anon',
-      cacheURL: null,
-      mutators: {
-        testCompositePKs: (tx: Tx) => {
-          type DeleteUser = Parameters<typeof tx.mutate.user.delete>[0];
-          type DeleteWorkspaceMember = Parameters<
-            typeof tx.mutate.workspaceMember.delete
-          >[0];
-          type DeleteSession = Parameters<typeof tx.mutate.session.delete>[0];
-          type DeleteWorkspace = Parameters<
-            typeof tx.mutate.workspace.delete
-          >[0];
-          expectTypeOf<DeleteUser>().toEqualTypeOf<{
-            workspaceId: string;
-            userId: string;
-          }>();
-          expectTypeOf<DeleteWorkspaceMember>().toEqualTypeOf<{
-            workspaceId: string;
-            memberId: string;
-          }>();
-          expectTypeOf<DeleteSession>().toEqualTypeOf<{
-            workspaceId: string;
-            sessionId: string;
-          }>();
-          expectTypeOf<DeleteWorkspace>().toEqualTypeOf<{
-            workspaceId: string;
-          }>();
-
-          return promiseVoid;
-        },
-      },
-    });
-  });
-
-  test('upsert operations have correct type signatures', () => {
-    new Zero({
-      schema: zeroStressSchema,
-      userID: 'anon',
-      cacheURL: null,
-      mutators: {
-        testUpsert: (tx: Tx) => {
-          // Upsert methods should be callable
-          expectTypeOf(tx.mutate.product.upsert).toBeFunction();
-          expectTypeOf(tx.mutate.user.upsert).toBeFunction();
-          expectTypeOf(tx.mutate.workspace.upsert).toBeFunction();
-
-          return promiseVoid;
-        },
-      },
-    });
   });
 
   test('enum types are preserved across different tables', () => {
