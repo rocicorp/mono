@@ -902,4 +902,120 @@ describe('change-streamer/storer', () => {
       ).toEqual([{ownerAddress: 'wss://change-streamer:12345'}]);
     });
   });
+
+  describe('table stats tracking', () => {
+    beforeEach(async () => {
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        db,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+      );
+    });
+
+    test('tracks table stats for data changes', () => {
+      const insert1 = messages.insert('issues', {id: '1'});
+      const insert2 = messages.insert('issues', {id: '2'});
+      const update1 = messages.update(
+        'issues',
+        {id: '1'},
+        {id: '1', title: 'updated'},
+      );
+
+      storer.store(['01', ['data', insert1]]);
+      storer.store(['02', ['data', insert2]]);
+      storer.store(['03', ['data', update1]]);
+
+      const stats = storer.getTableStatsForTesting();
+      expect(stats.get('public.issues')).toBe(3);
+    });
+
+    test('tracks stats for multiple tables', () => {
+      const insert1 = messages.insert('issues', {id: '1'});
+      const insert2 = {
+        tag: 'insert' as const,
+        relation: {schema: 'public', name: 'users', keyColumns: ['id']},
+        new: {id: '1', name: 'test'},
+      };
+
+      storer.store(['01', ['data', insert1]]);
+      storer.store(['02', ['data', insert2]]);
+      storer.store(['03', ['data', insert1]]);
+
+      const stats = storer.getTableStatsForTesting();
+      expect(stats.get('public.issues')).toBe(2);
+      expect(stats.get('public.users')).toBe(1);
+    });
+
+    test('formats top tables correctly', () => {
+      const insert1 = messages.insert('issues', {id: '1'});
+      const insert2 = {
+        tag: 'insert' as const,
+        relation: {schema: 'public', name: 'users', keyColumns: ['id']},
+        new: {id: '1'},
+      };
+      const insert3 = {
+        tag: 'insert' as const,
+        relation: {schema: 'audit', name: 'events', keyColumns: ['id']},
+        new: {id: '1'},
+      };
+
+      // Store 5 issues, 3 users, 1 event
+      for (let i = 0; i < 5; i++) {
+        storer.store([`0${i}`, ['data', insert1]]);
+      }
+      for (let i = 0; i < 3; i++) {
+        storer.store([`1${i}`, ['data', insert2]]);
+      }
+      storer.store(['20', ['data', insert3]]);
+
+      const formatted = storer.formatTopTablesForTesting();
+      expect(formatted).toBe(
+        ` 1. public.issues  5 pending\n` +
+          ` 2. public.users   3 pending\n` +
+          ` 3. audit.events   1 pending`,
+      );
+    });
+
+    test('returns empty message when no stats', () => {
+      const formatted = storer.formatTopTablesForTesting();
+      expect(formatted).toBe('(no table stats available)');
+    });
+
+    test('limits top tables to specified count', () => {
+      // Create 6 different tables
+      for (let i = 0; i < 6; i++) {
+        const insert = {
+          tag: 'insert' as const,
+          relation: {schema: 'public', name: `table${i}`, keyColumns: ['id']},
+          new: {id: '1'},
+        };
+        // Store i+1 changes for each table so they have different counts
+        for (let j = 0; j <= i; j++) {
+          storer.store([`${i}${j}`, ['data', insert]]);
+        }
+      }
+
+      const formatted = storer.formatTopTablesForTesting(3);
+      // Should only show top 3 tables (table5, table4, table3)
+      expect(formatted).toBe(
+        ` 1. public.table5  6 pending\n` +
+          ` 2. public.table4  5 pending\n` +
+          ` 3. public.table3  4 pending`,
+      );
+    });
+
+    test('does not track begin/commit messages', () => {
+      storer.store(['01', ['begin', {tag: 'begin'}, {commitWatermark: '02'}]]);
+      storer.store(['02', ['commit', {tag: 'commit'}, {watermark: '02'}]]);
+
+      const stats = storer.getTableStatsForTesting();
+      expect(stats.size).toBe(0);
+    });
+  });
 });

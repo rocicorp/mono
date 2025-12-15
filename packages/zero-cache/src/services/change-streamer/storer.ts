@@ -17,7 +17,21 @@ import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type ChangeEntry} from './change-streamer.ts';
+import type {DataChange} from '../change-source/protocol/current/data.ts';
 import * as ErrorType from './error-type-enum.ts';
+
+export function getTableFromChange(change: DataChange): string | null {
+  switch (change.tag) {
+    case 'insert':
+    case 'update':
+    case 'delete':
+      return `${change.relation.schema}.${change.relation.name}`;
+    case 'truncate':
+      return change.relations.map(r => `${r.schema}.${r.name}`).join(', ');
+    default:
+      return null;
+  }
+}
 import {
   AutoResetSignal,
   markResetRequired,
@@ -101,6 +115,7 @@ export class Storer implements Service {
   readonly #onConsumed: (c: Commit | StatusMessage) => void;
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
+  readonly #tableStats = new Map<string, number>();
 
   #running = false;
 
@@ -193,6 +208,13 @@ export class Storer implements Service {
 
   store(entry: WatermarkedChange) {
     this.#queue.enqueue(['change', entry]);
+    const [, downstream] = entry;
+    if (downstream[0] === 'data') {
+      const table = getTableFromChange(downstream[1]);
+      if (table) {
+        this.#tableStats.set(table, (this.#tableStats.get(table) ?? 0) + 1);
+      }
+    }
   }
 
   abort() {
@@ -209,16 +231,57 @@ export class Storer implements Service {
 
   #readyForMore: Resolver<void> | null = null;
 
+  #formatTopTables(limit = 20): string {
+    const sorted = [...this.#tableStats.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit);
+    if (sorted.length === 0) {
+      return '(no table stats available)';
+    }
+    const maxTableLen = Math.max(...sorted.map(([t]) => t.length));
+    return sorted
+      .map(([table, count], i) => {
+        const rank = String(i + 1).padStart(2, ' ');
+        const paddedTable = table.padEnd(maxTableLen, ' ');
+        return `${rank}. ${paddedTable}  ${count.toLocaleString()} pending`;
+      })
+      .join('\n');
+  }
+
+  /** @internal - exposed for testing */
+  getTableStatsForTesting(): Map<string, number> {
+    return new Map(this.#tableStats);
+  }
+
+  /** @internal - exposed for testing */
+  formatTopTablesForTesting(limit?: number): string {
+    return this.#formatTopTables(limit);
+  }
+
   readyForMore(): Promise<void> | undefined {
     if (!this.#running) {
       return undefined;
     }
+    const queueSize = this.#queue.size();
     if (
       this.#readyForMore === null &&
-      this.#queue.size() > QUEUE_SIZE_BACK_PRESSURE_THRESHOLD
+      queueSize > QUEUE_SIZE_BACK_PRESSURE_THRESHOLD
     ) {
       this.#lc.warn?.(
-        `applying back pressure with ${this.#queue.size()} queued changes`,
+        `applying back pressure with ${queueSize} queued changes\n` +
+          `\n` +
+          `Top tables by pending changes:\n` +
+          `${this.#formatTopTables()}\n` +
+          `\n` +
+          `To inspect changeLog backlog in your CVR database:\n` +
+          `  SELECT\n` +
+          `    (change->'relation'->>'schema') || '.' || (change->'relation'->>'name') AS table_name,\n` +
+          `    change->>'tag' AS operation,\n` +
+          `    COUNT(*) AS count\n` +
+          `  FROM "<app_id>/cdc"."changeLog"\n` +
+          `  GROUP BY 1, 2\n` +
+          `  ORDER BY 3 DESC\n` +
+          `  LIMIT 20;`,
       );
       this.#readyForMore = resolver();
     }
@@ -282,11 +345,26 @@ export class Storer implements Service {
             await tx.pool.done();
             tx = null;
           }
+          this.#tableStats.clear();
           continue;
         }
       }
       // msgType === 'change'
       const [watermark, downstream] = msg[1];
+
+      // Decrement table stats for data changes
+      if (downstream[0] === 'data') {
+        const table = getTableFromChange(downstream[1]);
+        if (table) {
+          const count = this.#tableStats.get(table) ?? 0;
+          if (count <= 1) {
+            this.#tableStats.delete(table);
+          } else {
+            this.#tableStats.set(table, count - 1);
+          }
+        }
+      }
+
       const [tag, change] = downstream;
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
