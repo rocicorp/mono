@@ -1,4 +1,11 @@
-import {describe, expect, expectTypeOf, test} from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  expectTypeOf,
+  test,
+} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   defineMutatorWithType,
@@ -58,52 +65,71 @@ const queries = defineQueriesWithType<typeof schema>()({
   issue: defineQueryWithType<typeof schema>()(() => zql.issues.one()),
 });
 
-test('run', async () => {
-  const z = zeroForTest({
-    schema,
-    mutators,
-  });
+const z = zeroForTest({
+  schema,
+  mutators,
+});
 
+beforeAll(async () => {
   await z.mutate(mutators.insertIssue()).client;
+});
 
-  const x = await z.run(zql.issues);
-  expectTypeOf(x).toEqualTypeOf<
-    {
-      readonly id: string;
-      readonly value: number;
-    }[]
-  >();
-  expect(x).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+afterAll(async () => {
+  await z.close();
+});
 
-  const y = await z.run(zql.issues.one());
-  expectTypeOf(y).toEqualTypeOf<
-    | {
+describe('run', () => {
+  test('run with many rows', async () => {
+    const x = await z.run(zql.issues);
+    expectTypeOf(x).toEqualTypeOf<
+      {
         readonly id: string;
         readonly value: number;
-      }
-    | undefined
-  >();
-  expect(y).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
+      }[]
+    >();
+    expect(x).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+
+    const y = await z.run(queries.issues());
+    expectTypeOf(y).toEqualTypeOf<
+      {
+        readonly id: string;
+        readonly value: number;
+      }[]
+    >();
+    expect(y).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+  });
+
+  test('run with one row', async () => {
+    const x = await z.run(zql.issues.one());
+    expectTypeOf(x).toEqualTypeOf<
+      | {
+          readonly id: string;
+          readonly value: number;
+        }
+      | undefined
+    >();
+    expect(x).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
+
+    const y = await z.run(queries.issue());
+    expectTypeOf(y).toEqualTypeOf<
+      | {
+          readonly id: string;
+          readonly value: number;
+        }
+      | undefined
+    >();
+    expect(y).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
+  });
 });
 
 describe('preload', () => {
   test('preload with many rows', async () => {
-    const z = zeroForTest({
-      schema,
-      mutators,
-    });
-
     const result = await z.preload(zql.issues);
     expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
     await z.preload(queries.issues());
   });
 
   test('preload with one row', async () => {
-    const z = zeroForTest({
-      schema,
-      mutators,
-    });
-
     const result = await z.preload(zql.issues.one());
     expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
     await z.preload(queries.issue());
@@ -152,6 +178,32 @@ test('materialize', async () => {
       }>
     >();
   });
+
+  const m2 = z.materialize(builder.issues.one());
+  expectTypeOf(m2.data).toEqualTypeOf<
+    | {
+        readonly id: string;
+        readonly value: number;
+      }
+    | undefined
+  >();
+
+  const m3 = z.materialize(queries.issue());
+  expectTypeOf(m3.data).toEqualTypeOf<
+    | {
+        readonly id: string;
+        readonly value: number;
+      }
+    | undefined
+  >();
+
+  const m4 = z.materialize(queries.issues());
+  expectTypeOf(m4.data).toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly value: number;
+    }[]
+  >();
 
   expect(gotData).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
 });
