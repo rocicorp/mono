@@ -2715,6 +2715,7 @@ test('Connect timeout', async () => {
   expect(connectionStates.length).toEqual(1 + 4 * 2);
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
     'connecting',
+    'disconnected',
   ]);
 
   // And success after this...
@@ -2723,6 +2724,7 @@ test('Connect timeout', async () => {
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
     'connecting',
+    'disconnected',
     'connected',
   ]);
 
