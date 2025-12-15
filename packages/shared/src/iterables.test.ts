@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import {getESLibVersion} from './get-es-lib-version.ts';
 import {wrapIterable} from './iterables.ts';
 
 function* range(start = 0, end = Infinity, step = 1) {
@@ -6,6 +7,14 @@ function* range(start = 0, end = Infinity, step = 1) {
     yield i;
   }
 }
+
+test('lib < ES2024', () => {
+  // Iterator.from was added in ES2024
+
+  // sanity check that we are using not yet using es2024. If this starts failing
+  // then we can remove the wrapIterable and use the builtins.
+  expect(getESLibVersion()).toBeLessThan(2024);
+});
 
 test('wrapper should be iterable', () => {
   const result = [];

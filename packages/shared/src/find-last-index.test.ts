@@ -1,21 +1,13 @@
 import {expect, test} from 'vitest';
-import data from '../../../tsconfig.json' with {type: 'json'};
 import {findLastIndex} from './find-last-index.ts';
-
-function getESLibVersion(libs: string[]): number {
-  const esVersion = libs.find(lib => lib.toLowerCase().startsWith('es'));
-  if (!esVersion) {
-    throw new Error('Could not find ES lib version');
-  }
-  return parseInt(esVersion.slice(2), 10);
-}
+import {getESLibVersion} from './get-es-lib-version.ts';
 
 test('lib < ES2023', () => {
   // findLastIndex was added in ES2023
 
   // sanity check that we are using es2022. If this starts failing then we can
   // remove the findLastIndex and use the builtin.
-  expect(getESLibVersion(data.compilerOptions.lib)).toBeLessThan(2023);
+  expect(getESLibVersion()).toBeLessThan(2023);
 });
 
 test('finds the last element that satisfies the predicate', () => {
