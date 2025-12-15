@@ -1,4 +1,4 @@
-import {expect, expectTypeOf, test} from 'vitest';
+import {describe, expect, expectTypeOf, test} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   defineMutatorWithType,
@@ -19,43 +19,54 @@ import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {
+  defineQueriesWithType,
+  defineQueryWithType,
+} from '../../../zql/src/query/query-registry.ts';
+
+const schema = createSchema({
+  tables: [
+    table('issues')
+      .columns({
+        id: string(),
+        value: number(),
+      })
+      .primaryKey('id'),
+  ],
+  enableLegacyMutators: true,
+});
+
+const mutators = defineMutatorsWithType<typeof schema>()({
+  insertIssue: defineMutatorWithType<typeof schema>()(async ({tx}) => {
+    expect('issues' in tx.mutate).toBe(true);
+    await tx.mutate.issues.insert({id: 'a', value: 1});
+
+    expect('noSuchTable' in tx.mutate).toBe(false);
+
+    // oxlint-disable-next-line no-constant-condition
+    if (false) {
+      // @ts-expect-error - noSuchTable does not exist
+      await tx.mutate.noSuchTable.insert({id: 'x'});
+    }
+  }),
+});
+
+const zql = createBuilder(schema);
+
+const queries = defineQueriesWithType<typeof schema>()({
+  issues: defineQueryWithType<typeof schema>()(() => zql.issues),
+  issue: defineQueryWithType<typeof schema>()(() => zql.issues.one()),
+});
 
 test('run', async () => {
-  const schema = createSchema({
-    tables: [
-      table('issues')
-        .columns({
-          id: string(),
-          value: number(),
-        })
-        .primaryKey('id'),
-    ],
-    enableLegacyMutators: true,
-  });
-
-  const mutators = defineMutatorsWithType<typeof schema>()({
-    insertIssue: defineMutatorWithType<typeof schema>()(async ({tx}) => {
-      expect('issues' in tx.mutate).toBe(true);
-      await tx.mutate.issues.insert({id: 'a', value: 1});
-
-      expect('noSuchTable' in tx.mutate).toBe(false);
-
-      // oxlint-disable-next-line no-constant-condition
-      if (false) {
-        // @ts-expect-error - noSuchTable does not exist
-        await tx.mutate.noSuchTable.insert({id: 'x'});
-      }
-    }),
-  } as const);
   const z = zeroForTest({
     schema,
     mutators,
   });
 
-  const builder = createBuilder(schema);
   await z.mutate(mutators.insertIssue()).client;
 
-  const x = await z.run(builder.issues);
+  const x = await z.run(zql.issues);
   expectTypeOf(x).toEqualTypeOf<
     {
       readonly id: string;
@@ -63,6 +74,40 @@ test('run', async () => {
     }[]
   >();
   expect(x).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+
+  const y = await z.run(zql.issues.one());
+  expectTypeOf(y).toEqualTypeOf<
+    | {
+        readonly id: string;
+        readonly value: number;
+      }
+    | undefined
+  >();
+  expect(y).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
+});
+
+describe('preload', () => {
+  test('preload with many rows', async () => {
+    const z = zeroForTest({
+      schema,
+      mutators,
+    });
+
+    const result = await z.preload(zql.issues);
+    expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
+    await z.preload(queries.issues());
+  });
+
+  test('preload with one row', async () => {
+    const z = zeroForTest({
+      schema,
+      mutators,
+    });
+
+    const result = await z.preload(zql.issues.one());
+    expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
+    await z.preload(queries.issue());
+  });
 });
 
 test('materialize', async () => {
