@@ -59,14 +59,12 @@ type IteratorConstructor = {
 // We use globalThis to access the runtime value safely
 const hasNativeIteratorFrom = (() => {
   try {
-    return (
-      typeof (globalThis as {Iterator?: unknown}).Iterator !== 'undefined' &&
-      typeof (
-        (globalThis as {Iterator?: {from?: unknown}}).Iterator as {
-          from?: unknown;
-        }
-      ).from === 'function'
-    );
+    const IteratorObj = (globalThis as {Iterator?: unknown}).Iterator;
+    if (typeof IteratorObj === 'undefined') {
+      return false;
+    }
+    const fromMethod = (IteratorObj as {from?: unknown}).from;
+    return typeof fromMethod === 'function';
   } catch {
     return false;
   }
@@ -97,8 +95,10 @@ export function wrapIterable<T>(
 ): IterWrapper<T> | IteratorWithHelpers<T> {
   if (hasNativeIteratorFrom) {
     // Use native ES2024 Iterator.from
-    const IteratorCtor = (globalThis as {Iterator?: IteratorConstructor})
-      .Iterator as IteratorConstructor;
+    // hasNativeIteratorFrom already verified Iterator.from exists
+    const IteratorCtor = (
+      globalThis as unknown as {Iterator: IteratorConstructor}
+    ).Iterator;
     return IteratorCtor.from(iter);
   }
   // Fallback to custom implementation
