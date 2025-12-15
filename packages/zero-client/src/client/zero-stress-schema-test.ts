@@ -12,6 +12,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
 // ==================== TABLE DEFINITIONS ====================
 
@@ -11826,6 +11827,10 @@ export const zeroStressSchema = createSchema({
     workspaceRelationships,
     workspaceMemberRelationships,
   ],
-  enableLegacyMutators: true,
+  enableLegacyMutators: false,
   enableLegacyQueries: false,
 });
+
+const zql = createBuilder(zeroStressSchema);
+
+export {zql};
