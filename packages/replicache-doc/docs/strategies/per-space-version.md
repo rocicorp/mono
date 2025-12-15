@@ -175,7 +175,7 @@ Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to 
 
 ## Example
 
-[Todo-WC](https://github.com/rocicorp/todo-wc) is a simple example of per-space versioning. [Repliear](/examples/repliear) is a more involved example. Note that both examples also uses [Shared Mutators](../howto/share-mutators) and [batch the mutations](#early-exit-batch-size) into a single transaction. So the logic is a little different than described above, but equivalent.
+[Todo-WC](https://github.com/rocicorp/todo-wc) is a simple example of per-space versioning. [Repliear](/examples/repliear) is a more involved example. Note that both examples also uses [Shared Mutators](../howto/share-mutators) and batch the mutations into a single transaction. So the logic is a little different than described above, but equivalent.
 
 ## Challenges
 

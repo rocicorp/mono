@@ -156,7 +156,7 @@ Replicache sends a [`PullRequest`](/reference/server-pull#http-request-body) to 
 
 ## Example
 
-See [todo-nextjs](https://github.com/rocicorp/todo-nextjs) for an example of this strategy. Note that this sample also uses [Shared Mutators](../howto/share-mutators) and [batches the mutations](#early-exit-batch-size) into a single transaction. So the logic is a little different than above, but equivalent.
+See [todo-nextjs](https://github.com/rocicorp/todo-nextjs) for an example of this strategy. Note that this sample also uses [Shared Mutators](../howto/share-mutators) and batches the mutations into a single transaction. So the logic is a little different than above, but equivalent.
 
 ## Why Not Use Last-Modified?
 
@@ -198,7 +198,7 @@ To correctly implement auth changes with this strategy, you also need to track t
 
 ### Early Exit, Batch Size
 
-Just as in the Reset strategy, you can [early exit](./reset#early-exit) the push handler or process mutations in [batches](./reset#batch-size).
+Just as in the Reset strategy, you can [early exit](./reset#early-exit) the push handler or process mutations in [batches](./reset#batching).
 
 ### Alternative Soft Delete
 

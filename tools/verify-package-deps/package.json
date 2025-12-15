@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "npm@10.9.2",
   "engines": {
-    "node": ">=22.x"
+    "node": ">=22"
   },
   "scripts": {
     "verify": "node --experimental-strip-types src/verify-package-deps.ts",

@@ -2,7 +2,7 @@
   "name": "@rocicorp/mono",
   "packageManager": "npm@10.9.2",
   "engines": {
-    "node": ">=22.x"
+    "node": ">=22"
   },
   "version": "0.0.0",
   "private": true,
