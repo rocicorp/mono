@@ -9,7 +9,7 @@ For more information, see [How Replicache Works — Push](/concepts/how-it-works
 
 ## Configuration
 
-Specify the URL with the [`pushURL`](/api/interfaces/ReplicacheOptions#pushURL)
+Specify the URL with the [`pushURL`](/api/interfaces/ReplicacheOptions#pushurl)
 constructor option:
 
 ```js
@@ -60,7 +60,7 @@ its current state.
 
 ## HTTP Request Body
 
-When pushing we `POST` an HTTP request with a [JSON encoded body](/api#pushrequest).
+When pushing we `POST` an HTTP request with a [JSON encoded body](/api/type-aliases/PushRequest).
 
 ```ts
 type PushRequest = {
@@ -86,7 +86,7 @@ Version of the type Replicache uses for the request body. The current version is
 
 ### `clientGroupID`
 
-The [`clientGroupID`](/api/classes/Replicache#clientGroupID) of the requesting Replicache
+The [`clientGroupID`](/api/classes/Replicache#clientgroupid) of the requesting Replicache
 client group.
 
 ### `mutations`
@@ -109,7 +109,7 @@ This is something that you control and should identify the schema of your client
 view. This ensures that you are sending data of the correct type so that the
 client can correctly handle the data.
 
-The [`schemaVersion`](/api/interfaces/ReplicacheOptions#schemaVersion) can be set
+The [`schemaVersion`](/api/interfaces/ReplicacheOptions#schemaversion) can be set
 in the [`ReplicacheOptions`](/api/interfaces/ReplicacheOptions) when creating
 your instance of [`Replicache`](/api/classes/Replicache).
 
@@ -119,7 +119,7 @@ your instance of [`Replicache`](/api/classes/Replicache).
 
 - `200` for success
 - `401` for auth error — Replicache will reauthenticate using
-  [`getAuth`](/api/classes/Replicache#getAuth) if available
+  [`getAuth`](/api/classes/Replicache#getauth) if available
 - All other status codes are considered to be errors
 
 Replicache will exponentially back off sending pushes in the case of both
@@ -146,7 +146,7 @@ See [Remote Mutations](../byob/remote-mutations) for an example implementation.
 ### Mutation Status
 
 The server marks indicates that mutation was applied by returning a
-[`lastMutationID`](./server-pull#lastmutationid) in the `PullResponse` greater than
+[`lastMutationID`](./server-pull#lastmutationidchanges) in the `PullResponse` greater than
 or equal to its mutation id.
 
 Replicache will continue retrying a mutation until the server marks the mutation

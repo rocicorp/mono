@@ -10,7 +10,11 @@ const config: Config = {
   url: 'https://doc.replicache.dev',
   baseUrl: '/',
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'warn',
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
+  },
   favicon: 'img/favicon.png',
   organizationName: 'Rocicorp', // Usually your GitHub org/user name.
   projectName: 'replicache', // Usually your repo name.

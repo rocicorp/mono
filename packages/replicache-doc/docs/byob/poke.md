@@ -3,7 +3,7 @@ title: Poke
 slug: /byob/poke
 ---
 
-By default, Replicache pulls new changes periodically. The frequency is controlled by the [`pullInterval`](/api/interfaces/ReplicacheOptions#pullInterval) parameter which defaults to 60 seconds.
+By default, Replicache pulls new changes periodically. The frequency is controlled by the [`pullInterval`](/api/interfaces/ReplicacheOptions#pullinterval) parameter which defaults to 60 seconds.
 
 To get more responsive updates, you could reduce the pull interval, but that gets expensive quick. Most Replicache applications instead have the server send a special message called a _poke_ to the app, telling it when it should pull again.
 
