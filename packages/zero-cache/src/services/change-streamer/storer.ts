@@ -45,20 +45,6 @@ type PendingTransaction = {
   startingReplicationState: Promise<ReplicationState>;
 };
 
-// Technically, any threshold is fine because the point of back pressure
-// is to adjust the rate of incoming messages, and the size of the pending
-// work queue does not affect that mechanism.
-//
-// However, it is theoretically possible to exceed the available memory if
-// the size of changes is very large. This threshold can be improved by
-// roughly measuring the size of the enqueued contents and setting the
-// threshold based on available memory.
-//
-// TODO: switch to a message size-based thresholding when migrating over
-// to stringified JSON messages, which will bound the computation involved
-// in measuring the size of row messages.
-const QUEUE_SIZE_BACK_PRESSURE_THRESHOLD = 100_000;
-
 /**
  * Handles the storage of changes and the catchup of subscribers
  * that are behind.
@@ -101,6 +87,7 @@ export class Storer implements Service {
   readonly #onConsumed: (c: Commit | StatusMessage) => void;
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
+  readonly #backPressureThreshold: number;
 
   #running = false;
 
@@ -114,6 +101,7 @@ export class Storer implements Service {
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
     onFatal: (err: Error) => void,
+    backPressureThreshold: number,
   ) {
     this.#lc = lc;
     this.#shard = shard;
@@ -124,6 +112,7 @@ export class Storer implements Service {
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
+    this.#backPressureThreshold = backPressureThreshold;
   }
 
   // For readability in SQL statements.
@@ -215,10 +204,10 @@ export class Storer implements Service {
     }
     if (
       this.#readyForMore === null &&
-      this.#queue.size() > QUEUE_SIZE_BACK_PRESSURE_THRESHOLD
+      this.#queue.size() > this.#backPressureThreshold
     ) {
       this.#lc.warn?.(
-        `applying back pressure with ${this.#queue.size()} queued changes`,
+        `applying back pressure with ${this.#queue.size()} queued changes (threshold: ${this.#backPressureThreshold})`,
       );
       this.#readyForMore = resolver();
     }
@@ -229,7 +218,7 @@ export class Storer implements Service {
     if (
       this.#readyForMore !== null &&
       // Wait for at least 10% of the threshold to free up.
-      this.#queue.size() < QUEUE_SIZE_BACK_PRESSURE_THRESHOLD * 0.9
+      this.#queue.size() < this.#backPressureThreshold * 0.9
     ) {
       this.#lc.info?.(
         `releasing back pressure with ${this.#queue.size()} queued changes`,

@@ -8,6 +8,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {DEFAULT_BACK_PRESSURE_THRESHOLD} from '../../config/zero-config.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -80,6 +81,7 @@ describe('change-streamer/service', () => {
       },
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
@@ -752,6 +754,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -776,6 +779,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -797,6 +801,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -830,6 +835,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -866,6 +872,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -930,6 +937,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 

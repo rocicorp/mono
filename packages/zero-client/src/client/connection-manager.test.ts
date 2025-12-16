@@ -12,7 +12,7 @@ import {
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientError, type AuthError} from './error.ts';
 
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 60 * 1000;
 
 const sharedDisconnectError = new ClientError({
   kind: ClientErrorKind.Offline,

@@ -197,6 +197,23 @@ function parseArgs() {
       description:
         'Allow running with local changes in the working directory (useful for developing script)',
     },
+    {
+      name: 'skip-git',
+      type: Boolean,
+      description:
+        'Skip git tag and push (use when retrying after git succeeded)',
+    },
+    {
+      name: 'skip-npm',
+      type: Boolean,
+      description: 'Skip npm publish (use when retrying after npm succeeded)',
+    },
+    {
+      name: 'skip-docker',
+      type: Boolean,
+      description:
+        'Skip docker build and push (use when retrying after docker succeeded)',
+    },
   ];
 
   let options;
@@ -228,6 +245,9 @@ function parseArgs() {
     isCanary,
     remote,
     allowLocalChanges: Boolean(options['allow-local-changes']),
+    skipGit: Boolean(options['skip-git']),
+    skipNpm: Boolean(options['skip-npm']),
+    skipDocker: Boolean(options['skip-docker']),
   };
 }
 
@@ -268,10 +288,22 @@ Maintenance/cherry-pick workflow:
   2. Cherry-pick commits: git cherry-pick <commit-hash>
   3. Push to origin: git push origin maint/zero/v0.24
   4. Run: node release.js --from maint/zero/v0.24
+
+Retrying after partial failure:
+  node release.js --from main --skip-git               # Retry docker and npm
+  node release.js --from main --skip-git --skip-docker # Retry just npm
 `);
 }
 
-const {from: fromArg, isCanary, remote, allowLocalChanges} = parseArgs();
+const {
+  from: fromArg,
+  isCanary,
+  remote,
+  allowLocalChanges,
+  skipGit,
+  skipNpm,
+  skipDocker,
+} = parseArgs();
 
 try {
   // Find the git root directory
@@ -448,15 +480,68 @@ try {
     execute(`git commit -am "Bump version to ${nextVersion}"`);
   }
 
-  // Push tag to git before npm so that if npm fails the versioning logic works correctly.
-  // Also if npm push succeeds but docker fails we correctly record the tag that the
-  // npm version was made.
+  // Push tag to git first so that if later steps fail the versioning logic works correctly.
   // Note: We don't merge back to the build branch - canaries are throwaway builds
   // that exist only as tagged commits.
-  execute(`git tag ${tagName}`);
-  execute(`git push ${remote} ${tagName}`);
+  if (skipGit) {
+    console.log('Skipping git tag and push (--skip-git)');
+  } else {
+    execute(`git tag --force ${tagName}`);
+    execute(`git push --force ${remote} ${tagName}`);
+  }
 
-  if (isCanary) {
+  if (skipDocker) {
+    console.log('Skipping docker build and push (--skip-docker)');
+  } else {
+    try {
+      // Check if our specific multiarch builder exists
+      const builders = execute('docker buildx ls', {stdio: 'pipe'});
+      const hasMultiArchBuilder = builders.includes('zero-multiarch');
+
+      if (!hasMultiArchBuilder) {
+        console.log('Setting up multi-architecture builder...');
+        execute(
+          'docker buildx create --name zero-multiarch --driver docker-container --bootstrap',
+        );
+      }
+      execute('docker buildx use zero-multiarch');
+      execute('docker buildx inspect zero-multiarch --bootstrap');
+    } catch (e) {
+      console.error('Failed to set up Docker buildx:', e);
+      throw e;
+    }
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        execute(
+          `docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    --build-arg=ZERO_VERSION=${nextVersion} \
+    --build-arg=ZERO_SYNC_PROTOCOL_VERSION=${PROTOCOL_VERSION} \
+    --build-arg=ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} \
+    -t rocicorp/zero:${nextVersion} \
+    --push .`,
+          {cwd: basePath('packages', 'zero')},
+        );
+      } catch (e) {
+        if (i < 3) {
+          console.error(
+            `Error building docker image, retrying in 10 seconds...`,
+          );
+          await new Promise(resolve => setTimeout(resolve, 10_000));
+          continue;
+        }
+        throw e;
+      }
+      break;
+    }
+  }
+
+  // npm publish last since it's the user-facing entrypoint - we don't want
+  // users installing a version that has no docker image
+  if (skipNpm) {
+    console.log('Skipping npm publish (--skip-npm)');
+  } else if (isCanary) {
     execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
     execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} canary`);
   } else {
@@ -465,54 +550,19 @@ try {
     execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} staging`);
   }
 
-  try {
-    // Check if our specific multiarch builder exists
-    const builders = execute('docker buildx ls', {stdio: 'pipe'});
-    const hasMultiArchBuilder = builders.includes('zero-multiarch');
-
-    if (!hasMultiArchBuilder) {
-      console.log('Setting up multi-architecture builder...');
-      execute(
-        'docker buildx create --name zero-multiarch --driver docker-container --bootstrap',
-      );
-    }
-    execute('docker buildx use zero-multiarch');
-    execute('docker buildx inspect zero-multiarch --bootstrap');
-  } catch (e) {
-    console.error('Failed to set up Docker buildx:', e);
-    throw e;
-  }
-
-  for (let i = 0; i < 3; i++) {
-    try {
-      execute(
-        `docker buildx build \
-    --platform linux/amd64,linux/arm64 \
-    --build-arg=ZERO_VERSION=${nextVersion} \
-    --build-arg=ZERO_SYNC_PROTOCOL_VERSION=${PROTOCOL_VERSION} \
-    --build-arg=ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} \
-    -t rocicorp/zero:${nextVersion} \
-    --push .`,
-        {cwd: basePath('packages', 'zero')},
-      );
-    } catch (e) {
-      if (i < 3) {
-        console.error(`Error building docker image, retrying in 10 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, 10_000));
-        continue;
-      }
-      throw e;
-    }
-    break;
-  }
-
   console.log(``);
   console.log(``);
   console.log(`🎉 Success!`);
   console.log(``);
-  console.log(`* Published @rocicorp/zero@${nextVersion} to npm.`);
-  console.log(`* Created Docker image rocicorp/zero:${nextVersion}.`);
-  console.log(`* Pushed Git tag ${tagName} to ${remote}.`);
+  if (!skipGit) {
+    console.log(`* Pushed Git tag ${tagName} to ${remote}.`);
+  }
+  if (!skipDocker) {
+    console.log(`* Created Docker image rocicorp/zero:${nextVersion}.`);
+  }
+  if (!skipNpm) {
+    console.log(`* Published @rocicorp/zero@${nextVersion} to npm.`);
+  }
   console.log(``);
   console.log(``);
   console.log(`Next steps:`);
