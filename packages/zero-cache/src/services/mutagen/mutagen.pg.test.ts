@@ -37,8 +37,6 @@ class MockWriteAuthorizer implements WriteAuthorizer {
 }
 const mockWriteAuthorizer = new MockWriteAuthorizer();
 
-const TEST_SCHEMA_VERSION = 1;
-
 async function createTables(db: PostgresDB) {
   await db.unsafe(`
       CREATE TABLE idonly (
@@ -112,58 +110,6 @@ describe('processMutation', {timeout: 15000}, () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
-      TEST_SCHEMA_VERSION,
-    );
-
-    expect(error).undefined;
-
-    await expectTables(db, {
-      idonly: [{id: '1'}],
-      [`${APP_ID}_${SHARD_NUM}.clients`]: [
-        {
-          clientGroupID: 'abc',
-          clientID: '123',
-          lastMutationID: 1n,
-          userID: null,
-        },
-      ],
-    });
-  });
-
-  test('schemaVersions table not looked up if no schema version specified', async () => {
-    await expectTables(db, {
-      idonly: [],
-      [`${APP_ID}_${SHARD_NUM}.clients`]: [],
-    });
-    await db`DROP TABLE ${db(APP_ID)}."schemaVersions";`;
-
-    const error = await processMutation(
-      lc,
-      undefined,
-      db,
-      SHARD,
-      'abc',
-      {
-        type: MutationType.CRUD,
-        id: 1,
-        clientID: '123',
-        name: '_zero_crud',
-        args: [
-          {
-            ops: [
-              {
-                op: 'insert',
-                tableName: 'idonly',
-                primaryKey: ['id'],
-                value: {id: '1'},
-              },
-            ],
-          },
-        ],
-        timestamp: Date.now(),
-      },
-      mockWriteAuthorizer,
-      undefined, // schemaVersion,
     );
 
     expect(error).undefined;
@@ -214,7 +160,6 @@ describe('processMutation', {timeout: 15000}, () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
-      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;
@@ -265,7 +210,6 @@ describe('processMutation', {timeout: 15000}, () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
-      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;
@@ -317,7 +261,6 @@ describe('processMutation', {timeout: 15000}, () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
-      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;
@@ -369,7 +312,6 @@ describe('processMutation', {timeout: 15000}, () => {
           timestamp: Date.now(),
         },
         mockWriteAuthorizer,
-        TEST_SCHEMA_VERSION,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Push contains unexpected mutation id 3 for client 123. Expected mutation id 2.]`,
@@ -424,7 +366,7 @@ describe('processMutation', {timeout: 15000}, () => {
           timestamp: Date.now(),
         },
         mockWriteAuthorizer,
-        TEST_SCHEMA_VERSION,
+
         undefined,
         true,
       ),
@@ -444,118 +386,6 @@ describe('processMutation', {timeout: 15000}, () => {
         "Both CRUD and Custom mutators are being used at once. This is supported for now but IS NOT RECOMMENDED. Migrate completely to custom mutators.",
       ]
     `);
-  });
-
-  test('schema version below supported range throws', async () => {
-    await db`
-      INSERT INTO ${db(
-        `${APP_ID}_${SHARD_NUM}`,
-      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('abc', '123', 1)`;
-
-    await db`UPDATE ${db(APP_ID)}."schemaVersions"
-             SET "minSupportedVersion"=2, "maxSupportedVersion"=3`;
-
-    await expect(
-      processMutation(
-        lc,
-        undefined,
-        db,
-        SHARD,
-        'abc',
-        {
-          type: MutationType.CRUD,
-          id: 2,
-          clientID: '123',
-          name: '_zero_crud',
-          args: [
-            {
-              ops: [
-                {
-                  op: 'insert',
-                  tableName: 'idonly',
-                  primaryKey: ['id'],
-                  value: {id: '1'},
-                },
-              ],
-            },
-          ],
-          timestamp: Date.now(),
-        },
-        mockWriteAuthorizer,
-        1,
-      ),
-    ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[ProtocolError: Schema version 1 is not in range of supported schema versions [2, 3].]`,
-    );
-
-    await expectTables(db, {
-      idonly: [],
-      [`${APP_ID}_${SHARD_NUM}.clients`]: [
-        {
-          clientGroupID: 'abc',
-          clientID: '123',
-          lastMutationID: 1n,
-          userID: null,
-        },
-      ],
-    });
-  });
-
-  test('schema version above supported range throws', async () => {
-    await db`
-      INSERT INTO ${db(
-        `${APP_ID}_${SHARD_NUM}`,
-      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('abc', '123', 1)`;
-
-    await db`UPDATE ${db(APP_ID)}."schemaVersions"
-             SET "minSupportedVersion"=2, "maxSupportedVersion"=3`;
-
-    await expect(
-      processMutation(
-        lc,
-        {},
-        db,
-        SHARD,
-        'abc',
-        {
-          type: MutationType.CRUD,
-          id: 2,
-          clientID: '123',
-          name: '_zero_crud',
-          args: [
-            {
-              ops: [
-                {
-                  op: 'insert',
-                  tableName: 'idonly',
-                  primaryKey: ['id'],
-                  value: {id: '1'},
-                },
-              ],
-            },
-          ],
-          timestamp: Date.now(),
-        },
-        mockWriteAuthorizer,
-        4,
-      ),
-    ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[ProtocolError: Schema version 4 is not in range of supported schema versions [2, 3].]`,
-    );
-
-    await expectTables(db, {
-      idonly: [],
-      [`${APP_ID}_${SHARD_NUM}.clients`]: [
-        {
-          clientGroupID: 'abc',
-          clientID: '123',
-          lastMutationID: 1n,
-          userID: null,
-        },
-      ],
-    });
   });
 
   test('process create, set, update, delete all at once', async () => {
@@ -623,7 +453,6 @@ describe('processMutation', {timeout: 15000}, () => {
         timestamp: Date.now(),
       } satisfies CRUDMutation,
       mockWriteAuthorizer,
-      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;
@@ -677,7 +506,6 @@ describe('processMutation', {timeout: 15000}, () => {
         timestamp: Date.now(),
       } satisfies CRUDMutation,
       mockWriteAuthorizer,
-      TEST_SCHEMA_VERSION,
     );
 
     expect(error).toEqual([
@@ -750,7 +578,7 @@ describe('processMutation', {timeout: 15000}, () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
-      TEST_SCHEMA_VERSION,
+
       async () => {
         // Finish the 2 => 3 transaction only after this 3 => 4 transaction begins.
         resolve();
@@ -811,7 +639,6 @@ describe('processMutation', {timeout: 15000}, () => {
         timestamp: Date.now(),
       },
       mockWriteAuthorizer,
-      TEST_SCHEMA_VERSION,
     );
 
     expect(error).undefined;

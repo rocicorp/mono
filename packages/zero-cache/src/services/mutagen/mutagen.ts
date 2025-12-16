@@ -6,6 +6,11 @@ import postgres from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {
+  isProtocolError,
+  ProtocolError,
+} from '../../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   primaryKeyValueSchema,
@@ -19,8 +24,8 @@ import {
   type UpdateOp,
   type UpsertOp,
 } from '../../../../zero-protocol/src/push.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
 import type {DatabaseStorage} from '../../../../zqlite/src/database-storage.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {
   WriteAuthorizerImpl,
   type WriteAuthorizer,
@@ -30,16 +35,10 @@ import * as Mode from '../../db/mode-enum.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
-import {throwProtocolErrorIfSchemaVersionNotSupported} from '../../types/schema-versions.ts';
-import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
+import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {RefCountedService, Service} from '../service.ts';
 import {MutationAlreadyProcessedError} from './error.ts';
-import {
-  isProtocolError,
-  ProtocolError,
-} from '../../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -52,7 +51,6 @@ export interface Mutagen extends RefCountedService {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
-    schemaVersion: number | undefined,
     customMutatorsEnabled: boolean,
   ): Promise<MutationError | undefined>;
 }
@@ -127,7 +125,6 @@ export class MutagenService implements Mutagen, Service {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
-    schemaVersion: number | undefined,
     customMutatorsEnabled = false,
   ): Promise<MutationError | undefined> {
     if (this.#limiter?.canDo() === false) {
@@ -147,7 +144,6 @@ export class MutagenService implements Mutagen, Service {
       this.id,
       mutation,
       this.#writeAuthorizer,
-      schemaVersion,
       undefined,
       customMutatorsEnabled,
     );
@@ -178,7 +174,6 @@ export async function processMutation(
   clientGroupID: string,
   mutation: Mutation,
   writeAuthorizer: WriteAuthorizer,
-  schemaVersion: number | undefined,
   onTxStart?: () => void | Promise<void>, // for testing
   customMutatorsEnabled = false,
 ): Promise<MutationError | undefined> {
@@ -248,7 +243,6 @@ export async function processMutation(
               authData,
               shard,
               clientGroupID,
-              schemaVersion,
               mutation,
               errorMode,
               writeAuthorizer,
@@ -319,7 +313,6 @@ export async function processMutationWithTx(
   authData: JWTPayload | undefined,
   shard: ShardID,
   clientGroupID: string,
-  schemaVersion: number | undefined,
   mutation: CRUDMutation,
   errorMode: boolean,
   authorizer: WriteAuthorizer,
@@ -373,7 +366,6 @@ export async function processMutationWithTx(
       tx,
       shard,
       clientGroupID,
-      schemaVersion,
       mutation.clientID,
       mutation.id,
     ),
@@ -440,29 +432,17 @@ async function checkSchemaVersionAndIncrementLastMutationID(
   tx: PostgresTransaction,
   shard: ShardID,
   clientGroupID: string,
-  schemaVersion: number | undefined,
   clientID: string,
   receivedMutationID: number,
 ) {
-  const [[{lastMutationID}], supportedVersionRange] = await Promise.all([
-    tx<{lastMutationID: bigint}[]>`
+  const [{lastMutationID}] = await tx<{lastMutationID: bigint}[]>`
     INSERT INTO ${tx(upstreamSchema(shard))}.clients 
       as current ("clientGroupID", "clientID", "lastMutationID")
           VALUES (${clientGroupID}, ${clientID}, ${1})
       ON CONFLICT ("clientGroupID", "clientID")
       DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
       RETURNING "lastMutationID"
-  `,
-    schemaVersion === undefined
-      ? undefined
-      : tx<
-          {
-            minSupportedVersion: number;
-            maxSupportedVersion: number;
-          }[]
-        >`SELECT "minSupportedVersion", "maxSupportedVersion" 
-        FROM ${tx(appSchema(shard))}."schemaVersions"`,
-  ]);
+  `;
 
   // ABORT if the resulting lastMutationID is not equal to the receivedMutationID.
   if (receivedMutationID < lastMutationID) {
@@ -477,14 +457,6 @@ async function checkSchemaVersionAndIncrementLastMutationID(
       message: `Push contains unexpected mutation id ${receivedMutationID} for client ${clientID}. Expected mutation id ${lastMutationID.toString()}.`,
       origin: ErrorOrigin.ZeroCache,
     });
-  }
-
-  if (schemaVersion !== undefined && supportedVersionRange !== undefined) {
-    assert(supportedVersionRange.length === 1);
-    throwProtocolErrorIfSchemaVersionNotSupported(
-      schemaVersion,
-      supportedVersionRange[0],
-    );
   }
 }
 
