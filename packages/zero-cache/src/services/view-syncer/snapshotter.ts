@@ -14,7 +14,6 @@ import {
   type RowKey,
   type RowValue,
 } from '../../types/row-key.ts';
-import {type SchemaVersions} from '../../types/schema-versions.ts';
 import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
@@ -259,12 +258,6 @@ export class ResetPipelinesSignal extends Error {
   }
 }
 
-function getSchemaVersions(db: StatementRunner, appID: string): SchemaVersions {
-  return db.get(
-    `SELECT minSupportedVersion, maxSupportedVersion FROM "${appID}.schemaVersions"`,
-  );
-}
-
 class Snapshot {
   static create(
     lc: LogContext,
@@ -295,7 +288,6 @@ class Snapshot {
   readonly db: StatementRunner;
   readonly #appID: string;
   readonly version: string;
-  readonly schemaVersions: SchemaVersions;
 
   constructor(db: StatementRunner, appID: string) {
     db.beginConcurrent();
@@ -307,7 +299,6 @@ class Snapshot {
     this.db = db;
     this.#appID = appID;
     this.version = stateVersion;
-    this.schemaVersions = getSchemaVersions(db, appID);
   }
 
   numChangesSince(prevVersion: string) {

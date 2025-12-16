@@ -609,12 +609,6 @@ export async function setup(
     _0_version       TEXT NOT NULL,
     PRIMARY KEY ("clientGroupID", "clientID", "mutationID")
   );
-  CREATE TABLE "this_app.schemaVersions" (
-    "lock"                INT PRIMARY KEY,
-    "minSupportedVersion" INT,
-    "maxSupportedVersion" INT,
-    _0_version            TEXT NOT NULL
-  );
   CREATE TABLE "this_app.permissions" (
     "lock"        INT PRIMARY KEY,
     "permissions" JSON,
@@ -655,8 +649,6 @@ export async function setup(
 
   INSERT INTO "this_app_2.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
     VALUES ('9876', 'foo', 42, '01');
-  INSERT INTO "this_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-    VALUES (1, 2, 3, '01'); 
   INSERT INTO "this_app.permissions" ("lock", "permissions", "hash", _0_version)
     VALUES (1, NULL, NULL, '01');
 
@@ -826,16 +818,11 @@ export const messages = new ReplicationMessages({
   comments: 'id',
 });
 export const appMessages = new ReplicationMessages(
-  {
-    schemaVersions: 'lock',
-    permissions: 'lock',
-  },
+  {permissions: 'lock'},
   'this_app',
 );
 
 export const app2Messages = new ReplicationMessages(
-  {
-    clients: ['clientGroupID', 'clientID'],
-  },
+  {clients: ['clientGroupID', 'clientID']},
   'this_app_2',
 );

@@ -1002,7 +1002,6 @@ describe('server results and keeping read queries', () => {
     await z.triggerPokeStart({
       pokeID: '1',
       baseCookie: null,
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     await z.triggerPokePart({
       pokeID: '1',
@@ -1058,7 +1057,6 @@ describe('server results and keeping read queries', () => {
     await z.triggerPokeStart({
       pokeID: '2',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     await z.triggerPokePart({
       pokeID: '2',
@@ -1131,7 +1129,6 @@ describe('server results and keeping read queries', () => {
     await z.triggerPokeStart({
       pokeID: '1',
       baseCookie: null,
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     await z.triggerPokePart({
       pokeID: '1',

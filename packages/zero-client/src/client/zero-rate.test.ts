@@ -159,7 +159,6 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   await z.triggerPokeStart({
     pokeID: '1',
     baseCookie: null,
-    schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   await z.triggerPokePart({
     pokeID: '1',

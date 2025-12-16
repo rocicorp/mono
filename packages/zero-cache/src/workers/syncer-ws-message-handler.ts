@@ -50,7 +50,6 @@ export class SyncerWsMessageHandler implements MessageHandler {
       wsID,
       baseCookie,
       protocolVersion,
-      schemaVersion,
       httpCookie,
     } = connectParams;
     this.#viewSyncer = viewSyncer;
@@ -71,7 +70,6 @@ export class SyncerWsMessageHandler implements MessageHandler {
       wsID,
       baseCookie,
       protocolVersion,
-      schemaVersion,
       tokenData,
       httpCookie,
     };

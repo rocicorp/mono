@@ -11,8 +11,6 @@ export type ConnectParams = {
   readonly clientID: string;
   readonly clientGroupID: string;
   readonly profileID: string | null;
-  // TODO: Remove when fully migrated to clientSchemas
-  readonly schemaVersion: number | null;
   readonly baseCookie: string | null;
   readonly timestamp: number;
   readonly lmID: number;
@@ -43,7 +41,6 @@ export function getConnectParams(
     const clientID = params.get('clientID', true);
     const clientGroupID = params.get('clientGroupID', true);
     const profileID = params.get('profileID', false);
-    const schemaVersion = params.getInteger('schemaVersion', false);
     const baseCookie = params.get('baseCookie', false);
     const timestamp = params.getInteger('ts', true);
     const lmID = params.getInteger('lmid', true);
@@ -60,7 +57,6 @@ export function getConnectParams(
         clientID,
         clientGroupID,
         profileID,
-        schemaVersion,
         baseCookie,
         timestamp,
         lmID,

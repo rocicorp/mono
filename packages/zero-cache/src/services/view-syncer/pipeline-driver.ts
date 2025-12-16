@@ -39,7 +39,6 @@ import {
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
-import type {SchemaVersions} from '../../types/schema-versions.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
@@ -231,16 +230,6 @@ export class PipelineDriver {
   currentVersion(): string {
     assert(this.initialized(), 'Not yet initialized');
     return this.#snapshotter.current().version;
-  }
-
-  /**
-   * Returns the current supported schema version range of the database.  This
-   * will reflect changes to supported schema version range when calling
-   * {@link advance()} once the iteration has begun.
-   */
-  currentSchemaVersions(): SchemaVersions {
-    assert(this.initialized(), 'Not yet initialized');
-    return this.#snapshotter.current().schemaVersions;
   }
 
   /**

@@ -73,7 +73,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke1',
@@ -183,7 +182,6 @@ describe('poke handler', () => {
       pokeHandler.handlePokeStart({
         pokeID,
         baseCookie: '1',
-        schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
       });
       pokeHandler.handlePokePart({
         pokeID,
@@ -298,7 +296,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke1',
@@ -342,7 +339,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke2',
       baseCookie: '2',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke2',
@@ -449,7 +445,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke1',
@@ -493,7 +488,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke2',
       baseCookie: '2',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke2',
@@ -532,7 +526,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke3',
       baseCookie: '2',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke3',
@@ -631,7 +624,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke1',
@@ -710,7 +702,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke2',
       baseCookie: '2',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke2',
@@ -805,7 +796,6 @@ describe('poke handler', () => {
           pokeHandler.handlePokeStart({
             pokeID: 'poke1',
             baseCookie: '1',
-            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           });
           pokeHandler.handlePokePart({pokeID: 'poke2'});
         },
@@ -816,7 +806,6 @@ describe('poke handler', () => {
           pokeHandler.handlePokeStart({
             pokeID: 'poke1',
             baseCookie: '1',
-            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           });
           pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '2'});
         },
@@ -862,7 +851,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke1',
@@ -916,7 +904,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke2',
       baseCookie: '2',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke2',
@@ -969,7 +956,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke1',
@@ -1014,7 +1000,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke2',
       baseCookie: '3', // gap, should be 2
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke2',
@@ -1038,7 +1023,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke3',
       baseCookie: '4',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke3',
@@ -1090,7 +1074,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
       pokeID: 'poke1',
@@ -1159,7 +1142,6 @@ describe('poke handler', () => {
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     const lastMutationIDChangeForSelf0 = pokeHandler.handlePokePart({
       pokeID: 'poke1',
@@ -1229,7 +1211,6 @@ describe('poke handler', () => {
           pokeStart: {
             pokeID: 'poke1',
             baseCookie: '3',
-            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
           parts: [
             {
@@ -1301,7 +1282,6 @@ describe('poke handler', () => {
           pokeStart: {
             pokeID: 'poke2',
             baseCookie: '4',
-            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
           parts: [
             {
@@ -1407,7 +1387,6 @@ describe('poke handler', () => {
           pokeStart: {
             pokeID: 'poke1',
             baseCookie: '3',
-            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
           parts: [
             {
@@ -1457,7 +1436,6 @@ describe('poke handler', () => {
           pokeStart: {
             pokeID: 'poke2',
             baseCookie: '4',
-            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
           parts: [
             {
@@ -1535,7 +1513,6 @@ describe('poke handler', () => {
             pokeStart: {
               pokeID: 'poke1',
               baseCookie: '3',
-              schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
             },
             parts: [
               {
@@ -1552,7 +1529,6 @@ describe('poke handler', () => {
             pokeStart: {
               pokeID: 'poke2',
               baseCookie: '5', // gap, should be 4
-              schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
             },
             parts: [
               {
@@ -1616,7 +1592,6 @@ describe('mutation tracker interactions', () => {
       pokeHandler.handlePokeStart({
         pokeID: 'poke' + id,
         baseCookie: '1',
-        schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
       });
       pokeHandler.handlePokePart({
         pokeID: 'poke' + id,
@@ -1668,7 +1643,6 @@ describe('mutation tracker interactions', () => {
       pokeHandler.handlePokeStart({
         pokeID: 'poke' + id,
         baseCookie: '1',
-        schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
       });
       pokeHandler.handlePokePart({
         pokeID: 'poke' + id,
