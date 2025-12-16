@@ -1,4 +1,7 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
+import {Schema as S} from 'effect';
+import * as v from 'valibot';
+import {z} from 'zod';
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
@@ -506,4 +509,71 @@ describe('isQueryDefinition', () => {
     expect(isQueryDefinition({validator: undefined})).toBe(false);
     expect(isQueryDefinition(null)).toBe(false);
   });
+});
+
+describe('Real-world schema library support', () => {
+  // Effect's standardSchemaV1 returns a class constructor (typeof 'function')
+  // which was previously misidentified as a query function.
+  // Zod and Valibot return plain objects, so they work correctly.
+  //
+  // All schemas define the same shape: {id: string} with non-empty constraint
+  const schemaLibraries = [
+    {
+      name: 'Effect',
+      schema: S.standardSchemaV1(S.Struct({id: S.NonEmptyString})),
+    },
+    {
+      name: 'Valibot',
+      schema: v.object({id: v.pipe(v.string(), v.minLength(1))}),
+    },
+    {
+      name: 'Zod',
+      schema: z.object({id: z.string().min(1)}),
+    },
+  ] as const;
+
+  test.for(schemaLibraries)(
+    'defineQuery correctly identifies $name schema as validator',
+    ({schema}) => {
+      const query = defineQuery(schema, ({args}: {args: {id: string}}) =>
+        builder.foo.where('id', '=', args.id),
+      );
+
+      expect(query.validator).toBe(schema);
+      expect(isQueryDefinition(query)).toBe(true);
+    },
+  );
+
+  test.for(schemaLibraries)(
+    '$name schema infers correct argument type in defineQuery',
+    ({schema}) => {
+      const query = defineQuery(schema, ({args}) => {
+        // All schemas should infer args as {id: string} (or readonly variant)
+        expectTypeOf(args).toMatchTypeOf<{id: string}>();
+        return builder.foo.where('id', '=', args.id);
+      });
+
+      // Query fn should accept the correct shape
+      expectTypeOf(query.fn).parameter(0).toMatchTypeOf<{args: {id: string}}>();
+    },
+  );
+
+  test.for(schemaLibraries)(
+    '$name schema rejects invalid input at validation time',
+    ({schema}) => {
+      // Directly test the validator rejects empty string
+      const result = schema['~standard'].validate({id: ''});
+      expect(result).toHaveProperty('issues');
+      expect((result as {issues: unknown[]}).issues.length).toBeGreaterThan(0);
+    },
+  );
+
+  test.for(schemaLibraries)(
+    '$name schema accepts valid input at validation time',
+    ({schema}) => {
+      const result = schema['~standard'].validate({id: 'valid-id'});
+      expect(result).toHaveProperty('value');
+      expect((result as {value: {id: string}}).value.id).toBe('valid-id');
+    },
+  );
 });

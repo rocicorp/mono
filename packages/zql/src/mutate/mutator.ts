@@ -110,13 +110,17 @@ export function defineMutator<
     Transaction<TSchema, TWrappedTransaction>
   >;
 
-  if (typeof validatorOrMutator === 'function') {
+  if (
+    typeof validatorOrMutator === 'function' &&
+    !('~standard' in validatorOrMutator)
+  ) {
     // defineMutator(mutator) - no validator
     validator = undefined;
     actualMutator = validatorOrMutator;
   } else {
     // defineMutator(validator, mutator)
-    validator = validatorOrMutator;
+    // Cast needed because TS can't narrow based on '~standard' in check
+    validator = validatorOrMutator as StandardSchemaV1<TInput, TOutput>;
     actualMutator = must(mutator);
   }
 

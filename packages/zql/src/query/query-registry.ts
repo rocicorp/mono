@@ -390,13 +390,17 @@ export function defineQuery<
     TContext
   >;
 
-  if (typeof validatorOrQueryFn === 'function') {
+  if (
+    typeof validatorOrQueryFn === 'function' &&
+    !('~standard' in validatorOrQueryFn)
+  ) {
     // defineQuery(queryFn) - no validator
     validator = undefined;
     actualQueryFn = validatorOrQueryFn;
   } else {
     // defineQuery(validator, queryFn) - with validator
-    validator = validatorOrQueryFn;
+    // Cast needed because TS can't narrow based on '~standard' in check
+    validator = validatorOrQueryFn as StandardSchemaV1<TInput, TOutput>;
     actualQueryFn = must(queryFn);
   }
 
