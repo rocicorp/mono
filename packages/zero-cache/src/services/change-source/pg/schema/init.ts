@@ -8,7 +8,12 @@ import {
   type Migration,
 } from '../../../../db/migration.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
-import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
+import {
+  appSchema,
+  upstreamSchema,
+  type ShardConfig,
+} from '../../../../types/shards.ts';
+import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
 import {publishedSchema} from './published.ts';
@@ -19,7 +24,6 @@ import {
   setupTablesAndReplication,
   setupTriggers,
 } from './shard.ts';
-import {id} from '../../../../types/sql.ts';
 
 /**
  * Ensures that a shard is set up for initial sync.
@@ -189,6 +193,13 @@ function getIncrementalMigrations(
           ALTER PUBLICATION ${id(metadataPublicationName(shard.appID, shard.shardNum))} ADD TABLE ${id(upstreamSchema(shard))}."mutations";
         `);
         lc.info?.('Upgraded schema with new mutations table');
+      },
+    },
+
+    11: {
+      migrateSchema: async (lc, sql) => {
+        await sql`DROP TABLE IF EXISTS ${sql(appSchema(shard))}."schemaVersions"`;
+        lc.info?.(`Dropped legacy schemaVersions table`);
       },
     },
   };
