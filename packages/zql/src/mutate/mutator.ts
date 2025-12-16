@@ -110,14 +110,14 @@ export function defineMutator<
     Transaction<TSchema, TWrappedTransaction>
   >;
 
-  if (typeof validatorOrMutator === 'function') {
-    // defineMutator(mutator) - no validator
-    validator = undefined;
-    actualMutator = validatorOrMutator;
-  } else {
+  if ('~standard' in validatorOrMutator) {
     // defineMutator(validator, mutator)
     validator = validatorOrMutator;
     actualMutator = must(mutator);
+  } else {
+    // defineMutator(mutator) - no validator
+    validator = undefined;
+    actualMutator = validatorOrMutator;
   }
 
   const mutatorDefinition: MutatorDefinition<
