@@ -21,7 +21,7 @@
     "get-port": "^7.0.0",
     "hash-wasm": "^4.9.0",
     "idb": "^7.0.1",
-    "playwright": "^1.53.2",
+    "playwright": "^1.57.0",
     "replicache": "15.2.1",
     "shared": "0.0.0",
     "tsx": "^4.19.1",
