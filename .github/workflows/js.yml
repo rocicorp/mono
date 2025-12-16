@@ -93,6 +93,9 @@ jobs:
   test:
     name: Test (Shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.57.0-noble
+      options: --user 1001
     needs: [format, lint, check-types]
     strategy:
       matrix:
@@ -110,7 +113,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Install Playwright
-        run: npx playwright install chromium firefox webkit
+        run: npx playwright install chromium firefox webkit --with-deps
       - name: Run tests
         run: TEST_PG_MODE=nopg npm run test -- --shard=${{ matrix.shard }}/3
 

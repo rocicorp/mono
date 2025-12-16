@@ -21,7 +21,7 @@ jobs:
       - run: rm -rf /tmp/replicache-playwright-*
       - run: npm ci
       - name: Install Playwright
-        run: npx playwright install
+        run: npx playwright install --with-deps
 
       - run: npm run build
         working-directory: packages/replicache-perf

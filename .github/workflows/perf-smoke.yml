@@ -22,7 +22,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Install Playwright
-        run: npx playwright install
+        run: npx playwright install --with-deps
       - name: Run benchmark
         shell: bash
         working-directory: packages/replicache-perf
