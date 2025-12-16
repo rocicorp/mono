@@ -38,14 +38,6 @@ describe('view-syncer/snapshotter', () => {
           _0_version    TEXT NOT NULL
         );
         INSERT INTO "my_app.permissions" ("lock", "_0_version") VALUES (1, '01');
-        CREATE TABLE "my_app.schemaVersions" (
-          "lock"                INT PRIMARY KEY,
-          "minSupportedVersion" INTEGER,
-          "maxSupportedVersion" INTEGER,
-          _0_version            TEXT NOT NULL
-        );
-        INSERT INTO "my_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-          VALUES (1, 1, 1, '01');  
         CREATE TABLE issues(id INT PRIMARY KEY, owner INTEGER, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
         CREATE TABLE users(id INT PRIMARY KEY, handle TEXT UNIQUE, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
         CREATE TABLE comments(id INT PRIMARY KEY, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
@@ -73,13 +65,9 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('initial snapshot', () => {
-    const {db, version, schemaVersions} = s.current();
+    const {db, version} = s.current();
 
     expect(version).toBe('01');
-    expect(schemaVersions).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 1,
-    });
     expectTables(db.db, {
       issues: [
         {id: 1, owner: 10, desc: 'foo', ignore: 'zzz', ['_0_version']: '01'},
@@ -111,66 +99,6 @@ describe('view-syncer/snapshotter', () => {
     users: 'id',
     comments: 'id',
     ['my_app.permissions']: 'lock',
-  });
-
-  const appMessages = new ReplicationMessages(
-    {
-      schemaVersions: 'lock',
-    },
-    'my_app',
-  );
-
-  test('schemaVersions change', () => {
-    expect(s.current().version).toBe('01');
-    expect(s.current().schemaVersions).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 1,
-    });
-
-    replicator.processTransaction(
-      '07',
-      appMessages.update('schemaVersions', {
-        lock: true,
-        minSupportedVersion: 1,
-        maxSupportedVersion: 2,
-      }),
-    );
-
-    const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('01');
-    expect(diff.curr.version).toBe('07');
-    expect(diff.changes).toBe(1);
-
-    expect(s.current().version).toBe('07');
-    expect(s.current().schemaVersions).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 2,
-    });
-
-    expect([...diff]).toMatchInlineSnapshot(`
-      [
-        {
-          "nextValue": {
-            "_0_version": "07",
-            "lock": 1,
-            "maxSupportedVersion": 2,
-            "minSupportedVersion": 1,
-          },
-          "prevValues": [
-            {
-              "_0_version": "01",
-              "lock": 1,
-              "maxSupportedVersion": 1,
-              "minSupportedVersion": 1,
-            },
-          ],
-          "rowKey": {
-            "lock": 1,
-          },
-          "table": "my_app.schemaVersions",
-        },
-      ]
-    `);
   });
 
   test('multiple prev values', () => {

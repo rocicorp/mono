@@ -41,7 +41,6 @@ describe('permissions', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    schemaVersion: 2,
     tokenData: {
       raw: '',
       decoded: {sub: 'foo', role: 'user', iat: 0},
@@ -85,10 +84,6 @@ describe('permissions', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -137,10 +132,6 @@ describe('permissions', () => {
           {
             "baseCookie": null,
             "pokeID": "01:02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -247,10 +238,6 @@ describe('permissions', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -317,10 +304,6 @@ describe('permissions', () => {
           {
             "baseCookie": "01",
             "pokeID": "05",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -404,10 +387,6 @@ describe('permissions', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -459,10 +438,6 @@ describe('permissions', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [

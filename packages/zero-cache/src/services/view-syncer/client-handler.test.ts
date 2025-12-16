@@ -1,14 +1,13 @@
 import {resolver} from '@rocicorp/resolver';
-import {describe, expect, test, beforeEach} from 'vitest';
+import {beforeEach, describe, expect, test} from 'vitest';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {
   PokeEndMessage,
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
-import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   ClientHandler,
@@ -17,8 +16,6 @@ import {
   type Patch,
   type PokeHandler,
 } from './client-handler.ts';
-import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 const APP_ID = 'zapp';
 const SHARD_NUM = 6;
@@ -65,8 +62,6 @@ describe('view-syncer/client-handler', () => {
 
     const {subscription, close} = createSubscription();
 
-    const schemaVersion = 1;
-    const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
     const handler = new ClientHandler(
       lc,
       'g1',
@@ -74,24 +69,23 @@ describe('view-syncer/client-handler', () => {
       'ws1',
       SHARD,
       '121',
-      schemaVersion,
       subscription,
     );
 
     // One poke advances from 121 => 123.
-    let poker = handler.startPoke(poke1Version, schemaVersions);
+    let poker = handler.startPoke(poke1Version);
     await poker.end(poke1Version);
 
     // The second poke starts the advancement to 125 but then reverts to 123.
-    poker = handler.startPoke(poke2Version, schemaVersions);
+    poker = handler.startPoke(poke2Version);
     await poker.end(poke1Version);
 
     // The third poke gets canceled.
-    poker = handler.startPoke(poke3Version, schemaVersions);
+    poker = handler.startPoke(poke3Version);
     await poker.cancel();
 
     // The fourth poke advances to 129.
-    poker = handler.startPoke(poke4Version, schemaVersions);
+    poker = handler.startPoke(poke4Version);
     await poker.end(poke4Version);
 
     const {received} = await close();
@@ -103,10 +97,6 @@ describe('view-syncer/client-handler', () => {
         {
           baseCookie: '121',
           pokeID: '123',
-          schemaVersions: {
-            maxSupportedVersion: 1,
-            minSupportedVersion: 1,
-          },
         },
       ],
       [
@@ -121,10 +111,6 @@ describe('view-syncer/client-handler', () => {
         {
           baseCookie: '123',
           pokeID: '129',
-          schemaVersions: {
-            maxSupportedVersion: 1,
-            minSupportedVersion: 1,
-          },
         },
       ],
       [
@@ -147,8 +133,6 @@ describe('view-syncer/client-handler', () => {
       createSubscription(),
     ];
 
-    const schemaVersion = 1;
-    const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
     const handlers = [
       // Client 1 is already caught up.
       new ClientHandler(
@@ -158,7 +142,6 @@ describe('view-syncer/client-handler', () => {
         'ws1',
         SHARD,
         '121',
-        schemaVersion,
         subscriptions[0].subscription,
       ),
       // Client 2 is a bit behind.
@@ -169,7 +152,6 @@ describe('view-syncer/client-handler', () => {
         'ws2',
         SHARD,
         '120:01',
-        schemaVersion,
         subscriptions[1].subscription,
       ),
       // Client 3 is more behind.
@@ -180,12 +162,11 @@ describe('view-syncer/client-handler', () => {
         'ws3',
         SHARD,
         '11z',
-        schemaVersion,
         subscriptions[2].subscription,
       ),
     ];
 
-    let pokers = startPoke(handlers, poke1Version, schemaVersions);
+    let pokers = startPoke(handlers, poke1Version);
     await pokers.addPatch({
       toVersion: {stateVersion: '11z', minorVersion: 1},
       patch: {
@@ -290,7 +271,7 @@ describe('view-syncer/client-handler', () => {
     await pokers.end(poke1Version);
 
     // Now send another (empty) poke with everyone at the same baseCookie.
-    pokers = startPoke(handlers, poke2Version, schemaVersions);
+    pokers = startPoke(handlers, poke2Version);
     await pokers.end(poke2Version);
 
     const results = await Promise.all(subscriptions.map(sub => sub.close()));
@@ -299,7 +280,7 @@ describe('view-syncer/client-handler', () => {
     expect(results[0].received).toEqual([
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', schemaVersions},
+        {pokeID: '123', baseCookie: '121'},
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
@@ -308,7 +289,7 @@ describe('view-syncer/client-handler', () => {
     expect(results[1].received).toEqual([
       [
         'pokeStart',
-        {pokeID: '121', baseCookie: '120:01', schemaVersions},
+        {pokeID: '121', baseCookie: '120:01'},
       ] satisfies PokeStartMessage,
       [
         'pokePart',
@@ -338,7 +319,7 @@ describe('view-syncer/client-handler', () => {
       // Second poke
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', schemaVersions},
+        {pokeID: '123', baseCookie: '121'},
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
@@ -347,7 +328,7 @@ describe('view-syncer/client-handler', () => {
     expect(results[2].received).toEqual([
       [
         'pokeStart',
-        {pokeID: '121', baseCookie: '11z', schemaVersions},
+        {pokeID: '121', baseCookie: '11z'},
       ] satisfies PokeStartMessage,
       [
         'pokePart',
@@ -384,7 +365,7 @@ describe('view-syncer/client-handler', () => {
       // Second poke
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', schemaVersions},
+        {pokeID: '123', baseCookie: '121'},
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
@@ -397,8 +378,6 @@ describe('view-syncer/client-handler', () => {
     beforeEach(() => {
       const {subscription, close} = createSubscription();
 
-      const schemaVersion = 1;
-      const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
       const handler = new ClientHandler(
         lc,
         'g1',
@@ -406,10 +385,9 @@ describe('view-syncer/client-handler', () => {
         'ws1',
         SHARD,
         '121',
-        schemaVersion,
         subscription,
       );
-      poker = handler.startPoke({stateVersion: '123'}, schemaVersions);
+      poker = handler.startPoke({stateVersion: '123'});
       closer = close;
     });
 
@@ -437,45 +415,41 @@ describe('view-syncer/client-handler', () => {
 
       const {received, err} = await closer();
       expect(received).toMatchInlineSnapshot(`
-      [
         [
-          "pokeStart",
-          {
-            "baseCookie": "121",
-            "pokeID": "123",
-            "schemaVersions": {
-              "maxSupportedVersion": 1,
-              "minSupportedVersion": 1,
+          [
+            "pokeStart",
+            {
+              "baseCookie": "121",
+              "pokeID": "123",
             },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "mutationsPatch": [
-              {
-                "mutation": {
-                  "id": {
-                    "clientID": "boo",
-                    "id": 123,
+          ],
+          [
+            "pokePart",
+            {
+              "mutationsPatch": [
+                {
+                  "mutation": {
+                    "id": {
+                      "clientID": "boo",
+                      "id": 123,
+                    },
+                    "result": {},
                   },
-                  "result": {},
+                  "op": "put",
                 },
-                "op": "put",
-              },
-            ],
-            "pokeID": "123",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "123",
-            "pokeID": "123",
-          },
-        ],
-      ]
-    `);
+              ],
+              "pokeID": "123",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "123",
+              "pokeID": "123",
+            },
+          ],
+        ]
+      `);
       expect(err).toBeUndefined();
     });
 
@@ -512,10 +486,6 @@ describe('view-syncer/client-handler', () => {
             {
               "baseCookie": "121",
               "pokeID": "123",
-              "schemaVersions": {
-                "maxSupportedVersion": 1,
-                "minSupportedVersion": 1,
-              },
             },
           ],
           [
@@ -578,10 +548,6 @@ describe('view-syncer/client-handler', () => {
             {
               "baseCookie": "121",
               "pokeID": "123",
-              "schemaVersions": {
-                "maxSupportedVersion": 1,
-                "minSupportedVersion": 1,
-              },
             },
           ],
           [
@@ -612,48 +578,6 @@ describe('view-syncer/client-handler', () => {
     });
   });
 
-  test('schemaVersion unsupported', async () => {
-    const received: Downstream[] = [];
-    let e: Error | undefined = undefined;
-    const subscription = Subscription.create<Downstream>({
-      cleanup: (msgs, err) => {
-        received.push(...msgs);
-        e = err;
-      },
-    });
-
-    const lc = createSilentLogContext();
-    const schemaVersion = 1;
-    const schemaVersions = {minSupportedVersion: 2, maxSupportedVersion: 3};
-    const clientHandler = new ClientHandler(
-      lc,
-      'g1',
-      'id1',
-      'ws1',
-      SHARD,
-      '120',
-      schemaVersion,
-      subscription,
-    );
-
-    const poker = clientHandler.startPoke(
-      {stateVersion: '121'},
-      schemaVersions,
-    );
-    await poker.end({stateVersion: '121'});
-
-    subscription.cancel();
-
-    expect(received).toEqual([]);
-    expect(e).toBeInstanceOf(ProtocolError);
-    expect((e as unknown as ProtocolError).errorBody).toEqual({
-      kind: ErrorKind.SchemaVersionNotSupported,
-      message:
-        'Schema version 1 is not in range of supported schema versions [2, 3].',
-      origin: ErrorOrigin.ZeroCache,
-    });
-  });
-
   test('error on unsafe integer', async () => {
     for (const patch of [
       {
@@ -681,8 +605,6 @@ describe('view-syncer/client-handler', () => {
     ] satisfies Patch[]) {
       const {subscription, close} = createSubscription();
 
-      const schemaVersion = 1;
-      const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
       const handler = new ClientHandler(
         createSilentLogContext(),
         'g1',
@@ -690,10 +612,9 @@ describe('view-syncer/client-handler', () => {
         'ws1',
         SHARD,
         '121',
-        schemaVersion,
         subscription,
       );
-      const poker = handler.startPoke({stateVersion: '123'}, schemaVersions);
+      const poker = handler.startPoke({stateVersion: '123'});
 
       await poker.addPatch({toVersion: {stateVersion: '123'}, patch});
       const {err} = await close();
