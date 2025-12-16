@@ -390,14 +390,14 @@ export function defineQuery<
     TContext
   >;
 
-  if (typeof validatorOrQueryFn === 'function') {
-    // defineQuery(queryFn) - no validator
-    validator = undefined;
-    actualQueryFn = validatorOrQueryFn;
-  } else {
+  if ('~standard' in validatorOrQueryFn) {
     // defineQuery(validator, queryFn) - with validator
     validator = validatorOrQueryFn;
     actualQueryFn = must(queryFn);
+  } else {
+    // defineQuery(queryFn) - no validator
+    validator = undefined;
+    actualQueryFn = validatorOrQueryFn;
   }
 
   const queryDefinition: QueryDefinition<
