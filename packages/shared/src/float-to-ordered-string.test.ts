@@ -40,6 +40,8 @@ test.each(reversedCases)('decode %s -> %f', (s, expected) => {
 test('random with fast-check', () => {
   fc.assert(
     fc.property(fc.float(), fc.float(), (a, b) => {
+      a = normalizeMinusZero(a);
+      b = normalizeMinusZero(b);
       const as = encodeFloat64AsString(a);
       const bs = encodeFloat64AsString(b);
 
@@ -60,3 +62,6 @@ test('random with fast-check', () => {
     }),
   );
 });
+function normalizeMinusZero(b: number): number {
+  return Object.is(b, -0) ? 0 : b;
+}

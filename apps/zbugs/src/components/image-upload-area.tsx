@@ -18,7 +18,7 @@ export type TextAreaPatch = {
 type ImageUploadAreaProps = {
   children: ReactNode;
   className?: string;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
+  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
   onInsert: (patch: TextAreaPatch) => void;
 };
 

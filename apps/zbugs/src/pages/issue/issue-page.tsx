@@ -281,7 +281,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [displayed?.comments, allCommentsResult.type, allComments]);
 
   const issueDescriptionRef = useRef<HTMLDivElement | null>(null);
-  const restoreScrollRef = useRef<() => void>();
+  const restoreScrollRef = useRef<() => void>(undefined);
   const {listRef, virtualizer} = useVirtualComments(comments ?? []);
 
   // Restore scroll on changes to comments.
@@ -1026,7 +1026,7 @@ function useEmojiChangeListener(
     enabled,
   });
 
-  const lastEmojis = useRef<Map<string, Emoji> | undefined>();
+  const lastEmojis = useRef<Map<string, Emoji>>(undefined);
 
   useEffect(() => {
     const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
@@ -1074,7 +1074,7 @@ function useShowToastForNewComment(
 ) {
   // Keep track of the last comment IDs so we can compare them to the current
   // comment IDs and show a toast for new comments.
-  const lastCommentIDs = useRef<Set<string> | undefined>();
+  const lastCommentIDs = useRef<Set<string>>(undefined);
   const {userID} = useZero();
 
   useEffect(() => {

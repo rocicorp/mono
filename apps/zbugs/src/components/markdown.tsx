@@ -129,7 +129,7 @@ export const Markdown = memo(({children}: {children: string}) => (
         // Check if the paragraph contains a block-level `div.video-container`
         const containsVideoContainer = React.Children.toArray(children).some(
           child =>
-            React.isValidElement(child) &&
+            React.isValidElement<{className?: string}>(child) &&
             child.props?.className?.includes('video-container'),
         );
 
@@ -142,8 +142,8 @@ export const Markdown = memo(({children}: {children: string}) => (
         return <p>{children}</p>;
       },
       // Ensure no additional processing for <img> elements
-      img: ({node: _node, ...props}) => <img {...props} />,
-      li: ({children, ...props}) => {
+      img: ({node: _n, key: _k, ref: _, ...props}) => <img {...props} />,
+      li: ({children, ref: _r, ...props}) => {
         const isTask = props.className?.includes('task-list-item');
         const nodes: React.ReactNode[] = React.Children.toArray(children);
 
@@ -157,7 +157,7 @@ export const Markdown = memo(({children}: {children: string}) => (
         for (const node of nodes) {
           if (
             !seenCheckbox &&
-            React.isValidElement(node) &&
+            React.isValidElement<{type?: string}>(node) &&
             node.type === 'input' &&
             node.props.type === 'checkbox'
           ) {

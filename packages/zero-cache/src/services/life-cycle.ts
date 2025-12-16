@@ -219,7 +219,7 @@ export class ProcessManager {
 
 export async function runUntilKilled(
   lc: LogContext,
-  parent: Worker | NodeJS.Process,
+  parent: EventEmitter,
   ...services: SingletonService[]
 ): Promise<void> {
   if (services.length === 0) {

@@ -200,7 +200,8 @@ function parseArgs() {
     {
       name: 'skip-git',
       type: Boolean,
-      description: 'Skip git tag and push (use when retrying after git succeeded)',
+      description:
+        'Skip git tag and push (use when retrying after git succeeded)',
     },
     {
       name: 'skip-npm',
@@ -210,7 +211,8 @@ function parseArgs() {
     {
       name: 'skip-docker',
       type: Boolean,
-      description: 'Skip docker build and push (use when retrying after docker succeeded)',
+      description:
+        'Skip docker build and push (use when retrying after docker succeeded)',
     },
   ];
 
@@ -293,7 +295,15 @@ Retrying after partial failure:
 `);
 }
 
-const {from: fromArg, isCanary, remote, allowLocalChanges, skipGit, skipNpm, skipDocker} = parseArgs();
+const {
+  from: fromArg,
+  isCanary,
+  remote,
+  allowLocalChanges,
+  skipGit,
+  skipNpm,
+  skipDocker,
+} = parseArgs();
 
 try {
   // Find the git root directory
@@ -515,7 +525,9 @@ try {
         );
       } catch (e) {
         if (i < 3) {
-          console.error(`Error building docker image, retrying in 10 seconds...`);
+          console.error(
+            `Error building docker image, retrying in 10 seconds...`,
+          );
           await new Promise(resolve => setTimeout(resolve, 10_000));
           continue;
         }

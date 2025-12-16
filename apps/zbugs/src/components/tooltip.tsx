@@ -79,10 +79,10 @@ function useTooltip({
   const hover = useHover(context, {
     move: false,
     delay,
-    enabled: controlledOpen === null,
+    enabled: controlledOpen === undefined,
   });
   const focus = useFocus(context, {
-    enabled: controlledOpen === null,
+    enabled: controlledOpen === undefined,
   });
   const dismiss = useDismiss(context);
   const role = useRole(context, {
