@@ -58,7 +58,6 @@ describe('view-syncer/service', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    schemaVersion: 2,
     tokenData: undefined,
     httpCookie: undefined,
   };
