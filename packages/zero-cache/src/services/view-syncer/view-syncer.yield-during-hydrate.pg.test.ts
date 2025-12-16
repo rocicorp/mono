@@ -59,7 +59,6 @@ describe('view-syncer/yield-during-hydrate', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    schemaVersion: 2,
     tokenData: undefined,
     httpCookie: undefined,
   };
@@ -309,10 +308,6 @@ describe('view-syncer/yield-during-hydrate', () => {
           {
             "baseCookie": "01:01",
             "pokeID": "01:02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [

@@ -3,6 +3,11 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
@@ -20,11 +25,6 @@ import {
 } from '../replicator/test-utils.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {Snapshotter} from './snapshotter.ts';
-import {
-  string,
-  table,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -56,15 +56,6 @@ describe('view-syncer/pipeline-driver', () => {
     initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
-      CREATE TABLE "zeroz.schemaVersions" (
-        -- Note: Using "INT" to avoid the special semantics of "INTEGER PRIMARY KEY" in SQLite.
-        "lock"                INT PRIMARY KEY,
-        "minSupportedVersion" INT,
-        "maxSupportedVersion" INT,
-        _0_version            TEXT NOT NULL
-      );
-      INSERT INTO "zeroz.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-        VALUES (1, 1, 1, '123');
       CREATE TABLE "zeroz.mutations" (
         "clientGroupID"  TEXT,
         "clientID"       TEXT,
