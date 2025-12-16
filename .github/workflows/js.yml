@@ -112,8 +112,8 @@ jobs:
           node-version: 22.x
           cache: 'npm'
       - run: npm ci
-      - name: Install Playwright
-        run: npx playwright install chromium firefox webkit --with-deps
+      # - name: Install Playwright
+      #   run: npx playwright install chromium firefox webkit --with-deps
       - name: Run tests
         run: TEST_PG_MODE=nopg npm run test -- --shard=${{ matrix.shard }}/3
 
