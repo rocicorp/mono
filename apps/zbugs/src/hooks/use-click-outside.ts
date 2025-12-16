@@ -1,7 +1,7 @@
 import {type RefObject, useCallback, useEffect} from 'react';
 
 export const useClickOutside = (
-  ref: RefObject<Node> | RefObject<Node>[],
+  ref: RefObject<Node | null> | RefObject<Node | null>[],
   callback: (event: MouseEvent | TouchEvent) => void,
 ): void => {
   const handleClick = useCallback(
