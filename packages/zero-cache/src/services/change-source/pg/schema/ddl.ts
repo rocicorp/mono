@@ -159,7 +159,6 @@ DECLARE
   publications TEXT[];
   cmd RECORD;
   relevant RECORD;
-  deprecated RECORD;
   schema_specs TEXT;
   message TEXT;
   event TEXT;
@@ -241,15 +240,7 @@ BEGIN
   END IF;
 
   -- Construct and emit the DdlUpdateEvent message.
-
-  -- TODO: Remove backwards-compatibility fields after a few releases.
-  SELECT 'deprecated' as "schema", 'deprecated' as "name" INTO deprecated;
-
-  SELECT json_build_object(
-    'tag', tag,
-    'table', deprecated,
-    'index', deprecated
-  ) INTO event;
+  SELECT json_build_object('tag', tag) INTO event;
   
   SELECT ${schema}.schema_specs() INTO schema_specs;
 

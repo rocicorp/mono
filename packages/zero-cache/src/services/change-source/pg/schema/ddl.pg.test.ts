@@ -310,10 +310,7 @@ describe('change-source/tables/ddl', () => {
         },
         type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'CREATE TABLE',
-          table: {schema: 'deprecated', name: 'deprecated'},
-        } as {tag: string},
+        event: {tag: 'CREATE TABLE'},
         schema: {
           tables: inserted(DDL_START.schema.tables, 0, {
             oid: expect.any(Number),
@@ -395,10 +392,7 @@ describe('change-source/tables/ddl', () => {
         },
         type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'CREATE INDEX',
-          index: {schema: 'deprecated', name: 'deprecated'},
-        } as {tag: string},
+        event: {tag: 'CREATE INDEX'},
         schema: {
           tables: DDL_START.schema.tables,
           indexes: inserted(DDL_START.schema.indexes, 3, {
@@ -423,10 +417,7 @@ describe('change-source/tables/ddl', () => {
         },
         type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'ALTER TABLE',
-          table: {schema: 'deprecated', name: 'deprecated'},
-        } as {tag: string},
+        event: {tag: 'ALTER TABLE'},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -503,10 +494,7 @@ describe('change-source/tables/ddl', () => {
         context: {
           query: 'ALTER TABLE pub.foo ADD username TEXT UNIQUE',
         },
-        event: {
-          tag: 'ALTER TABLE',
-          table: {schema: 'deprecated', name: 'deprecated'},
-        } as {tag: string},
+        event: {tag: 'ALTER TABLE'},
         type: 'ddlUpdate',
         version: 1,
         schema: {
@@ -573,10 +561,7 @@ describe('change-source/tables/ddl', () => {
         },
         type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'ALTER TABLE',
-          table: {schema: 'deprecated', name: 'deprecated'},
-        } as {tag: string},
+        event: {tag: 'ALTER TABLE'},
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -635,10 +620,7 @@ describe('change-source/tables/ddl', () => {
         },
         type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'ALTER TABLE',
-          table: {schema: 'deprecated', name: 'deprecated'},
-        } as {tag: string},
+        event: {tag: 'ALTER TABLE'},
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -689,10 +671,7 @@ describe('change-source/tables/ddl', () => {
         },
         type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'ALTER TABLE',
-          table: {schema: 'deprecated', name: 'deprecated'},
-        } as {tag: string},
+        event: {tag: 'ALTER TABLE'},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -762,10 +741,7 @@ describe('change-source/tables/ddl', () => {
         context: {query: 'ALTER TABLE pub.foo drop description'},
         type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'ALTER TABLE',
-          table: {schema: 'deprecated', name: 'deprecated'},
-        } as {tag: string},
+        event: {tag: 'ALTER TABLE'},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
