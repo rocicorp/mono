@@ -288,8 +288,8 @@ Maintenance/cherry-pick workflow:
   4. Run: node release.js --from maint/zero/v0.24
 
 Retrying after partial failure:
-  node release.js --from main --skip-git --skip-npm    # Retry just docker
-  node release.js --from main --skip-git               # Retry npm and docker
+  node release.js --from main --skip-git               # Retry docker and npm
+  node release.js --from main --skip-git --skip-docker # Retry just npm
 `);
 }
 
@@ -470,9 +470,7 @@ try {
     execute(`git commit -am "Bump version to ${nextVersion}"`);
   }
 
-  // Push tag to git before npm so that if npm fails the versioning logic works correctly.
-  // Also if npm push succeeds but docker fails we correctly record the tag that the
-  // npm version was made.
+  // Push tag to git first so that if later steps fail the versioning logic works correctly.
   // Note: We don't merge back to the build branch - canaries are throwaway builds
   // that exist only as tagged commits.
   if (skipGit) {
@@ -480,17 +478,6 @@ try {
   } else {
     execute(`git tag --force ${tagName}`);
     execute(`git push --force ${remote} ${tagName}`);
-  }
-
-  if (skipNpm) {
-    console.log('Skipping npm publish (--skip-npm)');
-  } else if (isCanary) {
-    execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
-    execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} canary`);
-  } else {
-    // For stable releases, publish without a dist-tag (we'll add 'latest' separately)
-    execute('npm publish --tag=staging', {cwd: basePath('packages', 'zero')});
-    execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} staging`);
   }
 
   if (skipDocker) {
@@ -538,6 +525,19 @@ try {
     }
   }
 
+  // npm publish last since it's the user-facing entrypoint - we don't want
+  // users installing a version that has no docker image
+  if (skipNpm) {
+    console.log('Skipping npm publish (--skip-npm)');
+  } else if (isCanary) {
+    execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
+    execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} canary`);
+  } else {
+    // For stable releases, publish without a dist-tag (we'll add 'latest' separately)
+    execute('npm publish --tag=staging', {cwd: basePath('packages', 'zero')});
+    execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} staging`);
+  }
+
   console.log(``);
   console.log(``);
   console.log(`🎉 Success!`);
@@ -545,11 +545,11 @@ try {
   if (!skipGit) {
     console.log(`* Pushed Git tag ${tagName} to ${remote}.`);
   }
-  if (!skipNpm) {
-    console.log(`* Published @rocicorp/zero@${nextVersion} to npm.`);
-  }
   if (!skipDocker) {
     console.log(`* Created Docker image rocicorp/zero:${nextVersion}.`);
+  }
+  if (!skipNpm) {
+    console.log(`* Published @rocicorp/zero@${nextVersion} to npm.`);
   }
   console.log(``);
   console.log(``);
