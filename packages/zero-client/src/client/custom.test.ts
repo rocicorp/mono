@@ -1,3 +1,4 @@
+import type {StandardSchemaV1} from '@standard-schema/spec';
 import {
   afterEach,
   assert,
@@ -16,6 +17,11 @@ import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue} from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {
+  addContextToQuery,
+  defineQueries,
+  defineQuery,
+} from '../../../zql/src/query/query-registry.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {legacySchema} from '../../../zql/src/query/test/test-schemas.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
@@ -1276,6 +1282,290 @@ describe('enableLegacyQueries', () => {
       m => Array.isArray(m) && m[0] === 'changeDesiredQueries',
     );
     expect(changeDesiredQueriesMessages.length).toBeGreaterThan(0);
+    await z.close();
+  });
+});
+
+describe('custom queries (from defineQueries) in ClientTransaction', () => {
+  const zql = createBuilder(legacySchema);
+
+  vi.setSystemTime(new Date('2025-12-16T12:00:00.123Z'));
+
+  test('tx.run() works with custom query without validator', async () => {
+    const customQueries = defineQueries({
+      allIssues: defineQuery(() => zql.issue.orderBy('createdAt', 'desc')),
+      issueById: defineQuery(({args}: {args: {id: string}}) =>
+        zql.issue.where('id', args.id).one(),
+      ),
+    });
+
+    let queriedIssues: Row<typeof legacySchema.tables.issue>[] | undefined;
+    let queriedIssue: Row<typeof legacySchema.tables.issue> | null | undefined;
+
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          createAndQueryCustom: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof legacySchema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+
+            // Query all issues using custom query (convert to Query first)
+            queriedIssues = await tx.run(
+              addContextToQuery(customQueries.allIssues(), {}),
+            );
+
+            // Query specific issue using custom query (convert to Query first)
+            queriedIssue = await tx.run(
+              addContextToQuery(customQueries.issueById({id: args.id}), {}),
+            );
+          },
+        },
+      },
+    });
+
+    const issueId = 'issue-custom-1';
+    await z.mutate.issue.createAndQueryCustom({
+      id: issueId,
+      title: 'Custom Query Test',
+      closed: false,
+      description: 'Testing custom queries in tx',
+      ownerId: 'user-1',
+      createdAt: Date.now(),
+    }).client;
+
+    expect(queriedIssues).toHaveLength(1);
+    expect(queriedIssues).toEqual([
+      {
+        closed: false,
+        createdAt: 1765886400123,
+        description: 'Testing custom queries in tx',
+        id: 'issue-custom-1',
+        ownerId: 'user-1',
+        title: 'Custom Query Test',
+        [refCountSymbol]: 1,
+      },
+    ]);
+
+    expect(queriedIssue).toEqual({
+      closed: false,
+      createdAt: 1765886400123,
+      description: 'Testing custom queries in tx',
+      id: 'issue-custom-1',
+      ownerId: 'user-1',
+      title: 'Custom Query Test',
+      [refCountSymbol]: 1,
+    });
+
+    await z.close();
+  });
+
+  test('tx.run() works with custom query with transforming validator', async () => {
+    // Validator that transforms input string to parsed number
+    const stringToNumberValidator: StandardSchemaV1<
+      {raw: string},
+      {parsed: number}
+    > = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: data => {
+          const value = Number((data as {raw: string}).raw);
+          if (Number.isNaN(value)) {
+            return {
+              issues: [{message: 'invalid number'}],
+            };
+          }
+          return {
+            value: {parsed: value},
+          };
+        },
+      },
+    };
+
+    const customQueries = defineQueries({
+      issuesByMinTimestamp: defineQuery(
+        stringToNumberValidator,
+        ({args}: {args: {parsed: number}}) =>
+          zql.issue.where('createdAt', '>=', args.parsed),
+      ),
+    });
+
+    let queriedIssues: Row<typeof legacySchema.tables.issue>[] | undefined;
+
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          createAndQueryWithTransform: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof legacySchema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+
+            // Query using transformed input (string -> number)
+            queriedIssues = await tx.run(
+              addContextToQuery(
+                customQueries.issuesByMinTimestamp({
+                  raw: String(args.createdAt),
+                }),
+                {},
+              ),
+            );
+          },
+        },
+      },
+    });
+
+    const timestamp = Date.now();
+    await z.mutate.issue.createAndQueryWithTransform({
+      id: 'issue-transform-1',
+      title: 'Transform Test',
+      closed: false,
+      description: 'Testing transforming validator',
+      ownerId: 'user-1',
+      createdAt: timestamp,
+    }).client;
+
+    expect(queriedIssues).toHaveLength(1);
+    expect(queriedIssues![0]).toEqual(
+      expect.objectContaining({
+        id: 'issue-transform-1',
+        createdAt: timestamp,
+      }),
+    );
+
+    await z.close();
+  });
+
+  test('tx.run() throws when custom query validator fails', async () => {
+    const throwingValidator: StandardSchemaV1<{id: string}, {id: string}> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: data => ({
+          issues: [
+            {
+              message: `Invalid ID: ${(data as {id: string}).id}`,
+            },
+          ],
+        }),
+      },
+    };
+
+    const customQueries = defineQueries({
+      issueById: defineQuery(
+        throwingValidator,
+        ({args}: {args: {id: string}}) => zql.issue.where('id', args.id).one(),
+      ),
+    });
+
+    let caughtError: Error | undefined;
+
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          queryWithFailingValidator: async (tx: MutatorTx) => {
+            try {
+              await tx.run(
+                addContextToQuery(customQueries.issueById({id: 'test-id'}), {}),
+              );
+            } catch (e) {
+              caughtError = e as Error;
+            }
+          },
+        },
+      },
+    });
+
+    await z.mutate.issue.queryWithFailingValidator().client;
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError?.message).toContain('Invalid ID: test-id');
+
+    await z.close();
+  });
+
+  test('tx.run() works with nested custom queries', async () => {
+    const customQueries = defineQueries({
+      issues: {
+        all: defineQuery(() => zql.issue),
+        byOwner: defineQuery(({args}: {args: {ownerId: string}}) =>
+          zql.issue.where('ownerId', args.ownerId),
+        ),
+        closed: defineQuery(() => zql.issue.where('closed', true)),
+      },
+    });
+
+    let allIssuesCount = 0;
+    let ownerIssuesCount = 0;
+    let closedIssuesCount = 0;
+
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          createMultipleAndQuery: async (
+            tx: MutatorTx,
+            args: {ownerId: string},
+          ) => {
+            // Create multiple issues
+            await tx.mutate.issue.insert({
+              id: 'nested-1',
+              title: 'Issue 1',
+              closed: false,
+              description: '',
+              ownerId: args.ownerId,
+              createdAt: Date.now(),
+            });
+            await tx.mutate.issue.insert({
+              id: 'nested-2',
+              title: 'Issue 2',
+              closed: true,
+              description: '',
+              ownerId: args.ownerId,
+              createdAt: Date.now(),
+            });
+            await tx.mutate.issue.insert({
+              id: 'nested-3',
+              title: 'Issue 3',
+              closed: false,
+              description: '',
+              ownerId: 'other-user',
+              createdAt: Date.now(),
+            });
+
+            // Query using nested custom queries
+            const all = await tx.run(
+              addContextToQuery(customQueries.issues.all(), {}),
+            );
+            const byOwner = await tx.run(
+              addContextToQuery(
+                customQueries.issues.byOwner({ownerId: args.ownerId}),
+                {},
+              ),
+            );
+            const closed = await tx.run(
+              addContextToQuery(customQueries.issues.closed(), {}),
+            );
+
+            allIssuesCount = all.length;
+            ownerIssuesCount = byOwner.length;
+            closedIssuesCount = closed.length;
+          },
+        },
+      },
+    });
+
+    await z.mutate.issue.createMultipleAndQuery({ownerId: 'user-1'}).client;
+
+    expect(allIssuesCount).toBe(3);
+    expect(ownerIssuesCount).toBe(2);
+    expect(closedIssuesCount).toBe(1);
+
     await z.close();
   });
 });

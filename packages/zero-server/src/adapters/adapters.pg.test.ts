@@ -1,3 +1,4 @@
+import type {StandardSchemaV1} from '@standard-schema/spec';
 import {eq} from 'drizzle-orm';
 import {drizzle as drizzleNodePg} from 'drizzle-orm/node-postgres';
 import {pgTable, text} from 'drizzle-orm/pg-core';
@@ -10,6 +11,12 @@ import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
 import {nanoid} from '../../../zero-client/src/util/nanoid.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {
+  addContextToQuery,
+  defineQueries,
+  defineQuery,
+} from '../../../zql/src/query/query-registry.ts';
 import type {ZQLDatabase} from '../zql-database.ts';
 import {zeroDrizzle, type DrizzleTransaction} from './drizzle.ts';
 import {zeroNodePg} from './pg.ts';
@@ -427,7 +434,7 @@ describe('drizzle and node-postgres', () => {
           Awaited<ReturnType<TxType['query']['user']['findFirst']>['execute']>
         >
       >
-    >().toMatchTypeOf<
+    >().toExtend<
       | {
           id: `user_${string}`;
           name: string | null;
@@ -435,7 +442,7 @@ describe('drizzle and node-postgres', () => {
         }
       | undefined
     >();
-    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
+    expectTypeOf(zql).toExtend<ZQLDatabase<typeof schema, TxType>>();
   });
 });
 
@@ -560,7 +567,7 @@ describe('drizzle and postgres-js', () => {
           Awaited<ReturnType<TxType['query']['user']['findFirst']>['execute']>
         >
       >
-    >().toMatchTypeOf<
+    >().toExtend<
       | {
           id: `user_${string}`;
           name: string | null;
@@ -568,6 +575,247 @@ describe('drizzle and postgres-js', () => {
         }
       | undefined
     >();
-    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
+    expectTypeOf(zql).toExtend<ZQLDatabase<typeof schema, TxType>>();
+  });
+});
+
+describe('custom queries (from defineQueries) in ServerTransaction', () => {
+  const zql = createBuilder(schema);
+
+  test('tx.run() works with custom query without validator', async ({
+    expect,
+  }) => {
+    const customQueries = defineQueries({
+      allUsers: defineQuery(() => zql.user.orderBy('id', 'asc')),
+      userById: defineQuery(({args}: {args: {id: string}}) =>
+        zql.user.where('id', args.id).one(),
+      ),
+    });
+
+    const zqlDB = zeroPostgresJS(schema, postgresJsClient);
+    const testUser = getRandomUser();
+
+    const result = await zqlDB.transaction(async tx => {
+      // Insert a user
+      await tx.mutate.user.insert(testUser);
+
+      // Query all users using custom query
+      const allUsers = await tx.run(
+        addContextToQuery(customQueries.allUsers(), {}),
+      );
+
+      // Query specific user using custom query
+      const specificUser = await tx.run(
+        addContextToQuery(customQueries.userById({id: testUser.id}), {}),
+      );
+
+      return {allUsers, specificUser};
+    }, mockTransactionInput);
+
+    expect(result.allUsers.length).toBeGreaterThan(0);
+    expect(result.allUsers.some(u => u.id === testUser.id)).toBe(true);
+    expect(result.specificUser).toEqual(
+      expect.objectContaining({
+        id: testUser.id,
+        name: testUser.name,
+        status: testUser.status,
+      }),
+    );
+  });
+
+  test('tx.run() works with custom query with transforming validator', async ({
+    expect,
+  }) => {
+    // Validator that transforms input string to ensure it's a valid status
+    const statusValidator: StandardSchemaV1<
+      {status: string},
+      {status: UserStatus}
+    > = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: data => {
+          const status = (data as {status: string}).status.toLowerCase();
+          if (status !== 'active' && status !== 'inactive') {
+            return {
+              issues: [{message: 'status must be active or inactive'}],
+            };
+          }
+          return {
+            value: {status: status as UserStatus},
+          };
+        },
+      },
+    };
+
+    const customQueries = defineQueries({
+      usersByStatus: defineQuery(
+        statusValidator,
+        ({args}: {args: {status: UserStatus}}) =>
+          zql.user.where('status', args.status),
+      ),
+    });
+
+    const zqlDB = zeroPostgresJS(schema, postgresJsClient);
+    const activeUser = {...getRandomUser(), status: 'active' as UserStatus};
+    const inactiveUser = {
+      ...getRandomUser(),
+      status: 'inactive' as UserStatus,
+    };
+
+    const result = await zqlDB.transaction(async tx => {
+      await tx.mutate.user.insert(activeUser);
+      await tx.mutate.user.insert(inactiveUser);
+
+      // Query using mixed case input that gets transformed to lowercase
+      const activeUsers = await tx.run(
+        addContextToQuery(customQueries.usersByStatus({status: 'ACTIVE'}), {}),
+      );
+
+      return {activeUsers};
+    }, mockTransactionInput);
+
+    expect(result.activeUsers.length).toBeGreaterThan(0);
+    expect(result.activeUsers.every(u => u.status === 'active')).toBe(true);
+    expect(result.activeUsers.some(u => u.id === activeUser.id)).toBe(true);
+  });
+
+  test('tx.run() throws when custom query validator fails', async ({
+    expect,
+  }) => {
+    const throwingValidator: StandardSchemaV1<{id: string}, {id: string}> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: data => ({
+          issues: [
+            {
+              message: `Validation failed for ID: ${(data as {id: string}).id}`,
+            },
+          ],
+        }),
+      },
+    };
+
+    const customQueries = defineQueries({
+      userById: defineQuery(throwingValidator, ({args}: {args: {id: string}}) =>
+        zql.user.where('id', args.id).one(),
+      ),
+    });
+
+    const zqlDB = zeroPostgresJS(schema, postgresJsClient);
+
+    await expect(
+      zqlDB.transaction(async tx => {
+        await tx.run(
+          addContextToQuery(customQueries.userById({id: 'invalid-id'}), {}),
+        );
+      }, mockTransactionInput),
+    ).rejects.toThrow('Validation failed for ID: invalid-id');
+  });
+
+  test('tx.run() works with nested custom queries', async ({expect}) => {
+    const customQueries = defineQueries({
+      users: {
+        all: defineQuery(() => zql.user),
+        active: defineQuery(() => zql.user.where('status', 'active')),
+        inactive: defineQuery(() => zql.user.where('status', 'inactive')),
+        byName: defineQuery(({args}: {args: {name: string}}) =>
+          zql.user.where('name', args.name),
+        ),
+      },
+    });
+
+    const zqlDB = zeroPostgresJS(schema, postgresJsClient);
+    const user1 = {...getRandomUser(), status: 'active' as UserStatus};
+    const user2 = {...getRandomUser(), status: 'inactive' as UserStatus};
+
+    const result = await zqlDB.transaction(async tx => {
+      await tx.mutate.user.insert(user1);
+      await tx.mutate.user.insert(user2);
+
+      const all = await tx.run(
+        addContextToQuery(customQueries.users.all(), {}),
+      );
+      const active = await tx.run(
+        addContextToQuery(customQueries.users.active(), {}),
+      );
+      const inactive = await tx.run(
+        addContextToQuery(customQueries.users.inactive(), {}),
+      );
+      const byName = await tx.run(
+        addContextToQuery(customQueries.users.byName({name: user1.name}), {}),
+      );
+
+      return {all, active, inactive, byName};
+    }, mockTransactionInput);
+
+    expect(result.all.length).toBeGreaterThanOrEqual(2);
+    expect(result.active.length).toBeGreaterThan(0);
+    expect(result.inactive.length).toBeGreaterThan(0);
+    expect(result.byName.some(u => u.id === user1.id)).toBe(true);
+  });
+
+  test('tx.run() works with all adapters (node-pg, postgresjs, drizzle)', async ({
+    expect,
+  }) => {
+    const customQueries = defineQueries({
+      userById: defineQuery(({args}: {args: {id: string}}) =>
+        zql.user.where('id', args.id).one(),
+      ),
+    });
+
+    const testUser = getRandomUser();
+
+    // Insert test data
+    await postgresJsClient.unsafe(
+      `INSERT INTO "user" (id, name, status) VALUES ($1, $2, $3)`,
+      [testUser.id, testUser.name, testUser.status],
+    );
+
+    // Test with postgres.js
+    const zqlPostgresJS = zeroPostgresJS(schema, postgresJsClient);
+    const resultPostgresJS = await zqlPostgresJS.transaction(
+      async tx =>
+        await tx.run(
+          addContextToQuery(customQueries.userById({id: testUser.id}), {}),
+        ),
+      mockTransactionInput,
+    );
+    expect(resultPostgresJS).toEqual(
+      expect.objectContaining({id: testUser.id}),
+    );
+
+    // Test with node-pg Pool
+    const zqlNodePgPool = zeroNodePg(schema, nodePgPool);
+    const resultNodePgPool = await zqlNodePgPool.transaction(
+      async tx =>
+        await tx.run(
+          addContextToQuery(customQueries.userById({id: testUser.id}), {}),
+        ),
+      mockTransactionInput,
+    );
+    expect(resultNodePgPool).toEqual(
+      expect.objectContaining({id: testUser.id}),
+    );
+
+    // Test with drizzle
+    const drizzleClient = drizzlePostgresJs(postgresJsClient, {
+      schema: drizzleSchema,
+    });
+    const zqlDrizzle = zeroDrizzle(schema, drizzleClient);
+    const resultDrizzle = await zqlDrizzle.transaction(
+      async tx =>
+        await tx.run(
+          addContextToQuery(customQueries.userById({id: testUser.id}), {}),
+        ),
+      mockTransactionInput,
+    );
+    expect(resultDrizzle).toEqual(expect.objectContaining({id: testUser.id}));
+
+    // Cleanup
+    await postgresJsClient.unsafe(`DELETE FROM "user" WHERE id = $1`, [
+      testUser.id,
+    ]);
   });
 });
