@@ -342,13 +342,16 @@ export class CVRStore {
 
     for (const row of desiresRows) {
       const client = cvr.clients[row.clientID];
-      if (client) {
-        if (!row.deleted && row.inactivatedAt === null) {
+      // Note: row.inactivatedAt is mapped from inactivatedAtMs in the SQL query
+      if (!row.deleted && row.inactivatedAt === null) {
+        if (client) {
           client.desiredQueryIDs.push(row.queryHash);
+        } else {
+          // This can happen if the client was deleted but the queries are still alive.
+          lc.debug?.(
+            `Not adding to desiredQueryIDs for client ${row.clientID} because it has been deleted.`,
+          );
         }
-      } else {
-        // This can happen if the client was deleted but the queries are still alive.
-        lc.debug?.(`Client ${row.clientID} not found`);
       }
 
       const query = cvr.queries[row.queryHash];
@@ -364,6 +367,7 @@ export class CVRStore {
         };
       }
     }
+
     lc.debug?.(
       `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
