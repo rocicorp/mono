@@ -3,7 +3,7 @@ import {vi, type Mock} from 'vitest';
 /**
  * Mocks Math.random() to return deterministic values using a seeded pseudo-random number generator.
  * Uses Vitest's mocking system so it integrates properly with vi.restoreAllMocks().
- * 
+ *
  * Uses a Linear Congruential Generator (LCG) algorithm with parameters from Numerical Recipes
  * (a = 1664525, c = 1013904223, m = 2^32) which provides a good balance of speed and randomness
  * for testing purposes.
