@@ -3,31 +3,34 @@ import {vi, type Mock} from 'vitest';
 /**
  * Mocks Math.random() to return deterministic values using a seeded pseudo-random number generator.
  * Uses Vitest's mocking system so it integrates properly with vi.restoreAllMocks().
- * Returns a Disposable for use with the `using` keyword for automatic cleanup.
+ * 
+ * Uses a Linear Congruential Generator (LCG) algorithm with parameters from Numerical Recipes
+ * (a = 1664525, c = 1013904223, m = 2^32) which provides a good balance of speed and randomness
+ * for testing purposes.
  *
- * Uses a simple Linear Congruential Generator (LCG) algorithm.
- *
- * https://en.wikipedia.org/wiki/Linear_congruential_generator
+ * @see https://en.wikipedia.org/wiki/Linear_congruential_generator
  *
  * @param seed - The seed value for the random number generator (default: 12345)
- * @returns A Disposable that automatically restores Math.random() when disposed
+ * @returns A vitest Mock that can be used to control and inspect Math.random() calls
  *
  * @example
  * ```typescript
- * test('my test', () => {
- *   using _random = mockRandom();
- *   // Math.random() now returns predictable values
- *   const value = Math.random();
- *   // Automatically restored when _random goes out of scope
+ * test('generates predictable random values', () => {
+ *   const mock = mockRandom();
+ *   expect(Math.random()).toBeCloseTo(0.00028, 5);
+ *   expect(Math.random()).toBeCloseTo(0.75595, 5);
+ *   mock.mockRestore();
  * });
  * ```
  *
  * @example
  * ```typescript
- * test('my test', () => {
- *   using _random = mockRandom(42);
- *   // Use custom seed for different sequence
- *   const value = Math.random();
+ * test('uses custom seed', () => {
+ *   const mock = mockRandom(42);
+ *   const value1 = Math.random();
+ *   const value2 = Math.random();
+ *   expect(value1).not.toBe(value2);
+ *   mock.mockRestore();
  * });
  * ```
  */
