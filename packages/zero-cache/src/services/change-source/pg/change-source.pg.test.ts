@@ -228,10 +228,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
                ARRAY['2019-01-12T00:30:35.654321'::timestamp, '2019-01-12T00:30:35.123456'::timestamp],
                123456789012
                )`;
-      // schemaVersions
-      await tx`
-      UPDATE ${tx(APP_ID)}."schemaVersions" SET "maxSupportedVersion" = 2;
-      `;
     });
 
     const begin1 = (await downstream.dequeue()) as Begin;
@@ -273,13 +269,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
           times: [1547253035654.321, 1547253035123.456],
           num: 123456789012,
         },
-      },
-    ]);
-    expect(await downstream.dequeue()).toMatchObject([
-      'data',
-      {
-        tag: 'update',
-        new: {minSupportedVersion: 1, maxSupportedVersion: 2},
       },
     ]);
     const commit1 = (await downstream.dequeue()) as Commit;

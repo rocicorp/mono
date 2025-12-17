@@ -172,35 +172,6 @@ describe('change-source/custom', () => {
           tag: 'create-table',
           spec: {
             schema: 'bongo',
-            name: 'schemaVersions',
-            primaryKey: ['lock'],
-            columns: {
-              lock: {pos: 0, dataType: 'bool', notNull: true},
-              minSupportedVersion: {pos: 1, dataType: 'int'},
-              maxSupportedVersion: {pos: 2, dataType: 'int'},
-            },
-          },
-        },
-      ],
-      [
-        'data',
-        {
-          tag: 'create-index',
-          spec: {
-            name: 'bongo_schemaVersions_key',
-            schema: 'bongo',
-            tableName: 'schemaVersions',
-            columns: {lock: 'ASC'},
-            unique: true,
-          },
-        },
-      ],
-      [
-        'data',
-        {
-          tag: 'create-table',
-          spec: {
-            schema: 'bongo',
             name: 'permissions',
             primaryKey: ['lock'],
             columns: {
@@ -224,18 +195,6 @@ describe('change-source/custom', () => {
           },
         },
       ],
-      [
-        'data',
-        {
-          tag: 'insert',
-          relation: {
-            schema: 'bongo',
-            name: 'schemaVersions',
-            keyColumns: ['lock'],
-          },
-          new: {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-        },
-      ],
       ['commit', {tag: 'commit'}, {watermark: '123'}],
     ]);
 
@@ -248,14 +207,6 @@ describe('change-source/custom', () => {
 
     expectTables(replicaDbFile.connect(lc), {
       foo: [{id: 'abcde', bar: 'baz', ['_0_version']: '123'}],
-      ['bongo.schemaVersions']: [
-        {
-          lock: 1,
-          minSupportedVersion: 1,
-          maxSupportedVersion: 1,
-          ['_0_version']: '123',
-        },
-      ],
       ['bongo_0.clients']: [],
       ['_zero.replicationState']: [{lock: 1, stateVersion: '123'}],
       ['_zero.replicationConfig']: [
