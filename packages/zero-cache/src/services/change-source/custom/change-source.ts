@@ -245,10 +245,6 @@ function getRequiredTables({
       permissions: {type: 'json'},
       hash: {type: 'string'},
     },
-    [`${appID}.schemaVersions`]: {
-      minSupportedVersion: {type: 'number'},
-      maxSupportedVersion: {type: 'number'},
-    },
   };
 }
 

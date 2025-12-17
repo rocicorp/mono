@@ -63,19 +63,6 @@ function globalSetup(appID: AppID): string {
   return /*sql*/ `
   CREATE SCHEMA IF NOT EXISTS ${app};
 
-  CREATE TABLE IF NOT EXISTS ${app}."schemaVersions" (
-    "minSupportedVersion" INT4,
-    "maxSupportedVersion" INT4,
-
-    -- Ensure that there is only a single row in the table.
-    -- Application code can be agnostic to this column, and
-    -- simply invoke UPDATE statements on the version columns.
-    "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
-  );
-
-  INSERT INTO ${app}."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
-    VALUES (true, 1, 1) ON CONFLICT DO NOTHING;
-
   CREATE TABLE IF NOT EXISTS ${app}.permissions (
     "permissions" JSONB,
     "hash"        TEXT,
@@ -157,7 +144,7 @@ export function shardSetup(
 
   DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
   CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients", ${shard}."mutations";
+    FOR TABLE ${app}."permissions", TABLE ${shard}."clients", ${shard}."mutations";
 
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,
