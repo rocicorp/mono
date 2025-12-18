@@ -1,5 +1,12 @@
 import {vi, type Mock} from 'vitest';
 
+if (!Symbol.dispose) {
+  // Polyfill for Symbol.dispose in environments (like Safari) that don't support it yet.
+  // Remove this once Safari (and other target environments) support it natively.
+  // oxlint-disable-next-line no-explicit-any
+  (Symbol as any).dispose = Symbol.for('Symbol.dispose');
+}
+
 /**
  * Mocks Math.random() to return deterministic values using a seeded pseudo-random number generator.
  * Uses Vitest's mocking system so it integrates properly with vi.restoreAllMocks().

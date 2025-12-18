@@ -26,7 +26,7 @@
     "ast-to-zql": "0.0.0",
     "datadog": "0.0.0",
     "esbuild": "^0.25.10",
-    "playwright": "^1.53.2",
+    "playwright": "^1.57.0",
     "replicache": "15.2.1",
     "shared": "0.0.0",
     "typescript": "~5.9.3",
