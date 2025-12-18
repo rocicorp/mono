@@ -182,7 +182,7 @@ export default $config({
       environment: {
         ...commonEnv,
         ZERO_LOG_LEVEL: 'debug',
-        ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250630-00`,
+        ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20251218-00`,
         ZERO_INITIAL_SYNC_PROFILE_COPY: 'true',
         ZERO_CHANGE_MAX_CONNS: '3',
         ZERO_NUM_SYNC_WORKERS: '0',
