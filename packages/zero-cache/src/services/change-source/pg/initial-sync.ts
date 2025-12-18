@@ -2,6 +2,7 @@ import {
   PG_CONFIGURATION_LIMIT_EXCEEDED,
   PG_INSUFFICIENT_PRIVILEGE,
 } from '@drdgvhbh/postgres-error-codes';
+import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {platform} from 'node:os';
 import {Writable} from 'node:stream';
@@ -475,7 +476,7 @@ async function copy(
     new Writable({
       highWaterMark: BUFFERED_SIZE_THRESHOLD,
 
-      write(
+      async write(
         chunk: Buffer,
         _encoding: string,
         callback: (error?: Error) => void,
@@ -492,7 +493,7 @@ async function copy(
                 ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
                 pendingSize >= BUFFERED_SIZE_THRESHOLD
               ) {
-                flush();
+                await flushInQueue(flush);
               }
             }
           }
@@ -502,9 +503,9 @@ async function copy(
         }
       },
 
-      final: (callback: (error?: Error) => void) => {
+      final: async (callback: (error?: Error) => void) => {
         try {
-          flush();
+          await flushInQueue(flush);
           callback();
         } catch (e) {
           callback(e instanceof Error ? e : new Error(String(e)));
@@ -519,4 +520,18 @@ async function copy(
       `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
   );
   return {rows, flushTime};
+}
+
+const flushQueue = new Lock();
+
+function flushInQueue(flush: () => void) {
+  return flushQueue.withLock(
+    () =>
+      new Promise<void>(done =>
+        setImmediate(() => {
+          flush();
+          done();
+        }),
+      ),
+  );
 }
