@@ -1,5 +1,5 @@
 import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {PostgresError} from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
@@ -133,7 +133,7 @@ describe.skip('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     await upstream.begin(sql => {
       for (let i = 0; i < NUM_ROWS; i++) {
-        sql`
+        void sql`
         INSERT INTO foo(id, int, big1, big2, big3)
           VALUES ${sql({
             id: i,
