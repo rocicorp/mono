@@ -26,7 +26,7 @@ const SHARD_NUM = 1;
 // The purpose of this test is to empirically verify the behavior of PG
 // with respect to TOASTED values and publications. By default it is
 // skipped to avoid unnecessary load on the CI runner.
-describe.skip('change-source/pg', {timeout: 30000, retry: 3}, () => {
+describe.skip('toasted values', {timeout: 30000, retry: 3}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let upstreamURI: string;
