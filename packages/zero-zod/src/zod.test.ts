@@ -91,14 +91,14 @@ describe('rowSchema', () => {
     expect(() =>
       schema.parse({id: 'u1', active: true, role: 'admin', deletedAt: null}),
     ).toThrowErrorMatchingInlineSnapshot(`
-      [ZodError: [
+      [$ZodError: [
         {
           "expected": "number",
           "code": "invalid_type",
           "path": [
             "age"
           ],
-          "message": "Invalid input: expected number, received undefined"
+          "message": "Invalid input"
         }
       ]]
     `);
@@ -162,14 +162,14 @@ describe('insertSchema', () => {
     expect(() =>
       schema.parse({age: 30, active: true, role: 'admin', deletedAt: null}),
     ).toThrowErrorMatchingInlineSnapshot(`
-      [ZodError: [
+      [$ZodError: [
         {
           "expected": "string",
           "code": "invalid_type",
           "path": [
             "id"
           ],
-          "message": "Invalid input: expected string, received undefined"
+          "message": "Invalid input"
         }
       ]]
     `);
@@ -216,19 +216,20 @@ describe('updateSchema', () => {
     expect(schema.parse({id: 'u1', extra: 'nope'})).toEqual({
       id: 'u1',
     });
-    expect(() => schema.parse({name: 'missing id'}))
-      .toThrowErrorMatchingInlineSnapshot(`
-        [ZodError: [
-          {
-            "expected": "string",
-            "code": "invalid_type",
-            "path": [
-              "id"
-            ],
-            "message": "Invalid input: expected string, received undefined"
-          }
-        ]]
-      `);
+    expect(() =>
+      schema.parse({name: 'missing id'}),
+    ).toThrowErrorMatchingInlineSnapshot(`
+      [$ZodError: [
+        {
+          "expected": "string",
+          "code": "invalid_type",
+          "path": [
+            "id"
+          ],
+          "message": "Invalid input"
+        }
+      ]]
+    `);
   });
 });
 
@@ -248,16 +249,17 @@ describe('deleteSchema', () => {
       projectID: 'p1',
     });
 
-    expect(() => schema.parse({userID: 'u1'}))
-      .toThrowErrorMatchingInlineSnapshot(`
-      [ZodError: [
+    expect(() =>
+      schema.parse({userID: 'u1'}),
+    ).toThrowErrorMatchingInlineSnapshot(`
+      [$ZodError: [
         {
           "expected": "string",
           "code": "invalid_type",
           "path": [
             "projectID"
           ],
-          "message": "Invalid input: expected string, received undefined"
+          "message": "Invalid input"
         }
       ]]
     `);
