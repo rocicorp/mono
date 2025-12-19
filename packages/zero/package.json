@@ -90,6 +90,7 @@
     "typescript": "~5.9.3",
     "vite": "7.2.7",
     "vitest": "4.0.15",
+    "zero-zod": "0.0.0",
     "zero-cache": "0.0.0",
     "zero-client": "0.0.0",
     "zero-pg": "0.0.0",
@@ -100,13 +101,17 @@
   },
   "peerDependencies": {
     "expo-sqlite": ">=15",
-    "@op-engineering/op-sqlite": ">=15"
+    "@op-engineering/op-sqlite": ">=15",
+    "zod": ">=3"
   },
   "peerDependenciesMeta": {
     "expo-sqlite": {
       "optional": true
     },
     "@op-engineering/op-sqlite": {
+      "optional": true
+    },
+    "zod": {
       "optional": true
     }
   },
@@ -170,6 +175,10 @@
     "./sqlite": {
       "types": "./out/zero/src/sqlite.d.ts",
       "default": "./out/zero/src/sqlite.js"
+    },
+    "./zod": {
+      "types": "./out/zero/src/zod.d.ts",
+      "default": "./out/zero/src/zod.js"
     },
     "./zqlite": {
       "types": "./out/zero/src/zqlite.d.ts",

@@ -1,0 +1,25 @@
+{
+  "name": "zero-zod",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "oxlint --type-aware src/"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.4.0",
+    "zod": "^4.1.11",
+    "zql": "0.0.0",
+    "zero-types": "0.0.0"
+  },
+  "peerDependencies": {
+    "zod": ">=3"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
