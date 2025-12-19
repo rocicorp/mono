@@ -91,7 +91,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           tracer,
           'connection.push',
           async () => {
-            const {clientGroupID, mutations, schemaVersion} = msg[1];
+            const {clientGroupID, mutations} = msg[1];
             if (clientGroupID !== this.#clientGroupID) {
               return [
                 {
@@ -142,7 +142,6 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 const maybeError = await this.#mutagen.processMutation(
                   mutation,
                   this.#authData,
-                  schemaVersion,
                   this.#pusher !== undefined,
                 );
                 if (maybeError !== undefined) {

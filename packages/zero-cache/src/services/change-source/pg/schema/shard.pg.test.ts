@@ -53,7 +53,6 @@ describe('change-source/pg', () => {
     });
 
     expect(await publications()).toEqual([
-      [`_zro_metadata_0`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
       [`_zro_metadata_0`, `zro_0`, 'mutations', null],
@@ -62,9 +61,6 @@ describe('change-source/pg', () => {
 
     await expectTables(db, {
       ['zro.permissions']: [{lock: true, permissions: null, hash: null}],
-      ['zro.schemaVersions']: [
-        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-      ],
       ['zro_0.shardConfig']: [
         {
           lock: true,
@@ -112,7 +108,6 @@ describe('change-source/pg', () => {
     );
 
     expect(await publications()).toEqual([
-      [`_zro_metadata_0`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
       [`_zro_metadata_0`, `zro_0`, 'mutations', null],
@@ -121,9 +116,6 @@ describe('change-source/pg', () => {
 
     await expectTables(db, {
       ['zro.permissions']: [{lock: true, permissions: null, hash: null}],
-      ['zro.schemaVersions']: [
-        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-      ],
       ['zro_0.shardConfig']: [
         {
           lock: true,
@@ -154,7 +146,6 @@ describe('change-source/pg', () => {
     );
 
     expect(await publications()).toEqual([
-      [`_1_metadata_0`, '1', 'schemaVersions', null],
       [`_1_metadata_0`, '1', 'permissions', null],
       [`_1_metadata_0`, `1_0`, 'clients', null],
       [`_1_metadata_0`, `1_0`, 'mutations', null],
@@ -163,9 +154,6 @@ describe('change-source/pg', () => {
 
     await expectTables(db, {
       ['1.permissions']: [{lock: true, permissions: null, hash: null}],
-      ['1.schemaVersions']: [
-        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-      ],
       [`1_0.shardConfig`]: [
         {
           lock: true,
@@ -195,11 +183,9 @@ describe('change-source/pg', () => {
     );
 
     expect(await publications()).toEqual([
-      [`_zro_metadata_0`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
       [`_zro_metadata_0`, `zro_0`, 'mutations', null],
-      [`_zro_metadata_1`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_1`, 'zro', 'permissions', null],
       [`_zro_metadata_1`, `zro_1`, 'clients', null],
       [`_zro_metadata_1`, `zro_1`, 'mutations', null],
@@ -209,9 +195,6 @@ describe('change-source/pg', () => {
 
     await expectTables(db, {
       ['zro.permissions']: [{lock: true, permissions: null, hash: null}],
-      ['zro.schemaVersions']: [
-        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-      ],
       ['zro_0.shardConfig']: [
         {
           lock: true,
@@ -290,7 +273,6 @@ describe('change-source/pg', () => {
     );
 
     expect(await publications()).toEqual([
-      [`_zro_metadata_2`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_2`, 'zro', 'permissions', null],
       [`_zro_metadata_2`, `zro_2`, 'clients', null],
       [`_zro_metadata_2`, `zro_2`, 'mutations', null],
@@ -300,9 +282,6 @@ describe('change-source/pg', () => {
 
     await expectTables(db, {
       ['zro.permissions']: [{lock: true, permissions: null, hash: null}],
-      ['zro.schemaVersions']: [
-        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-      ],
       ['zro_2.shardConfig']: [
         {
           lock: true,
@@ -333,7 +312,6 @@ describe('change-source/pg', () => {
     );
 
     expect(await publications()).toEqual([
-      [`_supaneon_metadata_0`, 'supaneon', 'schemaVersions', null],
       [`_supaneon_metadata_0`, 'supaneon', 'permissions', null],
       [`_supaneon_metadata_0`, `supaneon_0`, 'clients', null],
       ['_supaneon_metadata_0', 'supaneon_0', 'mutations', null],
@@ -342,9 +320,6 @@ describe('change-source/pg', () => {
 
     await expectTables(db, {
       ['supaneon.permissions']: [{lock: true, permissions: null, hash: null}],
-      ['supaneon.schemaVersions']: [
-        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-      ],
       ['supaneon_0.shardConfig']: [
         {
           lock: true,
