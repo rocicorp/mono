@@ -58,7 +58,7 @@ export type InsertValue<S extends TableSchema> = Expand<
   PrimaryKeyFields<S> & {
     [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
       ? K
-      : never]?: SchemaValueToTSType<S['columns'][K]> | undefined | null;
+      : never]?: SchemaValueToTSType<S['columns'][K]> | undefined;
   } & {
     [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
       ? never
@@ -72,8 +72,7 @@ export type UpdateValue<S extends TableSchema> = Expand<
   PrimaryKeyFields<S> & {
     [K in keyof S['columns']]?:
       | SchemaValueToTSType<S['columns'][K]>
-      | undefined
-      | null;
+      | undefined;
   }
 >;
 

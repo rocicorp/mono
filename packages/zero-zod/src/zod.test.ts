@@ -296,9 +296,8 @@ describe('type mappings', () => {
 
   test('updateSchema matches UpdateValue', () => {
     type Output = z.infer<ReturnType<typeof updateSchema<typeof userTable>>>;
-    expectTypeOf<Output>().toEqualTypeOf<
-      Mutable<UpdateValue<typeof userTable>>
-    >();
+    type Expected = Mutable<UpdateValue<typeof userTable>>;
+    expectTypeOf<Output>().toEqualTypeOf<Expected>();
     expectTypeOf<Output['id']>().toEqualTypeOf<string>();
     expectTypeOf<Output['name']>().toEqualTypeOf<string | null | undefined>();
     expectTypeOf<Output['meta']>().toEqualTypeOf<
