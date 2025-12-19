@@ -1,5 +1,3 @@
-import type {JSONValue} from '../../shared/src/json.ts';
-
 /**
  * The allowed value types in Zero schema definitions.
  */
@@ -28,7 +26,8 @@ export type TypeNameToTypeMap = {
   number: number;
   boolean: boolean;
   null: null;
-  json: JSONValue;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  json: any;
 };
 
 export type ColumnTypeName<T extends SchemaValue | ValueType> =

@@ -384,7 +384,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const remove = async () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    const result = z.mutate(mutators.issue.delete(displayed.id));
+    const result = z.mutate(mutators.issue.delete({id: displayed.id}));
 
     // we wait for the client result to redirect to the list page
     const clientResult = await result.client;

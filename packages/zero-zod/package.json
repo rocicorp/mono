@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
-    "zod": "^4.1.11",
+    "zod": ">=3",
     "zql": "0.0.0",
     "zero-types": "0.0.0"
   },

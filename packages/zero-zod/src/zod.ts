@@ -1,24 +1,23 @@
-import {z, type ZodType, type ZodTypeAny} from 'zod';
-import {jsonSchema as sharedJsonSchema} from '../../shared/src/json-schema.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {
+  z,
+  type ZodAny,
+  type ZodBoolean,
+  type ZodNull,
+  type ZodNullable,
+  type ZodNumber,
+  type ZodObject,
+  type ZodOptional,
+  type ZodString,
+  type ZodType,
+} from 'zod';
+import {unreachable} from '../../shared/src/asserts.ts';
 import type {
   SchemaValue,
-  SchemaValueToTSType,
   ValueType,
 } from '../../zero-types/src/schema-value.ts';
 import type {TableSchema} from '../../zero-types/src/schema.ts';
-import type {
-  DeleteID,
-  InsertValue,
-  UpdateValue,
-} from '../../zql/src/mutate/crud.ts';
-import type {Row} from '../../zql/src/query/query.ts';
 
-function asType<T>(schema: ZodTypeAny): ZodType<T> {
-  return schema as unknown as ZodType<T>;
-}
-
-function baseSchema(type: ValueType): ZodTypeAny {
+function baseSchema(type: ValueType) {
   switch (type) {
     case 'string':
       return z.string();
@@ -29,16 +28,62 @@ function baseSchema(type: ValueType): ZodTypeAny {
     case 'null':
       return z.null();
     case 'json':
-      return makeJSONSchema();
+      return z.any();
+    default:
+      unreachable(type);
   }
 }
 
-function columnValueSchema<V extends SchemaValue>(
-  column: V,
-): ZodType<SchemaValueToTSType<V>> {
+export type ColumnZodType<V> = V extends SchemaValue
+  ? V extends {customType: infer T}
+    ? ZodType<T, T>
+    : V['type'] extends 'string'
+      ? ZodString
+      : V['type'] extends 'number'
+        ? ZodNumber
+        : V['type'] extends 'boolean'
+          ? ZodBoolean
+          : V['type'] extends 'null'
+            ? ZodNull
+            : V['type'] extends 'json'
+              ? ZodAny
+              : ZodAny
+  : never;
+
+export type RowZodShape<TTable extends TableSchema> = {
+  readonly [K in keyof TTable['columns']]: TTable['columns'][K] extends {
+    optional: true;
+  }
+    ? ZodNullable<ColumnZodType<TTable['columns'][K]>>
+    : ColumnZodType<TTable['columns'][K]>;
+};
+
+export type InsertZodShape<TTable extends TableSchema> = {
+  readonly [K in keyof TTable['columns']]: K extends TTable['primaryKey'][number]
+    ? ColumnZodType<TTable['columns'][K]>
+    : TTable['columns'][K] extends {optional: true}
+      ? ZodOptional<ZodNullable<ColumnZodType<TTable['columns'][K]>>>
+      : ColumnZodType<TTable['columns'][K]>;
+};
+
+export type UpdateZodShape<TTable extends TableSchema> = {
+  readonly [K in keyof TTable['columns']]: K extends TTable['primaryKey'][number]
+    ? ColumnZodType<TTable['columns'][K]>
+    : ZodOptional<ZodNullable<ColumnZodType<TTable['columns'][K]>>>;
+};
+
+export type DeleteZodShape<TTable extends TableSchema> = {
+  readonly [K in Extract<
+    TTable['primaryKey'][number],
+    keyof TTable['columns']
+  >]: ColumnZodType<TTable['columns'][K]>;
+};
+
+function columnValueSchema<V extends SchemaValue>(column: V): ColumnZodType<V> {
   const schema = baseSchema(column.type);
-  const withOptional = column.optional === true ? schema.nullable() : schema;
-  return asType<SchemaValueToTSType<V>>(withOptional);
+  const withOptional =
+    column.optional === true ? schema.optional().nullable() : schema;
+  return withOptional as ColumnZodType<V>;
 }
 
 function requireColumn(table: TableSchema, columnName: string): SchemaValue {
@@ -53,82 +98,60 @@ function requireColumn(table: TableSchema, columnName: string): SchemaValue {
 
 export function rowSchema<TTable extends TableSchema>(
   table: TTable,
-): ZodType<Row<TTable>> {
-  const shape: Record<string, ZodTypeAny> = {};
+): ZodObject<RowZodShape<TTable>> {
+  const shape: Record<string, ReturnType<typeof columnValueSchema>> = {};
 
   for (const [columnName, column] of Object.entries(table.columns)) {
     shape[columnName] = columnValueSchema(column);
   }
 
-  return asType<Row<TTable>>(z.object(shape));
+  return z.object(shape) as unknown as ZodObject<RowZodShape<TTable>>;
 }
 
 export function insertSchema<TTable extends TableSchema>(
   table: TTable,
-): ZodType<InsertValue<TTable>> {
+): ZodObject<InsertZodShape<TTable>> {
   const primaryKeys = new Set(table.primaryKey);
-  const shape: Record<string, ZodTypeAny> = {};
+
+  const shape: Record<string, ReturnType<typeof columnValueSchema>> = {};
 
   for (const [columnName, column] of Object.entries(table.columns)) {
     const valueSchema = columnValueSchema(column);
     const isOptional = !primaryKeys.has(columnName) && column.optional === true;
-    shape[columnName] = isOptional
+    const withOptionality = isOptional
       ? valueSchema.optional().nullable()
       : valueSchema;
+    shape[columnName] = withOptionality;
   }
 
-  return asType<InsertValue<TTable>>(z.object(shape));
+  return z.object(shape) as unknown as ZodObject<InsertZodShape<TTable>>;
 }
 
 export function updateSchema<TTable extends TableSchema>(
   table: TTable,
-): ZodType<UpdateValue<TTable>> {
+): ZodObject<UpdateZodShape<TTable>> {
   const primaryKeys = new Set(table.primaryKey);
-  const shape: Record<string, ZodTypeAny> = {};
+  const shape: Record<string, ReturnType<typeof columnValueSchema>> = {};
 
   for (const [columnName, column] of Object.entries(table.columns)) {
     const valueSchema = columnValueSchema(column);
-    shape[columnName] = primaryKeys.has(columnName)
+    const withOptionality = primaryKeys.has(columnName)
       ? valueSchema
       : valueSchema.optional().nullable();
+    shape[columnName] = withOptionality;
   }
 
-  return asType<UpdateValue<TTable>>(z.object(shape));
+  return z.object(shape) as unknown as ZodObject<UpdateZodShape<TTable>>;
 }
 
 export function deleteSchema<TTable extends TableSchema>(
   table: TTable,
-): ZodType<DeleteID<TTable>> {
-  const shape: Record<string, ZodTypeAny> = {};
+): ZodObject<DeleteZodShape<TTable>> {
+  const shape: Record<string, ReturnType<typeof columnValueSchema>> = {};
 
   for (const columnName of table.primaryKey) {
     shape[columnName] = columnValueSchema(requireColumn(table, columnName));
   }
 
-  return asType<DeleteID<TTable>>(z.object(shape));
+  return z.object(shape) as unknown as ZodObject<DeleteZodShape<TTable>>;
 }
-
-function makeJSONSchema(): ZodType<ReadonlyJSONValue> {
-  return asType<ReadonlyJSONValue>(
-    z.any().superRefine((value, ctx) => {
-      try {
-        sharedJsonSchema.parse(value);
-      } catch (err) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            err instanceof Error
-              ? err.message
-              : 'Invalid JSON: value is not JSON-serializable',
-        });
-      }
-    }),
-  );
-}
-
-export type {
-  DeleteID,
-  InsertValue,
-  UpdateValue,
-} from '../../zql/src/mutate/crud.ts';
-export type {Row} from '../../zql/src/query/query.ts';

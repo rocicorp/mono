@@ -44,7 +44,7 @@ export const Comment = memo(
     const isPermalinked = highlight || hash === permalink;
 
     const edit = () => setEditing(true);
-    const remove = () => z.mutate(mutators.comment.remove(id));
+    const remove = () => z.mutate(mutators.comment.remove({id}));
 
     if (!comment) {
       return <div style={{height}}></div>;

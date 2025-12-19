@@ -20,6 +20,7 @@ async function getExternal(): Promise<string[]> {
     'node:*',
     'expo*',
     '@op-engineering/*',
+    'zod',
     ...builtinModules,
   ].sort();
 }

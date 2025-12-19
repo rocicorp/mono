@@ -1,5 +1,6 @@
 import {defineMutator, defineMutators, type Transaction} from '@rocicorp/zero';
-import {z} from 'zod/mini';
+import {deleteSchema, insertSchema, updateSchema} from '@rocicorp/zero/zod';
+import {z} from 'zod';
 import {
   assertIsCreatorOrAdmin,
   assertIsLoggedIn,
@@ -9,53 +10,30 @@ import {
   type AuthData,
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import {builder, ZERO_PROJECT_ID} from './schema.ts';
+import {builder, schema, ZERO_PROJECT_ID} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
 }
 
-const addEmojiSchema = z.object({
-  id: z.string(),
-  unicode: z.string(),
-  annotation: z.string(),
-  subjectID: z.string(),
-  created: z.number(),
+export const addEmojiSchema = insertSchema(schema.tables.emoji).omit({
+  creatorID: true,
 });
 
-export type AddEmojiArgs = z.infer<typeof addEmojiSchema>;
-
-export const createIssueArgsSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.optional(z.string()),
-  created: z.number(),
-  modified: z.number(),
-  projectID: z.optional(z.string()),
+export const createIssueArgsSchema = insertSchema(schema.tables.issue).omit({
+  open: true,
+  visibility: true,
+  creatorID: true,
 });
 
-export type CreateIssueArgs = z.infer<typeof createIssueArgsSchema>;
-
-export const updateIssueArgsSchema = z.object({
-  id: z.string(),
-  title: z.optional(z.string()),
-  description: z.optional(z.string()),
-  open: z.optional(z.boolean()),
-  assigneeID: z.optional(z.nullable(z.string())),
-  visibility: z.optional(z.enum(['internal', 'public'])),
+export const updateIssueArgsSchema = updateSchema(schema.tables.issue).extend({
+  // visibility: z.enum(['internal', 'public']).optional(),
   modified: z.number(),
 });
 
-export type UpdateIssueArgs = z.infer<typeof updateIssueArgsSchema>;
-
-const addCommentArgsSchema = z.object({
-  id: z.string(),
-  issueID: z.string(),
-  body: z.string(),
-  created: z.number(),
+export const addCommentArgsSchema = insertSchema(schema.tables.comment).omit({
+  creatorID: true,
 });
-
-export type AddCommentArgs = z.infer<typeof addCommentArgsSchema>;
 
 const notificationTypeSchema = z.enum(['subscribe', 'unsubscribe']);
 
@@ -65,6 +43,35 @@ const notificationUpdateSchema = z.object({
   issueID: z.string(),
   subscribed: notificationTypeSchema,
   created: z.number(),
+});
+
+const deleteIssueArgsSchema = deleteSchema(schema.tables.issue);
+const deleteEmojiArgsSchema = deleteSchema(schema.tables.emoji);
+export const deleteIssueLabelArgsSchema = deleteSchema(
+  schema.tables.issueLabel,
+);
+const deleteCommentArgsSchema = deleteSchema(schema.tables.comment);
+
+const insertLabelArgsSchema = insertSchema(schema.tables.label);
+const insertIssueLabelArgsSchema = insertSchema(schema.tables.issueLabel);
+export const addLabelArgsSchema = insertIssueLabelArgsSchema.extend({
+  projectID: z.optional(z.string()),
+});
+
+const insertViewStateArgsSchema = insertSchema(schema.tables.viewState).omit({
+  userID: true,
+});
+
+export const editCommentArgsSchema = updateSchema(schema.tables.comment)
+  .pick({
+    id: true,
+  })
+  .extend({
+    body: z.string(),
+  });
+
+const insertUserPrefArgsSchema = insertSchema(schema.tables.userPref).omit({
+  userID: true,
 });
 
 export const mutators = defineMutators({
@@ -143,17 +150,16 @@ export const mutators = defineMutators({
       },
     ),
 
-    delete: defineMutator(z.string(), async ({tx, args: id, ctx: authData}) => {
-      await assertIsCreatorOrAdmin(tx, authData, builder.issue, id);
-      await tx.mutate.issue.delete({id});
-    }),
+    delete: defineMutator(
+      deleteIssueArgsSchema,
+      async ({tx, args, ctx: authData}) => {
+        await assertIsCreatorOrAdmin(tx, authData, builder.issue, args.id);
+        await tx.mutate.issue.delete(args);
+      },
+    ),
 
     addLabel: defineMutator(
-      z.object({
-        issueID: z.string(),
-        labelID: z.string(),
-        projectID: z.optional(z.string()),
-      }),
+      addLabelArgsSchema,
       async ({tx, args: {issueID, labelID, projectID}, ctx: authData}) => {
         await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
         await tx.mutate.issueLabel.insert({
@@ -165,10 +171,7 @@ export const mutators = defineMutators({
     ),
 
     removeLabel: defineMutator(
-      z.object({
-        issueID: z.string(),
-        labelID: z.string(),
-      }),
+      deleteIssueLabelArgsSchema,
       async ({tx, args: {issueID, labelID}, ctx: authData}) => {
         await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
         await tx.mutate.issueLabel.delete({issueID, labelID});
@@ -208,10 +211,13 @@ export const mutators = defineMutators({
       },
     ),
 
-    remove: defineMutator(z.string(), async ({tx, args: id, ctx: authData}) => {
-      await assertIsCreatorOrAdmin(tx, authData, builder.emoji, id);
-      await tx.mutate.emoji.delete({id});
-    }),
+    remove: defineMutator(
+      deleteEmojiArgsSchema,
+      async ({tx, args, ctx: authData}) => {
+        await assertIsCreatorOrAdmin(tx, authData, builder.emoji, args.id);
+        await tx.mutate.emoji.delete(args);
+      },
+    ),
   },
 
   comment: {
@@ -235,29 +241,25 @@ export const mutators = defineMutators({
     ),
 
     edit: defineMutator(
-      z.object({
-        id: z.string(),
-        body: z.string(),
-      }),
+      editCommentArgsSchema,
       async ({tx, args: {id, body}, ctx: authData}) => {
         await assertIsCreatorOrAdmin(tx, authData, builder.comment, id);
         await tx.mutate.comment.update({id, body});
       },
     ),
 
-    remove: defineMutator(z.string(), async ({tx, args: id, ctx: authData}) => {
-      await assertIsCreatorOrAdmin(tx, authData, builder.comment, id);
-      await tx.mutate.comment.delete({id});
-    }),
+    remove: defineMutator(
+      deleteCommentArgsSchema,
+      async ({tx, args, ctx: authData}) => {
+        await assertIsCreatorOrAdmin(tx, authData, builder.comment, args.id);
+        await tx.mutate.comment.delete(args);
+      },
+    ),
   },
 
   label: {
     create: defineMutator(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        projectID: z.optional(z.string()),
-      }),
+      insertLabelArgsSchema,
       async ({tx, args: {id, name, projectID}, ctx: authData}) => {
         if (!isAdmin(authData)) {
           throw new MutationError(
@@ -312,10 +314,7 @@ export const mutators = defineMutators({
 
   viewState: {
     set: defineMutator(
-      z.object({
-        issueID: z.string(),
-        viewed: z.number(),
-      }),
+      insertViewStateArgsSchema,
       async ({tx, args: {issueID, viewed}, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
@@ -326,10 +325,7 @@ export const mutators = defineMutators({
 
   userPref: {
     set: defineMutator(
-      z.object({
-        key: z.string(),
-        value: z.string(),
-      }),
+      insertUserPrefArgsSchema,
       async ({tx, args: {key, value}, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
@@ -342,7 +338,7 @@ export const mutators = defineMutators({
 async function addEmoji(
   tx: Transaction,
   subjectType: 'issue' | 'comment',
-  {id, unicode, annotation, subjectID, created}: AddEmojiArgs,
+  {id, value, annotation, subjectID, created}: z.infer<typeof addEmojiSchema>,
   authData: AuthData | undefined,
 ) {
   assertIsLoggedIn(authData);
@@ -356,7 +352,7 @@ async function addEmoji(
 
   await tx.mutate.emoji.insert({
     id,
-    value: unicode,
+    value,
     annotation,
     subjectID,
     creatorID,
