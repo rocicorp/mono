@@ -207,7 +207,17 @@ export class Storer implements Service {
       this.#queue.size() > this.#backPressureThreshold
     ) {
       this.#lc.warn?.(
-        `applying back pressure with ${this.#queue.size()} queued changes (threshold: ${this.#backPressureThreshold})`,
+        `applying back pressure with ${this.#queue.size()} queued changes (threshold: ${this.#backPressureThreshold})\n` +
+          `\n` +
+          `To inspect changeLog backlog in your CVR database:\n` +
+          `  SELECT\n` +
+          `    (change->'relation'->>'schema') || '.' || (change->'relation'->>'name') AS table_name,\n` +
+          `    change->>'tag' AS operation,\n` +
+          `    COUNT(*) AS count\n` +
+          `  FROM "<app_id>/cdc"."changeLog"\n` +
+          `  GROUP BY 1, 2\n` +
+          `  ORDER BY 3 DESC\n` +
+          `  LIMIT 20;`,
       );
       this.#readyForMore = resolver();
     }
