@@ -1,6 +1,6 @@
 import {defineMutator, defineMutators, type Transaction} from '@rocicorp/zero';
 import {deleteSchema, insertSchema, updateSchema} from '@rocicorp/zero/zod';
-import {z} from 'zod';
+import {z} from 'zod/mini';
 import {
   assertIsCreatorOrAdmin,
   assertIsLoggedIn,
