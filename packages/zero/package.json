@@ -97,13 +97,13 @@
     "zero-server": "0.0.0",
     "zero-solid": "0.0.0",
     "zero-zod": "0.0.0",
-    "zod": "4.2.1",
+    "zod": "^3 || ^4",
     "zqlite": "0.0.0"
   },
   "peerDependencies": {
     "expo-sqlite": ">=15",
     "@op-engineering/op-sqlite": ">=15",
-    "zod": ">=3"
+    "zod": "^3 || ^4"
   },
   "peerDependenciesMeta": {
     "expo-sqlite": {

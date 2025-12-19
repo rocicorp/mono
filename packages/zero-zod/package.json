@@ -14,12 +14,12 @@
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
-    "zod": "4.2.1",
+    "zod": "^3 || ^4",
     "zql": "0.0.0",
     "zero-types": "0.0.0"
   },
   "peerDependencies": {
-    "zod": ">=3"
+    "zod": "^3 || ^4"
   },
   "prettier": "@rocicorp/prettier-config"
 }
