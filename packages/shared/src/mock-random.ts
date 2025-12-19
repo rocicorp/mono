@@ -1,8 +1,11 @@
 import {vi, type Mock} from 'vitest';
 
 if (!Symbol.dispose) {
-  // Polyfill for Symbol.dispose in environments (like Safari) that don't support it yet.
-  // Remove this once Safari (and other target environments) support it natively.
+  // Polyfill for Symbol.dispose in environments that don't support it yet.
+  // This is required because bundlers (ESBuild/Rolldown) compile `using` statements
+  // to code that references Symbol.dispose without providing the symbol itself.
+  // Remove once all target environments support Symbol.dispose natively.
+
   // oxlint-disable-next-line no-explicit-any
   (Symbol as any).dispose = Symbol.for('Symbol.dispose');
 }
@@ -23,21 +26,20 @@ if (!Symbol.dispose) {
  * @example
  * ```typescript
  * test('generates predictable random values', () => {
- *   const mock = mockRandom();
+ *   using mock = mockRandom();
  *   expect(Math.random()).toBeCloseTo(0.00028, 5);
  *   expect(Math.random()).toBeCloseTo(0.75595, 5);
- *   mock.mockRestore();
+ 
  * });
  * ```
  *
  * @example
  * ```typescript
  * test('uses custom seed', () => {
- *   const mock = mockRandom(42);
+ *   using mock = mockRandom(42);
  *   const value1 = Math.random();
  *   const value2 = Math.random();
  *   expect(value1).not.toBe(value2);
- *   mock.mockRestore();
  * });
  * ```
  */
