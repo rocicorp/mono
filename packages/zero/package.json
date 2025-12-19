@@ -97,7 +97,7 @@
     "zero-server": "0.0.0",
     "zero-solid": "0.0.0",
     "zero-zod": "0.0.0",
-    "zod": ">=3",
+    "zod": "4.2.1",
     "zqlite": "0.0.0"
   },
   "peerDependencies": {
