@@ -638,6 +638,14 @@ export const zeroOptions = {
       ],
     },
 
+    endpoint: {
+      type: v.string().optional(),
+      desc: [
+        `The S3-compatible endpoint URL to use for the litestream backup. Only required for non-AWS services.`,
+        `The {bold replication-manager} and {bold view-syncers} must have the same endpoint.`,
+      ],
+    },
+
     port: {
       type: v.number().optional(),
       desc: [
