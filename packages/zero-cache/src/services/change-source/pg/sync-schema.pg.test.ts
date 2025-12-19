@@ -22,8 +22,8 @@ const SHARD_NUM = 9;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 6,
-  schemaVersion: 6,
+  dataVersion: 7,
+  schemaVersion: 7,
   minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
@@ -124,7 +124,7 @@ describe('change-streamer/pg/sync-schema', () => {
         expectMatchingObjectsInTables(replica, c.replicaPostState);
 
         expectLiteTables(replica, {
-          ['_zero.changeLog']: [],
+          ['_zero.changeLog2']: [],
         });
 
         // Slot should still exist.

@@ -582,15 +582,6 @@ describe('view-syncer/pipeline-driver', () => {
           "queryHash": "hash1",
           "row": undefined,
           "rowKey": {
-            "id": "21",
-          },
-          "table": "comments",
-          "type": "remove",
-        },
-        {
-          "queryHash": "hash1",
-          "row": undefined,
-          "rowKey": {
             "id": "1",
           },
           "table": "issues",
@@ -601,6 +592,15 @@ describe('view-syncer/pipeline-driver', () => {
           "row": undefined,
           "rowKey": {
             "id": "10",
+          },
+          "table": "comments",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "21",
           },
           "table": "comments",
           "type": "remove",

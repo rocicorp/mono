@@ -2226,7 +2226,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           .prepare('SELECT * FROM "_zero.replicationState"')
           .get<{stateVersion: string}>();
         expect(replicaState).toMatchObject({stateVersion: WATERMARK_REGEX});
-        expectTables(replica, {['_zero.changeLog']: []});
+        expectTables(replica, {['_zero.changeLog2']: []});
 
         // Check replica state against the upstream slot.
         const r = replicas[i];
