@@ -303,10 +303,8 @@ describe('type mappings', () => {
     expectTypeOf<Output['meta']>().toEqualTypeOf<
       SchemaValueToTSType<typeof userTable.columns.meta> | undefined
     >();
-    expectTypeOf<Output['active']>().toEqualTypeOf<
-      boolean | null | undefined
-    >();
-    expectTypeOf<Output['role']>().toEqualTypeOf<Role | null | undefined>();
+    expectTypeOf<Output['active']>().toEqualTypeOf<boolean | undefined>();
+    expectTypeOf<Output['role']>().toEqualTypeOf<Role | undefined>();
     expectTypeOf<Output['deletedAt']>().toEqualTypeOf<null | undefined>();
   });
 

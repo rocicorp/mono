@@ -69,7 +69,9 @@ export type InsertZodShape<TTable extends TableSchema> = {
 export type UpdateZodShape<TTable extends TableSchema> = {
   readonly [K in keyof TTable['columns']]: K extends TTable['primaryKey'][number]
     ? ColumnZodType<TTable['columns'][K]>
-    : ZodOptional<ZodNullable<ColumnZodType<TTable['columns'][K]>>>;
+    : TTable['columns'][K] extends {optional: true}
+      ? ZodOptional<ZodNullable<ColumnZodType<TTable['columns'][K]>>>
+      : ZodOptional<ColumnZodType<TTable['columns'][K]>>;
 };
 
 export type DeleteZodShape<TTable extends TableSchema> = {
@@ -137,7 +139,7 @@ export function updateSchema<TTable extends TableSchema>(
     const valueSchema = columnValueSchema(column);
     const withOptionality = primaryKeys.has(columnName)
       ? valueSchema
-      : valueSchema.optional().nullable();
+      : valueSchema.optional();
     shape[columnName] = withOptionality;
   }
 
