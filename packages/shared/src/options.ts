@@ -456,6 +456,10 @@ function parseArgs(
   return [result, envObj, unknown] as const;
 }
 
+export function flagToEnv(prefix: string, flag: string): string {
+  return toSnakeCase(prefix + flag).toUpperCase();
+}
+
 export function parseBoolean(optionName: string, input: string) {
   const bool = input.toLowerCase();
   if (['true', '1'].includes(bool)) {
