@@ -169,6 +169,19 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": {
             "_0_version": "09",
+            "desc": null,
+            "id": 4,
+            "owner": 20,
+          },
+          "prevValues": [],
+          "rowKey": {
+            "id": 4,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": {
+            "_0_version": "09",
             "desc": "food",
             "id": 1,
             "owner": 10,
@@ -202,6 +215,19 @@ describe('view-syncer/snapshotter', () => {
           "table": "issues",
         },
         {
+          "nextValue": {
+            "_0_version": "09",
+            "desc": "bard",
+            "id": 5,
+            "owner": 10,
+          },
+          "prevValues": [],
+          "rowKey": {
+            "id": 5,
+          },
+          "table": "issues",
+        },
+        {
           "nextValue": null,
           "prevValues": [
             {
@@ -216,6 +242,12 @@ describe('view-syncer/snapshotter', () => {
           },
           "table": "issues",
         },
+      ]
+    `);
+
+    // Diff should be reusable as long as advance() hasn't been called.
+    expect([...diff1]).toMatchInlineSnapshot(`
+      [
         {
           "nextValue": {
             "_0_version": "09",
@@ -232,6 +264,41 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": {
             "_0_version": "09",
+            "desc": "food",
+            "id": 1,
+            "owner": 10,
+          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "foo",
+              "id": 1,
+              "owner": 10,
+            },
+          ],
+          "rowKey": {
+            "id": 1,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": null,
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "bar",
+              "id": 2,
+              "owner": 10,
+            },
+          ],
+          "rowKey": {
+            "id": 2,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": {
+            "_0_version": "09",
             "desc": "bard",
             "id": 5,
             "owner": 10,
@@ -242,90 +309,23 @@ describe('view-syncer/snapshotter', () => {
           },
           "table": "issues",
         },
+        {
+          "nextValue": null,
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "baz",
+              "id": 3,
+              "owner": 20,
+            },
+          ],
+          "rowKey": {
+            "id": 3,
+          },
+          "table": "issues",
+        },
       ]
     `);
-
-    // Diff should be reusable as long as advance() hasn't been called.
-    expect([...diff1]).toMatchInlineSnapshot(`
-            [
-              {
-                "nextValue": {
-                  "_0_version": "09",
-                  "desc": "food",
-                  "id": 1,
-                  "owner": 10,
-                },
-                "prevValues": [
-                  {
-                    "_0_version": "01",
-                    "desc": "foo",
-                    "id": 1,
-                    "owner": 10,
-                  },
-                ],
-                "rowKey": {
-                  "id": 1,
-                },
-                "table": "issues",
-              },
-              {
-                "nextValue": null,
-                "prevValues": [
-                  {
-                    "_0_version": "01",
-                    "desc": "bar",
-                    "id": 2,
-                    "owner": 10,
-                  },
-                ],
-                "rowKey": {
-                  "id": 2,
-                },
-                "table": "issues",
-              },
-              {
-                "nextValue": null,
-                "prevValues": [
-                  {
-                    "_0_version": "01",
-                    "desc": "baz",
-                    "id": 3,
-                    "owner": 20,
-                  },
-                ],
-                "rowKey": {
-                  "id": 3,
-                },
-                "table": "issues",
-              },
-              {
-                "nextValue": {
-                  "_0_version": "09",
-                  "desc": null,
-                  "id": 4,
-                  "owner": 20,
-                },
-                "prevValues": [],
-                "rowKey": {
-                  "id": 4,
-                },
-                "table": "issues",
-              },
-              {
-                "nextValue": {
-                  "_0_version": "09",
-                  "desc": "bard",
-                  "id": 5,
-                  "owner": 10,
-                },
-                "prevValues": [],
-                "rowKey": {
-                  "id": 5,
-                },
-                "table": "issues",
-              },
-            ]
-          `);
 
     // Replicate a second transaction
     replicator.processTransaction(
@@ -341,19 +341,6 @@ describe('view-syncer/snapshotter', () => {
 
     expect([...diff2]).toMatchInlineSnapshot(`
       [
-        {
-          "nextValue": {
-            "_0_version": "0d",
-            "desc": "bard",
-            "id": 2,
-            "owner": 10,
-          },
-          "prevValues": [],
-          "rowKey": {
-            "id": 2,
-          },
-          "table": "issues",
-        },
         {
           "nextValue": null,
           "prevValues": [
@@ -381,6 +368,19 @@ describe('view-syncer/snapshotter', () => {
           ],
           "rowKey": {
             "id": 5,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": {
+            "_0_version": "0d",
+            "desc": "bard",
+            "id": 2,
+            "owner": 10,
+          },
+          "prevValues": [],
+          "rowKey": {
+            "id": 2,
           },
           "table": "issues",
         },
