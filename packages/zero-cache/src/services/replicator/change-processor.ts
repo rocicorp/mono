@@ -21,7 +21,6 @@ import {
 } from '../../db/pg-to-lite.ts';
 import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
-import {ColumnMetadataStore} from '../change-source/column-metadata.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
   JSON_PARSED,
@@ -33,6 +32,7 @@ import {
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
 import {id} from '../../types/sql.ts';
+import {ColumnMetadataStore} from '../change-source/column-metadata.ts';
 import type {
   Change,
   ColumnAdd,
@@ -302,6 +302,7 @@ class TransactionProcessor {
   readonly #tableSpecs: Map<string, LiteTableSpec>;
   readonly #jsonFormat: JSONFormat;
 
+  #pos = 0;
   #schemaChanged = false;
 
   constructor(
@@ -692,13 +693,13 @@ class TransactionProcessor {
 
   #logSetOp(table: string, key: LiteRowKey) {
     if (this.#mode === 'serving') {
-      logSetOp(this.#db, this.#version, table, key);
+      logSetOp(this.#db, this.#version, this.#pos++, table, key);
     }
   }
 
   #logDeleteOp(table: string, key: LiteRowKey) {
     if (this.#mode === 'serving') {
-      logDeleteOp(this.#db, this.#version, table, key);
+      logDeleteOp(this.#db, this.#version, this.#pos++, table, key);
     }
   }
 

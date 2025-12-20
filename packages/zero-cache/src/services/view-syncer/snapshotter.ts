@@ -303,7 +303,7 @@ class Snapshot {
 
   numChangesSince(prevVersion: string) {
     const {count} = this.db.get(
-      'SELECT COUNT(*) AS count FROM "_zero.changeLog" WHERE stateVersion > ?',
+      'SELECT COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ?',
       prevVersion,
     );
     return count;
@@ -311,7 +311,7 @@ class Snapshot {
 
   changesSince(prevVersion: string) {
     const cached = this.db.statementCache.get(
-      'SELECT * FROM "_zero.changeLog" WHERE stateVersion > ?',
+      'SELECT * FROM "_zero.changeLog2" WHERE stateVersion > ? ORDER BY stateVersion ASC, pos ASC',
     );
     return {
       changes: cached.statement.iterate(prevVersion),

@@ -2,13 +2,14 @@ import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {must} from '../../../../shared/src/must.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import {listTables} from '../../db/lite-tables.ts';
 import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
 } from '../../db/migration-lite.ts';
-import {listTables} from '../../db/lite-tables.ts';
 import {AutoResetSignal} from '../change-streamer/schema/tables.ts';
+import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
   recordEvent,
@@ -92,6 +93,16 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       const store = ColumnMetadataStore.getInstance(db);
       const tables = listTables(db);
       must(store).populateFromExistingTables(tables);
+    },
+  },
+
+  7: {
+    migrateSchema: (_, db) => {
+      // Note: The original "changeLog" table is kept so that the replica file
+      // is compatible with older zero-caches. However, it is truncated for
+      // space savings (since historic changes were never read).
+      db.exec(`DELETE FROM "_zero.changeLog"`);
+      initChangeLog(db); // Creates _zero.changeLog2
     },
   },
 };
