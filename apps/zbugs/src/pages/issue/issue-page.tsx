@@ -1145,7 +1145,7 @@ function useShowToastForNewComment(
   }, [comments, virtualizer, userID, highlightComment]);
 }
 
-export function IssueRedirect() {
+export function IssueRedirect({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
 
@@ -1168,8 +1168,9 @@ export function IssueRedirect() {
     }
   }, [issue]);
 
-  if ((!issue || issue.project) && issueResult.type === 'complete') {
+  if (!issue && issueResult.type === 'complete') {
+    onReady();
     return <NotFound></NotFound>;
   }
-  return undefined;
+  return null;
 }
