@@ -5,10 +5,14 @@ import {
   type Transaction,
 } from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
-import {z} from 'zod/mini';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {
+  addCommentArgsSchema,
+  addEmojiSchema,
+  addLabelArgsSchema,
   createIssueArgsSchema,
+  deleteIssueLabelArgsSchema,
+  editCommentArgsSchema,
   mutators,
   updateIssueArgsSchema,
 } from '../shared/mutators.ts';
@@ -80,11 +84,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
       ),
 
       addLabel: defineMutator(
-        z.object({
-          issueID: z.string(),
-          labelID: z.string(),
-          projectID: z.optional(z.string()),
-        }),
+        addLabelArgsSchema,
         async ({tx, args: {issueID, labelID, projectID}, ctx: authData}) => {
           await mutators.issue.addLabel.fn({
             tx,
@@ -106,10 +106,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
       ),
 
       removeLabel: defineMutator(
-        z.object({
-          issueID: z.string(),
-          labelID: z.string(),
-        }),
+        deleteIssueLabelArgsSchema,
         async ({tx, args: {issueID, labelID}, ctx: authData}) => {
           await mutators.issue.removeLabel.fn({
             tx,
@@ -133,12 +130,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
 
     emoji: {
       addToIssue: defineMutator(
-        z.object({
-          id: z.string(),
-          unicode: z.string(),
-          annotation: z.string(),
-          subjectID: z.string(),
-        }),
+        addEmojiSchema,
         async ({tx, args, ctx: authData}) => {
           await mutators.emoji.addToIssue.fn({
             tx,
@@ -155,7 +147,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             {
               kind: 'add-emoji-to-issue',
               issueID: args.subjectID,
-              emoji: args.unicode,
+              emoji: args.value,
             },
             postCommitTasks,
           );
@@ -163,12 +155,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
       ),
 
       addToComment: defineMutator(
-        z.object({
-          id: z.string(),
-          unicode: z.string(),
-          annotation: z.string(),
-          subjectID: z.string(),
-        }),
+        addEmojiSchema,
         async ({tx, args, ctx: authData}) => {
           await mutators.emoji.addToComment.fn({
             tx,
@@ -198,7 +185,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
               kind: 'add-emoji-to-comment',
               issueID: comment.issueID,
               commentID: args.subjectID,
-              emoji: args.unicode,
+              emoji: args.value,
             },
             postCommitTasks,
           );
@@ -208,11 +195,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
 
     comment: {
       add: defineMutator(
-        z.object({
-          id: z.string(),
-          issueID: z.string(),
-          body: z.string(),
-        }),
+        addCommentArgsSchema,
         async ({tx, args: {id, issueID, body}, ctx: authData}) => {
           await mutators.comment.add.fn({
             tx,
@@ -240,10 +223,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
       ),
 
       edit: defineMutator(
-        z.object({
-          id: z.string(),
-          body: z.string(),
-        }),
+        editCommentArgsSchema,
         async ({tx, args: {id, body}, ctx: authData}) => {
           await mutators.comment.edit.fn({
             tx,

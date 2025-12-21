@@ -57,7 +57,7 @@ export const EmojiPanel = memo(
         (unicode: string, annotation: string) => {
           const args = {
             id: nanoid(),
-            unicode,
+            value: unicode,
             annotation,
             subjectID,
             creatorID: z.userID,
@@ -74,7 +74,7 @@ export const EmojiPanel = memo(
 
       const removeEmoji = useCallback(
         (id: string) => {
-          z.mutate(mutators.emoji.remove(id));
+          z.mutate(mutators.emoji.remove({id}));
         },
         [z],
       );
