@@ -93,7 +93,7 @@ export function Root() {
             />
           </Route>
           <Route path={routes.deprecatedIssue}>
-            <IssueRedirect></IssueRedirect>
+            <IssueRedirect onReady={() => setContentReady(true)} />
           </Route>
           <Route path="/p/:projectName" nest>
             <OGImageUpdater />
