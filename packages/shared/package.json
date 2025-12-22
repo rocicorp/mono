@@ -33,7 +33,7 @@
     "compare-utf8": "^0.1.1",
     "fast-check": "^3.18.0",
     "package-up": "^5.0.0",
-    "playwright": "^1.53.2",
+    "playwright": "^1.57.0",
     "type-fest": "^4.30.0",
     "typescript": "~5.9.3",
     "vitest": "4.0.15"
