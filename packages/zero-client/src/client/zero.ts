@@ -78,6 +78,8 @@ import {
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {
+  BaseDefaultContext,
+  BaseDefaultSchema,
   DefaultContext,
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
@@ -207,9 +209,9 @@ interface TestZero {
 }
 
 function asTestZero<
-  S extends Schema,
+  S extends BaseDefaultSchema,
   MD extends CustomMutatorDefs | undefined,
-  C,
+  C extends BaseDefaultContext,
 >(z: Zero<S, MD, C>): TestZero {
   return z as TestZero;
 }
@@ -315,9 +317,9 @@ export type ZeroMutate<
   ((mr: MutateRequest<any, S, C, any>) => MutatorResult);
 
 export class Zero<
-  const S extends Schema = DefaultSchema,
+  const S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  C = DefaultContext,
+  C extends BaseDefaultContext = DefaultContext,
 > {
   readonly version = version;
 
@@ -456,7 +458,7 @@ export class Zero<
       pingTimeoutMs = DEFAULT_PING_TIMEOUT_MS,
       disconnectTimeoutMs = DEFAULT_DISCONNECT_TIMEOUT_MS,
       schema,
-      batchViewUpdates = applyViewUpdates => applyViewUpdates(),
+      batchViewUpdates = (applyViewUpdates: () => void) => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
     } = options;
