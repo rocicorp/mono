@@ -10,6 +10,8 @@ import {
 import {useZero} from './zero-provider.tsx';
 import type {
   AnyMutatorRegistry,
+  BaseDefaultContext,
+  BaseDefaultSchema,
   CustomMutatorDefs,
   DefaultContext,
   DefaultSchema,
@@ -22,7 +24,6 @@ import type {
   QueryResultDetails,
   ReadonlyJSONValue,
   ResultType,
-  Schema,
   TTL,
   TypedView,
   Zero,
@@ -70,9 +71,9 @@ export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
+  TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
+  TContext extends BaseDefaultContext = DefaultContext,
 >(
   query: QueryOrQueryRequest<
     TTable,
@@ -107,9 +108,9 @@ export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
+  TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
+  TContext extends BaseDefaultContext = DefaultContext,
 >(
   query: QueryOrQueryRequest<
     TTable,
@@ -331,10 +332,10 @@ export class ViewStore {
 
   getView<
     TTable extends keyof TSchema['tables'] & string,
-    TSchema extends Schema,
+    TSchema extends BaseDefaultSchema,
     TReturn,
     MD extends CustomMutatorDefs | undefined,
-    TContext,
+    TContext extends BaseDefaultContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
     q: Query<TTable, TSchema, TReturn>,
@@ -411,10 +412,10 @@ const viewStore = new ViewStore();
  */
 class ViewWrapper<
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
+  TSchema extends BaseDefaultSchema,
   TReturn,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
-  TContext,
+  TContext extends BaseDefaultContext,
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;

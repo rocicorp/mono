@@ -99,6 +99,8 @@ export type {
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
 export type {
+  BaseDefaultContext,
+  BaseDefaultSchema,
   DefaultContext,
   DefaultSchema,
   DefaultTypes,
