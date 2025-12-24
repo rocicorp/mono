@@ -43,10 +43,6 @@ export class MemoryZQL<TSchema extends Schema> {
     this.#delegate = new QueryDelegateImpl({sources: this.#sources});
   }
 
-  /**
-   * Hydrates memory2 with initial data from raw rows.
-   * For each table, applies 'add' pushes and consumes them to commit.
-   */
   hydrate(raw: Map<keyof TSchema['tables'], Row[]>): void {
     for (const [table, rows] of raw) {
       const source = must(this.#sources[table as string]);
