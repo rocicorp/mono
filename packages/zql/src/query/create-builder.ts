@@ -1,3 +1,4 @@
+import {isIntrospectionProperty} from '../../../shared/src/introspection.ts';
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDelegate} from './query-delegate.ts';
@@ -37,6 +38,9 @@ function createBuilderWithQueryFactory<S extends Schema>(
     schema.tables,
     (_tableSchema, prop) => queryFactory(prop),
     prop => {
+      if (isIntrospectionProperty(prop)) {
+        return;
+      }
       throw new Error(`Table ${prop} does not exist in schema`);
     },
   ) as SchemaQuery<S>;
