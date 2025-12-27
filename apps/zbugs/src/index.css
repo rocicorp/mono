@@ -1861,3 +1861,34 @@ emoji-picker {
 .emoji-pill.mine {
 }
 */
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--color-text-dimmed-label);
+  font-size: 0.875rem;
+}
+
+.loading-spinner img {
+  animation: spin 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  5% {
+    transform: rotate(0deg);
+  }
+  65% {
+    transform: rotate(1080deg);
+  }
+  100% {
+    transform: rotate(1080deg);
+  }
+}
