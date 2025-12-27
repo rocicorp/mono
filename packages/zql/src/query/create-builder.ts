@@ -1,4 +1,3 @@
-import {isIntrospectionProperty} from '../../../shared/src/introspection.ts';
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDelegate} from './query-delegate.ts';
@@ -34,14 +33,13 @@ function createBuilderWithQueryFactory<S extends Schema>(
   schema: S,
   queryFactory: (table: keyof S['tables'] & string) => Query<string, S>,
 ): SchemaQuery<S> {
-  return recordProxy(
-    schema.tables,
-    (_tableSchema, prop) => queryFactory(prop),
-    prop => {
-      if (isIntrospectionProperty(prop)) {
-        return;
-      }
-      throw new Error(`Table ${prop} does not exist in schema`);
-    },
+  // Create a target with no prototype so accessing unknown properties returns undefined
+  const target = Object.create(null) as Record<string, unknown>;
+  for (const tableName of Object.keys(schema.tables)) {
+    target[tableName] = schema.tables[tableName];
+  }
+
+  return recordProxy(target, (_tableSchema, prop) =>
+    queryFactory(prop),
   ) as SchemaQuery<S>;
 }
