@@ -33,11 +33,14 @@ function createBuilderWithQueryFactory<S extends Schema>(
   schema: S,
   queryFactory: (table: keyof S['tables'] & string) => Query<string, S>,
 ): SchemaQuery<S> {
-  // Create a target with no prototype so accessing unknown properties returns undefined
-  const target = Object.create(null) as Record<string, unknown>;
-  for (const tableName of Object.keys(schema.tables)) {
-    target[tableName] = schema.tables[tableName];
-  }
+  // Create a target with no prototype so accessing unknown properties returns
+  // undefined instead of inherited Object.prototype methods (e.g., toString).
+  // This fixes React 19 dev mode compatibility where accessing $$typeof should
+  // return undefined rather than throwing.
+  const target = Object.assign(
+    Object.create(null),
+    schema.tables,
+  ) as Record<string, unknown>;
 
   return recordProxy(target, (_tableSchema, prop) =>
     queryFactory(prop),
