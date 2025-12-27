@@ -37,10 +37,10 @@ function createBuilderWithQueryFactory<S extends Schema>(
   // undefined instead of inherited Object.prototype methods (e.g., toString).
   // This fixes React 19 dev mode compatibility where accessing $$typeof should
   // return undefined rather than throwing.
-  const target = Object.assign(
-    Object.create(null),
-    schema.tables,
-  ) as Record<string, unknown>;
+  const target = Object.assign(Object.create(null), schema.tables) as Record<
+    string,
+    unknown
+  >;
 
   // No onMissing handler needed - unknown properties return undefined due to
   // null prototype, which is the desired behavior for normal JS object semantics.
