@@ -42,6 +42,8 @@ function createBuilderWithQueryFactory<S extends Schema>(
     schema.tables,
   ) as Record<string, unknown>;
 
+  // No onMissing handler needed - unknown properties return undefined due to
+  // null prototype, which is the desired behavior for normal JS object semantics.
   return recordProxy(target, (_tableSchema, prop) =>
     queryFactory(prop),
   ) as SchemaQuery<S>;
