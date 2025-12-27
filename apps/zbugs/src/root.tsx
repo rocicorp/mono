@@ -2,6 +2,7 @@ import {useConnectionState} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import {Redirect, Route, Switch} from 'wouter';
 import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
+import {LoadingSpinner} from './components/loading-spinner.tsx';
 import {Nav} from './components/nav.tsx';
 import {useLogin} from './hooks/use-login.tsx';
 import {useSoftNav} from './hooks/use-softnav.ts';
@@ -81,6 +82,7 @@ export function Root() {
 
   return (
     <ListContextProvider>
+      {!contentReady && <LoadingSpinner />}
       <div
         className="app-container flex p-8"
         style={{visibility: contentReady ? 'visible' : 'hidden'}}
