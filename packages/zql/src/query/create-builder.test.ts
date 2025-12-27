@@ -52,13 +52,11 @@ describe('createBuilder', () => {
     expect(postQuery).toBeDefined();
   });
 
-  test('throws for non-existent tables', () => {
+  test('returns undefined for non-existent tables', () => {
     const builder = createBuilder(schema);
 
-    expect(() => {
-      // @ts-expect-error - testing runtime behavior for non-existent table
-      builder.nonExistent;
-    }).toThrow('Table nonExistent does not exist in schema');
+    // @ts-expect-error - testing runtime behavior for non-existent table
+    expect(builder.nonExistent).toBeUndefined();
   });
 
   test('caches query builders', () => {
@@ -154,13 +152,11 @@ describe('createBuilder', () => {
       expect(descs.comment.value).toBe(builder.comment);
     });
 
-    test('toString throws (null prototype, no inherited methods)', () => {
+    test('toString returns undefined (null prototype, no inherited methods)', () => {
       const builder = createBuilder(schema);
 
-      // Accessing inherited methods throws like any other non-existent table
-      expect(() => builder.toString).toThrow(
-        'Table toString does not exist in schema',
-      );
+      // Accessing inherited methods returns undefined like any other non-existent table
+      expect(builder.toString).toBeUndefined();
     });
 
     test('table named toString works correctly', () => {
