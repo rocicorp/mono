@@ -1,4 +1,3 @@
-import {isIntrospectionProperty} from '../../../shared/src/introspection.ts';
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDelegate} from './query-delegate.ts';
@@ -34,14 +33,18 @@ function createBuilderWithQueryFactory<S extends Schema>(
   schema: S,
   queryFactory: (table: keyof S['tables'] & string) => Query<string, S>,
 ): SchemaQuery<S> {
-  return recordProxy(
+  // Create a target with no prototype so accessing unknown properties returns
+  // undefined instead of inherited Object.prototype methods (e.g., toString).
+  // This fixes React 19 dev mode compatibility where accessing $$typeof should
+  // return undefined rather than throwing.
+  const target = Object.assign(
+    Object.create(null),
     schema.tables,
-    (_tableSchema, prop) => queryFactory(prop),
-    prop => {
-      if (isIntrospectionProperty(prop)) {
-        return;
-      }
-      throw new Error(`Table ${prop} does not exist in schema`);
-    },
+  ) as Record<string, unknown>;
+
+  // No onMissing handler needed - unknown properties return undefined due to
+  // null prototype, which is the desired behavior for normal JS object semantics.
+  return recordProxy(target, (_tableSchema, prop) =>
+    queryFactory(prop),
   ) as SchemaQuery<S>;
 }
