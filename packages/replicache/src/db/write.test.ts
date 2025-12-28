@@ -511,7 +511,10 @@ test('putMany with large batch and indexes', async () => {
 
     const entries: Array<[string, FrozenJSONValue]> = [];
     for (let i = 0; i < 100; i++) {
-      entries.push([`key${i.toString().padStart(3, '0')}`, {id: i}]);
+      entries.push([
+        `key${i.toString().padStart(3, '0')}`,
+        deepFreeze({id: i}),
+      ]);
     }
 
     await w.putMany(lc, entries);
