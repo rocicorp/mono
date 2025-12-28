@@ -161,9 +161,21 @@ export function binarySearch(
   key: string,
   entries: BinarySearchEntries,
 ): number {
-  return binarySearchWithFunc(entries.length, i =>
-    compareUTF8(key, entries[i][0]),
+  return binarySearchFrom(key, entries, 0);
+}
+
+/**
+ * Binary search starting from a given index.
+ */
+function binarySearchFrom(
+  key: string,
+  entries: BinarySearchEntries,
+  start: number,
+): number {
+  const result = binarySearchWithFunc(entries.length - start, i =>
+    compareUTF8(key, entries[start + i][0]),
   );
+  return start + result;
 }
 
 export function binarySearchFound(
@@ -263,6 +275,11 @@ abstract class NodeImpl<Value> {
     tree: BTreeWrite,
   ): Promise<NodeImpl<Value>>;
 
+  abstract putMany(
+    entries: ReadonlyArray<Entry<FrozenJSONValue>>,
+    tree: BTreeWrite,
+  ): Promise<NodeImpl<Value>>;
+
   abstract del(
     key: string,
     tree: BTreeWrite,
@@ -320,6 +337,57 @@ export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
     return Promise.resolve(
       this.#splice(tree, i, deleteCount, [key, value, entrySize]),
     );
+  }
+
+  putMany(
+    entries: ReadonlyArray<Entry<FrozenJSONValue>>,
+    tree: BTreeWrite,
+  ): Promise<DataNodeImpl> {
+    if (entries.length === 0) {
+      return Promise.resolve(this);
+    }
+
+    // Merge sorted entries with existing entries
+    const merged: Entry<FrozenJSONValue>[] = [];
+    let i = 0; // index in this.entries
+    let j = 0; // index in entries
+
+    while (i < this.entries.length && j < entries.length) {
+      const existingEntry = this.entries[i];
+      const newEntry = entries[j];
+      const cmp = compareUTF8(existingEntry[0], newEntry[0]);
+
+      if (cmp < 0) {
+        merged.push(existingEntry);
+        i++;
+      } else if (cmp > 0) {
+        merged.push(newEntry);
+        j++;
+      } else {
+        // Same key, new entry wins (update)
+        merged.push(newEntry);
+        i++;
+        j++;
+      }
+    }
+
+    // Add remaining entries
+    while (i < this.entries.length) {
+      merged.push(this.entries[i]);
+      i++;
+    }
+    while (j < entries.length) {
+      merged.push(entries[j]);
+      j++;
+    }
+
+    if (this.isMutable) {
+      this.entries = merged;
+      this._updateNode(tree);
+      return Promise.resolve(this);
+    }
+
+    return Promise.resolve(tree.newDataNodeImpl(merged));
   }
 
   #splice(
@@ -380,6 +448,56 @@ function readonlySplice<T>(
   return arr;
 }
 
+/**
+ * Helper for putMany that merges and partitions a child node.
+ */
+async function putManyMergeAndPartition(
+  tree: BTreeWrite,
+  parentLevel: number,
+  i: number,
+  childNode: DataNodeImpl | InternalNodeImpl,
+  currentEntries: Entry<Hash>[],
+): Promise<Entry<Hash>[]> {
+  const level = parentLevel - 1;
+
+  type IterableHashEntries = Iterable<Entry<Hash>>;
+
+  let values: IterableHashEntries;
+  if (i > 0) {
+    const hash = currentEntries[i - 1][1];
+    const previousSibling = await tree.getNode(hash);
+    values = joinIterables(
+      previousSibling.entries as IterableHashEntries,
+      childNode.entries as IterableHashEntries,
+    );
+  } else if (i < currentEntries.length - 1) {
+    const hash = currentEntries[i + 1][1];
+    const nextSibling = await tree.getNode(hash);
+    values = joinIterables(
+      childNode.entries as IterableHashEntries,
+      nextSibling.entries as IterableHashEntries,
+    );
+  } else {
+    values = childNode.entries as IterableHashEntries;
+  }
+
+  const partitions = partition(
+    values,
+    e => e[2],
+    tree.minSize - tree.chunkHeaderSize,
+    tree.maxSize - tree.chunkHeaderSize,
+  );
+
+  const newEntries: Entry<Hash>[] = [];
+  for (const entries of partitions) {
+    const node = tree.newNodeImpl(entries, level);
+    const newHashEntry = createNewInternalEntryForNode(node, tree.getEntrySize);
+    newEntries.push(newHashEntry);
+  }
+
+  return newEntries;
+}
+
 export class InternalNodeImpl extends NodeImpl<Hash> {
   readonly level: number;
 
@@ -420,6 +538,86 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       tree.getEntrySize,
     );
     return this.#replaceChild(tree, i, newEntry);
+  }
+
+  async putMany(
+    entries: ReadonlyArray<Entry<FrozenJSONValue>>,
+    tree: BTreeWrite,
+  ): Promise<InternalNodeImpl> {
+    if (entries.length === 0) {
+      return this;
+    }
+
+    // Group entries by child index
+    // Since entries are sorted, we can restrict the binary search range
+    const childGroups: Map<number, Entry<FrozenJSONValue>[]> = new Map();
+
+    let searchStart = 0;
+    for (const entry of entries) {
+      const key = entry[0];
+      // Binary search from searchStart to end (entries are sorted)
+      let i = binarySearchFrom(key, this.entries, searchStart);
+      if (i === this.entries.length) {
+        // Insert into last (right most) leaf.
+        i--;
+      }
+      searchStart = i;
+
+      let group = childGroups.get(i);
+      if (!group) {
+        group = [];
+        childGroups.set(i, group);
+      }
+      group.push(entry);
+    }
+
+    // Process each affected child
+    const newEntries = [...this.entries];
+    const childrenToRebalance: Array<{
+      index: number;
+      node: DataNodeImpl | InternalNodeImpl;
+    }> = [];
+
+    for (const [childIndex, childEntries] of childGroups) {
+      const childHash = this.entries[childIndex][1];
+      const oldChildNode = await tree.getNode(childHash);
+      const childNode = await oldChildNode.putMany(childEntries, tree);
+
+      const childNodeSize = childNode.getChildNodeSize(tree);
+      if (childNodeSize > tree.maxSize || childNodeSize < tree.minSize) {
+        childrenToRebalance.push({index: childIndex, node: childNode});
+      } else {
+        const newEntry = createNewInternalEntryForNode(
+          childNode,
+          tree.getEntrySize,
+        );
+        newEntries[childIndex] = newEntry;
+      }
+    }
+
+    // Handle rebalancing - process from right to left to maintain indices
+    if (childrenToRebalance.length > 0) {
+      childrenToRebalance.sort((a, b) => b.index - a.index);
+
+      for (const {index, node} of childrenToRebalance) {
+        const rebalanced = await putManyMergeAndPartition(
+          tree,
+          this.level,
+          index,
+          node,
+          newEntries,
+        );
+        newEntries.splice(index, 1, ...rebalanced);
+      }
+    }
+
+    if (this.isMutable) {
+      this.entries = newEntries;
+      this._updateNode(tree);
+      return this;
+    }
+
+    return tree.newInternalNodeImpl(newEntries, this.level);
   }
 
   /**
