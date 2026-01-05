@@ -26,7 +26,6 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import {formatPg, sql} from '../../z2s/src/sql.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
@@ -35,6 +34,11 @@ import {createLogContext} from './logging.ts';
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
   writeMutationResult: (result: MutationResponse) => Promise<void>;
+  deleteMutationResults: (
+    clientGroupID: string,
+    clientID: string,
+    upToMutationID: number,
+  ) => Promise<void>;
 }
 
 export interface TransactionProviderInput {
@@ -257,7 +261,7 @@ export async function handleMutateRequest<
           await processCleanupResultsMutation(
             dbProvider,
             m,
-            queryParams.schema,
+            queryParams,
             lc,
           );
           // No response added - this is fire-and-forget
@@ -597,7 +601,7 @@ async function processCleanupResultsMutation<
 >(
   dbProvider: D,
   mutation: CustomMutation,
-  upstreamSchema: string,
+  queryParams: Params,
   lc: LogContext,
 ): Promise<void> {
   const args = mutation.args[0] as
@@ -613,28 +617,23 @@ async function processCleanupResultsMutation<
     return;
   }
 
-  // Run in a transaction without LMID tracking (no transactionInput)
-  await dbProvider.transaction(async (tx, _hooks) => {
-    // Access the underlying DB transaction to run raw SQL
-    // This relies on the tx having a dbTransaction property, which is true for ZQLDatabase
-    const dbTx = (tx as {dbTransaction?: {query: (q: string, args: unknown[]) => Promise<unknown>}})
-      .dbTransaction;
-    if (!dbTx) {
-      lc.warn?.(
-        'Cannot access dbTransaction for cleanup - skipping cleanup mutation',
+  // Run in a transaction, using the hook for DB-specific operation
+  await dbProvider.transaction(
+    async (_tx, hooks) => {
+      await hooks.deleteMutationResults(
+        args.clientGroupID,
+        args.clientID,
+        args.upToMutationID,
       );
-      return;
-    }
-
-    const stmt = formatPg(
-      sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
-          WHERE "clientGroupID" = ${args.clientGroupID}
-            AND "clientID" = ${args.clientID}
-            AND "mutationID" <= ${args.upToMutationID}`,
-    );
-
-    await dbTx.query(stmt.text, stmt.values);
-  });
+    },
+    // Provide transactionInput for upstreamSchema access in the hook
+    {
+      upstreamSchema: queryParams.schema,
+      clientGroupID: args.clientGroupID,
+      clientID: '',
+      mutationID: 0,
+    },
+  );
 }
 
 type DatabaseTransactionPhase = 'open' | 'execute';

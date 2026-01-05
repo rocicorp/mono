@@ -125,6 +125,7 @@ function createTrackingDatabase(options: TrackingDatabaseOptions = {}): {
               recordedResults.push(result);
               return Promise.resolve();
             },
+            deleteMutationResults: () => Promise.resolve(),
           }),
         );
         return resultPromise.then(result => {
