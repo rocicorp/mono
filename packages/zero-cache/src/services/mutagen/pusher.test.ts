@@ -509,7 +509,6 @@ describe('pusher service', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     const [url, options] = fetch.mock.calls[0];
-    // URL may have trailing slash before query params depending on normalization
     expect(url).toMatch(/^http:\/\/example\.com\/?\?schema=zero_0&appID=zero$/);
     expect(options.method).toBe('POST');
     expect(options.headers['X-Api-Key']).toBe('api-key');

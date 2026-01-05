@@ -258,12 +258,7 @@ export async function handleMutateRequest<
           `Processing internal mutation '${m.name}' (clientID=${m.clientID})`,
         );
         try {
-          await processCleanupResultsMutation(
-            dbProvider,
-            m,
-            queryParams,
-            lc,
-          );
+          await processCleanupResultsMutation(dbProvider, m, queryParams, lc);
           // No response added - this is fire-and-forget
           processedCount++;
         } catch (error) {
@@ -619,7 +614,7 @@ async function processCleanupResultsMutation<
 
   // Run in a transaction, using the hook for DB-specific operation
   await dbProvider.transaction(
-    async (_tx, hooks) => {
+    async (_, hooks) => {
       await hooks.deleteMutationResults(
         args.clientGroupID,
         args.clientID,
