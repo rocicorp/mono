@@ -12,6 +12,11 @@ import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.ts';
 // deleted soon so this should not happen.
 export const CRUD_MUTATION_NAME = '_zero_crud';
 
+// Internal mutation name for cleaning up mutation results.
+// This mutation is sent from zero-cache to zero-server to delete
+// acknowledged mutation results from the upstream database.
+export const CLEANUP_RESULTS_MUTATION_NAME = '_zero_cleanupResults';
+
 /**
  * Inserts if entity with id does not already exist.
  */

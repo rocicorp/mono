@@ -24,7 +24,6 @@ vi.mock('../server/anonymous-otel-start.ts', () => ({
   recordConnectionAttempted: vi.fn(),
   setActiveClientGroupsGetter: vi.fn(),
 }));
-const mockDB = (() => {}) as unknown as PostgresDB;
 
 import {LogContext} from '@rocicorp/logger';
 import fs from 'node:fs/promises';
@@ -50,7 +49,6 @@ import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ActivityBasedService} from '../services/service.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
-import type {PostgresDB} from '../types/pg.ts';
 import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
 import {Syncer} from './syncer.ts';
 
@@ -113,7 +111,6 @@ function makeFactories(
     },
     pusherFactory: (id: string) => {
       const ret = new PusherService(
-        mockDB,
         {} as ZeroConfig,
         {url: ['http://example.com'], forwardCookies: false},
         lc,
