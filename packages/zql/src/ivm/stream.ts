@@ -27,8 +27,11 @@ export function first<T>(stream: Stream<T>): T | undefined {
   return value;
 }
 
-export function consume<T>(stream: Stream<T>) {
-  [...stream];
+export function consume<T>(stream: Stream<T>): void {
+  for (const _ of stream) {
+    // Required to prevent minifiers (e.g. Terser) from removing this empty loop.
+    void 0;
+  }
 }
 
 export function drainGenerator<Yield, Return>(
