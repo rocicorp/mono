@@ -9,6 +9,7 @@ import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import {
+  CLEANUP_RESULTS_MUTATION_NAME,
   CRUD_MUTATION_NAME,
   type MutationResponse,
 } from '../../zero-protocol/src/push.ts';
@@ -59,6 +60,12 @@ type MutationShape = CustomMutationShape | CrudMutationShape;
 
 type TransactionInput = Parameters<Database<undefined>['transaction']>[1];
 
+type DeleteMutationResultsCall = {
+  clientGroupID: string;
+  clientID: string;
+  upToMutationID: number;
+};
+
 type TrackingDatabaseOptions = {
   readonly lastMutationIDProvider?: (params: {
     readonly mutationID: number | undefined;
@@ -75,15 +82,18 @@ type TrackingDatabaseOptions = {
     readonly transactionCount: number;
     readonly transactionInput?: TransactionInput;
   }) => Error | undefined;
+  readonly deleteMutationResultsErrorProvider?: () => Error | undefined;
 };
 
 function createTrackingDatabase(options: TrackingDatabaseOptions = {}): {
   readonly db: Database<undefined>;
   readonly recordedLMIDs: Array<number | bigint>;
   readonly recordedResults: MutationResponse[];
+  readonly recordedDeletions: DeleteMutationResultsCall[];
 } {
   const recordedLMIDs: Array<number | bigint> = [];
   const recordedResults: MutationResponse[] = [];
+  const recordedDeletions: DeleteMutationResultsCall[] = [];
   let transactionCount = 0;
 
   return {
@@ -105,6 +115,8 @@ function createTrackingDatabase(options: TrackingDatabaseOptions = {}): {
         if (transactionError) {
           return Promise.reject(transactionError);
         }
+        // Track whether updateClientMutationID was called in this transaction
+        let lmidWasUpdated = false;
         const resultPromise = Promise.resolve(
           callback(undefined, {
             updateClientMutationID: () => {
@@ -119,13 +131,21 @@ function createTrackingDatabase(options: TrackingDatabaseOptions = {}): {
                 customLastMutationID !== undefined
                   ? customLastMutationID
                   : BigInt(mutationIDForUpdate);
+              lmidWasUpdated = true;
               return Promise.resolve({lastMutationID});
             },
             writeMutationResult: result => {
               recordedResults.push(result);
               return Promise.resolve();
             },
-            deleteMutationResults: () => Promise.resolve(),
+            deleteMutationResults: (clientGroupID, clientID, upToMutationID) => {
+              const error = options.deleteMutationResultsErrorProvider?.();
+              if (error) {
+                return Promise.reject(error);
+              }
+              recordedDeletions.push({clientGroupID, clientID, upToMutationID});
+              return Promise.resolve();
+            },
           }),
         );
         return resultPromise.then(result => {
@@ -138,8 +158,10 @@ function createTrackingDatabase(options: TrackingDatabaseOptions = {}): {
             throw postTransactionError;
           }
 
-          // we push the LMID here because this is faking the tx committing
-          recordedLMIDs.push(transactionInput?.mutationID ?? 0);
+          // Only record LMID if updateClientMutationID was called (simulates tx commit)
+          if (lmidWasUpdated) {
+            recordedLMIDs.push(transactionInput?.mutationID ?? 0);
+          }
 
           return result;
         });
@@ -147,6 +169,7 @@ function createTrackingDatabase(options: TrackingDatabaseOptions = {}): {
     },
     recordedLMIDs,
     recordedResults,
+    recordedDeletions,
   };
 }
 
@@ -996,3 +1019,126 @@ describe.each(mutatorInvokers)(
     });
   },
 );
+
+describe('cleanup mutations', () => {
+  let consoleWarnSpy: MockInstance<typeof console.warn>;
+
+  beforeEach(() => {
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleWarnSpy.mockRestore();
+  });
+
+  test('cleanup mutation calls deleteMutationResults with correct args', async () => {
+    const {db, recordedLMIDs, recordedDeletions} = createTrackingDatabase();
+
+    const response = await handleMutateRequest(
+      db,
+      () => {
+        throw new Error('should not be called');
+      },
+      baseQuery,
+      makePushBody([
+        {
+          type: 'custom',
+          id: 0,
+          clientID: 'client-1',
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          args: [
+            {
+              clientGroupID: 'cg',
+              clientID: 'client-1',
+              upToMutationID: 5,
+            },
+          ],
+          timestamp: TEST_TIMESTAMP,
+        },
+      ]),
+    );
+
+    expect(recordedDeletions).toEqual([
+      {
+        clientGroupID: 'cg',
+        clientID: 'client-1',
+        upToMutationID: 5,
+      },
+    ]);
+    // No LMID tracking for internal mutations
+    expect(recordedLMIDs).toEqual([]);
+    // Fire-and-forget, no response
+    expect(response).toEqual({mutations: []});
+  });
+
+  test('cleanup mutation does not invoke user callback', async () => {
+    const userCallback = vi.fn();
+    const {db} = createTrackingDatabase();
+
+    await handleMutateRequest(
+      db,
+      userCallback,
+      baseQuery,
+      makePushBody([
+        {
+          type: 'custom',
+          id: 0,
+          clientID: 'client-1',
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          args: [
+            {
+              clientGroupID: 'cg',
+              clientID: 'client-1',
+              upToMutationID: 5,
+            },
+          ],
+          timestamp: TEST_TIMESTAMP,
+        },
+      ]),
+    );
+
+    expect(userCallback).not.toHaveBeenCalled();
+  });
+
+  test('cleanup mutation errors are logged but do not fail the push', async () => {
+    const {db, recordedDeletions} = createTrackingDatabase({
+      deleteMutationResultsErrorProvider: () =>
+        new Error('database connection failed'),
+    });
+
+    const response = await handleMutateRequest(
+      db,
+      () => {
+        throw new Error('should not be called');
+      },
+      baseQuery,
+      makePushBody([
+        {
+          type: 'custom',
+          id: 0,
+          clientID: 'client-1',
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          args: [
+            {
+              clientGroupID: 'cg',
+              clientID: 'client-1',
+              upToMutationID: 5,
+            },
+          ],
+          timestamp: TEST_TIMESTAMP,
+        },
+      ]),
+    );
+
+    // Deletion was not recorded because it failed
+    expect(recordedDeletions).toEqual([]);
+    // Push still succeeds with empty response
+    expect(response).toEqual({mutations: []});
+    // Warning was logged
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'PushProcessor',
+      expect.stringContaining('Failed to process cleanup mutation'),
+      expect.any(String),
+    );
+  });
+});
