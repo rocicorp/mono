@@ -138,7 +138,11 @@ function createTrackingDatabase(options: TrackingDatabaseOptions = {}): {
               recordedResults.push(result);
               return Promise.resolve();
             },
-            deleteMutationResults: (clientGroupID, clientID, upToMutationID) => {
+            deleteMutationResults: (
+              clientGroupID,
+              clientID,
+              upToMutationID,
+            ) => {
               const error = options.deleteMutationResultsErrorProvider?.();
               if (error) {
                 return Promise.reject(error);
