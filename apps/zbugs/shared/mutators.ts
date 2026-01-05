@@ -99,19 +99,25 @@ export const mutators = defineMutators({
     update: defineMutator(
       updateIssueArgsSchema,
       async ({tx, args: change, ctx: authData}) => {
+        // Security: Auth check MUST come before existence check to prevent
+        // information disclosure about private issue existence
+        await assertIsCreatorOrAdmin(tx, authData, builder.issue, change.id);
+
+        // Safe to read now since user is authorized
         const oldIssue = await tx.run(
           builder.issue.where('id', change.id).one(),
         );
 
+        // For admins, assertIsCreatorOrAdmin doesn't verify existence
+        // Use generic error to avoid leaking existence info
         if (!oldIssue) {
           throw new MutationError(
-            `Issue not found`,
-            MutationErrorCode.ENTITY_NOT_FOUND,
+            `Issue not found or not authorized`,
+            MutationErrorCode.NOT_AUTHORIZED,
             change.id,
           );
         }
 
-        await assertIsCreatorOrAdmin(tx, authData, builder.issue, change.id);
         await tx.mutate.issue.update(change);
 
         const isAssigneeChange =
@@ -319,6 +325,8 @@ export const mutators = defineMutators({
       async ({tx, args: {issueID, viewed}, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
+        // Security: Verify user can access the issue before setting view state
+        await assertUserCanSeeIssue(tx, userID, issueID);
         await tx.mutate.viewState.upsert({issueID, userID, viewed});
       },
     ),
