@@ -70,6 +70,20 @@ export class QueryManager implements InspectorDelegate {
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
+
+  // ==========================================================================
+  // FLIGHT CONTROL (EXPERIMENTAL / HACKY)
+  // Limits concurrent in-flight queries to prevent overwhelming the server.
+  // The view-syncer holds a lock for the entire changeDesiredQueries message,
+  // so sending 150 queries in one message blocks pings for ~7.5s causing timeouts.
+  // This works around the issue by sending queries one at a time.
+  // We'd love feedback on whether this is the right approach or if there's
+  // a better way to handle this on the server side.
+  // ==========================================================================
+  #inFlightQueries: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  #waitingQueries: UpQueriesPatchOp[] = [];
+  readonly #maxInFlight = 5;
+  readonly #inFlightTimeoutMs = 2000;
   readonly #mutationTracker: MutationTracker;
   readonly #pendingQueryChanges: UpQueriesPatchOp[] = [];
   readonly #queryChangeThrottleMs: number;
@@ -147,6 +161,14 @@ export class QueryManager implements InspectorDelegate {
   }
 
   #fireGotCallbacks(queryHash: string, got: boolean) {
+    // Flight control: release slot when server responds.
+    // gotCallback fires when server sends data or says "already caught up".
+    if (this.#inFlightQueries.has(queryHash)) {
+      clearTimeout(this.#inFlightQueries.get(queryHash));
+      this.#inFlightQueries.delete(queryHash);
+      this.#sendNextWaiting();
+    }
+
     const gotCallbacks = this.#queries.get(queryHash)?.gotCallbacks ?? [];
     for (const gotCallback of gotCallbacks) {
       gotCallback(got);
@@ -250,7 +272,10 @@ export class QueryManager implements InspectorDelegate {
   }
 
   handleClosed(
-    reason: ClientError<{kind: ClientErrorKind.ClientClosed; message: string}>,
+    reason: ClientError<{
+      kind: ClientErrorKind.ClientClosed;
+      message: string;
+    }>,
   ) {
     if (this.#closedError) {
       return;
@@ -413,13 +438,78 @@ export class QueryManager implements InspectorDelegate {
       this.#batchTimer = undefined;
     }
     if (this.#pendingQueryChanges.length > 0) {
-      this.#send([
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [...this.#pendingQueryChanges],
-        },
-      ]);
+      // Add to waiting queue - filtering/cancellation happens in #sendNextWaiting
+      // right before sending, so late-arriving dels can still cancel puts
+      this.#waitingQueries.push(...this.#pendingQueryChanges);
       this.#pendingQueryChanges.length = 0;
+      this.#sendNextWaiting();
+    }
+  }
+
+  /**
+   * Sends queries from the waiting queue, respecting the in-flight limit.
+   *
+   * This is intentionally simple and maybe too conservative. It:
+   * 1. Skips queries that were cancelled (put followed by del before send)
+   * 2. Sends one query per message so server releases lock between each
+   * 3. Tracks in-flight with timeout fallback in case server never responds
+   *
+   * The 2s timeout is a safety valve - if gotCallback never fires (e.g., server
+   * says "already caught up" without sending a poke), we don't block forever.
+   * This timeout value is arbitrary and might need tuning.
+   *
+   * We're not sure this is the right approach. Alternatives considered:
+   * - Server releasing lock between queries in a batch
+   * - Server processing pings on a separate thread
+   * - Client-side query prioritization/deduplication
+   */
+  #sendNextWaiting() {
+    while (
+      this.#waitingQueries.length > 0 &&
+      this.#inFlightQueries.size < this.#maxInFlight
+    ) {
+      // Build map of latest op per hash to detect cancelled queries
+      // (put followed by del = component unmounted before we sent)
+      const lastOpByHash = new Map<string, 'put' | 'del'>();
+      for (const op of this.#waitingQueries) {
+        if (op.op === 'clear') {
+          throw new Error('Unexpected clear op in waiting queue');
+        }
+        lastOpByHash.set(op.hash, op.op);
+      }
+
+      // Find next sendable query, skipping cancelled ones
+      let op: UpQueriesPatchOp | undefined;
+      while (this.#waitingQueries.length > 0) {
+        op = this.#waitingQueries.shift()!;
+
+        if (op.op === 'clear') {
+          throw new Error('Unexpected clear op in waiting queue');
+        }
+
+        // Skip if final op for this hash is del - query was cancelled
+        if (lastOpByHash.get(op.hash) === 'del') {
+          continue;
+        }
+
+        break;
+      }
+      if (!op) break;
+      // TypeScript doesn't narrow after throw, but we've thrown for all clear ops above
+      if (op.op === 'clear') break;
+
+      // Track as in-flight with timeout fallback
+      const hash = op.hash;
+      const timeoutId = setTimeout(() => {
+        if (this.#inFlightQueries.has(hash)) {
+          this.#inFlightQueries.delete(hash);
+          this.#sendNextWaiting();
+        }
+      }, this.#inFlightTimeoutMs);
+      this.#inFlightQueries.set(hash, timeoutId);
+
+      // Send as individual message so server releases lock between queries
+      this.#send(['changeDesiredQueries', {desiredQueriesPatch: [op]}]);
     }
   }
 
