@@ -17,6 +17,12 @@ export const CRUD_MUTATION_NAME = '_zero_crud';
 // acknowledged mutation results from the upstream database.
 export const CLEANUP_RESULTS_MUTATION_NAME = '_zero_cleanupResults';
 
+export const cleanupResultsArgSchema = v.object({
+  clientGroupID: v.string(),
+  clientID: v.string(),
+  upToMutationID: v.number(),
+});
+
 /**
  * Inserts if entity with id does not already exist.
  */
@@ -245,6 +251,7 @@ export type MutationResult = v.Infer<typeof mutationResultSchema>;
 export type AckMutationMessage = v.Infer<
   typeof ackMutationResponsesMessageSchema
 >;
+export type CleanupResultsArg = v.Infer<typeof cleanupResultsArgSchema>;
 export type {MutationID} from './mutation-id.ts';
 
 export function mapCRUD(

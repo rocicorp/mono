@@ -17,8 +17,10 @@ import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import type {PushFailedBody} from '../../zero-protocol/src/error.ts';
 import {
   CLEANUP_RESULTS_MUTATION_NAME,
+  cleanupResultsArgSchema,
   pushBodySchema,
   pushParamsSchema,
+  type CleanupResultsArg,
   type CustomMutation,
   type Mutation,
   type MutationID,
@@ -599,18 +601,12 @@ async function processCleanupResultsMutation<
   queryParams: Params,
   lc: LogContext,
 ): Promise<void> {
-  const args = mutation.args[0] as
-    | {
-        clientGroupID: string;
-        clientID: string;
-        upToMutationID: number;
-      }
-    | undefined;
-
-  if (!args) {
-    lc.warn?.('Cleanup mutation missing args');
+  const parseResult = v.test(mutation.args[0], cleanupResultsArgSchema);
+  if (!parseResult.ok) {
+    lc.warn?.('Cleanup mutation has invalid args', parseResult.error);
     return;
   }
+  const args: CleanupResultsArg = parseResult.value;
 
   // Run in a transaction, using the hook for DB-specific operation
   await dbProvider.transaction(
