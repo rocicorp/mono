@@ -179,7 +179,6 @@ export default function runWorker(
       ? undefined
       : (id: string) =>
           new PusherService(
-            upstreamDB,
             config,
             {
               ...config.push,

@@ -419,6 +419,11 @@ test('zero-cache --help', () => {
                                                                    This is only consulted by the replication-manager.                                                                    
                                                                    view-syncers receive this information from the replication-manager.                                                   
                                                                                                                                                                                          
+     --litestream-endpoint string                                  optional                                                                                                              
+       ZERO_LITESTREAM_ENDPOINT env                                                                                                                                                      
+                                                                   The S3-compatible endpoint URL to use for the litestream backup. Only required for non-AWS services.                  
+                                                                   The replication-manager and view-syncers must have the same endpoint.                                                 
+                                                                                                                                                                                         
      --litestream-port number                                      optional                                                                                                              
        ZERO_LITESTREAM_PORT env                                                                                                                                                          
                                                                    Port on which litestream exports metrics, used to determine the replication                                           

@@ -216,7 +216,7 @@ describe('change-source/custom', () => {
           publications: '["a","b"]',
         },
       ],
-      ['_zero.changeLog']: [
+      ['_zero.changeLog2']: [
         // changeLog should be set up but empty, since it is
         // unnecessary / wasteful to record the initial state
         // in the change log.

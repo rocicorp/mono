@@ -5,6 +5,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
+  flagToEnv,
   parseOptions,
   type Config,
   type ParseOptions,
@@ -24,6 +25,8 @@ import {
   type NormalizedZeroConfig,
 } from './normalize.ts';
 export type {LogConfig} from '../../../otel/src/log-options.ts';
+
+export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 
 // Technically, any threshold is fine because the point of back pressure
 // is to adjust the rate of incoming messages, and the size of the pending
@@ -198,8 +201,11 @@ const authOptions = {
   },
 };
 
+const makeDeprecationMessage = (flag: string) =>
+  `Use {bold ${flagToEnv(ZERO_ENV_VAR_PREFIX, flag)}} (or {bold --${flag}}) instead.`;
+
 const makeMutatorQueryOptions = (
-  replacement: 'mutate-url' | 'query-url' | undefined,
+  replacement: 'mutate' | 'query' | undefined,
   suffix: string,
 ) => ({
   url: {
@@ -246,7 +252,7 @@ const makeMutatorQueryOptions = (
       `For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern`,
     ],
     ...(replacement
-      ? {deprecated: [`Use {bold ${replacement}} instead.`]}
+      ? {deprecated: [makeDeprecationMessage(`${replacement}-url`)]}
       : {}),
   },
   apiKey: {
@@ -255,7 +261,7 @@ const makeMutatorQueryOptions = (
       `An optional secret used to authorize zero-cache to call the API server handling writes.`,
     ],
     ...(replacement
-      ? {deprecated: [`Use {bold ${replacement}-api-key} instead.`]}
+      ? {deprecated: [makeDeprecationMessage(`${replacement}-api-key`)]}
       : {}),
   },
   forwardCookies: {
@@ -266,16 +272,16 @@ const makeMutatorQueryOptions = (
       `If false, cookies are not forwarded.`,
     ],
     ...(replacement
-      ? {deprecated: [`Use {bold ${replacement}-forward-cookies} instead.`]}
+      ? {deprecated: [makeDeprecationMessage(`${replacement}-forward-cookies`)]}
       : {}),
   },
 });
 
 const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');
-const pushOptions = makeMutatorQueryOptions('mutate-url', 'push mutations');
+const pushOptions = makeMutatorQueryOptions('mutate', 'push mutations');
 const queryOptions = makeMutatorQueryOptions(undefined, 'send synced queries');
 const getQueriesOptions = makeMutatorQueryOptions(
-  'query-url',
+  'query',
   'send synced queries',
 );
 
@@ -657,6 +663,14 @@ export const zeroOptions = {
       ],
     },
 
+    endpoint: {
+      type: v.string().optional(),
+      desc: [
+        `The S3-compatible endpoint URL to use for the litestream backup. Only required for non-AWS services.`,
+        `The {bold replication-manager} and {bold view-syncers} must have the same endpoint.`,
+      ],
+    },
+
     port: {
       type: v.number().optional(),
       desc: [
@@ -839,8 +853,6 @@ export const zeroOptions = {
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;
-
-export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 
 let loadedConfig: Config<typeof zeroOptions> | undefined;
 

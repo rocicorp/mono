@@ -48,6 +48,8 @@ async function main() {
       envNamePrefix: ZERO_ENV_VAR_PREFIX,
       // TODO: This may no longer be necessary since multi-tenant was removed.
       allowPartial: true, // required by server/runner/config.ts
+      // Let the spawned zero-cache process emit deprecation warnings
+      emitDeprecationWarnings: false,
     },
   );
 
@@ -66,12 +68,14 @@ async function main() {
       envNamePrefix: ZERO_ENV_VAR_PREFIX,
       allowUnknown: true,
       includeDefaults: false,
+      emitDeprecationWarnings: false,
     },
   );
   const {env: zeroCacheEnv} = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: ZERO_ENV_VAR_PREFIX,
     allowUnknown: true,
     includeDefaults: false,
+    emitDeprecationWarnings: false,
   });
 
   let permissionsProcess: ChildProcess | undefined;
