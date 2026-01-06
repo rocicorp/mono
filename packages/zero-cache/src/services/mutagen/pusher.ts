@@ -13,18 +13,18 @@ import {
   type PushFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
 import {
+  CLEANUP_RESULTS_MUTATION_NAME,
   pushResponseSchema,
   type MutationID,
   type PushBody,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {compileUrlPattern, fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
-import type {PostgresDB} from '../../types/pg.ts';
-import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
@@ -67,21 +67,22 @@ export class PusherService implements Service, Pusher {
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #pushConfig: ZeroConfig['push'] & {url: string[]};
-  readonly #upstream: PostgresDB;
   readonly #config: Config;
+  readonly #lc: LogContext;
+  readonly #pushURLPatterns: URLPattern[];
   #stopped: Promise<void> | undefined;
   #refCount = 0;
   #isStopped = false;
 
   constructor(
-    upstream: PostgresDB,
     appConfig: Config,
     pushConfig: ZeroConfig['push'] & {url: string[]},
     lc: LogContext,
     clientGroupID: string,
   ) {
     this.#config = appConfig;
-    this.#upstream = upstream;
+    this.#lc = lc.withContext('component', 'pusherService');
+    this.#pushURLPatterns = pushConfig.url.map(compileUrlPattern);
     this.#queue = new Queue();
     this.#pusher = new PushWorker(
       appConfig,
@@ -123,14 +124,52 @@ export class PusherService implements Service, Pusher {
   }
 
   async ackMutationResponses(upToID: MutationID) {
-    // delete the relevant rows from the `mutations` table
-    const sql = this.#upstream;
-    await sql`DELETE FROM ${sql(
-      upstreamSchema({
-        appID: this.#config.app.id,
-        shardNum: this.#config.shard.num,
-      }),
-    )}.mutations WHERE "clientGroupID" = ${this.id} AND "clientID" = ${upToID.clientID} AND "mutationID" <= ${upToID.id}`;
+    const url = this.#pushConfig.url[0];
+    if (!url) {
+      // No push URL configured, skip cleanup
+      return;
+    }
+
+    const cleanupBody: PushBody = {
+      clientGroupID: this.id,
+      mutations: [
+        {
+          type: MutationType.Custom,
+          id: 0, // Not tracked - this is fire-and-forget
+          clientID: upToID.clientID,
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          args: [
+            {
+              clientGroupID: this.id,
+              clientID: upToID.clientID,
+              upToMutationID: upToID.id,
+            },
+          ],
+          timestamp: Date.now(),
+        },
+      ],
+      pushVersion: 1,
+      timestamp: Date.now(),
+      requestID: `cleanup-${this.id}-${upToID.clientID}-${upToID.id}`,
+    };
+
+    try {
+      await fetchFromAPIServer(
+        pushResponseSchema,
+        'push',
+        this.#lc,
+        url,
+        false,
+        this.#pushURLPatterns,
+        {appID: this.#config.app.id, shardNum: this.#config.shard.num},
+        {apiKey: this.#pushConfig.apiKey},
+        cleanupBody,
+      );
+    } catch (e) {
+      this.#lc.warn?.('Failed to send cleanup mutation', {
+        error: getErrorMessage(e),
+      });
+    }
   }
 
   ref() {

@@ -83,6 +83,20 @@ export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
           );
           await dbTx.query(formatted.text, formatted.values);
         },
+
+        async deleteMutationResults(
+          targetClientGroupID,
+          targetClientID,
+          upToMutationID,
+        ) {
+          const formatted = formatPg(
+            sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
+                WHERE "clientGroupID" = ${targetClientGroupID}
+                  AND "clientID" = ${targetClientID}
+                  AND "mutationID" <= ${upToMutationID}`,
+          );
+          await dbTx.query(formatted.text, formatted.values);
+        },
       });
     });
   }
