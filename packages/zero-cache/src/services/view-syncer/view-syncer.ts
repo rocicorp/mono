@@ -114,7 +114,6 @@ export type SyncContext = {
   readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
-  readonly schemaVersion: number | null;
   readonly tokenData: TokenData | undefined;
   readonly httpCookie: string | undefined;
 };
@@ -612,7 +611,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         profileID,
         wsID,
         baseCookie,
-        schemaVersion,
         tokenData,
         httpCookie,
         protocolVersion,
@@ -678,7 +676,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         wsID,
         this.#shard,
         baseCookie,
-        schemaVersion,
         downstream,
       );
       this.#clients.get(clientID)?.close(`replaced by wsID: ${wsID}`);
@@ -1608,11 +1605,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         removeQueries,
       );
       const clients = this.#getClients();
-      const pokers = startPoke(
-        clients,
-        newVersion,
-        this.#pipelines.currentSchemaVersions(),
-      );
+      const pokers = startPoke(clients, newVersion);
       for (const patch of queryPatches) {
         await pokers.addPatch(patch);
       }
@@ -1755,13 +1748,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return startAsyncSpan(tracer, 'vs.#catchupClients', async span => {
       current ??= cvr.version;
       const clients = this.#getClients();
-      const pokers =
-        usePokers ??
-        startPoke(
-          clients,
-          cvr.version,
-          this.#pipelines.currentSchemaVersions(),
-        );
+      const pokers = usePokers ?? startPoke(clients, cvr.version);
       span.setAttribute('numClients', clients.length);
 
       const catchupFrom = clients
@@ -1953,7 +1940,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const pokers = startPoke(
         this.#getClients(cvr.version),
         updater.updatedVersion(),
-        this.#pipelines.currentSchemaVersions(),
       );
       lc.debug?.(`applying ${numChanges} to advance to ${version}`);
       const hashToIDs = createHashToIDs(cvr);

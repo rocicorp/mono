@@ -310,35 +310,6 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
       tag: 'create-table',
       spec: {
         schema: '123',
-        name: 'schemaVersions',
-        primaryKey: ['lock'],
-        columns: {
-          lock: {pos: 0, dataType: 'bool', notNull: true},
-          minSupportedVersion: {pos: 1, dataType: 'int'},
-          maxSupportedVersion: {pos: 2, dataType: 'int'},
-        },
-      },
-    },
-  ],
-  [
-    'data',
-    {
-      tag: 'create-index',
-      spec: {
-        name: '123_schemaVersions_key',
-        schema: '123',
-        tableName: 'schemaVersions',
-        columns: {lock: 'ASC'},
-        unique: true,
-      },
-    },
-  ],
-  [
-    'data',
-    {
-      tag: 'create-table',
-      spec: {
-        schema: '123',
         name: 'permissions',
         primaryKey: ['lock'],
         columns: {
@@ -376,18 +347,6 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         permissions: permissions as unknown as JSONValue,
         hash: h128(JSON.stringify(permissions)).toString(),
       },
-    },
-  ],
-  [
-    'data',
-    {
-      tag: 'insert',
-      relation: {
-        schema: '123',
-        name: 'schemaVersions',
-        keyColumns: ['lock'],
-      },
-      new: {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
     },
   ],
   ['commit', {tag: 'commit'}, {watermark: '101'}],

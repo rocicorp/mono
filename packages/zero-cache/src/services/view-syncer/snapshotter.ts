@@ -14,7 +14,6 @@ import {
   type RowKey,
   type RowValue,
 } from '../../types/row-key.ts';
-import {type SchemaVersions} from '../../types/schema-versions.ts';
 import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
@@ -259,12 +258,6 @@ export class ResetPipelinesSignal extends Error {
   }
 }
 
-function getSchemaVersions(db: StatementRunner, appID: string): SchemaVersions {
-  return db.get(
-    `SELECT minSupportedVersion, maxSupportedVersion FROM "${appID}.schemaVersions"`,
-  );
-}
-
 class Snapshot {
   static create(
     lc: LogContext,
@@ -295,7 +288,6 @@ class Snapshot {
   readonly db: StatementRunner;
   readonly #appID: string;
   readonly version: string;
-  readonly schemaVersions: SchemaVersions;
 
   constructor(db: StatementRunner, appID: string) {
     db.beginConcurrent();
@@ -307,12 +299,11 @@ class Snapshot {
     this.db = db;
     this.#appID = appID;
     this.version = stateVersion;
-    this.schemaVersions = getSchemaVersions(db, appID);
   }
 
   numChangesSince(prevVersion: string) {
     const {count} = this.db.get(
-      'SELECT COUNT(*) AS count FROM "_zero.changeLog" WHERE stateVersion > ?',
+      'SELECT COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ?',
       prevVersion,
     );
     return count;
@@ -320,7 +311,7 @@ class Snapshot {
 
   changesSince(prevVersion: string) {
     const cached = this.db.statementCache.get(
-      'SELECT * FROM "_zero.changeLog" WHERE stateVersion > ?',
+      'SELECT * FROM "_zero.changeLog2" WHERE stateVersion > ? ORDER BY stateVersion ASC, pos ASC',
     );
     return {
       changes: cached.statement.iterate(prevVersion),

@@ -8,9 +8,14 @@ import {
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Writable} from '../../../../shared/src/writable.ts';
+import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import {
+  ProtocolError,
+  type TransformFailedBody,
+} from '../../../../zero-protocol/src/error.ts';
 import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.ts';
 import type {
   PokePartBody,
@@ -27,10 +32,6 @@ import {
   getLogLevel,
   wrapWithProtocolError,
 } from '../../types/error-with-level.ts';
-import {
-  getProtocolErrorIfSchemaVersionNotSupported,
-  type SchemaVersions,
-} from '../../types/schema-versions.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
@@ -44,11 +45,6 @@ import {
   type PutQueryPatch,
   type RowID,
 } from './schema/types.ts';
-import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
-import {
-  ProtocolError,
-  type TransformFailedBody,
-} from '../../../../zero-protocol/src/error.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -89,11 +85,8 @@ const NOOP: PokeHandler = {
 export function startPoke(
   clients: ClientHandler[],
   tentativeVersion: CVRVersion,
-  schemaVersions?: SchemaVersions, // absent for config-only pokes
 ): PokeHandler {
-  const pokers = clients.map(c =>
-    c.startPoke(tentativeVersion, schemaVersions),
-  );
+  const pokers = clients.map(c => c.startPoke(tentativeVersion));
 
   // Promise.allSettled() ensures that a failed (e.g. disconnected) client
   // does not prevent other clients from receiving the pokes. However, the
@@ -127,7 +120,6 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
-  readonly #schemaVersion: number | null;
 
   readonly #pokeTime = getOrCreateHistogram('sync', 'poke.time', {
     description:
@@ -154,7 +146,6 @@ export class ClientHandler {
     wsID: string,
     shard: ShardID,
     baseCookie: string | null,
-    schemaVersion: number | null,
     downstream: Subscription<Downstream>,
   ) {
     lc.debug?.('new client handler');
@@ -166,7 +157,6 @@ export class ClientHandler {
     this.#lc = lc;
     this.#downstream = downstream;
     this.#baseVersion = cookieToVersion(baseCookie);
-    this.#schemaVersion = schemaVersion;
   }
 
   version(): NullableCVRVersion {
@@ -191,24 +181,9 @@ export class ClientHandler {
     this.#downstream.cancel();
   }
 
-  startPoke(
-    tentativeVersion: CVRVersion,
-    schemaVersions?: SchemaVersions, // absent for config-only pokes
-  ): PokeHandler {
+  startPoke(tentativeVersion: CVRVersion): PokeHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
-
-    if (schemaVersions && this.#schemaVersion) {
-      const schemaVersionError = getProtocolErrorIfSchemaVersionNotSupported(
-        this.#schemaVersion,
-        schemaVersions,
-      );
-
-      if (schemaVersionError) {
-        this.fail(schemaVersionError);
-        return NOOP;
-      }
-    }
 
     if (cmpVersions(this.#baseVersion, tentativeVersion) >= 0) {
       lc.info?.(`already caught up, not sending poke.`);
@@ -222,9 +197,6 @@ export class ClientHandler {
     const start = performance.now();
 
     const pokeStart: PokeStartBody = {pokeID, baseCookie};
-    if (schemaVersions) {
-      pokeStart.schemaVersions = schemaVersions;
-    }
 
     let pokeStarted = false;
     let body: PokePartBody | undefined;

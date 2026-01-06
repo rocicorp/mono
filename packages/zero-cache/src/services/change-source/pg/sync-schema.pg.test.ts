@@ -22,8 +22,8 @@ const SHARD_NUM = 9;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 6,
-  schemaVersion: 6,
+  dataVersion: 7,
+  schemaVersion: 7,
   minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
@@ -48,20 +48,9 @@ describe('change-streamer/pg/sync-schema', () => {
       name: 'initial tables',
       upstreamPostState: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
-        [`${APP_ID}.schemaVersions`]: [
-          {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-        ],
       },
       replicaPostState: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
-        [`${APP_ID}.schemaVersions`]: [
-          {
-            lock: 1,
-            minSupportedVersion: 1,
-            maxSupportedVersion: 1,
-            ['_0_version']: WATERMARK_REGEX,
-          },
-        ],
         ['_zero.versionHistory']: [CURRENT_SCHEMA_VERSIONS],
       },
     },
@@ -81,20 +70,9 @@ describe('change-streamer/pg/sync-schema', () => {
       },
       upstreamPostState: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
-        [`${APP_ID}.schemaVersions`]: [
-          {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
-        ],
       },
       replicaPostState: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
-        [`${APP_ID}.schemaVersions`]: [
-          {
-            lock: 1,
-            minSupportedVersion: 1,
-            maxSupportedVersion: 1,
-            ['_0_version']: WATERMARK_REGEX,
-          },
-        ],
         ['_zero.versionHistory']: [CURRENT_SCHEMA_VERSIONS],
         users: [
           {userID: 123, handle: '@zoot', ['_0_version']: WATERMARK_REGEX},
@@ -146,7 +124,7 @@ describe('change-streamer/pg/sync-schema', () => {
         expectMatchingObjectsInTables(replica, c.replicaPostState);
 
         expectLiteTables(replica, {
-          ['_zero.changeLog']: [],
+          ['_zero.changeLog2']: [],
         });
 
         // Slot should still exist.

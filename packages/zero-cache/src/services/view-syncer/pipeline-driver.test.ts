@@ -3,6 +3,13 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  boolean,
+  number,
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
@@ -11,6 +18,7 @@ import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
+import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
@@ -22,14 +30,6 @@ import {getMutationResultsQuery} from './cvr.ts';
 import {PipelineDriver, type Timer} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 import {TimeSliceTimer} from './view-syncer.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  boolean,
-  number,
-  string,
-  table,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
-import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 
 const NO_TIME_ADVANCEMENT_TIMER: Timer = {
   elapsedLap: () => 0,
@@ -68,15 +68,6 @@ describe('view-syncer/pipeline-driver', () => {
     initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
-      CREATE TABLE "zeroz.schemaVersions" (
-        -- Note: Using "INT" to avoid the special semantics of "INTEGER PRIMARY KEY" in SQLite.
-        "lock"                INT PRIMARY KEY,
-        "minSupportedVersion" INT,
-        "maxSupportedVersion" INT,
-        _0_version            TEXT NOT NULL
-      );
-      INSERT INTO "zeroz.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-        VALUES (1, 1, 1, '123');
       CREATE TABLE "${mutationsTableName}" (
         "clientGroupID"  TEXT,
         "clientID"       TEXT,
@@ -364,10 +355,6 @@ describe('view-syncer/pipeline-driver', () => {
     uniques: 'id',
     [mutationsTableName]: ['clientGroupID', 'clientID', 'mutationID'],
   });
-  const zeroMessages = new ReplicationMessages(
-    {schemaVersions: 'lock'},
-    'zeroz',
-  );
 
   function startTimer() {
     return new TimeSliceTimer().startWithoutYielding();
@@ -595,15 +582,6 @@ describe('view-syncer/pipeline-driver', () => {
           "queryHash": "hash1",
           "row": undefined,
           "rowKey": {
-            "id": "21",
-          },
-          "table": "comments",
-          "type": "remove",
-        },
-        {
-          "queryHash": "hash1",
-          "row": undefined,
-          "rowKey": {
             "id": "1",
           },
           "table": "issues",
@@ -614,6 +592,15 @@ describe('view-syncer/pipeline-driver', () => {
           "row": undefined,
           "rowKey": {
             "id": "10",
+          },
+          "table": "comments",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "21",
           },
           "table": "comments",
           "type": "remove",
@@ -1566,56 +1553,6 @@ describe('view-syncer/pipeline-driver', () => {
         mutationID: 1,
       }),
     ).toMatchInlineSnapshot(`undefined`);
-  });
-
-  test('schemaVersions change and insert', () => {
-    pipelines.init(clientSchema);
-    [
-      ...pipelines.addQuery(
-        'hash1',
-        'queryID1',
-        ISSUES_AND_COMMENTS,
-        startTimer(),
-      ),
-    ];
-
-    replicator.processTransaction(
-      '134',
-      messages.insert('issues', {id: '4', closed: 0}),
-      zeroMessages.update('schemaVersions', {
-        lock: true,
-        minSupportedVersion: 1,
-        maxSupportedVersion: 2,
-      }),
-    );
-
-    expect(pipelines.currentSchemaVersions()).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 1,
-    });
-
-    expect(changes()).toMatchInlineSnapshot(`
-      [
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "134",
-            "closed": false,
-            "id": "4",
-          },
-          "rowKey": {
-            "id": "4",
-          },
-          "table": "issues",
-          "type": "add",
-        },
-      ]
-    `);
-
-    expect(pipelines.currentSchemaVersions()).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 2,
-    });
   });
 
   test('multiple advancements', () => {
