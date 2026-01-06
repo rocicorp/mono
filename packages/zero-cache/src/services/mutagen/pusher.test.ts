@@ -6,7 +6,6 @@ import type {
   PushBody,
   PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
-import type {PostgresDB} from '../../types/pg.ts';
 import {combinePushes, PusherService} from './pusher.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import type {PushFailedBody} from '../../../../zero-protocol/src/error.ts';
@@ -27,7 +26,6 @@ const config = {
 
 const clientID = 'test-cid';
 const wsID = 'test-wsid';
-const mockDB = (() => {}) as unknown as PostgresDB;
 
 describe('combine pushes', () => {
   test('empty array', () => {
@@ -299,7 +297,6 @@ const lc = createSilentLogContext();
 describe('pusher service', () => {
   test('the service can be stopped', async () => {
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -323,7 +320,6 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -356,7 +352,6 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -388,7 +383,6 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -439,7 +433,6 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -466,7 +459,6 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -489,15 +481,14 @@ describe('pusher service', () => {
     );
   });
 
-  test('ack mutation responses', async () => {
+  test('ack mutation responses sends cleanup mutation via HTTP', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockResolvedValue({
       ok: true,
+      json: () => Promise.resolve({mutations: []}),
     });
 
-    const mockDB = vi.fn(x => ({ident: x})) as unknown as PostgresDB;
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -516,30 +507,79 @@ describe('pusher service', () => {
 
     await pusher.stop();
 
-    expect(mockDB).toHaveBeenNthCalledWith(1, 'zero_0');
-    expect(mockDB).toHaveBeenNthCalledWith(
-      2,
-      [
-        'DELETE FROM ',
-        '.mutations WHERE "clientGroupID" = ',
-        ' AND "clientID" = ',
-        ' AND "mutationID" <= ',
-        '',
-      ],
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toMatch(/^http:\/\/example\.com\/?\?schema=zero_0&appID=zero$/);
+    expect(options.method).toBe('POST');
+    expect(options.headers['X-Api-Key']).toBe('api-key');
+
+    const body = JSON.parse(options.body);
+    expect(body.clientGroupID).toBe('cgid');
+    expect(body.mutations).toHaveLength(1);
+    expect(body.mutations[0].name).toBe('_zero_cleanupResults');
+    expect(body.mutations[0].args[0]).toEqual({
+      clientGroupID: 'cgid',
+      clientID: 'test-client',
+      upToMutationID: 42,
+    });
+  });
+
+  test('ack mutation responses handles network errors gracefully', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockRejectedValue(new Error('Network error'));
+
+    const pusher = new PusherService(
+      config,
       {
-        ident: 'zero_0',
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: true,
       },
+      lc,
       'cgid',
-      'test-client',
-      42,
     );
+    void pusher.run();
+
+    // Should not throw - errors are logged and swallowed
+    await pusher.ackMutationResponses({
+      clientID: 'test-client',
+      id: 42,
+    });
+
+    await pusher.stop();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('ack mutation responses skips cleanup when no push URL configured', async () => {
+    const fetch = (global.fetch = vi.fn());
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: [],
+        forwardCookies: true,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+
+    await pusher.ackMutationResponses({
+      clientID: 'test-client',
+      id: 42,
+    });
+
+    await pusher.stop();
+
+    // No fetch call should be made
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 
 describe('initConnection', () => {
   test('initConnection returns a stream', () => {
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -557,7 +597,6 @@ describe('initConnection', () => {
 
   test('initConnection throws if it was already called for the same clientID and wsID', () => {
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -576,7 +615,6 @@ describe('initConnection', () => {
 
   test('initConnection destroys prior stream for same client when wsID changes', async () => {
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -604,7 +642,6 @@ describe('initConnection', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://default.com', 'http://custom.com/push'],
@@ -639,7 +676,6 @@ describe('initConnection', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://default.com'],
@@ -672,7 +708,6 @@ describe('pusher streaming', () => {
 
   test('returns ok for subsequent pushes from same client', () => {
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -692,7 +727,6 @@ describe('pusher streaming', () => {
 
   test('cleanup removes client subscription', () => {
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -718,7 +752,6 @@ describe('pusher streaming', () => {
 
   test('new websocket for same client creates new downstream', async () => {
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -754,7 +787,6 @@ describe('pusher errors', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -899,7 +931,6 @@ describe('pusher errors', () => {
     fetch.mockRejectedValue('string error');
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -960,7 +991,6 @@ describe('pusher errors', () => {
     });
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -1017,7 +1047,6 @@ describe('pusher errors', () => {
     fetch.mockResolvedValue(mockResponse);
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -1083,7 +1112,6 @@ describe('pusher errors', () => {
     fetch.mockRejectedValue(new Error('Network error'));
 
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -1121,7 +1149,6 @@ describe('pusher errors', () => {
 
   test('rejects disallowed custom URL', async () => {
     const pusher = new PusherService(
-      mockDB,
       config,
       {
         url: ['http://allowed.com'],
