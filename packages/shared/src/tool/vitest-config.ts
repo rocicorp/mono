@@ -27,6 +27,12 @@ export default defineConfig({
   define,
   esbuild: {
     define,
+    target: 'es2022',
+    supported: {
+      // Force transpilation of 'using' keyword even though es2022 is the target
+      // because webkit/Safari doesn't support it yet
+      using: false,
+    },
   },
 
   test: {
