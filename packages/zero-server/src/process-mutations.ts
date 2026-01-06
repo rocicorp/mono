@@ -617,11 +617,10 @@ async function processCleanupResultsMutation<
         args.upToMutationID,
       );
     },
-    // Provide transactionInput for upstreamSchema access in the hook
     {
       upstreamSchema: queryParams.schema,
       clientGroupID: args.clientGroupID,
-      clientID: '',
+      clientID: args.clientID,
       mutationID: 0,
     },
   );
