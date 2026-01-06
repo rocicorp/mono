@@ -11,7 +11,11 @@ import {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
-import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
+import {
+  CLEANUP_RESULTS_MUTATION_NAME,
+  type MutationResult,
+  type PushBody,
+} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import {OutOfOrderMutation} from './process-mutations.ts';
@@ -894,6 +898,141 @@ test('mutators with arbitrary depth nesting', async () => {
       },
     },
   ]);
+});
+
+describe('cleanup mutations', () => {
+  test('cleanup mutation deletes mutation results from database', async () => {
+    const processor = new PushProcessor(
+      new ZQLDatabase(new PostgresJSConnection(pg), {
+        tables: {},
+        relationships: {},
+        version: 1,
+      }),
+    );
+
+    // First, create some mutation results by processing failing mutations
+    await processor.process(
+      mutators,
+      params,
+      makePush([1, 2, 3], Array(3).fill(customMutatorKey('|', ['foo', 'baz']))),
+    );
+
+    // Verify results were written
+    await checkMutationsTable(pg, [
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 1n,
+        result: {error: 'app', message: 'application error'},
+      },
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 2n,
+        result: {error: 'app', message: 'application error'},
+      },
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 3n,
+        result: {error: 'app', message: 'application error'},
+      },
+    ]);
+    await checkClientsTable(pg, 3);
+
+    // Send cleanup mutation to delete results up to mutation 2
+    const cleanupResult = await processor.process(mutators, params, {
+      pushVersion: 1,
+      clientGroupID: 'cgid',
+      requestID: 'cleanup-rid',
+      schemaVersion: 1,
+      timestamp: 42,
+      mutations: [
+        {
+          type: 'custom',
+          clientID: 'cid',
+          id: 0,
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          timestamp: 42,
+          args: [
+            {
+              clientGroupID: 'cgid',
+              clientID: 'cid',
+              upToMutationID: 2,
+            },
+          ],
+        },
+      ],
+    });
+
+    // Verify cleanup returns empty mutations (fire-and-forget)
+    expect(cleanupResult).toEqual({mutations: []});
+
+    // Verify only mutation 3 remains (mutations 1 and 2 were deleted)
+    await checkMutationsTable(pg, [
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 3n,
+        result: {error: 'app', message: 'application error'},
+      },
+    ]);
+
+    // Verify LMID was not affected
+    await checkClientsTable(pg, 3);
+  });
+
+  test('cleanup mutation does not invoke user mutators', async () => {
+    const callTracker = {called: false};
+    const trackingMutators = {
+      foo: {
+        bar: () => {
+          callTracker.called = true;
+          return Promise.resolve();
+        },
+        baz: () => Promise.reject(new Error('application error')),
+      },
+    };
+
+    const processor = new PushProcessor(
+      new ZQLDatabase(new PostgresJSConnection(pg), {
+        tables: {},
+        relationships: {},
+        version: 1,
+      }),
+    );
+
+    // Send cleanup mutation
+    await processor.process(trackingMutators, params, {
+      pushVersion: 1,
+      clientGroupID: 'cgid',
+      requestID: 'cleanup-rid',
+      schemaVersion: 1,
+      timestamp: 42,
+      mutations: [
+        {
+          type: 'custom',
+          clientID: 'cid',
+          id: 0,
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          timestamp: 42,
+          args: [
+            {
+              clientGroupID: 'cgid',
+              clientID: 'cid',
+              upToMutationID: 5,
+            },
+          ],
+        },
+      ],
+    });
+
+    // Verify user mutator was NOT called
+    expect(callTracker.called).toBe(false);
+
+    // Verify no LMID was set (cleanup doesn't track LMID)
+    await checkClientsTable(pg, undefined);
+  });
 });
 
 async function checkClientsTable(
