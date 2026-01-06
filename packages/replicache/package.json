@@ -47,7 +47,7 @@
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.25.10",
     "expo-sqlite": ">=15",
-    "playwright": "^1.53.2",
+    "playwright": "^1.57.0",
     "shared": "0.0.0",
     "typescript": "~5.9.3",
     "vitest": "4.0.15"
