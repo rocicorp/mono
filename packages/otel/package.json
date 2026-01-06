@@ -11,7 +11,10 @@
     "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.0"
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-metrics": "^2.2.0",
+    "@opentelemetry/core": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0"
   },
   "prettier": "@rocicorp/prettier-config",
   "devDependencies": {
