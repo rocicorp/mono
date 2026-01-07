@@ -4,9 +4,13 @@ import {nanoid} from 'nanoid';
 import {isJSONValue, type JSONObject} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {type ZeroEvent} from '../../../zero-events/src/index.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
+
+const MAX_PUBLISH_ATTEMPTS = 6;
+const INITIAL_PUBLISH_BACKOFF_MS = 500;
 
 type PublisherFn = (lc: LogContext, event: ZeroEvent) => Promise<void>;
 
@@ -72,11 +76,20 @@ export function initEventSink(
 
   publishFn = async (lc, event) => {
     const cloudEvent = createCloudEvent(event);
-    lc.info?.(`Publishing CloudEvent: ${cloudEvent.type}`, cloudEvent);
-    try {
-      await emit(cloudEvent);
-    } catch (e) {
-      lc.warn?.(`Error publishing ${cloudEvent.type}`, e);
+    lc.debug?.(`Publishing CloudEvent: ${cloudEvent.type}`);
+
+    for (let i = 0; i < MAX_PUBLISH_ATTEMPTS; i++) {
+      if (i > 0) {
+        // exponential backoff on retries
+        await sleep(INITIAL_PUBLISH_BACKOFF_MS * 2 ** (i - 1));
+      }
+      try {
+        await emit(cloudEvent);
+        lc.info?.(`Published CloudEvent: ${cloudEvent.type}`, cloudEvent);
+        return;
+      } catch (e) {
+        lc.warn?.(`Error publishing ${cloudEvent.type} (attempt ${i + 1})`, e);
+      }
     }
   };
 }

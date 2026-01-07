@@ -66,9 +66,9 @@
     "urlpattern-polyfill": "^10.1.0",
     "ws": "^8.18.1",
     "zero-protocol": "0.0.0",
+    "zero-types": "0.0.0",
     "zql": "0.0.0",
-    "zqlite": "0.0.0",
-    "zero-types": "0.0.0"
+    "zqlite": "0.0.0"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
@@ -79,6 +79,7 @@
     "@types/strip-ansi": "^3.0.0",
     "@types/ws": "^8.5.12",
     "@vitest/runner": "4.0.15",
+    "mockttp": "^4.2.1",
     "nock": "^14.0.4",
     "otel": "0.0.0",
     "shared": "0.0.0",
