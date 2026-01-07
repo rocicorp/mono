@@ -159,10 +159,10 @@ export function getErrorConnectionTransition(
       case ClientErrorKind.PingTimeout:
       case ClientErrorKind.PullTimeout:
       case ClientErrorKind.Hidden:
+      case ClientErrorKind.UnexpectedBaseCookie:
         return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
       // Fatal errors that should transition to error state
-      case ClientErrorKind.UnexpectedBaseCookie:
       case ClientErrorKind.Internal:
       case ClientErrorKind.InvalidMessage:
       case ClientErrorKind.UserDisconnect:
