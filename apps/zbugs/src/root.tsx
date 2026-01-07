@@ -70,6 +70,18 @@ export function Root() {
 
   useSoftNav();
 
+  // Apply light mode theme based on query parameter
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const isLightMode = searchParams.has('light');
+
+    if (isLightMode) {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }, []);
+
   const login = useLogin();
   const connectionState = useConnectionState();
 
