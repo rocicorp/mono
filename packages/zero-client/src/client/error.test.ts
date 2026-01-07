@@ -327,7 +327,7 @@ describe('getErrorConnectionTransition', () => {
 
   test('returns error status for fatal client errors', () => {
     const error = new ClientError({
-      kind: ClientErrorKind.UnexpectedBaseCookie,
+      kind: ClientErrorKind.Internal,
       message: 'fatal',
     });
 
