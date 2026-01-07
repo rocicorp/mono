@@ -77,6 +77,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #appID: string;
   readonly #logConfig: LogConfig;
   readonly #cgStorage: ClientGroupStorage;
+  readonly #config: ZeroConfig;
 
   #loadedPermissions: LoadedPermissions | null = null;
 
@@ -89,6 +90,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     writeAuthzStorage: DatabaseStorage,
   ) {
     this.#appID = appID;
+    this.#config = config;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
     this.#schema = getSchema(this.#lc, replica);
@@ -113,6 +115,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       this.#statementRunner,
       this.#appID,
       this.#loadedPermissions,
+      this.#config,
     ).permissions;
   }
 
