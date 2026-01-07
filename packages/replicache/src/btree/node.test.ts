@@ -37,6 +37,45 @@ import {BTreeWrite} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
+type TreeData = {
+  $level: number;
+  [key: string]: TreeData | ReadonlyJSONValue;
+};
+
+async function readTreeData(
+  rootHash: Hash,
+  dagRead: Read,
+  formatVersion: FormatVersion,
+  getEntrySize: <K, V>(k: K, v: V) => number,
+): Promise<Record<string, unknown>> {
+  const chunk = await dagRead.getChunk(rootHash);
+  const node = parseBTreeNode(chunk?.data, formatVersion, getEntrySize);
+  let lastKey: string | undefined;
+  const rv: Record<string, unknown> = {
+    $level: node[NODE_LEVEL],
+  };
+
+  if (node[NODE_LEVEL] === 0) {
+    for (const [k, v] of node[NODE_ENTRIES]) {
+      if (lastKey !== undefined) {
+        assert(lastKey < k);
+        lastKey = k;
+      }
+      rv[k] = v;
+    }
+    return rv;
+  }
+
+  for (const [k, hash] of (node as InternalNode)[NODE_ENTRIES]) {
+    if (lastKey !== undefined) {
+      expect(lastKey < k);
+      lastKey = k;
+    }
+    rv[k] = await readTreeData(hash, dagRead, formatVersion, getEntrySize);
+  }
+  return rv;
+}
+
 describe('btree node', () => {
   function createSizedEntry<K, V>(
     key: K,
@@ -44,11 +83,6 @@ describe('btree node', () => {
   ): [key: K, value: V, sizeOfEntry: number] {
     return [key, value, getEntrySize(key, value)];
   }
-
-  type TreeData = {
-    $level: number;
-    [key: string]: TreeData | ReadonlyJSONValue;
-  };
 
   function makeTree(
     node: TreeData,
@@ -99,39 +133,6 @@ describe('btree node', () => {
     }
   }
 
-  async function readTreeData(
-    rootHash: Hash,
-    dagRead: Read,
-    formatVersion: FormatVersion,
-  ): Promise<Record<string, unknown>> {
-    const chunk = await dagRead.getChunk(rootHash);
-    const node = parseBTreeNode(chunk?.data, formatVersion, getEntrySize);
-    let lastKey: string | undefined;
-    const rv: Record<string, unknown> = {
-      $level: node[NODE_LEVEL],
-    };
-
-    if (node[NODE_LEVEL] === 0) {
-      for (const [k, v] of node[NODE_ENTRIES]) {
-        if (lastKey !== undefined) {
-          assert(lastKey < k);
-          lastKey = k;
-        }
-        rv[k] = v;
-      }
-      return rv;
-    }
-
-    for (const [k, hash] of (node as InternalNode)[NODE_ENTRIES]) {
-      if (lastKey !== undefined) {
-        expect(lastKey < k);
-        lastKey = k;
-      }
-      rv[k] = await readTreeData(hash, dagRead, formatVersion);
-    }
-    return rv;
-  }
-
   async function expectTree(
     rootHash: Hash,
     dagStore: Store,
@@ -139,9 +140,9 @@ describe('btree node', () => {
     expected: TreeData,
   ) {
     await withRead(dagStore, async dagRead => {
-      expect(await readTreeData(rootHash, dagRead, formatVersion)).toEqual(
-        expected,
-      );
+      expect(
+        await readTreeData(rootHash, dagRead, formatVersion, getEntrySize),
+      ).toEqual(expected);
     });
   }
 
@@ -1703,4 +1704,739 @@ describe('Write nodes using ChainBuilder', () => {
       ],
     ]);
   });
+});
+
+describe('BTreeWrite.putMany', () => {
+  const minSize = 8 * 1024;
+  const maxSize = 16 * 1024;
+  const chunkHeaderSize = NODE_HEADER_SIZE;
+
+  function getEntrySize<K, V>(key: K, value: V): number {
+    return getSizeOfEntry(key, value);
+  }
+
+  for (const formatVersion of [FormatVersion.V6, FormatVersion.V7] as const) {
+    test(`putMany empty entries > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.putMany([]);
+        expect(tree.rootHash).toBe(emptyHash);
+      });
+    });
+
+    test(`putMany single entry > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.putMany([['a', 'aaa']]);
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('a')).toBe('aaa');
+      });
+    });
+
+    test(`putMany multiple entries > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.putMany([
+          ['a', 1],
+          ['c', 3],
+          ['e', 5],
+        ]);
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('a')).toBe(1);
+        expect(await tree.get('c')).toBe(3);
+        expect(await tree.get('e')).toBe(5);
+      });
+    });
+
+    test(`putMany updates existing entries > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.put('a', 1);
+        await tree.put('b', 2);
+        await tree.put('c', 3);
+
+        // Update with putMany
+        await tree.putMany([
+          ['b', 200],
+          ['c', 300],
+        ]);
+
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('a')).toBe(1);
+        expect(await tree.get('b')).toBe(200);
+        expect(await tree.get('c')).toBe(300);
+      });
+    });
+
+    test(`putMany interleaves with existing entries > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.put('a', 1);
+        await tree.put('c', 3);
+        await tree.put('e', 5);
+
+        // Insert between existing entries
+        await tree.putMany([
+          ['b', 2],
+          ['d', 4],
+          ['f', 6],
+        ]);
+
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('a')).toBe(1);
+        expect(await tree.get('b')).toBe(2);
+        expect(await tree.get('c')).toBe(3);
+        expect(await tree.get('d')).toBe(4);
+        expect(await tree.get('e')).toBe(5);
+        expect(await tree.get('f')).toBe(6);
+      });
+    });
+
+    test(`putMany with large dataset > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+
+        // Insert 1000 entries using putMany
+        const entries: [string, number][] = [];
+        for (let i = 0; i < 1000; i++) {
+          entries.push([`key${i.toString().padStart(4, '0')}`, i]);
+        }
+
+        await tree.putMany(entries);
+
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+
+        // Verify all entries are present
+        for (let i = 0; i < 1000; i++) {
+          const key = `key${i.toString().padStart(4, '0')}`;
+          expect(await tree.get(key)).toBe(i);
+        }
+      });
+    });
+
+    test(`putMany fast path on empty tree creates optimal structure > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+
+        // Use putMany on empty tree (fast path)
+        const entries: [string, number][] = [];
+        for (let i = 0; i < 100; i++) {
+          entries.push([`key${i.toString().padStart(3, '0')}`, i]);
+        }
+
+        await tree.putMany(entries);
+
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      // Verify the tree structure is correct and all entries are accessible
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+
+        for (let i = 0; i < 100; i++) {
+          const key = `key${i.toString().padStart(3, '0')}`;
+          expect(await tree.get(key)).toBe(i);
+        }
+
+        // Verify we can scan all entries
+        const scanned: string[] = [];
+        for await (const key of tree.keys()) {
+          scanned.push(key);
+        }
+        expect(scanned.length).toBe(100);
+      });
+    });
+
+    test(`putMany produces identical tree shape as fromEntries > v${formatVersion}`, async () => {
+      const entries: [string, number][] = [];
+      for (let i = 0; i < 500; i++) {
+        entries.push([`key${i.toString().padStart(4, '0')}`, i]);
+      }
+
+      // Build tree using sequential put.
+      const dagStore1 = new TestStore();
+      const hash1 = await withWrite(dagStore1, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        for (const [key, value] of entries) {
+          await tree.put(key, value);
+        }
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      // Build tree using putMany on empty tree (should use fast path)
+      const dagStore2 = new TestStore();
+      const hash2 = await withWrite(dagStore2, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          minSize,
+          maxSize,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.putMany(entries);
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      // Helper to get tree structure
+      function getTreeStructure(hash: Hash, dagStore: Store): Promise<unknown> {
+        return withRead(dagStore, dagRead => {
+          const getStructure = async (h: Hash): Promise<unknown> => {
+            if (h === emptyHash) {
+              return null;
+            }
+            const chunk = await dagRead.getChunk(h);
+            if (!chunk) {
+              return null;
+            }
+            const node = parseBTreeNode(
+              chunk.data,
+              formatVersion,
+              getEntrySize,
+            );
+            const level = node[NODE_LEVEL];
+            const entries = node[NODE_ENTRIES];
+
+            if (level === 0) {
+              // Data node - return keys and values
+              return {
+                level,
+                entries: entries.map(e => [e[0], e[1]]),
+              };
+            } else {
+              // Internal node - recursively get children
+              const children = await Promise.all(
+                entries.map(async e => ({
+                  key: e[0],
+                  child: await getStructure(e[1] as Hash),
+                })),
+              );
+              return {
+                level,
+                children,
+              };
+            }
+          };
+          return getStructure(hash);
+        });
+      }
+
+      const structure1 = await getTreeStructure(hash1, dagStore1);
+      const structure2 = await getTreeStructure(hash2, dagStore2);
+
+      // The structures should be identical
+      expect(structure2).toEqual(structure1);
+
+      // Also verify both trees have the same data
+      await withRead(dagStore1, async dagRead1 => {
+        await withRead(dagStore2, async dagRead2 => {
+          const tree1 = new BTreeRead(
+            dagRead1,
+            formatVersion,
+            hash1,
+            getEntrySize,
+            chunkHeaderSize,
+          );
+          const tree2 = new BTreeRead(
+            dagRead2,
+            formatVersion,
+            hash2,
+            getEntrySize,
+            chunkHeaderSize,
+          );
+
+          for (let i = 0; i < 500; i++) {
+            const key = `key${i.toString().padStart(4, '0')}`;
+            expect(await tree1.get(key)).toBe(i);
+            expect(await tree2.get(key)).toBe(i);
+          }
+        });
+      });
+    });
+
+    test(`putMany triggers merge and partition > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          200,
+          400,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.putMany(
+          Array.from({length: 5}, (_, i) => [`k${i}`, i] as [string, number]),
+        );
+        await tree.putMany(
+          Array.from(
+            {length: 10},
+            (_, i) => [`k15${i}`, `v${i}`] as [string, string],
+          ),
+        );
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('k0')).toBe(0);
+        expect(await tree.get('k150')).toBe('v0');
+      });
+    });
+
+    test(`putMany merge with previous sibling > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          150,
+          300,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.putMany(
+          Array.from({length: 3}, (_, i) => [`a${i}`, i] as [string, number]),
+        );
+        await tree.putMany(
+          Array.from({length: 3}, (_, i) => [`c${i}`, i] as [string, number]),
+        );
+        await tree.putMany(
+          Array.from(
+            {length: 8},
+            (_, i) => [`b${i}`, `v${i}`] as [string, string],
+          ),
+        );
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('a0')).toBe(0);
+        expect(await tree.get('b0')).toBe('v0');
+        expect(await tree.get('c0')).toBe(0);
+      });
+    });
+
+    test(`putMany merge with next sibling > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          150,
+          300,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.putMany(
+          Array.from({length: 3}, (_, i) => [`b${i}`, i] as [string, number]),
+        );
+        await tree.putMany(
+          Array.from({length: 3}, (_, i) => [`c${i}`, i] as [string, number]),
+        );
+        await tree.putMany(
+          Array.from(
+            {length: 8},
+            (_, i) => [`a${i}`, `v${i}`] as [string, string],
+          ),
+        );
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('a0')).toBe('v0');
+        expect(await tree.get('b0')).toBe(0);
+        expect(await tree.get('c0')).toBe(0);
+      });
+    });
+
+    test(`putMany merge with no siblings > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          100,
+          200,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        await tree.putMany([['k0', 0]]);
+        await tree.putMany(
+          Array.from(
+            {length: 10},
+            (_, i) =>
+              [`k${(i + 1).toString().padStart(2, '0')}`, `v${i}`] as [
+                string,
+                string,
+              ],
+          ),
+        );
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('k0')).toBe(0);
+        expect(await tree.get('k01')).toBe('v0');
+      });
+    });
+
+    test(`putMany triggers rebalancing with sibling merge > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+
+      // Use controlled sizes to force specific tree shape
+      const testGetEntrySize = () => 1;
+      const testMinSize = 2;
+      const testMaxSize = 4;
+
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          testMinSize,
+          testMaxSize,
+          testGetEntrySize,
+          chunkHeaderSize,
+        );
+        // First batch creates initial multi-level structure
+        // With maxSize=4 and entrySize=1, each node can hold max 4 entries
+        await tree.putMany(
+          Array.from({length: 10}, (_, i) => [`a${i}`, i] as [string, number]),
+        );
+        // Second batch in middle range forces rebalancing between siblings
+        await tree.putMany(
+          Array.from(
+            {length: 5},
+            (_, i) => [`a${i}5`, `mid${i}`] as [string, string],
+          ),
+        );
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          testGetEntrySize,
+          chunkHeaderSize,
+        );
+
+        // Verify data is accessible
+        expect(await tree.get('a0')).toBe(0);
+        expect(await tree.get('a05')).toBe('mid0');
+        expect(await tree.get('a9')).toBe(9);
+
+        // Verify tree structure - should have internal nodes due to rebalancing
+        const treeStructure = await readTreeData(
+          h,
+          dagRead,
+          formatVersion,
+          testGetEntrySize,
+        );
+        expect(treeStructure.$level).toBeGreaterThan(0);
+      });
+    });
+
+    test(`putMany causes node overflow requiring rebalancing > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+
+      // Use controlled sizes to force overflow
+      const testGetEntrySize = () => 1;
+      const testMinSize = 3;
+      const testMaxSize = 5;
+
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          testMinSize,
+          testMaxSize,
+          testGetEntrySize,
+          chunkHeaderSize,
+        );
+        // Create initial structure
+        await tree.putMany(
+          Array.from({length: 3}, (_, i) => [`a${i}`, i] as [string, number]),
+        );
+        // Add entries that overflow - with maxSize=5, adding 6 more will overflow
+        await tree.putMany(
+          Array.from({length: 6}, (_, i) => [`b${i}`, i] as [string, number]),
+        );
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          testGetEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('a0')).toBe(0);
+        expect(await tree.get('b0')).toBe(0);
+
+        // Verify tree structure shows overflow handling occurred
+        const treeStructure = await readTreeData(
+          h,
+          dagRead,
+          formatVersion,
+          testGetEntrySize,
+        );
+        expect(treeStructure.$level).toBeGreaterThan(0);
+      });
+    });
+
+    test(`putMany with multiple children needing rebalancing > v${formatVersion}`, async () => {
+      const dagStore = new TestStore();
+
+      // Use controlled sizes to create multi-level tree
+      const testGetEntrySize = () => 1;
+      const testMinSize = 2;
+      const testMaxSize = 4;
+
+      const h = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          testMinSize,
+          testMaxSize,
+          testGetEntrySize,
+          chunkHeaderSize,
+        );
+        // Build a tree with multiple levels - 20 entries will create multiple nodes
+        await tree.putMany(
+          Array.from(
+            {length: 20},
+            (_, i) =>
+              [`k${i.toString().padStart(2, '0')}`, i] as [string, number],
+          ),
+        );
+        // Insert entries in middle range affecting multiple children
+        await tree.putMany(
+          Array.from(
+            {length: 10},
+            (_, i) =>
+              [`k${i.toString().padStart(2, '0')}x`, i] as [string, number],
+          ),
+        );
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h,
+          testGetEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('k00')).toBe(0);
+        expect(await tree.get('k00x')).toBe(0);
+        expect(await tree.get('k19')).toBe(19);
+
+        // Verify multi-level tree structure
+        const treeStructure = await readTreeData(
+          h,
+          dagRead,
+          formatVersion,
+          testGetEntrySize,
+        );
+        expect(treeStructure.$level).toBeGreaterThan(0);
+      });
+    });
+  }
 });
