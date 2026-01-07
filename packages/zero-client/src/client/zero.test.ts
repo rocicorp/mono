@@ -98,6 +98,7 @@ import {
   createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   DEFAULT_PING_TIMEOUT_MS,
+  getInternalReplicacheImplForTesting,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
   type Zero,
@@ -4478,4 +4479,160 @@ test('We should send a deleteClient when a Zero instance is closed', async () =>
   });
 
   await z2.close();
+});
+
+describe('Zero replicache refresh integration', () => {
+  describe('enableRefresh', () => {
+    test('enableRefresh is false when Connecting or Connected, true when Error', async () => {
+      const z = zeroForTest();
+      expect(z.enableRefresh).toBeInstanceOf(Function);
+
+      // Initial state: Connecting
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+      // enableRefresh should be false during connecting
+      expect(z.enableRefresh()).toBe(false);
+
+      // Connected
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+      // enableRefresh should be false when connected
+      expect(z.enableRefresh()).toBe(false);
+
+      // Trigger error to transition to Error state
+      await z.triggerError({
+        kind: ErrorKind.Internal,
+        message: 'test error',
+        origin: ErrorOrigin.ZeroCache,
+      });
+
+      await z.waitForConnectionStatus(ConnectionStatus.Error);
+      expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+      expect(z.enableRefresh()).toBe(true);
+
+      // Reconnect
+      await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+      await z.connection.connect();
+
+      // Status should transition to Connecting
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+      // enableRefresh should be false during connecting
+      expect(z.enableRefresh()).toBe(false);
+
+      // Connected again
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+      // enableRefresh should be false when connected
+      expect(z.enableRefresh()).toBe(false);
+    });
+
+    test('enableRefresh is true when Disconnected', async () => {
+      const z = zeroForTest();
+
+      // Ensure connected first
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+      expect(z.enableRefresh()).toBe(false);
+
+      // Trigger Offline error to transition to Disconnected
+      z.connectionManager.disconnected(
+        new ClientError({
+          kind: ClientErrorKind.Offline,
+          message: 'offline',
+        }),
+      );
+
+      await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+      expect(z.connectionStatus).toBe(ConnectionStatus.Disconnected);
+
+      // enableRefresh should be true
+      expect(z.enableRefresh()).toBe(true);
+    });
+
+    test('enableRefresh is true when NeedsAuth', async () => {
+      const z = zeroForTest();
+
+      // Ensure connected first
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+      expect(z.enableRefresh()).toBe(false);
+
+      // Trigger AuthInvalidated error to transition to NeedsAuth
+      await z.triggerError({
+        kind: ErrorKind.AuthInvalidated,
+        message: 'session expired',
+        origin: ErrorOrigin.Server,
+      });
+
+      await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+      expect(z.connectionStatus).toBe(ConnectionStatus.NeedsAuth);
+
+      // enableRefresh should be true
+      expect(z.enableRefresh()).toBe(true);
+    });
+  });
+
+  describe('scheduleRefresh', () => {
+    test('calls scheduleRefresh on disconnect', async () => {
+      const z = zeroForTest();
+      const rep = getInternalReplicacheImplForTesting(z);
+
+      // Spy on scheduleRefresh
+      const scheduleRefreshSpy = vi
+        .spyOn(rep, 'scheduleRefresh')
+        .mockResolvedValue();
+
+      // Ensure connected first
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+      // Check initial state
+      expect(scheduleRefreshSpy).not.toHaveBeenCalled();
+
+      // Trigger disconnect via error
+      await z.triggerError({
+        kind: ErrorKind.Internal,
+        message: 'test error',
+        origin: ErrorOrigin.ZeroCache,
+      });
+
+      await z.waitForConnectionStatus(ConnectionStatus.Error);
+
+      // verify called
+      expect(scheduleRefreshSpy).toHaveBeenCalled();
+    });
+
+    test('does not call scheduleRefresh on NO_STATUS_TRANSITION disconnects', async () => {
+      const z = zeroForTest();
+      const rep = getInternalReplicacheImplForTesting(z);
+
+      // Spy on scheduleRefresh
+      const scheduleRefreshSpy = vi
+        .spyOn(rep, 'scheduleRefresh')
+        .mockResolvedValue();
+
+      // Ensure connected first
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+      // Check initial state
+      expect(scheduleRefreshSpy).not.toHaveBeenCalled();
+
+      // Trigger disconnect via error that causes NO_STATUS_TRANSITION
+      // ErrorKind.ServerOverloaded returns NO_STATUS_TRANSITION
+      await z.triggerError({
+        kind: ErrorKind.ServerOverloaded,
+        message: 'slow down',
+        origin: ErrorOrigin.ZeroCache,
+      });
+
+      // Status should transition to Connecting because NO_STATUS_TRANSITION calls connecting()
+      // Wait for state change
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+
+      // verify not called
+      expect(scheduleRefreshSpy).not.toHaveBeenCalled();
+    });
+  });
 });

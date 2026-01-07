@@ -193,6 +193,7 @@ export type TestingContext = {
   socketResolver: () => Resolver<WebSocket>;
   connectionManager: () => ConnectionManager;
   queryDelegate: () => QueryDelegate;
+  enableRefresh: () => boolean;
 };
 
 export const exposedToTestingSymbol = Symbol();
@@ -604,7 +605,8 @@ export class Zero<
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
-      enablePullAndPushInOpen: false, // Zero calls push in its connection management code
+      enablePullAndPushInOpen: false,
+      enableRefresh: () => this.#enableRefresh(),
       onClientsDeleted: deletedClients =>
         this.#deleteClientsManager.onClientsDeleted(deletedClients),
       zero: new ZeroRep(
@@ -795,8 +797,16 @@ export class Zero<
         socketResolver: () => this.#socketResolver,
         connectionManager: () => this.#connectionManager,
         queryDelegate: () => this.#zeroContext,
+        enableRefresh: () => this.#enableRefresh(),
       };
     }
+  }
+
+  #enableRefresh(): boolean {
+    return (
+      !this.#connectionManager.is(ConnectionStatus.Connected) &&
+      !this.#connectionManager.is(ConnectionStatus.Connecting)
+    );
   }
 
   #expose() {
@@ -1694,6 +1704,10 @@ export class Zero<
     this.#pokeHandler.handleDisconnect();
 
     const transition = getErrorConnectionTransition(reason);
+
+    if (transition.status !== NO_STATUS_TRANSITION) {
+      this.#rep.scheduleRefresh();
+    }
 
     switch (transition.status) {
       case ConnectionStatus.NeedsAuth:

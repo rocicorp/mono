@@ -182,6 +182,11 @@ export interface ReplicacheImplOptions {
   enableScheduledRefresh?: boolean | undefined;
 
   /**
+   * Defaults to `() => true`.
+   */
+  enableRefresh?: () => boolean;
+
+  /**
    * Defaults to true.
    */
   enablePullAndPushInOpen?: boolean | undefined;
@@ -324,6 +329,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly #persistLock = new Lock();
   readonly #enableScheduledPersist: boolean;
   readonly #enableScheduledRefresh: boolean;
+  readonly #enableRefresh: () => boolean;
   readonly #enablePullAndPushInOpen: boolean;
   #persistScheduler = new ProcessScheduler(
     () => this.persist(),
@@ -435,6 +441,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableMutationRecovery = true,
       enableScheduledPersist = true,
       enableScheduledRefresh = true,
+      enableRefresh = () => true,
       enablePullAndPushInOpen = true,
       enableClientGroupForking = true,
       onClientsDeleted = () => promiseVoid,
@@ -452,6 +459,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     this.#enableScheduledPersist = enableScheduledPersist;
     this.#enableScheduledRefresh = enableScheduledRefresh;
+    this.#enableRefresh = enableRefresh;
     this.#enablePullAndPushInOpen = enablePullAndPushInOpen;
 
     this.#lc = createLogContext(logLevel, logSinks, {name});
@@ -1215,6 +1223,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
+    if (!this.#enableRefresh()) {
+      return;
+    }
     let refreshResult: Awaited<ReturnType<typeof refresh>>;
     try {
       refreshResult = await refresh(
@@ -1285,11 +1296,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#lc.debug?.('Handling persist', persistInfo);
     const clientGroupID = await this.#clientGroupIDPromise;
     if (persistInfo.clientGroupID === clientGroupID) {
-      void this.#scheduleRefresh();
+      void this.scheduleRefresh();
     }
   }
 
-  async #scheduleRefresh(): Promise<void> {
+  async scheduleRefresh(): Promise<void> {
     if (!this.#enableScheduledRefresh) {
       return;
     }
