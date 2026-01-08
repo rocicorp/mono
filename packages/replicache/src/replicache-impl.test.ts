@@ -2,7 +2,6 @@ import {describe, expect, test, vi} from 'vitest';
 import {ReplicacheImpl} from './replicache-impl.ts';
 import {initReplicacheTesting} from './test-util.ts';
 import type {ReplicacheOptions} from './replicache-options.ts';
-import {consoleLogSink} from '@rocicorp/logger';
 import {refresh} from './persist/refresh.ts';
 
 vi.mock('./persist/refresh.ts', () => ({
@@ -18,7 +17,6 @@ describe('ReplicacheImpl', () => {
     const options: ReplicacheOptions<{}> = {
       name,
       pullURL,
-      logSinks: [consoleLogSink],
     };
 
     let refreshEnabled = false;

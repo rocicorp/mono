@@ -605,7 +605,7 @@ export class Zero<
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
-      enablePullAndPushInOpen: false,
+      enablePullAndPushInOpen: false, // Zero calls push in its connection management code
       enableRefresh: () => this.#enableRefresh(),
       onClientsDeleted: deletedClients =>
         this.#deleteClientsManager.onClientsDeleted(deletedClients),
@@ -803,6 +803,10 @@ export class Zero<
   }
 
   #enableRefresh(): boolean {
+    // Don't refresh if connected or connecting to avoid receiving new
+    // snapshots from refresh before receiving the new snapshot via poke from
+    // the connection (which results in a "unexpected base cookie for poke"
+    // error).
     return (
       !this.#connectionManager.is(ConnectionStatus.Connected) &&
       !this.#connectionManager.is(ConnectionStatus.Connecting)
