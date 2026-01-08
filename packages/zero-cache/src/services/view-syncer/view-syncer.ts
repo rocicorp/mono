@@ -134,7 +134,7 @@ export interface ViewSyncer {
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void>;
 
-  deleteClients(ctx: SyncContext, msg: DeleteClientsMessage): Promise<void>;
+  deleteClients(ctx: SyncContext, msg: DeleteClientsMessage): Promise<string[]>;
   inspect(context: SyncContext, msg: InspectUpMessage): Promise<void>;
 }
 
@@ -306,7 +306,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     taskID: string,
     clientGroupID: string,
     cvrDb: PostgresDB,
-    upstreamDb: PostgresDB | undefined,
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
@@ -337,7 +336,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       shard,
       taskID,
       clientGroupID,
@@ -759,8 +757,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async deleteClients(
     ctx: SyncContext,
     msg: DeleteClientsMessage,
-  ): Promise<void> {
-    await this.#runInLockForClient(
+  ): Promise<string[]> {
+    return await this.#runInLockForClient(
       ctx,
       [msg[0], {deleted: msg[1]}],
       (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
@@ -877,7 +875,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * Runs the given `fn` to process the `msg` from within the `#lock`,
    * optionally adding the `newClient` if supplied.
    */
-  #runInLockForClient<B, M extends [cmd: string, B] = [string, B]>(
+  #runInLockForClient<B, R = void, M extends [cmd: string, B] = [string, B]>(
     ctx: SyncContext,
     msg: M,
     fn: (
@@ -885,9 +883,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       clientID: string,
       body: B,
       cvr: CVRSnapshot,
-    ) => Promise<void>,
+    ) => Promise<R>,
     newClient?: ClientHandler,
-  ): Promise<void> {
+  ): Promise<R> {
     this.#lc.debug?.('viewSyncer.#runInLockForClient');
     const {clientID, wsID} = ctx;
     const [cmd, body] = msg;
@@ -901,8 +899,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       `vs.#runInLockForClient(${cmd})`,
       async () => {
         let client: ClientHandler | undefined;
+        let result: R | undefined;
         try {
-          await this.#runInLockWithCVR((lc, cvr) => {
+          await this.#runInLockWithCVR(async (lc, cvr) => {
             lc = lc
               .withContext('clientID', clientID)
               .withContext('wsID', wsID)
@@ -928,7 +927,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
 
             lc.debug?.(cmd, body);
-            return fn(lc, clientID, body, cvr);
+            result = await fn(lc, clientID, body, cvr);
           });
         } catch (e) {
           const lc = this.#lc
@@ -944,6 +943,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             throw e;
           }
         }
+        return result as R;
       },
     );
   }
@@ -1070,6 +1070,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       this.#scheduleExpireEviction(lc, cvr);
+      return deletedClientIDs;
     });
 
   #scheduleExpireEviction(lc: LogContext, cvr: CVRSnapshot): void {

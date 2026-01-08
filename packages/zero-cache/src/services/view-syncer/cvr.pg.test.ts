@@ -261,7 +261,6 @@ describe('view-syncer/cvr', () => {
     const pgStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -299,7 +298,6 @@ describe('view-syncer/cvr', () => {
     const pgStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -331,7 +329,6 @@ describe('view-syncer/cvr', () => {
     const pgStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -406,7 +403,6 @@ describe('view-syncer/cvr', () => {
     const pgStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -479,7 +475,6 @@ describe('view-syncer/cvr', () => {
     const pgStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -508,7 +503,6 @@ describe('view-syncer/cvr', () => {
     const pgStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -630,7 +624,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -735,7 +728,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -790,7 +782,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -836,7 +827,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -890,7 +880,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -986,7 +975,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1581,7 +1569,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1673,7 +1660,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1706,7 +1692,6 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1869,7 +1854,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -2090,7 +2074,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -2357,7 +2340,6 @@ describe('view-syncer/cvr', () => {
     let cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -2548,15 +2530,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    cvrStore = new CVRStore(
-      lc,
-      cvrDb,
-      upstreamDb,
-      SHARD,
-      'my-task',
-      'abc123',
-      ON_FAILURE,
-    );
+    cvrStore = new CVRStore(lc, cvrDb, SHARD, 'my-task', 'abc123', ON_FAILURE);
     cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual(updated);
 
@@ -2924,7 +2898,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -3176,7 +3149,6 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -3444,7 +3416,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -3586,7 +3557,6 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -3855,7 +3825,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4127,7 +4096,6 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4214,7 +4182,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4285,7 +4252,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4431,7 +4397,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4495,7 +4460,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4641,7 +4605,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4766,7 +4729,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4912,7 +4874,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -5069,7 +5030,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -5136,7 +5096,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -5234,7 +5193,6 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         cvrDb,
-        upstreamDb,
         SHARD,
         'my-task',
         'abc123',
@@ -5410,7 +5368,6 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         cvrDb,
-        upstreamDb,
         SHARD,
         'my-task',
         'abc123',
@@ -5546,7 +5503,6 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         cvrDb,
-        upstreamDb,
         SHARD,
         'my-task',
         'abc123',
@@ -5730,7 +5686,6 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         cvrDb,
-        upstreamDb,
         SHARD,
         'my-task',
         'abc123',
@@ -5896,7 +5851,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -6247,7 +6201,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -6667,7 +6620,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -6784,7 +6736,6 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
-      upstreamDb,
       SHARD,
       'my-task',
       'abc123',

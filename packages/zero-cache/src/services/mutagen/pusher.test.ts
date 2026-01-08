@@ -617,6 +617,7 @@ describe('pusher service', () => {
     expect(body.mutations).toHaveLength(1);
     expect(body.mutations[0].name).toBe('_zero_cleanupResults');
     expect(body.mutations[0].args[0]).toEqual({
+      type: 'single',
       clientGroupID: 'cgid',
       clientID: 'test-client',
       upToMutationID: 42,
