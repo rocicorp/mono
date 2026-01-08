@@ -1,10 +1,47 @@
-export * from '../../zero-protocol/src/application-error.ts';
-export * from '../../zql/src/mutate/custom.ts';
-export * from './custom.ts';
+export {
+  ApplicationError,
+  isApplicationError,
+  type ApplicationErrorOptions,
+} from '../../zero-protocol/src/application-error.ts';
+export type {
+  ServerColumnSchema,
+  ServerSchema,
+  ServerTableSchema,
+} from '../../zero-types/src/server-schema.ts';
+export type {
+  AnyTransaction,
+  ClientTransaction,
+  DBConnection,
+  DBTransaction,
+  Location,
+  MutateCRUD,
+  Row,
+  ServerTransaction,
+  Transaction,
+  TransactionBase,
+  TransactionReason,
+} from '../../zql/src/mutate/custom.ts';
+export {
+  CRUDMutatorFactory,
+  makeSchemaCRUD,
+  type CustomMutatorDefs,
+} from './custom.ts';
 export {executePostgresQuery} from './pg-query-executor.ts';
-export * from './process-mutations.ts';
-export * from './push-processor.ts';
-export * from './queries/process-queries.ts';
+export {
+  getMutation,
+  handleMutateRequest,
+  handleMutationRequest,
+  OutOfOrderMutation,
+  type Database,
+  type ExtractTransactionType,
+  type Params,
+  type Parsed,
+  type TransactFn,
+  type TransactFnCallback,
+  type TransactionProviderHooks,
+  type TransactionProviderInput,
+} from './process-mutations.ts';
+export {PushProcessor} from './push-processor.ts';
 export {
   handleGetQueriesRequest,
   handleQueryRequest,
