@@ -325,8 +325,6 @@ export const mutators = defineMutators({
       async ({tx, args: {issueID, viewed}, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
-        // Security: Verify user can access the issue before setting view state
-        await assertUserCanSeeIssue(tx, userID, issueID);
         await tx.mutate.viewState.upsert({issueID, userID, viewed});
       },
     ),
