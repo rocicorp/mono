@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1765532961953,
+  "lastUpdate": 1767907222724,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54925,6 +54925,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31858,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f073ac735adf005639d8fc30c3dc7428a63b9b9e",
+          "message": "chore(zero-cache): update zero-sqlite (#5395)\n\nUpdating `@rocicorp/zero-sqlite3` to `1.0.14`.",
+          "timestamp": "2026-01-08T21:10:10Z",
+          "tree_id": "0c47ef375d1f7706f374de932a306236acbd6070",
+          "url": "https://github.com/rocicorp/mono/commit/f073ac735adf005639d8fc30c3dc7428a63b9b9e"
+        },
+        "date": 1767907210465,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302413,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111385,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31840,
             "unit": "bytes"
           }
         ]
