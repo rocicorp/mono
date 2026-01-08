@@ -46,13 +46,18 @@ export async function assertIsCreatorOrAdmin(
   if (isAdmin(authData)) {
     return;
   }
-  const creatorID = must(
-    await tx.run(query.where('id', id).one()),
-    `entity ${id} does not exist`,
-  ).creatorID;
-  if (authData.sub !== creatorID) {
+  const entity = await tx.run(query.where('id', id).one());
+  // Security: Use generic error message to avoid leaking entity existence
+  if (!entity) {
     throw new MutationError(
-      `User ${authData.sub} is not an admin or the creator of the target entity`,
+      `Not authorized to access this resource`,
+      MutationErrorCode.NOT_AUTHORIZED,
+      id,
+    );
+  }
+  if (authData.sub !== entity.creatorID) {
+    throw new MutationError(
+      `Not authorized to access this resource`,
       MutationErrorCode.NOT_AUTHORIZED,
       id,
     );
