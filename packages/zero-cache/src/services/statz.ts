@@ -262,6 +262,7 @@ function osStats(out: Writable) {
       ['total mem', os.totalmem()],
       ['free mem', os.freemem()],
       ['cpus', os.cpus().length],
+      ['available parallelism', os.availableParallelism()],
       ['platform', os.platform()],
       ['arch', os.arch()],
       ['release', os.release()],
