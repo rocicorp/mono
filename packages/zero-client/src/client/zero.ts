@@ -1710,7 +1710,7 @@ export class Zero<
     const transition = getErrorConnectionTransition(reason);
 
     if (transition.status !== NO_STATUS_TRANSITION) {
-      this.#rep.scheduleRefresh();
+      void this.#rep.scheduleRefresh();
     }
 
     switch (transition.status) {
