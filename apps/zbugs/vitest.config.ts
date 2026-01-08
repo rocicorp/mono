@@ -20,6 +20,10 @@ export function configForVersion(version: number, url: string) {
     resolve: {
       alias: [
         {
+          find: '@rocicorp/zero/test-helpers',
+          replacement: resolve(packagesDir, 'zero/src/test-helpers.ts'),
+        },
+        {
           find: '@rocicorp/zero',
           replacement: resolve(packagesDir, 'zero/src/zero.ts'),
         },
@@ -47,7 +51,23 @@ export function configForVersion(version: number, url: string) {
 
 export function configForNoPg(url: string) {
   const name = nameFromURL(url);
+  const rootDir = dirname(fileURLToPath(url));
+  const packagesDir = resolve(rootDir, '../../packages');
+
   return mergeConfig(config, {
+    plugins: [tsconfigPaths()],
+    resolve: {
+      alias: [
+        {
+          find: '@rocicorp/zero/test-helpers',
+          replacement: resolve(packagesDir, 'zero/src/test-helpers.ts'),
+        },
+        {
+          find: '@rocicorp/zero',
+          replacement: resolve(packagesDir, 'zero/src/zero.ts'),
+        },
+      ],
+    },
     test: {
       name: `${name}/no-pg`,
       browser: {enabled: false},

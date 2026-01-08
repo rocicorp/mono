@@ -75,6 +75,12 @@ export const mutators = defineMutators({
         const {id, title, description, created, modified, projectID} = args;
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
+        console.log(
+          'Creating issue with args:',
+          args,
+          'and authData:',
+          authData,
+        );
         await tx.mutate.issue.insert({
           id,
           projectID: projectIDWithDefault(projectID),
@@ -86,7 +92,9 @@ export const mutators = defineMutators({
           open: true,
           visibility: 'public',
         });
+        console.log('Issue created with id:', id);
 
+        console.log('try to update notifs');
         // subscribe to notifications if the user creates the issue
         await updateIssueNotification(tx, {
           userID: creatorID,
@@ -94,6 +102,7 @@ export const mutators = defineMutators({
           subscribed: 'subscribe',
           created,
         });
+        console.log('Notification updated for issue creation');
       },
     ),
     update: defineMutator(
@@ -396,12 +405,15 @@ async function updateIssueNotification(
     forceUpdate?: boolean;
   },
 ) {
+  console.log('can user see?');
   await assertUserCanSeeIssue(tx, userID, issueID);
 
+  console.log('find existing');
   const existingNotification = builder.issueNotifications
     .where('userID', userID)
     .where('issueID', issueID)
     .one();
+  console.log('upsert stuff');
 
   // if the user is subscribing to the issue, and they don't already have a preference
   // or the forceUpdate flag is set, we upsert the notification.
