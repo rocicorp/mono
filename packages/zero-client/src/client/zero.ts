@@ -179,6 +179,7 @@ import {
   fromReplicacheAuthToken,
   toReplicacheAuthToken,
 } from './zero-rep.ts';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 
 export type NoRelations = Record<string, never>;
 
@@ -381,6 +382,8 @@ export class Zero<
   #abortPingTimeout = () => {
     // intentionally empty
   };
+
+  #forceEnableRefresh = false;
 
   /**
    * The timeout in milliseconds for ping operations. Controls both:
@@ -803,13 +806,14 @@ export class Zero<
   }
 
   #enableRefresh(): boolean {
-    // Don't refresh if connected or connecting to avoid receiving new
-    // snapshots from refresh before receiving the new snapshot via poke from
-    // the connection (which results in a "unexpected base cookie for poke"
-    // error).
+    // Don't refresh if connected or connecting, unless #forceEnableRefresh to
+    // avoid receiving new snapshots from refresh before receiving the new
+    // snapshot via poke from the connection (which results in a "unexpected
+    // base cookie for poke" error).
     return (
-      !this.#connectionManager.is(ConnectionStatus.Connected) &&
-      !this.#connectionManager.is(ConnectionStatus.Connecting)
+      this.#forceEnableRefresh ||
+      (!this.#connectionManager.is(ConnectionStatus.Connected) &&
+        !this.#connectionManager.is(ConnectionStatus.Connecting))
     );
   }
 
@@ -1709,10 +1713,6 @@ export class Zero<
 
     const transition = getErrorConnectionTransition(reason);
 
-    if (transition.status !== NO_STATUS_TRANSITION) {
-      void this.#rep.scheduleRefresh();
-    }
-
     switch (transition.status) {
       case ConnectionStatus.NeedsAuth:
         this.#connectionManager.needsAuth(transition.reason);
@@ -2047,7 +2047,7 @@ export class Zero<
         );
 
         const transition = getErrorConnectionTransition(ex);
-
+        let sleepMs: number | undefined = undefined;
         switch (transition.status) {
           case NO_STATUS_TRANSITION: {
             // We continue the loop because the error does not indicate
@@ -2070,7 +2070,7 @@ export class Zero<
               'ms before reconnecting due to error, state:',
               this.#connectionManager.state,
             );
-            await sleep(backoffMs);
+            sleepMs = backoffMs;
             break;
           }
           case ConnectionStatus.NeedsAuth: {
@@ -2097,6 +2097,31 @@ export class Zero<
           }
           default:
             unreachable(transition);
+        }
+
+        // refresh to ensure any persisted snapshots that we're not refreshed
+        // becasue refreshes are disabled while connecting and connected and
+        // were not received via poke from the server, are picked up.
+        // Do this before back off sleep.
+        if (transition.status !== ConnectionStatus.Closed) {
+          try {
+            this.#forceEnableRefresh = true;
+            await this.#rep.runRefresh();
+          } catch (ex) {
+            if (ex instanceof AbortError) {
+              this.#lc.debug?.(
+                `Refresh from storage did not complete before close.`,
+              );
+            } else {
+              this.#lc.error?.(`Error during refresh from storage`, ex);
+            }
+          } finally {
+            this.#forceEnableRefresh = false;
+          }
+        }
+
+        if (sleepMs) {
+          await sleep(sleepMs);
         }
       }
     }

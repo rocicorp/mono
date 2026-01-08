@@ -184,7 +184,7 @@ export interface ReplicacheImplOptions {
   /**
    * Defaults to `() => true`.
    */
-  enableRefresh?: () => boolean;
+  enableRefresh?: (() => boolean) | undefined;
 
   /**
    * Defaults to true.
@@ -1220,10 +1220,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   async refresh(): Promise<void> {
     await this.#ready;
     const {clientID} = this;
-    if (this.#closed) {
-      return;
-    }
-    if (!this.#enableRefresh()) {
+    if (this.#closed || !this.#enableRefresh()) {
       return;
     }
     let refreshResult: Awaited<ReturnType<typeof refresh>>;
@@ -1296,11 +1293,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     this.#lc.debug?.('Handling persist', persistInfo);
     const clientGroupID = await this.#clientGroupIDPromise;
     if (persistInfo.clientGroupID === clientGroupID) {
-      void this.scheduleRefresh();
+      void this.#scheduleRefresh();
     }
   }
 
-  async scheduleRefresh(): Promise<void> {
+  async #scheduleRefresh(): Promise<void> {
     if (!this.#enableScheduledRefresh) {
       return;
     }
@@ -1317,6 +1314,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#lc.error?.(`Error during ${name}`, e);
       }
     }
+  }
+
+  /**
+   * Runs a refresh as soon as possible through the refresh scheduler.
+   */
+  runRefresh(): Promise<void> {
+    return this.#refreshScheduler.run();
   }
 
   #changeSyncCounters(pushDelta: 0, pullDelta: 1 | -1): void;

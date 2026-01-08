@@ -28,13 +28,13 @@ describe('ReplicacheImpl', () => {
     // Initial state
     refreshEnabled = false;
 
-    await impl.refresh();
+    await impl.runRefresh();
 
     expect(refresh).not.toHaveBeenCalled();
 
     refreshEnabled = true;
 
-    await impl.refresh();
+    await impl.runRefresh();
 
     expect(refresh).toHaveBeenCalled();
 
