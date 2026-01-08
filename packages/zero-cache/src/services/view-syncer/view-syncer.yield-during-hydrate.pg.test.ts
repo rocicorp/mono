@@ -200,7 +200,6 @@ describe('view-syncer/yield-during-hydrate', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,

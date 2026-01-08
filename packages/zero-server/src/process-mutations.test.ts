@@ -9,6 +9,7 @@ import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import {
+  type CleanupResultsArg,
   CRUD_MUTATION_NAME,
   type MutationResponse,
 } from '../../zero-protocol/src/push.ts';
@@ -59,11 +60,7 @@ type MutationShape = CustomMutationShape | CrudMutationShape;
 
 type TransactionInput = Parameters<Database<undefined>['transaction']>[1];
 
-type DeleteMutationResultsCall = {
-  clientGroupID: string;
-  clientID: string;
-  upToMutationID: number;
-};
+type DeleteMutationResultsCall = CleanupResultsArg;
 
 type TrackingDatabaseOptions = {
   readonly lastMutationIDProvider?: (params: {
@@ -137,16 +134,12 @@ function createTrackingDatabase(options: TrackingDatabaseOptions = {}): {
               recordedResults.push(result);
               return Promise.resolve();
             },
-            deleteMutationResults: (
-              clientGroupID,
-              clientID,
-              upToMutationID,
-            ) => {
+            deleteMutationResults: args => {
               const error = options.deleteMutationResultsErrorProvider?.();
               if (error) {
                 return Promise.reject(error);
               }
-              recordedDeletions.push({clientGroupID, clientID, upToMutationID});
+              recordedDeletions.push(args);
               return Promise.resolve();
             },
           }),

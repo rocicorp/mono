@@ -45,6 +45,7 @@ export interface Pusher extends RefCountedService {
     httpCookie: string | undefined,
   ): HandlerResult;
   ackMutationResponses(upToID: MutationID): Promise<void>;
+  deleteClientMutations(clientIDs: string[]): Promise<void>;
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
@@ -140,6 +141,7 @@ export class PusherService implements Service, Pusher {
           name: CLEANUP_RESULTS_MUTATION_NAME,
           args: [
             {
+              type: 'single',
               clientGroupID: this.id,
               clientID: upToID.clientID,
               upToMutationID: upToID.id,
@@ -167,6 +169,58 @@ export class PusherService implements Service, Pusher {
       );
     } catch (e) {
       this.#lc.warn?.('Failed to send cleanup mutation', {
+        error: getErrorMessage(e),
+      });
+    }
+  }
+
+  async deleteClientMutations(clientIDs: string[]) {
+    if (clientIDs.length === 0) {
+      return;
+    }
+    const url = this.#pushConfig.url[0];
+    if (!url) {
+      // No push URL configured, skip cleanup
+      return;
+    }
+
+    const cleanupBody: PushBody = {
+      clientGroupID: this.id,
+      mutations: [
+        {
+          type: MutationType.Custom,
+          id: 0, // Not tracked - this is fire-and-forget
+          clientID: clientIDs[0], // Use first client as sender
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          args: [
+            {
+              type: 'bulk',
+              clientGroupID: this.id,
+              clientIDs,
+            },
+          ],
+          timestamp: Date.now(),
+        },
+      ],
+      pushVersion: 1,
+      timestamp: Date.now(),
+      requestID: `cleanup-bulk-${this.id}-${Date.now()}`,
+    };
+
+    try {
+      await fetchFromAPIServer(
+        pushResponseSchema,
+        'push',
+        this.#lc,
+        url,
+        false,
+        this.#pushURLPatterns,
+        {appID: this.#config.app.id, shardNum: this.#config.shard.num},
+        {apiKey: this.#pushConfig.apiKey},
+        cleanupBody,
+      );
+    } catch (e) {
+      this.#lc.warn?.('Failed to send bulk cleanup mutation', {
         error: getErrorMessage(e),
       });
     }
