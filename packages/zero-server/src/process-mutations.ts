@@ -36,11 +36,7 @@ import {createLogContext} from './logging.ts';
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
   writeMutationResult: (result: MutationResponse) => Promise<void>;
-  deleteMutationResults: (
-    clientGroupID: string,
-    clientID: string,
-    upToMutationID: number,
-  ) => Promise<void>;
+  deleteMutationResults: (args: CleanupResultsArg) => Promise<void>;
 }
 
 export interface TransactionProviderInput {
@@ -608,19 +604,19 @@ async function processCleanupResultsMutation<
   }
   const args: CleanupResultsArg = parseResult.value;
 
+  // Determine clientID for transaction input based on cleanup type
+  const clientID =
+    args.type === 'single' ? args.clientID : (args.clientIDs[0] ?? '');
+
   // Run in a transaction, using the hook for DB-specific operation
   await dbProvider.transaction(
     async (_, hooks) => {
-      await hooks.deleteMutationResults(
-        args.clientGroupID,
-        args.clientID,
-        args.upToMutationID,
-      );
+      await hooks.deleteMutationResults(args);
     },
     {
       upstreamSchema: queryParams.schema,
       clientGroupID: args.clientGroupID,
-      clientID: args.clientID,
+      clientID,
       mutationID: 0,
     },
   );

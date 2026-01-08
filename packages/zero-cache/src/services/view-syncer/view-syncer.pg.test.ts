@@ -167,7 +167,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -214,7 +213,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -239,7 +237,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -284,7 +281,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -3080,7 +3076,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -3189,7 +3184,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -3250,7 +3244,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
@@ -3286,7 +3279,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
@@ -3323,7 +3315,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,

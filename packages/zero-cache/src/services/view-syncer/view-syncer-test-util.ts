@@ -725,7 +725,6 @@ export async function setup(
     TASK_ID,
     serviceID,
     cvrDB,
-    upstreamDb,
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
       testLogConfig,
