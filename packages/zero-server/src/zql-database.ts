@@ -1,5 +1,6 @@
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
+import type {CleanupResultsArg} from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {
@@ -84,18 +85,30 @@ export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
           await dbTx.query(formatted.text, formatted.values);
         },
 
-        async deleteMutationResults(
-          targetClientGroupID,
-          targetClientID,
-          upToMutationID,
-        ) {
-          const formatted = formatPg(
-            sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
-                WHERE "clientGroupID" = ${targetClientGroupID}
-                  AND "clientID" = ${targetClientID}
-                  AND "mutationID" <= ${upToMutationID}`,
-          );
-          await dbTx.query(formatted.text, formatted.values);
+        async deleteMutationResults(args: CleanupResultsArg) {
+          switch (args.type) {
+            case 'bulk': {
+              // Bulk deletion: delete all mutations for multiple clients
+              const formatted = formatPg(
+                sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
+                    WHERE "clientGroupID" = ${args.clientGroupID}
+                      AND "clientID" = ANY(${args.clientIDs})`,
+              );
+              await dbTx.query(formatted.text, formatted.values);
+              break;
+            }
+            case 'single': {
+              // Single client: delete up to mutation ID
+              const formatted = formatPg(
+                sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
+                    WHERE "clientGroupID" = ${args.clientGroupID}
+                      AND "clientID" = ${args.clientID}
+                      AND "mutationID" <= ${args.upToMutationID}`,
+              );
+              await dbTx.query(formatted.text, formatted.values);
+              break;
+            }
+          }
         },
       });
     });

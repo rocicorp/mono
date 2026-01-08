@@ -17,11 +17,21 @@ export const CRUD_MUTATION_NAME = '_zero_crud';
 // acknowledged mutation results from the upstream database.
 export const CLEANUP_RESULTS_MUTATION_NAME = '_zero_cleanupResults';
 
-export const cleanupResultsArgSchema = v.object({
-  clientGroupID: v.string(),
-  clientID: v.string(),
-  upToMutationID: v.number(),
-});
+export const cleanupResultsArgSchema = v.union(
+  // Existing: delete up to a specific mutation ID for one client
+  v.object({
+    type: v.literal('single'),
+    clientGroupID: v.string(),
+    clientID: v.string(),
+    upToMutationID: v.number(),
+  }),
+  // New: delete all mutations for multiple clients
+  v.object({
+    type: v.literal('bulk'),
+    clientGroupID: v.string(),
+    clientIDs: v.array(v.string()),
+  }),
+);
 
 /**
  * Inserts if entity with id does not already exist.
