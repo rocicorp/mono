@@ -64,7 +64,7 @@ test('repro run-loop error->connect race using state.subscribe passes with sleep
   await z.waitForConnectionStatus(ConnectionStatus.Error);
 
   // Reconnect without providing auth opts - should keep existing auth
-  vi.waitFor(() => expect(connectPromise).toBeDefined());
+  await vi.waitFor(() => expect(connectPromise).toBeDefined());
   await connectPromise;
   const currentSocket = await z.socket;
   expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
@@ -122,7 +122,7 @@ test('repro run-loop error->connect race using state.subscribe timesout without 
   await z.waitForConnectionStatus(ConnectionStatus.Error);
 
   // Reconnect without providing auth opts - should keep existing auth
-  vi.waitFor(() => expect(connectPromise).toBeDefined());
+  await vi.waitFor(() => expect(connectPromise).toBeDefined());
   await connectPromise;
   const currentSocket = await z.socket;
   expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
