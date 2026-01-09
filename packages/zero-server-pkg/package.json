@@ -1,0 +1,90 @@
+{
+  "name": "@rocicorp/zero-server",
+  "version": "0.26.0",
+  "description": "Zero server-side mutations and queries library - lightweight package without zero-cache",
+  "author": "Rocicorp, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocicorp/mono.git",
+    "directory": "packages/zero-server-pkg"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://zero.rocicorp.dev",
+  "bugs": {
+    "url": "https://bugs.rocicorp.dev"
+  },
+  "scripts": {
+    "build": "node --experimental-strip-types --no-warnings tool/build.ts",
+    "check-types": "tsc",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "oxlint --type-aware src/"
+  },
+  "dependencies": {
+    "@badrap/valita": "0.3.11",
+    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/resolver": "^1.0.2",
+    "compare-utf8": "^0.1.1"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.4.0",
+    "drizzle-orm": "^0.44.2",
+    "pg": "^8.16.3",
+    "postgres": "^3.4.4",
+    "shared": "0.0.0",
+    "typescript": "~5.9.3",
+    "vite": "7.2.7",
+    "z2s": "0.0.0",
+    "zero-protocol": "0.0.0",
+    "zero-schema": "0.0.0",
+    "zero-server": "0.0.0",
+    "zero-types": "0.0.0",
+    "zql": "0.0.0"
+  },
+  "peerDependencies": {
+    "drizzle-orm": ">=0.30",
+    "pg": ">=8",
+    "postgres": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "postgres": {
+      "optional": true
+    }
+  },
+  "type": "module",
+  "main": "out/zero-server-pkg/src/mod.js",
+  "module": "out/zero-server-pkg/src/mod.js",
+  "types": "out/zero-server-pkg/src/mod.d.ts",
+  "exports": {
+    ".": {
+      "types": "./out/zero-server-pkg/src/mod.d.ts",
+      "default": "./out/zero-server-pkg/src/mod.js"
+    },
+    "./adapters/drizzle": {
+      "types": "./out/zero-server-pkg/src/adapters/drizzle.d.ts",
+      "default": "./out/zero-server-pkg/src/adapters/drizzle.js"
+    },
+    "./adapters/pg": {
+      "types": "./out/zero-server-pkg/src/adapters/pg.d.ts",
+      "default": "./out/zero-server-pkg/src/adapters/pg.js"
+    },
+    "./adapters/postgresjs": {
+      "types": "./out/zero-server-pkg/src/adapters/postgresjs.d.ts",
+      "default": "./out/zero-server-pkg/src/adapters/postgresjs.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "out",
+    "!*.tsbuildinfo"
+  ],
+  "prettier": "@rocicorp/prettier-config"
+}
