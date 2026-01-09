@@ -55,7 +55,6 @@ export type UseQueryOptions = {
 };
 
 // Deprecated in 0.22
-// Overload 1: Query
 /**
  * @deprecated Use {@linkcode useQuery} instead.
  */
@@ -71,45 +70,7 @@ export function createQuery<
     QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
   >,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
-): QueryResult<TReturn>;
-
-// Overload 2: Maybe query
-/**
- * @deprecated Use {@linkcode useQuery} instead.
- */
-export function createQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
->(
-  querySignal: Accessor<
-    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-    | Falsy
-  >,
-  options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
-): MaybeQueryResult<TReturn>;
-
-// Implementation
-/**
- * @deprecated Use {@linkcode useQuery} instead.
- */
-export function createQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
->(
-  querySignal: Accessor<
-    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-    | Falsy
-  >,
-  options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
-): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
+): QueryResult<TReturn> {
   return useQuery(querySignal, options);
 }
 
