@@ -32,6 +32,15 @@ export type QueryResult<TReturn> = readonly [
   Accessor<QueryResultDetails & {}>,
 ];
 
+/**
+ * Result type for queries that may be falsy (null, undefined, or false).
+ * The data value can be undefined when the query is disabled.
+ */
+export type NullableQueryResult<TReturn> = readonly [
+  Accessor<HumanReadable<TReturn> | undefined>,
+  Accessor<QueryResultDetails & {}>,
+];
+
 // Deprecated in 0.22
 /**
  * @deprecated Use {@linkcode UseQueryOptions} instead.
@@ -45,6 +54,7 @@ export type UseQueryOptions = {
 };
 
 // Deprecated in 0.22
+// Overload 1: Truthy query
 /**
  * @deprecated Use {@linkcode useQuery} instead.
  */
@@ -60,10 +70,57 @@ export function createQuery<
     QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
   >,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Possibly falsy query
+/**
+ * @deprecated Use {@linkcode useQuery} instead.
+ */
+export function createQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  querySignal: Accessor<
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | null
+    | undefined
+    | false
+    | ''
+    | 0
+  >,
+  options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
+): NullableQueryResult<TReturn>;
+
+// Implementation
+/**
+ * @deprecated Use {@linkcode useQuery} instead.
+ */
+export function createQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  querySignal: Accessor<
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | null
+    | undefined
+    | false
+    | ''
+    | 0
+  >,
+  options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
+): QueryResult<TReturn> | NullableQueryResult<TReturn> {
   return useQuery(querySignal, options);
 }
 
+// Overload 1: Truthy query - returns QueryResult<TReturn>
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -76,7 +133,47 @@ export function useQuery<
     QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
   >,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Possibly falsy query - returns NullableQueryResult<TReturn>
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  querySignal: Accessor<
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | null
+    | undefined
+    | false
+    | ''
+    | 0
+  >,
+  options?: UseQueryOptions | Accessor<UseQueryOptions>,
+): NullableQueryResult<TReturn>;
+
+// Implementation
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  querySignal: Accessor<
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | null
+    | undefined
+    | false
+    | ''
+    | 0
+  >,
+  options?: UseQueryOptions | Accessor<UseQueryOptions>,
+): QueryResult<TReturn> | NullableQueryResult<TReturn> {
   const [state, setState] = createStore<State>([
     {
       '': undefined,
@@ -91,9 +188,21 @@ export function useQuery<
   };
 
   const zero = useZero<TSchema, undefined, TContext>();
-  const q = createMemo(() => addContextToQuery(querySignal(), zero().context));
-  const qi = createMemo(() => asQueryInternals(q()));
-  const hash = createMemo(() => qi().hash());
+
+  // Handle possibly falsy queries
+  const q = createMemo(() => {
+    const query = querySignal();
+    if (!query) return undefined;
+    return addContextToQuery(query, zero().context);
+  });
+
+  const qi = createMemo(() => {
+    const query = q();
+    if (!query) return undefined;
+    return asQueryInternals(query);
+  });
+
+  const hash = createMemo(() => qi()?.hash());
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
 
   const initialTTL = ttl();
@@ -101,9 +210,18 @@ export function useQuery<
   const view = createMemo(() => {
     // Depend on hash instead of query to avoid recreating the view when the
     // query object changes but the hash is the same.
-    hash();
+    const currentHash = hash();
     refetchKey();
+
+    // If query is falsy, don't create a view
+    if (currentHash === undefined) {
+      return undefined;
+    }
+
     const untrackedQuery = untrack(q);
+    if (!untrackedQuery) {
+      return undefined;
+    }
 
     const v = zero().materialize(
       untrackedQuery,
@@ -123,7 +241,7 @@ export function useQuery<
     on(
       ttl,
       currentTTL => {
-        view().updateTTL(currentTTL);
+        view()?.updateTTL(currentTTL);
       },
       {defer: true},
     ),

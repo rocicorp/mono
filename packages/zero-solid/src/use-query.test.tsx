@@ -18,7 +18,12 @@ import {
   refCountSymbol,
   type QueryDelegate,
 } from './bindings.ts';
-import {useQuery, type UseQueryOptions} from './use-query.ts';
+import {
+  useQuery,
+  type NullableQueryResult,
+  type QueryResult,
+  type UseQueryOptions,
+} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
 import {
   createSchema,
@@ -106,10 +111,19 @@ function useQueryWithZeroProvider<
       {props.children}
     </ZeroProvider>
   );
-  return renderHook(useQuery, {
-    initialProps: [querySignal, options],
-    wrapper: MockZeroProvider,
-  });
+  // Use wrapper function to avoid TypeScript overload resolution issues with renderHook
+  type QuerySignal = Accessor<
+    Query<TTable, TSchema, TReturn>
+  >;
+  type Options = UseQueryOptions | Accessor<UseQueryOptions> | undefined;
+  type Result = QueryResult<TReturn>;
+  return renderHook(
+    (q: QuerySignal, opts: Options) => useQuery(q, opts) as Result,
+    {
+      initialProps: [querySignal, options],
+      wrapper: MockZeroProvider,
+    },
+  );
 }
 
 test('useQuery', async () => {
@@ -919,8 +933,70 @@ test('useQuery when ZeroProvider is not-used, view is not-reused if query instan
   const querySignal = () => queries[queryIndex()];
 
   expect(() => {
-    renderHook(useQuery, {
-      initialProps: [querySignal],
-    });
+    renderHook(
+      (q: typeof querySignal) => useQuery(q),
+      {
+        initialProps: [querySignal],
+      },
+    );
   }).toThrow('useZero must be used within a ZeroProvider');
 });
+
+// Type-level tests for nullable queries
+// These verify correct return types at compile time - if types are wrong, tsc fails
+{
+  type Issue = {readonly id: string; readonly title: string};
+  type PluralQuery = Query<string, Schema, Issue>;
+  type SingularQuery = Query<string, Schema, Issue | undefined>;
+
+  // Type assertion helpers - these fail to compile if types don't match
+  const _typeTests = {
+    truthyPlural: () => {
+      const result: QueryResult<Issue> = useQuery(() => ({}) as PluralQuery);
+      const data: Accessor<readonly Issue[]> = result[0];
+      return {result, data};
+    },
+    truthySingular: () => {
+      const result: QueryResult<Issue | undefined> = useQuery(
+        () => ({}) as SingularQuery,
+      );
+      const data: Accessor<Issue | undefined> = result[0];
+      return {result, data};
+    },
+    nullablePlural: () => {
+      const result: NullableQueryResult<Issue> = useQuery(
+        () => ({}) as PluralQuery | undefined,
+      );
+      const data: Accessor<readonly Issue[] | undefined> = result[0];
+      return {result, data};
+    },
+    nullableSingular: () => {
+      const result: NullableQueryResult<Issue | undefined> = useQuery(
+        () => ({}) as SingularQuery | undefined,
+      );
+      const data: Accessor<Issue | undefined> = result[0];
+      return {result, data};
+    },
+    falseQuery: () => {
+      const result: NullableQueryResult<Issue> = useQuery(
+        () => ({}) as PluralQuery | false,
+      );
+      return result;
+    },
+    emptyStringQuery: () => {
+      const result: NullableQueryResult<Issue> = useQuery(
+        () => ({}) as PluralQuery | '',
+      );
+      return result;
+    },
+    zeroQuery: () => {
+      const result: NullableQueryResult<Issue> = useQuery(
+        () => ({}) as PluralQuery | 0,
+      );
+      return result;
+    },
+  };
+
+  // Suppress unused variable warning
+  void _typeTests;
+}
