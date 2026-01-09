@@ -130,6 +130,10 @@ export class TestZero<
     return this[exposedToTestingSymbol].connectStart;
   }
 
+  get enableRefresh() {
+    return this[exposedToTestingSymbol].enableRefresh;
+  }
+
   constructor(options: ZeroOptions<S, MD, C>) {
     super(options);
 
