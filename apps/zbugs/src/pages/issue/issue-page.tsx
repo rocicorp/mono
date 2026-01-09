@@ -1,5 +1,4 @@
-import type {Row} from '@rocicorp/zero';
-import {useQuery, useZero} from '../../../shared/zero-hooks.ts';
+import {useQuery, useZero, type ZbugsRow} from '../../../shared/zero-hooks.ts';
 import type {Virtualizer} from '@tanstack/react-virtual';
 import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
@@ -802,8 +801,8 @@ function getId(params: DefaultParams) {
 
 function maybeShowToastForEmoji(
   emoji: Emoji,
-  issue: Row['issue'] & {
-    readonly comments: readonly Row['comment'][];
+  issue: ZbugsRow['issue'] & {
+    readonly comments: readonly ZbugsRow['comment'][];
   },
   virtualizer: Virtualizer<Window, HTMLElement>,
   emojiElement: HTMLDivElement | null,
@@ -1012,8 +1011,8 @@ function noop() {
   // no op
 }
 
-type Issue = Row['issue'] & {
-  readonly comments: readonly Row['comment'][];
+type Issue = ZbugsRow['issue'] & {
+  readonly comments: readonly ZbugsRow['comment'][];
 };
 
 function useEmojiChangeListener(
@@ -1064,7 +1063,7 @@ function useEmojiChangeListener(
 function useShowToastForNewComment(
   comments:
     | ReadonlyArray<
-        Row['comment'] & {readonly creator: Row['user'] | undefined}
+        ZbugsRow['comment'] & {readonly creator: ZbugsRow['user'] | undefined}
       >
     | undefined,
   virtualizer: Virtualizer<Window, HTMLElement>,

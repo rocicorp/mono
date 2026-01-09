@@ -1,5 +1,4 @@
-import {type Row} from '@rocicorp/zero';
-import {useQuery} from '../../shared/zero-hooks.ts';
+import {useQuery, type ZbugsRow} from '../../shared/zero-hooks.ts';
 import {useEffect, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import {queries} from '../../shared/queries.ts';
@@ -7,7 +6,7 @@ import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 import {Combobox} from './combobox.tsx';
 
-type User = Row['user'];
+type User = ZbugsRow['user'];
 
 type Props = {
   projectName: string;

@@ -1,8 +1,5 @@
-import type {Row} from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
-import type {schema} from '../shared/schema.ts';
-
-type ZbugsRow = Row<typeof schema>;
+import type {ZbugsRow} from '../shared/zero-hooks.ts';
 
 export type Emoji = ZbugsRow['emoji'] & {
   readonly creator: ZbugsRow['user'] | undefined;

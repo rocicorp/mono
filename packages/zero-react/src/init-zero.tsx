@@ -10,7 +10,7 @@ import {
   type ZeroProviderProps,
 } from './zero-provider.tsx';
 import type {Schema, Zero} from './zero.ts';
-import { useConnectionState as useConnectionStateImpl } from './use-connection-state.tsx';
+import {useConnectionState as useConnectionStateImpl} from './use-connection-state.tsx';
 
 /**
  * The result of calling initZero for React.

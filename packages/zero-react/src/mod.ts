@@ -6,6 +6,8 @@ export {
   type MaybeQueryResult,
   type QueryResult,
   type UseQueryOptions,
+  type TypedUseQuery,
+  type TypedUseSuspenseQuery,
 } from './use-query.tsx';
 export {useZeroOnline} from './use-zero-online.tsx';
 export {
@@ -15,3 +17,4 @@ export {
   ZeroProvider,
   type ZeroProviderProps,
 } from './zero-provider.tsx';
+export type {Zero} from './zero.ts';

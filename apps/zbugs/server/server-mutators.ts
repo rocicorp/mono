@@ -1,9 +1,3 @@
-import {
-  defineMutator,
-  defineMutators,
-  type ServerTransaction,
-  type Transaction,
-} from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
 import {z} from 'zod/mini';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
@@ -11,13 +5,14 @@ import {
   createIssueArgsSchema,
   mutators,
   updateIssueArgsSchema,
+  type ZbugsTransaction,
 } from '../shared/mutators.ts';
-import {builder} from '../shared/schema.ts';
+import {builder, defineMutator, defineMutators} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
 
-function asServerTransaction(tx: Transaction): ServerTransaction {
+function asServerTransaction(tx: ZbugsTransaction) {
   assert(tx.location === 'server', 'Transaction is not a server transaction');
   return tx;
 }

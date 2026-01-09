@@ -10,6 +10,7 @@ import {
   table,
 } from '@rocicorp/zero';
 import type {AuthData, Role} from './auth.ts';
+import type {PostgresJsTransaction} from '@rocicorp/zero/server/adapters/postgresjs';
 
 // Table definitions
 const user = table('user')
@@ -271,7 +272,7 @@ export const builder = createBuilder(schema);
 
 // Initialize Zero with typed utilities
 export const {defineMutator, defineMutators, defineQuery, defineQueries} =
-  initZero<typeof schema, AuthData | undefined>();
+  initZero<typeof schema, AuthData | undefined, PostgresJsTransaction>();
 
 export const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
 export const ZERO_PROJECT_NAME = 'Zero';

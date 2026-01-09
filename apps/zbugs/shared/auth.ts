@@ -1,7 +1,8 @@
-import type {Query, Transaction} from '@rocicorp/zero';
+import type {Query} from '@rocicorp/zero';
 import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
+import type {ZbugsTransaction} from './mutators.ts';
 import {builder, type schema} from './schema.ts';
 
 // TDOO(arv): Use zod-mini here too
@@ -37,7 +38,7 @@ export function isAdmin(token: AuthData | undefined) {
 }
 
 export async function assertIsCreatorOrAdmin(
-  tx: Transaction<typeof schema>,
+  tx: ZbugsTransaction,
   authData: AuthData | undefined,
   query: Query<'comment' | 'issue' | 'emoji', typeof schema>,
   id: string,
@@ -65,7 +66,7 @@ export async function assertIsCreatorOrAdmin(
 }
 
 export async function assertUserCanSeeIssue(
-  tx: Transaction<typeof schema, unknown>,
+  tx: ZbugsTransaction,
   userID: string,
   issueID: string,
 ) {
@@ -86,7 +87,7 @@ export async function assertUserCanSeeIssue(
 }
 
 export async function assertUserCanSeeComment(
-  tx: Transaction<typeof schema, unknown>,
+  tx: ZbugsTransaction,
   userID: string,
   commentID: string,
 ) {
