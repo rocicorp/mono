@@ -115,7 +115,7 @@ export class Storer implements Service {
     onConsumed: (c: Commit | StatusMessage) => void,
     onFatal: (err: Error) => void,
   ) {
-    this.#lc = lc;
+    this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
     this.#taskID = taskID;
     this.#discoveryAddress = discoveryAddress;
