@@ -95,9 +95,8 @@ export interface Connection {
    * @param opts.auth - Token to use for authentication. If provided, this overrides
    *                    the stored auth credential for this connection attempt.
    *                    If `null` or `undefined`, the stored auth credential is cleared.
-   * @returns A promise that resolves once the connection state has transitioned to connecting.
    */
-  connect(opts?: {auth: string | null | undefined}): Promise<void>;
+  connect(opts?: {auth: string | null | undefined}): void;
 }
 
 export class ConnectionImpl implements Connection {
@@ -121,7 +120,7 @@ export class ConnectionImpl implements Connection {
     return this.#source;
   }
 
-  connect(opts?: {auth: string | null | undefined}): Promise<void> {
+  connect(opts?: {auth: string | null | undefined}): void {
     const lc = this.#lc.withContext('connect');
 
     if (opts && 'auth' in opts) {
@@ -138,7 +137,7 @@ export class ConnectionImpl implements Connection {
       lc.error?.(
         'connect() called but the connection is disconnected due to a missing cacheURL. No reconnect will be attempted.',
       );
-      return Promise.resolve();
+      return;
     }
 
     // only allow connect() to be called from a terminal state
@@ -147,7 +146,7 @@ export class ConnectionImpl implements Connection {
         'connect() called but not in a terminal state. Current state:',
         this.#connectionManager.state.name,
       );
-      return Promise.resolve();
+      return;
     }
 
     lc.info?.(
@@ -156,7 +155,7 @@ export class ConnectionImpl implements Connection {
 
     // Transition to connecting to unblock the run loop.
     this.#connectionManager.connecting();
-    return Promise.resolve();
+    return;
   }
 }
 
