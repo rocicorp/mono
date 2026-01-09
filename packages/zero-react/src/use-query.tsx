@@ -33,6 +33,15 @@ export type QueryResult<TReturn> = readonly [
   QueryResultDetails & {},
 ];
 
+/**
+ * Result type for queries that may be falsy (null, undefined, or false).
+ * The data value can be undefined when the query is disabled.
+ */
+export type NullableQueryResult<TReturn> = readonly [
+  HumanReadable<TReturn> | undefined,
+  QueryResultDetails & {},
+];
+
 export type UseQueryOptions = {
   enabled?: boolean | undefined;
   /**
@@ -66,6 +75,7 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
+// Overload 1: Truthy query - returns QueryResult<TReturn>
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -83,7 +93,45 @@ export function useQuery<
     TContext
   >,
   options?: UseQueryOptions | boolean,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Possibly falsy query - returns NullableQueryResult<TReturn>
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | null
+    | undefined
+    | false
+    | ''
+    | 0,
+  options?: UseQueryOptions | boolean,
+): NullableQueryResult<TReturn>;
+
+// Implementation
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | null
+    | undefined
+    | false
+    | ''
+    | 0,
+  options?: UseQueryOptions | boolean,
+): QueryResult<TReturn> | NullableQueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   if (typeof options === 'boolean') {
@@ -93,6 +141,12 @@ export function useQuery<
   }
 
   const zero = useZero<TSchema, undefined, TContext>();
+
+  // Handle falsy query - return disabled snapshot
+  if (!query) {
+    return disabledQuerySnapshot as NullableQueryResult<TReturn>;
+  }
+
   const q = addContextToQuery(query, zero.context);
   const view = viewStore.getView(zero, q, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
@@ -103,6 +157,7 @@ export function useQuery<
   );
 }
 
+// Overload 1: Truthy query - returns QueryResult<TReturn>
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -120,7 +175,45 @@ export function useSuspenseQuery<
     TContext
   >,
   options?: UseSuspenseQueryOptions | boolean,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Possibly falsy query - returns NullableQueryResult<TReturn>
+export function useSuspenseQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | null
+    | undefined
+    | false
+    | ''
+    | 0,
+  options?: UseSuspenseQueryOptions | boolean,
+): NullableQueryResult<TReturn>;
+
+// Implementation
+export function useSuspenseQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | null
+    | undefined
+    | false
+    | ''
+    | 0,
+  options?: UseSuspenseQueryOptions | boolean,
+): QueryResult<TReturn> | NullableQueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   let suspendUntil: 'complete' | 'partial' = 'partial';
@@ -135,6 +228,12 @@ export function useSuspenseQuery<
   }
 
   const zero = useZero<TSchema, undefined, TContext>();
+
+  // Handle falsy query - return disabled snapshot
+  if (!query) {
+    return disabledQuerySnapshot as NullableQueryResult<TReturn>;
+  }
+
   const q = addContextToQuery(query, zero.context);
 
   const view = viewStore.getView(zero, q, enabled, ttl);
@@ -164,6 +263,8 @@ const disabledSubscriber = () => () => {};
 const resultTypeUnknown = {type: 'unknown'} as const;
 const resultTypeComplete = {type: 'complete'} as const;
 const resultTypeError = {type: 'error'} as const;
+
+const disabledQuerySnapshot = [undefined, resultTypeUnknown] as const;
 
 const emptySnapshotSingularUnknown = [undefined, resultTypeUnknown] as const;
 const emptySnapshotSingularComplete = [undefined, resultTypeComplete] as const;

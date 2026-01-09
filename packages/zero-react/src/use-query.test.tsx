@@ -12,6 +12,9 @@ import {
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
   getAllViewsSizeForTesting,
+  type NullableQueryResult,
+  type QueryResult,
+  useQuery,
   useSuspenseQuery,
   ViewStore,
 } from './use-query.tsx';
@@ -1222,3 +1225,72 @@ describe('useSuspenseQuery', () => {
     });
   });
 });
+
+// Type-level tests for nullable queries
+// These verify correct return types at compile time - if types are wrong, tsc fails
+// Tests are skipped at runtime but TypeScript still checks the types during compilation
+{
+  type Issue = {readonly id: string; readonly title: string};
+
+  // Use 'any' for schema to avoid complex schema type requirements in tests
+  // The important thing is testing the return type based on query nullability
+  type PluralQuery = Query<string, Schema, Issue>;
+  type SingularQuery = Query<string, Schema, Issue | undefined>;
+
+  // Type assertion helpers - these fail to compile if types don't match
+  const _typeTests = {
+    truthyPlural: () => {
+      const result: QueryResult<Issue> = useQuery({} as PluralQuery);
+      const data: readonly Issue[] = result[0];
+      return {result, data};
+    },
+    truthySingular: () => {
+      const result: QueryResult<Issue | undefined> = useQuery(
+        {} as SingularQuery,
+      );
+      const data: Issue | undefined = result[0];
+      return {result, data};
+    },
+    nullablePlural: () => {
+      const result: NullableQueryResult<Issue> = useQuery(
+        {} as PluralQuery | undefined,
+      );
+      const data: readonly Issue[] | undefined = result[0];
+      return {result, data};
+    },
+    nullableSingular: () => {
+      const result: NullableQueryResult<Issue | undefined> = useQuery(
+        {} as SingularQuery | undefined,
+      );
+      const data: Issue | undefined = result[0];
+      return {result, data};
+    },
+    falseQuery: () => {
+      const result: NullableQueryResult<Issue> = useQuery(
+        {} as PluralQuery | false,
+      );
+      return result;
+    },
+    emptyStringQuery: () => {
+      const result: NullableQueryResult<Issue> = useQuery(
+        {} as PluralQuery | '',
+      );
+      return result;
+    },
+    zeroQuery: () => {
+      const result: NullableQueryResult<Issue> = useQuery(
+        {} as PluralQuery | 0,
+      );
+      return result;
+    },
+    suspenseNullable: () => {
+      const result: NullableQueryResult<Issue> = useSuspenseQuery(
+        {} as PluralQuery | undefined,
+      );
+      return result;
+    },
+  };
+
+  // Suppress unused variable warning
+  void _typeTests;
+}
