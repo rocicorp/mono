@@ -4,6 +4,7 @@ import {
   escapeLike,
   type DefaultSchema,
   type Query,
+  type Schema,
 } from '@rocicorp/zero';
 import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
@@ -42,7 +43,7 @@ const issueRowSort = z.object({
   modified: z.number(),
 });
 
-type IssueRowSort = z.infer<typeof issueRowSort>;
+export type IssueRowSort = z.infer<typeof issueRowSort>;
 
 function labelsOrderByName({
   args: {projectName, orderBy},
@@ -207,10 +208,11 @@ export const queries = defineQueries({
       limit: z.nullable(z.number()),
       start: z.nullable(issueRowSort),
       dir: z.union([z.literal('forward'), z.literal('backward')]),
+      inclusive: z.optional(z.boolean()),
     }),
 
-    ({ctx: auth, args: {listContext, userID, limit, start, dir}}) =>
-      issueListV2(listContext, limit, userID, auth, start, dir),
+    ({ctx: auth, args: {listContext, userID, limit, start, dir, inclusive}}) =>
+      issueListV2(listContext, limit, userID, auth, start, dir, inclusive),
   ),
 
   emojiChange: defineQuery(idValidator, ({args: subjectID}) =>
@@ -265,7 +267,7 @@ export const queries = defineQueries({
       limit: z.number(),
     }),
     ({ctx: auth, args: {listContext, userID, limit}}) =>
-      issueListV2(listContext, limit, userID, auth, null, 'forward'),
+      issueListV2(listContext, limit, userID, auth, null, 'forward', false),
   ),
 
   userPicker: defineQuery(
@@ -311,6 +313,7 @@ function issueListV2(
   auth: AuthData | undefined,
   start: IssueRowSort | null,
   dir: 'forward' | 'backward',
+  inclusive: boolean | undefined,
 ) {
   return buildListQuery({
     listContext,
@@ -319,6 +322,7 @@ function issueListV2(
     role: auth?.role,
     start: start ?? undefined,
     dir,
+    inclusive,
   });
 }
 
@@ -331,7 +335,16 @@ export type ListQueryArgs = {
   limit?: number | undefined;
   start?: IssueRowSort | undefined;
   dir?: 'forward' | 'backward' | undefined;
+  inclusive?: boolean | undefined;
 };
+
+function alwaysFalse<
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
+  TReturn,
+>(q: Query<TTable, TSchema, TReturn>): Query<TTable, TSchema, TReturn> {
+  return q.where(({or}) => or());
+}
 
 export function buildListQuery(args: ListQueryArgs) {
   const {
@@ -341,19 +354,17 @@ export function buildListQuery(args: ListQueryArgs) {
     role,
     dir = 'forward',
     start,
+    inclusive = false,
   } = args;
 
   let q = issueQuery
     .related('viewState', q =>
-      (args.userID
-        ? q.where('userID', args.userID)
-        : q.where(({or}) => or())
-      ).one(),
+      (args.userID ? q.where('userID', args.userID) : alwaysFalse(q)).one(),
     )
     .related('labels');
 
   if (!listContext) {
-    return q.where(({or}) => or());
+    return alwaysFalse(q);
   }
   const {projectName = ZERO_PROJECT_NAME} = listContext;
 
@@ -371,7 +382,7 @@ export function buildListQuery(args: ListQueryArgs) {
   q = q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
 
   if (start) {
-    q = q.start(start);
+    q = q.start(start, {inclusive});
   }
   if (limit) {
     q = q.limit(limit);
