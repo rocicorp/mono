@@ -73,21 +73,25 @@ export function createUseZero<
 
 const NO_AUTH_SET = Symbol();
 
+export type ZeroProviderProps<
+  S extends Schema = DefaultSchema,
+  MD extends CustomMutatorDefs | undefined = undefined,
+  Context = DefaultContext,
+> = {
+  children: JSX.Element;
+  init?: (zero: Zero<S, MD, Context>) => void;
+} & (
+  | {
+      zero: Zero<S, MD, Context>;
+    }
+  | ZeroOptions<S, MD, Context>
+);
+
 export function ZeroProvider<
   S extends Schema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
->(
-  props: {
-    children: JSX.Element;
-    init?: (zero: Zero<S, MD, Context>) => void;
-  } & (
-    | {
-        zero: Zero<S, MD, Context>;
-      }
-    | ZeroOptions<S, MD, Context>
-  ),
-) {
+>(props: ZeroProviderProps<S, MD, Context>) {
   const zero = createMemo(() => {
     if ('zero' in props) {
       return props.zero;

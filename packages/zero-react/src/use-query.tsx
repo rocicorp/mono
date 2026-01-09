@@ -76,6 +76,30 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
+export type TypedUseQuery<S extends Schema, C> = {
+  // Overload 1: Query
+  <
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn = PullRow<TTable, S>,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
+    options?: UseQueryOptions | boolean,
+  ): QueryResult<TReturn>;
+
+  // Overload 2: Maybe query
+  <
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn = PullRow<TTable, S>,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C> | Falsy,
+    options?: UseQueryOptions | boolean,
+  ): MaybeQueryResult<TReturn>;
+};
+
 // Overload 1: Query
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
@@ -149,6 +173,30 @@ export function useQuery<
       (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
   );
 }
+
+export type TypedUseSuspenseQuery<S extends Schema, C> = {
+  // Overload 1: Query
+  <
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn = PullRow<TTable, S>,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
+    options?: UseSuspenseQueryOptions | boolean,
+  ): QueryResult<TReturn>;
+
+  // Overload 2: Maybe query
+  <
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn = PullRow<TTable, S>,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C> | Falsy,
+    options?: UseSuspenseQueryOptions | boolean,
+  ): MaybeQueryResult<TReturn>;
+};
 
 // Overload 1: Query
 export function useSuspenseQuery<

@@ -1,5 +1,10 @@
 export {useConnectionState} from './use-connection-state.ts';
 export {
+  initZero,
+  type InitZeroProviderProps,
+  type InitZeroSolidResult,
+} from './init-zero.ts';
+export {
   createQuery,
   useQuery,
   type CreateQueryOptions,
