@@ -371,7 +371,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           this.#storer.store([watermark, change]);
           this.#forwarder.forward([watermark, change]);
 
-          if (type === 'commit') {
+          if (type === 'commit' || type === 'rollback') {
             watermark = null;
           }
 
