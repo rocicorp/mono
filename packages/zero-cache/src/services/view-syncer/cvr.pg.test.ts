@@ -6721,18 +6721,6 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(cvrDb, initialState);
 
-    await Promise.all([
-      insertMutationResult(upstreamDb, clientGroupID, clientID, 1),
-      insertMutationResult(upstreamDb, clientGroupID, clientID, 2),
-      insertMutationResult(upstreamDb, 'other-client-group', 'other-client', 1),
-      insertMutationResult(
-        upstreamDb,
-        'other-client-group',
-        'other-client-2',
-        1,
-      ),
-    ]);
-
     const cvrStore = new CVRStore(
       lc,
       cvrDb,
@@ -6752,30 +6740,7 @@ describe('view-syncer/cvr', () => {
       Date.UTC(2024, 3, 20),
       ttlClockFromNumber(Date.UTC(2024, 3, 20)),
     );
-
-    expect(
-      await readMutationResults(upstreamDb, clientGroupID, clientID),
-    ).toEqual([]);
+    // Note: Mutation result cleanup is now handled by the Pusher service
+    // (via deleteClientMutations), not by CVRStore directly.
   });
 });
-
-function insertMutationResult(
-  upstreamDb: PostgresDB,
-  clientGroupID: string,
-  clientID: string,
-  mutationID: number,
-) {
-  return upstreamDb`INSERT INTO ${upstreamDb(upstreamSchema(SHARD))}.mutations
-      ("clientGroupID", "clientID", "mutationID", "result")
-      VALUES (${clientGroupID}, ${clientID}, ${mutationID}, ${{}})`;
-}
-
-function readMutationResults(
-  upstreamDb: PostgresDB,
-  clientGroupID: string,
-  clientID: string,
-) {
-  return upstreamDb`SELECT * FROM ${upstreamDb(
-    upstreamSchema(SHARD),
-  )}.mutations WHERE "clientGroupID" = ${clientGroupID} AND "clientID" = ${clientID}`;
-}
