@@ -1,4 +1,4 @@
-import type {Accessor, JSX} from 'solid-js';
+import {useConnectionState as useConnectionStateImpl} from './use-connection-state.ts';
 import {
   useQuery as useQueryImpl,
   type MaybeQueryResult,
@@ -9,10 +9,8 @@ import {
 import {
   useZero as useZeroImpl,
   ZeroProvider as ZeroProviderImpl,
-  type ZeroProviderProps,
 } from './use-zero.ts';
-import type {Schema, Zero} from './zero.ts';
-import {useConnectionState as useConnectionStateImpl} from './use-connection-state.ts';
+import type {Schema} from './zero.ts';
 
 export type {MaybeQueryResult, QueryResult, UseQueryOptions};
 
@@ -24,16 +22,14 @@ export type InitZeroSolidResult<S extends Schema, C> = {
    * Solid provider component for the Zero instance.
    * Pass either ZeroOptions props or a pre-created Zero instance.
    */
-  readonly ZeroProvider: (
-    props: ZeroProviderProps<S, undefined, C>,
-  ) => ReturnType<typeof ZeroProviderImpl>;
+  readonly ZeroProvider: typeof ZeroProviderImpl<S, undefined, C>;
 
   /**
    * Hook to get the Zero client accessor from context.
    * Returns an Accessor (function) that returns the Zero instance.
    * Must be used within a ZeroProvider.
    */
-  readonly useZero: () => Accessor<Zero<S, undefined, C>>;
+  readonly useZero: typeof useZeroImpl<S, undefined, C>;
 
   /**
    * Hook to subscribe to query results.
@@ -78,10 +74,8 @@ export function initZero<
   C = unknown,
 >(): InitZeroSolidResult<S, C> {
   return {
-    ZeroProvider: ZeroProviderImpl as (
-      props: ZeroProviderProps<S, undefined, C>,
-    ) => JSX.Element,
-    useZero: useZeroImpl as () => Accessor<Zero<S, undefined, C>>,
+    ZeroProvider: ZeroProviderImpl as typeof ZeroProviderImpl<S, undefined, C>,
+    useZero: useZeroImpl as typeof useZeroImpl<S, undefined, C>,
     useQuery: useQueryImpl as TypedUseQuery<S, C>,
     useConnectionState: useConnectionStateImpl,
   };

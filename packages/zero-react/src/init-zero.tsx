@@ -1,3 +1,4 @@
+import {useConnectionState as useConnectionStateImpl} from './use-connection-state.tsx';
 import {
   useQuery as useQueryImpl,
   useSuspenseQuery as useSuspenseQueryImpl,
@@ -7,10 +8,8 @@ import {
 import {
   useZero as useZeroImpl,
   ZeroProvider as ZeroProviderImpl,
-  type ZeroProviderProps,
 } from './zero-provider.tsx';
-import type {Schema, Zero} from './zero.ts';
-import {useConnectionState as useConnectionStateImpl} from './use-connection-state.tsx';
+import type {Schema} from './zero.ts';
 
 /**
  * The result of calling initZero for React.
@@ -20,15 +19,13 @@ export type InitZeroReactResult<S extends Schema, C> = {
    * React provider component for the Zero instance.
    * Pass either ZeroOptions props or a pre-created Zero instance.
    */
-  readonly ZeroProvider: (
-    props: ZeroProviderProps<S, undefined, C>,
-  ) => ReturnType<typeof ZeroProviderImpl>;
+  readonly ZeroProvider: typeof ZeroProviderImpl<S, undefined, C>;
 
   /**
    * Hook to get the Zero client instance from context.
    * Must be used within a ZeroProvider.
    */
-  readonly useZero: () => Zero<S, undefined, C>;
+  readonly useZero: typeof useZeroImpl<S, undefined, C>;
 
   /**
    * Hook to subscribe to query results.
@@ -80,10 +77,8 @@ export function initZero<
   C = unknown,
 >(): InitZeroReactResult<S, C> {
   return {
-    ZeroProvider: ZeroProviderImpl as (
-      props: ZeroProviderProps<S, undefined, C>,
-    ) => ReturnType<typeof ZeroProviderImpl>,
-    useZero: useZeroImpl as () => Zero<S, undefined, C>,
+    ZeroProvider: ZeroProviderImpl as typeof ZeroProviderImpl<S, undefined, C>,
+    useZero: useZeroImpl as typeof useZeroImpl<S, undefined, C>,
     useQuery: useQueryImpl as TypedUseQuery<S, C>,
     useSuspenseQuery: useSuspenseQueryImpl as TypedUseSuspenseQuery<S, C>,
     useConnectionState: useConnectionStateImpl,
