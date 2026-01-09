@@ -2428,6 +2428,38 @@ test('connect() without opts preserves existing auth', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 });
 
+// NOTE: this test is the same as the previous test case
+// but without the tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS) call.
+// Many of these tests are either doing either
+// await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+// or
+// await vi.advanceTimersByTimeAsync(0);
+// and will stall and timeout without them.
+test.only('repro run-loop race', async () => {
+  const z = zeroForTest({auth: 'initial-token'});
+
+  await z.triggerConnected();
+  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Trigger a non-auth error
+  await z.triggerError({
+    kind: ErrorKind.Internal,
+    message: 'internal error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await z.waitForConnectionStatus(ConnectionStatus.Error);
+  //await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+
+  // Reconnect without providing auth opts - should keep existing auth
+  await z.connection.connect();
+  const currentSocket = await z.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
+  );
+  await z.triggerConnected();
+  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
 test('can start with no auth and add it later', async () => {
   const z = zeroForTest({auth: undefined});
 
