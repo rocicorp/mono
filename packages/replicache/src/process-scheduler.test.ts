@@ -22,9 +22,9 @@ describe('ProcessScheduler', () => {
 
   test('runs process on idle with specified idleTimeoutMs', async () => {
     let testProcessCallCount = 0;
-    // oxlint-disable-next-line require-await
-    const testProcess = async () => {
+    const testProcess = () => {
       testProcessCallCount++;
+      return Promise.resolve();
     };
     const requestIdleCalls: number[] = [];
     const requestIdleResolver = resolver();
@@ -54,11 +54,11 @@ describe('ProcessScheduler', () => {
   test('rejects if process rejects', async () => {
     let testProcessCallCount = 0;
     let testProcessError;
-    // oxlint-disable-next-line require-await
-    const testProcess = async () => {
+    const testProcess = () => {
       testProcessCallCount++;
       testProcessError = new Error('testProcess error');
       throw testProcessError;
+      return Promise.resolve();
     };
     const requestIdleCalls: number[] = [];
     const requestIdleResolver = resolver();
@@ -91,44 +91,287 @@ describe('ProcessScheduler', () => {
     expect(testProcessCallCount).toBe(1);
   });
 
-  test('rejects if process rejects', async () => {
+  test('runs immediately bypassing throttle and idle when run() is called', async () => {
     let testProcessCallCount = 0;
-    let testProcessError;
-    // oxlint-disable-next-line require-await
-    const testProcess = async () => {
+    const testProcess = () => {
       testProcessCallCount++;
-      testProcessError = new Error('testProcess error');
-      throw testProcessError;
+      return Promise.resolve();
     };
-    const requestIdleCalls: number[] = [];
-    const requestIdleResolver = resolver();
-    const requestIdle = (idleTimeoutMs: number) => {
-      requestIdleCalls.push(idleTimeoutMs);
-      return requestIdleResolver.promise;
-    };
+    // requestIdle that never resolves to prove it's skipped
+    const requestIdle = () => new Promise<void>(() => {});
+
+    // throttleMs to prove it's skipped
     const scheduler = new ProcessScheduler(
       testProcess,
       1234,
+      5000,
+      new AbortController().signal,
+      requestIdle,
+    );
+
+    const result = scheduler.run();
+    await aFewMicrotasks();
+
+    // Should run immediately
+    expect(testProcessCallCount).toBe(1);
+    await result;
+  });
+
+  // Scenario 1: run() call while a schedule() call has a process running
+  test('run() waits for currently running process (scheduled)', async () => {
+    const processResolvers: Resolver<void>[] = [];
+    const testProcess = async () => {
+      const r = resolver();
+      processResolvers.push(r);
+      await r.promise;
+    };
+    const requestIdle = (_ms: number) => Promise.resolve();
+
+    const scheduler = new ProcessScheduler(
+      testProcess,
+      100,
       0,
       new AbortController().signal,
       requestIdle,
     );
-    const result = scheduler.schedule();
+
+    // Start a scheduled process
+    const schedulePromise = scheduler.schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).toBe(0);
-    expect(requestIdleCalls.length).toBe(1);
-    expect(requestIdleCalls[0]).toBe(1234);
-    requestIdleResolver.resolve();
+
+    // It should be running now (since idle resolves immediately)
+    expect(processResolvers.length).toBe(1);
+
+    // Call run()
+    const runPromise = scheduler.run();
     await aFewMicrotasks();
-    expect(testProcessCallCount).toBe(1);
-    let expectedE;
-    try {
-      await result;
-    } catch (e) {
-      expectedE = e;
-    }
-    expect(expectedE).toBe(testProcessError);
-    expect(testProcessCallCount).toBe(1);
+
+    // Should wait for first process to finish
+    expect(processResolvers.length).toBe(1);
+
+    // Finish first process
+    processResolvers[0].resolve();
+    await schedulePromise;
+    await aFewMicrotasks();
+
+    // Now run() should start
+    expect(processResolvers.length).toBe(2);
+
+    // Finish second process
+    processResolvers[1].resolve();
+    await runPromise;
+  });
+
+  // Scenario 2: run() call while a schedule() call is waiting on throttle
+  test('run() preempts schedule() waiting on throttle', async () => {
+    let callCount = 0;
+    const testProcess = () => {
+      callCount++;
+      return Promise.resolve();
+    };
+    const requestIdle = (_ms: number) => Promise.resolve();
+
+    const scheduler = new ProcessScheduler(
+      testProcess,
+      100,
+      5000, // Very long throttle
+      new AbortController().signal,
+      requestIdle,
+    );
+
+    // Initial run to start throttle timer
+    await scheduler.run();
+    expect(callCount).toBe(1);
+
+    // Schedule next run - should wait on throttle
+    const schedulePromise = scheduler.schedule();
+    await aFewMicrotasks();
+    expect(callCount).toBe(1); // Still waiting
+
+    // Call run() - should preempt
+    const runPromise = scheduler.run();
+    await aFewMicrotasks();
+
+    // Run() should execute immediately and fulfill BOTH promises
+    expect(callCount).toBe(2);
+
+    await runPromise;
+    await schedulePromise;
+  });
+
+  // Scenario 3: run() call while a schedule() call is waiting on idle
+  test('run() preempts schedule() waiting on idle', async () => {
+    let callCount = 0;
+    const testProcess = () => {
+      callCount++;
+      return Promise.resolve();
+    };
+    const requestIdleResolver = resolver();
+    const requestIdle = (_ms: number) => requestIdleResolver.promise;
+
+    const scheduler = new ProcessScheduler(
+      testProcess,
+      100,
+      0,
+      new AbortController().signal,
+      requestIdle,
+    );
+
+    // Schedule run - should wait on idle
+    const schedulePromise = scheduler.schedule();
+    await aFewMicrotasks();
+    expect(callCount).toBe(0);
+
+    // Call run() - should preempt
+    const runPromise = scheduler.run();
+    await aFewMicrotasks();
+
+    // Run() should execute immediately (ignoring idle) and fulfill BOTH
+    expect(callCount).toBe(1);
+
+    await runPromise;
+    await schedulePromise;
+  });
+
+  // Scenario 4: run() call while a schedule() call has a process running and another schedule() call is queued
+  test('run() chains correctly when schedule() running and another schedule() queued', async () => {
+    const processResolvers: Resolver<void>[] = [];
+    const testProcess = async () => {
+      const r = resolver();
+      processResolvers.push(r);
+      await r.promise;
+    };
+    const requestIdle = (_ms: number) => Promise.resolve();
+
+    const scheduler = new ProcessScheduler(
+      testProcess,
+      100,
+      0,
+      new AbortController().signal,
+      requestIdle,
+    );
+
+    // 1. Start scheduled process A
+    const scheduleA = scheduler.schedule();
+    await aFewMicrotasks();
+    expect(processResolvers.length).toBe(1); // A running
+
+    // 2. Queue schedule B (waits for A)
+    const scheduleB = scheduler.schedule();
+    await aFewMicrotasks();
+
+    // 3. Call run() C (steals B, waits for A)
+    const runC = scheduler.run();
+    await aFewMicrotasks();
+
+    // A is still running. C is waiting for A. B is stolen by C.
+    expect(processResolvers.length).toBe(1);
+
+    // Finish A
+    processResolvers[0].resolve();
+    await scheduleA;
+    await aFewMicrotasks();
+
+    // C should act immediately (since start of C's run logic), creating process 2
+    expect(processResolvers.length).toBe(2);
+
+    // Finish C (which fulfills B)
+    processResolvers[1].resolve();
+    await runC;
+    await scheduleB;
+  });
+
+  // Scenario 5: schedule() call while a run() call is running
+  test('schedule() waits for currently running run()', async () => {
+    const processResolvers: Resolver<void>[] = [];
+    const testProcess = async () => {
+      const r = resolver();
+      processResolvers.push(r);
+      await r.promise;
+    };
+    const requestIdle = (_ms: number) => Promise.resolve();
+
+    const scheduler = new ProcessScheduler(
+      testProcess,
+      100,
+      0,
+      new AbortController().signal,
+      requestIdle,
+    );
+
+    // Start run() A
+    const runA = scheduler.run();
+    await aFewMicrotasks();
+    expect(processResolvers.length).toBe(1); // A running
+
+    // Schedule B (waits for A)
+    const scheduleB = scheduler.schedule();
+    await aFewMicrotasks();
+
+    // Finish A
+    processResolvers[0].resolve();
+    await runA;
+    await aFewMicrotasks();
+
+    // B starts
+    expect(processResolvers.length).toBe(2);
+
+    // Finish B
+    processResolvers[1].resolve();
+    await scheduleB;
+  });
+
+  // Scenario 6: schedule() call while a run() call is waiting on a process run from a previous schedule() call
+  test('schedule() queues correctly while run() is waiting on previous schedule', async () => {
+    const processResolvers: Resolver<void>[] = [];
+    const testProcess = async () => {
+      const r = resolver();
+      processResolvers.push(r);
+      await r.promise;
+    };
+    const requestIdle = (_ms: number) => Promise.resolve();
+
+    const scheduler = new ProcessScheduler(
+      testProcess,
+      100,
+      0,
+      new AbortController().signal,
+      requestIdle,
+    );
+
+    // 1. Start scheduled A
+    const scheduleA = scheduler.schedule();
+    await aFewMicrotasks();
+    expect(processResolvers.length).toBe(1); // A running
+
+    // 2. Call run() B (waits for A)
+    const runB = scheduler.run();
+    await aFewMicrotasks();
+
+    // 3. Schedule C (waits for B? No, queues via scheduleInternal logic)
+    // scheduleInternal for C will await "runPromise" which is now B's promise
+    const scheduleC = scheduler.schedule();
+    await aFewMicrotasks();
+
+    // Finish A
+    processResolvers[0].resolve();
+    await scheduleA;
+    await aFewMicrotasks();
+
+    // B starts
+    expect(processResolvers.length).toBe(2);
+
+    // Finish B
+    processResolvers[1].resolve();
+    await runB;
+    await aFewMicrotasks();
+
+    // C starts
+    expect(processResolvers.length).toBe(3);
+
+    // Finish C
+    processResolvers[2].resolve();
+    await scheduleC;
   });
 
   test('multiple calls to schedule while process is running are fullfilled by one process run', async () => {
@@ -417,9 +660,9 @@ describe('ProcessScheduler', () => {
 
   test('rejects with AbortError if AbortSignal is already aborted', async () => {
     let testProcessCallCount = 0;
-    // oxlint-disable-next-line require-await
-    const testProcess = async () => {
+    const testProcess = () => {
       testProcessCallCount++;
+      return Promise.resolve();
     };
     const requestIdleCalls: number[] = [];
     const requestIdleResolver = resolver();

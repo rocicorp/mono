@@ -182,6 +182,11 @@ export interface ReplicacheImplOptions {
   enableScheduledRefresh?: boolean | undefined;
 
   /**
+   * Defaults to `() => true`.
+   */
+  enableRefresh?: (() => boolean) | undefined;
+
+  /**
    * Defaults to true.
    */
   enablePullAndPushInOpen?: boolean | undefined;
@@ -324,6 +329,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly #persistLock = new Lock();
   readonly #enableScheduledPersist: boolean;
   readonly #enableScheduledRefresh: boolean;
+  readonly #enableRefresh: () => boolean;
   readonly #enablePullAndPushInOpen: boolean;
   #persistScheduler = new ProcessScheduler(
     () => this.persist(),
@@ -435,6 +441,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableMutationRecovery = true,
       enableScheduledPersist = true,
       enableScheduledRefresh = true,
+      enableRefresh = () => true,
       enablePullAndPushInOpen = true,
       enableClientGroupForking = true,
       onClientsDeleted = () => promiseVoid,
@@ -452,6 +459,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     this.#enableScheduledPersist = enableScheduledPersist;
     this.#enableScheduledRefresh = enableScheduledRefresh;
+    this.#enableRefresh = enableRefresh;
     this.#enablePullAndPushInOpen = enablePullAndPushInOpen;
 
     this.#lc = createLogContext(logLevel, logSinks, {name});
@@ -1212,7 +1220,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   async refresh(): Promise<void> {
     await this.#ready;
     const {clientID} = this;
-    if (this.#closed) {
+    if (this.#closed || !this.#enableRefresh()) {
       return;
     }
     let refreshResult: Awaited<ReturnType<typeof refresh>>;
@@ -1306,6 +1314,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#lc.error?.(`Error during ${name}`, e);
       }
     }
+  }
+
+  /**
+   * Runs a refresh as soon as possible through the refresh scheduler.
+   */
+  runRefresh(): Promise<void> {
+    return this.#refreshScheduler.run();
   }
 
   #changeSyncCounters(pushDelta: 0, pullDelta: 1 | -1): void;

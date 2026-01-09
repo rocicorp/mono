@@ -2,6 +2,7 @@ export {useConnectionState} from './use-connection-state.tsx';
 export {
   useQuery,
   useSuspenseQuery,
+  type MaybeQueryResult,
   type QueryResult,
   type UseQueryOptions,
 } from './use-query.tsx';
