@@ -2428,14 +2428,7 @@ test('connect() without opts preserves existing auth', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 });
 
-// NOTE: this test is the same as the previous test case
-// but without the tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS) call.
-// Many of these tests are either doing either
-// await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-// or
-// await vi.advanceTimersByTimeAsync(0);
-// and will stall and timeout without them.
-test('repro run-loop race', async () => {
+test('run-loop error->connect with no ticks', async () => {
   const z = zeroForTest({auth: 'initial-token'});
 
   await z.triggerConnected();
@@ -2448,7 +2441,6 @@ test('repro run-loop race', async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
-  //await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
 
   // Reconnect without providing auth opts - should keep existing auth
   // never resolves
@@ -2461,7 +2453,7 @@ test('repro run-loop race', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 });
 
-test('repro run-loop race using state.subscribe', async () => {
+test('run-loop error->connect with no ticks using state.subscribe', async () => {
   const z = zeroForTest({auth: 'initial-token'});
 
   await z.triggerConnected();
@@ -2481,7 +2473,6 @@ test('repro run-loop race using state.subscribe', async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
-  //await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
 
   // Reconnect without providing auth opts - should keep existing auth
   expect(connectPromise).toBeDefined();

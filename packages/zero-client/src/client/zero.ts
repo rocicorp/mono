@@ -2119,6 +2119,8 @@ export class Zero<
             break;
           }
           case ConnectionStatus.Error: {
+            lc.debug?.('Fatal error encountered, transitioning to error state');
+
             this.#connectionManager.error(transition.reason);
             // run loop will enter the error state case and await a state change
             break;
