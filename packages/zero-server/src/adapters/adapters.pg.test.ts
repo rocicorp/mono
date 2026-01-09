@@ -25,7 +25,7 @@ let postgresJsClient: PostgresDB;
 let nodePgPool: Pool;
 let nodePgPoolClient: PoolClient;
 let nodePgClient: Client;
-let prismaClient: PrismaClient | undefined;
+let prismaClient: PrismaClient;
 
 beforeEach(async () => {
   postgresJsClient = await testDBs.create('adapters-pg-test');
@@ -35,6 +35,11 @@ beforeEach(async () => {
   nodePgPoolClient = await nodePgPool.connect();
   nodePgClient = new Client({
     connectionString: getConnectionURI(postgresJsClient),
+  });
+  prismaClient = new PrismaClient({
+    adapter: new PrismaPg({
+      connectionString: getConnectionURI(postgresJsClient),
+    }),
   });
 
   await nodePgClient.connect();
@@ -278,26 +283,6 @@ describe('postgres-js', () => {
 });
 
 describe('prisma', () => {
-  let previousDatabaseUrl: string | undefined;
-
-  beforeEach(() => {
-    previousDatabaseUrl = process.env.DATABASE_URL;
-    process.env.DATABASE_URL = getConnectionURI(postgresJsClient);
-    const adapter = new PrismaPg({
-      connectionString: getConnectionURI(postgresJsClient),
-    });
-    prismaClient = new PrismaClient({adapter});
-  });
-
-  afterEach(() => {
-    if (previousDatabaseUrl === undefined) {
-      delete process.env.DATABASE_URL;
-    } else {
-      process.env.DATABASE_URL = previousDatabaseUrl;
-    }
-    previousDatabaseUrl = undefined;
-  });
-
   test('querying', async ({expect}) => {
     if (!prismaClient) {
       throw new Error('Prisma client not initialized');
