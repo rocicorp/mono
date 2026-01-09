@@ -2460,7 +2460,7 @@ test.only('repro run-loop race', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 });
 
-test.only('repro run-loop race 2', async () => {
+test.only('repro run-loop race using state.subscribe', async () => {
   const z = zeroForTest({auth: 'initial-token'});
 
   await z.triggerConnected();
