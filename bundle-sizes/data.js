@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1767907222724,
+  "lastUpdate": 1767980031318,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54969,6 +54969,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31840,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "greg@roci.dev",
+            "name": "Greg Baker",
+            "username": "grgbkr"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d24bf2c37abc92d2326fe5284ffbb424b7f3ed10",
+          "message": "fix(zero-client): improve handling of race between poke and IndexedDB refresh (#5389)\n\nAddresses https://bugs.rocicorp.dev/p/zero/issue/3795\n\nThe recent changes to the connection API and error handling surfaced\nthat clients were frequently hitting \"Server returned unexpected base\ncookie during sync\" client errors when new tabs were opened. Those\nchanges also made it so that Zero client didn't auto-reconnect when it\nencountered this error, instead customer code has to explicitly call\n`zero.connection.connect()`, which meant clients were often permanently\ndisconnecting when new tabs were open.\nhttps://github.com/rocicorp/mono/pull/5388 updated Zero client to\nauto-reconnect on this type of error.\n\nThis change aims to avoid this error all together by avoiding the race\nbetween persist/refresh and poke more reliably by not refreshing when\nZero client is connecting/connected.\n\nInstead we only refresh from IndexedDB when in connection states:\n`Disconnected`, `NeedsAuth`, `Error` and `Closed`, and we schedule a\nrefresh when transitioning to one of these states (to make sure we get\nany persists that happened while connecting/connected which are ahead of\nthe last poke received by this client. To enable this added an\nenableRefresh control to `ReplicacheImpl` and exposed\n`ReplicacheImpl.#scheduleRefresh`, making it non-private\n`ReplicacheImpl.scheduleRefresh`.\n\nVerified by adding some new tests and by manually testing with zbugs\nthat opening new tabs and switch tabs no longer results in \"Server\nreturned unexpected base cookie during sync\" errors.",
+          "timestamp": "2026-01-09T17:26:00Z",
+          "tree_id": "f71739559a115e3323d8a490f8193e7a6103ea0e",
+          "url": "https://github.com/rocicorp/mono/commit/d24bf2c37abc92d2326fe5284ffbb424b7f3ed10"
+        },
+        "date": 1767980019275,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 304211,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54849,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111722,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31957,
             "unit": "bytes"
           }
         ]
