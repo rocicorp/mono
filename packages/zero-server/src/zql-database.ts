@@ -86,28 +86,23 @@ export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
         },
 
         async deleteMutationResults(args: CleanupResultsArg) {
-          switch (args.type) {
-            case 'bulk': {
-              // Bulk deletion: delete all mutations for multiple clients
-              const formatted = formatPg(
-                sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
-                    WHERE "clientGroupID" = ${args.clientGroupID}
-                      AND "clientID" = ANY(${args.clientIDs})`,
-              );
-              await dbTx.query(formatted.text, formatted.values);
-              break;
-            }
-            case 'single': {
-              // Single client: delete up to mutation ID
-              const formatted = formatPg(
-                sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
-                    WHERE "clientGroupID" = ${args.clientGroupID}
-                      AND "clientID" = ${args.clientID}
-                      AND "mutationID" <= ${args.upToMutationID}`,
-              );
-              await dbTx.query(formatted.text, formatted.values);
-              break;
-            }
+          if ('type' in args && args.type === 'bulk') {
+            // Bulk deletion: delete all mutations for multiple clients
+            const formatted = formatPg(
+              sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
+                  WHERE "clientGroupID" = ${args.clientGroupID}
+                    AND "clientID" = ANY(${args.clientIDs})`,
+            );
+            await dbTx.query(formatted.text, formatted.values);
+          } else {
+            // Single client (explicit 'single' or legacy without type): delete up to mutation ID
+            const formatted = formatPg(
+              sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
+                  WHERE "clientGroupID" = ${args.clientGroupID}
+                    AND "clientID" = ${args.clientID}
+                    AND "mutationID" <= ${args.upToMutationID}`,
+            );
+            await dbTx.query(formatted.text, formatted.values);
           }
         },
       });

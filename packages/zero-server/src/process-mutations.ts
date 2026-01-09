@@ -604,8 +604,11 @@ async function processCleanupResultsMutation<
   const args: CleanupResultsArg = parseResult.value;
 
   // Determine clientID for transaction input based on cleanup type
+  // Note: legacy format without type field is treated as single
   const clientID =
-    args.type === 'single' ? args.clientID : (args.clientIDs[0] ?? '');
+    'type' in args && args.type === 'bulk'
+      ? (args.clientIDs[0] ?? '')
+      : args.clientID;
 
   // Run in a transaction, using the hook for DB-specific operation
   await dbProvider.transaction(
