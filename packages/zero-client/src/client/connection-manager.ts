@@ -66,6 +66,7 @@ type TerminalConnectionManagerState = Extract<
 
 export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   #state: ConnectionManagerState;
+  #connectRequestResolver: Resolver<void> | undefined = resolver();
 
   /**
    * The timestamp when we first started trying to connect.
@@ -159,6 +160,28 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    */
   waitForStateChange(): Promise<ConnectionManagerState> {
     return this.#nextStatePromise();
+  }
+
+  requestConnect(): void {
+    if (this.#connectRequestResolver === undefined) {
+      return;
+    }
+    this.#connectRequestResolver.resolve();
+    this.#connectRequestResolver = undefined;
+  }
+
+  waitForConnectRequest(): Promise<void> {
+    return this.#connectRequestResolver === undefined
+      ? Promise.resolve()
+      : this.#connectRequestResolver.promise;
+  }
+
+  consumeConnectRequest(): boolean {
+    if (this.#connectRequestResolver !== undefined) {
+      return false;
+    }
+    this.#connectRequestResolver = resolver();
+    return true;
   }
 
   /**

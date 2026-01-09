@@ -2435,7 +2435,7 @@ test('connect() without opts preserves existing auth', async () => {
 // or
 // await vi.advanceTimersByTimeAsync(0);
 // and will stall and timeout without them.
-test.only('repro run-loop race', async () => {
+test('repro run-loop race', async () => {
   const z = zeroForTest({auth: 'initial-token'});
 
   await z.triggerConnected();
@@ -2452,9 +2452,7 @@ test.only('repro run-loop race', async () => {
 
   // Reconnect without providing auth opts - should keep existing auth
   // never resolves
-  console.log('before await z.connection.connect()');
   await z.connection.connect();
-  console.log('after await z.connection.connect()');
   const currentSocket = await z.socket;
   expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
     'initial-token',
@@ -2463,7 +2461,7 @@ test.only('repro run-loop race', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 });
 
-test.only('repro run-loop race using state.subscribe', async () => {
+test('repro run-loop race using state.subscribe', async () => {
   const z = zeroForTest({auth: 'initial-token'});
 
   await z.triggerConnected();
@@ -2472,7 +2470,6 @@ test.only('repro run-loop race using state.subscribe', async () => {
   let connectPromise = undefined;
   z.connection.state.subscribe(state => {
     if (state.name === ConnectionStatus.Error) {
-      console.log('connecting from error');
       connectPromise = z.connection.connect();
     }
   });
@@ -2488,9 +2485,7 @@ test.only('repro run-loop race using state.subscribe', async () => {
 
   // Reconnect without providing auth opts - should keep existing auth
   expect(connectPromise).toBeDefined();
-  console.log('before await connectPromise');
   await connectPromise;
-  console.log('after await connectPromise');
   const currentSocket = await z.socket;
   expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
     'initial-token',
