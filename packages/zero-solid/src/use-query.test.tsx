@@ -6,7 +6,7 @@ import {
   type Accessor,
   type JSX,
 } from 'solid-js';
-import {afterEach, expect, test, vi} from 'vitest';
+import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {
@@ -18,7 +18,7 @@ import {
   refCountSymbol,
   type QueryDelegate,
 } from './bindings.ts';
-import {useQuery, type UseQueryOptions} from './use-query.ts';
+import {useQuery, type QueryResult, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
 import {
   createSchema,
@@ -29,6 +29,7 @@ import {
   type CustomMutatorDefs,
   type MaterializeOptions,
   type Query,
+  type QueryResultDetails,
   type Schema,
   type TTL,
   type ViewFactory,
@@ -106,10 +107,17 @@ function useQueryWithZeroProvider<
       {props.children}
     </ZeroProvider>
   );
-  return renderHook(useQuery, {
-    initialProps: [querySignal, options],
-    wrapper: MockZeroProvider,
-  });
+  // Use wrapper function to avoid TypeScript overload resolution issues with renderHook
+  type QuerySignal = Accessor<Query<TTable, TSchema, TReturn>>;
+  type Options = UseQueryOptions | Accessor<UseQueryOptions> | undefined;
+  type Result = QueryResult<TReturn>;
+  return renderHook(
+    (q: QuerySignal, opts: Options) => useQuery(q, opts) as Result,
+    {
+      initialProps: [querySignal, options],
+      wrapper: MockZeroProvider,
+    },
+  );
 }
 
 test('useQuery', async () => {
@@ -919,8 +927,178 @@ test('useQuery when ZeroProvider is not-used, view is not-reused if query instan
   const querySignal = () => queries[queryIndex()];
 
   expect(() => {
-    renderHook(useQuery, {
+    renderHook((q: typeof querySignal) => useQuery(q), {
       initialProps: [querySignal],
     });
   }).toThrow('useZero must be used within a ZeroProvider');
+});
+
+describe('maybe queries', () => {
+  // Shared queries and type for maybe query tests
+  const {tableQuery: pluralQuery, queryDelegate} = setupTestEnvironment();
+  const singularQuery = pluralQuery.one();
+  type Row = {readonly a: number; readonly b: string};
+
+  test('plural maybe query (truthy at runtime) returns typed data', () => {
+    const zero = newMockZero('maybe-plural-truthy', queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const maybeQuery = pluralQuery as typeof pluralQuery | null;
+    const {result} = renderHook(
+      () => {
+        // Non-maybe query returns Row[] (no undefined)
+        const [nonMaybeData] = useQuery(() => pluralQuery);
+        expectTypeOf(nonMaybeData()).toMatchTypeOf<readonly Row[]>();
+
+        // Maybe query returns Row[] | undefined
+        return useQuery(() => maybeQuery);
+      },
+      {wrapper: MockZeroProvider},
+    );
+
+    const [data, details] = result;
+
+    expectTypeOf(data()).toMatchTypeOf<readonly Row[] | undefined>();
+    expectTypeOf(details()).toMatchTypeOf<QueryResultDetails>();
+
+    expect(materializeSpy).toHaveBeenCalled();
+  });
+
+  test('plural maybe query (falsy at runtime) returns undefined', () => {
+    const zero = newMockZero('maybe-plural-falsy', queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const maybeQuery = null as typeof pluralQuery | null;
+    const {result} = renderHook(() => useQuery(() => maybeQuery), {
+      wrapper: MockZeroProvider,
+    });
+
+    const [data, details] = result;
+
+    // Type assertions: plural maybe query returns Row[] | undefined
+    expectTypeOf(data()).toMatchTypeOf<readonly Row[] | undefined>();
+    expectTypeOf(details()).toMatchTypeOf<QueryResultDetails>();
+
+    expect(data()).toBe(undefined);
+    expect(details()).toEqual({type: 'unknown'});
+    expect(materializeSpy).not.toHaveBeenCalled();
+  });
+
+  test('singular maybe query (truthy at runtime) returns typed data', () => {
+    const zero = newMockZero('maybe-singular-truthy', queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const maybeQuery = singularQuery as typeof singularQuery | null;
+    const {result} = renderHook(
+      () => {
+        // Non-maybe singular query returns Row | undefined (undefined for no result, not disabled)
+        const [nonMaybeData] = useQuery(() => singularQuery);
+        expectTypeOf(nonMaybeData()).toMatchTypeOf<Row | undefined>();
+
+        // Maybe singular query also returns Row | undefined
+        return useQuery(() => maybeQuery);
+      },
+      {wrapper: MockZeroProvider},
+    );
+
+    const [data, details] = result;
+
+    // Type assertions: singular maybe query returns Row | undefined
+    expectTypeOf(data()).toMatchTypeOf<Row | undefined>();
+    expectTypeOf(details()).toMatchTypeOf<QueryResultDetails>();
+
+    expect(materializeSpy).toHaveBeenCalled();
+  });
+
+  test('singular maybe query (falsy at runtime) returns undefined', () => {
+    const zero = newMockZero('maybe-singular-falsy', queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const maybeQuery = null as typeof singularQuery | null;
+    const {result} = renderHook(() => useQuery(() => maybeQuery), {
+      wrapper: MockZeroProvider,
+    });
+
+    const [data, details] = result;
+
+    // Type assertions: singular maybe query returns Row | undefined
+    expectTypeOf(data()).toMatchTypeOf<Row | undefined>();
+    expectTypeOf(details()).toMatchTypeOf<QueryResultDetails>();
+
+    expect(data()).toBe(undefined);
+    expect(details()).toEqual({type: 'unknown'});
+    expect(materializeSpy).not.toHaveBeenCalled();
+  });
+
+  // These tests verify that transitioning between truthy/falsy queries
+  // properly resets the data to undefined when the query becomes falsy.
+
+  test('query transitioning from truthy to falsy resets data to undefined', () => {
+    const zero = newMockZero('maybe-transition-truthy-to-falsy', queryDelegate);
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const [enabled, setEnabled] = createSignal(true);
+    const {result} = renderHook(
+      () => useQuery(() => enabled() && pluralQuery),
+      {wrapper: MockZeroProvider},
+    );
+
+    const [data] = result;
+
+    // Initially enabled - should have data
+    expect(data()).not.toBe(undefined);
+    expect(Array.isArray(data())).toBe(true);
+
+    // Disable the query - data should become undefined
+    setEnabled(false);
+    expect(data()).toBe(undefined);
+  });
+
+  test('singular query transitioning from truthy to falsy resets data to undefined', () => {
+    const zero = newMockZero('maybe-singular-transition', queryDelegate);
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const [enabled, setEnabled] = createSignal(true);
+    const {result} = renderHook(
+      () => useQuery(() => enabled() && singularQuery),
+      {wrapper: MockZeroProvider},
+    );
+
+    const [data] = result;
+
+    // Initially enabled - should have data (or undefined if no match, but not because disabled)
+    // The key is that after disabling, it MUST be undefined
+    const initialData = data();
+
+    // Disable the query - data should become undefined
+    setEnabled(false);
+    expect(data()).toBe(undefined);
+
+    // Re-enable - should get data back
+    setEnabled(true);
+    // Data should be restored (same as initial)
+    expect(data()).toEqual(initialData);
+  });
 });
