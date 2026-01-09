@@ -22,9 +22,9 @@ describe('ProcessScheduler', () => {
 
   test('runs process on idle with specified idleTimeoutMs', async () => {
     let testProcessCallCount = 0;
-    // oxlint-disable-next-line require-await
-    const testProcess = async () => {
+    const testProcess = () => {
       testProcessCallCount++;
+      return Promise.resolve();
     };
     const requestIdleCalls: number[] = [];
     const requestIdleResolver = resolver();
@@ -54,11 +54,11 @@ describe('ProcessScheduler', () => {
   test('rejects if process rejects', async () => {
     let testProcessCallCount = 0;
     let testProcessError;
-    // oxlint-disable-next-line require-await
-    const testProcess = async () => {
+    const testProcess = () => {
       testProcessCallCount++;
       testProcessError = new Error('testProcess error');
       throw testProcessError;
+      return Promise.resolve();
     };
     const requestIdleCalls: number[] = [];
     const requestIdleResolver = resolver();
@@ -93,8 +93,9 @@ describe('ProcessScheduler', () => {
 
   test('runs immediately bypassing throttle and idle when run() is called', async () => {
     let testProcessCallCount = 0;
-    const testProcess = async () => {
+    const testProcess = () => {
       testProcessCallCount++;
+      return Promise.resolve();
     };
     // requestIdle that never resolves to prove it's skipped
     const requestIdle = () => new Promise<void>(() => {});
@@ -164,8 +165,9 @@ describe('ProcessScheduler', () => {
   // Scenario 2: run() call while a schedule() call is waiting on throttle
   test('run() preempts schedule() waiting on throttle', async () => {
     let callCount = 0;
-    const testProcess = async () => {
+    const testProcess = () => {
       callCount++;
+      return Promise.resolve();
     };
     const requestIdle = (_ms: number) => Promise.resolve();
 
@@ -200,8 +202,9 @@ describe('ProcessScheduler', () => {
   // Scenario 3: run() call while a schedule() call is waiting on idle
   test('run() preempts schedule() waiting on idle', async () => {
     let callCount = 0;
-    const testProcess = async () => {
+    const testProcess = () => {
       callCount++;
+      return Promise.resolve();
     };
     const requestIdleResolver = resolver();
     const requestIdle = (_ms: number) => requestIdleResolver.promise;
@@ -657,9 +660,9 @@ describe('ProcessScheduler', () => {
 
   test('rejects with AbortError if AbortSignal is already aborted', async () => {
     let testProcessCallCount = 0;
-    // oxlint-disable-next-line require-await
-    const testProcess = async () => {
+    const testProcess = () => {
       testProcessCallCount++;
+      return Promise.resolve();
     };
     const requestIdleCalls: number[] = [];
     const requestIdleResolver = resolver();
