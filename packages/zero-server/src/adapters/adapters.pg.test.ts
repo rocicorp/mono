@@ -3,7 +3,6 @@ import {drizzle as drizzleNodePg} from 'drizzle-orm/node-postgres';
 import {pgTable, text} from 'drizzle-orm/pg-core';
 import {drizzle as drizzlePostgresJs} from 'drizzle-orm/postgres-js';
 import {PrismaPg} from '@prisma/adapter-pg';
-import {PrismaClient} from '@prisma/client';
 import {Client, Pool, type PoolClient} from 'pg';
 import type {ExpectStatic} from 'vitest';
 import {afterEach, beforeEach, describe, expectTypeOf, test} from 'vitest';
@@ -25,7 +24,7 @@ let postgresJsClient: PostgresDB;
 let nodePgPool: Pool;
 let nodePgPoolClient: PoolClient;
 let nodePgClient: Client;
-let prismaClient: PrismaClient;
+let prismaClient: any;
 
 beforeEach(async () => {
   postgresJsClient = await testDBs.create('adapters-pg-test');
@@ -36,7 +35,7 @@ beforeEach(async () => {
   nodePgClient = new Client({
     connectionString: getConnectionURI(postgresJsClient),
   });
-  prismaClient = new PrismaClient({
+  prismaClient = new (await import('@prisma/client')).PrismaClient({
     adapter: new PrismaPg({
       connectionString: getConnectionURI(postgresJsClient),
     }),
@@ -284,13 +283,9 @@ describe('postgres-js', () => {
 
 describe('prisma', () => {
   test('querying', async ({expect}) => {
-    if (!prismaClient) {
-      throw new Error('Prisma client not initialized');
-    }
-    const prisma = prismaClient;
     const newUser = getRandomUser();
 
-    await prisma.user.create({
+    await prismaClient.user.create({
       data: {
         id: newUser.id,
         name: newUser.name,
@@ -298,7 +293,7 @@ describe('prisma', () => {
       },
     });
 
-    const zql = zeroPrisma(schema, prisma);
+    const zql = zeroPrisma(schema, prismaClient);
 
     const resultZQL = await zql.run(builder.user.where('id', '=', newUser.id));
 
@@ -320,12 +315,7 @@ describe('prisma', () => {
   });
 
   test('mutations', async ({expect}) => {
-    if (!prismaClient) {
-      throw new Error('Prisma client not initialized');
-    }
-    expect(prismaClient).toBeDefined();
-    const prisma = prismaClient;
-    const zql = zeroPrisma(schema, prisma);
+    const zql = zeroPrisma(schema, prismaClient);
     await exerciseMutations(zql, expect);
   });
 });

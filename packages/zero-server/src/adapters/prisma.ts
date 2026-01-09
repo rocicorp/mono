@@ -122,29 +122,36 @@ function toIterableRows(result: unknown): Iterable<Row> {
  *
  * @example
  * ```ts
+ * import {PrismaPg} from '@prisma/adapter-pg';
  * import {PrismaClient} from '@prisma/client';
- * import type {ServerTransaction} from '@rocicorp/zero';
+ * import {defineMutator, defineMutators} from '@rocicorp/zero';
+ * import {zeroPrisma} from '@rocicorp/zero/server/adapters/prisma';
+ * import {z} from 'zod/mini';
  *
- * const prisma = new PrismaClient();
+ * const prisma = new PrismaClient({
+ *   adapter: new PrismaPg({connectionString: process.env.ZERO_UPSTREAM_DB!}),
+ * });
  * const zql = zeroPrisma(schema, prisma);
  *
- * type ServerTx = ServerTransaction<
- *   Schema,
- *   PrismaTransaction<typeof prisma>
- * >;
- *
- * async function createUser(
- *   tx: ServerTx,
- *   {id, name}: {id: string; name: string},
- * ) {
- *   await tx.dbTransaction.wrappedTransaction.user.create({
- *     data: {
- *       id,
- *       name,
- *       status: 'active',
- *     },
- *   });
- * }
+ * export const serverMutators = defineMutators({
+ *   user: {
+ *     create: defineMutator(
+ *       z.object({id: z.string(), name: z.string()}),
+ *       async ({tx, args}) => {
+ *         if (tx.location !== 'server') {
+ *           throw new Error('Server-only mutator');
+ *         }
+ *         await tx.dbTransaction.wrappedTransaction.user.create({
+ *           data: {
+ *             id: args.id,
+ *             name: args.name,
+ *             status: 'active',
+ *           },
+ *         });
+ *       },
+ *     ),
+ *   },
+ * });
  * ```
  */
 export function zeroPrisma<
