@@ -121,7 +121,7 @@ export class ConnectionImpl implements Connection {
     return this.#source;
   }
 
-  async connect(opts?: {auth: string | null | undefined}): Promise<void> {
+  connect(opts?: {auth: string | null | undefined}): Promise<void> {
     const lc = this.#lc.withContext('connect');
 
     if (opts && 'auth' in opts) {
@@ -138,7 +138,7 @@ export class ConnectionImpl implements Connection {
       lc.error?.(
         'connect() called but the connection is disconnected due to a missing cacheURL. No reconnect will be attempted.',
       );
-      return;
+      return Promise.resolve();
     }
 
     // only allow connect() to be called from a terminal state
@@ -147,17 +147,16 @@ export class ConnectionImpl implements Connection {
         'connect() called but not in a terminal state. Current state:',
         this.#connectionManager.state.name,
       );
-      return;
+      return Promise.resolve();
     }
 
     lc.info?.(
       `Resuming connection from state: ${this.#connectionManager.state.name}`,
     );
 
-    // Transition to connecting, which will trigger the state change resolver
-    // and unblock the run loop. Wait for the next state change (connected, disconnected, etc.)
-    const {nextStatePromise} = this.#connectionManager.connecting();
-    await nextStatePromise;
+    // Transition to connecting to unblock the run loop.
+    this.#connectionManager.connecting();
+    return Promise.resolve();
   }
 }
 
