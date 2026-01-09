@@ -1,30 +1,37 @@
-import {Suspense} from 'react';
+import {Suspense, useState} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {
   afterEach,
   beforeEach,
   describe,
   expect,
+  expectTypeOf,
   test,
   vi,
   type Mock,
 } from 'vitest';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
   getAllViewsSizeForTesting,
+  useQuery,
   useSuspenseQuery,
   ViewStore,
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
-import type {
-  CustomMutatorDefs,
-  ErroredQuery,
-  Query,
-  QueryResultDetails,
-  ReadonlyJSONValue,
-  ResultType,
-  Schema,
-  Zero,
+import {
+  createSchema,
+  number,
+  string,
+  table,
+  type CustomMutatorDefs,
+  type ErroredQuery,
+  type Query,
+  type QueryResultDetails,
+  type ReadonlyJSONValue,
+  type ResultType,
+  type Schema,
+  type Zero,
 } from './zero.ts';
 
 function newMockQuery(query: string, singular = false): Query<string, Schema> {
@@ -1220,5 +1227,239 @@ describe('useSuspenseQuery', () => {
       // All views should be cleaned up
       expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
     });
+  });
+});
+
+describe('maybe queries', () => {
+  let container: HTMLElement;
+  let root: Root;
+  let zero: Zero<Schema>;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    zero = newMockZero('client-maybe');
+  });
+
+  afterEach(() => {
+    root.unmount();
+    document.body.removeChild(container);
+    vi.resetAllMocks();
+  });
+
+  // Shared schema and type for maybe query tests
+  const testSchema = createSchema({
+    tables: [
+      table('item').columns({id: number(), name: string()}).primaryKey('id'),
+    ],
+  });
+  const pluralQuery = newQuery(testSchema, 'item');
+  const singularQuery = pluralQuery.one();
+  type Item = {readonly id: number; readonly name: string};
+
+  test('plural maybe query (truthy at runtime) returns typed data', async () => {
+    let capturedDetails: QueryResultDetails | undefined;
+
+    function Comp() {
+      // Non-maybe query returns Item[] (no undefined)
+      const [nonMaybeData] = useQuery(pluralQuery);
+      expectTypeOf(nonMaybeData).toEqualTypeOf<Item[]>();
+
+      // Maybe query returns Item[] | undefined
+      const maybeQuery = pluralQuery as typeof pluralQuery | null;
+      const [data, details] = useQuery(maybeQuery);
+      capturedDetails = details;
+
+      expectTypeOf(data).toEqualTypeOf<Item[] | undefined>();
+      expectTypeOf(details).toEqualTypeOf<QueryResultDetails>();
+
+      return <div>Has query</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    await vi.waitFor(() => {
+      expect(capturedDetails).toBeDefined();
+    });
+
+    expect(zero.materialize).toHaveBeenCalled();
+  });
+
+  test('plural maybe query (falsy at runtime) returns undefined', async () => {
+    let capturedData: unknown;
+    let capturedDetails: QueryResultDetails | undefined;
+
+    function Comp() {
+      const maybeQuery = null as typeof pluralQuery | null;
+      const [data, details] = useQuery(maybeQuery);
+      capturedData = data;
+      capturedDetails = details;
+
+      // Type assertions: plural maybe query returns Item[] | undefined
+      expectTypeOf(data).toEqualTypeOf<Item[] | undefined>();
+      expectTypeOf(details).toEqualTypeOf<QueryResultDetails>();
+
+      return <div>No query</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    await vi.waitFor(() => {
+      expect(capturedDetails).toBeDefined();
+    });
+
+    expect(capturedData).toBe(undefined);
+    expect(capturedDetails).toEqual({type: 'unknown'});
+    expect(zero.materialize).not.toHaveBeenCalled();
+  });
+
+  test('singular maybe query (truthy at runtime) returns typed data', async () => {
+    let capturedDetails: QueryResultDetails | undefined;
+
+    function Comp() {
+      // Non-maybe singular query returns Item | undefined (undefined for no match)
+      const [nonMaybeData] = useQuery(singularQuery);
+      expectTypeOf(nonMaybeData).toEqualTypeOf<Item | undefined>();
+
+      // Maybe singular query also returns Item | undefined (same type)
+      const maybeQuery = singularQuery as typeof singularQuery | null;
+      const [data, details] = useQuery(maybeQuery);
+      capturedDetails = details;
+
+      expectTypeOf(data).toEqualTypeOf<Item | undefined>();
+      expectTypeOf(details).toEqualTypeOf<QueryResultDetails>();
+
+      return <div>Has query</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    await vi.waitFor(() => {
+      expect(capturedDetails).toBeDefined();
+    });
+
+    expect(zero.materialize).toHaveBeenCalled();
+  });
+
+  test('singular maybe query (falsy at runtime) returns undefined', async () => {
+    let capturedData: unknown;
+    let capturedDetails: QueryResultDetails | undefined;
+
+    function Comp() {
+      const maybeQuery = null as typeof singularQuery | null;
+      const [data, details] = useQuery(maybeQuery);
+      capturedData = data;
+      capturedDetails = details;
+
+      // Type assertions: singular maybe query returns Item | undefined
+      expectTypeOf(data).toEqualTypeOf<Item | undefined>();
+      expectTypeOf(details).toEqualTypeOf<QueryResultDetails>();
+
+      return <div>No query</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    await vi.waitFor(() => {
+      expect(capturedDetails).toBeDefined();
+    });
+
+    expect(capturedData).toBe(undefined);
+    expect(capturedDetails).toEqual({type: 'unknown'});
+    expect(zero.materialize).not.toHaveBeenCalled();
+  });
+
+  // These tests verify that transitioning between truthy/falsy queries doesn't
+  // cause React hooks order violations. Without the fix, React throws:
+  // - "Rendered fewer hooks than expected" (truthy → falsy)
+  // - "Rendered more hooks than during the previous render" (falsy → truthy)
+
+  test('query transitioning from truthy to falsy maintains hooks order', async () => {
+    let capturedData: Item[] | undefined;
+    let setQueryEnabled!: (enabled: boolean) => void;
+
+    function Comp() {
+      const [enabled, setEnabled] = useState(true);
+      setQueryEnabled = setEnabled;
+
+      const maybeQuery = enabled ? pluralQuery : null;
+      const [data] = useQuery(maybeQuery);
+      capturedData = data;
+
+      return <div>{enabled ? 'Has query' : 'No query'}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toBe('Has query');
+    });
+    expect(zero.materialize).toHaveBeenCalled();
+
+    // Transition to falsy - would throw "Rendered fewer hooks" without fix
+    setQueryEnabled(false);
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toBe('No query');
+    });
+    expect(capturedData).toBe(undefined);
+  });
+
+  test('query transitioning from falsy to truthy maintains hooks order', async () => {
+    let capturedData: Item[] | undefined;
+    let setQueryEnabled!: (enabled: boolean) => void;
+
+    function Comp() {
+      const [enabled, setEnabled] = useState(false);
+      setQueryEnabled = setEnabled;
+
+      const maybeQuery = enabled ? pluralQuery : null;
+      const [data] = useQuery(maybeQuery);
+      capturedData = data;
+
+      return <div>{enabled ? 'Has query' : 'No query'}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toBe('No query');
+    });
+    expect(capturedData).toBe(undefined);
+    expect(zero.materialize).not.toHaveBeenCalled();
+
+    // Transition to truthy - would throw "Rendered more hooks" without fix
+    setQueryEnabled(true);
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toBe('Has query');
+    });
+    expect(zero.materialize).toHaveBeenCalled();
   });
 });

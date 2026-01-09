@@ -1020,15 +1020,13 @@ function useEmojiChangeListener(
   issue: Issue | undefined,
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
-  const enabled = issue !== undefined;
   const issueID = issue?.id;
-  const [emojis, result] = useQuery(queries.emojiChange(issueID ?? ''), {
-    enabled,
-  });
+  const [emojis, result] = useQuery(issueID && queries.emojiChange(issueID));
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
 
   useEffect(() => {
+    if (!emojis) return;
     const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
 
     // First time we see the complete emojis for this issue.

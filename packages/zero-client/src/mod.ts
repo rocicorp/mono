@@ -16,6 +16,7 @@ export {
 export type {ClientGroupID, ClientID} from '../../replicache/src/sync/ids.ts';
 export {TransactionClosedError} from '../../replicache/src/transaction-closed-error.ts';
 export type {Expand} from '../../shared/src/expand.ts';
+export type {Falsy} from '../../shared/src/falsy.ts';
 export type {
   JSONObject,
   JSONValue,
