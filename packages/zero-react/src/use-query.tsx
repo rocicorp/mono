@@ -14,6 +14,7 @@ import type {
   DefaultContext,
   DefaultSchema,
   ErroredQuery,
+  Falsy,
   HumanReadable,
   PullRow,
   Query,
@@ -30,6 +31,15 @@ import type {
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,
+  QueryResultDetails & {},
+];
+
+/**
+ * Result type for "maybe queries" - queries that may be falsy.
+ * The data value can be undefined when the query is falsy/disabled.
+ */
+export type MaybeQueryResult<TReturn> = readonly [
+  HumanReadable<TReturn> | undefined,
   QueryResultDetails & {},
 ];
 
@@ -66,6 +76,7 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
+// Overload 1: Query
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -83,7 +94,37 @@ export function useQuery<
     TContext
   >,
   options?: UseQueryOptions | boolean,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Maybe query
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseQueryOptions | boolean,
+): MaybeQueryResult<TReturn>;
+
+// Implementation
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseQueryOptions | boolean,
+): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   if (typeof options === 'boolean') {
@@ -93,16 +134,23 @@ export function useQuery<
   }
 
   const zero = useZero<TSchema, undefined, TContext>();
-  const q = addContextToQuery(query, zero.context);
-  const view = viewStore.getView(zero, q, enabled, ttl);
+
+  // When query is falsy, use disabled subscriber/snapshot to maintain hook order
+  const q = query ? addContextToQuery(query, zero.context) : undefined;
+  const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
+
   // https://react.dev/reference/react/useSyncExternalStore
+  // Always call useSyncExternalStore to maintain consistent hook order
   return useSyncExternalStore(
-    view.subscribeReactInternals,
-    view.getSnapshot,
-    view.getSnapshot,
+    view?.subscribeReactInternals ?? disabledSubscriber,
+    view?.getSnapshot ??
+      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+    view?.getSnapshot ??
+      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
   );
 }
 
+// Overload 1: Query
 export function useSuspenseQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -120,7 +168,37 @@ export function useSuspenseQuery<
     TContext
   >,
   options?: UseSuspenseQueryOptions | boolean,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Maybe query
+export function useSuspenseQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseSuspenseQueryOptions | boolean,
+): MaybeQueryResult<TReturn>;
+
+// Implementation
+export function useSuspenseQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseSuspenseQueryOptions | boolean,
+): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   let suspendUntil: 'complete' | 'partial' = 'partial';
@@ -135,17 +213,22 @@ export function useSuspenseQuery<
   }
 
   const zero = useZero<TSchema, undefined, TContext>();
-  const q = addContextToQuery(query, zero.context);
 
-  const view = viewStore.getView(zero, q, enabled, ttl);
+  // When query is falsy, use disabled subscriber/snapshot to maintain hook order
+  const q = query ? addContextToQuery(query, zero.context) : undefined;
+  const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
+
   // https://react.dev/reference/react/useSyncExternalStore
+  // Always call useSyncExternalStore to maintain consistent hook order
   const snapshot = useSyncExternalStore(
-    view.subscribeReactInternals,
-    view.getSnapshot,
-    view.getSnapshot,
+    view?.subscribeReactInternals ?? disabledSubscriber,
+    view?.getSnapshot ??
+      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+    view?.getSnapshot ??
+      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
   );
 
-  if (enabled) {
+  if (view && enabled) {
     if (suspendUntil === 'complete' && !view.complete) {
       suspend(view.waitForComplete());
     }
@@ -164,6 +247,9 @@ const disabledSubscriber = () => () => {};
 const resultTypeUnknown = {type: 'unknown'} as const;
 const resultTypeComplete = {type: 'complete'} as const;
 const resultTypeError = {type: 'error'} as const;
+
+const disabledQuerySnapshot = [undefined, resultTypeUnknown] as const;
+const getDisabledSnapshot = () => disabledQuerySnapshot;
 
 const emptySnapshotSingularUnknown = [undefined, resultTypeUnknown] as const;
 const emptySnapshotSingularComplete = [undefined, resultTypeComplete] as const;
