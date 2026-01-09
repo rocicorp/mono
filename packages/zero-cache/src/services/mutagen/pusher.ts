@@ -12,6 +12,7 @@ import {
   isProtocolError,
   type PushFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   pushResponseSchema,
   type MutationID,
@@ -551,5 +552,9 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
   assert(
     left.push.pushVersion === right.push.pushVersion,
     'pushVersion must be the same for all pushes with the same clientID',
+  );
+  assert(
+    left.httpCookie === right.httpCookie,
+    'httpCookie must be the same for all pushes with the same clientID',
   );
 }
