@@ -1903,7 +1903,14 @@ export class Zero<
             });
 
             if (visibilityResult.key === 'stateChange') {
-              throwIfConnectionError(visibilityResult.result);
+              const nextState = visibilityResult.result;
+              if (
+                ConnectionManager.isTerminalState(nextState) ||
+                nextState.name === ConnectionStatus.Closed
+              ) {
+                break;
+              }
+              throwIfConnectionError(nextState);
               break;
             }
 
@@ -1964,9 +1971,17 @@ export class Zero<
                 break;
               }
 
-              case 'stateChange':
-                throwIfConnectionError(raceResult.result);
+              case 'stateChange': {
+                const nextState = raceResult.result;
+                if (
+                  ConnectionManager.isTerminalState(nextState) ||
+                  nextState.name === ConnectionStatus.Closed
+                ) {
+                  break;
+                }
+                throwIfConnectionError(nextState);
                 break;
+              }
 
               default:
                 unreachable(raceResult);
@@ -1981,8 +1996,17 @@ export class Zero<
               `Run loop paused in needs-auth state. Call zero.connection.connect({auth}) to resume.`,
               currentState.reason,
             );
-
-            await this.#connectionManager.waitForStateChange();
+            const resumeResult = await promiseRace({
+              connectRequest: this.#connectionManager.waitForConnectRequest(),
+              stateChange: this.#connectionManager.waitForStateChange(),
+            });
+            if (
+              resumeResult.key === 'connectRequest' &&
+              this.#connectionManager.isInTerminalState()
+            ) {
+              this.#connectionManager.consumeConnectRequest();
+              this.#connectionManager.connecting();
+            }
             break;
           }
 
@@ -1992,8 +2016,17 @@ export class Zero<
               `Run loop paused in error state. Call zero.connection.connect() to resume.`,
               currentState.reason,
             );
-
-            await this.#connectionManager.waitForStateChange();
+            const resumeResult = await promiseRace({
+              connectRequest: this.#connectionManager.waitForConnectRequest(),
+              stateChange: this.#connectionManager.waitForStateChange(),
+            });
+            if (
+              resumeResult.key === 'connectRequest' &&
+              this.#connectionManager.isInTerminalState()
+            ) {
+              this.#connectionManager.consumeConnectRequest();
+              this.#connectionManager.connecting();
+            }
             break;
           }
 
@@ -2064,8 +2097,6 @@ export class Zero<
             break;
           }
           case ConnectionStatus.Error: {
-            lc.debug?.('Fatal error encountered, transitioning to error state');
-
             this.#connectionManager.error(transition.reason);
             // run loop will enter the error state case and await a state change
             break;

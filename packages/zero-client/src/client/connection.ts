@@ -95,8 +95,9 @@ export interface Connection {
    * @param opts.auth - Token to use for authentication. If provided, this overrides
    *                    the stored auth credential for this connection attempt.
    *                    If `null` or `undefined`, the stored auth credential is cleared.
+   * @returns A promise that resolves once the connection state has transitioned to connecting.
    */
-  connect(opts?: {auth: string | null | undefined}): void;
+  connect(opts?: {auth: string | null | undefined}): Promise<void>;
 }
 
 export class ConnectionImpl implements Connection {
@@ -120,7 +121,7 @@ export class ConnectionImpl implements Connection {
     return this.#source;
   }
 
-  connect(opts?: {auth: string | null | undefined}): void {
+  async connect(opts?: {auth: string | null | undefined}): Promise<void> {
     const lc = this.#lc.withContext('connect');
 
     if (opts && 'auth' in opts) {
@@ -153,9 +154,12 @@ export class ConnectionImpl implements Connection {
       `Resuming connection from state: ${this.#connectionManager.state.name}`,
     );
 
-    // Transition to connecting to unblock the run loop.
-    this.#connectionManager.connecting();
-    return;
+    this.#connectionManager.requestConnect();
+    if (this.#connectionManager.state.name === ConnectionStatus.Connecting) {
+      return;
+    }
+
+    await this.#connectionManager.waitForStateChange();
   }
 }
 

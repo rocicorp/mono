@@ -50,7 +50,6 @@ test('repro run-loop error->connect race using state.subscribe passes with sleep
   let connectPromise: Promise<void> | undefined = undefined;
   z.connection.state.subscribe(async state => {
     if (state.name === ConnectionStatus.Error) {
-      console.log('connecting from error');
       await sleep(1);
       connectPromise = z.connection.connect();
     }
@@ -89,11 +88,10 @@ test('repro run-loop error->connect race timesout without sleep', async () => {
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
 
-  //await sleep(1);
-
   // Reconnect without providing auth opts - should keep existing auth
-  // never resolves
   await z.connection.connect();
+  await sleep(1000);
+  await Promise.resolve();
   const currentSocket = await z.socket;
   expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
     'initial-token',
@@ -109,10 +107,8 @@ test('repro run-loop error->connect race using state.subscribe timesout without 
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
   let connectPromise: Promise<void> | undefined = undefined;
-  z.connection.state.subscribe(async state => {
+  z.connection.state.subscribe(state => {
     if (state.name === ConnectionStatus.Error) {
-      console.log('connecting from error');
-      //await sleep(1);
       connectPromise = z.connection.connect();
     }
   });
