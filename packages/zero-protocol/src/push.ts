@@ -18,14 +18,20 @@ export const CRUD_MUTATION_NAME = '_zero_crud';
 export const CLEANUP_RESULTS_MUTATION_NAME = '_zero_cleanupResults';
 
 export const cleanupResultsArgSchema = v.union(
-  // Existing: delete up to a specific mutation ID for one client
+  // Legacy format (no type field) - treat as single
+  v.object({
+    clientGroupID: v.string(),
+    clientID: v.string(),
+    upToMutationID: v.number(),
+  }),
+  // Explicit single: delete up to a specific mutation ID for one client
   v.object({
     type: v.literal('single'),
     clientGroupID: v.string(),
     clientID: v.string(),
     upToMutationID: v.number(),
   }),
-  // New: delete all mutations for multiple clients
+  // Bulk: delete all mutations for multiple clients
   v.object({
     type: v.literal('bulk'),
     clientGroupID: v.string(),
