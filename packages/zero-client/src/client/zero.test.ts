@@ -2466,9 +2466,10 @@ test.only('repro run-loop race 2', async () => {
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  let connectPromise;
+  let connectPromise = undefined;
   z.connection.state.subscribe(state => {
     if (state.name === ConnectionStatus.Error) {
+      console.log('connecting from error');
       connectPromise = z.connection.connect();
     }
   });
