@@ -35,7 +35,7 @@ beforeEach(async () => {
   nodePgClient = new Client({
     connectionString: getConnectionURI(postgresJsClient),
   });
-  prismaClient = new (await import('@prisma/client')).PrismaClient({
+  prismaClient = new ((await import('@prisma/client')) as any).PrismaClient({
     adapter: new PrismaPg({
       connectionString: getConnectionURI(postgresJsClient),
     }),
