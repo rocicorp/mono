@@ -24,6 +24,7 @@ let postgresJsClient: PostgresDB;
 let nodePgPool: Pool;
 let nodePgPoolClient: PoolClient;
 let nodePgClient: Client;
+// oxlint-disable-next-line no-explicit-any
 let prismaClient: any;
 
 beforeEach(async () => {
@@ -35,6 +36,7 @@ beforeEach(async () => {
   nodePgClient = new Client({
     connectionString: getConnectionURI(postgresJsClient),
   });
+  // oxlint-disable-next-line no-explicit-any
   prismaClient = new ((await import('@prisma/client')) as any).PrismaClient({
     adapter: new PrismaPg({
       connectionString: getConnectionURI(postgresJsClient),
