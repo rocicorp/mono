@@ -2,6 +2,8 @@ import {eq} from 'drizzle-orm';
 import {drizzle as drizzleNodePg} from 'drizzle-orm/node-postgres';
 import {pgTable, text} from 'drizzle-orm/pg-core';
 import {drizzle as drizzlePostgresJs} from 'drizzle-orm/postgres-js';
+import {PrismaPg} from '@prisma/adapter-pg';
+import {PrismaClient} from '@prisma/client';
 import {Client, Pool, type PoolClient} from 'pg';
 import type {ExpectStatic} from 'vitest';
 import {afterEach, beforeEach, describe, expectTypeOf, test} from 'vitest';
@@ -12,8 +14,10 @@ import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {ZQLDatabase} from '../zql-database.ts';
 import {zeroDrizzle, type DrizzleTransaction} from './drizzle.ts';
+import {zeroPrisma} from './prisma.ts';
 import {zeroNodePg} from './pg.ts';
 import {zeroPostgresJS} from './postgresjs.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
 let postgresJsClient: PostgresDB;
 
@@ -21,6 +25,7 @@ let postgresJsClient: PostgresDB;
 let nodePgPool: Pool;
 let nodePgPoolClient: PoolClient;
 let nodePgClient: Client;
+let prismaClient: PrismaClient | undefined;
 
 beforeEach(async () => {
   postgresJsClient = await testDBs.create('adapters-pg-test');
@@ -48,6 +53,7 @@ afterEach(async () => {
   await nodePgPoolClient.release();
   await nodePgClient.end();
   await nodePgPool.end();
+  await prismaClient?.$disconnect();
 
   // Drop the per-test database to avoid global teardown force-terminating connections
   await testDBs.drop(postgresJsClient);
@@ -78,6 +84,8 @@ const schema = createSchema({
   enableLegacyMutators: true,
   enableLegacyQueries: true,
 });
+
+const builder = createBuilder(schema);
 
 const getRandomUser = () => {
   const id = nanoid();
@@ -119,7 +127,7 @@ async function exerciseMutations<WrappedTransaction>(
     });
 
     const afterUpsert = await tx.run(
-      tx.query.user.where('id', '=', baseUser.id),
+      builder.user.where('id', '=', baseUser.id),
     );
     expect(afterUpsert[0]?.name).toBe(updatedName);
     expect(afterUpsert[0]?.status).toBe(alternateStatus);
@@ -130,7 +138,7 @@ async function exerciseMutations<WrappedTransaction>(
     });
 
     const afterPartialUpsert = await tx.run(
-      tx.query.user.where('id', '=', baseUser.id),
+      builder.user.where('id', '=', baseUser.id),
     );
     expect(afterPartialUpsert[0]?.name).toBe(updatedName);
     expect(afterPartialUpsert[0]?.status).toBe(baseUser.status);
@@ -142,7 +150,7 @@ async function exerciseMutations<WrappedTransaction>(
     });
 
     const afterUpdate = await tx.run(
-      tx.query.user.where('id', '=', baseUser.id),
+      builder.user.where('id', '=', baseUser.id),
     );
     expect(afterUpdate[0]?.name).toBe(updatedName);
     expect(afterUpdate[0]?.status).toBe(alternateStatus);
@@ -150,7 +158,7 @@ async function exerciseMutations<WrappedTransaction>(
     await tx.mutate.user.delete({id: baseUser.id});
 
     const afterDelete = await tx.run(
-      tx.query.user.where('id', '=', baseUser.id),
+      builder.user.where('id', '=', baseUser.id),
     );
     expect(afterDelete).toHaveLength(0);
 
@@ -161,7 +169,7 @@ async function exerciseMutations<WrappedTransaction>(
     await tx.mutate.user.insert(namelessInsert);
 
     const namelessRow = await tx.run(
-      tx.query.user.where('id', '=', namelessInsert.id),
+      builder.user.where('id', '=', namelessInsert.id),
     );
     expect(namelessRow).toHaveLength(1);
     expect(namelessRow[0]?.name ?? null).toBeNull();
@@ -172,7 +180,7 @@ async function exerciseMutations<WrappedTransaction>(
     });
 
     const namelessAfterUpsert = await tx.run(
-      tx.query.user.where('id', '=', namelessInsert.id),
+      builder.user.where('id', '=', namelessInsert.id),
     );
     expect(namelessAfterUpsert[0]?.name ?? null).toBeNull();
     expect(namelessAfterUpsert[0]?.status).toBe('active');
@@ -180,7 +188,7 @@ async function exerciseMutations<WrappedTransaction>(
     await tx.mutate.user.delete({id: namelessInsert.id});
 
     const cleanupCheck = await tx.run(
-      tx.query.user.where('id', '=', namelessInsert.id),
+      builder.user.where('id', '=', namelessInsert.id),
     );
     expect(cleanupCheck).toHaveLength(0);
   }, mockTransactionInput);
@@ -202,13 +210,9 @@ describe('node-postgres', () => {
 
       const zql = zeroNodePg(schema, client);
 
-      const zqlQuery = await zql.transaction(tx => {
-        const result = tx.query.user.where('id', '=', newUser.id);
-
-        return result;
-      }, mockTransactionInput);
-
-      const resultZQL = await zql.run(zqlQuery);
+      const resultZQL = await zql.run(
+        builder.user.where('id', '=', newUser.id),
+      );
 
       const resultClientQuery = await zql.transaction(async tx => {
         const result = await tx.dbTransaction.query(
@@ -248,12 +252,7 @@ describe('postgres-js', () => {
 
     const zql = zeroPostgresJS(schema, postgresJsClient);
 
-    const zqlQuery = await zql.transaction(tx => {
-      const result = tx.query.user.where('id', '=', newUser.id);
-      return result;
-    }, mockTransactionInput);
-
-    const resultZQL = await zql.run(zqlQuery);
+    const resultZQL = await zql.run(builder.user.where('id', '=', newUser.id));
 
     const resultClientQuery = await zql.transaction(async tx => {
       const result = await tx.dbTransaction.query(
@@ -274,6 +273,74 @@ describe('postgres-js', () => {
 
   test('mutations', async ({expect}) => {
     const zql = zeroPostgresJS(schema, postgresJsClient);
+    await exerciseMutations(zql, expect);
+  });
+});
+
+describe('prisma', () => {
+  let previousDatabaseUrl: string | undefined;
+
+  beforeEach(() => {
+    previousDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = getConnectionURI(postgresJsClient);
+    const adapter = new PrismaPg({
+      connectionString: getConnectionURI(postgresJsClient),
+    });
+    prismaClient = new PrismaClient({adapter});
+  });
+
+  afterEach(() => {
+    if (previousDatabaseUrl === undefined) {
+      delete process.env.DATABASE_URL;
+    } else {
+      process.env.DATABASE_URL = previousDatabaseUrl;
+    }
+    previousDatabaseUrl = undefined;
+  });
+
+  test('querying', async ({expect}) => {
+    if (!prismaClient) {
+      throw new Error('Prisma client not initialized');
+    }
+    const prisma = prismaClient;
+    const newUser = getRandomUser();
+
+    await prisma.user.create({
+      data: {
+        id: newUser.id,
+        name: newUser.name,
+        status: newUser.status,
+      },
+    });
+
+    const zql = zeroPrisma(schema, prisma);
+
+    const resultZQL = await zql.run(builder.user.where('id', '=', newUser.id));
+
+    const resultClientQuery = await zql.transaction(async tx => {
+      const result = await tx.dbTransaction.query(
+        'SELECT * FROM "user" WHERE id = $1',
+        [newUser.id],
+      );
+      return result;
+    }, mockTransactionInput);
+
+    expect(resultZQL[0]?.name).toEqual(newUser.name);
+    expect(resultZQL[0]?.id).toEqual(newUser.id);
+
+    for await (const row of resultClientQuery) {
+      expect(row.name).toBe(newUser.name);
+      expect(row.id).toBe(newUser.id);
+    }
+  });
+
+  test('mutations', async ({expect}) => {
+    if (!prismaClient) {
+      throw new Error('Prisma client not initialized');
+    }
+    expect(prismaClient).toBeDefined();
+    const prisma = prismaClient;
+    const zql = zeroPrisma(schema, prisma);
     await exerciseMutations(zql, expect);
   });
 });
@@ -368,11 +435,9 @@ describe('drizzle and node-postgres', () => {
 
       const zql = zeroDrizzle(schema, client);
 
-      const zqlQuery = await zql.transaction(
-        tx => tx.query.user.where('id', '=', newUser.id),
-        mockTransactionInput,
+      const resultZQL = await zql.run(
+        builder.user.where('id', '=', newUser.id),
       );
-      const resultZQL = await zql.run(zqlQuery);
 
       const resultClientQuery = await zql.transaction(async tx => {
         const result = await tx.dbTransaction.query(
@@ -455,12 +520,7 @@ describe('drizzle and postgres-js', () => {
 
     const zql = zeroDrizzle(schema, client);
 
-    const q = await zql.transaction(
-      tx => tx.query.user.where('id', '=', newUser.id),
-      mockTransactionInput,
-    );
-
-    const result = await zql.run(q);
+    const result = await zql.run(builder.user.where('id', '=', newUser.id));
 
     expect(result[0]?.name).toEqual(newUser.name);
     expect(result[0]?.id).toEqual(newUser.id);
@@ -507,10 +567,7 @@ describe('drizzle and postgres-js', () => {
 
     const zql = zeroDrizzle(schema, client);
 
-    const resultZQL = await zql.transaction(
-      tx => tx.run(tx.query.user.where('id', '=', newUser.id)),
-      mockTransactionInput,
-    );
+    const resultZQL = await zql.run(builder.user.where('id', '=', newUser.id));
 
     const resultClientQuery = await zql.transaction(async tx => {
       const result = await tx.dbTransaction.query(
@@ -560,7 +617,7 @@ describe('drizzle and postgres-js', () => {
           Awaited<ReturnType<TxType['query']['user']['findFirst']>['execute']>
         >
       >
-    >().toMatchTypeOf<
+    >().toEqualTypeOf<
       | {
           id: `user_${string}`;
           name: string | null;
@@ -568,6 +625,6 @@ describe('drizzle and postgres-js', () => {
         }
       | undefined
     >();
-    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
+    expectTypeOf(zql).toEqualTypeOf<ZQLDatabase<typeof schema, TxType>>();
   });
 });
