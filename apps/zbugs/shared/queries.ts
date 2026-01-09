@@ -4,7 +4,7 @@ import type {AuthData, Role} from './auth.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
 import {
-  type builder,
+  builder,
   defineQueries,
   defineQuery,
   type schema,
