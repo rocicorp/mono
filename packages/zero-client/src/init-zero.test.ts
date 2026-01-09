@@ -1,6 +1,8 @@
-import {describe, expect, test} from 'vitest';
-import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
+import {describe, expectTypeOf, test} from 'vitest';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
+import type {Transaction} from '../../zql/src/mutate/custom.ts';
+import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import {initZero} from './init-zero.ts';
 
 const issueTable = table('issue')
@@ -22,51 +24,37 @@ const schema = createSchema({
   tables: [issueTable, userTable],
 });
 
+const zql = createBuilder(schema);
+
 type AuthData = {userID: string; role: 'admin' | 'user'};
 
 describe('initZero', () => {
   test('returns typed utilities', () => {
-    const result = initZero<typeof schema, AuthData | undefined>({schema});
+    const result = initZero<typeof schema, AuthData | undefined>();
 
-    expect(result.builder).toBeDefined();
-    expect(result.defineMutator).toBeDefined();
-    expect(result.defineMutators).toBeDefined();
-    expect(result.defineQuery).toBeDefined();
-    expect(result.defineQueries).toBeDefined();
-  });
+    expectTypeOf<
+      ReturnType<typeof result.defineMutator>['~']['$context']
+    >().toEqualTypeOf<AuthData | undefined>();
+    expectTypeOf<
+      ReturnType<typeof result.defineQuery>['~']['$context']
+    >().toEqualTypeOf<AuthData | undefined>();
 
-  test('builder creates typed queries', () => {
-    const {builder} = initZero<typeof schema>({schema});
+    const m = result.defineMutators({
+      issue: {
+        // oxlint-disable-next-line require-await
+        create: result.defineMutator(async ({tx}) => {
+          expectTypeOf(tx).toEqualTypeOf<Transaction<typeof schema, unknown>>();
+        }),
+      },
+    });
+    expectTypeOf<(typeof m)['~']['$schema']>().toEqualTypeOf<typeof schema>();
 
-    // Should be able to access issue table
-    const issueQuery = builder.issue;
-    expect(issueQuery).toBeDefined();
-
-    // Should be able to access user table
-    const userQuery = builder.user;
-    expect(userQuery).toBeDefined();
-  });
-
-  test('defineMutators returns function', () => {
-    const {defineMutators, defineMutator} = initZero<typeof schema>({schema});
-
-    // Just verify the functions exist and are callable
-    expect(typeof defineMutators).toBe('function');
-    expect(typeof defineMutator).toBe('function');
-  });
-
-  test('defineQueries returns function', () => {
-    const {defineQueries, defineQuery} = initZero<typeof schema>({schema});
-
-    // Just verify the functions exist and are callable
-    expect(typeof defineQueries).toBe('function');
-    expect(typeof defineQuery).toBe('function');
-  });
-
-  test('can use builder to create where queries', () => {
-    const {builder} = initZero<typeof schema>({schema});
-
-    const query = builder.issue.where('id', '123');
-    expect(query).toBeDefined();
+    const q = result.defineQueries({
+      issue: result.defineQuery(({ctx}) => {
+        expectTypeOf(ctx).toEqualTypeOf<AuthData | undefined>();
+        return zql.issue;
+      }),
+    });
+    expectTypeOf<(typeof q)['~']['$schema']>().toEqualTypeOf<typeof schema>();
   });
 });

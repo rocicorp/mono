@@ -1,4 +1,4 @@
-import {defineMutator, defineMutators, type Transaction} from '@rocicorp/zero';
+import type {Transaction} from '@rocicorp/zero';
 import {z} from 'zod/mini';
 import {
   assertIsCreatorOrAdmin,
@@ -9,7 +9,13 @@ import {
   type AuthData,
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import {builder, ZERO_PROJECT_ID} from './schema.ts';
+import {
+  builder,
+  defineMutator,
+  defineMutators,
+  type schema,
+  ZERO_PROJECT_ID,
+} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
@@ -346,7 +352,7 @@ export const mutators = defineMutators({
 });
 
 async function addEmoji(
-  tx: Transaction,
+  tx: Transaction<typeof schema>,
   subjectType: 'issue' | 'comment',
   {id, unicode, annotation, subjectID, created}: AddEmojiArgs,
   authData: AuthData | undefined,
@@ -381,7 +387,7 @@ async function addEmoji(
 }
 
 async function updateIssueNotification(
-  tx: Transaction,
+  tx: Transaction<typeof schema>,
   {
     userID,
     issueID,

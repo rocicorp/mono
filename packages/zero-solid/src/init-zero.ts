@@ -12,6 +12,7 @@ import {
   type ZeroProviderProps,
 } from './use-zero.ts';
 import type {Schema, Zero} from './zero.ts';
+import {useConnectionState as useConnectionStateImpl} from './use-connection-state.ts';
 
 export type {MaybeQueryResult, QueryResult, UseQueryOptions};
 
@@ -39,6 +40,12 @@ export type InitZeroSolidResult<S extends Schema, C> = {
    * Returns [dataAccessor, resultDetailsAccessor] tuple.
    */
   readonly useQuery: TypedUseQuery<S, C>;
+
+  /**
+   * Hook to subscribe to the connection state of the Zero instance.
+   * Returns an Accessor for the connection state.
+   */
+  readonly useConnectionState: typeof useConnectionStateImpl;
 };
 
 /**
@@ -59,6 +66,7 @@ export type InitZeroSolidResult<S extends Schema, C> = {
  *   ZeroProvider,
  *   useZero,
  *   useQuery,
+ *   useConnectionState,
  * } = initZero<Schema, AuthData | undefined>();
  * ```
  *
@@ -75,5 +83,6 @@ export function initZero<
     ) => JSX.Element,
     useZero: useZeroImpl as () => Accessor<Zero<S, undefined, C>>,
     useQuery: useQueryImpl as TypedUseQuery<S, C>,
+    useConnectionState: useConnectionStateImpl,
   };
 }

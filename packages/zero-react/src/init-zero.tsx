@@ -10,6 +10,7 @@ import {
   type ZeroProviderProps,
 } from './zero-provider.tsx';
 import type {Schema, Zero} from './zero.ts';
+import { useConnectionState as useConnectionStateImpl } from './use-connection-state.tsx';
 
 /**
  * The result of calling initZero for React.
@@ -40,6 +41,12 @@ export type InitZeroReactResult<S extends Schema, C> = {
    * Suspends until results are available.
    */
   readonly useSuspenseQuery: TypedUseSuspenseQuery<S, C>;
+
+  /**
+   * Hook to subscribe to the connection state of the Zero instance.
+   * Returns the connection state.
+   */
+  readonly useConnectionState: typeof useConnectionStateImpl;
 };
 
 /**
@@ -61,6 +68,7 @@ export type InitZeroReactResult<S extends Schema, C> = {
  *   useZero,
  *   useQuery,
  *   useSuspenseQuery,
+ *   useConnectionState,
  * } = initZero<Schema, AuthData | undefined>();
  * ```
  *
@@ -78,5 +86,6 @@ export function initZero<
     useZero: useZeroImpl as () => Zero<S, undefined, C>,
     useQuery: useQueryImpl as TypedUseQuery<S, C>,
     useSuspenseQuery: useSuspenseQueryImpl as TypedUseSuspenseQuery<S, C>,
+    useConnectionState: useConnectionStateImpl,
   };
 }

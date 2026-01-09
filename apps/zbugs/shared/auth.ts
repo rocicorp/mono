@@ -37,9 +37,9 @@ export function isAdmin(token: AuthData | undefined) {
 }
 
 export async function assertIsCreatorOrAdmin(
-  tx: Transaction,
+  tx: Transaction<typeof schema>,
   authData: AuthData | undefined,
-  query: Query<'comment' | 'issue' | 'emoji'>,
+  query: Query<'comment' | 'issue' | 'emoji', typeof schema>,
   id: string,
 ) {
   assertIsLoggedIn(authData);
@@ -95,10 +95,4 @@ export async function assertUserCanSeeComment(
   );
 
   await assertUserCanSeeIssue(tx, userID, comment.issueID);
-}
-
-declare module '@rocicorp/zero' {
-  interface DefaultTypes {
-    context: AuthData | undefined;
-  }
 }

@@ -1,5 +1,5 @@
 import type {Row} from '@rocicorp/zero';
-import {useQuery, useZero} from '@rocicorp/zero/react';
+import {useQuery, useZero} from '../../../shared/zero-hooks.ts';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';

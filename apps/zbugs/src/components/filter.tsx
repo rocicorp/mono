@@ -1,4 +1,4 @@
-import {useQuery} from '@rocicorp/zero/react';
+import {useQuery} from '../../shared/zero-hooks.ts';
 import classNames from 'classnames';
 import {memo, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';

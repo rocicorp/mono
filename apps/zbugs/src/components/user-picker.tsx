@@ -1,5 +1,5 @@
 import {type Row} from '@rocicorp/zero';
-import {useQuery} from '@rocicorp/zero/react';
+import {useQuery} from '../../shared/zero-hooks.ts';
 import {useEffect, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import {queries} from '../../shared/queries.ts';

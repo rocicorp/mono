@@ -1,5 +1,5 @@
 import type {Row} from '@rocicorp/zero';
-import {useQuery, useZero} from '@rocicorp/zero/react';
+import {useQuery, useZero} from '../../../shared/zero-hooks.ts';
 import type {Virtualizer} from '@tanstack/react-virtual';
 import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';

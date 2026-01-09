@@ -3,12 +3,13 @@ import {
   createBuilder,
   createSchema,
   enumeration,
+  initZero,
   number,
   relationships,
   string,
   table,
 } from '@rocicorp/zero';
-import type {Role} from './auth.ts';
+import type {AuthData, Role} from './auth.ts';
 
 // Table definitions
 const user = table('user')
@@ -268,11 +269,9 @@ export const schema = createSchema({
 
 export const builder = createBuilder(schema);
 
+// Initialize Zero with typed utilities
+export const {defineMutator, defineMutators, defineQuery, defineQueries} =
+  initZero<typeof schema, AuthData | undefined>();
+
 export const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
 export const ZERO_PROJECT_NAME = 'Zero';
-
-declare module '@rocicorp/zero' {
-  interface DefaultTypes {
-    schema: typeof schema;
-  }
-}
