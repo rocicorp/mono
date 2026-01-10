@@ -17,7 +17,25 @@ import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type ChangeEntry} from './change-streamer.ts';
+import type {DataChange} from '../change-source/protocol/current/data.ts';
 import * as ErrorType from './error-type-enum.ts';
+
+/**
+ * Extracts the table name(s) from a data change.
+ * Returns null for begin/commit/rollback messages.
+ */
+export function getTableFromChange(change: DataChange): string | null {
+  switch (change.tag) {
+    case 'insert':
+    case 'update':
+    case 'delete':
+      return `${change.relation.schema}.${change.relation.name}`;
+    case 'truncate':
+      return change.relations.map(r => `${r.schema}.${r.name}`).join(', ');
+    default:
+      return null;
+  }
+}
 import {
   AutoResetSignal,
   markResetRequired,
@@ -88,6 +106,23 @@ export class Storer implements Service {
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThreshold: number;
+  /**
+   * Tracks the number of pending changes per table in the in-memory queue.
+   *
+   * IMPORTANT: This is different from the changeLog table in the CVR database!
+   *
+   * The changeLog table contains changes that have been committed to the database
+   * but not yet purged. The in-memory queue (#tableStats) tracks changes that are
+   * waiting to be sent to downstream consumers (view-syncers, backup-replicator).
+   *
+   * These can diverge significantly:
+   * - changeLog might be small (e.g. 50k) if changes are being committed quickly
+   * - in-memory queue might be large (e.g. 100k+) if downstream consumers are slow
+   *
+   * The SQL query in the back pressure log inspects the changeLog (committed changes),
+   * while #tableStats shows what's actually in the queue causing back pressure.
+   */
+  readonly #tableStats = new Map<string, number>();
 
   #running = false;
 
@@ -182,10 +217,19 @@ export class Storer implements Service {
 
   store(entry: WatermarkedChange) {
     this.#queue.enqueue(['change', entry]);
+    // Track table stats for data changes
+    const [, downstream] = entry;
+    if (downstream[0] === 'data') {
+      const table = getTableFromChange(downstream[1]);
+      if (table) {
+        this.#tableStats.set(table, (this.#tableStats.get(table) ?? 0) + 1);
+      }
+    }
   }
 
   abort() {
     this.#queue.enqueue(['abort']);
+    this.#tableStats.clear();
   }
 
   status(s: StatusMessage) {
@@ -198,6 +242,33 @@ export class Storer implements Service {
 
   #readyForMore: Resolver<void> | null = null;
 
+  #formatTopTables(limit = 20): string {
+    const sorted = [...this.#tableStats.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit);
+    if (sorted.length === 0) {
+      return '(no table stats available)';
+    }
+    const maxTableLen = Math.max(...sorted.map(([t]) => t.length));
+    return sorted
+      .map(([table, count], i) => {
+        const rank = String(i + 1).padStart(2, ' ');
+        const paddedTable = table.padEnd(maxTableLen, ' ');
+        return `${rank}. ${paddedTable}  ${count.toLocaleString()} pending`;
+      })
+      .join('\n');
+  }
+
+  /** @internal - exposed for testing */
+  getTableStatsForTesting(): Map<string, number> {
+    return new Map(this.#tableStats);
+  }
+
+  /** @internal - exposed for testing */
+  formatTopTablesForTesting(limit?: number): string {
+    return this.#formatTopTables(limit);
+  }
+
   readyForMore(): Promise<void> | undefined {
     if (!this.#running) {
       return undefined;
@@ -209,7 +280,16 @@ export class Storer implements Service {
       this.#lc.warn?.(
         `applying back pressure with ${this.#queue.size()} queued changes (threshold: ${this.#backPressureThreshold})\n` +
           `\n` +
-          `To inspect changeLog backlog in your CVR database:\n` +
+          `Top tables in the in-memory queue:\n` +
+          `${this.#formatTopTables()}\n` +
+          `\n` +
+          `NOTE: The in-memory queue (above) tracks changes waiting to be sent to\n` +
+          `downstream consumers (view-syncers, backup-replicator). This is different\n` +
+          `from the changeLog table in your CVR database, which contains changes that\n` +
+          `have been committed but not yet purged. These can diverge significantly\n` +
+          `when downstream consumers are slow.\n` +
+          `\n` +
+          `To inspect the changeLog (committed changes) in your CVR database:\n` +
           `  SELECT\n` +
           `    (change->'relation'->>'schema') || '.' || (change->'relation'->>'name') AS table_name,\n` +
           `    change->>'tag' AS operation,\n` +
@@ -281,11 +361,26 @@ export class Storer implements Service {
             await tx.pool.done();
             tx = null;
           }
+          this.#tableStats.clear();
           continue;
         }
       }
       // msgType === 'change'
       const [watermark, downstream] = msg[1];
+
+      // Decrement table stats for data changes being processed
+      if (downstream[0] === 'data') {
+        const table = getTableFromChange(downstream[1]);
+        if (table) {
+          const count = this.#tableStats.get(table) ?? 0;
+          if (count <= 1) {
+            this.#tableStats.delete(table);
+          } else {
+            this.#tableStats.set(table, count - 1);
+          }
+        }
+      }
+
       const [tag, change] = downstream;
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
