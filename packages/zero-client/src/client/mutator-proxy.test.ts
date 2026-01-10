@@ -1,6 +1,10 @@
+import {LogContext} from '@rocicorp/logger';
 import {assert, describe, expect, test, vi} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../shared/src/logging-test-utils.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -588,6 +592,108 @@ describe('MutatorProxy', () => {
       expect(clientResult).toEqual({type: 'success'});
       expect(serverResult).toEqual({type: 'success'});
       expect(mutator).toHaveBeenCalledTimes(1);
+    });
+
+    test('logs warning when mutation called while offline', () => {
+      const testLogSink = new TestLogSink();
+      const testLc = new LogContext('warn', undefined, testLogSink);
+      const {manager, mutationTracker, stateCallback} =
+        createMockConnectionManager();
+      const proxy = new MutatorProxy(testLc, manager, mutationTracker);
+
+      // Go offline
+      stateCallback({
+        name: ConnectionStatus.Disconnected,
+        reason: new ClientError({
+          kind: ClientErrorKind.Offline,
+          message: 'offline',
+        }),
+      });
+
+      // Attempt mutation
+      const wrapped = proxy.wrapCustomMutator('testMutator', () => ({
+        client: Promise.resolve(),
+        server: Promise.resolve(),
+      }));
+      wrapped();
+
+      // Verify warning was logged
+      expect(testLogSink.messages).toHaveLength(1);
+      expect(testLogSink.messages[0][0]).toBe('warn');
+      const message = testLogSink.messages[0][2][0] as string;
+      expect(message).toContain(
+        'Mutation "testMutator" rejected because Zero is offline',
+      );
+      expect(message).toContain('Details:');
+      expect(message).toContain('https://zero.rocicorp.dev/docs/connection');
+    });
+
+    test('logs warning when mutation called while in error state', () => {
+      const testLogSink = new TestLogSink();
+      const testLc = new LogContext('warn', undefined, testLogSink);
+      const {manager, mutationTracker, stateCallback} =
+        createMockConnectionManager();
+      const proxy = new MutatorProxy(testLc, manager, mutationTracker);
+
+      // Go into error state
+      stateCallback({
+        name: ConnectionStatus.Error,
+        reason: new ClientError({
+          kind: ClientErrorKind.Internal,
+          message: 'internal error',
+        }),
+      });
+
+      // Attempt mutation
+      const wrapped = proxy.wrapCustomMutator('testMutator', () => ({
+        client: Promise.resolve(),
+        server: Promise.resolve(),
+      }));
+      wrapped();
+
+      // Verify warning was logged
+      expect(testLogSink.messages).toHaveLength(1);
+      expect(testLogSink.messages[0][0]).toBe('warn');
+      const message = testLogSink.messages[0][2][0] as string;
+      expect(message).toContain(
+        'Mutation "testMutator" rejected because Zero is in error state',
+      );
+      expect(message).toContain('Details:');
+      expect(message).toContain('https://zero.rocicorp.dev/docs/connection');
+    });
+
+    test('logs warning when mutation called while closed', () => {
+      const testLogSink = new TestLogSink();
+      const testLc = new LogContext('warn', undefined, testLogSink);
+      const {manager, mutationTracker, stateCallback} =
+        createMockConnectionManager();
+      const proxy = new MutatorProxy(testLc, manager, mutationTracker);
+
+      // Close the client
+      stateCallback({
+        name: ConnectionStatus.Closed,
+        reason: new ClientError({
+          kind: ClientErrorKind.ClientClosed,
+          message: 'client closed',
+        }),
+      });
+
+      // Attempt mutation
+      const wrapped = proxy.wrapCustomMutator('testMutator', () => ({
+        client: Promise.resolve(),
+        server: Promise.resolve(),
+      }));
+      wrapped();
+
+      // Verify warning was logged
+      expect(testLogSink.messages).toHaveLength(1);
+      expect(testLogSink.messages[0][0]).toBe('warn');
+      const message = testLogSink.messages[0][2][0] as string;
+      expect(message).toContain(
+        'Mutation "testMutator" rejected because Zero is closed',
+      );
+      expect(message).toContain('Details:');
+      expect(message).toContain('https://zero.rocicorp.dev/docs/connection');
     });
   });
 });
