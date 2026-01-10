@@ -103,7 +103,7 @@ export class Storer implements Service {
     onFatal: (err: Error) => void,
     backPressureThreshold: number,
   ) {
-    this.#lc = lc;
+    this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
     this.#taskID = taskID;
     this.#discoveryAddress = discoveryAddress;
