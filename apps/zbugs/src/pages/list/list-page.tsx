@@ -51,18 +51,18 @@ type StartRow = IssueRowSort;
 
 type Anchor =
   | {
-      startRow: StartRow | undefined;
-      type: 'forward' | 'backward';
-      index: number;
+      readonly startRow: StartRow | undefined;
+      readonly type: 'forward' | 'backward';
+      readonly index: number;
     }
   | {
-      startRow: StartRow;
-      type: 'permalink';
-      index: number;
+      readonly startRow: StartRow;
+      readonly type: 'permalink';
+      readonly index: number;
     };
 
 type QueryAnchor = {
-  anchor: Anchor;
+  readonly anchor: Anchor;
   /**
    * Associates an anchor with list query params.  This is for managing the
    * transition when query params change.  When this happens the list should
@@ -81,7 +81,7 @@ type QueryAnchor = {
    *    old anchor, avoided by not doing paging updates when
    *    listContextParams !== queryAnchor.listContextParams
    */
-  listContextParams: ListContextParams;
+  readonly listContextParams: ListContextParams;
 };
 
 const MIN_ESTIMATED_ROWS_BEFORE = 1; //2 * MIN_PAGE_SIZE;
@@ -99,14 +99,14 @@ const START_ANCHOR: Anchor = !TOP_ANCHOR || {
   index: PERMALINK_INDEX,
   type: 'permalink',
 
-  // First issue
-  // index: 0
-  // subject: Leaking listeners on AbortSignal
-  startRow: {
-    id: 'HdpMkgbHpK3_OcOIiQOuW',
-    modified: 1765697824305,
-    created: 1726473756000,
-  },
+  // // First issue
+  // // index: 0
+  // // subject: Leaking listeners on AbortSignal
+  // startRow: {
+  //   id: 'HdpMkgbHpK3_OcOIiQOuW',
+  //   modified: 1765697824305,
+  //   created: 1726473756000,
+  // },
 
   // // index: 45
   // // subject:RFE: enumerateCaches
@@ -116,14 +116,14 @@ const START_ANCHOR: Anchor = !TOP_ANCHOR || {
   //   created: 1669918206000,
   // },
 
-  // // Middle issue
-  // // index: 260
-  // // title: Evaluate if we should return a ClientStateNotFoundResponse ...
-  // startRow: {
-  //   id: '0zTrvA-6aVO8eNdHBoW7G',
-  //   modified: 1678220708000,
-  //   created: 1671231873000,
-  // },
+  // Middle issue
+  // index: 260
+  // title: Evaluate if we should return a ClientStateNotFoundResponse ...
+  startRow: {
+    id: '0zTrvA-6aVO8eNdHBoW7G',
+    modified: 1678220708000,
+    created: 1671231873000,
+  },
 
   // // Close to bottom
   // // index: 500
@@ -314,6 +314,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   );
   const [hasScrolledToPermalink, setHasScrolledToPermalink] = useState(false);
   const [pendingScrollShift, setPendingScrollShift] = useState<{
+    oldAnchor: Anchor;
     oldIssuesLength: number;
     newAnchor: Anchor;
   } | null>(null);
@@ -340,7 +341,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
 
-  console.log(
+  console.debug(
     'Render',
     'estimatedRowsBefore',
     estimatedRowsBefore,
@@ -718,26 +719,48 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    const {oldIssuesLength, newAnchor} = pendingScrollShift;
+    // If we've reached the start, clear pending scroll shift without applying it
+    // The atStart handler will take care of proper anchor conversion
+    if (atStart) {
+      console.log('clearing pending scroll shift at start');
+      setPendingScrollShift(null);
+      return;
+    }
+
+    const {oldAnchor, oldIssuesLength, newAnchor} = pendingScrollShift;
+
+    // Calculate shift using the original working formula
     const shift =
-      newAnchor.type !== 'backward'
-        ? newAnchor.index + oldIssuesLength - newAnchor.index
-        : anchor.index - newAnchor.index;
+      oldAnchor.type !== 'backward'
+        ? oldAnchor.index + oldIssuesLength - newAnchor.index
+        : oldAnchor.index - newAnchor.index;
 
     console.log('applying scroll shift', {
       shift,
+      oldAnchorIndex: oldAnchor.index,
+      oldAnchorType: oldAnchor.type,
       oldIssuesLength,
       newIssuesLength: issues.length,
-      estimatedRowsBefore,
       newAnchorIndex: newAnchor.index,
+      newAnchorType: newAnchor.type,
+      estimatedRowsBefore,
+      scrollOffset: virtualizer.scrollOffset,
     });
 
     if (shift > estimatedRowsBefore) {
       // We need to make room for the new rows we are loading before
-      virtualizer.scrollToOffset(
-        (virtualizer.scrollOffset ?? 0) + shift * ITEM_SIZE,
-      );
+      const newScrollOffset =
+        (virtualizer.scrollOffset ?? 0) + shift * ITEM_SIZE;
+      console.log('adjusting scroll and anchor for shift', {
+        oldScrollOffset: virtualizer.scrollOffset,
+        newScrollOffset,
+        shiftPixels: shift * ITEM_SIZE,
+        oldAnchorIndex: newAnchor.index,
+        newAnchorIndex: newAnchor.index + shift,
+      });
+      virtualizer.scrollToOffset(newScrollOffset);
 
+      // Adjust the anchor index
       setQueryAnchor({
         anchor: {
           ...newAnchor,
@@ -747,10 +770,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
       });
     }
 
+    // Update estimated rows
     setEstimatedRowsAfter(estimatedRowsAfter + shift);
-    setEstimatedRowsBefore(
-      atStart ? 0 : Math.max(1, estimatedRowsBefore - shift),
-    );
+    setEstimatedRowsBefore(Math.max(1, estimatedRowsBefore - shift));
 
     setPendingScrollShift(null);
   }, [
@@ -812,6 +834,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
       distanceFromStart,
       'anchor.index',
       anchor.index,
+      'achor.type',
+      anchor.type,
       'issues.length',
       issues.length,
       'lastItem.index',
@@ -823,7 +847,21 @@ export function ListPage({onReady}: {onReady: () => void}) {
     );
 
     if (atStart) {
-      if (anchor.index !== 0 && anchor.type !== 'backward') {
+      // When at start with backward anchor, we need to convert to forward anchor with index 0
+      if (anchor.type === 'backward') {
+        console.log('converting backward anchor to forward at start', {
+          oldIndex: anchor.index,
+          issuesLength: issues.length,
+        });
+        setEstimatedRowsBefore(0);
+        setQueryAnchor({
+          anchor: TOP_ANCHOR,
+          listContextParams,
+        });
+        return;
+      }
+      // When at start with forward/permalink anchor, just ensure index is 0
+      if (anchor.index !== 0) {
         setEstimatedRowsBefore(0);
         setQueryAnchor({
           anchor: {
@@ -844,7 +882,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       distanceFromStart <= nearPageEdgeThreshold
     ) {
       // if (anchor.index !== 0 && distanceFromStart <= nearPageEdgeThreshold) {
-      debugger;
       const issueArrayIndex = toBoundIssueArrayIndex(
         lastItem.index + nearPageEdgeThreshold * 2,
         anchor,
@@ -864,11 +901,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
         index: newAnchor.index,
         type: newAnchor.type,
         startRow: newAnchor.startRow,
+        oldAnchorIndex: anchor.index,
+        oldAnchorType: anchor.type,
         oldIssuesLength: issues.length,
       });
 
-      // Save the old issues.length so we can calculate shift after new issues load
+      // Save old anchor state so we can calculate shift after new issues load
       setPendingScrollShift({
+        oldAnchor: anchor,
         oldIssuesLength: issues.length,
         newAnchor,
       });
