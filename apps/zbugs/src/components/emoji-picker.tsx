@@ -1,4 +1,4 @@
-import {useZero} from '@rocicorp/zero/react';
+import {useZero} from '../../shared/zero-hooks.ts';
 import 'emoji-picker-element';
 import Database from 'emoji-picker-element/database.js';
 import type Picker from 'emoji-picker-element/picker.js';

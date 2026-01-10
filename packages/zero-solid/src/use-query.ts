@@ -74,6 +74,34 @@ export function createQuery<
   return useQuery(querySignal, options);
 }
 
+export type TypedUseQuery<S extends Schema, C> = {
+  // Overload 1: Query
+  <
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn = PullRow<TTable, S>,
+  >(
+    querySignal: Accessor<
+      QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>
+    >,
+    options?: UseQueryOptions | Accessor<UseQueryOptions>,
+  ): QueryResult<TReturn>;
+
+  // Overload 2: Maybe query
+  <
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn = PullRow<TTable, S>,
+  >(
+    querySignal: Accessor<
+      QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C> | Falsy
+    >,
+    options?: UseQueryOptions | Accessor<UseQueryOptions>,
+  ): MaybeQueryResult<TReturn>;
+};
+
 // Overload 1: Query - returns QueryResult<TReturn>
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,

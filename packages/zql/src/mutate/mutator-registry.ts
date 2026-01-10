@@ -157,7 +157,7 @@ export function defineMutatorsWithType<
  * The return type of defineMutatorsWithType. A function matching the
  * defineMutators overloads but with Schema pre-bound.
  */
-type TypedDefineMutators<S extends Schema> = {
+export type TypedDefineMutators<S extends Schema> = {
   // Single definitions
   <MD>(
     definitions: MD & AssertMutatorDefinitions<MD>,

@@ -1,4 +1,4 @@
-import {useQuery, useConnectionState} from '@rocicorp/zero/react';
+import {useQuery, useConnectionState} from '../../shared/zero-hooks.ts';
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';

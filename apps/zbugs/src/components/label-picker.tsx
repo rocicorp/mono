@@ -1,4 +1,4 @@
-import {useQuery} from '@rocicorp/zero/react';
+import {useQuery} from '../../shared/zero-hooks.ts';
 import classNames from 'classnames';
 import {useCallback, useRef, useState} from 'react';
 import {queries} from '../../shared/queries.ts';

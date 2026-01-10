@@ -1,5 +1,6 @@
-import {type Row, type ServerTransaction} from '@rocicorp/zero';
+import type {ZbugsRow} from '../shared/zero-hooks.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
+import type {ZbugsServerTransaction} from '../shared/mutators.ts';
 
 export async function sendEmail({
   tx,
@@ -11,13 +12,13 @@ export async function sendEmail({
   issue,
   attachments = [],
 }: {
-  tx: ServerTransaction;
+  tx: ZbugsServerTransaction;
   email: string;
   title: string;
   message: string;
   link: string;
   unsubscribeLink: string;
-  issue: Row['issue'];
+  issue: ZbugsRow['issue'];
   attachments?: {
     filename: string;
     contentType: string;

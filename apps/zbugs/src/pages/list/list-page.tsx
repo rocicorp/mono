@@ -1,5 +1,4 @@
-import type {Row} from '@rocicorp/zero';
-import {useQuery, useZero} from '@rocicorp/zero/react';
+import {useQuery, useZero, type ZbugsRow} from '../../../shared/zero-hooks.ts';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
@@ -44,7 +43,7 @@ const MIN_PAGE_SIZE = 100;
 const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
 type Anchor = {
-  startRow: Row['issue'] | undefined;
+  startRow: ZbugsRow['issue'] | undefined;
   direction: 'forward' | 'backward';
   index: number;
 };

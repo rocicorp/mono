@@ -1,5 +1,5 @@
 import type {Row} from '@rocicorp/zero';
-import {useZero} from '@rocicorp/zero/react';
+import {useZero} from '../../../shared/zero-hooks.ts';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
 import {mutators} from '../../../shared/mutators.ts';

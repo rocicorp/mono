@@ -11,7 +11,7 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import {useZero} from '@rocicorp/zero/react';
+import {useZero} from '../../shared/zero-hooks.ts';
 import {nanoid} from 'nanoid';
 import {
   forwardRef,

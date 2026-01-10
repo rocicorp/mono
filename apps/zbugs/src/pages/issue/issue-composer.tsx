@@ -1,4 +1,4 @@
-import {useZero} from '@rocicorp/zero/react';
+import {useZero} from '../../../shared/zero-hooks.ts';
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {mutators} from '../../../shared/mutators.ts';

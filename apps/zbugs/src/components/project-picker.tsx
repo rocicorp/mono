@@ -1,10 +1,10 @@
-import type {Row} from '@rocicorp/zero';
+import type {ZbugsRow} from '../../shared/zero-hooks.ts';
 import rocketIcon from '../assets/icons/icon-rocket.svg';
 import projectIcon from '../assets/icons/project-box.svg';
 import zeroMarkIcon from '../assets/images/mark.svg';
 import {Combobox} from './combobox.tsx';
 
-type Project = Row['project'];
+type Project = ZbugsRow['project'];
 
 interface Props {
   onChange: (selectedValue: Project) => void;

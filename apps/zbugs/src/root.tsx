@@ -1,4 +1,4 @@
-import {useConnectionState} from '@rocicorp/zero/react';
+import {useConnectionState} from '../shared/zero-hooks.ts';
 import {useEffect, useState} from 'react';
 import {Redirect, Route, Switch} from 'wouter';
 import {ZERO_PROJECT_NAME} from '../shared/schema.ts';

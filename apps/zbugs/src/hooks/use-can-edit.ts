@@ -1,4 +1,4 @@
-import {useQuery} from '@rocicorp/zero/react';
+import {useQuery} from '../../shared/zero-hooks.ts';
 import {queries} from '../../shared/queries.ts';
 import {useLogin} from './use-login.tsx';
 

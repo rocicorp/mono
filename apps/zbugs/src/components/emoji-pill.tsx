@@ -1,4 +1,4 @@
-import {useZero} from '@rocicorp/zero/react';
+import {useZero} from '../../shared/zero-hooks.ts';
 import classNames from 'classnames';
 import {memo, useEffect, useState} from 'react';
 import {useIntersectionObserver} from 'usehooks-ts';
