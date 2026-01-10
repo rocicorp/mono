@@ -62,6 +62,62 @@ describe('ConnectionManager', () => {
     });
   });
 
+  describe('connect request', () => {
+    test('waitForConnectRequest resolves after requestConnect', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+
+      let resolved = false;
+      const waitPromise = manager.waitForConnectRequest().then(() => {
+        resolved = true;
+      });
+
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      manager.requestConnect();
+      await waitPromise;
+      expect(resolved).toBe(true);
+    });
+
+    test('waitForConnectRequest resolves immediately while request is pending', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+
+      manager.requestConnect();
+      await manager.waitForConnectRequest();
+
+      let resolved = false;
+      await manager.waitForConnectRequest().then(() => {
+        resolved = true;
+      });
+      expect(resolved).toBe(true);
+
+      expect(manager.consumeConnectRequest()).toBe(true);
+
+      let pendingResolved = false;
+      const pendingPromise = manager.waitForConnectRequest().then(() => {
+        pendingResolved = true;
+      });
+      await Promise.resolve();
+      expect(pendingResolved).toBe(false);
+
+      manager.requestConnect();
+      await pendingPromise;
+      expect(pendingResolved).toBe(true);
+    });
+
+    test('consumeConnectRequest returns false when no request is pending', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+
+      expect(manager.consumeConnectRequest()).toBe(false);
+    });
+  });
+
   describe('connecting', () => {
     test('increments attempt and keeps disconnect deadline while already connecting', () => {
       vi.setSystemTime(2_500);
