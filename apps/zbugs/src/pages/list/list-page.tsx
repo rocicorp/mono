@@ -330,17 +330,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
-  const {
-    issues,
-    complete,
-    // estimatedRowsBefore: newEstimatedRowsBefore,
-    // estimatedRowsAfter: newEstimatedRowsAfter,
-    // startRow,
-    // endRow,
-    atStart,
-    atEnd,
-    // ...rest
-  } = useIssues(
+  const {issues, complete, atStart, atEnd} = useIssues(
     listContextParams,
     z.userID,
     pageSize,
@@ -1242,14 +1232,12 @@ function useIssues(
     assert(start !== null);
     assert(pageSize % 2 === 0);
 
-    // Inlined usePermalinkPage
-    const middleRow = start;
     const halfPageSize = pageSize / 2;
     const qBefore = queries.issueListV2({
       listContext,
       userID,
       limit: halfPageSize + 1,
-      start: middleRow,
+      start,
       dir: 'backward',
       inclusive: true,
     });
@@ -1257,7 +1245,7 @@ function useIssues(
       listContext,
       userID,
       limit: halfPageSize + 1,
-      start: middleRow,
+      start,
       dir: 'forward',
       inclusive: true,
     });
@@ -1266,106 +1254,49 @@ function useIssues(
     const completeBefore = resultBefore.type === 'complete';
     const completeAfter = resultAfter.type === 'complete';
 
-    const atStart = completeBefore && issuesBefore.length <= halfPageSize;
-    const atEnd = completeAfter && issuesAfter.length <= halfPageSize;
-
-    const issues = joinIssues(issuesBefore, issuesAfter, halfPageSize);
-
     return {
-      issues,
+      issues: joinIssues(issuesBefore, issuesAfter, halfPageSize),
       complete: completeBefore && completeAfter,
-      atStart,
-      atEnd,
+      atStart: completeBefore && issuesBefore.length <= halfPageSize,
+      atEnd: completeAfter && issuesAfter.length <= halfPageSize,
     };
   }
 
-  if (kind === 'forward') {
-    if (start === null) {
-      // Inlined useTopPage
-      // At start of list we know we are at the index 0 and at the start. We only have one page.
-      const q = queries.issueListV2({
-        listContext,
-        userID,
-        limit: pageSize + 1,
-        start: null,
-        dir: 'forward',
-        inclusive: true, // not needed.
-      });
-      const [issues, result] = useQuery(q, options);
+  kind satisfies 'forward' | 'backward';
 
-      // not used but needed to follow rules of hooks
-      void useQuery(q, options);
-
-      const atStart = true;
-      const complete = result.type === 'complete';
-      const atEnd = complete && issues.length <= pageSize;
-      const slicedIssues = !atEnd ? issues.slice(0, pageSize) : issues;
-      return {
-        issues: slicedIssues,
-        complete,
-        atStart,
-        atEnd,
-      };
-    }
-
-    // Inlined useForwardPage
-    const q = queries.issueListV2({
-      listContext,
-      userID,
-      // overfetch by 1 to determine if there are more pages.
-      limit: pageSize + 1,
-      start,
-      dir: 'forward',
-      inclusive: false,
-    });
-    const [issues, result] = useQuery(q, options);
-    // not used but needed to follow rules of hooks
-    void useQuery(q, options);
-
-    const complete = result.type === 'complete';
-    const atStart = anchorIndex === 0;
-    const atEnd = complete && issues.length <= pageSize;
-    const slicedIssues = !atEnd ? issues.slice(0, pageSize) : issues;
-    return {
-      issues: slicedIssues,
-      complete,
-      atStart,
-      atEnd,
-    };
-  }
-
-  kind satisfies 'backward';
-
-  assert(start !== null);
-
-  // Inlined useBackwardPage
   const q = queries.issueListV2({
     listContext,
     userID,
-    // overfetch by 1 to determine if there are more pages.
     limit: pageSize + 1,
     start,
-    dir: 'backward',
-    inclusive: false,
+    dir: kind,
+    inclusive: start === null,
   });
   const [issues, result] = useQuery(q, options);
   // not used but needed to follow rules of hooks
   void useQuery(q, options);
 
-  // Backward query returns issues in descending position order (which is what we need)
-  // so we should NOT reverse them
-  const slicedIssues = issues.slice(0, pageSize);
   const complete = result.type === 'complete';
-  const atStart = complete && issues.length <= pageSize;
+  const hasMoreIssues = issues.length > pageSize;
+  const slicedIssues = hasMoreIssues ? issues.slice(0, pageSize) : issues;
 
-  // Never atEnd when going backward because exclusive query
-  const atEnd = false;
+  if (kind === 'forward') {
+    return {
+      issues: slicedIssues,
+      complete,
+      atStart: start === null || anchorIndex === 0,
+      atEnd: complete && !hasMoreIssues,
+    };
+  }
+
+  kind satisfies 'backward';
+  assert(start !== null);
 
   return {
     issues: slicedIssues,
     complete,
-    atStart,
-    atEnd,
+    atStart: complete && !hasMoreIssues,
+    atEnd: false,
   };
 }
 
