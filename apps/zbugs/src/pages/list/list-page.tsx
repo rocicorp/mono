@@ -91,10 +91,10 @@ const TOP_ANCHOR = Object.freeze({
 });
 
 const START_ANCHOR: Anchor =
-  //  TOP_ANCHOR;
+  // TOP_ANCHOR;
 
   {
-    index: 1,
+    index: NUM_ROWS_FOR_LOADING_SKELETON,
     type: 'permalink',
 
     // // First issue
@@ -131,6 +131,15 @@ const START_ANCHOR: Anchor =
     //   id: 'mrh64by3B9b6MRHbzkLQP',
     //   modified: 1677090672000,
     //   created: 1666168138000,
+    // },
+
+    // // Even closer to bottom
+    // // title: Can we support...
+    // // index: 512
+    // startRow: {
+    //   id: '8tyDj9FUJWQ5qd2JEP3KS',
+    //   modified: 1677090541000,
+    //   created: 1665587844000,
     // },
 
     // // Last issue
@@ -306,7 +315,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
   );
 
   // const [total, setTotal] = useState<number | undefined>(undefined);
-  const total = undefined as number | undefined;
 
   const [hasScrolledToPermalink, setHasScrolledToPermalink] = useState(false);
   const [pendingScrollShift, setPendingScrollShift] = useState<{
@@ -315,6 +323,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
     newAnchor: Anchor;
   } | null>(null);
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
+  const [hasReachedEnd, setHasReachedEnd] = useState(false);
+  const [hasReachedStart, setHasReachedStart] = useState(false);
+
+  const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
@@ -538,22 +550,36 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (atStart && atEnd) {
       // We have the complete list
       newEstimate = issues.length;
+      setHasReachedStart(true);
+      setHasReachedEnd(true);
     } else if (atStart) {
       // We know the start, estimate the rest
+      const extra = hasReachedEnd ? 0 : NUM_ROWS_FOR_LOADING_SKELETON;
       newEstimate = Math.max(
         estimatedTotal,
-        anchor.index + issues.length + NUM_ROWS_FOR_LOADING_SKELETON,
+        anchor.index + issues.length + extra,
       );
+      setHasReachedStart(true);
     } else if (atEnd) {
       // We know the end, we have everything
-      newEstimate = Math.max(estimatedTotal, anchor.index + issues.length);
+      console.log('setting estimated total at end', {
+        'anchor.index': anchor.index,
+        'issues.length': issues.length,
+      });
+      if (hasReachedEnd) {
+        newEstimate = Math.max(estimatedTotal, anchor.index + issues.length);
+      } else {
+        newEstimate = anchor.index + issues.length;
+      }
+      setHasReachedEnd(true);
     } else {
-      newEstimate = Math.max(
-        estimatedTotal,
-        anchor.type === 'backward'
-          ? anchor.index + NUM_ROWS_FOR_LOADING_SKELETON
-          : anchor.index + issues.length + NUM_ROWS_FOR_LOADING_SKELETON,
-      );
+      newEstimate = estimatedTotal;
+      // Math.max(
+      //   estimatedTotal,
+      //   anchor.type !== 'backward'
+      //     ? anchor.index + NUM_ROWS_FOR_LOADING_SKELETON
+      //     : anchor.index + issues.length + NUM_ROWS_FOR_LOADING_SKELETON,
+      // );
     }
 
     console.log('setting estimated total?', {
@@ -735,6 +761,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
 
     virtualizer.scrollToOffset(newScrollOffset);
+    setEstimatedTotal(estimatedTotal + shift);
     setPendingScrollShift(null);
     // skipPagingLogic is already set when pendingScrollShift was created
   }, [
@@ -794,32 +821,27 @@ export function ListPage({onReady}: {onReady: () => void}) {
       firstItem.index,
     );
 
-    // TEMPORARY DISABLE - see comment below
-    // if (atStart) {
-    //   // When at start with backward anchor, we need to convert to forward anchor with index 0
-    //   if (anchor.type === 'backward') {
-    //     console.log('converting backward anchor to forward at start', {
-    //       oldIndex: anchor.index,
-    //       issuesLength: issues.length,
-    //     });
-    //     setQueryAnchor({
-    //       anchor: TOP_ANCHOR,
-    //       listContextParams,
-    //     });
-    //     return;
-    //   }
-    //   // When at start with forward/permalink anchor, just ensure index is 0
-    //   if (anchor.index !== 0) {
-    //     setQueryAnchor({
-    //       anchor: {
-    //         ...anchor,
-    //         index: 0,
-    //       },
-    //       listContextParams,
-    //     });
-    //     return;
-    //   }
-    // }
+    if (atStart) {
+      // When at start with backward anchor, we need to convert to forward anchor with index 0
+      if (anchor.type === 'backward') {
+        setQueryAnchor({
+          anchor: TOP_ANCHOR,
+          listContextParams,
+        });
+        return;
+      }
+      // When at start with forward/permalink anchor, just ensure index is 0
+      if (anchor.index !== 0) {
+        setQueryAnchor({
+          anchor: {
+            ...anchor,
+            index: 0,
+          },
+          listContextParams,
+        });
+        return;
+      }
+    }
 
     // TODO(arv): I don't think we need to overfetch. It seems like we can use
     // anchor.index === 0 like before
@@ -870,6 +892,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
           anchor: newAnchor,
           listContextParams,
         });
+
         return;
       }
 
@@ -944,6 +967,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
         },
         listContextParams,
       });
+      console.log('increasing estimated total for page down', {
+        index,
+        pageSize,
+        estimatedTotal,
+      });
+      if (!hasReachedEnd) {
+        setEstimatedTotal(
+          Math.max(
+            estimatedTotal,
+            index + pageSize + NUM_ROWS_FOR_LOADING_SKELETON,
+          ),
+        );
+      }
     }
   }, [
     listContextParams,
