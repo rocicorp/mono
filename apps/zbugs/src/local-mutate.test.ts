@@ -1,5 +1,5 @@
 import {test} from 'vitest';
-import {zeroForTest} from '@rocicorp/zero/test-helpers';
+import {zeroForTest} from '@rocicorp/zero/testing';
 import {builder, schema} from '../shared/schema.ts';
 import {mutators} from '../shared/mutators.ts';
 import type {AuthData} from '../shared/auth.ts';

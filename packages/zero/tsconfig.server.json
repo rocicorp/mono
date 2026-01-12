@@ -14,7 +14,6 @@
     "src/zqlite.ts",
     "src/analyze-query.ts",
     "src/transform-query.ts",
-    "src/zero-out.ts",
-    "src/test-helpers.ts"
+    "src/zero-out.ts"
   ]
 }

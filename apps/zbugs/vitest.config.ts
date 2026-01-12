@@ -20,8 +20,8 @@ export function configForVersion(version: number, url: string) {
     resolve: {
       alias: [
         {
-          find: '@rocicorp/zero/test-helpers',
-          replacement: resolve(packagesDir, 'zero/src/test-helpers.ts'),
+          find: '@rocicorp/zero/testing',
+          replacement: resolve(packagesDir, 'zero/src/testing.ts'),
         },
         {
           find: '@rocicorp/zero',
@@ -59,8 +59,8 @@ export function configForNoPg(url: string) {
     resolve: {
       alias: [
         {
-          find: '@rocicorp/zero/test-helpers',
-          replacement: resolve(packagesDir, 'zero/src/test-helpers.ts'),
+          find: '@rocicorp/zero/testing',
+          replacement: resolve(packagesDir, 'zero/src/testing.ts'),
         },
         {
           find: '@rocicorp/zero',
