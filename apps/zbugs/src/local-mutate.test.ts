@@ -2,7 +2,6 @@ import {test} from 'vitest';
 import {zeroForTest} from '@rocicorp/zero/testing';
 import {builder, schema} from '../shared/schema.ts';
 import {mutators} from '../shared/mutators.ts';
-import type {AuthData} from '../shared/auth.ts';
 import {defineMutator, defineMutators} from '@rocicorp/zero';
 import {z} from 'zod/mini';
 
@@ -13,7 +12,8 @@ const userSchema = z.object({
   role: z.union([z.literal('user'), z.literal('crew')]),
 });
 
-const mutatorsForTest = defineMutators({
+// Use the merge overload to inherit context type from the base mutators
+const mutatorsForTest = defineMutators(mutators, {
   user: {
     create: defineMutator(userSchema, async ({tx, args}) => {
       await tx.mutate.user.insert({
@@ -32,16 +32,14 @@ test('local mutate', async () => {
     cacheURL: null,
     kvStore: 'mem',
     schema,
-    mutators: {
-      ...mutators,
-      ...mutatorsForTest,
-    },
+    mutators: mutatorsForTest,
     userID: 'user-1',
-    context: {sub: 'user-1', role: 'user'} as AuthData | undefined,
+    // can't make this work using the proper type. Context always throws an error
+    // no matter what we do.
+    context: {sub: 'user-1', role: 'user'} as any,
   });
 
   await zero.mutate(
-    // @ts-ignore - can't get context type to play nicely with the mutator definitions
     mutatorsForTest.user.create({
       id: 'user-1',
       login: 'holden',
@@ -51,8 +49,7 @@ test('local mutate', async () => {
   ).client;
 
   const result = await zero.mutate(
-    // @ts-ignore - can't get context type to play nicely with the mutator definitions
-    mutators.issue.create({
+    mutatorsForTest.issue.create({
       id: 'issue-1',
       title: 'Test Issue',
       description: 'This is a test issue',
