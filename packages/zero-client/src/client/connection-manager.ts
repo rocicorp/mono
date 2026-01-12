@@ -176,11 +176,27 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
       : this.#connectRequestResolver.promise;
   }
 
-  consumeConnectRequest(): boolean {
+  #consumeConnectRequest(): boolean {
     if (this.#connectRequestResolver !== undefined) {
       return false;
     }
     this.#connectRequestResolver = resolver();
+    return true;
+  }
+
+  /**
+   * Consume a pending connect request and resume connecting.
+   *
+   * @returns true if a pending request was handled.
+   */
+  resumeFromConnectRequest(): boolean {
+    if (!this.isInTerminalState()) {
+      return false;
+    }
+    if (!this.#consumeConnectRequest()) {
+      return false;
+    }
+    this.connecting();
     return true;
   }
 

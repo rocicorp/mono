@@ -85,7 +85,12 @@ describe('ConnectionManager', () => {
       const manager = new ConnectionManager({
         disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
+      const error = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'boom',
+      });
 
+      manager.error(error);
       manager.requestConnect();
       await manager.waitForConnectRequest();
 
@@ -95,7 +100,8 @@ describe('ConnectionManager', () => {
       });
       expect(resolved).toBe(true);
 
-      expect(manager.consumeConnectRequest()).toBe(true);
+      expect(manager.resumeFromConnectRequest()).toBe(true);
+      expect(manager.state.name).toBe(ConnectionStatus.Connecting);
 
       let pendingResolved = false;
       const pendingPromise = manager.waitForConnectRequest().then(() => {
@@ -109,12 +115,28 @@ describe('ConnectionManager', () => {
       expect(pendingResolved).toBe(true);
     });
 
-    test('consumeConnectRequest returns false when no request is pending', () => {
+    test('resumeFromConnectRequest returns false when not in terminal state', () => {
       const manager = new ConnectionManager({
         disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
-      expect(manager.consumeConnectRequest()).toBe(false);
+      expect(manager.resumeFromConnectRequest()).toBe(false);
+    });
+
+    test('resumeFromConnectRequest restarts connecting when requested', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+      const error = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'boom',
+      });
+
+      manager.error(error);
+      manager.requestConnect();
+
+      expect(manager.resumeFromConnectRequest()).toBe(true);
+      expect(manager.state.name).toBe(ConnectionStatus.Connecting);
     });
   });
 

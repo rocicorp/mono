@@ -2008,12 +2008,8 @@ export class Zero<
               connectRequest: this.#connectionManager.waitForConnectRequest(),
               stateChange: this.#connectionManager.waitForStateChange(),
             });
-            if (
-              resumeResult.key === 'connectRequest' &&
-              this.#connectionManager.isInTerminalState()
-            ) {
-              this.#connectionManager.consumeConnectRequest();
-              this.#connectionManager.connecting();
+            if (resumeResult.key === 'connectRequest') {
+              this.#connectionManager.resumeFromConnectRequest();
             }
             break;
           }
@@ -2028,12 +2024,8 @@ export class Zero<
               connectRequest: this.#connectionManager.waitForConnectRequest(),
               stateChange: this.#connectionManager.waitForStateChange(),
             });
-            if (
-              resumeResult.key === 'connectRequest' &&
-              this.#connectionManager.isInTerminalState()
-            ) {
-              this.#connectionManager.consumeConnectRequest();
-              this.#connectionManager.connecting();
+            if (resumeResult.key === 'connectRequest') {
+              this.#connectionManager.resumeFromConnectRequest();
             }
             break;
           }
