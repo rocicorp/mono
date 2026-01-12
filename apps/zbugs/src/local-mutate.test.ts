@@ -37,11 +37,11 @@ test('local mutate', async () => {
       ...mutatorsForTest,
     },
     userID: 'user-1',
-    context: {sub: 'user-1', role: 'user'} as AuthData,
+    context: {sub: 'user-1', role: 'user'} as AuthData | undefined,
   });
 
   await zero.mutate(
-    // @ts-ignore - wtf?
+    // @ts-ignore - can't get context type to play nicely with the mutator definitions
     mutatorsForTest.user.create({
       id: 'user-1',
       login: 'holden',
@@ -51,7 +51,7 @@ test('local mutate', async () => {
   ).client;
 
   const result = await zero.mutate(
-    // @ts-ignore - wtf?
+    // @ts-ignore - can't get context type to play nicely with the mutator definitions
     mutators.issue.create({
       id: 'issue-1',
       title: 'Test Issue',
