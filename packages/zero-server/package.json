@@ -10,7 +10,7 @@
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --type-aware src/",
-    "pretest": "prisma generate --schema ./src/adapters/schema.test.prisma",
+    "postinstall": "prisma generate --schema ./src/adapters/schema.test.prisma",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:pg17": "vitest run --project='*17*'",
