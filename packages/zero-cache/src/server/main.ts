@@ -102,7 +102,7 @@ export default async function runWorker(
       if (runChangeStreamer) {
         // If the restore failed, e.g. due to a corrupt backup, the
         // replication-manager recovers by re-syncing.
-        lc.error?.('error restoring backup. resyncing the replica.');
+        lc.error?.('error restoring backup. resyncing the replica.', e);
       } else {
         // View-syncers, on the other hand, have no option other than to retry
         // until a valid backup has been published. This is achieved by
