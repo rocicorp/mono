@@ -310,9 +310,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       : START_ANCHOR;
 
   // TODO(arv): Maybe use 4* like before?
-  const [estimatedTotal, setEstimatedTotal] = useState(
-    START_ANCHOR.index + MIN_PAGE_SIZE * 2,
-  );
+  const [estimatedTotal, setEstimatedTotal] = useState(pageSize);
 
   // const [total, setTotal] = useState<number | undefined>(undefined);
 
@@ -609,7 +607,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     getScrollElement: () => listRef.current,
     initialOffset: () => {
       if (anchor.type === 'permalink') {
-        // TODO(arv): We can do better
         // TODO(arv): Also measure
         return (anchor.index + pageSize / 2) * ITEM_SIZE;
       }
@@ -919,7 +916,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
         : anchor.index - lastItem.index;
 
     if (atEnd) {
-      // TODO(arv): Update estimated total?
       return;
     }
 
@@ -1205,20 +1201,6 @@ function toStartRow(row: Row['issue']): StartRow {
 
 type Issues = Row<ReturnType<typeof queries.issueListV2>>[];
 
-/////////////////////////////////////////////////////////
-// New strategy
-
-type CombinedPages = {
-  issues: Issues;
-  complete: boolean;
-  // startRowXXX: StartRow | undefined;
-  // endRowXXX: StartRow | undefined;
-  atStart: boolean;
-  atEnd: boolean;
-  // estimatedRowsBefore: number;
-  // estimatedRowsAfter: number;
-};
-
 function useIssues(
   listContext: ListContextParams,
   userID: string,
@@ -1227,7 +1209,7 @@ function useIssues(
   kind: 'forward' | 'backward' | 'permalink',
   anchorIndex: number,
   options: UseQueryOptions,
-): CombinedPages {
+) {
   if (kind === 'permalink') {
     assert(start !== null);
     assert(pageSize % 2 === 0);
