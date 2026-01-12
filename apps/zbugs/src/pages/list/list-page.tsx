@@ -1,6 +1,12 @@
 // oxlint-disable no-console
 import type {Row} from '@rocicorp/zero';
-import {useQuery, useZero, type UseQueryOptions} from '@rocicorp/zero/react';
+import {
+  setupSlowQuery,
+  useQuery,
+  useSlowQuery,
+  useZero,
+  type UseQueryOptions,
+} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
@@ -40,6 +46,12 @@ import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
+
+// Set to true to enable slow query simulation (half data → full data after 5s)
+const USE_SLOW_QUERY = true;
+if (USE_SLOW_QUERY) {
+  setupSlowQuery({delayMs: 1000, unknownDataPercentage: 70});
+}
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -309,8 +321,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
       ? queryAnchor.anchor
       : START_ANCHOR;
 
+  // Track when queryAnchor/anchor changes
+  useEffect(() => {
+    console.log('anchor changed', {
+      'anchor.index': anchor.index,
+      'anchor.type': anchor.type,
+      'queryAnchor === reference': anchor === queryAnchor.anchor,
+    });
+  }, [anchor, queryAnchor]);
+
   // TODO(arv): Maybe use 4* like before?
-  const [estimatedTotal, setEstimatedTotal] = useState(pageSize);
+  const [estimatedTotal, setEstimatedTotal] = useState(
+    NUM_ROWS_FOR_LOADING_SKELETON,
+  );
 
   // const [total, setTotal] = useState<number | undefined>(undefined);
 
@@ -326,6 +349,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
 
+  // Create a stable identifier for the current anchor to track which anchor generated the issues
+  const anchorId = useMemo(
+    () => `${anchor.index}-${anchor.type}-${anchor.startRow?.id ?? 'null'}`,
+    [anchor.index, anchor.type, anchor.startRow?.id],
+  );
+
+  // Track the previous anchor to detect changes
+  const prevAnchorIdRef = useRef<string>(anchorId);
+  const maxIssuesLengthRef = useRef<number>(0);
+
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
   const {issues, complete, atStart, atEnd} = useIssues(
@@ -337,6 +370,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
     anchor.index,
     textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
+
+  // Update tracking when issues changes
+  useEffect(() => {
+    // Track the max issues length we've seen
+    if (issues.length > maxIssuesLengthRef.current) {
+      console.log('issues length increased', {
+        'issues.length': issues.length,
+        'old max': maxIssuesLengthRef.current,
+        'anchor.index': anchor.index,
+        anchorId,
+      });
+      maxIssuesLengthRef.current = issues.length;
+    }
+  }, [issues]);
 
   console.debug(
     'Render',
@@ -527,12 +574,54 @@ export function ListPage({onReady}: {onReady: () => void}) {
     );
   };
 
+  // #region Computing new estimated total
   // Update estimated total - should only increase unless we reach the end
   useEffect(() => {
-    // TODO(arv): Should work for incomplete lists too
-    if (!complete) {
+    if (queryAnchor.listContextParams !== listContextParams) {
       return;
     }
+
+    const anchorJustChanged = prevAnchorIdRef.current !== anchorId;
+
+    // Guard: Skip if anchor just changed - issues might be stale cached data
+    if (anchorJustChanged) {
+      console.log('skipping estimated total calc - anchor just changed', {
+        'prevAnchorId': prevAnchorIdRef.current,
+        'currentAnchorId': anchorId,
+        'anchor.index': anchor.index,
+        'issues.length': issues.length,
+      });
+      // Update prevAnchorIdRef for next render
+      prevAnchorIdRef.current = anchorId;
+      // Reset max when anchor changes
+      maxIssuesLengthRef.current = issues.length;
+      return;
+    }
+
+    // // Guard: Only calculate when we have new/more data
+    // // This prevents recalculating with partial data from useSlowQuery (100 → 50 → 100)
+    // if (issues.length < maxIssuesLengthRef.current) {
+    //   console.log('skipping estimated total calc - partial data', {
+    //     'issues.length': issues.length,
+    //     'maxIssuesLength': maxIssuesLengthRef.current,
+    //     'anchor.index': anchor.index,
+    //   });
+    //   return;
+    // }
+
+    console.log('estimated total effect running', {
+      'queryAnchor.anchor': queryAnchor.anchor,
+      anchor,
+      'anchor === queryAnchor.anchor': anchor === queryAnchor.anchor,
+      'issues.length': issues.length,
+      anchorId,
+      'prevAnchorId': prevAnchorIdRef.current,
+    });
+
+    // TODO(arv): Should work for incomplete lists too
+    // if (!complete) {
+    //   return;
+    // }
 
     let newEstimate: number;
     if (atStart && atEnd) {
@@ -561,43 +650,45 @@ export function ListPage({onReady}: {onReady: () => void}) {
       }
       setHasReachedEnd(true);
     } else {
-      newEstimate = estimatedTotal;
-      // Math.max(
-      //   estimatedTotal,
-      //   anchor.type !== 'backward'
-      //     ? anchor.index + NUM_ROWS_FOR_LOADING_SKELETON
-      //     : anchor.index + issues.length + NUM_ROWS_FOR_LOADING_SKELETON,
-      // );
+      newEstimate = Math.max(
+        estimatedTotal,
+        anchor.type === 'backward'
+          ? anchor.index + NUM_ROWS_FOR_LOADING_SKELETON
+          : anchor.index + issues.length + NUM_ROWS_FOR_LOADING_SKELETON,
+      );
+
+      console.log('setting estimated total in middle', {
+        newEstimate,
+        estimatedTotal,
+        'anchor.type': anchor.type,
+        'anchor.index': anchor.index,
+        'issues.length': issues.length,
+      });
     }
 
-    console.log('setting estimated total?', {
-      newEstimate,
-      estimatedTotal,
-      complete,
-      atEnd,
-      atStart,
-      'set?': newEstimate > estimatedTotal || atEnd,
-    });
+    if (newEstimate > estimatedTotal || atEnd) {
+      console.log('setting estimated total?', {
+        newEstimate,
+        estimatedTotal,
+        complete,
+        atEnd,
+        atStart,
+      });
 
-    // Update if estimate increased, or if we reached the end (exact count)
-    // if (newEstimate > estimatedTotal || atEnd) {
-    // if (atEnd) {
-    setEstimatedTotal(newEstimate);
-    // } else
-    // // if (newEstimate > estimatedTotal) {
-    //   setEstimatedTotal(newEstimate);
-    //   debugger;
-    // }
-    // }
+      setEstimatedTotal(newEstimate);
+    }
   }, [
     complete,
     atStart,
     atEnd,
     anchor.index,
     anchor.type,
+    anchor.startRow?.id, // Ensure effect re-runs when queryAnchor changes to detect stale issues
     issues.length,
     estimatedTotal,
+    hasReachedEnd,
   ]);
+  //#endregion
 
   const virtualizer = useVirtualizer({
     // count: total ?? estimatedTotal + NUM_ROWS_FOR_LOADING_SKELETON,
@@ -620,13 +711,17 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
+    const anchorJustChanged = prevAnchorIdRef.current !== anchorId;
+
     if (anchor.type === 'permalink' && complete) {
+      assert(!anchorJustChanged);
       // Find the actual index of the permalink item in the list. It might not be in the middle because there might not be full
       // pages before or after it.
       const issueArrayIndex = issues.findIndex(
         issue => issue.id === anchor.startRow.id,
       );
       console.log(
+        'permalink',
         'scrolling to issueArrayIndex',
         anchor.index,
         issueArrayIndex,
@@ -638,14 +733,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
           align: 'start',
         },
       );
-      setHasScrolledToPermalink(true);
+      setHasScrolledToPermalink(!atStart);
     }
   }, [
     hasScrolledToPermalink,
     anchor.type,
     anchor.startRow?.id,
-    complete,
     anchor.index,
+    complete,
     atStart,
     issues,
     virtualizer,
@@ -761,6 +856,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     virtualizer,
   ]);
 
+  // #region Scrolling
   useEffect(() => {
     if (queryAnchor.listContextParams !== listContextParams) {
       return;
@@ -833,7 +929,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
     // TODO(arv): I don't think we need to overfetch. It seems like we can use
     // anchor.index === 0 like before
     if (
-      virtualizer.scrollDirection === 'backward' &&
+      // virtualizer.scrollDirection === 'backward' &&
+      complete &&
       !atStart &&
       distanceFromStart <= nearPageEdgeThreshold
     ) {
@@ -915,12 +1012,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
         ? anchor.index + issues.length - lastItem.index
         : anchor.index - lastItem.index;
 
-    if (atEnd) {
+    if (atEnd || !complete) {
       return;
     }
 
     if (
-      virtualizer.scrollDirection === 'forward' &&
+      // virtualizer.scrollDirection === 'forward' &&
       distanceFromEnd <= nearPageEdgeThreshold
     ) {
       const issueArrayIndex = toBoundIssueArrayIndex(
@@ -957,14 +1054,18 @@ export function ListPage({onReady}: {onReady: () => void}) {
         index,
         pageSize,
         estimatedTotal,
+        'anchor.type': anchor.type,
+        'anchor.index': anchor.index,
       });
       if (!hasReachedEnd) {
-        setEstimatedTotal(
-          Math.max(
-            estimatedTotal,
-            index + pageSize + NUM_ROWS_FOR_LOADING_SKELETON,
-          ),
-        );
+        // setEstimatedTotal(estimatedTotal + NUM_ROWS_FOR_LOADING_SKELETON);
+        //   Math.max(
+        //     estimatedTotal,
+        //     anchor.type !== 'backward'
+        //       ? index + issues.length + NUM_ROWS_FOR_LOADING_SKELETON
+        //       : index + NUM_ROWS_FOR_LOADING_SKELETON,
+        //   ),
+        // );
       }
     }
   }, [
@@ -978,6 +1079,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     virtualizer,
     anchor,
   ]);
+  // #endregion
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
@@ -1210,9 +1312,14 @@ function useIssues(
   anchorIndex: number,
   options: UseQueryOptions,
 ) {
+  // Conditionally use useSlowQuery or useQuery based on USE_SLOW_QUERY flag
+  const queryFn = USE_SLOW_QUERY ? useSlowQuery : useQuery;
+
   if (kind === 'permalink') {
     assert(start !== null);
     assert(pageSize % 2 === 0);
+
+    // TODO(arv): Before can be exclusive, after inclusive
 
     const halfPageSize = pageSize / 2;
     const qBefore = queries.issueListV2({
@@ -1231,8 +1338,14 @@ function useIssues(
       dir: 'forward',
       inclusive: true,
     });
-    const [issuesBefore, resultBefore] = useQuery(qBefore, options);
-    const [issuesAfter, resultAfter] = useQuery(qAfter, options);
+    const [issuesBefore, resultBefore]: [Issues, {type: string}] = queryFn(
+      qBefore,
+      options,
+    ) as unknown as [Issues, {type: string}];
+    const [issuesAfter, resultAfter]: [Issues, {type: string}] = queryFn(
+      qAfter,
+      options,
+    ) as unknown as [Issues, {type: string}];
     const completeBefore = resultBefore.type === 'complete';
     const completeAfter = resultAfter.type === 'complete';
 
@@ -1254,9 +1367,12 @@ function useIssues(
     dir: kind,
     inclusive: start === null,
   });
-  const [issues, result] = useQuery(q, options);
+  const [issues, result]: [Issues, {type: string}] = queryFn(
+    q,
+    options,
+  ) as unknown as [Issues, {type: string}];
   // not used but needed to follow rules of hooks
-  void useQuery(q, options);
+  void queryFn(q, options);
 
   const complete = result.type === 'complete';
   const hasMoreIssues = issues.length > pageSize;
