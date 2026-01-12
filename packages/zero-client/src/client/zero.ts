@@ -1925,14 +1925,7 @@ export class Zero<
             });
 
             if (visibilityResult.key === 'stateChange') {
-              const nextState = visibilityResult.result;
-              if (
-                ConnectionManager.isTerminalState(nextState) ||
-                nextState.name === ConnectionStatus.Closed
-              ) {
-                break;
-              }
-              throwIfConnectionError(nextState);
+              throwIfConnectionError(visibilityResult.result);
               break;
             }
 
@@ -1994,14 +1987,7 @@ export class Zero<
               }
 
               case 'stateChange': {
-                const nextState = raceResult.result;
-                if (
-                  ConnectionManager.isTerminalState(nextState) ||
-                  nextState.name === ConnectionStatus.Closed
-                ) {
-                  break;
-                }
-                throwIfConnectionError(nextState);
+                throwIfConnectionError(raceResult.result);
                 break;
               }
 
