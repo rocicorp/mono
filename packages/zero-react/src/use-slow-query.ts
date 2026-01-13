@@ -160,7 +160,7 @@ export function useSlowQuery<
     const partialData = Array.isArray(data)
       ? data.slice(
           0,
-          Math.floor((data.length * globalConfig.unknownDataPercentage) / 100),
+          Math.ceil((data.length * globalConfig.unknownDataPercentage) / 100),
         )
       : data;
 
