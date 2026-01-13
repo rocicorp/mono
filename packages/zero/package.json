@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.25.9",
+  "version": "0.25.10",
   "description": "Zero is a web framework for serverless web development.",
   "author": "Rocicorp, Inc.",
   "repository": {
