@@ -96,23 +96,29 @@ export class NodePgTransactionInternal
  * @example
  * ```ts
  * import {Pool} from 'pg';
+ * import {defineMutator, defineMutators} from '@rocicorp/zero';
+ * import {zeroNodePg} from '@rocicorp/zero/server/adapters/pg';
+ * import {z} from 'zod/mini';
  *
  * const pool = new Pool({connectionString: process.env.ZERO_UPSTREAM_DB!});
  * const zql = zeroNodePg(schema, pool);
  *
- * // Define the server mutator transaction type using the helper
- * type ServerTx = ServerTransaction<
- *   Schema,
- *   NodePgTransaction
- * >;
- *
- * async function createUser(
- *   tx: ServerTx,
- *   {id, name}: {id: string; name: string},
- * ) {
- *   await tx.dbTransaction.wrappedTransaction
- *     .query('SELECT * FROM "user" WHERE id = $1', [id]);
- * }
+ * export const serverMutators = defineMutators({
+ *   user: {
+ *     create: defineMutator(
+ *       z.object({id: z.string(), name: z.string()}),
+ *       async ({tx, args}) => {
+ *         if (tx.location !== 'server') {
+ *           throw new Error('Server-only mutator');
+ *         }
+ *         await tx.dbTransaction.wrappedTransaction.query(
+ *           'INSERT INTO "user" (id, name, status) VALUES ($1, $2, $3)',
+ *           [args.id, args.name, 'active'],
+ *         );
+ *       },
+ *     ),
+ *   },
+ * });
  * ```
  */
 export function zeroNodePg<S extends Schema>(
