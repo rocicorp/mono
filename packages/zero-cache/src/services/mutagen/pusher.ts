@@ -12,7 +12,6 @@ import {
   isProtocolError,
   type PushFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
-import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   pushResponseSchema,
   type MutationID,
