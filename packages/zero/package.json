@@ -155,6 +155,10 @@
       "types": "./out/zero/src/adapters/drizzle.d.ts",
       "default": "./out/zero/src/adapters/drizzle.js"
     },
+    "./server/adapters/prisma": {
+      "types": "./out/zero/src/adapters/prisma.d.ts",
+      "default": "./out/zero/src/adapters/prisma.js"
+    },
     "./server/adapters/pg": {
       "types": "./out/zero/src/adapters/pg.d.ts",
       "default": "./out/zero/src/adapters/pg.js"
