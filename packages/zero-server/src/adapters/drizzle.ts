@@ -169,24 +169,29 @@ export function toIterableRows(result: unknown): Iterable<Row> {
  * ```ts
  * import {Pool} from 'pg';
  * import {drizzle} from 'drizzle-orm/node-postgres';
- * import type {ServerTransaction} from '@rocicorp/zero';
+ * import {defineMutator, defineMutators} from '@rocicorp/zero';
+ * import {zeroDrizzle} from '@rocicorp/zero/server/adapters/drizzle';
+ * import {z} from 'zod/mini';
  *
  * const pool = new Pool({connectionString: process.env.ZERO_UPSTREAM_DB!});
  * const drizzleDb = drizzle(pool, {schema: drizzleSchema});
- *
  * const zql = zeroDrizzle(schema, drizzleDb);
  *
- * // Define the server mutator transaction type using the helper
- * type ServerTx = ServerTransaction<Schema, DrizzleTransaction<typeof drizzleDb>>;
- *
- * async function createUser(
- *   tx: ServerTx,
- *   {id, name}: {id: string; name: string},
- * ) {
- *   await tx.dbTransaction.wrappedTransaction
- *     .insert(drizzleSchema.user)
- *     .values({id, name})
- * }
+ * export const serverMutators = defineMutators({
+ *   user: {
+ *     create: defineMutator(
+ *       z.object({id: z.string(), name: z.string()}),
+ *       async ({tx, args}) => {
+ *         if (tx.location !== 'server') {
+ *           throw new Error('Server-only mutator');
+ *         }
+ *         await tx.dbTransaction.wrappedTransaction
+ *           .insert(drizzleSchema.user)
+ *           .values({id: args.id, name: args.name, status: 'active'});
+ *       },
+ *     ),
+ *   },
+ * });
  * ```
  */
 export function zeroDrizzle<
