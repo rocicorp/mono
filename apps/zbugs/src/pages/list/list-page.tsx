@@ -320,12 +320,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [pageSize, size]);
 
+  const isListContextCurrent = useMemo(
+    () => queryAnchor.listContextParams === listContextParams,
+    [queryAnchor.listContextParams, listContextParams],
+  );
+
   const anchor = useMemo(
-    () =>
-      queryAnchor.listContextParams === listContextParams
-        ? queryAnchor.anchor
-        : START_ANCHOR,
-    [queryAnchor.listContextParams, queryAnchor.anchor, listContextParams],
+    () => (isListContextCurrent ? queryAnchor.anchor : START_ANCHOR),
+    [isListContextCurrent, queryAnchor.anchor],
   );
 
   const [estimatedTotal, setEstimatedTotal] = useState(
@@ -373,11 +375,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [atEnd]);
 
   useEffect(() => {
-    if (issuesEmpty) {
-      return;
-    }
-
-    if (queryAnchor.listContextParams !== listContextParams) {
+    if (issuesEmpty || !isListContextCurrent) {
       return;
     }
 
@@ -441,8 +439,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
     skipPagingLogic,
     issuesEmpty,
     listContextParams,
-    queryAnchor.listContextParams,
-    // virtualizer,
+    isListContextCurrent,
+    estimatedTotal,
+    // virtualizer, Do not depend on virtualizer. TDZ.
   ]);
 
   const newEstimatedTotal = firstIssueIndex + issuesLength;
@@ -463,7 +462,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   useEffect(() => {
     // TODO(arv): Deal with permalinks too
-    if (queryAnchor.listContextParams !== listContextParams) {
+    if (!isListContextCurrent) {
       if (listRef.current) {
         listRef.current.scrollTop = 0;
       }
@@ -477,7 +476,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         listContextParams,
       });
     }
-  }, [listContextParams, anchor]);
+  }, [listContextParams, anchor, isListContextCurrent]);
 
   useEffect(() => {
     if (complete) {
@@ -668,19 +667,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const virtualItems = virtualizer.getVirtualItems();
 
   useEffect(() => {
-    if (queryAnchor.listContextParams !== listContextParams) {
-      return;
-    }
-
-    if (virtualItems.length === 0) {
-      return;
-    }
-
-    if (!complete) {
-      return;
-    }
-
-    if (skipPagingLogic || pendingScrollAdjustment !== 0) {
+    if (
+      !isListContextCurrent ||
+      virtualItems.length === 0 ||
+      !complete ||
+      skipPagingLogic ||
+      pendingScrollAdjustment !== 0
+    ) {
       return;
     }
 
@@ -694,6 +687,23 @@ export function ListPage({onReady}: {onReady: () => void}) {
       }
     }
 
+    const updateAnchorForEdge = (
+      targetIndex: number,
+      type: 'forward' | 'backward',
+      indexOffset: number,
+    ) => {
+      const index = toBoundIndex(targetIndex, firstIssueIndex, issuesLength);
+      setQueryAnchor({
+        anchor: {
+          index: index + indexOffset,
+          type,
+          startRow: issueAt(index),
+        },
+        listContextParams,
+      });
+      return true;
+    };
+
     const firstItem = virtualItems[0];
     const lastItem = virtualItems[virtualItems.length - 1];
     const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
@@ -701,49 +711,32 @@ export function ListPage({onReady}: {onReady: () => void}) {
     const distanceFromStart = firstItem.index - firstIssueIndex;
     const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
 
-    if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
-      // When we scroll really fast up and the loading is slow we can end up with a page of only placeholders.
-      // When that happens we use the first issue index as the anchor index which allows us to keep going.
-      const index = clampIndex(
+    if (
+      !atStart &&
+      distanceFromStart <= nearPageEdgeThreshold &&
+      updateAnchorForEdge(
         lastItem.index + 2 * nearPageEdgeThreshold,
-        firstIssueIndex,
-        issuesLength,
-      );
-
-      setQueryAnchor({
-        anchor: {
-          index,
-          type: 'backward',
-          startRow: issueAt(index),
-        },
-        listContextParams,
-      });
-
+        'backward',
+        0,
+      )
+    ) {
       return;
     }
 
-    if (!atEnd && distanceFromEnd <= nearPageEdgeThreshold) {
-      // When we scroll really fast down and the loading is slow we can end up with a page of only placeholders.
-      // When that happens we use the last possible issue index as the anchor index which allows us to keep going.
-      const index = clampIndex(
+    if (
+      !atEnd &&
+      distanceFromEnd <= nearPageEdgeThreshold &&
+      updateAnchorForEdge(
         firstItem.index - 2 * nearPageEdgeThreshold,
-        firstIssueIndex,
-        issuesLength,
-      );
-
-      setQueryAnchor({
-        anchor: {
-          index: index + 1,
-          type: 'forward',
-          startRow: issueAt(index),
-        },
-        listContextParams,
-      });
+        'forward',
+        1,
+      )
+    ) {
       return;
     }
   }, [
     listContextParams,
-    queryAnchor.listContextParams,
+    isListContextCurrent,
     virtualItems,
     skipPagingLogic,
     pendingScrollAdjustment,
@@ -1117,7 +1110,7 @@ function useIssues(
  * @param issuesLength - The number of issues available
  * @returns The clamped index within [firstIssueIndex, firstIssueIndex + issuesLength - 1]
  */
-function clampIndex(
+function toBoundIndex(
   targetIndex: number,
   firstIssueIndex: number,
   issuesLength: number,
