@@ -298,6 +298,27 @@ export function mergeRelationships(left: Change, right: Change): Change {
           },
         };
       }
+      case 'child': {
+        // Multiple branches may preserve the same child change, each adding
+        // different relationships. Merge the relationships, keeping the child
+        // (which should be identical across branches).
+        assert(
+          right.type === 'child',
+          () =>
+            `mergeRelationships: when left.type is child and types match, right.type must be child, got ${right.type}`,
+        );
+        return {
+          type: 'child',
+          node: {
+            row: left.node.row,
+            relationships: {
+              ...right.node.relationships,
+              ...left.node.relationships,
+            },
+          },
+          child: left.child,
+        };
+      }
     }
   }
 
