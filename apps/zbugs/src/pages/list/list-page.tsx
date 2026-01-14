@@ -1,4 +1,3 @@
-// oxlint-disable no-console
 import type {Row} from '@rocicorp/zero';
 import {
   setupSlowQuery,
@@ -103,7 +102,7 @@ const TOP_ANCHOR = Object.freeze({
 });
 
 const START_ANCHOR: Anchor =
-  // TOP_ANCHOR
+  // TOP_ANCHOR;
   {
     index: NUM_ROWS_FOR_LOADING_SKELETON,
     type: 'permalink',
@@ -183,33 +182,6 @@ const START_ANCHOR: Anchor =
 
 const getNearPageEdgeThreshold = (pageSize: number) => Math.ceil(pageSize / 10);
 
-const toIssueArrayIndex = (
-  index: number,
-  anchor: Anchor,
-  firstIssueIndex: number,
-) =>
-  anchor.type !== 'backward' ? index - firstIssueIndex : anchor.index - index;
-
-const toBoundIssueArrayIndex = (
-  index: number,
-  anchor: Anchor,
-  firstIssueIndex: number,
-  length: number,
-) =>
-  Math.min(
-    length - 1,
-    Math.max(0, toIssueArrayIndex(index, anchor, firstIssueIndex)),
-  );
-
-const toIndex = (
-  issueArrayIndex: number,
-  anchor: Anchor,
-  firstIssueIndex: number,
-) =>
-  anchor.type !== 'backward'
-    ? issueArrayIndex + firstIssueIndex
-    : anchor.index - issueArrayIndex;
-
 function RowDebugInfo({
   index,
   issueArrayIndex,
@@ -257,7 +229,6 @@ function RowDebugInfo({
 }
 
 export function ListPage({onReady}: {onReady: () => void}) {
-  // #region
   const login = useLogin();
   const search = useSearch();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
@@ -348,76 +319,31 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setPageSize(newPageSize);
     }
   }, [pageSize, size]);
-  //#endregion
 
   const anchor = useMemo(
     () =>
       queryAnchor.listContextParams === listContextParams
         ? queryAnchor.anchor
         : START_ANCHOR,
-    [
-      queryAnchor.listContextParams,
-      queryAnchor.anchor.index,
-      queryAnchor.anchor.type,
-      queryAnchor.anchor.startRow?.id,
-      listContextParams,
-    ],
+    [queryAnchor.listContextParams, queryAnchor.anchor, listContextParams],
   );
 
-  // // Track when queryAnchor/anchor changes
-  // useEffect(() => {
-  //   console.log('anchor changed', {
-  //     'anchor.index': anchor.index,
-  //     'anchor.type': anchor.type,
-  //     'anchor.startRow?.id': anchor.startRow?.id,
-  //     'queryAnchor.anchor.index': queryAnchor.anchor.index,
-  //     'queryAnchor.anchor.type': queryAnchor.anchor.type,
-  //     'queryAnchor.anchor.startRow?.id': queryAnchor.anchor.startRow?.id,
-  //   });
-  // }, [
-  //   anchor.index,
-  //   anchor.type,
-  //   anchor.startRow?.id,
-  //   queryAnchor.anchor.index,
-  //   queryAnchor.anchor.type,
-  //   queryAnchor.anchor.startRow?.id,
-  // ]);
-
-  // TODO(arv): Maybe use 4* like before?
   const [estimatedTotal, setEstimatedTotal] = useState(
     anchor.index + NUM_ROWS_FOR_LOADING_SKELETON,
   );
 
-  // const [total, setTotal] = useState<number | undefined>(undefined);
-
   const [hasScrolledToPermalink, setHasScrolledToPermalink] = useState(false);
-  const [pendingScrollShift, setPendingScrollShift] = useState<{
-    oldAnchor: Anchor;
-    oldIssuesLength: number;
-    newAnchor: Anchor;
-  } | null>(null);
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
   const skipPagingLogicRef = useRef<boolean>(false);
 
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [hasReachedStart, setHasReachedStart] = useState(false);
 
-  const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
-
-  // Create a stable identifier for the current anchor to track which anchor generated the issues
-  const anchorId = useMemo(
-    () => `${anchor.index}-${anchor.type}-${anchor.startRow?.id ?? 'null'}`,
-    [anchor.index, anchor.type, anchor.startRow?.id],
-  );
-
-  // Track the previous anchor to detect changes
-  const prevAnchorIdRef = useRef<string>(anchorId);
-  const maxIssuesLengthRef = useRef<number>(0);
+  // const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
   const {
-    // issues,
     issueAt,
     issuesLength,
     complete,
@@ -425,7 +351,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     atStart,
     atEnd,
     firstIssueIndex,
-    // lastIssueIndex,
   } = useIssues(
     listContextParams,
     z.userID,
@@ -437,8 +362,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
   );
 
   useEffect(() => {
+    if (atStart) {
+      setHasReachedStart(true);
+    }
+  }, [atStart]);
+
+  useEffect(() => {
+    if (atEnd) {
+      setHasReachedEnd(true);
+    }
+  }, [atEnd]);
+
+  useEffect(() => {
     if (issuesEmpty) {
-      // TODO(arv): complete check too?
       return;
     }
 
@@ -459,83 +395,31 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
     // There is a pending scroll adjustment from last anchor change.
     if (pendingScrollAdjustment !== 0) {
-      // TODO(arv): Remove wasAtStart
-      const offset = pendingScrollAdjustment;
-
-      // const adjustedOffset =
-      //   offset + (!atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0);
-
-      // console.log('XXX issues indexes', {
-      //   offset,
-      //   adjustedOffset,
-      //   'anchor.index': anchor.index,
-      //   'anchor.type': anchor.type,
-      //   issuesLength,
-      //   firstIssueIndex,
-      //   atStart,
-      //   atEnd,
-      //   wasAtStart,
-      // });
-
-      console.log('scrollToOffset for pending scroll adjustment', {
-        offset,
-        atStart,
-      });
-
       virtualizer.scrollToOffset(
-        (virtualizer.scrollOffset ?? 0) + offset * ITEM_SIZE,
+        (virtualizer.scrollOffset ?? 0) + pendingScrollAdjustment * ITEM_SIZE,
       );
+
+      setEstimatedTotal(estimatedTotal + pendingScrollAdjustment);
+
       setPendingScrollAdjustment(0);
       setSkipPagingLogic(true);
       skipPagingLogicRef.current = true;
-
-      const firstItem = virtualItems[0];
-      const lastItem = virtualItems[virtualItems.length - 1];
-
-      const distanceFromStart = firstItem.index - firstIssueIndex;
-      const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
-
-      console.log('setting skipPagingLogic to true', {
-        distanceFromStart,
-        // 'skipPagingLogicRef': skipPagingLogicRef.current,
-        'old skipPagingLogic': skipPagingLogic,
-        pendingScrollAdjustment,
-        // distanceFromEnd,
-        // 'anchor.index': anchor.index,
-        // 'anchor.type': anchor.type,
-        // issuesLength,
-        // 'firstItemIndex': firstItem.index,
-        // 'lastItemIndex': lastItem.index,
-        // atStart,
-        // atEnd,
-      });
 
       return;
     }
 
     // First issue is before start of list - need to shift down
     if (firstIssueIndex < 0) {
-      const offset =
-        -firstIssueIndex + (!atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0);
+      const placeholderRows = !atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0;
+      const offset = -firstIssueIndex + placeholderRows;
 
-      console.log('XXX shift scroll adjustment for negative firstIssueIndex', {
-        firstIssueIndex,
-        'anchor.index': anchor.index,
-        'virtualizer.scrollOffset': (virtualizer.scrollOffset ?? 0) / ITEM_SIZE,
-        atStart,
-        issuesLength,
-        offset,
-      });
       setSkipPagingLogic(true);
       skipPagingLogicRef.current = true;
       setPendingScrollAdjustment(offset);
       setQueryAnchor({
         anchor: {
           ...anchor,
-          index:
-            anchor.index -
-            firstIssueIndex +
-            (!atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0),
+          index: anchor.index + offset,
         },
         listContextParams,
       });
@@ -550,67 +434,27 @@ export function ListPage({onReady}: {onReady: () => void}) {
       });
       return;
     }
-
-    // if (firstIssueIndex < (atStart ? 0 : NUM_ROWS_FOR_LOADING_SKELETON)) {
   }, [
     firstIssueIndex,
-    anchor.index,
+    anchor,
     atStart,
     pendingScrollAdjustment,
-    skipPagingLogicRef.current,
     skipPagingLogic,
     issuesEmpty,
     listContextParams,
     queryAnchor.listContextParams,
-    pageSize,
+    // virtualizer,
   ]);
 
-  let newEstimatedTotal =
-    firstIssueIndex +
-    issuesLength +
-    (!atEnd ? NUM_ROWS_FOR_LOADING_SKELETON : 0);
-  // console.log('XXX newEstimatedTotal calc', {
-  //   firstIssueIndex,
-  //   issuesLength,
-  //   atEnd,
-  //   newEstimatedTotal,
-  // });
+  const newEstimatedTotal = firstIssueIndex + issuesLength;
 
-  // // Update tracking when issues changes
-  // useEffect(() => {
-  //   // Track the max issues length we've seen
-  //   if (issues.length > maxIssuesLengthRef.current) {
-  //     console.log('issues length increased', {
-  //       'issues.length': issues.length,
-  //       'old max': maxIssuesLengthRef.current,
-  //       'anchor.index': anchor.index,
-  //       anchorId,
-  //     });
-  //     maxIssuesLengthRef.current = issues.length;
-  //   }
-  // }, [issues]);
+  useEffect(() => {
+    if (complete && newEstimatedTotal > estimatedTotal) {
+      setEstimatedTotal(newEstimatedTotal);
+    }
+  }, [estimatedTotal, complete, newEstimatedTotal]);
 
-  // console.debug(
-  //   'Render',
-  //   'estimatedTotal',
-  //   estimatedTotal,
-  //   'issues.length',
-  //   issues.length,
-  //   'complete',
-  //   complete,
-  //   'atStart',
-  //   atStart,
-  //   'atEnd',
-  //   atEnd,
-  //   'anchor.type',
-  //   anchor.type,
-  //   'anchor.index',
-  //   anchor.index,
-  //   'scrollTop',
-  //   listRef.current?.scrollTop,
-  //   'scrollHeight',
-  //   listRef.current?.scrollHeight,
-  // );
+  const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
 
   useEffect(() => {
     if (!issuesEmpty || complete) {
@@ -618,7 +462,27 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [issuesEmpty, complete, onReady]);
 
-  //#region Old
+  useEffect(() => {
+    if (queryAnchor.listContextParams !== listContextParams) {
+      // if (listRef.current) {
+      //   listRef.current.scrollTop = 0;
+      // }
+
+      setEstimatedTotal(0);
+      setHasReachedStart(true);
+      setHasReachedEnd(false);
+
+      // setQueryAnchor({
+      //   anchor: TOP_ANCHOR,
+      //   listContextParams,
+      // });
+      setQueryAnchor({
+        anchor,
+        listContextParams,
+      });
+    }
+  }, [listContextParams, queryAnchor]);
+
   useEffect(() => {
     if (complete) {
       recordPageLoad('list-page');
@@ -713,6 +577,15 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
+    const toIssueArrayIndex = (
+      index: number,
+      anchor: Anchor,
+      firstIssueIndex: number,
+    ) =>
+      anchor.type !== 'backward'
+        ? index - firstIssueIndex
+        : anchor.index - index;
+
     const issue = issueAt(index); //issues[issueArrayIndex];
     const issueArrayIndex = toIssueArrayIndex(index, anchor, firstIssueIndex);
     if (issue === undefined) {
@@ -728,8 +601,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         </div>
       );
     }
-    // const issue = issueAt(index); //issues[issueArrayIndex];
-    assert(issue !== undefined);
+
     if (firstRowRendered === false) {
       mark('first issue row rendered');
       firstRowRendered = true;
@@ -781,334 +653,24 @@ export function ListPage({onReady}: {onReady: () => void}) {
       </div>
     );
   };
-  // #endregion
-
-  // #region Computing new estimated total
-  // // Update estimated total - should only increase unless we reach the end
-  // useEffect(() => {
-  //   if (queryAnchor.listContextParams !== listContextParams) {
-  //     return;
-  //   }
-
-  //   const anchorJustChanged = prevAnchorIdRef.current !== anchorId;
-
-  //   // Guard: Skip if anchor just changed - issues might be stale cached data
-  //   if (anchorJustChanged) {
-  //     console.log('skipping estimated total calc - anchor just changed', {
-  //       'prevAnchorId': prevAnchorIdRef.current,
-  //       'currentAnchorId': anchorId,
-  //       'anchor.index': anchor.index,
-  //       'issues.length': issues.length,
-  //     });
-  //     // Update prevAnchorIdRef for next render
-  //     prevAnchorIdRef.current = anchorId;
-  //     // Reset max when anchor changes
-  //     maxIssuesLengthRef.current = issues.length;
-  //     return;
-  //   }
-
-  //   // // Guard: Only calculate when we have new/more data
-  //   // // This prevents recalculating with partial data from useSlowQuery (100 → 50 → 100)
-  //   // if (issues.length < maxIssuesLengthRef.current) {
-  //   //   console.log('skipping estimated total calc - partial data', {
-  //   //     'issues.length': issues.length,
-  //   //     'maxIssuesLength': maxIssuesLengthRef.current,
-  //   //     'anchor.index': anchor.index,
-  //   //   });
-  //   //   return;
-  //   // }
-
-  //   console.log('estimated total effect running', {
-  //     'queryAnchor.anchor': queryAnchor.anchor,
-  //     anchor,
-  //     'anchor === queryAnchor.anchor': anchor === queryAnchor.anchor,
-  //     'issues.length': issues.length,
-  //     anchorId,
-  //     'prevAnchorId': prevAnchorIdRef.current,
-  //   });
-
-  //   // TODO(arv): Should work for incomplete lists too
-  //   // if (!complete) {
-  //   //   return;
-  //   // }
-
-  //   let newEstimate: number;
-  //   if (atStart && atEnd) {
-  //     // We have the complete list
-  //     newEstimate = issues.length;
-  //     setHasReachedStart(true);
-  //     setHasReachedEnd(true);
-  //   } else if (atStart) {
-  //     // We know the start, estimate the rest
-  //     const extra = hasReachedEnd ? 0 : NUM_ROWS_FOR_LOADING_SKELETON;
-  //     newEstimate = Math.max(
-  //       estimatedTotal,
-  //       anchor.index + issues.length + extra,
-  //     );
-  //     setHasReachedStart(true);
-  //   } else if (atEnd) {
-  //     // We know the end, we have everything
-  //     console.log('setting estimated total at end', {
-  //       'anchor.index': anchor.index,
-  //       'issues.length': issues.length,
-  //     });
-  //     if (hasReachedEnd) {
-  //       newEstimate = Math.max(estimatedTotal, anchor.index + issues.length);
-  //     } else {
-  //       newEstimate = anchor.index + issues.length;
-  //     }
-  //     setHasReachedEnd(true);
-  //   } else {
-  //     newEstimate = Math.max(
-  //       estimatedTotal,
-  //       anchor.type === 'backward'
-  //         ? anchor.index + NUM_ROWS_FOR_LOADING_SKELETON
-  //         : anchor.index + issues.length + NUM_ROWS_FOR_LOADING_SKELETON,
-  //     );
-
-  //     console.log('setting estimated total in middle', {
-  //       newEstimate,
-  //       estimatedTotal,
-  //       'anchor.type': anchor.type,
-  //       'anchor.index': anchor.index,
-  //       'issues.length': issues.length,
-  //     });
-  //   }
-
-  //   if (newEstimate > estimatedTotal || atEnd) {
-  //     console.log('setting estimated total?', {
-  //       newEstimate,
-  //       estimatedTotal,
-  //       complete,
-  //       atEnd,
-  //       atStart,
-  //     });
-
-  //     setEstimatedTotal(newEstimate);
-  //   }
-  // }, [
-  //   complete,
-  //   atStart,
-  //   atEnd,
-  //   anchor.index,
-  //   anchor.type,
-  //   anchor.startRow?.id, // Ensure effect re-runs when queryAnchor changes to detect stale issues
-  //   issues.length,
-  //   estimatedTotal,
-  //   hasReachedEnd,
-  // ]);
-  //#endregion
 
   const virtualizer = useVirtualizer({
-    count: newEstimatedTotal,
+    count:
+      Math.max(estimatedTotal, newEstimatedTotal) +
+      (!atEnd ? NUM_ROWS_FOR_LOADING_SKELETON : 0),
     estimateSize: () => ITEM_SIZE,
     overscan: 5,
     getScrollElement: () => listRef.current,
     initialOffset: () => {
       if (anchor.type === 'permalink') {
-        console.log('virtualizer initialOffset for permalink', {
-          'anchor.index': anchor.index,
-        });
-        // anchor.index is the virtual scroll position we want to show
         return anchor.index * ITEM_SIZE;
       }
       return 0;
     },
   });
 
-  // // If the anchor is a permalink we need to adjust the scroll position once after we got the complete list.
-  // useEffect(() => {
-  //   if (hasScrolledToPermalink) {
-  //     return;
-  //   }
-
-  //   const anchorJustChanged = prevAnchorIdRef.current !== anchorId;
-
-  //   if (anchor.type === 'permalink' && complete) {
-  //     assert(!anchorJustChanged);
-
-  //     // For permalinks, anchor.index might be a placeholder (e.g., 1)
-  //     // Calculate the real position based on where the anchor actually sits
-  //     let realAnchorIndex = anchor.index;
-
-  //     // Find where the permalink issue actually is in the loaded data
-  //     const issueArrayIndex = issues.findIndex(
-  //       issue => issue.id === anchor.startRow?.id,
-  //     );
-
-  //     if (issueArrayIndex === -1) {
-  //       // Issue not found in loaded data - shouldn't happen but bail out
-  //       console.warn('permalink issue not found in loaded data', {
-  //         'anchor.startRow?.id': anchor.startRow?.id,
-  //         'issues.length': issues.length,
-  //       });
-  //     } else if (atEnd && atStart) {
-  //       // We have the complete list - the array index IS the real position
-  //       realAnchorIndex = issueArrayIndex;
-  //     } else {
-  //       // Partial list - need to account for firstIssueIndex offset
-  //       // The real position is where the issue sits relative to the start of the virtual list
-  //       realAnchorIndex = firstIssueIndex + issueArrayIndex;
-  //     }
-
-  //     console.log('permalink anchor calculation', {
-  //       'realAnchorIndex': realAnchorIndex,
-  //       'anchor.index': anchor.index,
-  //       'firstIssueIndex': firstIssueIndex,
-  //       'issues.length': issues.length,
-  //       'atStart': atStart,
-  //       'atEnd': atEnd,
-  //       'anchor.startRow?.id': anchor.startRow?.id,
-  //     });
-
-  //     // Update the anchor with the real position if it changed
-  //     if (realAnchorIndex !== anchor.index) {
-  //       console.log('updating permalink anchor index', {
-  //         'oldIndex': anchor.index,
-  //         'newIndex': realAnchorIndex,
-  //         'anchor.startRow?.id': anchor.startRow?.id,
-  //         'issues.length': issues.length,
-  //       });
-  //       setQueryAnchor({
-  //         anchor: {
-  //           ...anchor,
-  //           index: realAnchorIndex,
-  //         },
-  //         listContextParams,
-  //       });
-  //     }
-
-  //     // TODO(arv): Re-enable scrolling after fixing jumpiness
-  //     // virtualizer.scrollToIndex(realAnchorIndex, {
-  //     //   align: 'start',
-  //     // });
-  //     setHasScrolledToPermalink(true);
-  //   }
-  // }, [
-  //   hasScrolledToPermalink,
-  //   anchor,
-  //   anchor.type,
-  //   anchor.startRow?.id,
-  //   anchor.index,
-  //   complete,
-  //   atStart,
-  //   atEnd,
-  //   firstIssueIndex,
-  //   issues,
-  //   issues.length,
-  //   listContextParams,
-  //   setQueryAnchor,
-  //   virtualizer,
-  //   anchorId,
-  // ]);
-
   const virtualItems = virtualizer.getVirtualItems();
 
-  // // Clear skip paging flag after scroll shift is applied and virtualizer has updated
-  // useEffect(() => {
-  //   if (skipPagingLogic && !pendingScrollShift) {
-  //     setSkipPagingLogic(false);
-  //   }
-  // }, [skipPagingLogic, pendingScrollShift, virtualizer.scrollOffset]);
-
-  // // Apply pending scroll shift after new issues have loaded
-  // useEffect(() => {
-  //   if (!pendingScrollShift || !complete) {
-  //     return;
-  //   }
-
-  //   const {oldAnchor, oldIssuesLength, newAnchor} = pendingScrollShift;
-
-  //   // When converting from forward/permalink to backward anchor, we need to calculate
-  //   // shift differently because the indexing semantics change:
-  //   // - Forward: issues[i] at virtualIndex = anchor.index + i
-  //   // - Backward: issues[i] at virtualIndex = anchor.index - i
-  //   const isConvertingToBackward =
-  //     oldAnchor.type !== 'backward' && newAnchor.type === 'backward';
-
-  //   let shift: number;
-  //   if (isConvertingToBackward) {
-  //     // For forward->backward conversion:
-  //     // The new anchor.index should be issues.length + pageSize
-  //     // After loading new issues, we'll have more issues, so the actual anchor.index
-  //     // needs to be adjusted to issues.length to keep visual position
-  //     shift = issues.length - newAnchor.index;
-  //   } else {
-  //     // Normal shift calculation for backward->backward paging
-  //     shift =
-  //       oldAnchor.type !== 'backward'
-  //         ? oldAnchor.index + oldIssuesLength - newAnchor.index
-  //         : oldAnchor.index - newAnchor.index;
-  //   }
-
-  //   if (atStart) {
-  //     if (oldAnchor.type === 'backward') {
-  //       shift = issues.length - anchor.index - 1; //newAnchor.index - oldAnchor.index + issues.length + 0;
-  //     } else {
-  //       shift = oldAnchor.index - issues.length;
-  //     }
-  //   }
-
-  //   console.log('applying scroll shift', {
-  //     shift,
-  //     oldAnchorIndex: oldAnchor.index,
-  //     oldAnchorType: oldAnchor.type,
-  //     oldIssuesLength,
-  //     newIssuesLength: issues.length,
-  //     newAnchorIndex: newAnchor.index,
-  //     newAnchorType: newAnchor.type,
-  //     isConvertingToBackward,
-  //     scrollOffset: virtualizer.scrollOffset,
-  //   });
-
-  //   // Apply scroll shift and adjust anchor
-  //   const newScrollOffset = (virtualizer.scrollOffset ?? 0) + shift * ITEM_SIZE;
-
-  //   console.log('adjusting scroll and anchor for shift', {
-  //     oldScrollOffset: virtualizer.scrollOffset,
-  //     newScrollOffset,
-  //     shiftPixels: shift * ITEM_SIZE,
-  //     oldAnchorIndex: newAnchor.index,
-  //     newAnchorIndex: isConvertingToBackward
-  //       ? issues.length
-  //       : newAnchor.index + shift,
-  //   });
-
-  //   if (atStart) {
-  //     setQueryAnchor({
-  //       anchor: TOP_ANCHOR,
-  //       listContextParams,
-  //     });
-  //   } else {
-  //     // Adjust the anchor index
-  //     setQueryAnchor({
-  //       anchor: {
-  //         ...newAnchor,
-  //         // For backward anchor after conversion, set to actual issues.length
-  //         // For continued backward paging, shift by the loaded amount
-  //         index: isConvertingToBackward
-  //           ? issues.length
-  //           : newAnchor.index + shift,
-  //       },
-  //       listContextParams,
-  //     });
-  //   }
-
-  //   virtualizer.scrollToOffset(newScrollOffset);
-  //   setEstimatedTotal(estimatedTotal + shift);
-  //   setPendingScrollShift(null);
-  //   // skipPagingLogic is already set when pendingScrollShift was created
-  // }, [
-  //   pendingScrollShift,
-  //   complete,
-  //   issues.length,
-  //   anchor,
-  //   atStart,
-  //   listContextParams,
-  //   virtualizer,
-  // ]);
-
-  // // #region Scrolling
   useEffect(() => {
     if (queryAnchor.listContextParams !== listContextParams) {
       return;
@@ -1122,47 +684,35 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    // // Skip paging logic temporarily after a scroll shift to avoid
-    // // triggering page down from the scroll offset change
-    // if (skipPagingLogic) {
-    //   return;
-    // }
-
-    const firstItem = virtualItems[0];
-    const lastItem = virtualItems[virtualItems.length - 1];
-
-    const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
-
-    if (!complete) {
-      return;
-    }
-
     if (skipPagingLogic || pendingScrollAdjustment !== 0) {
       return;
     }
 
+    if (atStart) {
+      if (firstIssueIndex !== 0) {
+        setQueryAnchor({
+          anchor: TOP_ANCHOR,
+          listContextParams,
+        });
+        return;
+      }
+    }
+
+    const firstItem = virtualItems[0];
+    const lastItem = virtualItems[virtualItems.length - 1];
+    const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
+
     const distanceFromStart = firstItem.index - firstIssueIndex;
     const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
 
-    // console.log('change anchors?', {
-    //   distanceFromStart,
-    //   // 'skipPagingLogicRef': skipPagingLogicRef.current,
-    //   skipPagingLogic,
-    //   pendingScrollAdjustment,
-    //   // distanceFromEnd,
-    //   // 'anchor.index': anchor.index,
-    //   // 'anchor.type': anchor.type,
-    //   // issuesLength,
-    //   // 'firstItemIndex': firstItem.index,
-    //   // 'lastItemIndex': lastItem.index,
-    //   atStart,
-    //   // atEnd,
-    // });
-
     if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
-      console.log('%cPAGE UP', 'color: red');
-
-      const index = lastItem.index + 2 * nearPageEdgeThreshold;
+      // When we scroll really fast up and the loading is slow we can end up with a page of only placeholders.
+      // When that happens we use the first issue index as the anchor index which allows us to keep going.
+      const index = clampIndex(
+        lastItem.index + 2 * nearPageEdgeThreshold,
+        firstIssueIndex,
+        issuesLength,
+      );
 
       setQueryAnchor({
         anchor: {
@@ -1173,156 +723,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
         listContextParams,
       });
 
-      // needs shift here too
-
       return;
-      // console.log('page up distanceFromStart', {
-      //   distanceFromStart,
-      //   'anchor.index': anchor.index,
-      //   'anchor.type': anchor.type,
-      //   firstIssueIndex,
-      //   'firstItem.index': firstItem.index,
-      // });
     }
 
-    //   if (atStart) {
-    //     // When at start with backward anchor, we need to convert to forward anchor with index 0
-    //     if (anchor.type === 'backward') {
-    //       setQueryAnchor({
-    //         anchor: TOP_ANCHOR,
-    //         listContextParams,
-    //       });
-    //       return;
-    //     }
-    //     // When at start with forward/permalink anchor, just ensure index is 0
-    //     if (anchor.index !== 0) {
-    //       setQueryAnchor({
-    //         anchor: {
-    //           ...anchor,
-    //           index: 0,
-    //         },
-    //         listContextParams,
-    //       });
-    //       return;
-    //     }
-    //   }
-
-    //   // TODO(arv): I don't think we need to overfetch. It seems like we can use
-    //   // anchor.index === 0 like before
-    //   if (
-    //     // virtualizer.scrollDirection === 'backward' &&
-    //     complete &&
-    //     !atStart &&
-    //     distanceFromStart <= nearPageEdgeThreshold
-    //   ) {
-    //     // if (anchor.index !== 0 && distanceFromStart <= nearPageEdgeThreshold) {
-    //     const issueArrayIndex = toBoundIssueArrayIndex(
-    //       lastItem.index + nearPageEdgeThreshold * 2,
-    //       anchor,
-    //       firstIssueIndex,
-    //       issues.length,
-    //     );
-
-    //     // When converting from forward/permalink to backward anchor,
-    //     // the backward anchor index should be issues.length + headroom
-    //     // because for backward anchors: issues[i] renders at virtualIndex = anchor.index - i
-    //     const isConvertingToBackward = anchor.type !== 'backward';
-    //     const index = toIndex(issueArrayIndex, anchor, firstIssueIndex) - 1;
-
-    //     // If index is now less than pageSize then we need shifting to ensure headroom
-    //     if (index < pageSize) {
-    //       const newAnchor: Anchor = {
-    //         index,
-    //         type: 'backward',
-    //         startRow: toStartRow(issues[issueArrayIndex]),
-    //       };
-    //       console.log('page up - setting new anchor with pending shift', {
-    //         index: newAnchor.index,
-    //         complete,
-    //         estimatedTotal,
-    //         type: newAnchor.type,
-    //         startRow: newAnchor.startRow,
-    //         oldAnchorIndex: anchor.index,
-    //         oldAnchorType: anchor.type,
-    //         oldIssuesLength: issues.length,
-    //         isConvertingToBackward,
-    //       });
-
-    //       setPendingScrollShift({
-    //         oldAnchor: anchor,
-    //         oldIssuesLength: issues.length,
-    //         newAnchor,
-    //       });
-    //       setSkipPagingLogic(true);
-    //       setQueryAnchor({
-    //         anchor: newAnchor,
-    //         listContextParams,
-    //       });
-
-    //       return;
-    //     }
-
-    //     const newAnchor: Anchor = {
-    //       index,
-    //       type: 'backward',
-    //       startRow: toStartRow(issues[issueArrayIndex]),
-    //     };
-
-    //     console.log('page up - setting new anchor without pending shift', {
-    //       index: newAnchor.index,
-    //       complete,
-    //       estimatedTotal,
-    //       type: newAnchor.type,
-    //       startRow: newAnchor.startRow,
-    //       oldAnchorIndex: anchor.index,
-    //       oldAnchorType: anchor.type,
-    //       oldIssuesLength: issues.length,
-    //       isConvertingToBackward,
-    //     });
-
-    //     setQueryAnchor({
-    //       anchor: newAnchor,
-    //       listContextParams,
-    //     });
-
-    //     return;
-    //   }
-
-    // Should we load more forward?
-
-    // console.log('distanceFromEnd', {
-    //   distanceFromEnd,
-    //   'anchor.index': anchor.index,
-    //   'anchor.type': anchor.type,
-    //   'issues.length': issuesLength,
-    //   'lastItem.index': lastItem.index,
-    // });
-
-    //   if (atEnd || !complete) {
-    //     return;
-    //   }
-
     if (!atEnd && distanceFromEnd <= nearPageEdgeThreshold) {
-      console.log('%cPAGE DOWN', 'color: red');
-
-      const index = firstItem.index - 2 * nearPageEdgeThreshold;
-      console.log('page down - setting new anchor', {
-        index,
-        complete,
-        newEstimatedTotal,
-        type: 'forward',
-        // startRow: toStartRow(issues[issueArrayIndex]),
-        currentAnchorIndex: anchor.index,
-        currentAnchorType: anchor.type,
-        issuesLength: issuesLength,
-        firstItemIndex: firstItem.index,
-        lastItemIndex: lastItem.index,
-        distanceFromEnd,
-      });
+      // When we scroll really fast down and the loading is slow we can end up with a page of only placeholders.
+      // When that happens we use the last possible issue index as the anchor index which allows us to keep going.
+      const index = clampIndex(
+        firstItem.index - 2 * nearPageEdgeThreshold,
+        firstIssueIndex,
+        issuesLength,
+      );
 
       setQueryAnchor({
         anchor: {
-          // TODD(arv): Cleanup vs startRow
           index: index + 1,
           type: 'forward',
           startRow: issueAt(index),
@@ -1331,72 +745,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
       });
       return;
     }
-    //     const issueArrayIndex = toBoundIssueArrayIndex(
-    //       firstItem.index - nearPageEdgeThreshold * 2,
-    //       anchor,
-    //       firstIssueIndex,
-    //       issues.length,
-    //     );
-    //     const index = toIndex(issueArrayIndex, anchor, firstIssueIndex) + 1;
-    //     // oxlint-disable-next-line no-console -- Debug logging in demo app
-    //     console.log('page down', {
-    //       index,
-    //       complete,
-    //       estimatedTotal,
-    //       direction: 'forward',
-    //       startRow: toStartRow(issues[issueArrayIndex]),
-    //       currentAnchorIndex: anchor.index,
-    //       currentAnchorType: anchor.type,
-    //       issuesLength: issues.length,
-    //       firstItemIndex: firstItem.index,
-    //       lastItemIndex: lastItem.index,
-    //       distanceFromEnd,
-    //       nearPageEdgeThreshold,
-    //     });
-
-    //     setQueryAnchor({
-    //       anchor: {
-    //         index,
-    //         type: 'forward',
-    //         startRow: toStartRow(issues[issueArrayIndex]),
-    //       },
-    //       listContextParams,
-    //     });
-    //     console.log('increasing estimated total for page down', {
-    //       index,
-    //       pageSize,
-    //       estimatedTotal,
-    //       'anchor.type': anchor.type,
-    //       'anchor.index': anchor.index,
-    //     });
-    //     if (!hasReachedEnd) {
-    //       // setEstimatedTotal(estimatedTotal + NUM_ROWS_FOR_LOADING_SKELETON);
-    //       //   Math.max(
-    //       //     estimatedTotal,
-    //       //     anchor.type !== 'backward'
-    //       //       ? index + issues.length + NUM_ROWS_FOR_LOADING_SKELETON
-    //       //       : index + NUM_ROWS_FOR_LOADING_SKELETON,
-    //       //   ),
-    //       // );
-    //     }
-    //   }
   }, [
     listContextParams,
-    //   queryAnchor,
-    //   issues,
-    //   complete,
-    //   pageSize,
+    queryAnchor.listContextParams,
     virtualItems,
     skipPagingLogic,
-    // skipPagingLogicRef.current,
     pendingScrollAdjustment,
-    //   virtualizer,
-    anchor,
+    complete,
+    pageSize,
     firstIssueIndex,
+    issuesLength,
     atStart,
     atEnd,
+    issueAt,
   ]);
-  // // #endregion
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
@@ -1427,6 +789,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setForceSearchMode(true);
     }
   };
+
+  console.log('XXX anchor', {
+    // 'listRef.current?.scrollTop': listRef.current?.scrollTop,
+    'index': anchor.index,
+    'type': anchor.type,
+    'startRow.?id': anchor.startRow?.id,
+    // 'estimatedTotal': estimatedTotal,
+  });
 
   return (
     <>
@@ -1610,14 +980,6 @@ function formatIssueCountEstimate(count: number) {
   return `~${Math.floor(count / 1000).toLocaleString()}k`;
 }
 
-function toStartRow(row: Row['issue']): StartRow {
-  return {
-    id: row.id,
-    created: row.created,
-    modified: row.modified,
-  };
-}
-
 type Issue = Row<ReturnType<typeof queries.issueListV2>>;
 type Issues = Issue[];
 
@@ -1630,7 +992,6 @@ function useIssues(
   anchorIndex: number,
   options: UseQueryOptions,
 ): {
-  // issues: Issues;
   issueAt: (index: number) => Issue | undefined;
   issuesLength: number;
   complete: boolean;
@@ -1638,7 +999,6 @@ function useIssues(
   atStart: boolean;
   atEnd: boolean;
   firstIssueIndex: number;
-  // lastIssueIndex: number;
 } {
   // Conditionally use useSlowQuery or useQuery based on USE_SLOW_QUERY flag
   const queryFn = USE_SLOW_QUERY ? useSlowQuery : useQuery;
@@ -1762,36 +1122,23 @@ function useIssues(
   };
 }
 
-// function joinIssues(
-//   issuesBefore: Issues,
-//   issuesAfter: Issues,
-//   halfPageSize: number,
-// ): {issues: Issues; anchorArrayIndex: number} {
-//   // issuesBefore is in reverse order (most recent first from backward query)
-//   // issuesAfter is in forward order (least recent first from forward query)
-//   // Both queries are inclusive, so they share the middle/anchor issue
-
-//   // Early returns for empty arrays to avoid unnecessary allocations
-//   if (issuesBefore.length === 0) {
-//     // TODO: We can skip slice if shorter than pageSize
-//     return {issues: issuesAfter.slice(0, halfPageSize), anchorArrayIndex: 0};
-//   }
-
-//   // Reverse to get forward order
-//   // overfetched
-//   const beforeReversed = issuesBefore.slice(1).reverse();
-
-//   if (issuesAfter.length === 0) {
-//     return {
-//       issues: beforeReversed,
-//       anchorArrayIndex: beforeReversed.length - 1,
-//     };
-//   }
-
-//   // The anchor is the first item in bef
-//   const anchorArrayIndex = beforeReversed.length - 1;
-//   return {issues: [...beforeReversed, ...issuesAfter], anchorArrayIndex};
-// }
+/**
+ * Clamps an index to be within the valid range of issues.
+ * @param targetIndex - The desired index to clamp
+ * @param firstIssueIndex - The first valid issue index
+ * @param issuesLength - The number of issues available
+ * @returns The clamped index within [firstIssueIndex, firstIssueIndex + issuesLength - 1]
+ */
+function clampIndex(
+  targetIndex: number,
+  firstIssueIndex: number,
+  issuesLength: number,
+): number {
+  return Math.max(
+    firstIssueIndex,
+    Math.min(firstIssueIndex + issuesLength - 1, targetIndex),
+  );
+}
 
 function makeEven(n: number) {
   return n % 2 === 0 ? n : n + 1;
