@@ -141,7 +141,6 @@ test('connect without auth then auth before needs-auth', async () => {
     message: 'auth error',
     origin: ErrorOrigin.ZeroCache,
   });
-  await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
 
   await z.connection.connect({auth: 'next-token'});
   const currentSocket = await z.socket;
@@ -164,4 +163,7 @@ test('connect({auth}) while connecting keeps current socket', async () => {
   const currentSocket = await z.socket;
   expect(currentSocket).toBe(initialSocket);
   expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
+
+  await z.triggerConnected();
+  await z.waitForConnectionStatus(ConnectionStatus.Connected);
 });
