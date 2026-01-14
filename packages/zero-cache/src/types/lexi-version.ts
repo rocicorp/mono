@@ -42,7 +42,11 @@ export function versionToLexi(v: number | bigint): LexiVersion {
 }
 
 export function versionFromLexi(lexiVersion: LexiVersion): bigint {
-  assert(lexiVersion.length >= 2);
+  assert(
+    lexiVersion.length >= 2,
+    () =>
+      `LexiVersion must have at least 2 characters, got ${lexiVersion.length}`,
+  );
   const length = lexiVersion.substring(0, 1);
   const base36Version = lexiVersion.substring(1);
   assert(

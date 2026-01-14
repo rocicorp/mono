@@ -131,7 +131,11 @@ export async function runSchemaMigrations(
             let versions = getVersionHistory(tx);
             if (versions.dataVersion < dest) {
               versions = await runMigration(log, tx, versions, dest, migration);
-              assert(versions.dataVersion === dest);
+              assert(
+                versions.dataVersion === dest,
+                () =>
+                  `Migration did not reach target version: expected ${dest}, got ${versions.dataVersion}`,
+              );
             }
             return versions;
           });
@@ -157,7 +161,11 @@ export async function runSchemaMigrations(
     db.pragma('synchronous = NORMAL');
     db.unsafeMode(false);
 
-    assert(versions.dataVersion === codeVersion);
+    assert(
+      versions.dataVersion === codeVersion,
+      () =>
+        `Final dataVersion (${versions.dataVersion}) does not match codeVersion (${codeVersion})`,
+    );
     log.info?.(
       `Running ${debugName} at schema v${codeVersion} (${
         Date.now() - start
@@ -242,7 +250,7 @@ function updateVersionHistory(
   newVersion: number,
   minSafeVersion?: number,
 ): VersionHistory {
-  assert(newVersion > 0);
+  assert(newVersion > 0, 'newVersion must be positive');
   const meta = {
     ...prev,
     dataVersion: newVersion,

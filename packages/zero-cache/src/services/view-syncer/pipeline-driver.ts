@@ -341,7 +341,10 @@ export class PipelineDriver {
     query: AST,
     timer: Timer,
   ): Iterable<RowChange | 'yield'> {
-    assert(this.initialized());
+    assert(
+      this.initialized(),
+      'Pipeline driver must be initialized before adding queries',
+    );
     this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
     if (this.#pipelines.has(transformationHash)) {
       this.#lc.info?.(`query ${transformationHash} already added`, query);
@@ -386,7 +389,10 @@ export class PipelineDriver {
       },
     });
 
-    assert(this.#advanceContext === null);
+    assert(
+      this.#advanceContext === null,
+      'Cannot hydrate while advance is in progress',
+    );
     this.#hydrateContext = {
       timer,
     };
@@ -473,7 +479,10 @@ export class PipelineDriver {
     numChanges: number;
     changes: Iterable<RowChange | 'yield'>;
   } {
-    assert(this.initialized());
+    assert(
+      this.initialized(),
+      'Pipeline driver must be initialized before advancing',
+    );
     const diff = this.#snapshotter.advance(this.#tableSpecs);
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
@@ -492,7 +501,10 @@ export class PipelineDriver {
     timer: Timer,
     numChanges: number,
   ): Iterable<RowChange | 'yield'> {
-    assert(this.#hydrateContext === null);
+    assert(
+      this.#hydrateContext === null,
+      'Cannot advance while hydration is in progress',
+    );
     this.#advanceContext = {
       timer,
       totalHydrationTimeMs: this.totalHydrationTimeMs(),
@@ -672,13 +684,13 @@ export class PipelineDriver {
   }
 
   #startAccumulating() {
-    assert(this.#streamer === null);
+    assert(this.#streamer === null, 'Streamer already started');
     this.#streamer = new Streamer(must(this.#primaryKeys));
   }
 
   #stopAccumulating(): Streamer {
     const streamer = this.#streamer;
-    assert(streamer);
+    assert(streamer, 'Streamer not started');
     this.#streamer = null;
     return streamer;
   }
