@@ -561,6 +561,30 @@ describe('mergeRelationships', () => {
       expect.arrayContaining(['editOldRel', 'removeRel']),
     );
   });
+
+  test('merges relationships from child changes', () => {
+    const childInfo = {
+      change: {type: 'add' as const, node: {row: {id: 2}, relationships: {}}},
+      relationshipName: 'childRel',
+    };
+    const left: Change = {
+      type: 'child',
+      node: {row: {id: 1}, relationships: {rel1: () => []}},
+      child: childInfo,
+    };
+    const right: Change = {
+      type: 'child',
+      node: {row: {id: 1}, relationships: {rel2: () => []}},
+      child: childInfo,
+    };
+
+    const result = mergeRelationships(left, right);
+
+    expect(result.type).toBe('child');
+    expect(Object.keys(result.node.relationships)).toEqual(
+      expect.arrayContaining(['rel1', 'rel2']),
+    );
+  });
 });
 
 describe('makeAddEmptyRelationships', () => {
