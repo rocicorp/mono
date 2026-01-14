@@ -108,7 +108,10 @@ class CustomChangeSource implements ChangeSource {
       url.searchParams.append('publications', pub);
     }
     if (clientWatermark) {
-      assert(replicaVersion.length);
+      assert(
+        replicaVersion.length,
+        'replicaVersion is required when clientWatermark is set',
+      );
       url.searchParams.set('lastWatermark', clientWatermark);
       url.searchParams.set('replicaVersion', replicaVersion);
     }

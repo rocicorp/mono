@@ -129,7 +129,11 @@ export async function runSchemaMigrations(
                 dest,
                 migration,
               );
-              assert(versions.dataVersion === dest);
+              assert(
+                versions.dataVersion === dest,
+                () =>
+                  `Migration did not reach target version: expected ${dest}, got ${versions.dataVersion}`,
+              );
             }
             return versions;
           });
@@ -137,7 +141,11 @@ export async function runSchemaMigrations(
       }
     }
 
-    assert(versions.dataVersion === codeVersion);
+    assert(
+      versions.dataVersion === codeVersion,
+      () =>
+        `Final dataVersion (${versions.dataVersion}) does not match codeVersion (${codeVersion})`,
+    );
     log.info?.(`Running ${debugName} at schema v${codeVersion}`);
   } catch (e) {
     log.error?.('Error in ensureSchemaMigrated', e);
@@ -251,7 +259,7 @@ async function updateVersionHistory(
   newVersion: number,
   minSafeVersion?: number,
 ): Promise<VersionHistory> {
-  assert(newVersion > 0);
+  assert(newVersion > 0, 'newVersion must be positive');
   const versions = {
     dataVersion: newVersion,
     // The schemaVersion never moves backwards.

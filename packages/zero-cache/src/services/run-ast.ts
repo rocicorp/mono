@@ -103,7 +103,7 @@ export async function runAst(
       await yieldProcess();
       continue;
     }
-    assert(rowChange.type === 'add');
+    assert(rowChange.type === 'add', 'Hydration only handles add row changes');
 
     // yield to other tasks to avoid blocking for too long
     if (syncedRowCount % 10 === 0) {

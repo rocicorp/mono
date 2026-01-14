@@ -5,6 +5,10 @@ export class MutationAlreadyProcessedError extends Error {
     super(
       `Ignoring mutation from ${clientID} with ID ${received} as it was already processed. Expected: ${actual}`,
     );
-    assert(received < actual);
+    assert(
+      received < actual,
+      () =>
+        `MutationAlreadyProcessedError: received (${received}) must be < actual (${actual})`,
+    );
   }
 }

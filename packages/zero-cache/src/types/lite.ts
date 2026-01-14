@@ -225,8 +225,16 @@ export function isArray(liteTypeString: LiteTypeString) {
 
 export function assertValidLiteColumnSpec(spec: ColumnSpec) {
   const {dataType} = spec;
-  assert(dataType.includes(TEXT_ARRAY_ATTRIBUTE) === dataType.includes('[]'));
-  assert(dataType.includes('[]') === (spec.elemPgTypeClass !== null));
+  assert(
+    dataType.includes(TEXT_ARRAY_ATTRIBUTE) === dataType.includes('[]'),
+    () =>
+      `TEXT_ARRAY_ATTRIBUTE and [] must be consistent in dataType: ${dataType}`,
+  );
+  assert(
+    dataType.includes('[]') === (spec.elemPgTypeClass !== null),
+    () =>
+      `[] in dataType (${dataType}) must match elemPgTypeClass presence (${spec.elemPgTypeClass})`,
+  );
 
   // and no [] after |
   assert(!/^.+\|.*\[\]/.test(dataType), `Invalid dataType ${dataType}`);

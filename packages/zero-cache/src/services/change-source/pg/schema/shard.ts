@@ -134,7 +134,10 @@ export function shardSetup(
   const shard = id(upstreamSchema(shardConfig));
 
   const pubs = [...shardConfig.publications].sort();
-  assert(pubs.includes(metadataPublication));
+  assert(
+    pubs.includes(metadataPublication),
+    () => `Publications must include ${metadataPublication}`,
+  );
 
   return /*sql*/ `
   CREATE SCHEMA IF NOT EXISTS ${shard};
@@ -254,7 +257,10 @@ export async function getInternalShardConfig(
     SELECT "publications", "ddlDetection"
       FROM ${sql(upstreamSchema(shard))}."shardConfig";
   `;
-  assert(result.length === 1);
+  assert(
+    result.length === 1,
+    () => `Expected exactly one shardConfig row, got ${result.length}`,
+  );
   return v.parse(result[0], internalShardConfigSchema, 'passthrough');
 }
 

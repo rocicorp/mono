@@ -216,7 +216,7 @@ export class ChangeProcessor {
       // Undef this.#currentTx to allow the assembly of the next transaction.
       this.#currentTx = null;
 
-      assert(watermark);
+      assert(watermark, 'watermark is required for commit messages');
       const schemaUpdated = tx.processCommit(msg, watermark);
       return {watermark, schemaUpdated};
     }

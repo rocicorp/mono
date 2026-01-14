@@ -205,7 +205,7 @@ export class CVRStore {
         }
         return result;
       }
-      assert(err);
+      assert(err, 'Expected error to be set after retry loop exhausted');
       throw new ClientNotFoundError(
         `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
       );
@@ -282,7 +282,10 @@ export class CVRStore {
         profileID: null,
       });
     } else {
-      assert(instance.length === 1);
+      assert(
+        instance.length === 1,
+        () => `Expected exactly one CVR instance, got ${instance.length}`,
+      );
       const {
         version,
         lastActive,
@@ -451,7 +454,10 @@ export class CVRStore {
       // This can happen if the CVR has not been initialized yet.
       return undefined;
     }
-    assert(result.length === 1);
+    assert(
+      result.length === 1,
+      () => `Expected exactly one rowsVersion result, got ${result.length}`,
+    );
     return result[0][0];
   }
 
@@ -718,7 +724,7 @@ export class CVRStore {
           ? {type: 'query', op: 'del', id}
           : {type: 'query', op: 'put', id};
         const v = row.patchVersion;
-        assert(v);
+        assert(v, 'patchVersion must be set for query patches');
         patches.push({patch, toVersion: versionFromString(v)});
       }
       for (const row of allDesires) {

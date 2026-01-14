@@ -143,7 +143,10 @@ function getIncrementalMigrations(
         });
         const result = await sql`
           SELECT "replicaVersion", "initialSchema" FROM ${sql(shardConfigTable)}`;
-        assert(result.length === 1);
+        assert(
+          result.length === 1,
+          () => `Expected exactly one shardConfig row, got ${result.length}`,
+        );
         const {replicaVersion, initialSchema} = v.parse(
           result[0],
           legacyShardConfigSchema,
