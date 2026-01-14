@@ -102,14 +102,20 @@ export function* generateWithOverlay(
       applied = true;
       yield overlay.node;
     } else if (overlay.type === 'edit') {
-      assert(editNewApplied);
+      assert(
+        editNewApplied,
+        'edit overlay: new node must be applied before old node',
+      );
       editOldApplied = true;
       applied = true;
       yield overlay.oldNode;
     }
   }
 
-  assert(applied);
+  assert(
+    applied,
+    'overlayGenerator: overlay was never applied to any fetched node',
+  );
 }
 
 export function rowEqualsForCompoundKey(

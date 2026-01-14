@@ -252,7 +252,11 @@ export class Exists implements FilterOperator {
 
   *#fetchSize(node: Node): Generator<'yield', number> {
     const relationship = node.relationships[this.#relationshipName];
-    assert(relationship);
+    assert(
+      relationship,
+      () =>
+        `Exists: relationship "${this.#relationshipName}" not found on node`,
+    );
     let size = 0;
     for (const n of relationship()) {
       if (n === 'yield') {

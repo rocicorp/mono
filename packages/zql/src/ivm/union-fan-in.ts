@@ -143,7 +143,11 @@ export class UnionFanIn implements Operator {
       return;
     }
 
-    assert(change.type === 'add' || change.type === 'remove');
+    assert(
+      change.type === 'add' || change.type === 'remove',
+      () =>
+        `UnionFanIn: expected add or remove change type, got ${change.type}`,
+    );
 
     let hadMatch = false;
     for (const input of this.#inputs) {
@@ -173,12 +177,18 @@ export class UnionFanIn implements Operator {
   }
 
   fanOutStartedPushing() {
-    assert(this.#fanOutPushStarted === false);
+    assert(
+      this.#fanOutPushStarted === false,
+      'UnionFanIn: fanOutStartedPushing called while already pushing',
+    );
     this.#fanOutPushStarted = true;
   }
 
   *fanOutDonePushing(fanOutChangeType: Change['type']): Stream<'yield'> {
-    assert(this.#fanOutPushStarted);
+    assert(
+      this.#fanOutPushStarted,
+      'UnionFanIn: fanOutDonePushing called without fanOutStartedPushing',
+    );
     this.#fanOutPushStarted = false;
     if (this.#inputs.length === 0) {
       return;

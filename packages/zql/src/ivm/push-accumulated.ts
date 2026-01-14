@@ -278,7 +278,11 @@ export function mergeRelationships(left: Change, right: Change): Change {
         };
       }
       case 'edit': {
-        assert(right.type === 'edit');
+        assert(
+          right.type === 'edit',
+          () =>
+            `mergeRelationships: when left.type is edit and types match, right.type must be edit, got ${right.type}`,
+        );
         // merge edits into a single edit
         return {
           type: 'edit',
@@ -302,7 +306,11 @@ export function mergeRelationships(left: Change, right: Change): Change {
   }
 
   // left is always an edit here
-  assert(left.type === 'edit');
+  assert(
+    left.type === 'edit',
+    () =>
+      `mergeRelationships: when types differ, left.type must be edit, got left.type=${left.type}, right.type=${right.type}`,
+  );
   switch (right.type) {
     case 'add': {
       return {
