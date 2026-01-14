@@ -103,7 +103,7 @@ const TOP_ANCHOR = Object.freeze({
 });
 
 const START_ANCHOR: Anchor =
-  //  TOP_ANCHOR;
+  // TOP_ANCHOR
   {
     index: NUM_ROWS_FOR_LOADING_SKELETON,
     type: 'permalink',
@@ -135,14 +135,23 @@ const START_ANCHOR: Anchor =
     //   created: 1669918206000,
     // },
 
-    // Middle issue
-    // index: 260
-    // title: Evaluate if we should return a ClientStateNotFoundResponse ...
+    // // Second page
+    // // index: 120
+    // // subject: app-publish function needs more Memory
     startRow: {
-      id: '0zTrvA-6aVO8eNdHBoW7G',
-      modified: 1678220708000,
-      created: 1671231873000,
+      id: 'Us_A9kc4ldfHuChlbKeU6',
+      modified: 1701202102000,
+      created: 1698518825000,
     },
+
+    // // Middle issue
+    // // index: 260
+    // // title: Evaluate if we should return a ClientStateNotFoundResponse ...
+    // startRow: {
+    //   id: '0zTrvA-6aVO8eNdHBoW7G',
+    //   modified: 1678220708000,
+    //   created: 1671231873000,
+    // },
 
     // // Close to bottom
     // // index: 500
@@ -318,10 +327,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
     anchor: START_ANCHOR,
     listContextParams,
   });
-  const [pendingScrollAdjustment, setPendingScrollAdjustment] = useState<{
-    offset: number;
-    wasAtStart: boolean;
-  } | null>(null);
+  const [pendingScrollAdjustment, setPendingScrollAdjustment] =
+    useState<number>(0);
 
   const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
@@ -390,6 +397,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
     newAnchor: Anchor;
   } | null>(null);
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
+  const skipPagingLogicRef = useRef<boolean>(false);
+
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [hasReachedStart, setHasReachedStart] = useState(false);
 
@@ -437,11 +446,21 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
+    if (
+      skipPagingLogicRef.current &&
+      skipPagingLogic &&
+      pendingScrollAdjustment === 0
+    ) {
+      // TODO(arv): See if we can remove the state and only use the ref
+      setSkipPagingLogic(false);
+      skipPagingLogicRef.current = false;
+      return;
+    }
+
     // There is a pending scroll adjustment from last anchor change.
-    if (pendingScrollAdjustment !== null) {
+    if (pendingScrollAdjustment !== 0) {
       // TODO(arv): Remove wasAtStart
-      const {offset, wasAtStart} = pendingScrollAdjustment;
-      void wasAtStart;
+      const offset = pendingScrollAdjustment;
 
       // const adjustedOffset =
       //   offset + (!atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0);
@@ -458,10 +477,39 @@ export function ListPage({onReady}: {onReady: () => void}) {
       //   wasAtStart,
       // });
 
+      console.log('scrollToOffset for pending scroll adjustment', {
+        offset,
+        atStart,
+      });
+
       virtualizer.scrollToOffset(
         (virtualizer.scrollOffset ?? 0) + offset * ITEM_SIZE,
       );
-      setPendingScrollAdjustment(null);
+      setPendingScrollAdjustment(0);
+      setSkipPagingLogic(true);
+      skipPagingLogicRef.current = true;
+
+      const firstItem = virtualItems[0];
+      const lastItem = virtualItems[virtualItems.length - 1];
+
+      const distanceFromStart = firstItem.index - firstIssueIndex;
+      const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
+
+      console.log('setting skipPagingLogic to true', {
+        distanceFromStart,
+        // 'skipPagingLogicRef': skipPagingLogicRef.current,
+        'old skipPagingLogic': skipPagingLogic,
+        pendingScrollAdjustment,
+        // distanceFromEnd,
+        // 'anchor.index': anchor.index,
+        // 'anchor.type': anchor.type,
+        // issuesLength,
+        // 'firstItemIndex': firstItem.index,
+        // 'lastItemIndex': lastItem.index,
+        // atStart,
+        // atEnd,
+      });
+
       return;
     }
 
@@ -470,18 +518,17 @@ export function ListPage({onReady}: {onReady: () => void}) {
       const offset =
         -firstIssueIndex + (!atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0);
 
-      // console.log('XXX shift scroll adjustment for negative firstIssueIndex', {
-      //   firstIssueIndex,
-      //   'anchor.index': anchor.index,
-      //   'virtualizer.scrollOffset': (virtualizer.scrollOffset ?? 0) / ITEM_SIZE,
-      //   atStart,
-      //   issuesLength,
-      //   offset,
-      // });
-      setPendingScrollAdjustment({
+      console.log('XXX shift scroll adjustment for negative firstIssueIndex', {
+        firstIssueIndex,
+        'anchor.index': anchor.index,
+        'virtualizer.scrollOffset': (virtualizer.scrollOffset ?? 0) / ITEM_SIZE,
+        atStart,
+        issuesLength,
         offset,
-        wasAtStart: atStart,
       });
+      setSkipPagingLogic(true);
+      skipPagingLogicRef.current = true;
+      setPendingScrollAdjustment(offset);
       setQueryAnchor({
         anchor: {
           ...anchor,
@@ -495,20 +542,28 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    // if (atStart && firstIssueIndex > 0) {
-    //   setPendingScrollAdjustment({
-    //     offset: -firstIssueIndex,
-    //     wasAtStart: atStart,
-    //   });
-    //   setQueryAnchor({
-    //     anchor: TOP_ANCHOR,
-    //     listContextParams,
-    //   });
-    //   return;
-    // }
+    if (atStart && firstIssueIndex > 0) {
+      setPendingScrollAdjustment(-firstIssueIndex);
+      setQueryAnchor({
+        anchor: TOP_ANCHOR,
+        listContextParams,
+      });
+      return;
+    }
 
     // if (firstIssueIndex < (atStart ? 0 : NUM_ROWS_FOR_LOADING_SKELETON)) {
-  }, [firstIssueIndex, anchor.index, atStart, pendingScrollAdjustment]);
+  }, [
+    firstIssueIndex,
+    anchor.index,
+    atStart,
+    pendingScrollAdjustment,
+    skipPagingLogicRef.current,
+    skipPagingLogic,
+    issuesEmpty,
+    listContextParams,
+    queryAnchor.listContextParams,
+    pageSize,
+  ]);
 
   let newEstimatedTotal =
     firstIssueIndex +
@@ -1082,28 +1137,53 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    // Should we load more backward (page up)?
-    const distanceFromStart =
-      anchor.type === 'backward'
-        ? firstItem.index - (anchor.index - issuesLength)
-        : firstItem.index - firstIssueIndex;
+    if (skipPagingLogic || pendingScrollAdjustment !== 0) {
+      return;
+    }
 
-    //   console.debug(
-    //     'distanceFromStart',
-    //     distanceFromStart,
-    //     'anchor.index',
-    //     anchor.index,
-    //     'anchor.type',
-    //     anchor.type,
-    //     'issues.length',
-    //     issues.length,
-    //     'lastItem.index',
-    //     lastItem.index,
-    //     'atEnd',
-    //     atEnd,
-    //     'firstItem.index',
-    //     firstItem.index,
-    //   );
+    const distanceFromStart = firstItem.index - firstIssueIndex;
+    const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
+
+    // console.log('change anchors?', {
+    //   distanceFromStart,
+    //   // 'skipPagingLogicRef': skipPagingLogicRef.current,
+    //   skipPagingLogic,
+    //   pendingScrollAdjustment,
+    //   // distanceFromEnd,
+    //   // 'anchor.index': anchor.index,
+    //   // 'anchor.type': anchor.type,
+    //   // issuesLength,
+    //   // 'firstItemIndex': firstItem.index,
+    //   // 'lastItemIndex': lastItem.index,
+    //   atStart,
+    //   // atEnd,
+    // });
+
+    if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
+      console.log('%cPAGE UP', 'color: red');
+
+      const index = lastItem.index + 2 * nearPageEdgeThreshold;
+
+      setQueryAnchor({
+        anchor: {
+          index,
+          type: 'backward',
+          startRow: issueAt(index),
+        },
+        listContextParams,
+      });
+
+      // needs shift here too
+
+      return;
+      // console.log('page up distanceFromStart', {
+      //   distanceFromStart,
+      //   'anchor.index': anchor.index,
+      //   'anchor.type': anchor.type,
+      //   firstIssueIndex,
+      //   'firstItem.index': firstItem.index,
+      // });
+    }
 
     //   if (atStart) {
     //     // When at start with backward anchor, we need to convert to forward anchor with index 0
@@ -1209,25 +1289,22 @@ export function ListPage({onReady}: {onReady: () => void}) {
     //   }
 
     // Should we load more forward?
-    const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
 
-    console.log('distanceFromEnd', {
-      distanceFromEnd,
-      'anchor.index': anchor.index,
-      'anchor.type': anchor.type,
-      'issues.length': issuesLength,
-      'lastItem.index': lastItem.index,
-    });
+    // console.log('distanceFromEnd', {
+    //   distanceFromEnd,
+    //   'anchor.index': anchor.index,
+    //   'anchor.type': anchor.type,
+    //   'issues.length': issuesLength,
+    //   'lastItem.index': lastItem.index,
+    // });
 
     //   if (atEnd || !complete) {
     //     return;
     //   }
 
-    if (
-      !atEnd &&
-      // virtualizer.scrollDirection === 'forward' &&
-      distanceFromEnd <= nearPageEdgeThreshold
-    ) {
+    if (!atEnd && distanceFromEnd <= nearPageEdgeThreshold) {
+      console.log('%cPAGE DOWN', 'color: red');
+
       const index = firstItem.index - 2 * nearPageEdgeThreshold;
       console.log('page down - setting new anchor', {
         index,
@@ -1310,12 +1387,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
     //   complete,
     //   pageSize,
     virtualItems,
-    //   skipPagingLogic,
+    skipPagingLogic,
+    // skipPagingLogicRef.current,
+    pendingScrollAdjustment,
     //   virtualizer,
     anchor,
     firstIssueIndex,
-    //   atStart,
-    // atEnd,
+    atStart,
+    atEnd,
   ]);
   // // #endregion
 
@@ -1668,8 +1747,12 @@ function useIssues(
 
   return {
     // issues: slicedIssues,
-    issueAt: (index: number) =>
-      issues[issues.length - 1 - (index - anchorIndex)],
+    issueAt: (index: number) => {
+      if (anchorIndex - index - 1 >= issuesLength) {
+        return undefined;
+      }
+      return issues[anchorIndex - index - 1];
+    },
     issuesLength,
     complete,
     issuesEmpty,
