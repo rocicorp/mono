@@ -139,12 +139,7 @@ export default function runWorker(
       new PipelineDriver(
         logger,
         config.log,
-        new Snapshotter(
-          logger,
-          replicaFile,
-          shard,
-          config.replica.pageCacheSizeKib,
-        ),
+        new Snapshotter(logger, replicaFile, shard),
         shard,
         operatorStorage.createClientGroupStorage(id),
         id,

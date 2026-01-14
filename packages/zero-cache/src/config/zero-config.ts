@@ -136,19 +136,6 @@ const replicaOptions = {
       `operations are not performed.`,
     ],
   },
-
-  pageCacheSizeKib: {
-    type: v.number().optional(),
-    desc: [
-      `The SQLite page cache size in kibibytes (KiB) for view-syncer connections.`,
-      `The page cache stores recently accessed database pages in memory to reduce disk I/O.`,
-      `Larger cache sizes improve performance for workloads that fit in cache.`,
-      `If unspecified, SQLite's default (~2 MB) is used.`,
-      `Note that the effective memory use of this setting will be:`,
-      `2 * cache_size * num_cores as each connection to the replica gets its own cache`,
-      `and each core maintains 2 connections.`,
-    ],
-  },
 };
 
 export type ReplicaOptions = Config<typeof replicaOptions>;
