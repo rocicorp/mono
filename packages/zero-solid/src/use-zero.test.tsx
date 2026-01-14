@@ -418,7 +418,7 @@ describe('ZeroProvider', () => {
       expect(zero.connection.connect).toHaveBeenCalledTimes(1);
     });
 
-    test('calls connection.connect when zero is provided externally and auth changes', () => {
+    test('does not call connection.connect when zero is provided externally and auth changes', () => {
       const zero = createMockZero();
       const [auth, setAuth] = createSignal<string | undefined>('token-1');
 
@@ -437,14 +437,13 @@ describe('ZeroProvider', () => {
 
       setAuth('token-2');
 
-      expect(zero.connection.connect).toHaveBeenCalledWith({auth: 'token-2'});
-      expect(zero.connection.connect).toHaveBeenCalledTimes(1);
+      expect(zero.connection.connect).not.toHaveBeenCalled();
 
       zero.connection.connect.mockClear();
 
       setAuth(undefined);
 
-      expect(zero.connection.connect).toHaveBeenCalledWith({auth: undefined});
+      expect(zero.connection.connect).not.toHaveBeenCalled();
     });
   });
 });
