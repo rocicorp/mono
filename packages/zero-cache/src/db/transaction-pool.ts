@@ -94,8 +94,11 @@ export class TransactionPool {
     maxWorkers = initialWorkers,
     timeoutTasks = TIMEOUT_TASKS, // Overridden for tests.
   ) {
-    assert(initialWorkers > 0);
-    assert(maxWorkers >= initialWorkers);
+    assert(initialWorkers > 0, 'initialWorkers must be positive');
+    assert(
+      maxWorkers >= initialWorkers,
+      'maxWorkers must be >= initialWorkers',
+    );
 
     this.#lc = lc;
     this.#mode = mode;
@@ -446,7 +449,10 @@ export class TransactionPool {
    * Decrements the internal reference count, automatically invoking {@link setDone} when it reaches 0.
    */
   unref(count = 1) {
-    assert(count <= this.#refCount);
+    assert(
+      count <= this.#refCount,
+      () => `Cannot unref ${count} when refCount is ${this.#refCount}`,
+    );
 
     this.#refCount -= count;
     if (this.#refCount === 0) {

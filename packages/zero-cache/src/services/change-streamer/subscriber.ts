@@ -78,7 +78,10 @@ export class Subscriber {
    */
   setCaughtUp() {
     this.#ensureInitialStatusSent();
-    assert(this.#backlog);
+    assert(
+      this.#backlog,
+      'setCaughtUp() called but subscriber is not in catchup mode',
+    );
     for (const change of this.#backlog) {
       this.#send(change);
     }

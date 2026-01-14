@@ -292,7 +292,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       throw new Error(`Table ${tableName} not found`);
     }
     const {columns, primaryKey} = tableSpec.tableSpec;
-    assert(primaryKey.length);
+    assert(
+      primaryKey.length,
+      () => `Table ${tableName} must have a primary key`,
+    );
     source = new TableSource(
       this.#lc,
       this.#logConfig,
@@ -560,7 +563,7 @@ function updateWhere(where: Condition | undefined, policy: Policy) {
       {
         type: 'or',
         conditions: policy.map(([action, rule]) => {
-          assert(action);
+          assert(action, 'action must be defined in policy');
           return rule;
         }),
       },
