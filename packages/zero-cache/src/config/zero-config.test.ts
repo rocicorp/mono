@@ -431,6 +431,15 @@ test('zero-cache --help', () => {
                                                                                                                                                                                          
                                                                    If unspecified, defaults to --port + 2.                                                                               
                                                                                                                                                                                          
+     --litestream-snapshot-reservation-timeout-ms number           default: 0                                                                                                            
+       ZERO_LITESTREAM_SNAPSHOT_RESERVATION_TIMEOUT_MS env                                                                                                                               
+                                                                   How long a /snapshot reservation may be held open before it is forcefully ended.                                      
+                                                                   This is a safeguard against a view-syncer that opens a /snapshot request but                                          
+                                                                   never completes snapshot initialization (e.g. it hangs, crashes, or is wedged in                                      
+                                                                   startup) which would otherwise pause change log cleanup indefinitely.                                                 
+                                                                                                                                                                                         
+                                                                   Set to 0 to disable.                                                                                                  
+                                                                                                                                                                                         
      --litestream-checkpoint-threshold-mb number                   default: 40                                                                                                           
        ZERO_LITESTREAM_CHECKPOINT_THRESHOLD_MB env                                                                                                                                       
                                                                    The size of the WAL file at which to perform an SQlite checkpoint to apply                                            

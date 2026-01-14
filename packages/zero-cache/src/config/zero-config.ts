@@ -681,6 +681,18 @@ export const zeroOptions = {
       ],
     },
 
+    snapshotReservationTimeoutMs: {
+      type: v.number().default(0),
+      desc: [
+        `How long a /snapshot reservation may be held open before it is forcefully ended.`,
+        `This is a safeguard against a view-syncer that opens a /snapshot request but`,
+        `never completes snapshot initialization (e.g. it hangs, crashes, or is wedged in`,
+        `startup) which would otherwise pause change log cleanup indefinitely.`,
+        ``,
+        `Set to 0 to disable.`,
+      ],
+    },
+
     checkpointThresholdMB: {
       type: v.number().default(40),
       desc: [
