@@ -47,7 +47,7 @@ import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 
 // Set to true to enable slow query simulation (half data → full data after 5s)
-const USE_SLOW_QUERY = true;
+const USE_SLOW_QUERY = false;
 if (USE_SLOW_QUERY) {
   setupSlowQuery({delayMs: 1_000, unknownDataPercentage: 50});
 }
@@ -332,7 +332,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     anchor.index + NUM_ROWS_FOR_LOADING_SKELETON,
   );
 
-  const [hasScrolledToPermalink, setHasScrolledToPermalink] = useState(false);
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
   const skipPagingLogicRef = useRef<boolean>(false);
 
@@ -463,25 +462,22 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [issuesEmpty, complete, onReady]);
 
   useEffect(() => {
+    // TODO(arv): Deal with permalinks too
     if (queryAnchor.listContextParams !== listContextParams) {
-      // if (listRef.current) {
-      //   listRef.current.scrollTop = 0;
-      // }
+      if (listRef.current) {
+        listRef.current.scrollTop = 0;
+      }
 
       setEstimatedTotal(0);
       setHasReachedStart(true);
       setHasReachedEnd(false);
 
-      // setQueryAnchor({
-      //   anchor: TOP_ANCHOR,
-      //   listContextParams,
-      // });
       setQueryAnchor({
-        anchor,
+        anchor: TOP_ANCHOR,
         listContextParams,
       });
     }
-  }, [listContextParams, queryAnchor]);
+  }, [listContextParams, anchor]);
 
   useEffect(() => {
     if (complete) {
@@ -789,14 +785,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setForceSearchMode(true);
     }
   };
-
-  console.log('XXX anchor', {
-    // 'listRef.current?.scrollTop': listRef.current?.scrollTop,
-    'index': anchor.index,
-    'type': anchor.type,
-    'startRow.?id': anchor.startRow?.id,
-    // 'estimatedTotal': estimatedTotal,
-  });
 
   return (
     <>
