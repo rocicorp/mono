@@ -6327,324 +6327,312 @@ describe('view-syncer/cvr', () => {
       ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
     );
 
-    expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
-      {
-        "clients": Result [
-          {
-            "clientGroupID": "abc123",
-            "clientID": "client-a",
+    expect(await getAllState(cvrDb)).toMatchObject({
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-c',
+        },
+        {
+          clientGroupID: 'def456',
+          clientID: 'client-b',
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+          deleted: null,
+          inactivatedAt: null,
+          patchVersion: '1a9:01',
+          queryHash: 'oneHash',
+          ttl: 300000,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-c',
+          deleted: null,
+          inactivatedAt: null,
+          patchVersion: '1a9:01',
+          queryHash: 'oneHash',
+          ttl: 300000,
+        },
+        {
+          clientGroupID: 'def456',
+          clientID: 'client-b',
+          deleted: null,
+          inactivatedAt: null,
+          patchVersion: '1a9:01',
+          queryHash: 'oneHash',
+          ttl: 300000,
+        },
+      ],
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          clientSchema: null,
+          deleted: false,
+          lastActive: 1713830400000,
+          profileID: null,
+          replicaVersion: '120',
+          ttlClock: 1713830400000,
+          version: '1aa',
+        },
+        {
+          clientGroupID: 'def456',
+          clientSchema: null,
+          deleted: false,
+          lastActive: 1713830400000,
+          profileID: null,
+          replicaVersion: '120',
+          ttlClock: 1713830400000,
+          version: '1aa',
+        },
+      ],
+      queries: [
+        {
+          clientAST: {
+            table: 'issues',
           },
-          {
-            "clientGroupID": "abc123",
-            "clientID": "client-c",
+          clientGroupID: 'abc123',
+          deleted: null,
+          internal: null,
+          patchVersion: null,
+          queryArgs: null,
+          queryHash: 'oneHash',
+          queryName: null,
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
+            table: 'issues',
           },
-          {
-            "clientGroupID": "def456",
-            "clientID": "client-b",
+          clientGroupID: 'def456',
+          deleted: null,
+          internal: null,
+          patchVersion: null,
+          queryArgs: null,
+          queryHash: 'oneHash',
+          queryName: null,
+          transformationHash: null,
+          transformationVersion: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1a0',
+          refCounts: {
+            oneHash: 2,
           },
-        ],
-        "desires": Result [
-          {
-            "clientGroupID": "abc123",
-            "clientID": "client-a",
-            "deleted": null,
-            "inactivatedAt": null,
-            "patchVersion": "1a9:01",
-            "queryHash": "oneHash",
-            "ttl": 300000,
+          rowKey: {
+            id: '123',
           },
-          {
-            "clientGroupID": "abc123",
-            "clientID": "client-c",
-            "deleted": null,
-            "inactivatedAt": null,
-            "patchVersion": "1a9:01",
-            "queryHash": "oneHash",
-            "ttl": 300000,
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1a0',
+          refCounts: {
+            oneHash: 2,
           },
-          {
-            "clientGroupID": "def456",
-            "clientID": "client-b",
-            "deleted": null,
-            "inactivatedAt": null,
-            "patchVersion": "1a9:01",
-            "queryHash": "oneHash",
-            "ttl": 300000,
+          rowKey: {
+            id: '321',
           },
-        ],
-        "instances": Result [
-          {
-            "clientGroupID": "abc123",
-            "clientSchema": null,
-            "deleted": false,
-            "grantedAt": 1709251200000,
-            "lastActive": 1713830400000,
-            "owner": "my-task",
-            "profileID": null,
-            "replicaVersion": "120",
-            "ttlClock": 1713830400000,
-            "version": "1aa",
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'def456',
+          patchVersion: '1a0',
+          refCounts: {
+            oneHash: 1,
           },
-          {
-            "clientGroupID": "def456",
-            "clientSchema": null,
-            "deleted": false,
-            "grantedAt": null,
-            "lastActive": 1713830400000,
-            "owner": null,
-            "profileID": null,
-            "replicaVersion": "120",
-            "ttlClock": 1713830400000,
-            "version": "1aa",
+          rowKey: {
+            id: '123',
           },
-        ],
-        "queries": Result [
-          {
-            "clientAST": {
-              "table": "issues",
-            },
-            "clientGroupID": "abc123",
-            "deleted": null,
-            "internal": null,
-            "patchVersion": null,
-            "queryArgs": null,
-            "queryHash": "oneHash",
-            "queryName": null,
-            "transformationHash": null,
-            "transformationVersion": null,
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'def456',
+          patchVersion: '1a0',
+          refCounts: {
+            oneHash: 1,
           },
-          {
-            "clientAST": {
-              "table": "issues",
-            },
-            "clientGroupID": "def456",
-            "deleted": null,
-            "internal": null,
-            "patchVersion": null,
-            "queryArgs": null,
-            "queryHash": "oneHash",
-            "queryName": null,
-            "transformationHash": null,
-            "transformationVersion": null,
+          rowKey: {
+            id: '321',
           },
-        ],
-        "rows": Result [
-          {
-            "clientGroupID": "abc123",
-            "patchVersion": "1a0",
-            "refCounts": {
-              "oneHash": 2,
-            },
-            "rowKey": {
-              "id": "123",
-            },
-            "rowVersion": "03",
-            "schema": "public",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "abc123",
-            "patchVersion": "1a0",
-            "refCounts": {
-              "oneHash": 2,
-            },
-            "rowKey": {
-              "id": "321",
-            },
-            "rowVersion": "03",
-            "schema": "public",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "def456",
-            "patchVersion": "1a0",
-            "refCounts": {
-              "oneHash": 1,
-            },
-            "rowKey": {
-              "id": "123",
-            },
-            "rowVersion": "03",
-            "schema": "public",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "def456",
-            "patchVersion": "1a0",
-            "refCounts": {
-              "oneHash": 1,
-            },
-            "rowKey": {
-              "id": "321",
-            },
-            "rowVersion": "03",
-            "schema": "public",
-            "table": "issues",
-          },
-        ],
-      }
-    `);
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    });
 
     // No-op
     expect(flushed).toBe(false);
 
-    expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
-      {
-        "clients": Result [
-          {
-            "clientGroupID": "abc123",
-            "clientID": "client-a",
+    expect(await getAllState(cvrDb)).toMatchObject({
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-c',
+        },
+        {
+          clientGroupID: 'def456',
+          clientID: 'client-b',
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+          deleted: null,
+          inactivatedAt: null,
+          patchVersion: '1a9:01',
+          queryHash: 'oneHash',
+          ttl: 300000,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-c',
+          deleted: null,
+          inactivatedAt: null,
+          patchVersion: '1a9:01',
+          queryHash: 'oneHash',
+          ttl: 300000,
+        },
+        {
+          clientGroupID: 'def456',
+          clientID: 'client-b',
+          deleted: null,
+          inactivatedAt: null,
+          patchVersion: '1a9:01',
+          queryHash: 'oneHash',
+          ttl: 300000,
+        },
+      ],
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          clientSchema: null,
+          deleted: false,
+          lastActive: 1713830400000,
+          profileID: null,
+          replicaVersion: '120',
+          ttlClock: 1713830400000,
+          version: '1aa',
+        },
+        {
+          clientGroupID: 'def456',
+          clientSchema: null,
+          deleted: false,
+          lastActive: 1713830400000,
+          profileID: null,
+          replicaVersion: '120',
+          ttlClock: 1713830400000,
+          version: '1aa',
+        },
+      ],
+      queries: [
+        {
+          clientAST: {
+            table: 'issues',
           },
-          {
-            "clientGroupID": "abc123",
-            "clientID": "client-c",
+          clientGroupID: 'abc123',
+          deleted: null,
+          internal: null,
+          patchVersion: null,
+          queryArgs: null,
+          queryHash: 'oneHash',
+          queryName: null,
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
+            table: 'issues',
           },
-          {
-            "clientGroupID": "def456",
-            "clientID": "client-b",
+          clientGroupID: 'def456',
+          deleted: null,
+          internal: null,
+          patchVersion: null,
+          queryArgs: null,
+          queryHash: 'oneHash',
+          queryName: null,
+          transformationHash: null,
+          transformationVersion: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1a0',
+          refCounts: {
+            oneHash: 2,
           },
-        ],
-        "desires": Result [
-          {
-            "clientGroupID": "abc123",
-            "clientID": "client-a",
-            "deleted": null,
-            "inactivatedAt": null,
-            "patchVersion": "1a9:01",
-            "queryHash": "oneHash",
-            "ttl": 300000,
+          rowKey: {
+            id: '123',
           },
-          {
-            "clientGroupID": "abc123",
-            "clientID": "client-c",
-            "deleted": null,
-            "inactivatedAt": null,
-            "patchVersion": "1a9:01",
-            "queryHash": "oneHash",
-            "ttl": 300000,
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1a0',
+          refCounts: {
+            oneHash: 2,
           },
-          {
-            "clientGroupID": "def456",
-            "clientID": "client-b",
-            "deleted": null,
-            "inactivatedAt": null,
-            "patchVersion": "1a9:01",
-            "queryHash": "oneHash",
-            "ttl": 300000,
+          rowKey: {
+            id: '321',
           },
-        ],
-        "instances": Result [
-          {
-            "clientGroupID": "abc123",
-            "clientSchema": null,
-            "deleted": false,
-            "grantedAt": 1709251200000,
-            "lastActive": 1713830400000,
-            "owner": "my-task",
-            "profileID": null,
-            "replicaVersion": "120",
-            "ttlClock": 1713830400000,
-            "version": "1aa",
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'def456',
+          patchVersion: '1a0',
+          refCounts: {
+            oneHash: 1,
           },
-          {
-            "clientGroupID": "def456",
-            "clientSchema": null,
-            "deleted": false,
-            "grantedAt": null,
-            "lastActive": 1713830400000,
-            "owner": null,
-            "profileID": null,
-            "replicaVersion": "120",
-            "ttlClock": 1713830400000,
-            "version": "1aa",
+          rowKey: {
+            id: '123',
           },
-        ],
-        "queries": Result [
-          {
-            "clientAST": {
-              "table": "issues",
-            },
-            "clientGroupID": "abc123",
-            "deleted": null,
-            "internal": null,
-            "patchVersion": null,
-            "queryArgs": null,
-            "queryHash": "oneHash",
-            "queryName": null,
-            "transformationHash": null,
-            "transformationVersion": null,
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'def456',
+          patchVersion: '1a0',
+          refCounts: {
+            oneHash: 1,
           },
-          {
-            "clientAST": {
-              "table": "issues",
-            },
-            "clientGroupID": "def456",
-            "deleted": null,
-            "internal": null,
-            "patchVersion": null,
-            "queryArgs": null,
-            "queryHash": "oneHash",
-            "queryName": null,
-            "transformationHash": null,
-            "transformationVersion": null,
+          rowKey: {
+            id: '321',
           },
-        ],
-        "rows": Result [
-          {
-            "clientGroupID": "abc123",
-            "patchVersion": "1a0",
-            "refCounts": {
-              "oneHash": 2,
-            },
-            "rowKey": {
-              "id": "123",
-            },
-            "rowVersion": "03",
-            "schema": "public",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "abc123",
-            "patchVersion": "1a0",
-            "refCounts": {
-              "oneHash": 2,
-            },
-            "rowKey": {
-              "id": "321",
-            },
-            "rowVersion": "03",
-            "schema": "public",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "def456",
-            "patchVersion": "1a0",
-            "refCounts": {
-              "oneHash": 1,
-            },
-            "rowKey": {
-              "id": "123",
-            },
-            "rowVersion": "03",
-            "schema": "public",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "def456",
-            "patchVersion": "1a0",
-            "refCounts": {
-              "oneHash": 1,
-            },
-            "rowKey": {
-              "id": "321",
-            },
-            "rowVersion": "03",
-            "schema": "public",
-            "table": "issues",
-          },
-        ],
-      }
-    `);
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    });
   });
 
   test('ttlClock only updates when we have meaningful flushes', async () => {
