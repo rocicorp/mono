@@ -531,7 +531,7 @@ describe('ZeroProvider', () => {
       });
     });
 
-    test('calls connection.connect when zero is provided externally and auth changes', () => {
+    test('does not call connection.connect when zero is provided externally and auth changes', () => {
       const mockZero = createMockZero();
 
       const root = renderWithRoot(
@@ -541,7 +541,7 @@ describe('ZeroProvider', () => {
       );
 
       // Initial connection should not be called
-      expect(mockZero.connection.connect).toHaveBeenCalledTimes(0);
+      expect(mockZero.connection.connect).not.toHaveBeenCalled();
 
       // Change auth
       act(() => {
@@ -552,18 +552,14 @@ describe('ZeroProvider', () => {
         );
       });
 
-      // Should call connect again with new auth
-      expect(mockZero.connection.connect).toHaveBeenCalledWith({
-        auth: 'token-2',
-      });
-      expect(mockZero.connection.connect).toHaveBeenCalledTimes(1);
+      expect(mockZero.connection.connect).not.toHaveBeenCalled();
 
       act(() => {
         root.unmount();
       });
     });
 
-    test('calls connection.connect with undefined when auth prop is removed', () => {
+    test('does not call connection.connect when auth prop is removed', () => {
       const mockZero = createMockZero();
 
       const root = renderWithRoot(
@@ -580,10 +576,7 @@ describe('ZeroProvider', () => {
         );
       });
 
-      expect(mockZero.connection.connect).toHaveBeenCalledWith({
-        auth: undefined,
-      });
-      expect(mockZero.connection.connect).toHaveBeenCalledTimes(1);
+      expect(mockZero.connection.connect).not.toHaveBeenCalled();
       expect(mockZero.close).not.toHaveBeenCalled();
 
       act(() => {

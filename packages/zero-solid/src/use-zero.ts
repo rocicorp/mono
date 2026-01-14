@@ -115,7 +115,7 @@ export function ZeroProvider<
 
   createEffect(() => {
     const currentZero = zero();
-    if (!currentZero) {
+    if (!currentZero || 'zero' in props) {
       return;
     }
 
