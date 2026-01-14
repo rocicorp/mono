@@ -167,6 +167,11 @@ export const internalQueryRecordSchema = baseQueryRecordSchema.extend({
 
 export type InternalQueryRecord = v.Infer<typeof internalQueryRecordSchema>;
 
+const queryErrorSchema = v.object({
+  message: v.string(),
+  version: cvrVersionSchema,
+});
+
 const clientStateSchema = v.object({
   /**
    * The time at which the query was last inactivated. If this undefined or
@@ -190,6 +195,11 @@ const clientStateSchema = v.object({
    * The version at which the client state changed (i.e. individual `patchVersion`s).
    */
   version: cvrVersionSchema,
+
+  /**
+   * The error version for which the query should be retried.
+   */
+  retryErrorVersion: cvrVersionSchema.optional(),
 });
 
 const externalQueryRecordSchema = baseQueryRecordSchema.extend({
@@ -203,6 +213,11 @@ const externalQueryRecordSchema = baseQueryRecordSchema.extend({
   // For queries, the `patchVersion` indicates when query was added to the got set,
   // and is absent if not yet gotten.
   patchVersion: cvrVersionSchema.optional(),
+
+  /**
+   * If present, the query execution failed.
+   */
+  error: queryErrorSchema.optional(),
 });
 
 export const clientQueryRecordSchema = externalQueryRecordSchema.extend({
@@ -336,6 +351,8 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: true,
         deleted: false, // put vs del "got" query
+        errorMessage: null,
+        errorVersion: null,
       };
     case 'client':
       return {
@@ -349,6 +366,8 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: null,
         deleted: false, // put vs del "got" query
+        errorMessage: query.error?.message ?? null,
+        errorVersion: maybeVersionString(query.error?.version),
       };
     case 'custom':
       return {
@@ -362,9 +381,20 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: null,
         deleted: false, // put vs del "got" query
+        errorMessage: query.error?.message ?? null,
+        errorVersion: maybeVersionString(query.error?.version),
       };
   }
 }
 
-export const maybeVersionString = (v: CVRVersion | undefined) =>
-  v ? versionString(v) : null;
+export function maybeVersionString(v: undefined): null;
+export function maybeVersionString(v: CVRVersion): string;
+export function maybeVersionString(v: CVRVersion | undefined): string | null;
+export function maybeVersionString(v: CVRVersion | undefined): string | null {
+  return v ? versionString(v) : null;
+}
+
+export const maybeVersionFromString = (
+  str: string | undefined,
+): CVRVersion | undefined =>
+  str === undefined ? undefined : versionFromString(str);

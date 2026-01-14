@@ -1,7 +1,7 @@
 import * as v from '../../shared/src/valita.ts';
 import {clientSchemaSchema} from './client-schema.ts';
 import {deleteClientsBodySchema} from './delete-clients.ts';
-import {upQueriesPatchSchema} from './queries-patch.ts';
+import {desiredQueriesPatchSchema} from './queries-patch.ts';
 
 /**
  * After opening a websocket the client waits for a `connected` message
@@ -22,7 +22,7 @@ export const connectedMessageSchema = v.tuple([
 ]);
 
 const initConnectionBodySchema = v.object({
-  desiredQueriesPatch: upQueriesPatchSchema,
+  desiredQueriesPatch: desiredQueriesPatchSchema,
   // As the schema can be large, client only sends when it does not have a
   // server snapshot (i.e. a snapshot with a cookie).  Once it has a server
   // snapshot it will assume the zero-cache already has the schema for this

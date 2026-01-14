@@ -1,6 +1,9 @@
 import * as v from '../../shared/src/valita.ts';
 import {mutationsPatchSchema} from './mutations-patch.ts';
-import {queriesPatchSchema} from './queries-patch.ts';
+import {
+  gotQueriesPatchSchema,
+  desiredQueriesPatchSchema,
+} from './queries-patch.ts';
 import {rowsPatchSchema} from './row-patch.ts';
 import {nullableVersionSchema, versionSchema} from './version.ts';
 
@@ -53,10 +56,10 @@ export const pokePartBodySchema = v.object({
   // Changes to last mutation id by client id.
   lastMutationIDChanges: v.record(v.number()).optional(),
   // Patches to the desired query sets by client id.
-  desiredQueriesPatches: v.record(queriesPatchSchema).optional(),
+  desiredQueriesPatches: v.record(desiredQueriesPatchSchema).optional(),
   // Patches to the set of queries for which entities are sync'd in
   // rowsPatch.
-  gotQueriesPatch: queriesPatchSchema.optional(),
+  gotQueriesPatch: gotQueriesPatchSchema.optional(),
   // Patches to the rows set.
   rowsPatch: rowsPatchSchema.optional(),
   // Mutation results patch

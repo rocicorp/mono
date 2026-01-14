@@ -29,7 +29,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
+import {putDesiredQueryOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
 import {
   hashOfAST,
   hashOfNameAndArgs,
@@ -926,7 +926,7 @@ describe('getQueriesPatch', () => {
       const patch = await queryManager.getQueriesPatch(testReadTransaction);
       expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
       const op = patch.get('1hydj1t7t5yv4');
-      v.assert(op, upPutOpSchema);
+      v.assert(op, putDesiredQueryOpSchema);
       return op.ttl;
     }
 

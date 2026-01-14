@@ -213,6 +213,20 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migrateV16ToV17: Migration = {
+    migrateSchema: async (_, sql) => {
+      await sql`ALTER TABLE ${sql(schema)}.queries 
+        ADD COLUMN "errorMessage" TEXT`;
+      await sql`ALTER TABLE ${sql(schema)}.queries 
+        ADD COLUMN "errorVersion" TEXT`;
+      await sql`ALTER TABLE ${sql(schema)}.desires 
+        ADD COLUMN "retryErrorVersion" TEXT`;
+      await sql`
+        ALTER TABLE ${sql(schema)}.queries ADD CONSTRAINT check_error_fields
+          CHECK (("errorMessage" IS NULL) = ("errorVersion" IS NULL));`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -245,6 +259,8 @@ export async function initViewSyncerSchema(
     // V16 adds instances."profileID" and a corresponding index for estimating
     // active user counts more accurately for apps that use memstore.
     16: migratedV15ToV16,
+    // V17 adds queries."errorMessage", queries."errorVersion", and desires."retryAfterVersion"
+    17: migrateV16ToV17,
   };
 
   await runSchemaMigrations(

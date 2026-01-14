@@ -9,13 +9,14 @@ import {
 import type {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {DesiredQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {ReplicaState} from '../replicator/replicator.ts';
+import type {Subscription} from '../../types/subscription.ts';
+
+import type {FakeReplicator} from '../replicator/test-utils.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
-import type {Subscription} from '../../types/subscription.ts';
-import type {ReplicaState} from '../replicator/replicator.ts';
-import type {FakeReplicator} from '../replicator/test-utils.ts';
 import {
   ALL_ISSUES_QUERY,
   ISSUES_QUERY_WITH_OWNER,
@@ -41,7 +42,7 @@ describe('view-syncer/yield-during-advance', () => {
   let viewSyncerDone: Promise<void>;
   let connect: (
     ctx: SyncContext,
-    desiredQueriesPatch: UpQueriesPatch,
+    desiredQueriesPatch: DesiredQueriesPatch,
   ) => Queue<Downstream>;
 
   const CLIENT_ID = 'client1';

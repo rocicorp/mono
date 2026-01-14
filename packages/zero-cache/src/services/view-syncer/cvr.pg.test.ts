@@ -120,7 +120,8 @@ describe('view-syncer/cvr', () => {
             "patchVersion",
             "deleted",
             "ttlMs" AS "ttl",
-            "inactivatedAtMs" AS "inactivatedAt"
+            "inactivatedAtMs" AS "inactivatedAt",
+            "retryErrorVersion"
             FROM ${db(`${cvrSchema(SHARD)}.` + table)}`),
         ];
       } else {
@@ -190,7 +191,8 @@ describe('view-syncer/cvr', () => {
         "patchVersion",
         "deleted",
         "ttlMs" AS "ttl",
-        "inactivatedAtMs" AS "inactivatedAt"
+        "inactivatedAtMs" AS "inactivatedAt",
+        "retryErrorVersion"
         FROM ${db('dapp_3/cvr.desires')} 
         ORDER BY "clientGroupID", "clientID", "queryHash"`,
       db`SELECT * FROM ${db('dapp_3/cvr.rows')} ORDER BY "clientGroupID", "schema", "table", "rowKey"`,
@@ -610,6 +612,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:02',
           internal: null,
           deleted: false,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -621,6 +625,7 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [],
@@ -715,6 +720,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:02',
           internal: null,
           deleted: false,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -726,6 +733,7 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [],
@@ -957,6 +965,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:02',
           internal: null,
           deleted: false,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -968,6 +978,7 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -977,6 +988,7 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [],
@@ -1385,6 +1397,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: null,
           queryHash: 'fourHash',
           transformationHash: null,
@@ -1395,6 +1409,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: null,
           queryArgs: [],
           queryHash: 'xCustomHash',
@@ -1428,6 +1444,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: false,
           internal: true,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: null,
           queryHash: 'lmids',
           transformationHash: null,
@@ -1463,6 +1481,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           deleted: false,
           internal: true,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: null,
           queryArgs: null,
           queryHash: 'mutationResults',
@@ -1479,6 +1499,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: null,
           queryHash: 'threeHash',
           transformationHash: null,
@@ -1493,6 +1515,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '1a9:02',
           queryHash: 'oneHash',
           transformationHash: 'twoHash',
@@ -1508,6 +1532,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1517,6 +1542,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'fourHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1526,6 +1552,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'xCustomHash',
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1535,6 +1562,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'threeHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1544,6 +1572,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1553,6 +1582,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'xCustomHash',
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1562,6 +1592,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'threeHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1571,6 +1602,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
 
@@ -1653,6 +1685,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:02',
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -1664,6 +1698,7 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [],
@@ -1778,6 +1813,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1790,6 +1827,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true, // Already in CVRs from "189"
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -1802,6 +1841,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -1813,6 +1854,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -2130,6 +2172,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '189',
           queryHash: 'already-deleted',
           transformationHash: null,
@@ -2144,6 +2188,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '19z',
           queryHash: 'catchup-delete',
           transformationHash: null,
@@ -2158,6 +2204,8 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           transformationHash: 'serverOneHash',
@@ -2173,6 +2221,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -2264,6 +2313,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2276,6 +2327,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true, // Already in CVRs from "189"
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2288,6 +2341,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -2299,6 +2354,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -2586,6 +2642,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '189',
           queryHash: 'already-deleted',
           transformationHash: null,
@@ -2600,6 +2658,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '19z',
           queryHash: 'catchup-delete',
           transformationHash: null,
@@ -2614,6 +2674,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           transformationHash: 'serverTwoHash',
@@ -2629,6 +2691,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -2742,6 +2805,8 @@ describe('view-syncer/cvr', () => {
           queryArgs: null,
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '189',
           queryHash: 'already-deleted',
           transformationHash: null,
@@ -2756,6 +2821,8 @@ describe('view-syncer/cvr', () => {
           queryArgs: null,
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '19z',
           queryHash: 'catchup-delete',
           transformationHash: null,
@@ -2770,6 +2837,8 @@ describe('view-syncer/cvr', () => {
           queryArgs: null,
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           transformationHash: 'newXFormHash',
@@ -2809,6 +2878,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2821,6 +2892,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2833,6 +2906,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2845,6 +2920,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -2856,6 +2933,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2865,6 +2943,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -3211,6 +3290,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '189',
           queryHash: 'already-deleted',
           transformationHash: null,
@@ -3225,6 +3306,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '19z',
           queryHash: 'catchup-delete',
           transformationHash: null,
@@ -3239,6 +3322,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           transformationHash: 'updatedServerOneHash',
@@ -3253,6 +3338,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: false,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '1aa:01',
           queryHash: 'twoHash',
           transformationHash: 'updatedServerTwoHash',
@@ -3268,6 +3355,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -3277,6 +3365,7 @@ describe('view-syncer/cvr', () => {
           queryHash: 'twoHash',
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -3360,6 +3449,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           internal: null,
           deleted: false,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -3372,6 +3463,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -3384,6 +3477,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [],
@@ -3621,6 +3716,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '189',
           queryHash: 'already-deleted',
           transformationHash: null,
@@ -3635,6 +3732,8 @@ describe('view-syncer/cvr', () => {
           queryName: null,
           deleted: true,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '19z',
           queryHash: 'catchup-delete',
           transformationHash: null,
@@ -3649,6 +3748,8 @@ describe('view-syncer/cvr', () => {
           queryArgs: null,
           queryName: null,
           internal: null,
+          errorMessage: null,
+          errorVersion: null,
           patchVersion: '1ba:01',
           queryHash: 'oneHash',
           transformationHash: null,
@@ -3740,6 +3841,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -3752,6 +3855,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -3764,6 +3869,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -3776,6 +3883,8 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
           internal: null,
           deleted: true,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -3787,6 +3896,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -3796,6 +3906,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -3885,6 +3996,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
+                "retryErrorVersion": undefined,
                 "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
@@ -3892,6 +4004,7 @@ describe('view-syncer/cvr', () => {
                 },
               },
             },
+            "error": undefined,
             "id": "oneHash",
             "patchVersion": {
               "minorVersion": 1,
@@ -3910,6 +4023,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
+                "retryErrorVersion": undefined,
                 "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
@@ -3917,6 +4031,7 @@ describe('view-syncer/cvr', () => {
                 },
               },
             },
+            "error": undefined,
             "id": "twoHash",
             "patchVersion": {
               "minorVersion": 1,
@@ -4174,6 +4289,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -4185,6 +4302,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -4325,6 +4443,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -4336,6 +4456,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -4391,6 +4512,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -4402,6 +4525,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -4535,6 +4659,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -4546,6 +4672,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -4601,6 +4728,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -4612,6 +4741,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -4806,6 +4936,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -4817,6 +4949,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -4872,6 +5005,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -4883,6 +5018,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -5029,6 +5165,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -5040,6 +5178,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -5194,6 +5333,8 @@ describe('view-syncer/cvr', () => {
             patchVersion: null,
             internal: null,
             deleted: null,
+            errorMessage: null,
+            errorVersion: null,
           },
         ],
         desires: [
@@ -5205,6 +5346,7 @@ describe('view-syncer/cvr', () => {
             deleted: null,
             inactivatedAt: null,
             ttl: DEFAULT_TTL_MS,
+            retryErrorVersion: null,
           },
         ],
         rows: [
@@ -5263,6 +5405,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
+                  "retryErrorVersion": undefined,
                   "ttl": 300000,
                   "version": {
                     "minorVersion": 1,
@@ -5270,6 +5413,7 @@ describe('view-syncer/cvr', () => {
                   },
                 },
               },
+              "error": undefined,
               "id": "oneHash",
               "patchVersion": undefined,
               "transformationHash": undefined,
@@ -5370,6 +5514,8 @@ describe('view-syncer/cvr', () => {
             patchVersion: null,
             internal: null,
             deleted: null,
+            errorMessage: null,
+            errorVersion: null,
           },
         ],
         desires: [
@@ -5381,6 +5527,7 @@ describe('view-syncer/cvr', () => {
             deleted: null,
             inactivatedAt: null,
             ttl,
+            retryErrorVersion: null,
           },
         ],
         rows: [
@@ -5506,6 +5653,8 @@ describe('view-syncer/cvr', () => {
             patchVersion: null,
             internal: null,
             deleted: null,
+            errorMessage: null,
+            errorVersion: null,
           },
         ],
         desires: [
@@ -5517,6 +5666,7 @@ describe('view-syncer/cvr', () => {
             deleted: null,
             inactivatedAt: null,
             ttl: DEFAULT_TTL_MS,
+            retryErrorVersion: null,
           },
         ],
         rows: [
@@ -5575,6 +5725,7 @@ describe('view-syncer/cvr', () => {
                 "clientState": {
                   "fooClient": {
                     "inactivatedAt": undefined,
+                    "retryErrorVersion": undefined,
                     "ttl": 300000,
                     "version": {
                       "minorVersion": 1,
@@ -5582,6 +5733,7 @@ describe('view-syncer/cvr', () => {
                     },
                   },
                 },
+                "error": undefined,
                 "id": "oneHash",
                 "patchVersion": undefined,
                 "transformationHash": "oneHashTransformed",
@@ -5709,6 +5861,8 @@ describe('view-syncer/cvr', () => {
             patchVersion: null,
             internal: null,
             deleted: null,
+            errorMessage: null,
+            errorVersion: null,
           },
         ],
         desires: [
@@ -5720,6 +5874,7 @@ describe('view-syncer/cvr', () => {
             deleted: null,
             inactivatedAt: null,
             ttl: 10,
+            retryErrorVersion: null,
           },
         ],
         rows: [],
@@ -5749,6 +5904,7 @@ describe('view-syncer/cvr', () => {
         .toMatchInlineSnapshot(`
           {
             "inactivatedAt": undefined,
+            "retryErrorVersion": undefined,
             "ttl": 10,
             "version": {
               "minorVersion": 1,
@@ -5787,15 +5943,16 @@ describe('view-syncer/cvr', () => {
       expect(
         (updated.queries.oneHash as ClientQueryRecord).clientState.fooClient,
       ).toMatchInlineSnapshot(`
-        {
-          "inactivatedAt": undefined,
-          "ttl": 600000,
-          "version": {
-            "minorVersion": 1,
-            "stateVersion": "1aa",
-          },
-        }
-      `);
+              {
+                "inactivatedAt": undefined,
+                "retryErrorVersion": undefined,
+                "ttl": 600000,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1aa",
+                },
+              }
+            `);
     });
   });
 
@@ -5838,6 +5995,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -5849,6 +6008,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -5858,6 +6018,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -5867,6 +6028,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -5959,6 +6121,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "client-a": {
                   "inactivatedAt": undefined,
+                  "retryErrorVersion": undefined,
                   "ttl": 300000,
                   "version": {
                     "minorVersion": 1,
@@ -5975,6 +6138,7 @@ describe('view-syncer/cvr', () => {
                 },
                 "client-c": {
                   "inactivatedAt": undefined,
+                  "retryErrorVersion": undefined,
                   "ttl": 300000,
                   "version": {
                     "minorVersion": 1,
@@ -5982,6 +6146,7 @@ describe('view-syncer/cvr', () => {
                   },
                 },
               },
+              "error": undefined,
               "id": "oneHash",
               "patchVersion": undefined,
               "transformationHash": undefined,
@@ -6029,6 +6194,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
+            "retryErrorVersion": null,
             "ttl": 300000,
           },
           {
@@ -6038,6 +6204,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": 1709683200000,
             "patchVersion": "1aa:01",
             "queryHash": "oneHash",
+            "retryErrorVersion": null,
             "ttl": 300000,
           },
           {
@@ -6047,6 +6214,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
+            "retryErrorVersion": null,
             "ttl": 300000,
           },
         ],
@@ -6071,6 +6239,8 @@ describe('view-syncer/cvr', () => {
             },
             "clientGroupID": "abc123",
             "deleted": false,
+            "errorMessage": null,
+            "errorVersion": null,
             "internal": null,
             "patchVersion": null,
             "queryArgs": null,
@@ -6159,6 +6329,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
         {
           clientGroupID: 'def456',
@@ -6171,6 +6343,8 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          errorMessage: null,
+          errorVersion: null,
         },
       ],
       desires: [
@@ -6182,6 +6356,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'def456',
@@ -6191,6 +6366,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
         {
           clientGroupID: 'abc123',
@@ -6200,6 +6376,7 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
+          retryErrorVersion: null,
         },
       ],
       rows: [
@@ -6256,62 +6433,65 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
 
     expect(cvr).toMatchInlineSnapshot(`
-        {
-          "clientSchema": null,
-          "clients": {
-            "client-a": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-a",
-            },
-            "client-c": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-c",
-            },
+      {
+        "clientSchema": null,
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
           },
-          "id": "abc123",
-          "lastActive": 1713830400000,
-          "profileID": null,
-          "queries": {
-            "oneHash": {
-              "ast": {
-                "table": "issues",
-              },
-              "clientState": {
-                "client-a": {
-                  "inactivatedAt": undefined,
-                  "ttl": 300000,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
-                },
-                "client-c": {
-                  "inactivatedAt": undefined,
-                  "ttl": 300000,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1713830400000,
+        "profileID": null,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
+              "client-a": {
+                "inactivatedAt": undefined,
+                "retryErrorVersion": undefined,
+                "ttl": 300000,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
                 },
               },
-              "id": "oneHash",
-              "patchVersion": undefined,
-              "transformationHash": undefined,
-              "transformationVersion": undefined,
-              "type": "client",
+              "client-c": {
+                "inactivatedAt": undefined,
+                "retryErrorVersion": undefined,
+                "ttl": 300000,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
+                },
+              },
             },
+            "error": undefined,
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+            "type": "client",
           },
-          "replicaVersion": "120",
-          "ttlClock": 1713830400000,
-          "version": {
-            "stateVersion": "1aa",
-          },
-        }
-      `);
+        },
+        "replicaVersion": "120",
+        "ttlClock": 1713830400000,
+        "version": {
+          "stateVersion": "1aa",
+        },
+      }
+    `);
 
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 

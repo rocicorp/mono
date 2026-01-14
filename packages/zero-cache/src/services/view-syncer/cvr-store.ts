@@ -80,6 +80,13 @@ function asQuery(row: QueriesRow): QueryRecord {
       row.queryName !== null && row.queryArgs !== null,
       'queryName and queryArgs must be set for custom queries',
     );
+    const error =
+      row.errorMessage !== null && row.errorVersion !== null
+        ? {
+            message: row.errorMessage,
+            version: versionFromString(row.errorVersion),
+          }
+        : undefined;
     return {
       type: 'custom',
       id: row.queryHash,
@@ -89,27 +96,38 @@ function asQuery(row: QueriesRow): QueryRecord {
       clientState: {},
       transformationHash: row.transformationHash ?? undefined,
       transformationVersion: maybeVersion(row.transformationVersion),
+      error,
     } satisfies CustomQueryRecord;
   }
 
   const ast = astSchema.parse(row.clientAST);
-  return row.internal
-    ? ({
-        type: 'internal',
-        id: row.queryHash,
-        ast,
-        transformationHash: row.transformationHash ?? undefined,
-        transformationVersion: maybeVersion(row.transformationVersion),
-      } satisfies InternalQueryRecord)
-    : ({
-        type: 'client',
-        id: row.queryHash,
-        ast,
-        patchVersion: maybeVersion(row.patchVersion),
-        clientState: {},
-        transformationHash: row.transformationHash ?? undefined,
-        transformationVersion: maybeVersion(row.transformationVersion),
-      } satisfies ClientQueryRecord);
+  if (row.internal) {
+    assert(row.errorMessage === null, 'Internal queries cannot error.');
+    return {
+      type: 'internal',
+      id: row.queryHash,
+      ast,
+      transformationHash: row.transformationHash ?? undefined,
+      transformationVersion: maybeVersion(row.transformationVersion),
+    } satisfies InternalQueryRecord;
+  }
+  const error =
+    row.errorMessage !== null && row.errorVersion !== null
+      ? {
+          message: row.errorMessage,
+          version: versionFromString(row.errorVersion),
+        }
+      : undefined;
+  return {
+    type: 'client',
+    id: row.queryHash,
+    ast,
+    patchVersion: maybeVersion(row.patchVersion),
+    clientState: {},
+    transformationHash: row.transformationHash ?? undefined,
+    transformationVersion: maybeVersion(row.transformationVersion),
+    error,
+  } satisfies ClientQueryRecord;
 }
 
 // The time to wait between load attempts.
@@ -266,7 +284,8 @@ export class CVRStore {
           "patchVersion",
           "deleted",
           "ttlMs" AS "ttl",
-          "inactivatedAtMs" AS "inactivatedAt"
+          "inactivatedAtMs" AS "inactivatedAt",
+          "retryErrorVersion"
           FROM ${this.#cvr('desires')}
           WHERE "clientGroupID" = ${id}`,
       ]);
@@ -384,6 +403,10 @@ export class CVRStore {
           inactivatedAt: row.inactivatedAt ?? undefined,
           ttl: clampTTL(row.ttl ?? DEFAULT_TTL_MS),
           version: versionFromString(row.patchVersion),
+          retryErrorVersion:
+            row.retryErrorVersion === null
+              ? undefined
+              : versionFromString(row.retryErrorVersion),
         };
       }
     }
@@ -506,6 +529,8 @@ export class CVRStore {
         deleted: true,
         transformationHash: null,
         transformationVersion: null,
+        errorMessage: null,
+        errorVersion: null,
       })}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryPatch.id}`,
     });
@@ -529,7 +554,9 @@ export class CVRStore {
         "transformationHash",
         "transformationVersion",
         "internal",
-        "deleted"
+        "deleted",
+        "errorMessage",
+        "errorVersion"
       ) VALUES (
         ${change.clientGroupID},
         ${change.queryHash},
@@ -540,7 +567,9 @@ export class CVRStore {
         ${change.transformationHash ?? null},
         ${change.transformationVersion ?? null},
         ${change.internal},
-        ${change.deleted ?? false}
+        ${change.deleted ?? false},
+        ${change.errorMessage ?? null},
+        ${change.errorVersion ?? null}
       )
       ON CONFLICT ("clientGroupID", "queryHash")
       DO UPDATE SET 
@@ -551,7 +580,9 @@ export class CVRStore {
         "transformationHash" = ${change.transformationHash ?? null},
         "transformationVersion" = ${change.transformationVersion ?? null},
         "internal" = ${change.internal},
-        "deleted" = ${change.deleted ?? false}`,
+        "deleted" = ${change.deleted ?? false},
+        "errorMessage" = ${change.errorMessage ?? null},
+        "errorVersion" = ${change.errorVersion ?? null}`,
     });
   }
 
@@ -565,6 +596,8 @@ export class CVRStore {
       | 'transformationHash'
       | 'transformationVersion'
       | 'deleted'
+      | 'errorMessage'
+      | 'errorVersion'
     > = {
       patchVersion:
         query.type === 'internal'
@@ -573,6 +606,12 @@ export class CVRStore {
       transformationHash: query.transformationHash ?? null,
       transformationVersion: maybeVersionString(query.transformationVersion),
       deleted: false,
+      errorMessage:
+        query.type === 'internal' ? null : (query.error?.message ?? null),
+      errorVersion:
+        query.type === 'internal'
+          ? null
+          : maybeVersionString(query.error?.version),
     };
 
     this.#writes.add({
@@ -617,6 +656,7 @@ export class CVRStore {
     deleted: boolean,
     inactivatedAt: TTLClock | undefined,
     ttl: number,
+    retryErrorVersion?: CVRVersion | undefined,
   ): void {
     const change: DesiresRow = {
       clientGroupID: this.#id,
@@ -628,6 +668,9 @@ export class CVRStore {
 
       // ttl is in ms in JavaScript
       ttl: ttl < 0 ? null : ttl,
+      retryErrorVersion: retryErrorVersion
+        ? versionString(retryErrorVersion)
+        : null,
     };
 
     // For backward compatibility during rollout, write to both old and new columns:
@@ -646,11 +689,11 @@ export class CVRStore {
       write: tx => tx`
       INSERT INTO ${this.#cvr('desires')} (
         "clientGroupID", "clientID", "queryHash", "patchVersion", "deleted",
-        "ttl", "ttlMs", "inactivatedAt", "inactivatedAtMs"
+        "ttl", "ttlMs", "inactivatedAt", "inactivatedAtMs", "retryErrorVersion"
       ) VALUES (
         ${change.clientGroupID}, ${change.clientID}, ${change.queryHash}, 
         ${change.patchVersion}, ${change.deleted}, ${ttlInterval}, ${ttlMs},
-        ${inactivatedAtTimestamp}, ${inactivatedAtMs}
+        ${inactivatedAtTimestamp}, ${inactivatedAtMs}, ${change.retryErrorVersion}
       )
       ON CONFLICT ("clientGroupID", "clientID", "queryHash")
       DO UPDATE SET
@@ -659,7 +702,8 @@ export class CVRStore {
         "ttl" = ${ttlInterval},
         "ttlMs" = ${ttlMs},
         "inactivatedAt" = ${inactivatedAtTimestamp},
-        "inactivatedAtMs" = ${inactivatedAtMs}
+        "inactivatedAtMs" = ${inactivatedAtMs},
+        "retryErrorVersion" = ${change.retryErrorVersion}
       `,
     });
   }
@@ -814,20 +858,20 @@ export class CVRStore {
     this.putInstance(cvr);
 
     const rowsFlushed = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
-      const pipelined: Promise<unknown>[] = [
-        // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
-        // query to acquire a row-level lock so that version-updating
-        // transactions are effectively serialized per cvr.instance.
-        //
-        // Note that `rowsVersion` updates, on the other hand, are not subject
-        // to this lock and can thus commit / be-committed independently of
-        // cvr.instances.
-        this.#checkVersionAndOwnership(
-          tx,
-          expectedCurrentVersion,
-          lastConnectTime,
-        ),
-      ];
+      // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
+      // query to acquire a row-level lock so that version-updating
+      // transactions are effectively serialized per cvr.instance.
+      //
+      // Note that `rowsVersion` updates, on the other hand, are not subject
+      // to this lock and can thus commit / be-committed independently of
+      // cvr.instances.
+      await this.#checkVersionAndOwnership(
+        tx,
+        expectedCurrentVersion,
+        lastConnectTime,
+      );
+
+      const pipelined: Promise<unknown>[] = [];
 
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;

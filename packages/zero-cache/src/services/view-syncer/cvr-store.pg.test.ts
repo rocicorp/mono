@@ -911,58 +911,61 @@ describe('view-syncer/cvr-store', () => {
     const cvr = await store.load(lc, CONNECT_TIME);
 
     expect(cvr).toMatchInlineSnapshot(`
-          {
-            "clientSchema": null,
-            "clients": {
+      {
+        "clientSchema": null,
+        "clients": {
+          "client1": {
+            "desiredQueryIDs": [
+              "foo",
+            ],
+            "id": "client1",
+          },
+        },
+        "id": "my-cvr",
+        "lastActive": 1725408000000,
+        "profileID": null,
+        "queries": {
+          "foo": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
               "client1": {
-                "desiredQueryIDs": [
-                  "foo",
-                ],
-                "id": "client1",
-              },
-            },
-            "id": "my-cvr",
-            "lastActive": 1725408000000,
-            "profileID": null,
-            "queries": {
-              "foo": {
-                "ast": {
-                  "table": "issues",
-                },
-                "clientState": {
-                  "client1": {
-                    "inactivatedAt": undefined,
-                    "ttl": 300000,
-                    "version": {
-                      "stateVersion": "01",
-                    },
-                  },
-                  "missing-client": {
-                    "inactivatedAt": 1741564800000,
-                    "ttl": 600000,
-                    "version": {
-                      "stateVersion": "01",
-                    },
-                  },
-                },
-                "id": "foo",
-                "patchVersion": {
+                "inactivatedAt": undefined,
+                "retryErrorVersion": undefined,
+                "ttl": 300000,
+                "version": {
                   "stateVersion": "01",
                 },
-                "transformationHash": "foo-transformed",
-                "transformationVersion": {
+              },
+              "missing-client": {
+                "inactivatedAt": 1741564800000,
+                "retryErrorVersion": undefined,
+                "ttl": 600000,
+                "version": {
                   "stateVersion": "01",
                 },
-                "type": "client",
               },
             },
-            "replicaVersion": "01",
-            "ttlClock": 1725408000000,
-            "version": {
-              "stateVersion": "03",
+            "error": undefined,
+            "id": "foo",
+            "patchVersion": {
+              "stateVersion": "01",
             },
-          }
-        `);
+            "transformationHash": "foo-transformed",
+            "transformationVersion": {
+              "stateVersion": "01",
+            },
+            "type": "client",
+          },
+        },
+        "replicaVersion": "01",
+        "ttlClock": 1725408000000,
+        "version": {
+          "stateVersion": "03",
+        },
+      }
+    `);
   });
 
   test('inspectQueries', async () => {

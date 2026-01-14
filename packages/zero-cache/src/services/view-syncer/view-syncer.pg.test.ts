@@ -27,7 +27,7 @@ import type {
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {DesiredQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
@@ -88,12 +88,12 @@ describe('view-syncer/service', () => {
   let replicator: FakeReplicator;
   let connect: (
     ctx: SyncContext,
-    desiredQueriesPatch: UpQueriesPatch,
+    desiredQueriesPatch: DesiredQueriesPatch,
     clientSchema?: ClientSchema | null,
   ) => Queue<Downstream>;
   let connectWithQueueAndSource: (
     ctx: SyncContext,
-    desiredQueriesPatch: UpQueriesPatch,
+    desiredQueriesPatch: DesiredQueriesPatch,
     clientSchema?: ClientSchema,
     activeClients?: string[],
   ) => {
