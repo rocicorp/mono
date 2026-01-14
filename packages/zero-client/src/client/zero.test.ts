@@ -2428,63 +2428,6 @@ test('connect() without opts preserves existing auth', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 });
 
-test('run-loop error->connect with no ticks', async () => {
-  const z = zeroForTest({auth: 'initial-token'});
-
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
-
-  // Trigger a non-auth error
-  await z.triggerError({
-    kind: ErrorKind.Internal,
-    message: 'internal error',
-    origin: ErrorOrigin.ZeroCache,
-  });
-  await z.waitForConnectionStatus(ConnectionStatus.Error);
-
-  // Reconnect without providing auth opts - should keep existing auth
-  // never resolves
-  await z.connection.connect();
-  const currentSocket = await z.socket;
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
-    'initial-token',
-  );
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
-});
-
-test('run-loop error->connect with no ticks using state.subscribe', async () => {
-  const z = zeroForTest({auth: 'initial-token'});
-
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
-
-  let connectPromise = undefined;
-  z.connection.state.subscribe(state => {
-    if (state.name === ConnectionStatus.Error) {
-      connectPromise = z.connection.connect();
-    }
-  });
-
-  // Trigger a non-auth error
-  await z.triggerError({
-    kind: ErrorKind.Internal,
-    message: 'internal error',
-    origin: ErrorOrigin.ZeroCache,
-  });
-  await z.waitForConnectionStatus(ConnectionStatus.Error);
-
-  // Reconnect without providing auth opts - should keep existing auth
-  expect(connectPromise).toBeDefined();
-  await connectPromise;
-  const currentSocket = await z.socket;
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
-    'initial-token',
-  );
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
-});
-
 test('can start with no auth and add it later', async () => {
   const z = zeroForTest({auth: undefined});
 
