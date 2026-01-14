@@ -147,7 +147,11 @@ function extractColumn(
   condition: SimpleCondition,
 ): {name: string; value: Value} | undefined {
   if (condition.left.type === 'column') {
-    assert(condition.right.type === 'literal');
+    assert(
+      condition.right.type === 'literal',
+      () =>
+        `extractColumn: expected right side to be literal, got ${condition.right.type}`,
+    );
     return {name: condition.left.name, value: condition.right.value};
   }
 

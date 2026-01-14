@@ -384,13 +384,19 @@ export class MemorySource implements Source {
         case 'add': {
           const added = data.add(change.row);
           // must succeed since we checked has() above.
-          assert(added);
+          assert(
+            added,
+            'MemorySource: add must succeed since row existence was already checked',
+          );
           break;
         }
         case 'remove': {
           const removed = data.delete(change.row);
           // must succeed since we checked has() above.
-          assert(removed);
+          assert(
+            removed,
+            'MemorySource: remove must succeed since row existence was already checked',
+          );
           break;
         }
         case 'edit': {
@@ -400,7 +406,10 @@ export class MemorySource implements Source {
           // not map to the same entry as the new `row` in the index btree.
           const removed = data.delete(change.oldRow);
           // must succeed since we checked has() above.
-          assert(removed);
+          assert(
+            removed,
+            'MemorySource: edit remove must succeed since row existence was already checked',
+          );
           data.add(change.row);
           break;
         }

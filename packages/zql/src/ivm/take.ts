@@ -310,7 +310,10 @@ export class Take implements Operator {
           }
         }
       }
-      assert(boundNode !== undefined);
+      assert(
+        boundNode !== undefined,
+        'Take: boundNode must be found during fetch',
+      );
       const removeChange: RemoveChange = {
         type: 'remove',
         node: boundNode,
@@ -486,7 +489,10 @@ export class Take implements Operator {
           beforeBoundNode = node;
           break;
         }
-        assert(beforeBoundNode !== undefined);
+        assert(
+          beforeBoundNode !== undefined,
+          'Take: beforeBoundNode must be found during fetch',
+        );
 
         this.#setTakeState(
           takeStateKey,
@@ -515,7 +521,10 @@ export class Take implements Operator {
         newBoundNode = node;
         break;
       }
-      assert(newBoundNode !== undefined);
+      assert(
+        newBoundNode !== undefined,
+        'Take: newBoundNode must be found during fetch',
+      );
 
       // The next row is the new row. We can replace the bounds and keep the
       // edit change.
@@ -577,8 +586,14 @@ export class Take implements Operator {
           break;
         }
       }
-      assert(oldBoundNode !== undefined);
-      assert(newBoundNode !== undefined);
+      assert(
+        oldBoundNode !== undefined,
+        'Take: oldBoundNode must be found during fetch',
+      );
+      assert(
+        newBoundNode !== undefined,
+        'Take: newBoundNode must be found during fetch',
+      );
 
       // Remove before add to maintain invariant that
       // output size <= limit.
@@ -633,7 +648,10 @@ export class Take implements Operator {
         afterBoundNode = node;
         break;
       }
-      assert(afterBoundNode !== undefined);
+      assert(
+        afterBoundNode !== undefined,
+        'Take: afterBoundNode must be found during fetch',
+      );
 
       // The new row is the new bound. Use an edit change.
       if (compareRows(afterBoundNode.row, change.node.row) === 0) {
