@@ -31,6 +31,7 @@ describe('useSlowQuery', () => {
     data: any,
     resultType: 'complete' | 'unknown' = 'complete',
     hashValue = 'test-hash-123',
+    singular = false,
   ) => {
     const mockResult = {type: resultType} as const;
     vi.mocked(useQuery).mockReturnValue([data, mockResult]);
@@ -38,8 +39,11 @@ describe('useSlowQuery', () => {
     vi.mocked(useZero).mockReturnValue({context: undefined} as any);
     // oxlint-disable-next-line no-explicit-any
     vi.mocked(addContextToQuery).mockReturnValue(mockQuery as any);
-    // oxlint-disable-next-line no-explicit-any
-    vi.mocked(asQueryInternals).mockReturnValue({hash: () => hashValue} as any);
+    vi.mocked(asQueryInternals).mockReturnValue({
+      hash: () => hashValue,
+      format: {singular, relationships: {}},
+      // oxlint-disable-next-line no-explicit-any
+    } as any);
     return mockResult;
   };
 
@@ -152,7 +156,7 @@ describe('useSlowQuery', () => {
   test('handles non-array data correctly', () => {
     // Arrange
     const mockData = {single: 'item'};
-    setupMocks(mockData);
+    setupMocks(mockData, 'complete', 'test-hash-123', true);
 
     // Act
     const {result} = renderHook(() => useSlowQuery(mockQuery));
@@ -169,8 +173,11 @@ describe('useSlowQuery', () => {
     // Act
     const {result} = renderHook(() => useSlowQuery(mockQuery));
 
-    // Assert - floor(5 / 2) = 2 items
-    expect(result.current).toEqual([[{id: '1'}, {id: '2'}], {type: 'unknown'}]);
+    // Assert - ceil(5 * 0.5) = 3 items
+    expect(result.current).toEqual([
+      [{id: '1'}, {id: '2'}, {id: '3'}],
+      {type: 'unknown'},
+    ]);
   });
 
   test('cleans up timeout on unmount', () => {
@@ -195,8 +202,11 @@ describe('useSlowQuery', () => {
     const hashFn = vi.fn(() => 'test-hash-123');
     const mockResult = {type: 'complete' as const};
     vi.mocked(useQuery).mockReturnValue([mockData, mockResult]);
-    // oxlint-disable-next-line no-explicit-any
-    vi.mocked(asQueryInternals).mockReturnValue({hash: hashFn} as any);
+    vi.mocked(asQueryInternals).mockReturnValue({
+      hash: hashFn,
+      format: {singular: false, relationships: {}},
+      // oxlint-disable-next-line no-explicit-any
+    } as any);
 
     // Act
     renderHook(() => useSlowQuery(mockQuery));
@@ -226,8 +236,8 @@ describe('useSlowQuery', () => {
     // Act
     const {result} = renderHook(() => useSlowQuery(mockQuery));
 
-    // Assert - floor(1 / 2) = 0 items
-    expect(result.current).toEqual([[], {type: 'unknown'}]);
+    // Assert - ceil(1 * 0.5) = 1 item
+    expect(result.current).toEqual([[{id: '1'}], {type: 'unknown'}]);
   });
 
   test('multiple queries with different hashes are tracked independently', async () => {
@@ -356,6 +366,7 @@ describe('useSlowQuery', () => {
       () =>
         ({
           hash: () => currentHash,
+          format: {singular: false, relationships: {}},
           // oxlint-disable-next-line no-explicit-any
         }) as any,
     );
@@ -377,7 +388,7 @@ describe('useSlowQuery', () => {
     vi.mocked(useQuery).mockReturnValue([mockData2, mockResult]);
     rerender({query: mockQuery2});
 
-    // New hash should be delayed
+    // New hash should be delayed - ceil(2 * 0.5) = 1 item
     expect(result.current).toEqual([[{id: 'a'}], {type: 'unknown'}]);
 
     // Complete second query

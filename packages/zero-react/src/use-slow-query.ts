@@ -7,6 +7,7 @@ import {useZero} from './zero-provider.tsx';
 import type {
   DefaultContext,
   DefaultSchema,
+  Falsy,
   PullRow,
   QueryOrQueryRequest,
   ReadonlyJSONValue,
@@ -85,6 +86,21 @@ export function resetSlowQuery(): void {
  *
  * Use setupSlowQuery() to configure the delay duration and initial data percentage.
  */
+
+export function useSlowQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | Falsy
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>,
+  options?: UseQueryOptions | boolean,
+): QueryResult<TReturn | Falsy>;
+
 export function useSlowQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -102,7 +118,21 @@ export function useSlowQuery<
     TContext
   >,
   options?: UseQueryOptions | boolean,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+export function useSlowQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseQueryOptions | boolean,
+): QueryResult<TReturn | Falsy> {
   const [data, result] = useQuery(query, options);
   const zero = useZero<TSchema, undefined, TContext>();
 
@@ -111,6 +141,9 @@ export function useSlowQuery<
 
   // Get query hash to detect when query changes
   const queryHash = useMemo(() => {
+    if (!query) {
+      return undefined;
+    }
     // Access query internals to get hash
     const q = addContextToQuery(query, zero.context);
     const internals = asQueryInternals(q);
@@ -118,10 +151,14 @@ export function useSlowQuery<
   }, [query, zero.context]);
 
   // Check if this query has already completed before
-  const hasCompletedBefore = completedQueryCache.has(queryHash);
+  const hasCompletedBefore = queryHash && completedQueryCache.has(queryHash);
 
   // Reset and start timer when query hash changes (only if not previously completed)
   useEffect(() => {
+    if (!queryHash) {
+      return;
+    }
+
     if (hasCompletedBefore) {
       console.log(
         `[useSlowQuery] Query ${queryHash.slice(0, 8)}... already completed before, returning immediately`,
@@ -131,7 +168,6 @@ export function useSlowQuery<
 
     // Mark this query as delayed
     setDelayedQueries(prev => new Set(prev).add(queryHash));
-
     console.log(
       `[useSlowQuery] Starting ${globalConfig.delayMs}ms delay for query hash: ${queryHash.slice(0, 8)}...`,
     );
@@ -153,26 +189,42 @@ export function useSlowQuery<
     return () => clearTimeout(timeout);
   }, [queryHash, hasCompletedBefore]);
 
-  const isDelayed = !hasCompletedBefore && delayedQueries.has(queryHash);
+  // Get query format to determine if result is singular or array
+  const queryFormat = useMemo(() => {
+    if (!query) {
+      return undefined;
+    }
+    const q = addContextToQuery(query, zero.context);
+    const internals = asQueryInternals(q);
+    return internals.format;
+  }, [query, zero.context]);
+
+  const isDelayed =
+    !hasCompletedBefore && !!queryHash && delayedQueries.has(queryHash);
 
   // If still delayed, return configured percentage of data with 'unknown' type
   if (isDelayed) {
-    const partialData = Array.isArray(data)
-      ? data.slice(
-          0,
-          Math.ceil((data.length * globalConfig.unknownDataPercentage) / 100),
-        )
-      : data;
+    const partialData =
+      queryFormat && !queryFormat.singular
+        ? (data as unknown[]).slice(
+            0,
+            Math.ceil(
+              ((data as unknown[]).length *
+                globalConfig.unknownDataPercentage) /
+                100,
+            ),
+          )
+        : data;
 
     console.log(
-      `[useSlowQuery] Returning partial data (${globalConfig.unknownDataPercentage}%, length=${Array.isArray(partialData) ? partialData.length : 'N/A'}) for query ${queryHash.slice(0, 8)}...`,
+      `[useSlowQuery] Returning partial data (${globalConfig.unknownDataPercentage}%, length=${queryFormat && !queryFormat.singular ? (partialData as unknown[]).length : 'N/A'}) for query ${queryHash?.slice(0, 8) ?? 'unknown'}...`,
     );
-    return [partialData, {type: 'unknown'}] as QueryResult<TReturn>;
+    return [partialData, {type: 'unknown'}] as QueryResult<TReturn | Falsy>;
   }
 
   // After delay, return actual data and result
   console.log(
-    `[useSlowQuery] Returning full data (length=${Array.isArray(data) ? data.length : 'N/A'}) for query ${queryHash.slice(0, 8)}...`,
+    `[useSlowQuery] Returning full data (length=${queryFormat && !queryFormat.singular ? (data as unknown[]).length : 'N/A'}) for query ${queryHash?.slice(0, 8) ?? 'unknown'}...`,
   );
-  return [data, result];
+  return [data, result] as QueryResult<TReturn | Falsy>;
 }

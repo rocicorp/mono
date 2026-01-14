@@ -1060,7 +1060,7 @@ function useIssues(
     options,
   ) as unknown as [Issues, {type: string}];
   // not used but needed to follow rules of hooks
-  void queryFn(q, options);
+  void queryFn(null, options);
 
   const complete = result.type === 'complete';
   const hasMoreIssues = issues.length > pageSize;
