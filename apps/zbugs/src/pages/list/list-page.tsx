@@ -21,7 +21,8 @@ import React, {
 import {assert} from 'shared/src/asserts.ts';
 import {useDebouncedCallback} from 'use-debounce';
 import {useLocation, useParams, useSearch} from 'wouter';
-import {navigate} from 'wouter/use-browser-location';
+import {navigate, useHistoryState} from 'wouter/use-browser-location';
+import * as zod from 'zod/mini';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {
   queries,
@@ -46,9 +47,9 @@ import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 
-// Set to true to enable slow query simulation (half data → full data after 5s)
-const USE_SLOW_QUERY = false;
-if (USE_SLOW_QUERY) {
+// Set to true to enable slow query simulation (half data → full data after 1s)
+const DEBUG_QUERY = import.meta.env.DEV && false;
+if (DEBUG_QUERY) {
   setupSlowQuery({delayMs: 1_000, unknownDataPercentage: 50});
 }
 
@@ -60,16 +61,21 @@ const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
 type StartRow = IssueRowSort;
 
-type Anchor =
+export type Anchor =
   | {
-      readonly startRow: StartRow | undefined;
-      readonly type: 'forward' | 'backward';
+      readonly type: 'forward';
       readonly index: number;
+      readonly startRow?: StartRow | undefined;
     }
   | {
+      readonly type: 'backward';
+      readonly index: number;
       readonly startRow: StartRow;
+    }
+  | {
       readonly type: 'permalink';
       readonly index: number;
+      readonly startRow: StartRow;
     };
 
 type QueryAnchor = {
@@ -101,84 +107,126 @@ const TOP_ANCHOR = Object.freeze({
   startRow: undefined,
 });
 
-const START_ANCHOR: Anchor =
-  // TOP_ANCHOR;
-  {
-    index: NUM_ROWS_FOR_LOADING_SKELETON,
-    type: 'permalink',
+const START_ANCHOR: Anchor = TOP_ANCHOR || {
+  index: NUM_ROWS_FOR_LOADING_SKELETON,
+  type: 'permalink',
 
-    // // First issue
-    // // index: 0
-    // // subject: Leaking listeners on AbortSignal
-    // startRow: {
-    //   id: 'HdpMkgbHpK3_OcOIiQOuW',
-    //   modified: 1765697824305,
-    //   created: 1726473756000,
-    // },
+  // // First issue
+  // // index: 0
+  // // subject: Leaking listeners on AbortSignal
+  // startRow: {
+  //   id: 'HdpMkgbHpK3_OcOIiQOuW',
+  //   modified: 1765697824305,
+  //   created: 1726473756000,
+  // },
 
-    // // Very early issue
-    // // index: 5
-    // // subject: Replicator dies...
-    // startRow: {
-    //   id: 'HC7kWsm0qUYvf2BqjfiD_',
-    //   modified: 1726188938000,
-    //   created: 1726184763000,
-    // },
+  // // Very early issue
+  // // index: 5
+  // // subject: Replicator dies...
+  // startRow: {
+  //   id: 'HC7kWsm0qUYvf2BqjfiD_',
+  //   modified: 1726188938000,
+  //   created: 1726184763000,
+  // },
 
-    // // Early issue
-    // // index: 45
-    // // subject:RFE: enumerateCaches
-    // startRow: {
-    //   id: 'X-TwNXBDwTeQB0Mav31bU',
-    //   modified: 1709537728000,
-    //   created: 1669918206000,
-    // },
+  // // Early issue
+  // // index: 45
+  // // subject:RFE: enumerateCaches
+  // startRow: {
+  //   id: 'X-TwNXBDwTeQB0Mav31bU',
+  //   modified: 1709537728000,
+  //   created: 1669918206000,
+  // },
 
-    // // Second page
-    // // index: 120
-    // // subject: app-publish function needs more Memory
-    startRow: {
-      id: 'Us_A9kc4ldfHuChlbKeU6',
-      modified: 1701202102000,
-      created: 1698518825000,
-    },
+  // // Second page
+  // // index: 120
+  // // subject: app-publish function needs more Memory
+  startRow: {
+    id: 'Us_A9kc4ldfHuChlbKeU6',
+    modified: 1701202102000,
+    created: 1698518825000,
+  },
 
-    // // Middle issue
-    // // index: 260
-    // // title: Evaluate if we should return a ClientStateNotFoundResponse ...
-    // startRow: {
-    //   id: '0zTrvA-6aVO8eNdHBoW7G',
-    //   modified: 1678220708000,
-    //   created: 1671231873000,
-    // },
+  // // Middle issue
+  // // index: 260
+  // // title: Evaluate if we should return a ClientStateNotFoundResponse ...
+  // startRow: {
+  //   id: '0zTrvA-6aVO8eNdHBoW7G',
+  //   modified: 1678220708000,
+  //   created: 1671231873000,
+  // },
 
-    // // Close to bottom
-    // // index: 500
-    // // Subject: Add DevTools
-    // startRow: {
-    //   id: 'mrh64by3B9b6MRHbzkLQP',
-    //   modified: 1677090672000,
-    //   created: 1666168138000,
-    // },
+  // // Close to bottom
+  // // index: 500
+  // // Subject: Add DevTools
+  // startRow: {
+  //   id: 'mrh64by3B9b6MRHbzkLQP',
+  //   modified: 1677090672000,
+  //   created: 1666168138000,
+  // },
 
-    // // Even closer to bottom
-    // // title: Can we support...
-    // // index: 512
-    // startRow: {
-    //   id: '8tyDj9FUJWQ5qd2JEP3KS',
-    //   modified: 1677090541000,
-    //   created: 1665587844000,
-    // },
+  // // Even closer to bottom
+  // // title: Can we support...
+  // // index: 512
+  // startRow: {
+  //   id: '8tyDj9FUJWQ5qd2JEP3KS',
+  //   modified: 1677090541000,
+  //   created: 1665587844000,
+  // },
 
-    // // Last issue
-    // // index: 515
-    // // subject: docs: Add something about offline ...
-    // startRow: {
-    //   id: '4wBDlh9b774qfGD3pWe6d',
-    //   modified: 1677090538000,
-    //   created: 1667987251000,
-    // },
-  };
+  // // Last issue
+  // // index: 515
+  // // subject: docs: Add something about offline ...
+  // startRow: {
+  //   id: '4wBDlh9b774qfGD3pWe6d',
+  //   modified: 1677090538000,
+  //   created: 1667987251000,
+  // },
+};
+
+const startRowSchema = zod.readonly(
+  zod.object({
+    id: zod.string(),
+    modified: zod.number(),
+    created: zod.number(),
+  }),
+);
+
+const anchorSchema = zod.union([
+  zod.readonly(
+    zod.object({
+      index: zod.number(),
+      type: zod.literal('forward'),
+      startRow: zod.optional(startRowSchema),
+    }),
+  ),
+  zod.readonly(
+    zod.object({
+      index: zod.number(),
+      type: zod.literal('backward'),
+      startRow: startRowSchema,
+    }),
+  ),
+  zod.readonly(
+    zod.object({
+      index: zod.number(),
+      type: zod.literal('permalink'),
+      startRow: startRowSchema,
+    }),
+  ),
+]);
+
+const permalinkAnchorSchema = zod.readonly(
+  zod.object({
+    anchor: zod.optional(anchorSchema),
+    scrollTop: zod.optional(zod.number()),
+  }),
+);
+
+type PermalinkHistoryState = {
+  readonly anchor?: Anchor | undefined;
+  readonly scrollTop?: number | undefined;
+};
 
 const getNearPageEdgeThreshold = (pageSize: number) => Math.ceil(pageSize / 10);
 
@@ -186,11 +234,19 @@ function RowDebugInfo({
   index,
   issueArrayIndex,
   issue,
+  anchor,
+  scrollTop,
 }: {
   index: number;
   issueArrayIndex: number;
   issue?: Row['issue'] | undefined;
+  anchor: Anchor;
+  scrollTop: number;
 }) {
+  if (!DEBUG_QUERY) {
+    return null;
+  }
+
   const handleMouseDown = async (e: React.MouseEvent) => {
     if (!issue) {
       return;
@@ -219,9 +275,11 @@ function RowDebugInfo({
         cursor: 'pointer',
       }}
       onMouseDownCapture={handleMouseDown}
-      title="Click to copy permalink anchor"
+      title={`Click to copy permalink anchor
+anchor: ${JSON.stringify(anchor, null, 2)}
+scrollTop: ${scrollTop}`}
     >
-      <span title="index">{index}</span>,
+      <span>{index}</span>,
       <span title="issueArrayIndex">{issueArrayIndex}</span>,
       {issue && <span title="issue.id">{issue.id.slice(0, 5)}</span>}
     </span>
@@ -270,6 +328,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const open = status === 'open' ? true : status === 'closed' ? false : null;
 
+  const permalinkID = qs.get('id');
+
   const listContextParams = useMemo(
     () =>
       ({
@@ -281,6 +341,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         labels,
         open,
         textFilter,
+        permalinkID,
       }) as const,
     [
       projectName,
@@ -291,19 +352,77 @@ export function ListPage({onReady}: {onReady: () => void}) {
       open,
       textFilter,
       labels,
+      permalinkID,
     ],
   );
 
-  const [queryAnchor, setQueryAnchor] = useState<QueryAnchor>({
-    anchor: START_ANCHOR,
-    listContextParams,
-  });
-  const [pendingScrollAdjustment, setPendingScrollAdjustment] =
-    useState<number>(0);
+  let title;
+  let shortTitle;
+  if (creator || assignee || labels.length > 0 || textFilter) {
+    title = 'Filtered Issues';
+    shortTitle = 'Filtered';
+  } else {
+    const statusCapitalized =
+      status.slice(0, 1).toUpperCase() + status.slice(1);
+    title = statusCapitalized + ' Issues';
+    shortTitle = statusCapitalized;
+  }
+
+  const [location] = useLocation();
+  const listContext: ListContext = useMemo(
+    () => ({
+      href: `${location}?${search}`,
+      title,
+      params: listContextParams,
+    }),
+    [location, search, title, listContextParams],
+  );
+
+  const {setListContext} = useListContext();
+  useEffect(() => {
+    setListContext(listContext);
+  }, [listContext]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(tableWrapperRef);
+
+  const maybeHistoryState = useHistoryState<PermalinkHistoryState | null>();
+  const res = permalinkAnchorSchema.safeParse(maybeHistoryState);
+  const historyState = res.success ? res.data : null;
+
+  // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount issues
+  const [queryAnchor, setQueryAnchor] = useState<QueryAnchor>(() => {
+    const state = history.state;
+    const parseResult = permalinkAnchorSchema.safeParse(state);
+    const anchor =
+      parseResult.success && parseResult.data.anchor
+        ? parseResult.data.anchor
+        : START_ANCHOR;
+    return {
+      anchor,
+      listContextParams,
+    };
+  });
+  const [pendingScrollAdjustment, setPendingScrollAdjustment] =
+    useState<number>(0);
+
+  const updateAnchor = (anchor: Anchor) => {
+    setQueryAnchor({
+      anchor,
+      listContextParams,
+    });
+    if (!anchorEquals(historyState?.anchor, anchor)) {
+      navigate(window.location.href, {
+        replace: true,
+        state: {
+          anchor,
+          scrollTop: virtualizer.scrollOffset ?? 0,
+        },
+      });
+      // history.replaceState({anchor}, '');
+    }
+  };
 
   const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
   useEffect(() => {
@@ -331,7 +450,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   );
 
   const [estimatedTotal, setEstimatedTotal] = useState(
-    anchor.index + NUM_ROWS_FOR_LOADING_SKELETON,
+    NUM_ROWS_FOR_LOADING_SKELETON,
   );
 
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
@@ -413,22 +532,17 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setSkipPagingLogic(true);
       skipPagingLogicRef.current = true;
       setPendingScrollAdjustment(offset);
-      setQueryAnchor({
-        anchor: {
-          ...anchor,
-          index: anchor.index + offset,
-        },
-        listContextParams,
-      });
+      const newAnchor = {
+        ...anchor,
+        index: anchor.index + offset,
+      };
+      updateAnchor(newAnchor);
       return;
     }
 
     if (atStart && firstIssueIndex > 0) {
       setPendingScrollAdjustment(-firstIssueIndex);
-      setQueryAnchor({
-        anchor: TOP_ANCHOR,
-        listContextParams,
-      });
+      updateAnchor(TOP_ANCHOR);
       return;
     }
   }, [
@@ -471,10 +585,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setHasReachedStart(true);
       setHasReachedEnd(false);
 
-      setQueryAnchor({
-        anchor: TOP_ANCHOR,
-        listContextParams,
-      });
+      updateAnchor(TOP_ANCHOR);
     }
   }, [listContextParams, anchor, isListContextCurrent]);
 
@@ -484,33 +595,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       preload(z, projectName);
     }
   }, [login.loginState?.decoded, complete, z]);
-
-  let title;
-  let shortTitle;
-  if (creator || assignee || labels.length > 0 || textFilter) {
-    title = 'Filtered Issues';
-    shortTitle = 'Filtered';
-  } else {
-    const statusCapitalized =
-      status.slice(0, 1).toUpperCase() + status.slice(1);
-    title = statusCapitalized + ' Issues';
-    shortTitle = statusCapitalized;
-  }
-
-  const [location] = useLocation();
-  const listContext: ListContext = useMemo(
-    () => ({
-      href: `${location}?${search}`,
-      title,
-      params: listContextParams,
-    }),
-    [location, search, title, listContextParams],
-  );
-
-  const {setListContext} = useListContext();
-  useEffect(() => {
-    setListContext(listContext);
-  }, [listContext]);
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;
@@ -568,7 +652,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const clearAndHideSearch = () => {
     setTextFilter(null);
     setForceSearchMode(false);
-    navigate(removeParam(qs, 'q'));
+    navigate(removeParam(qs, 'q'), {state: history.state});
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
@@ -591,8 +675,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
             ...style,
           }}
         >
-          {' '}
-          <RowDebugInfo index={index} issueArrayIndex={issueArrayIndex} />
+          <RowDebugInfo
+            index={index}
+            issueArrayIndex={issueArrayIndex}
+            anchor={anchor}
+            scrollTop={virtualizer.scrollOffset ?? 0}
+          />
         </div>
       );
     }
@@ -628,6 +716,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
             index={index}
             issueArrayIndex={issueArrayIndex}
             issue={issue}
+            anchor={anchor}
+            scrollTop={virtualizer.scrollOffset ?? 0}
           />
           {issue.title}
         </IssueLink>
@@ -657,6 +747,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
     overscan: 5,
     getScrollElement: () => listRef.current,
     initialOffset: () => {
+      if (historyState?.scrollTop !== undefined) {
+        return historyState.scrollTop;
+      }
       if (anchor.type === 'permalink') {
         return anchor.index * ITEM_SIZE;
       }
@@ -665,6 +758,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
   });
 
   const virtualItems = virtualizer.getVirtualItems();
+
+  useEffect(() => {
+    navigate(window.location.href, {
+      replace: true,
+      state: {
+        anchor,
+        scrollTop: virtualizer.scrollOffset ?? 0,
+      },
+    });
+  }, [virtualizer.scrollOffset]);
 
   useEffect(() => {
     if (
@@ -679,10 +782,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
     if (atStart) {
       if (firstIssueIndex !== 0) {
-        setQueryAnchor({
-          anchor: TOP_ANCHOR,
-          listContextParams,
-        });
+        updateAnchor(TOP_ANCHOR);
         return;
       }
     }
@@ -693,14 +793,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
       indexOffset: number,
     ) => {
       const index = toBoundIndex(targetIndex, firstIssueIndex, issuesLength);
-      setQueryAnchor({
-        anchor: {
-          index: index + indexOffset,
-          type,
-          startRow: issueAt(index),
-        },
-        listContextParams,
-      });
+      const startRow = issueAt(index);
+      assert(startRow !== undefined || type === 'forward');
+      updateAnchor({
+        index: index + indexOffset,
+        type,
+        startRow,
+      } as Anchor);
       return true;
     };
 
@@ -982,7 +1081,7 @@ function useIssues(
   firstIssueIndex: number;
 } {
   // Conditionally use useSlowQuery or useQuery based on USE_SLOW_QUERY flag
-  const queryFn = USE_SLOW_QUERY ? useSlowQuery : useQuery;
+  const queryFn = DEBUG_QUERY ? useSlowQuery : useQuery;
 
   if (kind === 'permalink') {
     assert(start !== null);
@@ -1123,4 +1222,18 @@ function toBoundIndex(
 
 function makeEven(n: number) {
   return n % 2 === 0 ? n : n + 1;
+}
+
+function anchorEquals(anchor: Anchor | undefined, other: Anchor): boolean {
+  if (anchor === undefined) {
+    return false;
+  }
+
+  return (
+    anchor.index === other.index &&
+    anchor.type === other.type &&
+    anchor.startRow?.id === other.startRow?.id &&
+    anchor.startRow?.modified === other.startRow?.modified &&
+    anchor.startRow?.created === other.startRow?.created
+  );
 }
