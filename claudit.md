@@ -30,6 +30,7 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | ZSP-005 | `internalQuery` RLS Bypass | ✅ Secure | N/A |
 | ZSP-006 | Default Permission Model | ✅ Secure | N/A |
 | ZSP-007 | Mutation Path Security | ✅ Secure | N/A |
+| ZSP-008 | Query Path Security | ✅ Secure | N/A |
 
 ---
 
@@ -206,6 +207,65 @@ Token flow: `Client → syncer-ws-message-handler.ts → Pusher.enqueuePush() �
 
 ---
 
+### ZSP-008: Query Path Security
+
+**Status:** ✅ SECURE
+
+#### Architecture
+
+Zero has two distinct query paths with separate authorization mechanisms:
+
+| Path | Handler | Authorization | Token Handling |
+|------|---------|---------------|----------------|
+| **Legacy (Client)** | ViewSyncer + ReadAuthorizer | Zero's RLS permission system | Claims bound to WHERE conditions |
+| **Custom** | CustomQueryTransformer → External API | User's API server | Forwarded to external API (delegated) |
+
+#### Legacy Query Security
+
+Token flow: `Client → syncer.ts → ViewSyncer → transformAndHashQuery(authData) → RLS WHERE conditions`
+
+**Key Files:**
+- `packages/zero-cache/src/auth/read-authorizer.ts:68-84` - Default deny logic
+- `packages/zero-cache/src/auth/read-authorizer.ts:45-59` - authData binding to RLS
+
+**Security Properties:**
+- Default deny: No rules = empty OR condition = no rows returned
+- authData claims bound directly into WHERE clauses
+- Subqueries also RLS-transformed (prevents oracle attacks)
+- Anonymous clients only get `ANYONE_CAN` rules
+
+#### Custom Query Security
+
+Token flow: `Client → ViewSyncer → CustomQueryTransformer → External API → AST → Local execution`
+
+**Key Files:**
+- `packages/zero-cache/src/custom-queries/transform-query.ts:74-125` - Token forwarding
+- `packages/zero-cache/src/custom/fetch.ts:77-95` - URL validation
+
+**Security Properties:**
+- External API decides what data to expose via returned AST
+- AST executed locally against SQLite replica (not at external API)
+- URL allowlist validation prevents SSRF
+- Response schema validation rejects invalid ASTs
+- Caching keyed by token (users see only their cached results)
+
+#### Query Routing Security
+
+**File:** `packages/zero-cache/src/services/view-syncer/cvr.ts:1020-1050`
+
+Query type is **server-determined** based on field presence:
+- `ast` present → client query (RLS applied)
+- `name/args` present → custom query (external API)
+- Both present → assertion failure (rejected)
+
+#### Internal Query Protection
+
+**File:** `packages/zero-cache/src/services/view-syncer/cvr.ts:82-89`
+
+Internal queries (which bypass RLS) can ONLY be created by the system with hardcoded IDs (`lmids`, `mutationResults`). Clients cannot trigger the internal query bypass.
+
+---
+
 ## Secure Components
 
 ### ZSP-004: SQL Injection Protections ✅
@@ -322,10 +382,22 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 - [ ] Mutation with mismatched name/type
 - [ ] Concurrent CRUD and custom mutations (ordering issues)
 
-### Phase 5: Query Path Testing (Pending)
-- [ ] Validate legacy query authorization with various authData states
-- [ ] Validate custom query forwarding and response handling
-- [ ] Test query transformation security boundaries
+### Phase 5: Legacy Query Testing
+- [ ] Connect without token, query table with authData-based rules → expect empty results
+- [ ] Connect with valid token, query table → expect RLS-filtered results
+- [ ] Query with subquery → verify RLS applies to subquery (oracle prevention)
+- [ ] Query table with no permission rules → expect empty results (default deny)
+
+### Phase 6: Custom Query Testing
+- [ ] Send custom query with no token → verify external API receives no auth
+- [ ] Send custom query with forged token → verify external API rejects
+- [ ] Verify returned AST is executed locally, not trusted blindly
+- [ ] Test URL validation bypass attempts → expect rejection
+
+### Phase 7: Query Routing Testing
+- [ ] Send query with both ast AND name/args → expect assertion failure
+- [ ] Attempt to use reserved internal query IDs (`lmids`, `mutationResults`) → expect rejection
+- [ ] Test mixed mode: client query and custom query in same session
 
 ---
 
@@ -343,7 +415,10 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 | zero-cache | `src/config/zero-config.ts` | Admin password validation |
 | zero-cache | `src/services/mutagen/mutagen.ts` | Legacy mutation processing (line 336-340) |
 | zero-cache | `src/services/mutagen/pusher.ts` | Custom mutation forwarding (line 110-124, 452-500) |
-| zero-cache | `src/custom/fetch.ts` | URL validation for custom endpoints (line 248-258) |
+| zero-cache | `src/custom/fetch.ts` | URL validation for custom endpoints (line 77-95, 248-258) |
+| zero-cache | `src/custom-queries/transform-query.ts` | Custom query transformation (line 74-125) |
+| zero-cache | `src/services/view-syncer/cvr.ts` | Query routing and internal query protection (line 82-89, 1020-1050) |
+| zero-cache | `src/services/view-syncer/view-syncer.ts` | Query processing orchestration |
 | zqlite | `src/internal/sql.ts` | SQL parameterization |
 | zqlite | `src/query-builder.ts` | Query construction |
 | zero-protocol | `src/ast.ts` | AST validation schemas |
