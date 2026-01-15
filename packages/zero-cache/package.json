@@ -14,6 +14,8 @@
     "test:pg17:watch": "vitest --project='*17*'",
     "test:no-pg": "vitest --project='*no-pg*' run",
     "test:no-pg:watch": "vitest --project='*no-pg*'",
+    "test:pentest": "vitest --config vitest.config.pentest.ts run",
+    "test:pentest:watch": "vitest --config vitest.config.pentest.ts",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
