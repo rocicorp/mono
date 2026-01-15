@@ -15,9 +15,9 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 
 | Risk Level | Count | Description |
 |------------|-------|-------------|
-| **CRITICAL** | 0 | Immediate action required |
-| **HIGH** | 4 | Should be addressed soon |
-| **MEDIUM** | 3 | Should be evaluated |
+| **CRITICAL** | 2 | Immediate action required |
+| **HIGH** | 6 | Should be addressed soon |
+| **MEDIUM** | 5 | Should be evaluated |
 | **LOW** | 0 | Acceptable risk |
 
 ### Key Findings
@@ -38,6 +38,14 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | ZSP-012 | Non-Mutation Message Flooding | **MEDIUM** | Open |
 | ZSP-013 | Sensitive Data in Error Messages | **MEDIUM** | Open |
 | ZSP-014 | wsID Default Empty String | **MEDIUM** | Verify |
+| ZSP-015 | /heapz Authentication Bypass | **CRITICAL** | Open |
+| ZSP-016 | Unauthenticated Replication Endpoints | **CRITICAL** | Open |
+| ZSP-017 | No Shard-Level Authorization | **HIGH** | Open |
+| ZSP-018 | SQLite Replica Unencrypted | **MEDIUM** | Open |
+| ZSP-019 | No Server-to-Server Authentication (zero-server) | **HIGH** | Open |
+| ZSP-020 | Direct API Bypass of zero-cache | **MEDIUM** | Open |
+| ZSP-021 | Zero-Server SQL Injection Protection | ✅ Secure | N/A |
+| ZSP-022 | Zero-Server Mutation Idempotency | ✅ Secure | N/A |
 
 ---
 
@@ -424,6 +432,306 @@ Proper cleanup on close (streams canceled, timers cleared). Ref counting for ser
 
 ---
 
+### ZSP-015: /heapz Authentication Bypass
+
+**Severity:** CRITICAL
+**CVSS Score:** 9.1 (Critical)
+**CWE:** CWE-287 (Improper Authentication)
+
+#### Description
+
+The `/heapz` endpoint is missing a `return` statement after sending the 401 response, allowing unauthenticated access to V8 heap snapshots.
+
+#### Vulnerable Code
+
+**File:** `packages/zero-cache/src/services/heapz.ts:16-21`
+
+```typescript
+if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
+  void res.code(401).send('Unauthorized');
+  // MISSING RETURN STATEMENT - execution continues!
+}
+
+const filename = v8.writeHeapSnapshot();  // Executed even on auth failure
+```
+
+#### Impact
+
+- **Memory Exposure:** V8 heap snapshots contain all objects in memory
+- **Credential Theft:** Tokens, passwords, and API keys in memory are exposed
+- **User Data Exposure:** Cached user data visible in heap
+- **DoS Potential:** Repeated snapshot requests can exhaust disk and CPU
+
+#### Remediation
+
+Add `return;` statement after the 401 response:
+
+```typescript
+if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
+  void res.code(401).send('Unauthorized');
+  return;  // ADD THIS LINE
+}
+```
+
+---
+
+### ZSP-016: Unauthenticated Replication Endpoints
+
+**Severity:** CRITICAL
+**CVSS Score:** 9.8 (Critical)
+**CWE:** CWE-306 (Missing Authentication for Critical Function)
+
+#### Description
+
+The replication WebSocket endpoints have NO authentication. Anyone with network access can stream ALL database changes in real-time.
+
+#### Affected Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /replication/v*/changes` | Streams all database changes |
+| `GET /replication/v*/snapshot` | Provides full database snapshots |
+
+#### Vulnerable Code
+
+**File:** `packages/zero-cache/src/services/change-streamer/change-streamer-http.ts`
+
+```typescript
+readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
+  const ctx = getSubscriberContext(req);
+  const downstream = await this.#changeStreamer.subscribe(ctx);
+  // NO AUTHENTICATION CHECK - Anyone can subscribe
+};
+```
+
+#### Impact
+
+- **Complete Data Breach:** Attacker receives every INSERT, UPDATE, DELETE in real-time
+- **Credential Exposure:** Database credentials and user data streamed to attacker
+- **Compliance Violation:** GDPR, HIPAA, SOC2 requirements violated
+
+#### Remediation
+
+1. Implement authentication on replication endpoints (API key or mutual TLS)
+2. Add authorization checks for shard-level access
+3. Ensure replication ports are not publicly accessible
+
+---
+
+### ZSP-017: No Shard-Level Authorization
+
+**Severity:** HIGH
+
+#### Description
+
+Replication endpoints don't validate which shards a client can access. A client can subscribe to any shard's change stream without authorization.
+
+#### Impact
+
+Multi-tenant deployments could have cross-tenant data leakage.
+
+---
+
+### ZSP-018: SQLite Replica Unencrypted
+
+**Severity:** MEDIUM
+
+#### Description
+
+**File:** `packages/zero-cache/src/db/create.ts`
+
+SQLite replica files are stored unencrypted on disk. If the container/server is compromised, all data is immediately accessible.
+
+#### Mitigation
+
+Consider using SQLite encryption extensions or encrypted filesystem.
+
+---
+
+### ZSP-019: No Server-to-Server Authentication (zero-server)
+
+**Severity:** HIGH
+**CWE:** CWE-306 (Missing Authentication for Critical Function)
+
+#### Description
+
+The `zero-server` package processes custom mutations and queries from `zero-cache` but has **no built-in server-to-server authentication**. Any service that can reach the zero-server HTTP endpoint can invoke mutations and queries.
+
+#### Architecture Context
+
+```
+zero-client → zero-cache → zero-server (user's API)
+                             ↑
+                    NO AUTHENTICATION HERE
+```
+
+#### Affected Components
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `packages/zero-server/src/process-mutations.ts` | 135-230 | Mutation entry point |
+| `packages/zero-server/src/push-processor.ts` | - | Public mutation API |
+| `packages/zero-server/src/queries/process-queries.ts` | - | Query entry point |
+
+#### Code Evidence
+
+```typescript
+// packages/zero-server/src/push-processor.ts
+// Mutations processed without any server-to-server auth verification
+export function processPush(request: PushRequest): Promise<PushResponse> {
+  // No API key validation
+  // No mutual TLS verification
+  // No shared secret check
+}
+```
+
+#### Impact
+
+- Any service with network access to zero-server can invoke mutations
+- In cloud deployments, lateral movement could allow unauthorized mutation execution
+- No audit trail of which service originated requests
+
+#### Remediation
+
+1. **API Key Authentication:** Add `ZERO_SERVER_API_KEY` environment variable, require in headers
+2. **Mutual TLS:** Configure mTLS between zero-cache and zero-server
+3. **Network Isolation:** Ensure zero-server is only accessible from zero-cache (VPC/network policy)
+
+---
+
+### ZSP-020: Direct API Bypass of zero-cache
+
+**Severity:** MEDIUM
+**CWE:** CWE-284 (Improper Access Control)
+
+#### Description
+
+Since zero-server has no authentication, attackers who discover the zero-server URL can bypass zero-cache entirely, avoiding:
+- Rate limiting applied at zero-cache
+- Token validation performed at zero-cache
+- WebSocket connection management
+
+#### Attack Scenario
+
+```
+Normal:  Client → zero-cache (auth + rate limit) → zero-server
+Attack:  Attacker → zero-server (direct, no controls)
+```
+
+#### Impact
+
+- Bypass of all zero-cache security controls
+- Direct database manipulation via mutations
+- No rate limiting on direct requests
+
+#### Mitigation
+
+- Applications MUST implement their own authentication in zero-server mutation handlers
+- zero-server should NOT be exposed to public networks
+- Use network segmentation to limit access to zero-server
+
+---
+
+### ZSP-021: Zero-Server SQL Injection Protection
+
+**Status:** ✅ SECURE
+
+#### Description
+
+Zero-server demonstrates **excellent** SQL injection protection throughout the mutation processing pipeline.
+
+#### Security Mechanisms
+
+1. **Parameterized Queries:** All SQL uses parameterized queries via `@databases/sql` or similar
+2. **Type-Safe Column Access:** Column names validated against schema, not passed as raw strings
+3. **Valita Schema Validation:** All inputs validated before processing
+
+#### Key Files
+
+| File | Lines | Security Feature |
+|------|-------|------------------|
+| `packages/zero-server/src/custom.ts` | 350-428 | CRUD operations with safe SQL |
+| `packages/z2s/src/sql.ts` | - | Parameterized SQL generation |
+| `packages/zero-protocol/src/push.ts` | - | Request schema validation |
+
+#### Code Evidence
+
+```typescript
+// packages/zero-server/src/custom.ts
+// INSERT uses parameterized values - NOT string concatenation
+const sql = `INSERT INTO ${sql.ident(tableName)} (${columns.map(c => sql.ident(c)).join(', ')})
+             VALUES (${columns.map(() => '?').join(', ')})`;
+// Values passed separately, never interpolated
+```
+
+---
+
+### ZSP-022: Zero-Server Mutation Idempotency
+
+**Status:** ✅ SECURE
+
+#### Description
+
+Zero-server correctly implements mutation idempotency guarantees, preventing duplicate processing.
+
+#### Security Properties
+
+1. **Mutation ID Tracking:** Each mutation has unique ID tracked in `replicache_client_group` table
+2. **Last Mutation ID Validation:** Server tracks last processed mutation per client
+3. **Ordering Enforcement:** Mutations processed in order, gaps detected
+
+#### Key Files
+
+| File | Purpose |
+|------|---------|
+| `packages/zero-server/src/process-mutations.ts` | Mutation ordering logic |
+| `packages/zero-server/src/custom.ts` | lastMutationID tracking |
+
+#### Impact
+
+- Replay attacks blocked (duplicate mutations rejected)
+- Client-server state consistency maintained
+- Out-of-order mutations detected and handled
+
+---
+
+## Zero-Server Secure Components
+
+### ✅ Prototype Pollution Prevention
+
+**File:** `packages/shared/src/object-traversal.ts`
+
+Mutator lookup uses safe object traversal that prevents prototype pollution attacks:
+- Direct property access only
+- No `__proto__` traversal
+- Constructor property protected
+
+### ✅ Schema-Based Input Validation
+
+All mutation and query requests validated against Valita schemas before processing. Invalid inputs rejected early.
+
+### ✅ Error Handling with Rollback
+
+Failed mutations within a transaction trigger rollback, maintaining database consistency.
+
+---
+
+## Admin Endpoint Secure Components
+
+### ✅ /statz Endpoint Properly Protected
+
+Has correct `return` statement after auth failure (unlike /heapz).
+
+### ✅ Admin Password Required in Production
+
+`packages/zero-cache/src/config/normalize.ts:42-47` enforces admin password at startup.
+
+### ✅ Secrets Handling
+
+No hardcoded credentials. Database URIs, API keys, and passwords not logged.
+
+---
+
 ## Secure Components
 
 ### ZSP-004: SQL Injection Protections ✅
@@ -502,20 +810,29 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 
 ## Recommendations
 
+### Immediate Actions (Critical)
+
+1. **Fix /heapz auth bypass** - Add `return;` statement after 401 response in `heapz.ts:17`
+2. **Secure replication endpoints** - Add authentication to `/replication/v*/changes` and `/replication/v*/snapshot`
+
 ### Short-term Actions (High)
 
-1. **Add SSRF protections** - IP validation, localhost blocking, metadata blocking for custom endpoint URLs
-2. **Add WebSocket message size limits** - Configure `maxPayload` on WebSocket server (recommend 1MB)
-3. **Add connection rate limiting** - Per-IP and per-clientID throttling for WebSocket connections
-4. **Sanitize error messages** - Never include raw exception messages in client responses
+3. **Add SSRF protections** - IP validation, localhost blocking, metadata blocking for custom endpoint URLs
+4. **Add WebSocket message size limits** - Configure `maxPayload` on WebSocket server (recommend 1MB)
+5. **Add connection rate limiting** - Per-IP and per-clientID throttling for WebSocket connections
+6. **Sanitize error messages** - Never include raw exception messages in client responses
+7. **Add shard-level authorization** - Validate clients can only access authorized shards
+8. **Add zero-server authentication** - Implement API key or mTLS between zero-cache and zero-server
 
 ### Medium-term Actions
 
-5. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
-6. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
-7. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
-8. **Security documentation** - Clear guidance on secure deployment with custom endpoints
-9. **Audit logging** - Log all custom endpoint requests and responses
+9. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
+10. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
+11. **Encrypt SQLite replica** - Use encryption at rest for replica files
+12. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
+13. **Security documentation** - Clear guidance on secure deployment with custom endpoints and zero-server
+14. **Audit logging** - Log all custom endpoint requests and responses
+15. **Document zero-server deployment** - Network isolation requirements, authentication best practices
 
 ---
 
@@ -579,6 +896,27 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 - [ ] Attempt to send messages with wrong wsID → expect silent drop
 - [ ] Test keepalive timeout (stop responding to pings)
 
+### Phase 11: Admin Endpoints (CRITICAL)
+- [ ] Access /heapz without credentials → expect heap snapshot received (CONFIRM BUG)
+- [ ] Access /statz without credentials → expect 401 only (correct behavior)
+- [ ] Verify admin password is required in production mode
+
+### Phase 12: Replication Security (CRITICAL)
+- [ ] Connect to /replication/v*/changes without auth → expect change stream (CONFIRM BUG)
+- [ ] Connect to /replication/v*/snapshot without auth → expect snapshot (CONFIRM BUG)
+- [ ] Subscribe to wrong shard → verify no authorization check
+- [ ] Verify replication ports are not exposed publicly
+
+### Phase 13: Zero-Server Security
+- [ ] Send mutation request directly to zero-server (bypassing zero-cache) → verify accepted without auth
+- [ ] Attempt SQL injection in mutation args → verify parameterized queries block
+- [ ] Send mutation with duplicate ID → verify idempotency rejects duplicate
+- [ ] Send out-of-order mutation IDs → verify ordering enforcement
+- [ ] Test prototype pollution in mutator name lookup → expect safe handling
+- [ ] Send malformed PushRequest → verify schema validation rejects
+- [ ] Check error responses for sensitive information leakage
+- [ ] Test concurrent mutations to same row → verify transaction isolation
+
 ---
 
 ## Appendix: Files Reviewed
@@ -602,9 +940,20 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 | zero-cache | `src/server/worker-dispatcher.ts` | WebSocket routing |
 | zero-cache | `src/workers/connect-params.ts` | Connection parameter extraction (line 41-47) |
 | zero-cache | `src/services/limiter/sliding-window-limiter.ts` | Mutation rate limiting |
+| zero-cache | `src/services/heapz.ts` | Heap snapshot endpoint (VULNERABLE - line 16-21) |
+| zero-cache | `src/services/statz.ts` | Statistics endpoint (secure) |
+| zero-cache | `src/services/change-streamer/change-streamer-http.ts` | Replication endpoints (VULNERABLE) |
+| zero-cache | `src/config/normalize.ts` | Production config validation |
 | zqlite | `src/internal/sql.ts` | SQL parameterization |
 | zqlite | `src/query-builder.ts` | Query construction |
 | zero-protocol | `src/ast.ts` | AST validation schemas |
+| zero-server | `src/process-mutations.ts` | Mutation entry point |
+| zero-server | `src/push-processor.ts` | Public mutation API |
+| zero-server | `src/queries/process-queries.ts` | Query transformation |
+| zero-server | `src/custom.ts` | CRUD operations with safe SQL |
+| z2s | `src/sql.ts` | Parameterized SQL generation |
+| shared | `src/object-traversal.ts` | Prototype pollution prevention |
+| zql | `src/query/query-registry.ts` | Query lookup via mustGetQuery() |
 
 ### Test Coverage
 
