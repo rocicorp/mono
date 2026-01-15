@@ -16,8 +16,8 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | Risk Level | Count | Description |
 |------------|-------|-------------|
 | **CRITICAL** | 2 | Immediate action required |
-| **HIGH** | 6 | Should be addressed soon |
-| **MEDIUM** | 5 | Should be evaluated |
+| **HIGH** | 5 | Should be addressed soon |
+| **MEDIUM** | 4 | Should be evaluated |
 | **LOW** | 0 | Acceptable risk |
 
 ### Key Findings
@@ -42,8 +42,8 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | ZSP-016 | Unauthenticated Replication Endpoints | **CRITICAL** | Open |
 | ZSP-017 | No Shard-Level Authorization | **HIGH** | Open |
 | ZSP-018 | SQLite Replica Unencrypted | **MEDIUM** | Open |
-| ZSP-019 | No Server-to-Server Authentication (zero-server) | **HIGH** | Open |
-| ZSP-020 | Direct API Bypass of zero-cache | **MEDIUM** | Open |
+| ZSP-019 | Zero-Server Auth Delegation | ✅ By Design | N/A |
+| ZSP-020 | Zero-Server Deployment Responsibility | ✅ By Design | N/A |
 | ZSP-021 | Zero-Server SQL Injection Protection | ✅ Secure | N/A |
 | ZSP-022 | Zero-Server Mutation Idempotency | ✅ Secure | N/A |
 
@@ -548,87 +548,84 @@ Consider using SQLite encryption extensions or encrypted filesystem.
 
 ---
 
-### ZSP-019: No Server-to-Server Authentication (zero-server)
+### ZSP-019: Zero-Server Authentication Delegation
 
-**Severity:** HIGH
-**CWE:** CWE-306 (Missing Authentication for Critical Function)
+**Status:** ✅ BY DESIGN
 
 #### Description
 
-The `zero-server` package processes custom mutations and queries from `zero-cache` but has **no built-in server-to-server authentication**. Any service that can reach the zero-server HTTP endpoint can invoke mutations and queries.
+The `zero-server` package does not implement built-in authentication. Instead, it delegates authentication responsibility to the user's application code, following the same pattern as ZSP-002.
 
-#### Architecture Context
+#### Security Model
+
+Zero forwards authentication credentials from clients to zero-server:
+
+| Credential | Header | Source |
+|------------|--------|--------|
+| API Key | `x-api-key` | Configured in zero-cache |
+| JWT Token | `Authorization` | Client-provided, forwarded |
+| Cookies | `Cookie` | Client-provided, forwarded |
+
+#### Architecture
 
 ```
 zero-client → zero-cache → zero-server (user's API)
-                             ↑
-                    NO AUTHENTICATION HERE
+                   ↓
+           Forwards: x-api-key, token, cookies
+                   ↓
+           User validates in their handlers
 ```
 
-#### Affected Components
+#### Key Files
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `packages/zero-server/src/process-mutations.ts` | 135-230 | Mutation entry point |
-| `packages/zero-server/src/push-processor.ts` | - | Public mutation API |
-| `packages/zero-server/src/queries/process-queries.ts` | - | Query entry point |
+| File | Purpose |
+|------|---------|
+| `packages/zero-cache/src/custom/fetch.ts` | Credential forwarding |
+| `packages/zero-server/src/process-mutations.ts` | Mutation entry point |
 
-#### Code Evidence
+#### Why This Is Secure
 
-```typescript
-// packages/zero-server/src/push-processor.ts
-// Mutations processed without any server-to-server auth verification
-export function processPush(request: PushRequest): Promise<PushResponse> {
-  // No API key validation
-  // No mutual TLS verification
-  // No shared secret check
-}
-```
+1. **Credentials forwarded:** Zero provides `x-api-key`, token, and cookie headers to zero-server
+2. **User implements validation:** Application code validates credentials in mutation/query handlers
+3. **Flexible auth schemes:** Supports any auth mechanism (JWT, sessions, API keys, OAuth)
+4. **Same pattern as custom endpoints:** Consistent with ZSP-002 design decision
 
-#### Impact
+#### User Responsibility
 
-- Any service with network access to zero-server can invoke mutations
-- In cloud deployments, lateral movement could allow unauthorized mutation execution
-- No audit trail of which service originated requests
-
-#### Remediation
-
-1. **API Key Authentication:** Add `ZERO_SERVER_API_KEY` environment variable, require in headers
-2. **Mutual TLS:** Configure mTLS between zero-cache and zero-server
-3. **Network Isolation:** Ensure zero-server is only accessible from zero-cache (VPC/network policy)
+Users MUST validate authentication in their zero-server handlers:
+- Check `x-api-key` header matches expected value
+- Validate JWT token claims
+- Verify session cookies
 
 ---
 
-### ZSP-020: Direct API Bypass of zero-cache
+### ZSP-020: Zero-Server Deployment Responsibility
 
-**Severity:** MEDIUM
-**CWE:** CWE-284 (Improper Access Control)
+**Status:** ✅ BY DESIGN
 
 #### Description
 
-Since zero-server has no authentication, attackers who discover the zero-server URL can bypass zero-cache entirely, avoiding:
-- Rate limiting applied at zero-cache
-- Token validation performed at zero-cache
-- WebSocket connection management
+Zero-server is designed to run on the user's infrastructure, and network security is the user's responsibility.
 
-#### Attack Scenario
+#### Security Model
 
-```
-Normal:  Client → zero-cache (auth + rate limit) → zero-server
-Attack:  Attacker → zero-server (direct, no controls)
-```
+| Concern | Responsibility |
+|---------|----------------|
+| Network isolation | User (VPC, firewall rules) |
+| TLS termination | User (load balancer, reverse proxy) |
+| Rate limiting | User (API gateway, middleware) |
+| Authentication | User (handler validation) |
 
-#### Impact
+#### Deployment Best Practices
 
-- Bypass of all zero-cache security controls
-- Direct database manipulation via mutations
-- No rate limiting on direct requests
+1. **Network isolation:** zero-server should only be accessible from zero-cache
+2. **Private subnet:** Deploy zero-server in private VPC subnet
+3. **API gateway:** Use API gateway for rate limiting and additional auth
+4. **TLS:** Ensure TLS between zero-cache and zero-server
 
-#### Mitigation
+#### Rationale
 
-- Applications MUST implement their own authentication in zero-server mutation handlers
-- zero-server should NOT be exposed to public networks
-- Use network segmentation to limit access to zero-server
+This design allows users to integrate zero-server into their existing infrastructure and security controls, rather than imposing a specific deployment topology.
 
 ---
 
@@ -822,17 +819,15 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 5. **Add connection rate limiting** - Per-IP and per-clientID throttling for WebSocket connections
 6. **Sanitize error messages** - Never include raw exception messages in client responses
 7. **Add shard-level authorization** - Validate clients can only access authorized shards
-8. **Add zero-server authentication** - Implement API key or mTLS between zero-cache and zero-server
 
 ### Medium-term Actions
 
-9. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
-10. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
-11. **Encrypt SQLite replica** - Use encryption at rest for replica files
-12. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
-13. **Security documentation** - Clear guidance on secure deployment with custom endpoints and zero-server
-14. **Audit logging** - Log all custom endpoint requests and responses
-15. **Document zero-server deployment** - Network isolation requirements, authentication best practices
+8. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
+9. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
+10. **Encrypt SQLite replica** - Use encryption at rest for replica files
+11. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
+12. **Security documentation** - Clear guidance on secure deployment with custom endpoints and zero-server
+13. **Audit logging** - Log all custom endpoint requests and responses
 
 ---
 
@@ -908,7 +903,9 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 - [ ] Verify replication ports are not exposed publicly
 
 ### Phase 13: Zero-Server Security
-- [ ] Send mutation request directly to zero-server (bypassing zero-cache) → verify accepted without auth
+- [ ] Verify x-api-key header is forwarded from zero-cache to zero-server
+- [ ] Verify JWT token is forwarded in Authorization header
+- [ ] Verify cookies are forwarded when configured
 - [ ] Attempt SQL injection in mutation args → verify parameterized queries block
 - [ ] Send mutation with duplicate ID → verify idempotency rejects duplicate
 - [ ] Send out-of-order mutation IDs → verify ordering enforcement
