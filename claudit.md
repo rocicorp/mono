@@ -15,7 +15,7 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 
 | Risk Level | Count | Description |
 |------------|-------|-------------|
-| **CRITICAL** | 2 | Immediate action required |
+| **CRITICAL** | 0 | Immediate action required |
 | **HIGH** | 1 | Should be addressed soon |
 | **LOW** | 0 | Acceptable risk |
 
@@ -23,144 +23,77 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 
 | ID | Finding | Severity | Status |
 |----|---------|----------|--------|
-| ZSP-001 | Development Mode Admin Bypass | **CRITICAL** | Open |
-| ZSP-002 | Custom Endpoint JWT Verification Skip | **CRITICAL** | Open |
+| ZSP-001 | Development Mode Admin Access | ✅ By Design | N/A |
+| ZSP-002 | Custom Endpoint JWT Verification Skip | ✅ By Design | N/A |
 | ZSP-003 | Weak SSRF Protection | **HIGH** | Open |
 | ZSP-004 | SQL Injection Protections | ✅ Secure | N/A |
 | ZSP-005 | `internalQuery` RLS Bypass | ✅ Secure | N/A |
 | ZSP-006 | Default Permission Model | ✅ Secure | N/A |
+| ZSP-007 | Mutation Path Security | ✅ Secure | N/A |
 
 ---
 
 ## Detailed Findings
 
-### ZSP-001: Development Mode Admin Bypass
+### ZSP-001: Development Mode Admin Access
 
-**Severity:** CRITICAL
-**CVSS Score:** 9.1 (Critical)
-**CWE:** CWE-287 (Improper Authentication)
+**Status:** ✅ BY DESIGN
 
 #### Description
 
-When the environment variable `NODE_ENV` is set to `development`, the Zero Cache server allows access to administrative endpoints without password authentication. This exposes sensitive debugging interfaces that can leak credentials and application data.
+When `NODE_ENV=development`, admin endpoints (`/statz`, `/heapz`, inspector) are accessible without password authentication. This is intentional behavior for local development convenience.
 
-#### Affected Components
+#### Security Model
+
+- **Development mode:** Password optional (local development only)
+- **Production mode:** Password required (enforced via startup assertion)
+
+#### Key Files
 
 | File | Lines | Function |
 |------|-------|----------|
 | `packages/zero-cache/src/config/normalize.ts` | 27-29 | `isDevelopmentMode()` |
 | `packages/zero-cache/src/config/zero-config.ts` | 885-916 | `isAdminPasswordValid()` |
-| `packages/zero-cache/src/services/statz.ts` | 304-329 | `handleStatzRequest()` |
-| `packages/zero-cache/src/services/heapz.ts` | 9-38 | `handleHeapzRequest()` |
-| `packages/zero-cache/src/server/inspector-delegate.ts` | 111-115 | `isAuthenticated()` |
 
-#### Vulnerable Code
+#### Rationale
 
-```typescript
-// packages/zero-cache/src/config/zero-config.ts:885-916
-export function isAdminPasswordValid(
-  lc: LogContext,
-  config: Pick<NormalizedZeroConfig, 'adminPassword'>,
-  password: string | undefined,
-) {
-  if (!password && !config.adminPassword && isDevelopmentMode()) {
-    warnOnce(lc, 'No admin password set; allowing access in development mode only');
-    return true;  // BYPASS - no authentication required
-  }
-  // ...
-}
-```
-
-#### Exposed Endpoints
-
-1. **`/statz`** - Database statistics, client metadata, query ASTs
-2. **`/heapz`** - V8 heap snapshots containing all in-memory data (credentials, tokens, user data)
-3. **Inspector Protocol** - Query analysis, permission inspection, metrics
-
-#### Attack Vectors
-
-- Environment variable injection via Docker/Kubernetes configuration
-- CI/CD pipeline misconfiguration
-- Cloud deployment platform settings
-- Local `.env` files committed to version control
-
-#### Impact
-
-- **Confidentiality:** Complete exposure of database schema, query patterns, and in-memory credentials
-- **Integrity:** Attackers can analyze permission model to find bypass opportunities
-- **Availability:** Repeated `/heapz` requests could cause memory exhaustion
-
-#### Proof of Concept
-
-```bash
-# If NODE_ENV=development is set:
-curl http://zero-cache:4848/statz  # Returns full database stats
-curl http://zero-cache:4848/heapz  # Downloads V8 heap snapshot
-```
-
-#### Remediation
-
-1. **Short-term:** Add explicit admin password requirement regardless of NODE_ENV
-2. **Long-term:** Replace NODE_ENV checks with dedicated security configuration flag
-3. **Defense-in-depth:** Rate limit admin endpoints, add IP allowlisting
+This design follows common Node.js conventions where `NODE_ENV=development` indicates a local development environment. Production deployments should never set `NODE_ENV=development`, and the startup assertion enforces admin password requirement in production mode.
 
 ---
 
-### ZSP-002: Custom Endpoint JWT Verification Skip
+### ZSP-002: Custom Endpoint JWT Verification Delegation
 
-**Severity:** CRITICAL
-**CVSS Score:** 8.6 (High)
-**CWE:** CWE-306 (Missing Authentication for Critical Function)
+**Status:** ✅ BY DESIGN
 
 #### Description
 
-When custom mutation/query URLs are configured (`ZERO_MUTATE_URL` + `ZERO_QUERY_URL`) without JWT verification options (`jwk`, `secret`, or `jwksUrl`), the Zero Cache server completely skips JWT validation and forwards raw authentication tokens to external servers without any verification.
+When custom mutation/query URLs are configured (`ZERO_MUTATE_URL` + `ZERO_QUERY_URL`) without JWT verification options, the Zero Cache server forwards raw authentication tokens to the user's external API server without local verification. This is intentional delegation of authentication responsibility.
 
-#### Affected Components
+#### Security Model
+
+| Configuration | JWT Verification Location | Mutations Protected By |
+|--------------|---------------------------|------------------------|
+| Custom endpoints only | External API server | User's API server |
+| Custom + JWT config | Zero layer + External API | Both layers |
+| Legacy only | Zero layer (required) | Zero permission system |
+
+#### Key Files
 
 | File | Lines | Function |
 |------|-------|----------|
 | `packages/zero-cache/src/workers/syncer.ts` | 153-190 | `#createConnection()` |
 | `packages/zero-cache/src/services/mutagen/pusher.ts` | 110-124 | `enqueuePush()` |
-| `packages/zero-cache/src/custom/fetch.ts` | 96-108 | Header construction |
 
-#### Vulnerable Code
+#### Why This Is Secure
 
-```typescript
-// packages/zero-cache/src/workers/syncer.ts:153-190
-const hasExactlyOneTokenOption = tokenOptions.length === 1;
-const hasCustomEndpoints = hasPushOrMutate && hasQueries;
+1. **Custom mutations cannot execute locally** - Zero Cache cannot apply changes without external API approval
+2. **External API is the authorization boundary** - Response required before any mutation takes effect
+3. **Tokens forwarded with request** - External API receives full auth context for validation
+4. **Legacy mutations remain protected** - Permission system with default-deny still applies to CRUD operations
 
-if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
-  throw new Error('Exactly one of jwk, secret, or jwksUrl must be set...');
-}
+#### Rationale
 
-if (tokenOptions.length > 0) {
-  decodedToken = await verifyToken(this.#config.auth, auth, {...});
-} else {
-  // JWT VERIFICATION COMPLETELY SKIPPED
-  this.#lc.warn?.('One of jwk, secret, or jwksUrl is not configured...');
-}
-```
-
-#### Attack Scenarios
-
-1. **Token Replay:** Attacker intercepts valid JWT, uses it after expiration
-2. **Forged Tokens:** Attacker creates arbitrary JWT claims without signature verification
-3. **Bypass Zero Cache:** Attacker discovers external endpoint URL, sends direct requests
-
-#### Impact
-
-- **Authentication Bypass:** Invalid, expired, or forged tokens accepted
-- **Authorization Bypass:** Attacker can assume any identity by forging JWT claims
-- **Data Exposure:** Complete access to mutation/query functionality
-
-#### Remediation
-
-1. **Always verify JWTs at Zero Cache layer** even when custom endpoints are configured
-2. **Add request signing:** Sign forwarded requests with a secret only Zero Cache knows
-3. **Add response verification:** Require external servers to sign responses
-4. **Documentation:** Clearly warn users about security implications
+This design allows users to implement their own authentication logic in their API server, supporting custom auth schemes, session management, and business logic that Zero cannot anticipate. The external API server is responsible for validating tokens and returning appropriate errors for unauthorized requests.
 
 ---
 
@@ -212,6 +145,64 @@ export function urlMatch(url: string, allowedUrlPatterns: URLPattern[]): boolean
 1. **IP Address Validation:** Resolve hostname and validate against blocklist
 2. **DNS Rebinding Protection:** Re-validate IP after DNS resolution
 3. **Allowlist-only mode:** Require explicit IP ranges for external endpoints
+
+---
+
+### ZSP-007: Mutation Path Security
+
+**Status:** ✅ SECURE
+
+#### Architecture
+
+Zero has two distinct mutation paths with separate authorization mechanisms:
+
+| Path | Handler | Authorization | Token Handling |
+|------|---------|---------------|----------------|
+| **Legacy (CRUD)** | Mutagen service | Zero's permission system | Validated at Zero layer (if configured) |
+| **Custom** | Pusher → External API | User's API server | Forwarded to external API (delegated) |
+
+#### Legacy Mutation Security
+
+Token flow: `Client → syncer.ts → SyncerWsMessageHandler → Mutagen.processMutation()`
+
+**Key Files:**
+- `packages/zero-cache/src/services/mutagen/mutagen.ts:336-340` - Authorization enforcement
+- `packages/zero-cache/src/auth/write-authorizer.ts:516-521` - Default deny logic
+
+**Security Properties:**
+- Permission checks (`canPre`/`canPost`) always enforced
+- Default deny when no policies defined
+- authData fields resolve to undefined when token missing → policy failures → DENY
+
+#### Custom Mutation Security
+
+Token flow: `Client → syncer-ws-message-handler.ts → Pusher.enqueuePush() → External API`
+
+**Key Files:**
+- `packages/zero-cache/src/workers/syncer-ws-message-handler.ts:121-134` - Routing logic
+- `packages/zero-cache/src/services/mutagen/pusher.ts:110-124` - Token forwarding
+
+**Security Properties:**
+- Zero Cache cannot apply custom mutations locally
+- External API response required for mutation effect
+- Authorization delegated to user's API server (by design)
+
+#### Mixed Mode Security
+
+**Concern:** Can CRUD mutations bypass custom auth when both are configured?
+
+**Finding:** No bypass possible because:
+1. CRUD mutations have their own authorization (Zero's permission system)
+2. Permission system defaults to DENY when no rules defined
+3. Each mutation type uses its own independent authorization path
+
+#### Token Validation Matrix
+
+| JWT Config | Custom Endpoints | Legacy CRUD Auth | Custom Mutation Auth |
+|------------|------------------|------------------|---------------------|
+| Configured | No | Permission system | N/A |
+| Configured | Yes | Permission system | External API |
+| Not configured | Yes | Permission system (default deny) | External API |
 
 ---
 
@@ -278,40 +269,63 @@ Zero implements a secure deny-all default:
 |-------------|----------|------|
 | WebSocket Upgrade | `websocket-handoff.ts:111-129` | Medium |
 | Message Handler | `connection.ts:177-215` | Low |
-| Custom Mutations | `syncer-ws-message-handler.ts:89-134` | **Critical** |
-| Custom Queries | `transform-query.ts:111-125` | **Critical** |
-| Admin Endpoints | `/statz`, `/heapz` | **Critical** |
+| Custom Mutations | `syncer-ws-message-handler.ts:89-134` | Low (delegated to external API) |
+| Custom Queries | `transform-query.ts:111-125` | Low (delegated to external API) |
+| Admin Endpoints | `/statz`, `/heapz` | Medium (password required in prod) |
 
 ### Authentication Flow
 
 ```
-Client → WebSocket → JWT Verification* → Message Parsing → Authorization → Database
-                          ↓
-                   * SKIPPED if custom endpoints configured without token options
+Legacy Path:    Client → WebSocket → JWT Verification → Message Parsing → Permission System → Database
+Custom Path:    Client → WebSocket → Token Forwarding → External API → Response Validation → Database
 ```
 
 ---
 
 ## Recommendations
 
-### Immediate Actions (Critical)
-
-1. **Remove NODE_ENV security gate** - Use dedicated, non-standard env var
-2. **Require admin password always** - Even in development environments
-3. **Always verify JWTs** - Never skip verification regardless of configuration
-
 ### Short-term Actions (High)
 
-4. **Add SSRF protections** - IP validation, localhost blocking, metadata blocking
-5. **Add request/response signing** - Cryptographic integrity for external endpoints
-6. **Rate limit admin endpoints** - Prevent DoS via repeated heap dumps
+1. **Add SSRF protections** - IP validation, localhost blocking, metadata blocking for custom endpoint URLs
 
-### Long-term Actions (Medium)
+### Medium-term Actions
 
-7. **Security documentation** - Clear guidance on secure deployment
-8. **Security headers** - Add standard HTTP security headers
-9. **Audit logging** - Log all admin endpoint access
-10. **Penetration testing** - Active testing of identified vulnerabilities
+2. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
+3. **Security documentation** - Clear guidance on secure deployment with custom endpoints
+4. **Audit logging** - Log all custom endpoint requests and responses
+
+---
+
+## Penetration Testing Plan
+
+### Phase 1: Legacy Mutation Testing
+- [ ] Connect without token, attempt CRUD mutations → expect DENY
+- [ ] Connect with invalid token, attempt CRUD mutations → expect DENY
+- [ ] Connect with valid token but missing required claims → expect DENY
+- [ ] Verify `lastMutationID` increments but no data changes on denied mutations
+
+### Phase 2: Custom Mutation Testing
+- [ ] Send custom mutation with no token → verify external API receives no auth
+- [ ] Send custom mutation with forged token → verify external API rejects
+- [ ] Attempt to bypass external API URL validation → expect block
+- [ ] Verify 401/403 from external API properly propagates to client
+
+### Phase 3: Mixed Mode Testing
+- [ ] Configure custom endpoints without JWT verification
+- [ ] Send CRUD mutation → verify Zero permission system blocks
+- [ ] Send custom mutation → verify external API receives and validates
+- [ ] Attempt to route CRUD mutation to custom endpoint → verify routing enforced
+
+### Phase 4: Edge Cases
+- [ ] Empty mutations array
+- [ ] Mutation with invalid type field
+- [ ] Mutation with mismatched name/type
+- [ ] Concurrent CRUD and custom mutations (ordering issues)
+
+### Phase 5: Query Path Testing (Pending)
+- [ ] Validate legacy query authorization with various authData states
+- [ ] Validate custom query forwarding and response handling
+- [ ] Test query transformation security boundaries
 
 ---
 
@@ -322,11 +336,14 @@ Client → WebSocket → JWT Verification* → Message Parsing → Authorization
 | Package | File | Purpose |
 |---------|------|---------|
 | zero-cache | `src/auth/read-authorizer.ts` | Read permission enforcement |
-| zero-cache | `src/auth/write-authorizer.ts` | Write permission enforcement |
-| zero-cache | `src/workers/syncer.ts` | Connection authentication |
+| zero-cache | `src/auth/write-authorizer.ts` | Write permission enforcement (default deny at line 516-521) |
+| zero-cache | `src/workers/syncer.ts` | Connection authentication (line 143-193) |
+| zero-cache | `src/workers/syncer-ws-message-handler.ts` | Mutation routing (line 121-134) |
 | zero-cache | `src/auth/jwt.ts` | Token verification |
 | zero-cache | `src/config/zero-config.ts` | Admin password validation |
-| zero-cache | `src/services/mutagen/mutagen.ts` | Mutation processing |
+| zero-cache | `src/services/mutagen/mutagen.ts` | Legacy mutation processing (line 336-340) |
+| zero-cache | `src/services/mutagen/pusher.ts` | Custom mutation forwarding (line 110-124, 452-500) |
+| zero-cache | `src/custom/fetch.ts` | URL validation for custom endpoints (line 248-258) |
 | zqlite | `src/internal/sql.ts` | SQL parameterization |
 | zqlite | `src/query-builder.ts` | Query construction |
 | zero-protocol | `src/ast.ts` | AST validation schemas |
