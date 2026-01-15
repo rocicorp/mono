@@ -1874,6 +1874,104 @@ emoji-picker {
   font-size: 0.875rem;
 }
 
+.loading-spinner.loading-spinner-demo {
+  font-size: 1.5rem;
+  color: var(--color-text-primary);
+}
+
+.loading-spinner-demo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 3rem 4rem;
+  border: 3px solid var(--color-modal-outline);
+  border-radius: 1rem;
+  backdrop-filter: var(--filter-backdrop-blur);
+}
+
+.loading-spinner-demo-container img {
+  margin-bottom: 1rem;
+}
+
+@property --demo-pill-angle {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0turn;
+}
+
+.demo-loaded-pill {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  z-index: var(--z-index-modal);
+  padding: 1.25rem 1.5rem;
+  border-radius: 1rem;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+  --demo-pill-angle: 0turn;
+  isolation: isolate;
+  max-width: 320px;
+}
+
+.demo-loaded-pill-header {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.demo-loaded-pill-body {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--color-text-dimmed-label);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.demo-loaded-pill::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--demo-pill-angle),
+    #ff9900 0deg,
+    #ff5e5e 60deg,
+    #c157ff 120deg,
+    #4c6bff 180deg,
+    #00c2ff 240deg,
+    #00d98b 300deg,
+    #ff9900 360deg
+  );
+  z-index: -1;
+  animation: demoPillOrbit 3.8s linear infinite;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@keyframes demoPillOrbit {
+  0% {
+    --demo-pill-angle: 0turn;
+  }
+  100% {
+    --demo-pill-angle: 1turn;
+  }
+}
+
+.demo-loaded-pill.fading {
+  opacity: 0;
+}
+
 .loading-spinner img {
   animation: spin 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
