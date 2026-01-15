@@ -16,7 +16,8 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | Risk Level | Count | Description |
 |------------|-------|-------------|
 | **CRITICAL** | 0 | Immediate action required |
-| **HIGH** | 1 | Should be addressed soon |
+| **HIGH** | 4 | Should be addressed soon |
+| **MEDIUM** | 3 | Should be evaluated |
 | **LOW** | 0 | Acceptable risk |
 
 ### Key Findings
@@ -31,6 +32,12 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | ZSP-006 | Default Permission Model | ✅ Secure | N/A |
 | ZSP-007 | Mutation Path Security | ✅ Secure | N/A |
 | ZSP-008 | Query Path Security | ✅ Secure | N/A |
+| ZSP-009 | No Origin Header Validation | **HIGH** | Open |
+| ZSP-010 | No WebSocket Message Size Limits | **HIGH** | Open |
+| ZSP-011 | No Connection Rate Limiting | **HIGH** | Open |
+| ZSP-012 | Non-Mutation Message Flooding | **MEDIUM** | Open |
+| ZSP-013 | Sensitive Data in Error Messages | **MEDIUM** | Open |
+| ZSP-014 | wsID Default Empty String | **MEDIUM** | Verify |
 
 ---
 
@@ -266,6 +273,157 @@ Internal queries (which bypass RLS) can ONLY be created by the system with hardc
 
 ---
 
+### ZSP-009: No Origin Header Validation
+
+**Severity:** HIGH
+
+#### Description
+
+The WebSocket server does NOT validate the Origin header during upgrade. No CORS configuration is implemented.
+
+#### Affected Components
+
+| File | Purpose |
+|------|---------|
+| `packages/zero-cache/src/server/worker-dispatcher.ts` | WebSocket routing |
+| `packages/zero-cache/src/services/http-service.ts` | HTTP/Fastify config |
+
+#### Impact
+
+Attackers from malicious origins can establish WebSocket connections. Could enable CSRF-style attacks if combined with session cookies.
+
+#### Mitigation
+
+The server requires explicit authentication tokens (when configured), providing defense in depth.
+
+---
+
+### ZSP-010: No WebSocket Message Size Limits
+
+**Severity:** HIGH
+
+#### Description
+
+No `maxPayload` is configured on the WebSocket server, allowing arbitrarily large messages.
+
+#### Affected Components
+
+**File:** `packages/zero-cache/src/workers/syncer.ts:40-63`
+
+```typescript
+function getWebSocketServerOptions(config: ZeroConfig): ServerOptions {
+  const options: ServerOptions = {
+    noServer: true,  // No maxPayload specified
+  };
+}
+```
+
+#### Impact
+
+Memory exhaustion via oversized messages or compression bombs (if perMessageDeflate enabled).
+
+#### Remediation
+
+Add `maxPayload: 1024 * 1024` (1MB) to WebSocket server options.
+
+---
+
+### ZSP-011: No Connection Rate Limiting
+
+**Severity:** HIGH
+
+#### Description
+
+No rate limiting on WebSocket connection attempts:
+- No per-IP throttling
+- No per-clientID connection limits
+- Only mutation-level rate limiting exists
+
+#### Impact
+
+DoS via connection flooding. Attackers can exhaust server resources by opening many connections.
+
+---
+
+### ZSP-012: Non-Mutation Message Flooding
+
+**Severity:** MEDIUM
+
+#### Description
+
+Rate limiting only applies to mutations. Unprotected message types:
+- `changeDesiredQueries` - can be flooded
+- `deleteClients` - can be flooded
+- `ping` - not rate limited
+
+#### Impact
+
+Resource exhaustion via non-mutation message flooding.
+
+---
+
+### ZSP-013: Sensitive Data in Error Messages
+
+**Severity:** MEDIUM
+
+#### Description
+
+**File:** `packages/zero-cache/src/workers/connection.ts:189`
+
+```typescript
+this.#lc.warn?.(`failed to parse message "${data}": ${String(e)}`);
+this.#closeWithError({
+  kind: ErrorKind.InvalidMessage,
+  message: String(e),  // Raw exception exposed
+});
+```
+
+Raw exception messages are sent to clients, potentially leaking internal details.
+
+---
+
+### ZSP-014: wsID Default Empty String
+
+**Severity:** MEDIUM
+
+#### Description
+
+**File:** `packages/zero-cache/src/workers/connect-params.ts:47`
+
+```typescript
+const wsID = params.get('wsid', false) ?? '';
+```
+
+If no wsID provided, it defaults to empty string. Multiple connections could share the same empty wsID.
+
+#### Mitigation
+
+Client likely generates wsID, and server validates wsID matches on every message via two-factor validation (wsID + clientID).
+
+---
+
+## WebSocket Secure Components
+
+### ✅ Message Schema Validation
+
+All incoming messages validated against `upstreamSchema` (Valita). Invalid messages trigger connection close.
+
+### ✅ wsID + clientID Two-Factor Validation
+
+**File:** `packages/zero-cache/src/services/view-syncer/view-syncer.ts:870-876`
+
+Every message validated against BOTH `clientID` AND `wsID`. Prevents connection hijacking.
+
+### ✅ Connection Cleanup & Resource Management
+
+Proper cleanup on close (streams canceled, timers cleared). Ref counting for service lifecycle.
+
+### ✅ Keepalive/Timeout Handling
+
+6-second ping/pong interval detects dead connections. Timer properly cleared on close.
+
+---
+
 ## Secure Components
 
 ### ZSP-004: SQL Injection Protections ✅
@@ -347,12 +505,17 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 ### Short-term Actions (High)
 
 1. **Add SSRF protections** - IP validation, localhost blocking, metadata blocking for custom endpoint URLs
+2. **Add WebSocket message size limits** - Configure `maxPayload` on WebSocket server (recommend 1MB)
+3. **Add connection rate limiting** - Per-IP and per-clientID throttling for WebSocket connections
+4. **Sanitize error messages** - Never include raw exception messages in client responses
 
 ### Medium-term Actions
 
-2. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
-3. **Security documentation** - Clear guidance on secure deployment with custom endpoints
-4. **Audit logging** - Log all custom endpoint requests and responses
+5. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
+6. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
+7. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
+8. **Security documentation** - Clear guidance on secure deployment with custom endpoints
+9. **Audit logging** - Log all custom endpoint requests and responses
 
 ---
 
@@ -399,6 +562,23 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 - [ ] Attempt to use reserved internal query IDs (`lmids`, `mutationResults`) → expect rejection
 - [ ] Test mixed mode: client query and custom query in same session
 
+### Phase 8: WebSocket Handshake Security
+- [ ] Connect from malicious origin → verify connection allowed (document behavior)
+- [ ] Attempt connection without sec-websocket-protocol header → expect rejection
+- [ ] Flood connection attempts from single IP → verify no rate limiting
+
+### Phase 9: WebSocket Message Security
+- [ ] Send oversized message (10MB+) → check for memory exhaustion
+- [ ] Send malformed JSON → verify graceful error handling
+- [ ] Flood with changeDesiredQueries messages → verify no rate limiting
+- [ ] Check error messages for sensitive data leakage
+
+### Phase 10: WebSocket Connection State
+- [ ] Connect with same clientID as existing connection → verify old connection closed
+- [ ] Connect without wsID → verify behavior with empty string wsID
+- [ ] Attempt to send messages with wrong wsID → expect silent drop
+- [ ] Test keepalive timeout (stop responding to pings)
+
 ---
 
 ## Appendix: Files Reviewed
@@ -418,7 +598,10 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 | zero-cache | `src/custom/fetch.ts` | URL validation for custom endpoints (line 77-95, 248-258) |
 | zero-cache | `src/custom-queries/transform-query.ts` | Custom query transformation (line 74-125) |
 | zero-cache | `src/services/view-syncer/cvr.ts` | Query routing and internal query protection (line 82-89, 1020-1050) |
-| zero-cache | `src/services/view-syncer/view-syncer.ts` | Query processing orchestration |
+| zero-cache | `src/services/view-syncer/view-syncer.ts` | Query processing orchestration, wsID validation (line 870-876) |
+| zero-cache | `src/server/worker-dispatcher.ts` | WebSocket routing |
+| zero-cache | `src/workers/connect-params.ts` | Connection parameter extraction (line 41-47) |
+| zero-cache | `src/services/limiter/sliding-window-limiter.ts` | Mutation rate limiting |
 | zqlite | `src/internal/sql.ts` | SQL parameterization |
 | zqlite | `src/query-builder.ts` | Query construction |
 | zero-protocol | `src/ast.ts` | AST validation schemas |
