@@ -1,4 +1,14 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["vite.config.ts", "schema.ts", "api/index.ts"]
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@rocicorp/zero": ["../../packages/zero/src/zero.ts"],
+      "@rocicorp/zero/server": ["../../packages/zero/src/server.ts"],
+      "@rocicorp/zero/server/adapters/postgresjs": [
+        "../../packages/zero/src/adapters/postgresjs.ts"
+      ]
+    }
+  },
+  "include": ["vite.config.ts", "api/index.ts"]
 }

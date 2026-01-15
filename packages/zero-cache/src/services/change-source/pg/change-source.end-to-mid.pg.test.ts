@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';

@@ -1,4 +1,4 @@
-import * as v from '../../../../../../shared/src/valita.ts';
+import type * as v from '../../../../../../shared/src/valita.ts';
 import {statusMessageSchema} from './status.ts';
 
 /** At the moment, the only upstream messages are status messages.  */

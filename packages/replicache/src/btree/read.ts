@@ -2,15 +2,14 @@ import type {Enum} from '../../../shared/src/enum.ts';
 import {deepEqual} from '../../../shared/src/json.ts';
 import {getSizeOfEntry} from '../../../shared/src/size-of-value.ts';
 import type {Read} from '../dag/store.ts';
-import * as FormatVersion from '../format-version-enum.ts';
+import type * as FormatVersion from '../format-version-enum.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import {type Hash, emptyHash} from '../hash.ts';
+import type {DataNodeImpl, InternalNodeImpl} from './node.ts';
 import {
-  DataNodeImpl,
   type Entry,
   type InternalDiff,
   type InternalDiffOperation,
-  InternalNodeImpl,
   NODE_ENTRIES,
   NODE_LEVEL,
   binarySearch,

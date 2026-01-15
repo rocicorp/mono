@@ -1,10 +1,10 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
-import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {
   mapAST,
   normalizeAST,
@@ -31,13 +31,13 @@ import type {ClientMetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
-import {ClientError, type ZeroError} from './error.ts';
+import type {ClientErrorKind} from './client-error-kind.ts';
+import type {ClientError} from './error.ts';
+import {type ZeroError} from './error.ts';
 import type {InspectorDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
 type QueryHash = string;
 
@@ -66,7 +66,6 @@ export class QueryManager implements InspectorDelegate {
   readonly #serverToClient: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
   readonly #onFatalError: (error: ZeroError) => void;
-  readonly #onApplicationError: (error: ApplicationError) => void;
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
@@ -76,14 +75,14 @@ export class QueryManager implements InspectorDelegate {
   readonly #queryChangeThrottleMs: number;
   #pendingRemovals: Array<() => void> = [];
   #batchTimer: ReturnType<typeof setTimeout> | undefined;
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
   readonly #metrics: ClientMetric = newMetrics();
   readonly #queryMetrics: Map<string, ClientMetric> = new Map();
   readonly #slowMaterializeThreshold: number;
   #closedError: ZeroError | undefined;
 
   constructor(
-    lc: ZeroLogContext,
+    lc: LogContext,
     mutationTracker: MutationTracker,
     clientID: ClientID,
     tables: Record<string, TableSchema>,
@@ -93,7 +92,6 @@ export class QueryManager implements InspectorDelegate {
     queryChangeThrottleMs: number,
     slowMaterializeThreshold: number,
     onFatalError: (error: ZeroError) => void,
-    onApplicationError: (error: ApplicationError) => void,
   ) {
     this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
@@ -105,7 +103,6 @@ export class QueryManager implements InspectorDelegate {
     this.#queryChangeThrottleMs = queryChangeThrottleMs;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.#onFatalError = onFatalError;
-    this.#onApplicationError = onApplicationError;
     this.#mutationTracker.onAllMutationsApplied(() => {
       if (this.#pendingRemovals.length === 0) {
         return;
@@ -234,12 +231,6 @@ export class QueryManager implements InspectorDelegate {
 
       if (error.error === 'app' || error.error === 'parse') {
         entry.gotCallbacks.forEach(callback => callback(false, error));
-
-        this.#onApplicationError(
-          new ApplicationError(error.message ?? 'Unknown application error', {
-            details: error.details,
-          }),
-        );
       }
       // this code path is not possible technically since errors were never implemented in the legacy query transform error
       // but is included for backwards compatibility and we have a test case for it

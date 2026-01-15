@@ -1,12 +1,20 @@
-import fc from 'fast-check';
-import {describe, expect, test} from 'vitest';
-import {mergeIterables, wrapIterable} from './iterables.ts';
+import {expect, test} from 'vitest';
+import {getESLibVersion} from './get-es-lib-version.ts';
+import {wrapIterable} from './iterables.ts';
 
 function* range(start = 0, end = Infinity, step = 1) {
   for (let i = start; i < end; i += step) {
     yield i;
   }
 }
+
+test('lib < ES2024', () => {
+  // Iterator.from was added in ES2024
+
+  // sanity check that we are using not yet using es2024. If this starts failing
+  // then we can remove the wrapIterable and use the builtins.
+  expect(getESLibVersion()).toBeLessThan(2024);
+});
 
 test('wrapper should be iterable', () => {
   const result = [];
@@ -62,121 +70,3 @@ test('chaining filter and map', () => {
     .map(x => x * 2);
   expect([...result]).toEqual([0, 4, 8, 12, 16]);
 });
-
-describe('mergeIterables', () => {
-  test('no dupes, interleaved items', () => {
-    const iterables = [
-      [1, 3, 5],
-      [2, 4, 6],
-    ];
-    const result = mergeIterables(iterables, (l, r) => l - r);
-    expect([...result]).toEqual([1, 2, 3, 4, 5, 6]);
-  });
-
-  test('dupes', () => {
-    const iterables = [
-      [1, 2, 3],
-      [1, 2, 3],
-    ];
-    let result = mergeIterables(iterables, (l, r) => l - r);
-    expect([...result]).toEqual([1, 1, 2, 2, 3, 3]);
-
-    result = mergeIterables(iterables, (l, r) => l - r, true);
-    expect([...result]).toEqual([1, 2, 3]);
-  });
-
-  test('fuzz', () => {
-    fc.assert(
-      fc.property(
-        fc.array(fc.array(fc.integer())),
-        fc.boolean(),
-        (arrays, noDupes) => {
-          const sorted = arrays.map(a => a.slice().sort((l, r) => l - r));
-          const result = mergeIterables(sorted, (l, r) => l - r, noDupes);
-          const expected = sorted.flat().sort((l, r) => l - r);
-          expect([...result]).toEqual(
-            noDupes ? [...new Set(expected)] : expected,
-          );
-        },
-      ),
-    );
-  });
-
-  test('return', () => {
-    let it1 = new TestIterable([1, 2, 3]);
-    let it2 = new TestIterable([1, 2, 3]);
-    let result = mergeIterables([it1, it2], (l, r) => (l ?? 0) - (r ?? 0));
-
-    expect(it1.returned).toBe(false);
-    expect(it2.returned).toBe(false);
-
-    for (const _ of result) {
-      // noop
-    }
-
-    expect(it1.returned).toBe(true);
-    expect(it2.returned).toBe(true);
-
-    it1 = new TestIterable([1, 2]);
-    it2 = new TestIterable([1, 2, 3, 4]);
-    result = mergeIterables([it1, it2], (l, r) => (l ?? 0) - (r ?? 0));
-
-    for (const _ of result) {
-      // noop
-    }
-
-    expect(it1.returned).toBe(true);
-    expect(it2.returned).toBe(true);
-  });
-
-  test('throw', () => {
-    const it1 = new TestIterable(new ThrowingIterable());
-    const it2 = new TestIterable(new ThrowingIterable());
-    const result = mergeIterables([it1, it2], (l, r) => (l ?? 0) - (r ?? 0));
-
-    expect(it1.returned).toBe(false);
-    expect(it2.returned).toBe(false);
-
-    expect(() => {
-      for (const _ of result) {
-        // noop
-      }
-    }).toThrow();
-
-    expect(it1.returned).toBe(true);
-    expect(it2.returned).toBe(true);
-  });
-});
-
-class ThrowingIterable {
-  [Symbol.iterator]() {
-    return {
-      next: () => {
-        throw new Error();
-      },
-    };
-  }
-}
-
-class TestIterable {
-  readonly #data;
-  returned: boolean = false;
-  thrown: boolean = false;
-
-  constructor(data: Iterable<number>) {
-    this.#data = data;
-  }
-
-  [Symbol.iterator]() {
-    const iterator = this.#data[Symbol.iterator]();
-    return {
-      next: () => iterator.next(),
-      return: () => this.return(),
-    };
-  }
-
-  return() {
-    this.returned = true;
-    return {value: undefined, done: true};
-  }
-}

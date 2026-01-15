@@ -61,8 +61,9 @@ async function getProtocolVersions() {
 
 /**
  * @param {string} version - Base version from package.json (e.g., "0.24.0")
+ * @param {string} remote
  */
-function bumpCanaryVersion(version) {
+function bumpCanaryVersion(version, remote) {
   // Canary versions use the format: major.minor.patch-canary.attempt
   //
   // This ensures that canary versions are treated as prereleases in semver,
@@ -85,8 +86,8 @@ function bumpCanaryVersion(version) {
   const baseVersion = baseVersionMatch[1];
 
   // Fetch tags to ensure we have the latest from remote
-  console.log('Fetching tags from remote...');
-  execute('git fetch --tags', {stdio: 'pipe'});
+  console.log(`Fetching tags from remote ${remote}...`);
+  execute(`git fetch ${remote} --tags`, {stdio: 'pipe'});
 
   // Find all canary tags for this base version
   const tagPattern = `zero/v${baseVersion}-canary.*`;
@@ -124,13 +125,14 @@ function bumpCanaryVersion(version) {
 /**
  * Find the latest canary tag for a given base version
  * @param {string} baseVersion - e.g., "0.24.0"
+ * @param {string} remote
  * @returns {string | null} - e.g., "zero/v0.24.0-canary.5" or null if none found
  */
-function findLatestCanaryTag(baseVersion) {
+function findLatestCanaryTag(baseVersion, remote) {
   console.log(
     `Looking for latest canary tag for base version ${baseVersion}...`,
   );
-  execute('git fetch --tags', {stdio: 'pipe'});
+  execute(`git fetch ${remote} --tags`, {stdio: 'pipe'});
 
   const tagPattern = `zero/v${baseVersion}-canary.*`;
   const tagsOutput = execute(`git tag -l "${tagPattern}"`, {stdio: 'pipe'});
@@ -184,6 +186,34 @@ function parseArgs() {
       description:
         'Create a stable release using base version. If not provided, creates a canary release (auto-calculated version)',
     },
+    {
+      name: 'remote',
+      type: String,
+      description: 'Git remote to use (default: origin)',
+    },
+    {
+      name: 'allow-local-changes',
+      type: Boolean,
+      description:
+        'Allow running with local changes in the working directory (useful for developing script)',
+    },
+    {
+      name: 'skip-git',
+      type: Boolean,
+      description:
+        'Skip git tag and push (use when retrying after git succeeded)',
+    },
+    {
+      name: 'skip-npm',
+      type: Boolean,
+      description: 'Skip npm publish (use when retrying after npm succeeded)',
+    },
+    {
+      name: 'skip-docker',
+      type: Boolean,
+      description:
+        'Skip docker build and push (use when retrying after docker succeeded)',
+    },
   ];
 
   let options;
@@ -208,10 +238,16 @@ function parseArgs() {
   }
 
   const isCanary = !Boolean(options.stable);
+  const remote = options.remote || 'origin';
 
   return {
     from: options.from,
     isCanary,
+    remote,
+    allowLocalChanges: Boolean(options['allow-local-changes']),
+    skipGit: Boolean(options['skip-git']),
+    skipNpm: Boolean(options['skip-npm']),
+    skipDocker: Boolean(options['skip-docker']),
   };
 }
 
@@ -252,23 +288,49 @@ Maintenance/cherry-pick workflow:
   2. Cherry-pick commits: git cherry-pick <commit-hash>
   3. Push to origin: git push origin maint/zero/v0.24
   4. Run: node release.js --from maint/zero/v0.24
+
+Retrying after partial failure:
+  node release.js --from main --skip-git --skip-npm    # Retry just docker
+  node release.js --from main --skip-git               # Retry npm and docker
 `);
 }
 
-const {from: fromArg, isCanary} = parseArgs();
+const {
+  from: fromArg,
+  isCanary,
+  remote,
+  allowLocalChanges,
+  skipGit,
+  skipNpm,
+  skipDocker,
+} = parseArgs();
 
 try {
   // Find the git root directory
   const gitRoot = execute('git rev-parse --show-toplevel', {stdio: 'pipe'});
 
-  // Check that there are no uncommitted changes
-  const uncommittedChanges = execute('git status --porcelain', {
-    stdio: 'pipe',
-  });
-  if (uncommittedChanges) {
-    console.error(`There are uncommitted changes in the working directory.`);
-    console.error(`Perhaps you need to commit them?`);
+  const remotesOutput = execute('git remote', {stdio: 'pipe'}) ?? '';
+  const remotes = remotesOutput.split('\n').filter(Boolean);
+
+  if (!remotes.includes(remote)) {
+    console.error(
+      `Remote "${remote}" is not configured. Available remotes: ${remotes.join(
+        ', ',
+      )}`,
+    );
     process.exit(1);
+  }
+
+  // Check that there are no uncommitted changes
+  if (!allowLocalChanges) {
+    const uncommittedChanges = execute('git status --porcelain', {
+      stdio: 'pipe',
+    });
+    if (uncommittedChanges) {
+      console.error(`There are uncommitted changes in the working directory.`);
+      console.error(`Perhaps you need to commit them?`);
+      process.exit(1);
+    }
   }
 
   const from = fromArg;
@@ -287,7 +349,7 @@ try {
   // Calculate what the next version will be
   let nextVersion;
   if (isCanary) {
-    nextVersion = bumpCanaryVersion(currentVersion);
+    nextVersion = bumpCanaryVersion(currentVersion, remote);
   } else {
     nextVersion = currentVersion;
   }
@@ -307,7 +369,7 @@ try {
   // Check that the ref we're building from exists both locally and remotely
   // and that they point to the same commit
   console.log(
-    `Verifying ref ${from} exists and matches between local and remote...`,
+    `Verifying ref ${from} exists and matches between local and remote ${remote}...`,
   );
 
   let localRefHash;
@@ -324,18 +386,20 @@ try {
 
   // Get remote ref hash
   try {
-    // For branches, check origin/branch
+    // For branches, check remote/branch
     // For tags, just check the tag (tags are fetched from remote)
-    remoteRefHash = execute(`git rev-parse origin/${from}`, {stdio: 'pipe'});
+    remoteRefHash = execute(`git rev-parse ${remote}/${from}`, {
+      stdio: 'pipe',
+    });
   } catch {
-    // If origin/from doesn't exist, try just the ref (works for tags)
+    // If remote/from doesn't exist, try just the ref (works for tags)
     try {
       // For tags, we need to ensure we have the latest from remote
-      execute(`git fetch origin tag ${from}`, {stdio: 'pipe'});
+      execute(`git fetch ${remote} tag ${from}`, {stdio: 'pipe'});
       remoteRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
     } catch {
       console.error(`Could not resolve remote ref: ${from}`);
-      console.error(`Make sure the branch/tag has been pushed to origin`);
+      console.error(`Make sure the branch/tag has been pushed to ${remote}`);
       process.exit(1);
     }
   }
@@ -361,11 +425,11 @@ try {
 
   // Discard any local changes and checkout the correct ref
   execute('git reset --hard');
-  execute('git fetch origin');
+  execute(`git fetch ${remote}`);
 
-  // Try to checkout as origin/branch first, fall back to tag/commit
+  // Try to checkout as remote/branch first, fall back to tag/commit
   try {
-    execute(`git checkout origin/${from}`);
+    execute(`git checkout ${remote}/${from}`);
   } catch {
     execute(`git checkout ${from}`);
   }
@@ -403,7 +467,7 @@ try {
   execute('npm install');
   execute('npm run build');
   execute('npm run format');
-  execute('npx syncpack fix-mismatches');
+  execute('npx syncpack@13 fix-mismatches');
 
   // Surface information about the code as image metadata (labels) for
   // production / release management.
@@ -411,17 +475,26 @@ try {
     await getProtocolVersions();
 
   execute('git status');
-  execute(`git commit -am "Bump version to ${nextVersion}"`);
+
+  if (isCanary) {
+    execute(`git commit -am "Bump version to ${nextVersion}"`);
+  }
 
   // Push tag to git before npm so that if npm fails the versioning logic works correctly.
   // Also if npm push succeeds but docker fails we correctly record the tag that the
   // npm version was made.
   // Note: We don't merge back to the build branch - canaries are throwaway builds
   // that exist only as tagged commits.
-  execute(`git tag ${tagName}`);
-  execute(`git push origin ${tagName}`);
+  if (skipGit) {
+    console.log('Skipping git tag and push (--skip-git)');
+  } else {
+    execute(`git tag --force ${tagName}`);
+    execute(`git push --force ${remote} ${tagName}`);
+  }
 
-  if (isCanary) {
+  if (skipNpm) {
+    console.log('Skipping npm publish (--skip-npm)');
+  } else if (isCanary) {
     execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
     execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} canary`);
   } else {
@@ -430,54 +503,66 @@ try {
     execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} staging`);
   }
 
-  try {
-    // Check if our specific multiarch builder exists
-    const builders = execute('docker buildx ls', {stdio: 'pipe'});
-    const hasMultiArchBuilder = builders.includes('zero-multiarch');
-
-    if (!hasMultiArchBuilder) {
-      console.log('Setting up multi-architecture builder...');
-      execute(
-        'docker buildx create --name zero-multiarch --driver docker-container --bootstrap',
-      );
-    }
-    execute('docker buildx use zero-multiarch');
-    execute('docker buildx inspect zero-multiarch --bootstrap');
-  } catch (e) {
-    console.error('Failed to set up Docker buildx:', e);
-    throw e;
-  }
-
-  for (let i = 0; i < 3; i++) {
+  if (skipDocker) {
+    console.log('Skipping docker build and push (--skip-docker)');
+  } else {
     try {
-      execute(
-        `docker buildx build \
+      // Check if our specific multiarch builder exists
+      const builders = execute('docker buildx ls', {stdio: 'pipe'});
+      const hasMultiArchBuilder = builders.includes('zero-multiarch');
+
+      if (!hasMultiArchBuilder) {
+        console.log('Setting up multi-architecture builder...');
+        execute(
+          'docker buildx create --name zero-multiarch --driver docker-container --bootstrap',
+        );
+      }
+      execute('docker buildx use zero-multiarch');
+      execute('docker buildx inspect zero-multiarch --bootstrap');
+    } catch (e) {
+      console.error('Failed to set up Docker buildx:', e);
+      throw e;
+    }
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        execute(
+          `docker buildx build \
     --platform linux/amd64,linux/arm64 \
     --build-arg=ZERO_VERSION=${nextVersion} \
     --build-arg=ZERO_SYNC_PROTOCOL_VERSION=${PROTOCOL_VERSION} \
     --build-arg=ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} \
     -t rocicorp/zero:${nextVersion} \
     --push .`,
-        {cwd: basePath('packages', 'zero')},
-      );
-    } catch (e) {
-      if (i < 3) {
-        console.error(`Error building docker image, retrying in 10 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, 10_000));
-        continue;
+          {cwd: basePath('packages', 'zero')},
+        );
+      } catch (e) {
+        if (i < 3) {
+          console.error(
+            `Error building docker image, retrying in 10 seconds...`,
+          );
+          await new Promise(resolve => setTimeout(resolve, 10_000));
+          continue;
+        }
+        throw e;
       }
-      throw e;
+      break;
     }
-    break;
   }
 
   console.log(``);
   console.log(``);
   console.log(`🎉 Success!`);
   console.log(``);
-  console.log(`* Published @rocicorp/zero@${nextVersion} to npm.`);
-  console.log(`* Created Docker image rocicorp/zero:${nextVersion}.`);
-  console.log(`* Pushed Git tag ${tagName} to origin.`);
+  if (!skipGit) {
+    console.log(`* Pushed Git tag ${tagName} to ${remote}.`);
+  }
+  if (!skipNpm) {
+    console.log(`* Published @rocicorp/zero@${nextVersion} to npm.`);
+  }
+  if (!skipDocker) {
+    console.log(`* Created Docker image rocicorp/zero:${nextVersion}.`);
+  }
   console.log(``);
   console.log(``);
   console.log(`Next steps:`);

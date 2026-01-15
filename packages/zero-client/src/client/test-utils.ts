@@ -4,7 +4,7 @@ import {nanoid} from '../util/nanoid.ts';
 // import {type VitestUtils} from 'vitest';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -29,11 +29,15 @@ import type {
   PushResponseBody,
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
+import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {PullRow, Query} from '../../../zql/src/query/query.ts';
-import {bindingsForZero} from './bindings.ts';
-import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
+import type {
+  ConnectionManager,
+  ConnectionManagerState,
+} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
@@ -48,6 +52,7 @@ import {
 
 // Do not use an import statement here because vitest will then load that file
 // which does not work in a worker context.
+// oxlint-disable-next-line consistent-type-imports
 type VitestUtils = import('vitest').VitestUtils;
 
 export async function tickAFewTimes(vi: VitestUtils, duration = 100) {
@@ -98,8 +103,8 @@ export class MockSocket extends EventTarget {
 export class TestZero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
-> extends Zero<S, MD, Context> {
+  C = unknown,
+> extends Zero<S, MD, C> {
   pokeIDCounter = 0;
 
   #connectionStatusResolvers: Set<{
@@ -116,7 +121,7 @@ export class TestZero<
     return this[exposedToTestingSymbol].connectionManager().state.name;
   }
 
-  get connectionState(): ConnectionState {
+  get connectionState(): ConnectionManagerState {
     assert(TESTING);
     return this[exposedToTestingSymbol].connectionManager().state;
   }
@@ -125,7 +130,11 @@ export class TestZero<
     return this[exposedToTestingSymbol].connectStart;
   }
 
-  constructor(options: ZeroOptions<S, MD, Context>) {
+  get enableRefresh() {
+    return this[exposedToTestingSymbol].enableRefresh;
+  }
+
+  constructor(options: ZeroOptions<S, MD, C>) {
     super(options);
 
     // Subscribe to connection manager to handle connection state change notifications
@@ -248,19 +257,23 @@ export class TestZero<
   }
 
   async triggerGotQueriesPatch(
-    q: Query<S, keyof S['tables'] & string>,
+    q: Query<keyof S['tables'] & string, S>,
   ): Promise<void> {
+    const qi = asQueryInternals(q);
+    const hash = qi.customQueryID
+      ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
+      : qi.hash();
     await this.triggerPoke(null, '1', {
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: bindingsForZero(this).hash(q),
+          hash,
         },
       ],
     });
   }
 
-  declare [exposedToTestingSymbol]: TestingContext<Context>;
+  declare [exposedToTestingSymbol]: TestingContext;
 
   get pusher() {
     assert(TESTING);
@@ -286,18 +299,18 @@ export class TestZero<
     return getInternalReplicacheImplForTesting(this).persist();
   }
 
-  markQueryAsGot<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn = PullRow<TTable, TSchema>,
-  >(q: Query<TSchema, TTable, TReturn>): Promise<void> {
+  markQueryAsGot(q: AnyQuery): Promise<void> {
     // TODO(arv): The cookies here could be better... Not sure if the client
     // ever checks these?
+    const qi = asQueryInternals(q);
+    const hash = qi.customQueryID
+      ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
+      : qi.hash();
     return this.triggerPoke(null, '1', {
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: bindingsForZero(this as unknown as Zero<TSchema, MD>).hash(q),
+          hash,
         },
       ],
     });
@@ -311,10 +324,11 @@ let testZeroCounter = 0;
 export function zeroForTest<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  C = unknown,
 >(
-  options: Partial<ZeroOptions<S, MD>> = {},
+  options: Partial<ZeroOptions<S, MD, C>> = {},
   errorOnUpdateNeeded = true,
-): TestZero<S, MD> {
+): TestZero<S, MD, C> {
   // Special case kvStore. If not present we default to 'mem'. This allows
   // passing `undefined` to get the default behavior.
   const newOptions = {...options};
@@ -323,7 +337,7 @@ export function zeroForTest<
   }
 
   return new TestZero({
-    server: 'https://example.com/',
+    cacheURL: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: options.userID ?? 'test-user-id-' + testZeroCounter++,
     auth: 'test-auth',
@@ -336,7 +350,7 @@ export function zeroForTest<
         }
       : undefined,
     ...newOptions,
-  } satisfies ZeroOptions<S, MD>);
+  } satisfies ZeroOptions<S, MD, C>);
 }
 
 export async function waitForUpstreamMessage(
@@ -400,4 +414,33 @@ export function waitForPostMessage() {
       resolve();
     };
   });
+}
+
+/**
+ * Converts a regular query into a custom query (named query) by associating
+ * a name and arguments with it. This is useful for testing custom query tracking.
+ */
+export function asCustomQuery<
+  T extends keyof S['tables'] & string,
+  S extends Schema,
+  R,
+>(
+  query: Query<T, S, R>,
+  name: string,
+  args: ReadonlyJSONValue | undefined,
+): Query<T, S, R> {
+  return asQueryInternals(query).nameAndArgs(
+    name,
+    args === undefined ? [] : [args],
+  );
+}
+
+export function queryID<
+  T extends keyof S['tables'] & string,
+  S extends Schema,
+  R,
+>(query: Query<T, S, R>): string {
+  const id = asQueryInternals(query).customQueryID;
+  assert(id !== undefined);
+  return hashOfNameAndArgs(id.name, id.args);
 }

@@ -1,6 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
+import {omitFanout} from './planner-node.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
@@ -91,6 +92,9 @@ export class PlannerFanIn {
       startupCost: 0,
       selectivity: 0,
       limit: undefined,
+      fanout: () => {
+        throw new Error('Failed to set fanout model');
+      },
     };
 
     if (this.#type === 'FI') {
@@ -108,6 +112,7 @@ export class PlannerFanIn {
           updatedPattern,
           planDebugger,
         );
+        totalCost.fanout = cost.fanout;
         if (cost.returnedRows > maxrows) {
           maxrows = cost.returnedRows;
         }
@@ -151,6 +156,7 @@ export class PlannerFanIn {
           updatedPattern,
           planDebugger,
         );
+        totalCost.fanout = cost.fanout;
         totalCost.returnedRows += cost.returnedRows;
         totalCost.cost += cost.cost;
         totalCost.scanEst += cost.scanEst;
@@ -172,14 +178,16 @@ export class PlannerFanIn {
       totalCost.selectivity = 1 - noMatchProb;
     }
 
-    planDebugger?.log({
-      type: 'node-cost',
-      nodeType: 'fan-in',
-      node: this.#type,
-      branchPattern,
-      downstreamChildSelectivity,
-      costEstimate: totalCost,
-    });
+    if (planDebugger) {
+      planDebugger.log({
+        type: 'node-cost',
+        nodeType: 'fan-in',
+        node: this.#type,
+        branchPattern,
+        downstreamChildSelectivity,
+        costEstimate: omitFanout(totalCost),
+      });
+    }
 
     return totalCost;
   }

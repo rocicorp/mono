@@ -1,8 +1,17 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
+import type {
+  AnalyzeQueryResult,
+  PlanDebugEventJSON,
+} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
+import {
+  AccumulatorDebugger,
+  serializePlanDebugEvents,
+} from '../../../zql/src/planner/planner-debug.ts';
 import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
+import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {mustGetTableSpec} from '../db/lite-tables.ts';
@@ -47,6 +56,22 @@ vi.mock('../../../zql/src/builder/debug-delegate.ts', () => ({
   Debug: vi.fn(),
 }));
 
+// Mock planner debug and cost model
+vi.mock('../../../zql/src/planner/planner-debug.ts', () => ({
+  AccumulatorDebugger: vi.fn(function () {
+    return {
+      events: [],
+    };
+  }),
+  serializePlanDebugEvents: vi.fn(events => events),
+}));
+
+vi.mock('../../../zqlite/src/sqlite-cost-model.ts', () => ({
+  createSQLiteCostModel: vi.fn(() => ({
+    // Mock cost model function
+  })),
+}));
+
 describe('analyzeQuery', () => {
   const lc = createSilentLogContext();
 
@@ -63,6 +88,8 @@ describe('analyzeQuery', () => {
     },
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
+
+  const minimalClientSchema: ClientSchema = {tables: {}};
 
   const simpleAST: AST = {
     table: 'users',
@@ -88,10 +115,16 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue(mockPlans);
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
+      minimalClientSchema,
       simpleAST,
       true, // isTransformed (AST already has server names)
       expect.objectContaining({
@@ -110,6 +143,7 @@ describe('analyzeQuery', () => {
           decorateFilterInput: expect.any(Function),
         }),
       }),
+      expect.anything(),
     );
 
     expect(explainQueries).toHaveBeenCalledWith(
@@ -119,7 +153,7 @@ describe('analyzeQuery', () => {
 
     expect(result).toEqual({
       ...mockResult,
-      plans: mockPlans,
+      sqlitePlans: mockPlans,
     });
   });
 
@@ -135,21 +169,30 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST, false, true);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+      false,
+      true,
+    );
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
+      minimalClientSchema,
       simpleAST,
       true,
       expect.objectContaining({
         syncedRows: false,
         vendedRows: true,
       }),
+      expect.anything(),
     );
 
     expect(result).toEqual({
       ...mockResult,
-      plans: {},
+      sqlitePlans: {},
     });
   });
 
@@ -180,13 +223,20 @@ describe('analyzeQuery', () => {
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
 
-    const result = await analyzeQuery(lc, mockConfig, complexAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      complexAST,
+    );
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
+      minimalClientSchema,
       complexAST,
       true,
       expect.any(Object),
+      expect.anything(),
     );
     expect(result.syncedRowCount).toBe(10);
   });
@@ -203,10 +253,15 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
-    expect(result.plans).toEqual({});
+    expect(result.sqlitePlans).toEqual({});
   });
 
   test('handles empty read row counts by query', async () => {
@@ -221,19 +276,24 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
-    expect(result.plans).toEqual({});
+    expect(result.sqlitePlans).toEqual({});
   });
 
   test('propagates errors from runAst', async () => {
     const error = new Error('Query analysis failed');
     vi.mocked(runAst).mockRejectedValue(error);
 
-    await expect(analyzeQuery(lc, mockConfig, simpleAST)).rejects.toThrow(
-      'Query analysis failed',
-    );
+    await expect(
+      analyzeQuery(lc, mockConfig, minimalClientSchema, simpleAST),
+    ).rejects.toThrow('Query analysis failed');
   });
 
   test('creates proper host delegate with getSource function', async () => {
@@ -244,8 +304,10 @@ describe('analyzeQuery', () => {
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(mustGetTableSpec).mockReturnValue(mockTableSpec as any);
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(TableSource).mockImplementation(() => ({}) as any);
+    vi.mocked(TableSource).mockImplementation(function () {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return {} as any;
+    });
 
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
@@ -256,10 +318,10 @@ describe('analyzeQuery', () => {
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
 
-    await analyzeQuery(lc, mockConfig, simpleAST);
+    await analyzeQuery(lc, mockConfig, minimalClientSchema, simpleAST);
 
     // Verify that runAst was called with a host that has the expected functions
-    const hostArg = vi.mocked(runAst).mock.calls[0][3].host;
+    const hostArg = vi.mocked(runAst).mock.calls[0][4].host;
 
     expect(typeof hostArg.getSource).toBe('function');
     expect(typeof hostArg.createStorage).toBe('function');
@@ -281,6 +343,7 @@ describe('analyzeQuery', () => {
       tableName,
       mockTableSpec.zqlSpec,
       mockTableSpec.tableSpec.primaryKey,
+      expect.anything(), // should yield
     );
   });
 
@@ -295,8 +358,10 @@ describe('analyzeQuery', () => {
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(mustGetTableSpec).mockReturnValue(mockTableSpec as any);
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(TableSource).mockImplementation(() => mockTableSource as any);
+    vi.mocked(TableSource).mockImplementation(function () {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return mockTableSource as any;
+    });
     vi.mocked(explainQueries).mockReturnValue({});
 
     const mockResult: AnalyzeQueryResult = {
@@ -308,9 +373,9 @@ describe('analyzeQuery', () => {
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
 
-    await analyzeQuery(lc, mockConfig, simpleAST);
+    await analyzeQuery(lc, mockConfig, minimalClientSchema, simpleAST);
 
-    const hostArg = vi.mocked(runAst).mock.calls[0][3].host;
+    const hostArg = vi.mocked(runAst).mock.calls[0][4].host;
 
     // Call getSource twice with the same table name
     const tableName = 'test_table';
@@ -333,16 +398,25 @@ describe('analyzeQuery', () => {
       end: 1010,
     });
 
-    await analyzeQuery(lc, mockConfig, simpleAST, false, true);
+    await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+      false,
+      true,
+    );
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
+      minimalClientSchema,
       simpleAST,
       true,
       expect.objectContaining({
         syncedRows: false,
         vendedRows: true,
       }),
+      expect.anything(),
     );
   });
 
@@ -373,7 +447,7 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue(mockPlans);
 
-    await analyzeQuery(lc, mockConfig, simpleAST);
+    await analyzeQuery(lc, mockConfig, minimalClientSchema, simpleAST);
 
     // Verify explainQueries is called with readRowCountsByQuery, not vendedRowCounts
     expect(explainQueries).toHaveBeenCalledWith(
@@ -388,10 +462,10 @@ describe('analyzeQuery', () => {
     );
   });
 
-  test('plans are populated when readRowCountsByQuery is set (regression test)', async () => {
+  test('sqlitePlans are populated when readRowCountsByQuery is set (regression test)', async () => {
     // This test simulates the actual bug: vendedRowCounts was deprecated and no longer set,
     // but the code was using it. When readRowCountsByQuery is undefined, explainQueries
-    // would be called with undefined/empty object, resulting in no plans.
+    // would be called with undefined/empty object, resulting in no sqlitePlans.
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
       syncedRowCount: 10,
@@ -416,21 +490,26 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue(expectedPlans);
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     // Critical assertion: explainQueries must be called with readRowCountsByQuery
-    // If it were called with vendedRowCounts (undefined), we'd get no plans
+    // If it were called with vendedRowCounts (undefined), we'd get no sqlitePlans
     expect(explainQueries).toHaveBeenCalledWith(
       mockResult.readRowCountsByQuery,
       expect.any(Object),
     );
 
-    // Verify plans are actually populated in the result
-    expect(result.plans).toEqual(expectedPlans);
-    expect(Object.keys(result.plans ?? {})).toHaveLength(1);
+    // Verify sqlitePlans are actually populated in the result
+    expect(result.sqlitePlans).toEqual(expectedPlans);
+    expect(Object.keys(result.sqlitePlans ?? {})).toHaveLength(1);
   });
 
-  test('plans default to empty object when readRowCountsByQuery is undefined', async () => {
+  test('sqlitePlans default to empty object when readRowCountsByQuery is undefined', async () => {
     // Edge case: when readRowCountsByQuery is undefined, we should default to {}
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
@@ -443,19 +522,26 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     // Should call explainQueries with empty object (due to ?? {} in the code)
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
-    expect(result.plans).toEqual({});
+    expect(result.sqlitePlans).toEqual({});
   });
 
-  test('real integration: explainQueries produces actual plans from readRowCountsByQuery', async () => {
+  test('real integration: explainQueries produces actual sqlitePlans from readRowCountsByQuery', async () => {
     // This test bypasses the mock for explainQueries to verify real plan generation
     const {explainQueries: realExplainQueries} = await vi.importActual<
+      // oxlint-disable-next-line consistent-type-imports
       typeof import('../../../zqlite/src/explain-queries.ts')
     >('../../../zqlite/src/explain-queries.ts');
     const {Database: RealDatabase} = await vi.importActual<
+      // oxlint-disable-next-line consistent-type-imports
       typeof import('../../../zqlite/src/db.ts')
     >('../../../zqlite/src/db.ts');
 
@@ -520,7 +606,12 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     // Verify elapsed is present (new property)
     expect(result.elapsed).toBe(50);
@@ -546,9 +637,175 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     expect(result.elapsed).toBe(150);
     expect(result.elapsed).toBe(result.end - result.start);
+  });
+
+  describe('planner debug', () => {
+    test('includes join plans when joinPlans is true', async () => {
+      const mockDebugEvents = [
+        {type: 'attempt-start', attemptNumber: 0, totalAttempts: 1} as const,
+        {
+          type: 'plan-complete',
+          attemptNumber: 0,
+          totalCost: 10.5,
+          flipPattern: 0,
+          joinStates: [],
+        } as const,
+      ];
+
+      const mockDebugger = {
+        events: mockDebugEvents,
+        format: vi.fn().mockReturnValue('formatted debug output'),
+      };
+
+      vi.mocked(AccumulatorDebugger).mockImplementation(function () {
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        return mockDebugger as any;
+      });
+      vi.mocked(serializePlanDebugEvents).mockReturnValue(
+        mockDebugEvents as unknown as PlanDebugEventJSON[],
+      );
+
+      const mockResult: AnalyzeQueryResult = {
+        warnings: [],
+        syncedRowCount: 5,
+        start: 1000,
+        end: 1050,
+        readRowCountsByQuery: {},
+      };
+
+      vi.mocked(runAst).mockResolvedValue(mockResult);
+      vi.mocked(explainQueries).mockReturnValue({});
+
+      const result = await analyzeQuery(
+        lc,
+        mockConfig,
+        minimalClientSchema,
+        simpleAST,
+        true,
+        false,
+        undefined,
+        undefined,
+        true, // joinPlans = true
+      );
+
+      // Verify AccumulatorDebugger was created
+      expect(AccumulatorDebugger).toHaveBeenCalled();
+
+      // Verify createSQLiteCostModel was called
+      expect(createSQLiteCostModel).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Map),
+      );
+
+      // Verify runAst was called with cost model and debugger
+      expect(runAst).toHaveBeenCalledWith(
+        lc,
+        minimalClientSchema,
+        simpleAST,
+        true,
+        expect.objectContaining({
+          costModel: expect.anything(),
+          planDebugger: mockDebugger,
+        }),
+        expect.anything(), // shouldYield
+      );
+
+      // Verify serializePlanDebugEvents was called
+      expect(serializePlanDebugEvents).toHaveBeenCalledWith(mockDebugEvents);
+
+      // Verify result includes joinPlans
+      expect(result.joinPlans).toEqual(mockDebugEvents);
+    });
+
+    test('does not include join plans when joinPlans is false', async () => {
+      vi.clearAllMocks();
+
+      const mockResult: AnalyzeQueryResult = {
+        warnings: [],
+        syncedRowCount: 5,
+        start: 1000,
+        end: 1050,
+        readRowCountsByQuery: {},
+      };
+
+      vi.mocked(runAst).mockResolvedValue(mockResult);
+      vi.mocked(explainQueries).mockReturnValue({});
+
+      const result = await analyzeQuery(
+        lc,
+        mockConfig,
+        minimalClientSchema,
+        simpleAST,
+        true,
+        false,
+        undefined,
+        undefined,
+        false, // joinPlans = false
+      );
+
+      // Verify AccumulatorDebugger was NOT created
+      expect(AccumulatorDebugger).not.toHaveBeenCalled();
+
+      // Verify createSQLiteCostModel was NOT called
+      expect(createSQLiteCostModel).not.toHaveBeenCalled();
+
+      // Verify runAst was called without cost model and debugger
+      expect(runAst).toHaveBeenCalledWith(
+        lc,
+        minimalClientSchema,
+        simpleAST,
+        true,
+        expect.objectContaining({
+          costModel: undefined,
+          planDebugger: undefined,
+        }),
+        expect.anything(), // shouldYield
+      );
+
+      // Verify serializePlanDebugEvents was NOT called
+      expect(serializePlanDebugEvents).not.toHaveBeenCalled();
+
+      // Verify result does not include joinPlans
+      expect(result.joinPlans).toBeUndefined();
+    });
+
+    test('defaults joinPlans to false when not provided', async () => {
+      vi.clearAllMocks();
+
+      const mockResult: AnalyzeQueryResult = {
+        warnings: [],
+        syncedRowCount: 5,
+        start: 1000,
+        end: 1050,
+        readRowCountsByQuery: {},
+      };
+
+      vi.mocked(runAst).mockResolvedValue(mockResult);
+      vi.mocked(explainQueries).mockReturnValue({});
+
+      // Call without joinPlans parameter
+      const result = await analyzeQuery(
+        lc,
+        mockConfig,
+        minimalClientSchema,
+        simpleAST,
+      );
+
+      // Verify cost model and debugger were NOT created
+      expect(AccumulatorDebugger).not.toHaveBeenCalled();
+      expect(createSQLiteCostModel).not.toHaveBeenCalled();
+
+      // Verify result does not include joinPlans
+      expect(result.joinPlans).toBeUndefined();
+    });
   });
 });

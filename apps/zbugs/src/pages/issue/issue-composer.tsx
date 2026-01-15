@@ -1,5 +1,7 @@
+import {useZero} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {mutators} from '../../../shared/mutators.ts';
 import {Button} from '../../components/button.tsx';
 import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
@@ -8,7 +10,6 @@ import {
 } from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
 import {useIsOffline} from '../../hooks/use-is-offline.ts';
-import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
@@ -61,14 +62,16 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
   const handleSubmit = async () => {
     const id = nanoid();
 
-    const result = z.mutate.issue.create({
-      id,
-      projectID,
-      title,
-      description: description ?? '',
-      created: Date.now(),
-      modified: Date.now(),
-    });
+    const result = z.mutate(
+      mutators.issue.create({
+        id,
+        projectID,
+        title,
+        description: description ?? '',
+        created: Date.now(),
+        modified: Date.now(),
+      }),
+    );
 
     // we wait for the client result to redirect to the issue page
     const clientResult = await result.client;

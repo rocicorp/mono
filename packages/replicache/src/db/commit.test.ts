@@ -7,9 +7,9 @@ import * as FormatVersion from '../format-version-enum.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import {type Hash, fakeHash, makeNewFakeHashFunction} from '../hash.ts';
 import {withRead} from '../with-transactions.ts';
+import type {Commit} from './commit.ts';
 import {
   type ChunkIndexDefinition,
-  Commit,
   type CommitData,
   type Meta,
   baseSnapshotFromHash,

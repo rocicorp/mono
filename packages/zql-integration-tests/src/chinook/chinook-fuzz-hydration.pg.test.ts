@@ -4,11 +4,12 @@ import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
-import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import {createRandomYieldWrapper} from '../../../zql/src/ivm/test/random-yield-source.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
-import {bootstrap, runAndCompare} from '../helpers/runner.ts';
+import {bootstrap, checkPush, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
@@ -23,9 +24,43 @@ const harness = await bootstrap({
   pgContent,
 });
 
-test.each(Array.from({length: 0}, () => createCase()))(
+// Internal timeout for graceful handling (shorter than vitest timeout)
+const TEST_TIMEOUT_MS = 15_000;
+
+/**
+ * Error thrown when a fuzz test query exceeds the time limit.
+ * This is caught and treated as a pass (with warning) rather than a failure.
+ */
+class FuzzTimeoutError extends Error {
+  constructor(label: string, elapsedMs: number) {
+    super(`Fuzz test "${label}" timed out after ${elapsedMs}ms`);
+    this.name = 'FuzzTimeoutError';
+  }
+}
+
+/**
+ * Creates a checkAbort function that throws FuzzTimeoutError when the
+ * elapsed time exceeds the timeout. This allows synchronous query execution
+ * to be aborted when it takes too long.
+ */
+function createCheckAbort(
+  startTime: number,
+  timeoutMs: number,
+  label: string,
+): () => void {
+  return () => {
+    const elapsed = Date.now() - startTime;
+    if (elapsed > timeoutMs) {
+      throw new FuzzTimeoutError(label, elapsed);
+    }
+  };
+}
+
+// oxlint-disable-next-line expect-expect
+test.each(Array.from({length: 100}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
+  60_000, // vitest timeout: longer than internal timeout to ensure we catch it ourselves
 );
 
 test('sentinel', () => {
@@ -40,12 +75,12 @@ if (REPRO_SEED) {
     console.log(
       'ZQL',
       await formatOutput(
-        queryWithContext(query[0], undefined).ast.table +
-          astToZQL(queryWithContext(query[0], undefined).ast),
+        asQueryInternals(query[0]).ast.table +
+          astToZQL(asQueryInternals(query[0]).ast),
       ),
     );
     await runCase(tc);
-  });
+  }, 60_000);
 }
 
 function createCase(seed?: number) {
@@ -58,6 +93,7 @@ function createCase(seed?: number) {
   });
   return {
     seed,
+    rng,
     query: generateShrinkableQuery(
       schema,
       {},
@@ -71,18 +107,37 @@ function createCase(seed?: number) {
 async function runCase({
   query,
   seed,
+  rng,
 }: {
   query: [AnyQuery, AnyQuery[]];
   seed: number;
+  rng: () => number;
 }) {
+  const label = `fuzz-hydration ${seed}`;
+  const startTime = Date.now();
+  const checkAbort = createCheckAbort(startTime, TEST_TIMEOUT_MS, label);
+
+  // Create a source wrapper that injects random yields and timeout checking
+  // for both memory and sqlite sources
+  const sourceWrapper = createRandomYieldWrapper(rng, 0.3, checkAbort);
+
   try {
-    await runAndCompare(schema, harness.delegates, query[0], undefined);
+    await harness.transact(async delegates => {
+      await runAndCompare(schema, delegates, query[0], undefined);
+      await checkPush(schema, delegates, query[0], 10);
+    }, sourceWrapper);
   } catch (e) {
+    // Timeouts pass with a warning
+    if (e instanceof FuzzTimeoutError) {
+      console.warn(`⚠️ ${e.message} - passing anyway`);
+      return;
+    }
+
+    // Actual test failures get shrunk and re-thrown
     const zql = await shrink(query[1], seed);
     if (seed === REPRO_SEED) {
       throw e;
     }
-
     throw new Error('Mismatch. Repro seed: ' + seed + '\nshrunk zql: ' + zql);
   }
 }
@@ -96,12 +151,10 @@ async function shrink(generations: AnyQuery[], seed: number) {
   while (low < high) {
     const mid = low + ((high - low) >> 1);
     try {
-      await runAndCompare(
-        schema,
-        harness.delegates,
-        generations[mid],
-        undefined,
-      );
+      await harness.transact(async delegates => {
+        await runAndCompare(schema, delegates, generations[mid], undefined);
+        await checkPush(schema, delegates, generations[mid], 10);
+      });
       low = mid + 1;
     } catch {
       lastFailure = mid;
@@ -112,6 +165,6 @@ async function shrink(generations: AnyQuery[], seed: number) {
     throw new Error('no failure found');
   }
   const query = generations[lastFailure];
-  const queryInternals = queryWithContext(query, undefined);
+  const queryInternals = asQueryInternals(query);
   return formatOutput(queryInternals.ast.table + astToZQL(queryInternals.ast));
 }

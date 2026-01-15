@@ -35,11 +35,11 @@ async function main() {
       schema: {
         path: {
           type: v.string().optional(),
-          desc: [
-            'Relative path to the file containing the schema definition.',
-            'The file must have a default export of type SchemaConfig.',
-          ],
+          desc: ['Relative path to the file containing permissions.'],
           alias: 'p',
+          deprecated: [
+            'Permissions are deprecated and will be removed in an upcoming release. See: https://zero.rocicorp.dev/docs/auth.',
+          ],
         },
       },
       ...zeroOptions,
@@ -48,6 +48,8 @@ async function main() {
       envNamePrefix: ZERO_ENV_VAR_PREFIX,
       // TODO: This may no longer be necessary since multi-tenant was removed.
       allowPartial: true, // required by server/runner/config.ts
+      // Let the spawned zero-cache process emit deprecation warnings
+      emitDeprecationWarnings: false,
     },
   );
 
@@ -65,11 +67,15 @@ async function main() {
     {
       envNamePrefix: ZERO_ENV_VAR_PREFIX,
       allowUnknown: true,
+      includeDefaults: false,
+      emitDeprecationWarnings: false,
     },
   );
   const {env: zeroCacheEnv} = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: ZERO_ENV_VAR_PREFIX,
     allowUnknown: true,
+    includeDefaults: false,
+    emitDeprecationWarnings: false,
   });
 
   let permissionsProcess: ChildProcess | undefined;
@@ -150,6 +156,13 @@ async function main() {
   }
 
   if (config.schema.path) {
+    if (config.query.url && config.mutate.url) {
+      lc.error?.(
+        'Cannot use -p/--path/ZERO_SCHEMA_PATH flag when using ZERO_MUTATE_URL and ZERO_QUERY_URL.',
+      );
+      process.exit(-1);
+    }
+
     await deployPermissionsAndStartZeroCache();
 
     // Watch for file changes

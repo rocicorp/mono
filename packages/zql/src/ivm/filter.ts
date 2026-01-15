@@ -27,8 +27,16 @@ export class Filter implements FilterOperator {
     input.setFilterOutput(this);
   }
 
-  filter(node: Node, cleanup: boolean): boolean {
-    return this.#predicate(node.row) && this.#output.filter(node, cleanup);
+  beginFilter(): void {
+    this.#output.beginFilter();
+  }
+
+  endFilter(): void {
+    this.#output.endFilter();
+  }
+
+  *filter(node: Node): Generator<'yield', boolean> {
+    return this.#predicate(node.row) && (yield* this.#output.filter(node));
   }
 
   setFilterOutput(output: FilterOutput) {
@@ -43,7 +51,7 @@ export class Filter implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  push(change: Change) {
-    filterPush(change, this.#output, this, this.#predicate);
+  *push(change: Change) {
+    yield* filterPush(change, this.#output, this, this.#predicate);
   }
 }

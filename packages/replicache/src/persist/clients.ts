@@ -8,9 +8,9 @@ import {BTreeRead} from '../btree/read.ts';
 import {type FrozenCookie, compareCookies} from '../cookies.ts';
 import {type Refs, toRefs} from '../dag/chunk.ts';
 import type {Read, Store, Write} from '../dag/store.ts';
+import type {Commit} from '../db/commit.ts';
 import {
   type ChunkIndexDefinition,
-  Commit,
   type IndexRecord,
   type SnapshotMetaDD31,
   assertSnapshotCommitDD31,
@@ -22,7 +22,7 @@ import {
 } from '../db/commit.ts';
 import {createIndexBTree} from '../db/write.ts';
 import type {DeletedClients} from '../deleted-clients.ts';
-import * as FormatVersion from '../format-version-enum.ts';
+import type * as FormatVersion from '../format-version-enum.ts';
 import {type FrozenJSONValue, deepFreeze} from '../frozen-json.ts';
 import {type Hash, hashSchema} from '../hash.ts';
 import {type IndexDefinitions, indexDefinitionsEqual} from '../index-defs.ts';

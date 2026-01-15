@@ -24,3 +24,9 @@ secrets*.json
 *.sln
 *.sw?
 zero-schema.json
+
+# db
+*.db
+*.db-shm
+*.db-wal
+*.db-wal2

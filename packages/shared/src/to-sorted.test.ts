@@ -1,21 +1,13 @@
 import {expect, test} from 'vitest';
-import data from '../tsconfig.json' with {type: 'json'};
+import {getESLibVersion} from './get-es-lib-version.ts';
 import {toSorted} from './to-sorted.ts';
-
-function getESLibVersion(libs: string[]): number {
-  const esVersion = libs.find(lib => lib.toLowerCase().startsWith('es'));
-  if (!esVersion) {
-    throw new Error('Could not find ES lib version');
-  }
-  return parseInt(esVersion.slice(2), 10);
-}
 
 test('lib < ES2023', () => {
   // toSorted was added in ES2023
 
   // sanity check that we are using es2022. If this starts failing then we can
   // remove the toSorted and use the builtin.
-  expect(getESLibVersion(data.compilerOptions.lib)).toBeLessThan(2023);
+  expect(getESLibVersion()).toBeLessThan(2023);
 });
 
 test('sorts an array of numbers in ascending order', () => {

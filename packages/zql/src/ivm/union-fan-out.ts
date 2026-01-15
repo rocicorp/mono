@@ -23,12 +23,12 @@ export class UnionFanOut implements Operator {
     this.#unionFanIn = fanIn;
   }
 
-  push(change: Change): void {
+  *push(change: Change): Stream<'yield'> {
     must(this.#unionFanIn).fanOutStartedPushing();
     for (const output of this.#outputs) {
-      output.push(change, this);
+      yield* output.push(change, this);
     }
-    must(this.#unionFanIn).fanOutDonePushing(change.type);
+    yield* must(this.#unionFanIn).fanOutDonePushing(change.type);
   }
 
   setOutput(output: Output): void {
@@ -39,13 +39,8 @@ export class UnionFanOut implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     return this.#input.fetch(req);
-  }
-
-  cleanup(_req: FetchRequest): Stream<Node> {
-    // Cleanup is going away. Not implemented.
-    return [];
   }
 
   destroy(): void {

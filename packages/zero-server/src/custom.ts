@@ -1,4 +1,6 @@
 import {assert} from '../../shared/src/asserts.ts';
+import {mapValues} from '../../shared/src/objects.ts';
+import {recordProxy} from '../../shared/src/record-proxy.ts';
 import {
   formatPgInternalConvert,
   sql,
@@ -11,90 +13,146 @@ import type {
   ServerSchema,
   ServerTableSchema,
 } from '../../zero-types/src/server-schema.ts';
+import {
+  type CRUDExecutor,
+  type CRUDKind,
+  makeCRUDMutate,
+  makeTransactionMutate,
+  type SchemaCRUD,
+  type TableCRUD,
+  type TransactionMutate,
+} from '../../zql/src/mutate/crud.ts';
 import type {
   DBTransaction,
-  SchemaCRUD,
-  SchemaQuery,
-  TableCRUD,
-  TransactionBase,
+  MutateCRUD,
+  ServerTransaction,
 } from '../../zql/src/mutate/custom.ts';
-import {queryWithContext} from '../../zql/src/query/query-internals.ts';
+import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
+import type {ConditionalSchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {getServerSchema} from './schema.ts';
-
-interface ServerTransaction<
-  TSchema extends Schema,
-  TWrappedTransaction,
-  TContext,
-> extends TransactionBase<TSchema, TContext> {
-  readonly location: 'server';
-  readonly reason: 'authoritative';
-  readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-}
 
 export type CustomMutatorDefs<TDBTransaction> = {
   [namespaceOrKey: string]:
-    | {
-        [key: string]: CustomMutatorImpl<TDBTransaction>;
-      }
-    | CustomMutatorImpl<TDBTransaction>;
+    | CustomMutatorImpl<TDBTransaction>
+    | CustomMutatorDefs<TDBTransaction>;
 };
 
-// oxlint-disable-next-line @typescript-eslint/no-explicit-any
-export type CustomMutatorImpl<TDBTransaction, TArgs = any> = (
-  tx: TDBTransaction,
-  args: TArgs,
-) => Promise<void>;
+export type CustomMutatorImpl<
+  TDBTransaction,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  TArgs = any,
+  Context = unknown,
+> = (tx: TDBTransaction, args: TArgs, ctx: Context) => Promise<void>;
 
-export class TransactionImpl<
-  TSchema extends Schema,
-  TWrappedTransaction,
-  TContext,
-> implements ServerTransaction<TSchema, TWrappedTransaction, TContext>
+/**
+ * QueryDelegate implementation for server-side transactions.
+ * Extends QueryDelegateBase to satisfy the QueryDelegate interface,
+ * but overrides run() to execute against Postgres and throws on
+ * preload()/materialize() which don't make sense server-side.
+ */
+class ServerTransactionQueryDelegate extends QueryDelegateBase {
+  readonly #dbTransaction: DBTransaction<unknown>;
+  readonly #schema: Schema;
+  readonly #serverSchema: ServerSchema;
+
+  readonly defaultQueryComplete = true;
+
+  constructor(
+    dbTransaction: DBTransaction<unknown>,
+    schema: Schema,
+    serverSchema: ServerSchema,
+  ) {
+    super();
+    this.#dbTransaction = dbTransaction;
+    this.#schema = schema;
+    this.#serverSchema = serverSchema;
+  }
+
+  getSource(): never {
+    throw new Error('not implemented');
+  }
+
+  override run<
+    TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
+    TReturn,
+  >(
+    query: Query<TTable, TSchema, TReturn>,
+    _options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    const queryInternals = asQueryInternals(query);
+    return this.#dbTransaction.runQuery<TReturn>(
+      queryInternals.ast,
+      queryInternals.format,
+      this.#schema,
+      this.#serverSchema,
+    );
+  }
+
+  override preload(): never {
+    throw new Error('preload() is not supported in server transactions');
+  }
+
+  override materialize(): never {
+    throw new Error('materialize() is not supported in server transactions');
+  }
+}
+
+export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
+  implements ServerTransaction<TSchema, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
   readonly clientID: string;
   readonly mutationID: number;
-  readonly mutate: SchemaCRUD<TSchema>;
-  readonly query: SchemaQuery<TSchema, TContext>;
+  readonly mutate: TransactionMutate<TSchema>;
+  /**
+   * @deprecated Use {@linkcode createBuilder} with `tx.run(zql.table.where(...))` instead.
+   */
+  readonly query: ConditionalSchemaQuery<TSchema>;
+
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
-  readonly #context: TContext;
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
-    mutate: SchemaCRUD<TSchema>,
-    query: SchemaQuery<TSchema, TContext>,
+    mutate: TransactionMutate<TSchema>,
     schema: TSchema,
     serverSchema: ServerSchema,
-    context: TContext,
   ) {
     this.dbTransaction = dbTransaction;
     this.clientID = clientID;
     this.mutationID = mutationID;
     this.mutate = mutate;
-    this.query = query;
     this.#schema = schema;
     this.#serverSchema = serverSchema;
-    this.#context = context;
+
+    const delegate = new ServerTransactionQueryDelegate(
+      dbTransaction,
+      schema,
+      serverSchema,
+    );
+    this.query = createRunnableBuilder(delegate, schema);
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TTable, TSchema, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    const queryInternals = queryWithContext(query, this.#context as TContext);
+    const queryInternals = asQueryInternals(query);
 
     // Execute the query using the database-specific executor
-    return this.dbTransaction.executeQuery<TReturn>(
+    return this.dbTransaction.runQuery<TReturn>(
       queryInternals.ast,
       queryInternals.format,
       this.#schema,
@@ -112,88 +170,129 @@ type WithHiddenTxAndSchema = {
   [serverSchemaSymbol]: ServerSchema;
 };
 
+/**
+ * Factory for creating MutateCRUD instances efficiently.
+ *
+ * Pre-creates the SQL-generating TableCRUD methods once from the schema,
+ * caches the serverSchema after first fetch, and only binds the transaction
+ * at transaction time.
+ *
+ * Use this when you need to create many transactions and want to avoid
+ * the overhead of re-creating CRUD methods for each one.
+ */
+export class CRUDMutatorFactory<S extends Schema> {
+  readonly #schema: S;
+  readonly #tableCRUDs: Record<string, TableCRUD<TableSchema>>;
+  #serverSchema: ServerSchema | undefined;
+
+  constructor(schema: S) {
+    this.#schema = schema;
+    // Pre-create TableCRUD methods for each table once
+    this.#tableCRUDs = {};
+    for (const tableSchema of Object.values(schema.tables)) {
+      this.#tableCRUDs[tableSchema.name] = makeServerTableCRUD(tableSchema);
+    }
+  }
+
+  /**
+   * Gets the cached serverSchema, or fetches and caches it on first call.
+   */
+  async #getOrFetchServerSchema(
+    dbTransaction: DBTransaction<unknown>,
+  ): Promise<ServerSchema> {
+    if (!this.#serverSchema) {
+      this.#serverSchema = await getServerSchema(dbTransaction, this.#schema);
+    }
+    return this.#serverSchema;
+  }
+
+  /**
+   * Creates a CRUDExecutor bound to the given transaction and serverSchema.
+   * Uses the pre-created TableCRUD methods from construction time.
+   */
+  createExecutor(
+    dbTransaction: DBTransaction<unknown>,
+    serverSchema: ServerSchema,
+  ): CRUDExecutor {
+    const txHolder: WithHiddenTxAndSchema = {
+      [dbTxSymbol]: dbTransaction,
+      [serverSchemaSymbol]: serverSchema,
+    };
+    const boundCRUDs = recordProxy(this.#tableCRUDs, tableCRUD =>
+      mapValues(tableCRUD, method => method.bind(txHolder)),
+    ) as unknown as SchemaCRUD<S>;
+
+    return (table: string, kind: CRUDKind, args: unknown) => {
+      const tableCRUD = boundCRUDs[table as keyof S['tables']];
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return (tableCRUD as any)[kind](args);
+    };
+  }
+
+  /**
+   * Creates a full ServerTransaction.
+   * Fetches/caches serverSchema automatically.
+   */
+  async createTransaction<TWrappedTransaction>(
+    dbTransaction: DBTransaction<TWrappedTransaction>,
+    clientID: string,
+    mutationID: number,
+  ): Promise<TransactionImpl<S, TWrappedTransaction>> {
+    const serverSchema = await this.#getOrFetchServerSchema(dbTransaction);
+    const executor = this.createExecutor(dbTransaction, serverSchema);
+    const mutate = makeTransactionMutate(this.#schema, executor);
+    return new TransactionImpl(
+      dbTransaction,
+      clientID,
+      mutationID,
+      mutate,
+      this.#schema,
+      serverSchema,
+    );
+  }
+}
+
 export async function makeServerTransaction<
   TSchema extends Schema,
   TWrappedTransaction,
-  TContext,
 >(
   dbTransaction: DBTransaction<TWrappedTransaction>,
   clientID: string,
   mutationID: number,
   schema: TSchema,
-  mutate: (
-    dbTransaction: DBTransaction<TWrappedTransaction>,
-    serverSchema: ServerSchema,
-  ) => SchemaCRUD<TSchema>,
-  query: SchemaQuery<TSchema, TContext>,
-  context: TContext,
 ) {
   const serverSchema = await getServerSchema(dbTransaction, schema);
+  // Use the internal executor and shared function directly,
+  // bypassing the validation in makeMutateCRUD/makeSchemaCRUD
+  const executor = makeServerCRUDExecutor(schema, dbTransaction, serverSchema);
+  const mutate = makeTransactionMutate(schema, executor);
   return new TransactionImpl(
     dbTransaction,
     clientID,
     mutationID,
-    mutate(dbTransaction, serverSchema),
-    query,
+    mutate,
     schema,
     serverSchema,
-    context,
   );
 }
 
+/**
+ * @deprecated Use transactions instead.
+ *
+ * Returns a curried function for backwards compatibility.
+ */
 export function makeSchemaCRUD<S extends Schema>(
   schema: S,
 ): (
   dbTransaction: DBTransaction<unknown>,
   serverSchema: ServerSchema,
-) => SchemaCRUD<S> {
-  const schemaCRUDs: Record<string, TableCRUD<TableSchema>> = {};
-  for (const tableSchema of Object.values(schema.tables)) {
-    schemaCRUDs[tableSchema.name] = makeTableCRUD(tableSchema);
-  }
-
-  /**
-   * For users with very large schemas it is expensive to re-create
-   * all the CRUD mutators for each transaction. Instead, we create
-   * them all once up-front and then bind them to the transaction
-   * as requested.
-   */
-  class CRUDHandler {
-    readonly #dbTransaction: DBTransaction<unknown>;
-    readonly #serverSchema: ServerSchema;
-    constructor(
-      dbTransaction: DBTransaction<unknown>,
-      serverSchema: ServerSchema,
-    ) {
-      this.#dbTransaction = dbTransaction;
-      this.#serverSchema = serverSchema;
-    }
-
-    get(target: Record<string, TableCRUD<TableSchema>>, prop: string) {
-      if (prop in target) {
-        return target[prop];
-      }
-
-      const txHolder: WithHiddenTxAndSchema = {
-        [dbTxSymbol]: this.#dbTransaction,
-        [serverSchemaSymbol]: this.#serverSchema,
-      };
-      target[prop] = Object.fromEntries(
-        Object.entries(schemaCRUDs[prop]).map(([name, method]) => [
-          name,
-          method.bind(txHolder),
-        ]),
-      ) as TableCRUD<TableSchema>;
-
-      return target[prop];
-    }
-  }
-
+) => MutateCRUD<S, true> {
   return (dbTransaction: DBTransaction<unknown>, serverSchema: ServerSchema) =>
-    new Proxy(
-      {},
-      new CRUDHandler(dbTransaction, serverSchema),
-    ) as SchemaCRUD<S>;
+    makeCRUDMutate(
+      schema,
+      true,
+      makeServerCRUDExecutor(schema, dbTransaction, serverSchema),
+    );
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -206,7 +305,47 @@ function removeUndefined<T extends Record<string, unknown>>(value: T): T {
   return valueWithoutUndefined as T;
 }
 
-function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
+/**
+ * Creates a CRUDExecutor for server-side SQL execution.
+ *
+ * For users with very large schemas it is expensive to re-create
+ * all the CRUD mutators for each transaction. Instead, we create
+ * the SQL-generating methods once up-front and then bind them to
+ * the transaction as requested.
+ */
+function makeServerCRUDExecutor<S extends Schema>(
+  schema: S,
+  dbTransaction: DBTransaction<unknown>,
+  serverSchema: ServerSchema,
+): CRUDExecutor {
+  // Pre-create TableCRUD methods for each table (optimization for large schemas)
+  const tableCRUDs: Record<string, TableCRUD<TableSchema>> = {};
+  for (const tableSchema of Object.values(schema.tables)) {
+    tableCRUDs[tableSchema.name] = makeServerTableCRUD(tableSchema);
+  }
+
+  // Bind transaction context to the methods
+  const txHolder: WithHiddenTxAndSchema = {
+    [dbTxSymbol]: dbTransaction,
+    [serverSchemaSymbol]: serverSchema,
+  };
+  const boundCRUDs = recordProxy(tableCRUDs, tableCRUD =>
+    mapValues(tableCRUD, method => method.bind(txHolder)),
+  ) as unknown as SchemaCRUD<S>;
+
+  // Return executor that dispatches to bound methods
+  return (table: string, kind: CRUDKind, args: unknown) => {
+    const tableCRUD = boundCRUDs[table as keyof S['tables']];
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    return (tableCRUD as any)[kind](args);
+  };
+}
+
+/**
+ * Creates SQL-generating TableCRUD methods for a table.
+ * Methods use `this` context to access transaction and server schema.
+ */
+function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
   return {
     async insert(this: WithHiddenTxAndSchema, value) {
       value = removeUndefined(value);

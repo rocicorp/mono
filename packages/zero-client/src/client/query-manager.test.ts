@@ -50,7 +50,6 @@ function createExperimentalWatchMock() {
 
 const ackMutations = () => {};
 const onFatalError = () => {};
-const onApplicationError = () => {};
 
 const queryChangeThrottleMs = 10;
 const lc = createSilentLogContext();
@@ -69,7 +68,6 @@ test('add', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   const ast: AST = {
     table: 'issue',
@@ -116,7 +114,6 @@ test('add and remove a custom query', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   const ast: AST = {
     table: 'issue',
@@ -212,7 +209,6 @@ test('add renamed fields', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   const ast: AST = {
     table: 'issue',
@@ -391,7 +387,6 @@ test('remove, recent queries max size 0', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   const ast: AST = {
     table: 'issue',
@@ -461,7 +456,6 @@ test('remove, max recent queries size 2', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   const ast1: AST = {
     table: 'issue',
@@ -628,7 +622,6 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   const ast1: AST = {
     table: 'issue',
@@ -848,7 +841,6 @@ describe('getQueriesPatch', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
-      onApplicationError,
     );
     // hash: 12hwg3ihkijhm
     const ast1: AST = {
@@ -917,7 +909,6 @@ describe('getQueriesPatch', () => {
         queryChangeThrottleMs,
         slowMaterializeThreshold,
         onFatalError,
-        onApplicationError,
       );
     });
 
@@ -1121,7 +1112,6 @@ describe('getQueriesPatch', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
-      onApplicationError,
     );
     const ast1: AST = {
       table: 'issue',
@@ -1241,7 +1231,6 @@ test('handleClosed marks queries as errored exactly once', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
 
   const ast: AST = {table: 'issue'};
@@ -1294,7 +1283,6 @@ test('gotCallback, query already got', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1367,7 +1355,6 @@ test('gotCallback, query got after add', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1435,7 +1422,6 @@ test('gotCallback, query got after add then removed', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1513,7 +1499,6 @@ test('gotCallback, query got after subscription removed', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1595,7 +1580,6 @@ describe('queriesPatch with lastPatch', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
-      onApplicationError,
     );
 
     queryManager.addLegacy(
@@ -1637,7 +1621,6 @@ describe('queriesPatch with lastPatch', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
-      onApplicationError,
     );
 
     const clean = queryManager.addLegacy(
@@ -1704,7 +1687,6 @@ const stubAst: AST = {
 describe('query transform errors', () => {
   test('got is called with an error when an app error occurs', () => {
     const onFatalErrorMock = vi.fn();
-    const onApplicationErrorMock = vi.fn();
     const nameAndArgs = {name: 'custom1', args: []};
     const nameAndArgs2 = {name: 'custom2', args: []};
 
@@ -1728,7 +1710,6 @@ describe('query transform errors', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalErrorMock,
-      onApplicationErrorMock,
     );
 
     const gotCallback1 = vi.fn<(got: boolean | Error) => void>();
@@ -1771,18 +1752,10 @@ describe('query transform errors', () => {
     // error does not notify unrelated queries
     expect(gotCallback2).toHaveBeenCalledTimes(1);
     expect(onFatalErrorMock).not.toHaveBeenCalled();
-    expect(onApplicationErrorMock).toHaveBeenCalledOnce();
-    expect(onApplicationErrorMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'failed to transform query',
-        details: 'injected failure',
-      }),
-    );
   });
 
   test('got is called with an error when a parse error occurs', () => {
     const onFatalErrorMock = vi.fn();
-    const onApplicationErrorMock = vi.fn();
     const nameAndArgs = {name: 'custom1', args: []};
     const nameAndArgs2 = {name: 'custom2', args: []};
 
@@ -1806,7 +1779,6 @@ describe('query transform errors', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalErrorMock,
-      onApplicationErrorMock,
     );
 
     const gotCallback1 = vi.fn<(got: boolean | Error) => void>();
@@ -1834,18 +1806,10 @@ describe('query transform errors', () => {
     expect(gotCallback1).nthCalledWith(2, false, parseError);
     expect(gotCallback2).toHaveBeenCalledTimes(1);
     expect(onFatalErrorMock).not.toHaveBeenCalled();
-    expect(onApplicationErrorMock).toHaveBeenCalledOnce();
-    expect(onApplicationErrorMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'invalid args',
-        details: undefined,
-      }),
-    );
   });
 
   test('calls onFatalError for non-app errors', () => {
     const onFatalErrorMock = vi.fn();
-    const onApplicationErrorMock = vi.fn();
     const experimentalWatch = createExperimentalWatchMock();
     const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
     const maxRecentQueriesSize = 0;
@@ -1865,7 +1829,6 @@ describe('query transform errors', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalErrorMock,
-      onApplicationErrorMock,
     );
 
     const ast: AST = {table: 'issue', orderBy: [['id', 'asc']]};
@@ -1891,12 +1854,10 @@ describe('query transform errors', () => {
         }),
       }),
     );
-    expect(onApplicationErrorMock).not.toHaveBeenCalled();
   });
 
   test('calls onFatalError for each non-app error in batch', () => {
     const onFatalErrorMock = vi.fn();
-    const onApplicationErrorMock = vi.fn();
     const experimentalWatch = createExperimentalWatchMock();
     const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
     const maxRecentQueriesSize = 0;
@@ -1916,7 +1877,6 @@ describe('query transform errors', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalErrorMock,
-      onApplicationErrorMock,
     );
 
     const ast1: AST = {table: 'issue', orderBy: [['id', 'asc']]};
@@ -1955,12 +1915,6 @@ describe('query transform errors', () => {
         }),
       }),
     );
-    expect(onApplicationErrorMock).toHaveBeenCalledOnce();
-    expect(onApplicationErrorMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Unknown application error',
-      }),
-    );
   });
 });
 
@@ -1981,7 +1935,6 @@ test('gotCallback, add same got callback twice', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -2054,7 +2007,6 @@ test('batching multiple operations in same microtask', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
 
   // Add multiple queries synchronously - should be batched
@@ -2106,7 +2058,6 @@ describe('query manager & mutator interaction', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
-      onApplicationError,
     );
   });
 
@@ -2190,7 +2141,6 @@ describe('Adding a query with TTL too large should warn', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
 
   afterEach(() => {
@@ -2288,7 +2238,6 @@ describe('update clamps TTL correctly', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
 
   afterEach(() => {
@@ -2442,7 +2391,6 @@ test('Getting the AST of custom query', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
-    onApplicationError,
   );
 
   const ast: AST = {

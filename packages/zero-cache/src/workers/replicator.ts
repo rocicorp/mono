@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';
@@ -73,17 +73,11 @@ async function connect(
       const t0 = performance.now();
       replica.unsafeMode(true);
       replica.pragma('journal_mode = OFF');
-      // Clear the changeLog to reclaim as much space as possible. The
-      // changeLog is only used for IVM advancements (i.e. from an initial
-      // hydration), so it is fine for it to be empty at startup.
-      replica.exec('DELETE FROM "_zero.changeLog"');
-      const t1 = performance.now();
-      lc.info?.(`Cleared _zero.changeLog (${t1 - t0} ms)`);
       replica.exec('VACUUM');
       recordEvent(replica, 'vacuum');
       replica.unsafeMode(false);
-      const t2 = performance.now();
-      lc.info?.(`VACUUM completed (${t2 - t1} ms)`);
+      const t1 = performance.now();
+      lc.info?.(`VACUUM completed (${t1 - t0} ms)`);
     }
   }
 

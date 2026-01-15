@@ -4,6 +4,7 @@
  * of the ChangeStreamer.
  */
 import * as v from '../../../../../../shared/src/valita.ts';
+import {jsonObjectSchema} from './json.ts';
 
 /**
  * Indicates that replication cannot continue and that the replica must be resynced
@@ -17,4 +18,8 @@ import * as v from '../../../../../../shared/src/valita.ts';
 export const resetRequiredSchema = v.object({
   tag: v.literal('reset-required'),
   message: v.string().optional(),
+
+  // errorDetails can contain any standard JSON object. This will be
+  // published in the `errorDetails` field of a replication ERROR event.
+  errorDetails: jsonObjectSchema.optional(),
 });

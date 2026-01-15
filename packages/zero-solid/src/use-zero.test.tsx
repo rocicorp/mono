@@ -1,16 +1,18 @@
 import {renderHook} from '@solidjs/testing-library';
 import {createSignal, type JSX} from 'solid-js';
 import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
-import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
-import type {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import {createUseZero, useZero, ZeroProvider} from './use-zero.ts';
 
-vi.mock('../../zero-client/src/client/zero.ts', () => ({
+import {createUseZero, useZero, ZeroProvider} from './use-zero.ts';
+import {
+  Zero as ZeroConstructor,
+  type Schema,
+  type Zero,
+  type ZeroOptions,
+} from './zero.ts';
+
+vi.mock('./zero.ts', () => ({
   Zero: vi.fn(),
 }));
-
-import {Zero as ZeroConstructor} from '../../zero-client/src/client/zero.ts';
 
 const ZeroMock = vi.mocked(ZeroConstructor);
 
@@ -87,15 +89,17 @@ describe('ZeroProvider', () => {
       const zero1 = createMockZero('client-1');
       const zero2 = createMockZero('client-2');
 
-      ZeroMock.mockImplementationOnce(() => zero1).mockImplementationOnce(
-        () => zero2,
-      );
+      ZeroMock.mockImplementationOnce(function () {
+        return zero1;
+      }).mockImplementationOnce(function () {
+        return zero2;
+      });
 
       const [server, setServer] = createSignal('foo');
       const schema = {} as Schema;
 
       const wrapper = (props: {children: JSX.Element}) => (
-        <ZeroProvider server={server()} schema={schema} userID="u">
+        <ZeroProvider cacheURL={server()} schema={schema} userID="u">
           {props.children}
         </ZeroProvider>
       );
@@ -117,13 +121,15 @@ describe('ZeroProvider', () => {
 
     test('does not recreate zero when only children change', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
 
       const [wrap, setWrap] = createSignal(false);
       const schema = {} as Schema;
 
       const wrapper = (props: {children: JSX.Element}) => (
-        <ZeroProvider server="foo" schema={schema} userID="u">
+        <ZeroProvider cacheURL="foo" schema={schema} userID="u">
           {wrap() ? <div>{props.children}</div> : props.children}
         </ZeroProvider>
       );
@@ -145,7 +151,7 @@ describe('ZeroProvider', () => {
 
     test('does not recreate zero for identical options but does for new references', () => {
       const createdZeros: MockZero[] = [];
-      ZeroMock.mockImplementation(() => {
+      ZeroMock.mockImplementation(function () {
         const zero = createMockZero(`client-${createdZeros.length + 1}`);
         createdZeros.push(zero);
         return zero;
@@ -156,7 +162,7 @@ describe('ZeroProvider', () => {
       const [schema, setSchema] = createSignal<Schema>(baseSchema);
 
       const wrapper = (props: {children: JSX.Element}) => (
-        <ZeroProvider server={server()} schema={schema()} userID="u">
+        <ZeroProvider cacheURL={server()} schema={schema()} userID="u">
           {props.children}
         </ZeroProvider>
       );
@@ -187,7 +193,9 @@ describe('ZeroProvider', () => {
 
     test('calls init callback with constructed zero', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
       const init = vi.fn();
 
       const schema = {} as Schema;
@@ -196,7 +204,7 @@ describe('ZeroProvider', () => {
         initialProps: [],
         wrapper: (props: {children: JSX.Element}) => (
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             userID="u"
             init={init}
@@ -242,7 +250,7 @@ describe('ZeroProvider', () => {
     test('passes auth to Zero constructor when provided', () => {
       const zero = createMockZero();
       const capturedOptions: ZeroOptions<Schema>[] = [];
-      ZeroMock.mockImplementation(options => {
+      ZeroMock.mockImplementation(function (options) {
         capturedOptions.push(options as ZeroOptions<Schema>);
         return zero;
       });
@@ -253,7 +261,7 @@ describe('ZeroProvider', () => {
         initialProps: [],
         wrapper: (props: {children: JSX.Element}) => (
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             auth="token-1"
             userID="u"
@@ -270,8 +278,8 @@ describe('ZeroProvider', () => {
     test('omits auth from constructor args when not provided', () => {
       const zero = createMockZero();
       // oxlint-disable-next-line no-explicit-any
-      const capturedOptions: ZeroOptions<any, any>[] = [];
-      ZeroMock.mockImplementation(options => {
+      const capturedOptions: ZeroOptions<any, any, any>[] = [];
+      ZeroMock.mockImplementation(function (options) {
         capturedOptions.push(options);
         return zero;
       });
@@ -281,7 +289,11 @@ describe('ZeroProvider', () => {
       renderHook(() => useZero<Schema>(), {
         initialProps: [],
         wrapper: (props: {children: JSX.Element}) => (
-          <ZeroProvider server="https://example.com" schema={schema} userID="u">
+          <ZeroProvider
+            cacheURL="https://example.com"
+            schema={schema}
+            userID="u"
+          >
             {props.children}
           </ZeroProvider>
         ),
@@ -293,14 +305,16 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect when auth changes', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal('token-1');
 
       const wrapper = (props: {children: JSX.Element}) => (
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           auth={auth()}
           userID="u"
@@ -333,14 +347,16 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect when auth changes from undefined to a value', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal<string | undefined>(undefined);
 
       const wrapper = (props: {children: JSX.Element}) => (
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           auth={auth()}
           userID="u"
@@ -365,14 +381,16 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect with undefined when auth prop is changed to undefined', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(function () {
+        return zero;
+      });
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal<string | undefined>('token-initial');
 
       const wrapper = (props: {children: JSX.Element}) => (
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           userID="u"
           auth={auth()}
@@ -400,7 +418,7 @@ describe('ZeroProvider', () => {
       expect(zero.connection.connect).toHaveBeenCalledTimes(1);
     });
 
-    test('calls connection.connect when zero is provided externally and auth changes', () => {
+    test('does not call connection.connect when zero is provided externally and auth changes', () => {
       const zero = createMockZero();
       const [auth, setAuth] = createSignal<string | undefined>('token-1');
 
@@ -419,14 +437,13 @@ describe('ZeroProvider', () => {
 
       setAuth('token-2');
 
-      expect(zero.connection.connect).toHaveBeenCalledWith({auth: 'token-2'});
-      expect(zero.connection.connect).toHaveBeenCalledTimes(1);
+      expect(zero.connection.connect).not.toHaveBeenCalled();
 
       zero.connection.connect.mockClear();
 
       setAuth(undefined);
 
-      expect(zero.connection.connect).toHaveBeenCalledWith({auth: undefined});
+      expect(zero.connection.connect).not.toHaveBeenCalled();
     });
   });
 });

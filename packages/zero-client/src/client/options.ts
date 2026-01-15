@@ -1,20 +1,22 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {ZeroError} from './error.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
  * Configuration for {@linkcode Zero}.
  */
 export interface ZeroOptions<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  C = DefaultContext,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -26,6 +28,11 @@ export interface ZeroOptions<
    * The latter is useful for configuring routing rules (e.g. "/zero/\*") when
    * the zero-cache is hosted on the same domain as the application. **Note that
    * only a single path segment is allowed (e.g. it cannot be "/proxy/zero/\*")**.
+   */
+  cacheURL?: string | null | undefined;
+
+  /**
+   * @deprecated Use {@linkcode cacheURL} instead.
    */
   server?: string | null | undefined;
 
@@ -87,8 +94,41 @@ export interface ZeroOptions<
    * implementations. Client side mutators must be idempotent as a
    * mutation can be rebased multiple times when folding in authoritative
    * changes from the server to the client.
+   *
+   * Define mutators using the `defineMutator` function to create type-safe,
+   * parameterized mutations. Mutators can be top-level or grouped in namespaces.
+   *
+   * @example
+   * ```ts
+   * import {defineMutator} from '@rocicorp/zero';
+   *
+   * const z = new Zero({
+   *   schema,
+   *   userID,
+   *   mutators: {
+   *     // Top-level mutator
+   *     increment: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {id: string}}) =>
+   *       tx.mutate.counter.update({id: args.id, value: tx.query.counter.where('id', '=', args.id).value + 1})
+   *     ),
+   *     // Namespace with multiple mutators
+   *     issues: {
+   *       create: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {title: string}}) =>
+   *         tx.mutate.issues.insert({id: nanoid(), title: args.title, status: 'open'})
+   *       ),
+   *       close: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {id: string}}) =>
+   *         tx.mutate.issues.update({id: args.id, status: 'closed'})
+   *       ),
+   *     },
+   *   },
+   * });
+   *
+   * // Usage
+   * await z.mutate.increment({id: 'counter-1'}).client;
+   * await z.mutate.issues.create({title: 'New issue'}).client;
+   * await z.mutate.issues.close({id: 'issue-123'}).client;
+   * ```
    */
-  mutators?: MD | undefined;
+  mutators?: MD extends CustomMutatorDefs ? MD : AnyMutatorRegistry | undefined;
 
   /**
    * Custom URL for mutation requests sent to your API server.
@@ -99,8 +139,16 @@ export interface ZeroOptions<
   /**
    * Custom URL for query requests sent to your API server.
    * If not provided, uses the default configured in zero-cache.
+   *
+   * @deprecated Use {@linkcode queryURL} instead.
    */
   getQueriesURL?: string | undefined;
+
+  /**
+   * Custom URL for query requests sent to your API server.
+   * If not provided, uses the default configured in zero-cache.
+   */
+  queryURL?: string | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
@@ -113,7 +161,7 @@ export interface ZeroOptions<
    * });
    * ```
    *
-   * Or use a hook like {@linkcode useZeroConnectionState} to subscribe to state changes.
+   * Or use a hook like {@linkcode useConnectionState} to subscribe to state changes.
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
 
@@ -159,9 +207,9 @@ export interface ZeroOptions<
    * The number of milliseconds to wait before disconnecting a Zero
    * instance when the connection to the server has timed out.
    *
-   * Default is 5 minutes.
+   * Default is 1 minute.
    */
-  disconnectTimeout?: number | undefined;
+  disconnectTimeoutMs?: number | undefined;
 
   /**
    * The timeout in milliseconds for ping operations. This value is used for:
@@ -173,20 +221,6 @@ export interface ZeroOptions<
    * Default is 5_000.
    */
   pingTimeoutMs?: number | undefined;
-
-  /**
-   * Invoked whenever Zero encounters an error.
-   *
-   * The argument is either an error originating from the server/zero-cache,
-   * client error (offline transitions, ping timeouts, websocket errors, etc),
-   * or an application error (e.g. a custom mutator error).
-   *
-   * Use this callback only to surface errors in your metrics/telemetry - use the
-   * `zero.connection` API for handling errors in the UI.
-   *
-   * When `onError` is omitted, Zero logs the error to the browser console.
-   */
-  onError?: (error: ZeroError | ApplicationError) => MaybePromise<void>;
 
   /**
    * Determines what kind of storage implementation to use on the client.
@@ -272,7 +306,7 @@ export interface ZeroOptions<
    * Context is passed to Synced Queries when they are executed
    */
   // TODO(arv): Mutators should also get context.
-  context?: Context | undefined;
+  context?: C | undefined;
 }
 
 /**
@@ -280,8 +314,9 @@ export interface ZeroOptions<
  */
 export interface ZeroAdvancedOptions<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-> extends ZeroOptions<S, MD> {}
+  MD extends CustomMutatorDefs | undefined,
+  Context,
+> extends ZeroOptions<S, MD, Context> {}
 
 type UpdateNeededReasonBase = {
   message?: string;

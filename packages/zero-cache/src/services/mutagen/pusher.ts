@@ -12,7 +12,9 @@ import {
   isProtocolError,
   type PushFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
+  CLEANUP_RESULTS_MUTATION_NAME,
   pushResponseSchema,
   type MutationID,
   type PushBody,
@@ -23,8 +25,6 @@ import {compileUrlPattern, fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
-import type {PostgresDB} from '../../types/pg.ts';
-import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
@@ -67,21 +67,22 @@ export class PusherService implements Service, Pusher {
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #pushConfig: ZeroConfig['push'] & {url: string[]};
-  readonly #upstream: PostgresDB;
   readonly #config: Config;
+  readonly #lc: LogContext;
+  readonly #pushURLPatterns: URLPattern[];
   #stopped: Promise<void> | undefined;
   #refCount = 0;
   #isStopped = false;
 
   constructor(
-    upstream: PostgresDB,
     appConfig: Config,
     pushConfig: ZeroConfig['push'] & {url: string[]},
     lc: LogContext,
     clientGroupID: string,
   ) {
     this.#config = appConfig;
-    this.#upstream = upstream;
+    this.#lc = lc.withContext('component', 'pusherService');
+    this.#pushURLPatterns = pushConfig.url.map(compileUrlPattern);
     this.#queue = new Queue();
     this.#pusher = new PushWorker(
       appConfig,
@@ -123,14 +124,52 @@ export class PusherService implements Service, Pusher {
   }
 
   async ackMutationResponses(upToID: MutationID) {
-    // delete the relevant rows from the `mutations` table
-    const sql = this.#upstream;
-    await sql`DELETE FROM ${sql(
-      upstreamSchema({
-        appID: this.#config.app.id,
-        shardNum: this.#config.shard.num,
-      }),
-    )}.mutations WHERE "clientGroupID" = ${this.id} AND "clientID" = ${upToID.clientID} AND "mutationID" <= ${upToID.id}`;
+    const url = this.#pushConfig.url[0];
+    if (!url) {
+      // No push URL configured, skip cleanup
+      return;
+    }
+
+    const cleanupBody: PushBody = {
+      clientGroupID: this.id,
+      mutations: [
+        {
+          type: MutationType.Custom,
+          id: 0, // Not tracked - this is fire-and-forget
+          clientID: upToID.clientID,
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          args: [
+            {
+              clientGroupID: this.id,
+              clientID: upToID.clientID,
+              upToMutationID: upToID.id,
+            },
+          ],
+          timestamp: Date.now(),
+        },
+      ],
+      pushVersion: 1,
+      timestamp: Date.now(),
+      requestID: `cleanup-${this.id}-${upToID.clientID}-${upToID.id}`,
+    };
+
+    try {
+      await fetchFromAPIServer(
+        pushResponseSchema,
+        'push',
+        this.#lc,
+        url,
+        false,
+        this.#pushURLPatterns,
+        {appID: this.#config.app.id, shardNum: this.#config.shard.num},
+        {apiKey: this.#pushConfig.apiKey},
+        cleanupBody,
+      );
+    } catch (e) {
+      this.#lc.warn?.('Failed to send cleanup mutation', {
+        error: getErrorMessage(e),
+      });
+    }
   }
 
   ref() {
@@ -251,7 +290,7 @@ class PushWorker {
     } else {
       // Validate that subsequent clients have compatible parameters
       if (this.#userPushURL !== userPushURL) {
-        this.#lc.error?.(
+        this.#lc.warn?.(
           'Client provided different mutate parameters than client group',
           {
             clientID,
@@ -298,7 +337,7 @@ class PushWorker {
     // if the entire push failed, send that to the client.
     if ('kind' in response || 'error' in response) {
       this.#lc.warn?.(
-        'The server behind ZERO_PUSH_URL returned a push error.',
+        'The server behind ZERO_MUTATE_URL returned a push error.',
         response,
       );
       const groupedMutationIDs = groupBy(
@@ -370,7 +409,7 @@ class PushWorker {
           const m = mutations[i];
           if ('error' in m.result) {
             this.#lc.warn?.(
-              'The server behind ZERO_PUSH_URL returned a mutation error.',
+              'The server behind ZERO_MUTATE_URL returned a mutation error.',
               m.result,
             );
           }
@@ -394,7 +433,7 @@ class PushWorker {
         }
 
         if (failure && i < mutations.length - 1) {
-          this.#lc.error?.(
+          this.#lc.warn?.(
             'push-response contains mutations after a mutation which should fatal the connection',
           );
         }
@@ -446,6 +485,7 @@ class PushWorker {
         'push',
         this.#lc,
         url,
+        url === this.#userPushURL,
         this.#pushURLPatterns,
         {
           appID: this.#config.app.id,
@@ -459,8 +499,6 @@ class PushWorker {
         entry.push,
       );
     } catch (e) {
-      this.#lc.error?.('failed to push', e);
-
       if (isProtocolError(e) && e.errorBody.kind === ErrorKind.PushFailed) {
         return {
           ...e.errorBody,
@@ -552,5 +590,9 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
   assert(
     left.push.pushVersion === right.push.pushVersion,
     'pushVersion must be the same for all pushes with the same clientID',
+  );
+  assert(
+    left.httpCookie === right.httpCookie,
+    'httpCookie must be the same for all pushes with the same clientID',
   );
 }

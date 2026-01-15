@@ -8,8 +8,6 @@ import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
 import {
   ZeroContext,
   type AddCustomQuery,
@@ -47,7 +45,6 @@ test('getSource', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -60,7 +57,7 @@ test('getSource', () => {
 
   const source = context.getSource('users');
   assert(source instanceof MemorySource);
-  expect(source.getSchemaInfo()).toMatchInlineSnapshot(`
+  expect(source.tableSchema).toMatchInlineSnapshot(`
     {
       "columns": {
         "id": {
@@ -74,10 +71,10 @@ test('getSource', () => {
           "type": "string",
         },
       },
+      "name": "users",
       "primaryKey": [
         "id",
       ],
-      "tableName": "users",
     }
   `);
 
@@ -88,7 +85,7 @@ test('getSource', () => {
 
   // Should work for other table too.
   const source2 = context.getSource('userStates');
-  expect((source2 as MemorySource).getSchemaInfo()).toMatchInlineSnapshot(`
+  expect((source2 as MemorySource).tableSchema).toMatchInlineSnapshot(`
     {
       "columns": {
         "stateCode": {
@@ -102,11 +99,11 @@ test('getSource', () => {
           "type": "string",
         },
       },
+      "name": "userStates",
       "primaryKey": [
         "userID",
         "stateCode",
       ],
-      "tableName": "userStates",
     }
   `);
 });
@@ -125,7 +122,6 @@ test('processChanges', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -197,7 +193,6 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -258,7 +253,6 @@ test('transactions', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -273,7 +267,6 @@ test('transactions', () => {
   const join = new Join({
     parent: servers.connect([['id', 'asc']]),
     child: flair.connect([['id', 'asc']]),
-    storage: new MemoryStorage(),
     parentKey: ['id'],
     childKey: ['serverID'],
     hidden: false,
@@ -327,7 +320,7 @@ test('transactions', () => {
   context.processChanges(undefined, 'ahash' as Hash, changes);
 
   expect(transactions).toEqual(1);
-  const result = out.fetch({});
+  const result = out.fetch({}).filter(n => n !== 'yield');
   expect(result).length(2);
   expect(result[0].row).toEqual({id: 's1', name: 'joanna'});
   expect(result[0].relationships.flair).length(15);
@@ -343,7 +336,6 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -368,7 +360,7 @@ test('batchViewUpdates returns value', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
+
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -382,44 +374,4 @@ test('batchViewUpdates returns value', () => {
   expect(batchViewUpdatesCalls).toEqual(0);
   expect(context.batchViewUpdates(() => 'test value')).toEqual('test value');
   expect(batchViewUpdatesCalls).toEqual(1);
-});
-
-test('withContext memoizes QueryInternals', () => {
-  const testSchema = createSchema({
-    tables: [
-      table('items')
-        .columns({
-          id: string(),
-          name: string(),
-        })
-        .primaryKey('id'),
-    ],
-  });
-
-  const context = new ZeroContext(
-    new LogContext('info'),
-    new IVMSourceBranch(testSchema.tables),
-    'context',
-    null as unknown as AddQuery,
-    null as unknown as AddCustomQuery,
-    null as unknown as UpdateQuery,
-    null as unknown as UpdateCustomQuery,
-    null as unknown as FlushQueryChanges,
-    testBatchViewUpdates,
-    () => {},
-    assertValidRunOptions,
-  );
-
-  const builder = createBuilder(testSchema);
-  const query = builder.items;
-
-  const qi1 = context.withContext(query);
-  const qi2 = context.withContext(query);
-  const qi3 = context.withContext(query);
-
-  expect(qi1).toBe(qi2);
-  expect(qi2).toBe(qi3);
-
-  expect(qi1.hash()).toBe(qi2.hash());
-  expect(qi1.format).toBe(qi2.format);
 });

@@ -1,7 +1,5 @@
 import {test} from 'vitest';
-import {defaultFormat} from '../../../zero-types/src/format.ts';
-import {StaticQuery} from '../../../zql/src/query/static-query.ts';
-import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
+import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
@@ -25,16 +23,12 @@ const z = {
   query: Object.fromEntries(
     Object.entries(schema.tables).map(([name]) => [
       name,
-      new StaticQuery(
-        schema,
-        name as keyof typeof schema.tables,
-        {table: name},
-        defaultFormat,
-      ),
+      newStaticQuery(schema, name as keyof typeof schema.tables),
     ]),
   ),
 };
 
+type AnyStaticQuery = ReturnType<typeof newStaticQuery>;
 const f = new Function('z', `return z.query.${QUERY_STRING};`);
 const query: AnyStaticQuery = f(z);
 

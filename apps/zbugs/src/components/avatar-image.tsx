@@ -1,9 +1,9 @@
+import type {Row} from '@rocicorp/zero';
 import {memo, type ImgHTMLAttributes} from 'react';
-import type {UserRow} from '../../shared/schema.ts';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 
 interface AvatarImageProps extends ImgHTMLAttributes<HTMLImageElement> {
-  user: UserRow;
+  user: Row['user'];
 }
 
 export const AvatarImage = memo((props: AvatarImageProps) => {

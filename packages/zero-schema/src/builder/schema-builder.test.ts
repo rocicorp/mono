@@ -42,10 +42,10 @@ const mockQueryInst = {
 };
 
 function mockQuery<
-  S extends Schema,
   T extends keyof S['tables'] & string,
->(): Query<S, T> {
-  return mockQueryInst as unknown as Query<S, T>;
+  S extends Schema,
+>(): Query<T, S> {
+  return mockQueryInst as unknown as Query<T, S>;
 }
 
 function run<Q extends AnyQuery>(
@@ -138,8 +138,8 @@ test('building a schema', async () => {
     relationships: [userRelationships, issueRelationships, labelRelationships],
   });
 
-  const q = mockQuery<typeof schema, 'user'>();
-  const iq = mockQuery<typeof schema, 'issue'>();
+  const q = mockQuery<'user', typeof schema>();
+  const iq = mockQuery<'issue', typeof schema>();
   const r = await run(
     q
       .related('recruiter', q => q.related('recruiter', q => q.one()).one())
@@ -238,7 +238,7 @@ test('building a schema', async () => {
     }[]
   >();
 
-  const lq = mockQuery<typeof schema, 'label'>();
+  const lq = mockQuery<'label', typeof schema>();
   const ld = await run(lq.related('issues'));
   expectTypeOf(ld).toEqualTypeOf<
     {
@@ -450,7 +450,7 @@ test('too many relationships', () => {
     ],
   });
 
-  const q = mockQuery<typeof schema, 'a'>();
+  const q = mockQuery<'a', typeof schema>();
   const q2 = q
     .related('toB')
     .related('toC')

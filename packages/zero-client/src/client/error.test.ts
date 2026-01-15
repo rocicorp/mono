@@ -327,7 +327,7 @@ describe('getErrorConnectionTransition', () => {
 
   test('returns error status for fatal client errors', () => {
     const error = new ClientError({
-      kind: ClientErrorKind.UnexpectedBaseCookie,
+      kind: ClientErrorKind.Internal,
       message: 'fatal',
     });
 
@@ -341,6 +341,18 @@ describe('getErrorConnectionTransition', () => {
     const error = new ClientError({
       kind: ClientErrorKind.Offline,
       message: 'disconnect',
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Disconnected,
+      reason: error,
+    });
+  });
+
+  test('returns disconnected status for missing socket origin', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.NoSocketOrigin,
+      message: 'no socket origin',
     });
 
     expect(getErrorConnectionTransition(error)).toEqual({

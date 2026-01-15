@@ -1,28 +1,45 @@
 import {resolver} from '@rocicorp/resolver';
 import React, {useSyncExternalStore} from 'react';
-import {deepClone} from '../../shared/src/deep-clone.ts';
-import type {Immutable} from '../../shared/src/immutable.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
-  bindingsForZero,
-  type BindingsForZero,
-} from '../../zero-client/src/client/bindings.ts';
-import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
-import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {
-  QueryErrorDetails,
-  QueryResultDetails,
-} from '../../zero-client/src/types/query-result.ts';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import type {Format} from '../../zql/src/ivm/view.ts';
-import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
-import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
-import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
+  type Immutable,
+  addContextToQuery,
+  asQueryInternals,
+  deepClone,
+  DEFAULT_TTL_MS,
+} from './bindings.ts';
 import {useZero} from './zero-provider.tsx';
+import type {
+  AnyMutatorRegistry,
+  CustomMutatorDefs,
+  DefaultContext,
+  DefaultSchema,
+  ErroredQuery,
+  Falsy,
+  HumanReadable,
+  PullRow,
+  Query,
+  QueryErrorDetails,
+  QueryOrQueryRequest,
+  QueryResultDetails,
+  ReadonlyJSONValue,
+  ResultType,
+  Schema,
+  TTL,
+  TypedView,
+  Zero,
+} from './zero.ts';
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,
+  QueryResultDetails & {},
+];
+
+/**
+ * Result type for "maybe queries" - queries that may be falsy.
+ * The data value can be undefined when the query is falsy/disabled.
+ */
+export type MaybeQueryResult<TReturn> = readonly [
+  HumanReadable<TReturn> | undefined,
   QueryResultDetails & {},
 ];
 
@@ -59,15 +76,55 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
+// Overload 1: Query
 export function useQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  query: Query<TSchema, TTable, TReturn, TContext>,
+  query: QueryOrQueryRequest<
+    TTable,
+    TInput,
+    TOutput,
+    TSchema,
+    TReturn,
+    TContext
+  >,
   options?: UseQueryOptions | boolean,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Maybe query
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseQueryOptions | boolean,
+): MaybeQueryResult<TReturn>;
+
+// Implementation
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseQueryOptions | boolean,
+): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   if (typeof options === 'boolean') {
@@ -76,24 +133,72 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const view = viewStore.getView(useZero(), query, enabled, ttl);
+  const zero = useZero<TSchema, undefined, TContext>();
+
+  // When query is falsy, use disabled subscriber/snapshot to maintain hook order
+  const q = query ? addContextToQuery(query, zero.context) : undefined;
+  const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
+
   // https://react.dev/reference/react/useSyncExternalStore
+  // Always call useSyncExternalStore to maintain consistent hook order
   return useSyncExternalStore(
-    view.subscribeReactInternals,
-    view.getSnapshot,
-    view.getSnapshot,
+    view?.subscribeReactInternals ?? disabledSubscriber,
+    view?.getSnapshot ??
+      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+    view?.getSnapshot ??
+      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
   );
 }
 
+// Overload 1: Query
 export function useSuspenseQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  query: Query<TSchema, TTable, TReturn, TContext>,
+  query: QueryOrQueryRequest<
+    TTable,
+    TInput,
+    TOutput,
+    TSchema,
+    TReturn,
+    TContext
+  >,
   options?: UseSuspenseQueryOptions | boolean,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Maybe query
+export function useSuspenseQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseSuspenseQueryOptions | boolean,
+): MaybeQueryResult<TReturn>;
+
+// Implementation
+export function useSuspenseQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options?: UseSuspenseQueryOptions | boolean,
+): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   let suspendUntil: 'complete' | 'partial' = 'partial';
@@ -107,15 +212,23 @@ export function useSuspenseQuery<
     } = options);
   }
 
-  const view = viewStore.getView(useZero(), query, enabled, ttl);
+  const zero = useZero<TSchema, undefined, TContext>();
+
+  // When query is falsy, use disabled subscriber/snapshot to maintain hook order
+  const q = query ? addContextToQuery(query, zero.context) : undefined;
+  const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
+
   // https://react.dev/reference/react/useSyncExternalStore
+  // Always call useSyncExternalStore to maintain consistent hook order
   const snapshot = useSyncExternalStore(
-    view.subscribeReactInternals,
-    view.getSnapshot,
-    view.getSnapshot,
+    view?.subscribeReactInternals ?? disabledSubscriber,
+    view?.getSnapshot ??
+      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+    view?.getSnapshot ??
+      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
   );
 
-  if (enabled) {
+  if (view && enabled) {
     if (suspendUntil === 'complete' && !view.complete) {
       suspend(view.waitForComplete());
     }
@@ -134,6 +247,9 @@ const disabledSubscriber = () => () => {};
 const resultTypeUnknown = {type: 'unknown'} as const;
 const resultTypeComplete = {type: 'complete'} as const;
 const resultTypeError = {type: 'error'} as const;
+
+const disabledQuerySnapshot = [undefined, resultTypeUnknown] as const;
+const getDisabledSnapshot = () => disabledQuerySnapshot;
 
 const emptySnapshotSingularUnknown = [undefined, resultTypeUnknown] as const;
 const emptySnapshotSingularComplete = [undefined, resultTypeComplete] as const;
@@ -300,14 +416,14 @@ export class ViewStore {
   }
 
   getView<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     MD extends CustomMutatorDefs | undefined,
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    q: Query<TTable, TSchema, TReturn>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -319,11 +435,11 @@ export class ViewStore {
     complete: boolean;
     nonEmpty: boolean;
   } {
-    const bindings = bindingsForZero(zero);
-    const format = bindings.format(query);
+    const qi = asQueryInternals(q);
+
     if (!enabled) {
       return {
-        getSnapshot: () => getDefaultSnapshot(format.singular),
+        getSnapshot: () => getDefaultSnapshot(qi.format.singular),
         subscribeReactInternals: disabledSubscriber,
         updateTTL: () => {},
         waitForComplete: () => Promise.resolve(),
@@ -333,10 +449,10 @@ export class ViewStore {
       };
     }
 
-    const hash = bindings.hash(query) + zero.clientID;
+    const hash = qi.hash() + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
-      existing = new ViewWrapper(bindings, query, format, ttl, view => {
+      existing = new ViewWrapper(q, zero, ttl, view => {
         const currentView = this.#views.get(hash);
         if (currentView && currentView !== view) {
           // we replaced the view with a new one already.
@@ -348,7 +464,7 @@ export class ViewStore {
     } else {
       existing.updateTTL(ttl);
     }
-    return existing as ViewWrapper<TSchema, TTable, TReturn, MD, TContext>;
+    return existing as ViewWrapper<TTable, TSchema, TReturn, MD, TContext>;
   }
 }
 
@@ -380,41 +496,40 @@ const viewStore = new ViewStore();
  * 2. If a different subscribe function is passed during a re-render, React will re-subscribe to the store using the newly passed subscribe function. You can prevent this by declaring subscribe outside the component.
  */
 class ViewWrapper<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
   TReturn,
-  MD extends CustomMutatorDefs | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
-  readonly #query: Query<TSchema, TTable, TReturn, TContext>;
-  readonly #format: Format;
+  readonly #query: Query<TTable, TSchema, TReturn>;
   #snapshot: QueryResult<TReturn>;
-  #reactInternals: Set<() => void>;
+  readonly #reactInternals: Set<() => void> = new Set();
   #ttl: TTL;
   #complete = false;
   #completeResolver = resolver<void>();
   #nonEmpty = false;
   #nonEmptyResolver = resolver<void>();
-  readonly #bindings: BindingsForZero<TSchema, TContext>;
+  readonly #zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize'>;
+  readonly #singular: boolean;
 
   constructor(
-    bindings: BindingsForZero<TSchema, TContext>,
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    format: Format,
+    query: Query<TTable, TSchema, TReturn>,
+    zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize'>,
     ttl: TTL,
     onDematerialized: (
-      view: ViewWrapper<TSchema, TTable, TReturn, MD, TContext>,
+      view: ViewWrapper<TTable, TSchema, TReturn, MD, TContext>,
     ) => void,
   ) {
-    this.#bindings = bindings;
     this.#query = query;
-    this.#format = format;
+    this.#zero = zero;
     this.#ttl = ttl;
     this.#onDematerialized = onDematerialized;
-    this.#snapshot = getDefaultSnapshot(format.singular);
-    this.#reactInternals = new Set();
+    const {singular} = asQueryInternals(query).format;
+    this.#singular = singular;
+    this.#snapshot = getDefaultSnapshot(singular);
     this.#materializeIfNeeded();
   }
 
@@ -428,7 +543,7 @@ class ViewWrapper<
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
     this.#snapshot = getSnapshot(
-      this.#format.singular,
+      this.#singular,
       data,
       resultType,
       this.#retry,
@@ -442,7 +557,7 @@ class ViewWrapper<
     }
 
     if (
-      this.#format.singular
+      this.#singular
         ? this.#snapshot[0] !== undefined
         : (this.#snapshot[0] as unknown[]).length !== 0
     ) {
@@ -469,7 +584,7 @@ class ViewWrapper<
     if (this.#view) {
       return;
     }
-    this.#view = this.#bindings.materialize(this.#query, undefined, {
+    this.#view = this.#zero.materialize(this.#query, {
       ttl: this.#ttl,
     });
     this.#view.addListener(this.#onData);

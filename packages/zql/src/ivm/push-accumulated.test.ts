@@ -1,13 +1,13 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {beforeEach, describe, expect, test} from 'vitest';
-import {identity} from '../../../shared/src/sentinels.ts';
+import {emptyArray, identity} from '../../../shared/src/sentinels.ts';
 import type {Change} from './change.js';
 import type {InputBase, Output} from './operator.js';
 import {
   makeAddEmptyRelationships,
   mergeEmpty,
   mergeRelationships,
-  pushAccumulatedChanges,
+  pushAccumulatedChanges as genPushAccumulatedChanges,
 } from './push-accumulated.js';
 import type {SourceSchema} from './schema.js';
 
@@ -15,6 +15,26 @@ const mockPusher: InputBase = {
   getSchema: () => mockSchema as any,
   destroy: () => {},
 };
+
+function pushAccumulatedChanges(
+  accumulatedPushes: Change[],
+  output: Output,
+  pusher: InputBase,
+  fanOutChangeType: Change['type'],
+  mergeRelationships: (existing: Change, incoming: Change) => Change,
+  addEmptyRelationships: (change: Change) => Change,
+) {
+  [
+    ...genPushAccumulatedChanges(
+      accumulatedPushes,
+      output,
+      pusher,
+      fanOutChangeType,
+      mergeRelationships,
+      addEmptyRelationships,
+    ),
+  ];
+}
 
 const mockChildChange: Change = {
   type: 'child',
@@ -51,6 +71,7 @@ describe('pushAccumulatedChanges', () => {
     output = {
       push: (change: Change) => {
         pushedChanges.push(change);
+        return emptyArray;
       },
     } as Output;
   });
@@ -538,6 +559,30 @@ describe('mergeRelationships', () => {
     expect(result.type).toBe('edit');
     expect(Object.keys(result.oldNode.relationships)).toEqual(
       expect.arrayContaining(['editOldRel', 'removeRel']),
+    );
+  });
+
+  test('merges relationships from child changes', () => {
+    const childInfo = {
+      change: {type: 'add' as const, node: {row: {id: 2}, relationships: {}}},
+      relationshipName: 'childRel',
+    };
+    const left: Change = {
+      type: 'child',
+      node: {row: {id: 1}, relationships: {rel1: () => []}},
+      child: childInfo,
+    };
+    const right: Change = {
+      type: 'child',
+      node: {row: {id: 1}, relationships: {rel2: () => []}},
+      child: childInfo,
+    };
+
+    const result = mergeRelationships(left, right);
+
+    expect(result.type).toBe('child');
+    expect(Object.keys(result.node.relationships)).toEqual(
+      expect.arrayContaining(['rel1', 'rel2']),
     );
   });
 });

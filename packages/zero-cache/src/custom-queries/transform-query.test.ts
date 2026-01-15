@@ -1,29 +1,29 @@
 import {
+  afterEach,
+  beforeEach,
   describe,
   expect,
-  vi,
-  beforeEach,
-  afterEach,
   type MockedFunction,
   test,
+  vi,
 } from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {CustomQueryTransformer} from './transform-query.ts';
-import {fetchFromAPIServer, compileUrlPattern} from '../custom/fetch.ts';
-import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
-import type {ShardID} from '../types/shards.ts';
 import type {
-  TransformResponseMessage,
   TransformResponseBody,
+  TransformResponseMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
-import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {
   ProtocolError,
   type TransformFailedBody,
 } from '../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
+import {compileUrlPattern, fetchFromAPIServer} from '../custom/fetch.ts';
+import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
+import type {ShardID} from '../types/shards.ts';
+import {CustomQueryTransformer} from './transform-query.ts';
 
 // Mock the fetch functions
 vi.mock('../custom/fetch.ts');
@@ -172,6 +172,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       pullUrl,
+      false,
       [expectUrlPatternMatching(pullUrl)],
       mockShard,
       headerOptions,
@@ -387,6 +388,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       'https://api.example.com/pull',
+      false,
       [expectUrlPatternMatching('https://api.example.com/pull')],
       mockShard,
       headerOptions,
@@ -405,6 +407,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       pullUrl,
+      false,
       [expectUrlPatternMatching(pullUrl)],
       mockShard,
       headerOptions,
@@ -449,6 +452,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       pullUrl,
+      false,
       [expectUrlPatternMatching(pullUrl)],
       mockShard,
       headerOptions, // Cookies should not be forwarded
@@ -488,6 +492,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       pullUrl,
+      false,
       [expectUrlPatternMatching(pullUrl)],
       mockShard,
       {...headerOptions, cookie: 'test-cookie'}, // Cookies should be forwarded
@@ -617,6 +622,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       customUrl,
+      true,
       [expectUrlPatternMatching(pullUrl)], // Pattern still compiled from config
       mockShard,
       headerOptions,
@@ -650,6 +656,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       pullUrl,
+      false,
       [expectUrlPatternMatching(pullUrl)],
       mockShard,
       headerOptions,
@@ -663,7 +670,7 @@ describe('CustomQueryTransformer', () => {
     // fetchFromAPIServer will throw a regular Error (not ProtocolError) for disallowed URLs
     mockFetchFromAPIServer.mockRejectedValue(
       new Error(
-        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/QUERY_URL configuration`,
       ),
     );
 
@@ -690,7 +697,7 @@ describe('CustomQueryTransformer', () => {
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
       message: expect.stringContaining(
-        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/QUERY_URL configuration`,
       ),
       queryIDs: ['query1'],
     });
@@ -701,6 +708,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       disallowedUrl,
+      true,
       [expectUrlPatternMatching(pullUrl)], // Pattern still compiled from config
       mockShard,
       headerOptions,
@@ -749,6 +757,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       pullUrl,
+      false,
       [expectUrlPatternMatching(pullUrl)],
       mockShard,
       headerOptions,
@@ -792,6 +801,7 @@ describe('CustomQueryTransformer', () => {
       'transform',
       lc,
       pullUrl,
+      false,
       [expectUrlPatternMatching(pullUrl)],
       mockShard,
       headerOptions,

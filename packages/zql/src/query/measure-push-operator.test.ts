@@ -5,13 +5,13 @@ import type {FetchRequest, Input, Output} from '../ivm/operator.ts';
 import type {SourceSchema} from '../ivm/schema.ts';
 import {MeasurePushOperator} from './measure-push-operator.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 
 describe('MeasurePushOperator', () => {
   test('should pass through fetch calls', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -33,38 +33,11 @@ describe('MeasurePushOperator', () => {
     expect(mockInput.fetch).toHaveBeenCalledWith(req);
   });
 
-  test('should pass through cleanup calls', () => {
-    const mockInput: Input = {
-      setOutput: vi.fn(),
-      fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
-      getSchema: vi.fn(() => ({}) as SourceSchema),
-      destroy: vi.fn(),
-    };
-
-    const mockMetricsDelegate: MetricsDelegate = {
-      addMetric: vi.fn(),
-    };
-
-    const measurePushOperator = new MeasurePushOperator(
-      mockInput,
-      'test-query-id',
-      mockMetricsDelegate,
-      'query-update-client',
-    );
-    const req = {} as FetchRequest;
-
-    measurePushOperator.cleanup(req);
-
-    expect(mockInput.cleanup).toHaveBeenCalledWith(req);
-  });
-
   test('should pass through getSchema calls', () => {
     const schema = {} as SourceSchema;
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => schema),
       destroy: vi.fn(),
     };
@@ -90,7 +63,6 @@ describe('MeasurePushOperator', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -115,13 +87,12 @@ describe('MeasurePushOperator', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
 
     const mockOutput: Output = {
-      push: vi.fn(),
+      push: vi.fn(() => emptyArray),
     };
 
     const mockMetricsDelegate: MetricsDelegate = {
@@ -141,7 +112,7 @@ describe('MeasurePushOperator', () => {
       node: {} as Node,
     };
 
-    measurePushOperator.push(change);
+    [...measurePushOperator.push(change)];
 
     expect(mockOutput.push).toHaveBeenCalledWith(change, measurePushOperator);
     expect(mockMetricsDelegate.addMetric).toHaveBeenCalledWith(
@@ -155,7 +126,6 @@ describe('MeasurePushOperator', () => {
     const mockInput: Input = {
       setOutput: vi.fn(),
       fetch: vi.fn(() => []),
-      cleanup: vi.fn(() => []),
       getSchema: vi.fn(() => ({}) as SourceSchema),
       destroy: vi.fn(),
     };
@@ -183,7 +153,7 @@ describe('MeasurePushOperator', () => {
       node: {} as Node,
     };
 
-    expect(() => measurePushOperator.push(change)).toThrow('Test error');
+    expect(() => [...measurePushOperator.push(change)]).toThrow('Test error');
     expect(mockMetricsDelegate.addMetric).not.toHaveBeenCalled();
   });
 });

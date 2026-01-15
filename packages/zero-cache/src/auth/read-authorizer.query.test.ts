@@ -30,13 +30,18 @@ import {
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {Query, Row} from '../../../zql/src/query/query.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -295,19 +300,19 @@ const schema = createSchema({
 type Schema = typeof schema;
 
 const permissions = must(
-  await definePermissions<AuthData, typeof schema>(schema, () => {
+  await definePermissions<AuthData, Schema>(schema, () => {
     const isCommentCreator = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'comment'>,
+      {cmp}: ExpressionBuilder<'comment', Schema>,
     ) => cmp('authorId', '=', authData.sub);
     const isViewStateOwner = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'viewState'>,
+      {cmp}: ExpressionBuilder<'viewState', Schema>,
     ) => cmp('userId', '=', authData.sub);
 
     const canWriteIssueLabelIfProjectMember = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
+      {exists}: ExpressionBuilder<'issueLabel', Schema>,
     ) =>
       exists('issue', q =>
         q.whereExists('project', q =>
@@ -316,16 +321,16 @@ const permissions = must(
       );
     const canWriteIssueLabelIfIssueCreator = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
+      {exists}: ExpressionBuilder<'issueLabel', Schema>,
     ) => exists('issue', q => q.where('creatorId', '=', authData.sub));
     const canWriteIssueLabelIfIssueOwner = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
+      {exists}: ExpressionBuilder<'issueLabel', Schema>,
     ) => exists('issue', q => q.where('ownerId', '=', authData.sub));
 
     const canSeeIssue = (
       authData: AuthData,
-      eb: ExpressionBuilder<Schema, 'issue'>,
+      eb: ExpressionBuilder<'issue', Schema>,
     ) =>
       eb.or(
         isAdmin(authData, eb),
@@ -337,24 +342,24 @@ const permissions = must(
 
     const canSeeComment = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'comment'>,
+      {exists}: ExpressionBuilder<'comment', Schema>,
     ) => exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
 
     const isAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+      {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
     ) => cmpLit(authData.role, '=', 'admin');
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     type TODO = any;
     const isAdminThroughNestedData = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+      {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
       // TODO: proxy should return parameter references instead....
     ) => cmpLit(authData.properties?.role as TODO, 'IS', 'admin');
 
     const isMemberOfProject = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<Schema, 'issue'>,
+      {exists}: ExpressionBuilder<'issue', Schema>,
     ) =>
       exists('project', q =>
         q.whereExists('members', q => q.where('id', '=', authData.sub)),
@@ -362,12 +367,12 @@ const permissions = must(
 
     const isIssueOwner = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'issue'>,
+      {cmp}: ExpressionBuilder<'issue', Schema>,
     ) => cmp('ownerId', '=', authData.sub);
 
     const isIssueCreator = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'issue'>,
+      {cmp}: ExpressionBuilder<'issue', Schema>,
     ) => cmp('creatorId', '=', authData.sub);
 
     return {
@@ -379,7 +384,7 @@ const permissions = must(
       issue: {
         row: {
           insert: [
-            (authData: AuthData, eb: ExpressionBuilder<Schema, 'issue'>) =>
+            (authData: AuthData, eb: ExpressionBuilder<'issue', Schema>) =>
               eb.and(
                 isIssueCreator(authData, eb),
                 eb.or(isAdmin(authData, eb), isMemberOfProject(authData, eb)),
@@ -402,7 +407,7 @@ const permissions = must(
       comment: {
         row: {
           insert: [
-            (authData: AuthData, eb: ExpressionBuilder<Schema, 'comment'>) =>
+            (authData: AuthData, eb: ExpressionBuilder<'comment', Schema>) =>
               eb.and(
                 isCommentCreator(authData, eb),
                 canSeeComment(authData, eb),
@@ -450,8 +455,9 @@ const permissions = must(
   }),
 );
 
-let queryDelegate: QueryDelegate<undefined>;
+let queryDelegate: QueryDelegate;
 let replica: Database;
+let writeAuthzStorage: DatabaseStorage;
 function toDbType(type: ValueType) {
   switch (type) {
     case 'string':
@@ -466,7 +472,7 @@ function toDbType(type: ValueType) {
 }
 let writeAuthorizer: WriteAuthorizerImpl;
 
-class ReadAuthorizerTestQueryDelegate extends QueryDelegateBase<undefined> {
+class ReadAuthorizerTestQueryDelegate extends QueryDelegateBase {
   readonly defaultQueryComplete = true;
 
   readonly #sources = new Map<string, Source>();
@@ -474,7 +480,7 @@ class ReadAuthorizerTestQueryDelegate extends QueryDelegateBase<undefined> {
   readonly #lc: LogContext;
 
   constructor(replica: Database, lc: LogContext) {
-    super(undefined);
+    super();
     this.#replica = replica;
     this.#lc = lc;
   }
@@ -527,12 +533,17 @@ beforeEach(() => {
     must(queryDelegate.getSource(table.name));
   }
 
+  const storageDb = new Database(lc, ':memory:');
+  storageDb.prepare(CREATE_STORAGE_TABLE).run();
+  writeAuthzStorage = new DatabaseStorage(storageDb);
+
   writeAuthorizer = new WriteAuthorizerImpl(
     lc,
     zeroConfig,
     replica,
     'app',
     'cg',
+    writeAuthzStorage,
   );
 });
 const lc = createSilentLogContext();
@@ -575,68 +586,84 @@ test('cannot create an issue with the wrong creatorId, even if admin', async () 
 
 function addUser(user: Row<Schema['tables']['user']>) {
   const userSource = must(queryDelegate.getSource('user'));
-  userSource.push({
-    type: 'add',
-    row: user,
-  });
+  consume(
+    userSource.push({
+      type: 'add',
+      row: user,
+    }),
+  );
 }
 
 function addProject(project: Row<Schema['tables']['project']>) {
   const projectSource = must(queryDelegate.getSource('project'));
-  projectSource.push({
-    type: 'add',
-    row: project,
-  });
+  consume(
+    projectSource.push({
+      type: 'add',
+      row: project,
+    }),
+  );
 }
 
 function addProjectMember(
   projectMember: Row<Schema['tables']['projectMember']>,
 ) {
   const projectMemberSource = must(queryDelegate.getSource('projectMember'));
-  projectMemberSource.push({
-    type: 'add',
-    row: projectMember,
-  });
+  consume(
+    projectMemberSource.push({
+      type: 'add',
+      row: projectMember,
+    }),
+  );
 }
 
 function addIssue(issue: Row<Schema['tables']['issue']>) {
   const issueSource = must(queryDelegate.getSource('issue'));
-  issueSource.push({
-    type: 'add',
-    row: issue,
-  });
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: issue,
+    }),
+  );
 }
 
 function addComment(comment: Row<Schema['tables']['comment']>) {
   const commentSource = must(queryDelegate.getSource('comment'));
-  commentSource.push({
-    type: 'add',
-    row: comment,
-  });
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: comment,
+    }),
+  );
 }
 
 function addLabel(label: Row<Schema['tables']['label']>) {
   const labelSource = must(queryDelegate.getSource('label'));
-  labelSource.push({
-    type: 'add',
-    row: label,
-  });
+  consume(
+    labelSource.push({
+      type: 'add',
+      row: label,
+    }),
+  );
 }
 
 function addIssueLabel(issueLabel: Row<Schema['tables']['issueLabel']>) {
   const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
-  issueLabelSource.push({
-    type: 'add',
-    row: issueLabel,
-  });
+  consume(
+    issueLabelSource.push({
+      type: 'add',
+      row: issueLabel,
+    }),
+  );
 }
 
 function addViewState(viewState: Row<Schema['tables']['viewState']>) {
   const viewStateSource = must(queryDelegate.getSource('viewState'));
-  viewStateSource.push({
-    type: 'add',
-    row: viewState,
-  });
+  consume(
+    viewStateSource.push({
+      type: 'add',
+      row: viewState,
+    }),
+  );
 }
 
 test('cannot create an issue unless you are a project member', async () => {
@@ -905,13 +932,13 @@ describe('issue permissions', () => {
 
 function runReadQueryWithPermissions(
   authData: AuthData,
-  query: Query<ZeroSchema, string>,
-  queryDelegate: QueryDelegate<undefined>,
+  query: Query<string, ZeroSchema>,
+  queryDelegate: QueryDelegate,
 ) {
   const updatedAst = bindStaticParameters(
     transformQuery(
       new LogContext('debug'),
-      queryWithContext(query, undefined).ast,
+      asQueryInternals(query).ast,
       permissions,
       authData,
     ),
@@ -922,7 +949,7 @@ function runReadQueryWithPermissions(
   );
   const pipeline = buildPipeline(updatedAst, queryDelegate, 'query-id');
   const out = new Catch(pipeline);
-  return out.fetch({});
+  return out.fetch({}).filter(n => n !== 'yield');
 }
 
 describe('comment & issueLabel permissions', () => {
@@ -1535,14 +1562,16 @@ describe('read permissions against nested paths', () => {
 // maps over nodes, drops all information from `row` except the id
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function toIdsOnly(nodes: CaughtNode[]): any[] {
-  return nodes.map(node => ({
-    id: node.row.id,
-    ...Object.fromEntries(
-      Object.entries(node.relationships)
-        .filter(([k]) => !k.startsWith('zsubq_'))
-        .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
-    ),
-  }));
+  return nodes
+    .filter(n => n !== 'yield')
+    .map(node => ({
+      id: node.row.id,
+      ...Object.fromEntries(
+        Object.entries(node.relationships)
+          .filter(([k]) => !k.startsWith('zsubq_'))
+          .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
+      ),
+    }));
 }
 
 // TODO (mlaw): test that `exists` does not provide an oracle

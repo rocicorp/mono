@@ -5,7 +5,6 @@ import type {BuilderDelegate} from '../builder/builder.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
-import type {QueryInternals} from './query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -21,32 +20,22 @@ export type GotCallback = (got: boolean, error?: ErroredQuery) => void;
 
 export interface NewQueryDelegate {
   newQuery<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
     schema: TSchema,
     table: TTable,
     ast: AST,
     format: Format,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
 }
 
 /**
  * Interface for delegates that support materializing, running, and preloading queries.
  * This interface contains the methods needed to execute queries and manage their lifecycle.
  */
-export interface QueryDelegate<TContext>
-  extends BuilderDelegate,
-    MetricsDelegate {
-  withContext<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-  ): QueryInternals<TSchema, TTable, TReturn, TContext>;
-
+export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
   addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void;
 
   addCustomQuery(
@@ -89,23 +78,23 @@ export interface QueryDelegate<TContext>
 
   /** Using the default view factory creates a TypedView */
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TTable, TSchema, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
 
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    query: Query<TTable, TSchema, TReturn>,
+    factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -113,13 +102,13 @@ export interface QueryDelegate<TContext>
    * Materialize a query into a custom view using a provided factory function.
    */
   materialize<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    query: Query<TTable, TSchema, TReturn>,
+    factory?: ViewFactory<TTable, TSchema, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -127,11 +116,11 @@ export interface QueryDelegate<TContext>
    * Run a query and return the results as a Promise.
    */
   run<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 
@@ -139,11 +128,11 @@ export interface QueryDelegate<TContext>
    * Preload a query's data without materializing a view.
    */
   preload<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TTable, TSchema, TReturn>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;

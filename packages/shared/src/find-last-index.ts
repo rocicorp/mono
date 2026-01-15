@@ -2,7 +2,7 @@
 
 export function findLastIndex<T>(
   array: readonly T[],
-  predicate: (value: T, index: number) => boolean,
+  predicate: (value: T, index: number) => unknown,
 ): number {
   let index = array.length;
   while (index--) {

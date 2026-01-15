@@ -231,10 +231,6 @@ export function computeZqlSpecs(
     }
     // Pick the "best" (i.e. shortest) key for default IVM operations.
     const primaryKey = keys.sort(keyCmp)[0];
-    // The unionKey is used to reference rows in the CVR (and del-patches),
-    // which facilitates clients migrating from one PK to another.
-    // TODO: Update CVR to use this.
-    const unionKey = [...allKeyColumns];
 
     const tableSpec = {
       ...fullTable,
@@ -242,7 +238,6 @@ export function computeZqlSpecs(
       // normalize (sort) keys to minimize creating new objects.
       // See row-key.ts: normalizedKeyOrder()
       primaryKey: v.parse(primaryKey.sort(), primaryKeySchema),
-      unionKey: v.parse(unionKey.sort(), primaryKeySchema),
       uniqueKeys: uniqueKeys.map(key => v.parse(key.sort(), primaryKeySchema)),
       allPotentialPrimaryKeys: keys.map(key =>
         v.parse(key.sort(), primaryKeySchema),

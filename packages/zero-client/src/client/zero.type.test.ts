@@ -1,6 +1,18 @@
-import {expect, expectTypeOf, test} from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  expectTypeOf,
+  test,
+} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  defineMutatorWithType,
+  type MutateRequest,
+} from '../../../zql/src/mutate/mutator.ts';
 import type {DBMutator} from './crud.ts';
+import type {MutatorResult} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 
 import type {ImmutableArray} from '../../../shared/src/immutable.ts';
@@ -10,35 +22,118 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {
+  defineQueriesWithType,
+  defineQueryWithType,
+} from '../../../zql/src/query/query-registry.ts';
 
-test('run', async () => {
-  const schema = createSchema({
-    tables: [
-      table('issues')
-        .columns({
-          id: string(),
-          value: number(),
-        })
-        .primaryKey('id'),
-    ],
-  });
-  const z = zeroForTest({
-    server: null,
-    schema,
-  });
-  const builder = createBuilder(schema);
-  await z.mutate.issues.insert({id: 'a', value: 1});
+const schema = createSchema({
+  tables: [
+    table('issues')
+      .columns({
+        id: string(),
+        value: number(),
+      })
+      .primaryKey('id'),
+  ],
+  enableLegacyMutators: true,
+});
 
-  const x = await z.run(builder.issues);
-  expectTypeOf(x).toEqualTypeOf<
-    {
-      readonly id: string;
-      readonly value: number;
-    }[]
-  >();
-  expect(x).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+const mutators = defineMutatorsWithType<typeof schema>()({
+  insertIssue: defineMutatorWithType<typeof schema>()(async ({tx}) => {
+    expect('issues' in tx.mutate).toBe(true);
+    await tx.mutate.issues.insert({id: 'a', value: 1});
+
+    expect('noSuchTable' in tx.mutate).toBe(false);
+
+    // oxlint-disable-next-line no-constant-condition
+    if (false) {
+      // @ts-expect-error - noSuchTable does not exist
+      await tx.mutate.noSuchTable.insert({id: 'x'});
+    }
+  }),
+});
+
+const zql = createBuilder(schema);
+
+const queries = defineQueriesWithType<typeof schema>()({
+  issues: defineQueryWithType<typeof schema>()(() => zql.issues),
+  issue: defineQueryWithType<typeof schema>()(() => zql.issues.one()),
+});
+
+const z = zeroForTest({
+  schema,
+  mutators,
+});
+
+beforeAll(async () => {
+  await z.mutate(mutators.insertIssue()).client;
+});
+
+afterAll(async () => {
+  await z.close();
+});
+
+describe('run', () => {
+  test('run with many rows', async () => {
+    const x = await z.run(zql.issues);
+    expectTypeOf(x).toEqualTypeOf<
+      {
+        readonly id: string;
+        readonly value: number;
+      }[]
+    >();
+    expect(x).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+
+    const y = await z.run(queries.issues());
+    expectTypeOf(y).toEqualTypeOf<
+      {
+        readonly id: string;
+        readonly value: number;
+      }[]
+    >();
+    expect(y).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+  });
+
+  test('run with one row', async () => {
+    const x = await z.run(zql.issues.one());
+    expectTypeOf(x).toEqualTypeOf<
+      | {
+          readonly id: string;
+          readonly value: number;
+        }
+      | undefined
+    >();
+    expect(x).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
+
+    const y = await z.run(queries.issue());
+    expectTypeOf(y).toEqualTypeOf<
+      | {
+          readonly id: string;
+          readonly value: number;
+        }
+      | undefined
+    >();
+    expect(y).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
+  });
+});
+
+describe('preload', () => {
+  test('preload with many rows', async () => {
+    const result = await z.preload(zql.issues);
+    expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
+    await z.preload(queries.issues());
+  });
+
+  test('preload with one row', async () => {
+    const result = await z.preload(zql.issues.one());
+    expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
+    await z.preload(queries.issue());
+  });
 });
 
 test('materialize', async () => {
@@ -51,13 +146,19 @@ test('materialize', async () => {
         })
         .primaryKey('id'),
     ],
+    enableLegacyMutators: true,
+  });
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    insertIssue: defineMutatorWithType<typeof schema>()(({tx}) =>
+      tx.mutate.issues.insert({id: 'a', value: 1}),
+    ),
   });
   const z = zeroForTest({
-    server: null,
     schema,
+    mutators,
   });
   const builder = createBuilder(schema);
-  await z.mutate.issues.insert({id: 'a', value: 1});
+  await z.mutate(mutators.insertIssue()).client;
 
   const m = z.materialize(builder.issues);
   expectTypeOf(m.data).toEqualTypeOf<
@@ -77,6 +178,32 @@ test('materialize', async () => {
       }>
     >();
   });
+
+  const m2 = z.materialize(builder.issues.one());
+  expectTypeOf(m2.data).toEqualTypeOf<
+    | {
+        readonly id: string;
+        readonly value: number;
+      }
+    | undefined
+  >();
+
+  const m3 = z.materialize(queries.issue());
+  expectTypeOf(m3.data).toEqualTypeOf<
+    | {
+        readonly id: string;
+        readonly value: number;
+      }
+    | undefined
+  >();
+
+  const m4 = z.materialize(queries.issues());
+  expectTypeOf(m4.data).toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly value: number;
+    }[]
+  >();
 
   expect(gotData).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
 });
@@ -137,13 +264,19 @@ test('legacy mutators disabled - table mutators do not exist', () => {
   expectTypeOf<TestDBMutator>().toEqualTypeOf<{}>();
 
   // Verify table mutators do not exist when legacy mutators disabled
-  expectTypeOf(z.mutate).toEqualTypeOf<{}>();
+  // mutate is still callable with MutateRequest even when legacy mutators disabled
+  expectTypeOf(z.mutate).toEqualTypeOf<
+    {} & ((
+      // oxlint-disable-next-line no-explicit-any
+      mr: MutateRequest<any, typeof schema, unknown, any>,
+    ) => MutatorResult)
+  >();
 
   // @ts-expect-error - issues table should not exist when legacy mutators disabled
-  z.mutate.issues;
+  void z.mutate.issues;
 });
 
-test('legacy mutators undefined - defaults to enabled', () => {
+test('legacy mutators undefined - defaults to disabled', () => {
   const schema = createSchema({
     tables: [
       table('issues')
@@ -153,16 +286,16 @@ test('legacy mutators undefined - defaults to enabled', () => {
         })
         .primaryKey('id'),
     ],
-    // enableLegacyMutators not specified - should default to true
+    // enableLegacyMutators not specified - should default to false
   });
 
   const z = zeroForTest({schema});
 
-  // Should have CRUD methods by default
-  expectTypeOf(z.mutate.issues.insert).toBeFunction();
-  expectTypeOf(z.mutate.issues.update).toBeFunction();
-  expectTypeOf(z.mutate.issues.delete).toBeFunction();
-  expectTypeOf(z.mutate.issues.upsert).toBeFunction();
+  // Should not have CRUD methods by default
+  // @ts-expect-error - issues table should not exist when legacy mutators disabled (default)
+  void z.mutate.issues;
+
+  expectTypeOf(z.mutate).toBeFunction();
 });
 
 test('CRUD and custom mutators work together with enableLegacyMutators: true', async () => {
@@ -178,6 +311,8 @@ test('CRUD and custom mutators work together with enableLegacyMutators: true', a
     ],
     enableLegacyMutators: true,
   });
+
+  const zql = createBuilder(schema);
 
   const z = zeroForTest({
     schema,
@@ -214,7 +349,7 @@ test('CRUD and custom mutators work together with enableLegacyMutators: true', a
   const result = z.mutate.issue.closeIssue({id: '1'});
   await result.client;
 
-  const issues = await z.run(z.query.issues.where('id', '1').one());
+  const issues = await z.run(zql.issues.where('id', '1').one());
   expect(issues?.status).toBe('closed');
 });
 
@@ -252,9 +387,49 @@ test('Custom mutators still work when enableLegacyMutators: false', async () => 
 
   // Type-level: Verify table mutators are NOT available but custom mutators ARE
   // @ts-expect-error - issues table should not exist when legacy mutators disabled
-  z.mutate.issues;
+  void z.mutate.issues;
   expectTypeOf(z.mutate.issue.customCreate).toBeFunction();
 
   // Runtime: Verify custom mutator can be called
-  await z.mutate.issue.customCreate({id: '1', title: 'Test'});
+  await z.mutate.issue.customCreate({id: '1', title: 'Test'}).client;
+});
+
+test('tx.mutate exposes only CRUD and is not callable when enableLegacyMutators is false', async () => {
+  const schema = createSchema({
+    tables: [
+      table('issues')
+        .columns({
+          id: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+    ],
+    enableLegacyMutators: false,
+  });
+
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    issue: {
+      insertViaTx: defineMutatorWithType<typeof schema>()(({tx}) => {
+        expect(typeof tx.mutate).not.toBe('function');
+        expect('issues' in tx.mutate).toBe(true);
+        expect(typeof tx.mutate.issues.insert).toBe('function');
+
+        // Custom namespaces should not be added to tx.mutate
+        expect('issue' in tx.mutate).toBe(false);
+        expect('noSuchTable' in tx.mutate).toBe(false);
+
+        // Type-level: tx.mutate should be a pure CRUD object
+        expectTypeOf(tx.mutate).toEqualTypeOf<SchemaCRUD<typeof schema>>();
+
+        return tx.mutate.issues.insert({id: 'a', title: 'from tx'});
+      }),
+    },
+  } as const);
+
+  const z = zeroForTest({
+    schema,
+    mutators,
+  });
+
+  await z.mutate(mutators.issue.insertViaTx()).client;
 });

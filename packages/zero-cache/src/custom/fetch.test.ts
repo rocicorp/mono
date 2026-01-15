@@ -5,28 +5,28 @@ import {
   beforeEach,
   describe,
   expect,
-  type MockedFunction,
   test,
   vi,
+  type MockedFunction,
 } from 'vitest';
 import {
   TestLogSink,
   createSilentLogContext,
 } from '../../../shared/src/logging-test-utils.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {ShardID} from '../types/shards.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {
   ProtocolError,
   isProtocolError,
 } from '../../../zero-protocol/src/error.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import type {ShardID} from '../types/shards.ts';
 import {
   compileUrlPattern,
   fetchFromAPIServer,
   getBodyPreview,
   urlMatch,
 } from './fetch.ts';
-import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 vi.stubGlobal('fetch', mockFetch);
@@ -60,6 +60,7 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
+      false,
       allowedPatterns,
       shard,
       {
@@ -97,6 +98,7 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       urlWithQuery,
+      true,
       allowedPatterns,
       shard,
       {},
@@ -120,6 +122,7 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
+      true,
       allowedPatterns,
       shard,
       {},
@@ -130,20 +133,40 @@ describe('fetchFromAPIServer', () => {
     expect(init?.headers).toEqual({'Content-Type': 'application/json'});
   });
 
-  test('rejects URLs that are not allowed by configuration', async () => {
+  test('rejects URLs that are not allowed by configuration for push', async () => {
     await expect(
       fetchFromAPIServer(
         validator,
         'push',
         lc,
         'https://evil.example.com/endpoint',
+        true,
         allowedPatterns,
         shard,
         {},
         body,
       ),
     ).rejects.toThrow(
-      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
+      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_MUTATE_URL configuration',
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  test('rejects URLs that are not allowed by configuration for transform', async () => {
+    await expect(
+      fetchFromAPIServer(
+        validator,
+        'transform',
+        lc,
+        'https://evil.example.com/endpoint',
+        true,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      ),
+    ).rejects.toThrow(
+      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_QUERY_URL configuration',
     );
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -158,6 +181,7 @@ describe('fetchFromAPIServer', () => {
           'push',
           lc,
           url,
+          false,
           allowedPatterns,
           shard,
           {},
@@ -181,6 +205,7 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
+        false,
         allowedPatterns,
         shard,
         {},
@@ -222,6 +247,7 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
+        false,
         allowedPatterns,
         shard,
         {},
@@ -257,6 +283,7 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
+        false,
         allowedPatterns,
         shard,
         {},
@@ -289,6 +316,7 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
+        false,
         allowedPatterns,
         shard,
         {},
@@ -325,6 +353,7 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
+        false,
         allowedPatterns,
         shard,
         {},
@@ -359,6 +388,7 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
+        false,
         allowedPatterns,
         shard,
         {},
@@ -390,6 +420,7 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
+        false,
         allowedPatterns,
         shard,
         {},
@@ -421,6 +452,7 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
+        false,
         allowedPatterns,
         shard,
         {},
@@ -448,13 +480,13 @@ describe('getBodyPreview', () => {
 
   test('returns entire body when below truncation threshold', async () => {
     const res = new Response('short-body', {status: 200});
-    expect(await getBodyPreview(res, lc)).toBe('short-body');
+    expect(await getBodyPreview(res, lc, 'warn')).toBe('short-body');
   });
 
   test('truncates body to 512 characters and appends ellipsis', async () => {
     const longBody = 'a'.repeat(600);
     const res = new Response(longBody, {status: 200});
-    const preview = await getBodyPreview(res, lc);
+    const preview = await getBodyPreview(res, lc, 'warn');
     expect(preview).toHaveLength(515);
     expect(preview?.endsWith('...')).toBe(true);
     expect(preview?.startsWith('a'.repeat(512))).toBe(true);
@@ -470,7 +502,9 @@ describe('getBodyPreview', () => {
       }),
     } as unknown as Response;
 
-    expect(await getBodyPreview(failingResponse, logContext)).toBeUndefined();
+    expect(
+      await getBodyPreview(failingResponse, logContext, 'error'),
+    ).toBeUndefined();
     expect(sink.messages).toHaveLength(1);
     const [level, _ctx, args] = sink.messages[0]!;
     expect(level).toBe('error');

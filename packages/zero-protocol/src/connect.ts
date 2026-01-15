@@ -23,6 +23,10 @@ export const connectedMessageSchema = v.tuple([
 
 const initConnectionBodySchema = v.object({
   desiredQueriesPatch: upQueriesPatchSchema,
+  // As the schema can be large, client only sends when it does not have a
+  // server snapshot (i.e. a snapshot with a cookie).  Once it has a server
+  // snapshot it will assume the zero-cache already has the schema for this
+  // client's client group in the CVR store.
   clientSchema: clientSchemaSchema.optional(),
   deleted: deleteClientsBodySchema.optional(),
   // parameters to configure the mutate endpoint

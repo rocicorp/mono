@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {
@@ -9,7 +9,9 @@ import type {
   Disjunction,
 } from '../../../zero-protocol/src/ast.ts';
 import {Catch} from '../ivm/catch.ts';
+import {consume} from '../ivm/stream.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
+import {simpleCostModel} from '../planner/test/helpers.ts';
 import {
   bindStaticParameters,
   buildPipeline,
@@ -33,13 +35,27 @@ export function testBuilderDelegate() {
     },
     ['id'],
   );
-  users.push({type: 'add', row: {id: 1, name: 'aaron', recruiterID: null}});
-  users.push({type: 'add', row: {id: 2, name: 'erik', recruiterID: 1}});
-  users.push({type: 'add', row: {id: 3, name: 'greg', recruiterID: 1}});
-  users.push({type: 'add', row: {id: 4, name: 'matt', recruiterID: 1}});
-  users.push({type: 'add', row: {id: 5, name: 'cesar', recruiterID: 3}});
-  users.push({type: 'add', row: {id: 6, name: 'darick', recruiterID: 3}});
-  users.push({type: 'add', row: {id: 7, name: 'alex', recruiterID: 1}});
+  consume(
+    users.push({type: 'add', row: {id: 1, name: 'aaron', recruiterID: null}}),
+  );
+  consume(
+    users.push({type: 'add', row: {id: 2, name: 'erik', recruiterID: 1}}),
+  );
+  consume(
+    users.push({type: 'add', row: {id: 3, name: 'greg', recruiterID: 1}}),
+  );
+  consume(
+    users.push({type: 'add', row: {id: 4, name: 'matt', recruiterID: 1}}),
+  );
+  consume(
+    users.push({type: 'add', row: {id: 5, name: 'cesar', recruiterID: 3}}),
+  );
+  consume(
+    users.push({type: 'add', row: {id: 6, name: 'darick', recruiterID: 3}}),
+  );
+  consume(
+    users.push({type: 'add', row: {id: 7, name: 'alex', recruiterID: 1}}),
+  );
 
   const states = createSource(
     lc,
@@ -48,11 +64,11 @@ export function testBuilderDelegate() {
     {code: {type: 'string'}},
     ['code'],
   );
-  states.push({type: 'add', row: {code: 'CA'}});
-  states.push({type: 'add', row: {code: 'HI'}});
-  states.push({type: 'add', row: {code: 'AZ'}});
-  states.push({type: 'add', row: {code: 'MD'}});
-  states.push({type: 'add', row: {code: 'GA'}});
+  consume(states.push({type: 'add', row: {code: 'CA'}}));
+  consume(states.push({type: 'add', row: {code: 'HI'}}));
+  consume(states.push({type: 'add', row: {code: 'AZ'}}));
+  consume(states.push({type: 'add', row: {code: 'MD'}}));
+  consume(states.push({type: 'add', row: {code: 'GA'}}));
 
   const userStates = createSource(
     lc,
@@ -61,13 +77,13 @@ export function testBuilderDelegate() {
     {userID: {type: 'number'}, stateCode: {type: 'string'}},
     ['userID', 'stateCode'],
   );
-  userStates.push({type: 'add', row: {userID: 1, stateCode: 'HI'}});
-  userStates.push({type: 'add', row: {userID: 3, stateCode: 'AZ'}});
-  userStates.push({type: 'add', row: {userID: 3, stateCode: 'CA'}});
-  userStates.push({type: 'add', row: {userID: 4, stateCode: 'MD'}});
-  userStates.push({type: 'add', row: {userID: 5, stateCode: 'AZ'}});
-  userStates.push({type: 'add', row: {userID: 6, stateCode: 'CA'}});
-  userStates.push({type: 'add', row: {userID: 7, stateCode: 'GA'}});
+  consume(userStates.push({type: 'add', row: {userID: 1, stateCode: 'HI'}}));
+  consume(userStates.push({type: 'add', row: {userID: 3, stateCode: 'AZ'}}));
+  consume(userStates.push({type: 'add', row: {userID: 3, stateCode: 'CA'}}));
+  consume(userStates.push({type: 'add', row: {userID: 4, stateCode: 'MD'}}));
+  consume(userStates.push({type: 'add', row: {userID: 5, stateCode: 'AZ'}}));
+  consume(userStates.push({type: 'add', row: {userID: 6, stateCode: 'CA'}}));
+  consume(userStates.push({type: 'add', row: {userID: 7, stateCode: 'GA'}}));
 
   const sources = {users, userStates, states};
 
@@ -151,7 +167,7 @@ test('source-only', () => {
     ]
   `);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -238,9 +254,9 @@ test('filter', () => {
     ]
   `);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
-  sources.users.push({type: 'add', row: {id: 9, name: 'abby'}});
-  sources.users.push({type: 'remove', row: {id: 8, name: 'sam'}});
+  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
+  consume(sources.users.push({type: 'add', row: {id: 9, name: 'abby'}}));
+  consume(sources.users.push({type: 'remove', row: {id: 8, name: 'sam'}}));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -420,13 +436,30 @@ test('self-join', () => {
     ]
   `);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam', recruiterID: 2}});
-  sources.users.push({type: 'add', row: {id: 9, name: 'abby', recruiterID: 8}});
-  sources.users.push({
-    type: 'remove',
-    row: {id: 8, name: 'sam', recruiterID: 2},
-  });
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam', recruiterID: 3}});
+  consume(
+    sources.users.push({
+      type: 'add',
+      row: {id: 8, name: 'sam', recruiterID: 2},
+    }),
+  );
+  consume(
+    sources.users.push({
+      type: 'add',
+      row: {id: 9, name: 'abby', recruiterID: 8},
+    }),
+  );
+  consume(
+    sources.users.push({
+      type: 'remove',
+      row: {id: 8, name: 'sam', recruiterID: 2},
+    }),
+  );
+  consume(
+    sources.users.push({
+      type: 'add',
+      row: {id: 8, name: 'sam', recruiterID: 3},
+    }),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
@@ -645,19 +678,21 @@ test('self-join edit', () => {
   `);
 
   // or was greg recruited by erik
-  sources.users.push({
-    type: 'edit',
-    oldRow: {
-      id: 3,
-      name: 'greg',
-      recruiterID: 1,
-    },
-    row: {
-      id: 3,
-      name: 'greg',
-      recruiterID: 2,
-    },
-  });
+  consume(
+    sources.users.push({
+      type: 'edit',
+      oldRow: {
+        id: 3,
+        name: 'greg',
+        recruiterID: 1,
+      },
+      row: {
+        id: 3,
+        name: 'greg',
+        recruiterID: 2,
+      },
+    }),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
@@ -891,7 +926,9 @@ test('multi-join', () => {
     ]
   `);
 
-  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+  consume(
+    sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}}),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
@@ -1041,7 +1078,9 @@ test('join with limit', () => {
     ]
   `);
 
-  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+  consume(
+    sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}}),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
@@ -1130,7 +1169,7 @@ test('skip', () => {
     ]
   `);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -1269,7 +1308,9 @@ test('exists junction', () => {
   `);
 
   // erik moves to hawaii
-  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+  consume(
+    sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}}),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
@@ -1478,7 +1519,9 @@ test('duplicative exists junction', () => {
   `);
 
   // erik moves to hawaii
-  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+  consume(
+    sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}}),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
@@ -1680,18 +1723,22 @@ test('exists junction with limit, remove row after limit, and last row', () => {
   `);
 
   // row after limit
-  sources.users.push({
-    type: 'remove',
-    row: {id: 4, name: 'matt', recruiterID: 1},
-  });
+  consume(
+    sources.users.push({
+      type: 'remove',
+      row: {id: 4, name: 'matt', recruiterID: 1},
+    }),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`[]`);
 
   // last row, also after limit
-  sources.users.push({
-    type: 'remove',
-    row: {id: 7, name: 'alex', recruiterID: 1},
-  });
+  consume(
+    sources.users.push({
+      type: 'remove',
+      row: {id: 7, name: 'alex', recruiterID: 1},
+    }),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`[]`);
 });
@@ -1767,19 +1814,21 @@ test('exists self join', () => {
   `);
 
   // or was greg recruited by erik
-  sources.users.push({
-    type: 'edit',
-    oldRow: {
-      id: 3,
-      name: 'greg',
-      recruiterID: 1,
-    },
-    row: {
-      id: 3,
-      name: 'greg',
-      recruiterID: 2,
-    },
-  });
+  consume(
+    sources.users.push({
+      type: 'edit',
+      oldRow: {
+        id: 3,
+        name: 'greg',
+        recruiterID: 1,
+      },
+      row: {
+        id: 3,
+        name: 'greg',
+        recruiterID: 2,
+      },
+    }),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
@@ -2042,19 +2091,21 @@ test('not exists self join', () => {
   `);
 
   // aaron recruited himself
-  sources.users.push({
-    type: 'edit',
-    oldRow: {
-      id: 1,
-      name: 'aaron',
-      recruiterID: null,
-    },
-    row: {
-      id: 1,
-      name: 'aaron',
-      recruiterID: 1,
-    },
-  });
+  consume(
+    sources.users.push({
+      type: 'edit',
+      oldRow: {
+        id: 1,
+        name: 'aaron',
+        recruiterID: null,
+      },
+      row: {
+        id: 1,
+        name: 'aaron',
+        recruiterID: 1,
+      },
+    }),
+  );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
@@ -2324,7 +2375,7 @@ test('empty or - nothing goes through', () => {
 
   expect(sink.fetch()).toMatchInlineSnapshot(`[]`);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
   expect(sink.pushes).toMatchInlineSnapshot(`[]`);
 });
 
@@ -2347,7 +2398,7 @@ test('empty and - everything goes through', () => {
 
   expect(sink.fetch().length).toEqual(7);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -2391,7 +2442,7 @@ test('always false literal comparison - nothing goes through', () => {
 
   expect(sink.fetch()).toMatchInlineSnapshot(`[]`);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
   expect(sink.pushes).toMatchInlineSnapshot(`[]`);
 });
 
@@ -2481,7 +2532,7 @@ test('always true literal comparison - everything goes through', () => {
     ]
   `);
 
-  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -2761,4 +2812,62 @@ test('groupSubqueryConditions', () => {
     [subqueryInAnd.conditions[0]],
     [subqueryInAnd.conditions[1]],
   ]);
+});
+
+test('graceful fallback when planner encounters too many joins', () => {
+  const {delegate} = testBuilderDelegate();
+
+  // Create a mock LogContext with a spy for warn
+  const warnSpy = vi.fn();
+  const testLc = {
+    ...lc,
+    warn: warnSpy,
+  } as unknown as typeof lc;
+
+  // Create an AST with 10 EXISTS conditions (MAX_FLIPPABLE_JOINS is 9)
+  // This should trigger the planner to skip optimization
+  const existsConditions: Condition[] = [];
+  for (let i = 0; i < 10; i++) {
+    existsConditions.push({
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['userID']},
+        subquery: {
+          table: 'userStates',
+          alias: `zsubq_userStates_${i}`,
+          orderBy: [
+            ['userID', 'asc'],
+            ['stateCode', 'asc'],
+          ],
+        },
+      },
+    });
+  }
+
+  const ast: AST = {
+    table: 'users',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'and',
+      conditions: existsConditions,
+    },
+  };
+
+  // This should fall back gracefully instead of throwing
+  const sink = new Catch(
+    buildPipeline(ast, delegate, 'query-id', simpleCostModel, testLc),
+  );
+
+  // Verify the warning was logged
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringMatching(
+      /Query has 10 EXISTS checks which would require 1024 plan evaluations/,
+    ),
+  );
+
+  // Verify the query still works (falls back to unoptimized version)
+  const result = sink.fetch();
+  expect(result[0]).toBeDefined();
 });

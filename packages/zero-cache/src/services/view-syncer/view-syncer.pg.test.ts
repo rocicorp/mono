@@ -8,7 +8,7 @@ import {
   vi,
 } from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Queue} from '../../../../shared/src/queue.ts';
+import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {
@@ -30,24 +30,24 @@ import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.t
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
+import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
-import {DbFile} from '../../test/lite.ts';
+import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
-import {Subscription} from '../../types/subscription.ts';
+import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater} from './cvr.ts';
-import {DrainCoordinator} from './drain-coordinator.ts';
+import type {DrainCoordinator} from './drain-coordinator.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   app2Messages,
-  appMessages,
   COMMENTS_QUERY,
   EXPECTED_LMIDS_AST,
   expectNoPokes,
@@ -69,7 +69,8 @@ import {
   TASK_ID,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
-import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import type {ViewSyncerService} from './view-syncer.ts';
+import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
   let storageDB: Database;
@@ -88,7 +89,7 @@ describe('view-syncer/service', () => {
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
-    clientSchema?: ClientSchema,
+    clientSchema?: ClientSchema | null,
   ) => Queue<Downstream>;
   let connectWithQueueAndSource: (
     ctx: SyncContext,
@@ -100,6 +101,7 @@ describe('view-syncer/service', () => {
     source: Source<Downstream>;
   };
   let setTimeoutFn: Mock<typeof setTimeout>;
+  let customQueryTransformer: CustomQueryTransformer | undefined;
 
   function callNextSetTimeout(delta: number) {
     // Sanity check that the system time is the mocked time.
@@ -112,10 +114,10 @@ describe('view-syncer/service', () => {
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
+    profileID: 'p0000g00000003203',
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    schemaVersion: 2,
     tokenData: undefined,
     httpCookie: undefined,
   };
@@ -136,6 +138,7 @@ describe('view-syncer/service', () => {
       connect,
       connectWithQueueAndSource,
       setTimeoutFn,
+      customQueryTransformer,
     } = await setup(testDBs, 'view_syncer_service_test', permissionsAll));
 
     return async () => {
@@ -188,6 +191,63 @@ describe('view-syncer/service', () => {
         },
       },
       version: {stateVersion: '00', minorVersion: 1},
+    });
+  });
+
+  test('initConnectionMessage for new client group missing clientSchema', async () => {
+    const client = connect(
+      SYNC_CONTEXT,
+      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+      null /** no clientSchema */,
+    );
+    await expect(client.dequeue()).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[ProtocolError: The initConnection message for a new client group must include client schema.]`,
+    );
+  });
+
+  test('initConnectionMessage sets profileID', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await client.dequeue();
+
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      upstreamDb,
+      SHARD,
+      TASK_ID,
+      serviceID,
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, Date.now());
+    expect(cvr).toMatchObject({
+      profileID: SYNC_CONTEXT.profileID,
+    });
+  });
+
+  test('initConnectionMessage with no profileID sets a default profileID based on the client group ID', async () => {
+    const oldSyncContext = {
+      ...SYNC_CONTEXT,
+      profileID: null,
+    };
+    const client = connect(oldSyncContext, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await client.dequeue();
+
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      upstreamDb,
+      SHARD,
+      TASK_ID,
+      serviceID,
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, Date.now());
+    expect(cvr).toMatchObject({
+      profileID: `cg${serviceID}`,
     });
   });
 
@@ -319,10 +379,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -560,10 +616,6 @@ describe('view-syncer/service', () => {
             {
               "baseCookie": "00:01",
               "pokeID": "01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
             },
           ],
           [
@@ -770,197 +822,185 @@ describe('view-syncer/service', () => {
       `);
       stateChanges.push({state: 'version-ready'});
       expect(await nextPoke(client)).toMatchInlineSnapshot(`
-        [
           [
-            "pokeStart",
-            {
-              "baseCookie": "00:01",
-              "pokeID": "01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
+            [
+              "pokeStart",
+              {
+                "baseCookie": "00:01",
+                "pokeID": "01",
               },
-            },
-          ],
-          [
-            "pokePart",
-            {
-              "gotQueriesPatch": [
-                {
-                  "hash": "custom-1",
-                  "op": "put",
+            ],
+            [
+              "pokePart",
+              {
+                "gotQueriesPatch": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+                "lastMutationIDChanges": {
+                  "foo": 42,
                 },
-                {
-                  "hash": "custom-2",
-                  "op": "put",
-                },
-              ],
-              "lastMutationIDChanges": {
-                "foo": 42,
+                "pokeID": "01",
+                "rowsPatch": [
+                  {
+                    "op": "put",
+                    "tableName": "issues",
+                    "value": {
+                      "big": 9007199254740991,
+                      "id": "1",
+                      "json": null,
+                      "owner": "100",
+                      "parent": null,
+                      "title": "parent issue foo",
+                    },
+                  },
+                  {
+                    "op": "put",
+                    "tableName": "issues",
+                    "value": {
+                      "big": -9007199254740991,
+                      "id": "2",
+                      "json": null,
+                      "owner": "101",
+                      "parent": null,
+                      "title": "parent issue bar",
+                    },
+                  },
+                  {
+                    "op": "put",
+                    "tableName": "issues",
+                    "value": {
+                      "big": 123,
+                      "id": "3",
+                      "json": null,
+                      "owner": "102",
+                      "parent": "1",
+                      "title": "foo",
+                    },
+                  },
+                  {
+                    "op": "put",
+                    "tableName": "issues",
+                    "value": {
+                      "big": 100,
+                      "id": "4",
+                      "json": null,
+                      "owner": "101",
+                      "parent": "2",
+                      "title": "bar",
+                    },
+                  },
+                ],
               },
-              "pokeID": "01",
-              "rowsPatch": [
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 9007199254740991,
-                    "id": "1",
-                    "json": null,
-                    "owner": "100",
-                    "parent": null,
-                    "title": "parent issue foo",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": -9007199254740991,
-                    "id": "2",
-                    "json": null,
-                    "owner": "101",
-                    "parent": null,
-                    "title": "parent issue bar",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 123,
-                    "id": "3",
-                    "json": null,
-                    "owner": "102",
-                    "parent": "1",
-                    "title": "foo",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 100,
-                    "id": "4",
-                    "json": null,
-                    "owner": "101",
-                    "parent": "2",
-                    "title": "bar",
-                  },
-                },
-              ],
-            },
-          ],
-          [
-            "pokeEnd",
-            {
-              "cookie": "01",
-              "pokeID": "01",
-            },
-          ],
-        ]
-      `);
+            ],
+            [
+              "pokeEnd",
+              {
+                "cookie": "01",
+                "pokeID": "01",
+              },
+            ],
+          ]
+        `);
       expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
         .toMatchInlineSnapshot(`
-        Result [
-          {
-            "clientGroupID": "9876",
-            "patchVersion": "01",
-            "refCounts": {
-              "lmids": 1,
-            },
-            "rowKey": {
+          Result [
+            {
               "clientGroupID": "9876",
-              "clientID": "foo",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
             },
-            "rowVersion": "01",
-            "schema": "",
-            "table": "this_app_2.clients",
-          },
-          {
-            "clientGroupID": "9876",
-            "patchVersion": "01",
-            "refCounts": {
-              "custom-1": 1,
-              "custom-2": 1,
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
             },
-            "rowKey": {
-              "id": "1",
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
             },
-            "rowVersion": "01",
-            "schema": "",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "9876",
-            "patchVersion": "01",
-            "refCounts": {
-              "custom-1": 1,
-              "custom-2": 1,
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
             },
-            "rowKey": {
-              "id": "2",
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
             },
-            "rowVersion": "01",
-            "schema": "",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "9876",
-            "patchVersion": "01",
-            "refCounts": {
-              "custom-1": 1,
-              "custom-2": 1,
-            },
-            "rowKey": {
-              "id": "3",
-            },
-            "rowVersion": "01",
-            "schema": "",
-            "table": "issues",
-          },
-          {
-            "clientGroupID": "9876",
-            "patchVersion": "01",
-            "refCounts": {
-              "custom-1": 1,
-              "custom-2": 1,
-            },
-            "rowKey": {
-              "id": "4",
-            },
-            "rowVersion": "01",
-            "schema": "",
-            "table": "issues",
-          },
-        ]
-      `);
+          ]
+        `);
     });
 
-    test('does not re-transform the same custom query if it was already registered and transformed', async () => {
-      let callCount = 0;
-      mockFetchImpl(() => {
-        callCount++;
-        return Promise.resolve(
-          new Response(
-            JSON.stringify([
-              'transformed',
-              [
-                {
-                  ast: ISSUES_QUERY,
-                  id: 'custom-1',
-                  name: 'named-query-1',
-                },
-                {
-                  ast: ISSUES_QUERY,
-                  id: 'custom-2',
-                  name: 'named-query-2',
-                },
-              ],
-            ] satisfies TransformResponseMessage),
-          ),
-        );
-      });
+    test('always transforms custom queries to validate authorization', async () => {
+      // Spy on transformer's transform method instead of mocking fetch
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-1',
+          },
+          {
+            id: 'custom-2',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-2',
+          },
+        ]);
 
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
@@ -970,8 +1010,11 @@ describe('view-syncer/service', () => {
       await nextPoke(client);
       stateChanges.push({state: 'version-ready'});
       await nextPoke(client);
-      expect(callCount).toBe(1);
 
+      // First client should have called transform once
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // Create second client with same queries
       const client2 = connect(
         {
           ...SYNC_CONTEXT,
@@ -992,10 +1035,6 @@ describe('view-syncer/service', () => {
             {
               "baseCookie": null,
               "pokeID": "01:01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
             },
           ],
           [
@@ -1098,7 +1137,10 @@ describe('view-syncer/service', () => {
           ],
         ]
       `);
-      expect(callCount).toBe(1);
+      // Transform is called twice:
+      // 1. First client connection triggers initial transform
+      // 2. Second client connection triggers transform again (separate validation)
+      expect(transformSpy).toHaveBeenCalledTimes(2);
     });
 
     // test cases where custom query transforms fail
@@ -1123,9 +1165,9 @@ describe('view-syncer/service', () => {
 
       await nextPoke(client);
       stateChanges.push({state: 'version-ready'});
-      await expect(nextPoke(client)).rejects.toMatchInlineSnapshot(`
-        [ProtocolError: Fetch from API server returned non-OK status 500]
-      `);
+      await expect(nextPoke(client)).rejects.toMatchInlineSnapshot(
+        `[ProtocolError: Fetch from API server returned non-OK status 500]`,
+      );
     });
 
     test('bad http response', async () => {
@@ -1141,9 +1183,9 @@ describe('view-syncer/service', () => {
 
       await nextPoke(client);
       stateChanges.push({state: 'version-ready'});
-      await expect(nextPoke(client)).rejects.toMatchInlineSnapshot(`
-        [ProtocolError: Fetch from API server returned non-OK status 500]
-      `);
+      await expect(nextPoke(client)).rejects.toMatchInlineSnapshot(
+        `[ProtocolError: Fetch from API server returned non-OK status 500]`,
+      );
     });
 
     test('all individual queries fail', async () => {
@@ -1177,7 +1219,8 @@ describe('view-syncer/service', () => {
 
       await nextPoke(client);
       stateChanges.push({state: 'version-ready'});
-      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      expect(await nextPoke(client)).toMatchInlineSnapshot(
+        `
         [
           [
             "transformError",
@@ -1213,10 +1256,6 @@ describe('view-syncer/service', () => {
             {
               "baseCookie": "00:01",
               "pokeID": "01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
             },
           ],
           [
@@ -1250,7 +1289,8 @@ describe('view-syncer/service', () => {
             },
           ],
         ]
-      `);
+      `,
+      );
     });
 
     test('some individual queries fail', async () => {
@@ -1274,85 +1314,300 @@ describe('view-syncer/service', () => {
 
       await nextPoke(client);
       stateChanges.push({state: 'version-ready'});
-      expect(await nextPoke(client)).toMatchInlineSnapshot(`
-                  [
-                    [
-                      "transformError",
-                      [
-                        {
-                          "error": "app",
-                          "id": "custom-1",
-                          "message": "errrrrr",
-                          "name": "named-query-1",
-                        },
-                      ],
-                    ],
-                    [
-                      "pokeStart",
-                      {
-                        "baseCookie": "00:01",
-                        "pokeID": "01",
-                        "schemaVersions": {
-                          "maxSupportedVersion": 3,
-                          "minSupportedVersion": 2,
-                        },
-                      },
-                    ],
-                    [
-                      "pokePart",
-                      {
-                        "gotQueriesPatch": [
-                          {
-                            "hash": "custom-2",
-                            "op": "put",
-                          },
-                          {
-                            "hash": "custom-1",
-                            "op": "del",
-                          },
-                        ],
-                        "lastMutationIDChanges": {
-                          "foo": 42,
-                        },
-                        "pokeID": "01",
-                        "rowsPatch": [
-                          {
-                            "op": "put",
-                            "tableName": "users",
-                            "value": {
-                              "id": "100",
-                              "name": "Alice",
-                            },
-                          },
-                          {
-                            "op": "put",
-                            "tableName": "users",
-                            "value": {
-                              "id": "101",
-                              "name": "Bob",
-                            },
-                          },
-                          {
-                            "op": "put",
-                            "tableName": "users",
-                            "value": {
-                              "id": "102",
-                              "name": "Candice",
-                            },
-                          },
-                        ],
-                      },
-                    ],
-                    [
-                      "pokeEnd",
-                      {
-                        "cookie": "01",
-                        "pokeID": "01",
-                      },
-                    ],
-                  ]
-                `);
+      expect(await nextPoke(client)).toMatchInlineSnapshot(
+        `
+        [
+          [
+            "transformError",
+            [
+              {
+                "error": "app",
+                "id": "custom-1",
+                "message": "errrrrr",
+                "name": "named-query-1",
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "100",
+                    "name": "Alice",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "101",
+                    "name": "Bob",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "102",
+                    "name": "Candice",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `,
+      );
     });
+
+    describe.each([
+      {
+        name: 'different hashes - removes old pipeline',
+        hash1: 'hash-1',
+        hash2: 'hash-2',
+        ast1: ISSUES_QUERY,
+        ast2: USERS_QUERY,
+        expectSameHash: false,
+        expectRowsPresent: false,
+      },
+      {
+        name: 'same hash - keeps pipeline for successful query',
+        hash1: 'hash-same',
+        hash2: 'hash-same',
+        ast1: ISSUES_QUERY,
+        ast2: ISSUES_QUERY,
+        expectSameHash: true,
+        expectRowsPresent: true,
+      },
+    ])(
+      'failed query re-transformation: $name',
+      ({hash1, hash2, ast1, ast2, expectSameHash, expectRowsPresent}) => {
+        test('removes failed query using last known transformation hash', async () => {
+          // Use spy pattern to control mock behavior between connections
+          using transformSpy = vi
+            .spyOn(customQueryTransformer!, 'transform')
+            .mockResolvedValueOnce([
+              {
+                id: 'custom-1',
+                transformedAst: ast1,
+                transformationHash: hash1,
+              },
+              {
+                id: 'custom-2',
+                transformedAst: ast2,
+                transformationHash: hash2,
+              },
+            ]);
+
+          const client1 = connect(SYNC_CONTEXT, [
+            {
+              op: 'put',
+              hash: 'custom-1',
+              name: 'named-query-1',
+              args: ['thing'],
+            },
+            {
+              op: 'put',
+              hash: 'custom-2',
+              name: 'named-query-2',
+              args: ['thing'],
+            },
+          ]);
+
+          // Initial config poke
+          await nextPoke(client1);
+
+          // Trigger hydration
+          stateChanges.push({state: 'version-ready'});
+          const hydrateResponse = await nextPoke(client1);
+
+          // Verify first transformation was called
+          expect(transformSpy).toHaveBeenCalledTimes(1);
+
+          if (expectRowsPresent) {
+            // Verify rows were hydrated (pipeline was created)
+            const pokePart = hydrateResponse.find(
+              ([cmd]) => cmd === 'pokePart',
+            ) as [string, PokePartBody];
+            expect(pokePart).toBeTruthy();
+            const rowsPatch = pokePart[1].rowsPatch;
+            expect(rowsPatch).toBeTruthy();
+            expect(rowsPatch!.length).toBeGreaterThan(0);
+          }
+
+          // Verify both queries are in CVR with transformation hashes
+          const queriesAfterFirstConnect =
+            await cvrDB`SELECT "queryHash", "transformationHash" FROM "this_app_2/cvr".queries WHERE "transformationHash" IS NOT NULL ORDER BY "queryHash"`;
+          // Should have custom-1, custom-2, and possibly internal queries
+          expect(queriesAfterFirstConnect.length).toBeGreaterThanOrEqual(2);
+
+          const custom1Query = queriesAfterFirstConnect.find(
+            q => q.queryHash === 'custom-1',
+          );
+          const custom2Query = queriesAfterFirstConnect.find(
+            q => q.queryHash === 'custom-2',
+          );
+
+          expect(custom1Query).toBeTruthy();
+          expect(custom1Query!.transformationHash).toBe(hash1);
+          expect(custom2Query).toBeTruthy();
+          expect(custom2Query!.transformationHash).toBe(hash2);
+
+          if (expectSameHash) {
+            // Verify both queries share the same transformation hash
+            expect(custom1Query!.transformationHash).toBe(
+              custom2Query!.transformationHash,
+            );
+          }
+
+          // Second connection - custom-1 fails transformation, custom-2 succeeds
+          transformSpy.mockResolvedValueOnce([
+            {
+              error: 'app',
+              id: 'custom-1',
+              name: 'named-query-1',
+              message: 'Authorization failed',
+            },
+            {
+              id: 'custom-2',
+              transformedAst: ast2,
+              transformationHash: hash2,
+            },
+          ]);
+
+          const client2 = connect(
+            {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+            [
+              {
+                op: 'put',
+                hash: 'custom-1',
+                name: 'named-query-1',
+                args: ['thing'],
+              },
+              {
+                op: 'put',
+                hash: 'custom-2',
+                name: 'named-query-2',
+                args: ['thing'],
+              },
+            ],
+          );
+
+          // Get the response - on reconnection, the query removal happens via poke
+          const response = await nextPoke(client2);
+
+          // Verify second transformation was called
+          expect(transformSpy).toHaveBeenCalledTimes(2);
+
+          // Verify custom-1 was removed from gotQueries
+          const pokePart = response.find(([cmd]) => cmd === 'pokePart') as [
+            string,
+            PokePartBody,
+          ];
+          expect(pokePart).toBeTruthy();
+          const gotQueriesPatch = pokePart[1].gotQueriesPatch;
+          expect(gotQueriesPatch).toContainEqual({hash: 'custom-1', op: 'del'});
+
+          if (expectRowsPresent) {
+            // Verify rows are still present (pipeline not removed because custom-2 uses same hash)
+            const rowsPatchAfterFailure = pokePart[1].rowsPatch;
+            expect(rowsPatchAfterFailure).toBeTruthy();
+            expect(rowsPatchAfterFailure!.length).toBeGreaterThan(0);
+
+            // Verify NO deletions for issues table (pipeline shared, still active)
+            const issueDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'issues',
+            );
+            expect(issueDelOps.length).toBe(0);
+
+            // Verify issues rows are still present (put operations)
+            const issuePutOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'put' && op.tableName === 'issues',
+            );
+            expect(issuePutOps.length).toBeGreaterThan(0);
+          } else {
+            // Verify custom-1 was removed from CVR (by checking it's marked as deleted or removed)
+            const queriesAfterFailure =
+              await cvrDB`SELECT "queryHash", "transformationHash" FROM "this_app_2/cvr".queries WHERE "queryHash" = 'custom-1'`;
+            // Query should either be deleted or removed from the active set
+            expect(
+              queriesAfterFailure.length === 0 ||
+                queriesAfterFailure[0].transformationHash === null,
+            ).toBe(true);
+
+            // Verify rowsPatch contains deletions for issues table (hash-1 pipeline removed)
+            const rowsPatchAfterFailure = pokePart[1].rowsPatch;
+            expect(rowsPatchAfterFailure).toBeTruthy();
+
+            // Should have deletion operations for all 4 issues rows (ids: '1', '2', '3', '4')
+            const issueDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'issues',
+            );
+            expect(issueDelOps.length).toBe(4);
+
+            // Verify all issue IDs are deleted
+            const deletedIssueIds = issueDelOps
+              .map(
+                op =>
+                  (op as {op: 'del'; tableName: string; id: {id: string}}).id
+                    .id,
+              )
+              .sort();
+            expect(deletedIssueIds).toEqual(['1', '2', '3', '4']);
+
+            // Verify no deletions for users table (hash-2 pipeline still active)
+            const userDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'users',
+            );
+            expect(userDelOps.length).toBe(0);
+          }
+
+          // Verify custom-2 is still present/active
+          if (expectRowsPresent) {
+            expect(gotQueriesPatch).toContainEqual({
+              hash: 'custom-2',
+              op: 'put',
+            });
+          } else {
+            const custom2QueryAfterFailure =
+              await cvrDB`SELECT "queryHash", "transformationHash" FROM "this_app_2/cvr".queries WHERE "queryHash" = 'custom-2' AND "transformationHash" IS NOT NULL`;
+            expect(custom2QueryAfterFailure).toHaveLength(1);
+          }
+        });
+      },
+    );
 
     // not yet supported: test('a single custom query that returns many queries' () => {});
   });
@@ -1863,10 +2118,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -1973,234 +2224,96 @@ describe('view-syncer/service', () => {
 
     expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "lmids": 1,
-          },
-          "rowKey": {
+        Result [
+          {
             "clientGroupID": "9876",
-            "clientID": "foo",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "this_app_2.clients",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash1.1": 1,
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "1",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash1.1": 1,
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "2",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash1.1": 1,
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "3",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash1.1": 1,
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "4",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "5",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-      ]
-    `);
-  });
-
-  test('initial hydration, schemaVersion unsupported', async () => {
-    const client = connect({...SYNC_CONTEXT, schemaVersion: 1}, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ]);
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": null,
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
+            "patchVersion": "01",
+            "refCounts": {
+              "lmids": 1,
             },
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "00:01",
-            "pokeID": "00:01",
-          },
-        ],
-      ]
-    `);
-    stateChanges.push({state: 'version-ready'});
-
-    const dequeuePromise = client.dequeue();
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ProtocolError);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
-      kind: ErrorKind.SchemaVersionNotSupported,
-      message:
-        'Schema version 1 is not in range of supported schema versions [2, 3].',
-      origin: ErrorOrigin.ZeroCache,
-    });
-  });
-
-  test('initial hydration, schema unsupported', async () => {
-    const client = connect(
-      {...SYNC_CONTEXT, schemaVersion: 1},
-      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
-      {
-        tables: {foo: {columns: {bar: {type: 'string'}}}},
-      },
-    );
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": null,
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
+            "rowKey": {
+              "clientGroupID": "9876",
+              "clientID": "foo",
             },
-            "pokeID": "00:01",
+            "rowVersion": "01",
+            "schema": "",
+            "table": "this_app_2.clients",
           },
-        ],
-        [
-          "pokeEnd",
           {
-            "cookie": "00:01",
-            "pokeID": "00:01",
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "query-hash1": 1,
+              "query-hash1.1": 1,
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "1",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-        ],
-      ]
-    `);
-    stateChanges.push({state: 'version-ready'});
-
-    const dequeuePromise = client.dequeue();
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ProtocolError);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
-      kind: ErrorKind.SchemaVersionNotSupported,
-      message:
-        'The "foo" table does not exist or is not one of the replicated tables: "comments","issueLabels","issues","labels","users".',
-      origin: ErrorOrigin.ZeroCache,
-    });
-  });
-
-  test('initial hydration, schemaVersion unsupported with bad query', async () => {
-    vi.setSystemTime(Date.UTC(2025, 6, 14));
-    // Simulate a connection when the replica is already ready.
-    stateChanges.push({state: 'version-ready'});
-    await sleep(5);
-
-    const client = connect({...SYNC_CONTEXT, schemaVersion: 1}, [
-      {
-        op: 'put',
-        hash: 'query-hash1',
-        ast: {
-          ...ISSUES_QUERY,
-          // simulate an "invalid" query for an old schema version with an empty orderBy
-          orderBy: [],
-        },
-      },
-    ]);
-
-    let err;
-    try {
-      // Depending on the ordering of events, the error can happen on
-      // the first or second poke.
-      await nextPoke(client);
-      await nextPoke(client);
-    } catch (e) {
-      err = e;
-    }
-    // Make sure it's the SchemaVersionNotSupported error that gets
-    // propagated, and not any error related to the bad query.
-    expect(err).toBeInstanceOf(ProtocolError);
-    expect((err as ProtocolError).errorBody).toEqual({
-      kind: ErrorKind.SchemaVersionNotSupported,
-      message:
-        'Schema version 1 is not in range of supported schema versions [2, 3].',
-      origin: ErrorOrigin.ZeroCache,
-    });
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "query-hash1": 1,
+              "query-hash1.1": 1,
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "2",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "query-hash1": 1,
+              "query-hash1.1": 1,
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "3",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "query-hash1": 1,
+              "query-hash1.1": 1,
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "4",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "5",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+        ]
+      `);
   });
 
   test('process advancements', async () => {
@@ -2252,10 +2365,6 @@ describe('view-syncer/service', () => {
         {
           "baseCookie": "00:01",
           "pokeID": "01",
-          "schemaVersions": {
-            "maxSupportedVersion": 3,
-            "minSupportedVersion": 2,
-          },
         },
       ]
     `);
@@ -2293,10 +2402,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "01",
             "pokeID": "123",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -2338,89 +2443,89 @@ describe('view-syncer/service', () => {
 
     expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "lmids": 1,
-          },
-          "rowKey": {
+        Result [
+          {
             "clientGroupID": "9876",
-            "clientID": "foo",
+            "patchVersion": "01",
+            "refCounts": {
+              "lmids": 1,
+            },
+            "rowKey": {
+              "clientGroupID": "9876",
+              "clientID": "foo",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "this_app_2.clients",
           },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "this_app_2.clients",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash2": 1,
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "query-hash1": 1,
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "3",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-          "rowKey": {
-            "id": "3",
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "query-hash1": 1,
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "4",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash2": 1,
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "5",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-          "rowKey": {
-            "id": "4",
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "123",
+            "refCounts": {
+              "query-hash1": 1,
+              "query-hash2": 1,
+            },
+            "rowKey": {
+              "id": "1",
+            },
+            "rowVersion": "123",
+            "schema": "",
+            "table": "issues",
           },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "query-hash2": 1,
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "123",
+            "refCounts": null,
+            "rowKey": {
+              "id": "2",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-          "rowKey": {
-            "id": "5",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "123",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "1",
-          },
-          "rowVersion": "123",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "123",
-          "refCounts": null,
-          "rowKey": {
-            "id": "2",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-      ]
-    `);
+        ]
+      `);
 
     replicator.processTransaction('124', messages.truncate('issues'));
 
@@ -2434,10 +2539,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "123",
             "pokeID": "124",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -2488,465 +2589,78 @@ describe('view-syncer/service', () => {
 
     expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": {
-            "lmids": 1,
-          },
-          "rowKey": {
+        Result [
+          {
             "clientGroupID": "9876",
-            "clientID": "foo",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "this_app_2.clients",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "123",
-          "refCounts": null,
-          "rowKey": {
-            "id": "2",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "124",
-          "refCounts": null,
-          "rowKey": {
-            "id": "1",
-          },
-          "rowVersion": "123",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "124",
-          "refCounts": null,
-          "rowKey": {
-            "id": "3",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "124",
-          "refCounts": null,
-          "rowKey": {
-            "id": "4",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "124",
-          "refCounts": null,
-          "rowKey": {
-            "id": "5",
-          },
-          "rowVersion": "01",
-          "schema": "",
-          "table": "issues",
-        },
-      ]
-    `);
-  });
-
-  test('process advancement that results in client having an unsupported schemaVersion', async () => {
-    const client1 = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ]);
-    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": null,
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
+            "patchVersion": "01",
+            "refCounts": {
+              "lmids": 1,
             },
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "00:01",
-            "pokeID": "00:01",
-          },
-        ],
-      ]
-    `);
-
-    // Note: client2 is behind, so it does not get an immediate update on connect.
-    //       It has to wait until a hydrate to catchup. However, client1 will get
-    //       updated about client2.
-    const client2 = connect(
-      {...SYNC_CONTEXT, clientID: 'bar', schemaVersion: 3},
-      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
-    );
-    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "00:01",
-            "pokeID": "00:02",
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "bar": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
+            "rowKey": {
+              "clientGroupID": "9876",
+              "clientID": "foo",
             },
-            "pokeID": "00:02",
+            "rowVersion": "01",
+            "schema": "",
+            "table": "this_app_2.clients",
           },
-        ],
-        [
-          "pokeEnd",
           {
-            "cookie": "00:02",
-            "pokeID": "00:02",
-          },
-        ],
-      ]
-    `);
-
-    stateChanges.push({state: 'version-ready'});
-    expect((await nextPoke(client1))[0]).toMatchInlineSnapshot(`
-      [
-        "pokeStart",
-        {
-          "baseCookie": "00:02",
-          "pokeID": "01",
-          "schemaVersions": {
-            "maxSupportedVersion": 3,
-            "minSupportedVersion": 2,
-          },
-        },
-      ]
-    `);
-    expect((await nextPoke(client2))[0]).toMatchInlineSnapshot(`
-      [
-        "pokeStart",
-        {
-          "baseCookie": null,
-          "pokeID": "01",
-          "schemaVersions": {
-            "maxSupportedVersion": 3,
-            "minSupportedVersion": 2,
-          },
-        },
-      ]
-    `);
-
-    replicator.processTransaction(
-      '123',
-      messages.update('issues', {
-        id: '1',
-        title: 'new title',
-        owner: 100,
-        parent: null,
-        big: 9007199254740991n,
-      }),
-      messages.delete('issues', {id: '2'}),
-      appMessages.update('schemaVersions', {
-        lock: true,
-        minSupportedVersion: 3,
-        maxSupportedVersion: 3,
-      }),
-    );
-
-    stateChanges.push({state: 'version-ready'});
-
-    // client1 now has an unsupported version and is sent an error and no poke
-    // client2 still has a supported version and is sent a poke with the
-    // updated schemaVersions range
-    const dequeuePromise = client1.dequeue();
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ProtocolError);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
-      kind: ErrorKind.SchemaVersionNotSupported,
-      message:
-        'Schema version 2 is not in range of supported schema versions [3, 3].',
-      origin: ErrorOrigin.ZeroCache,
-    });
-
-    expect(await nextPoke(client2)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "01",
-            "pokeID": "123",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 3,
+            "clientGroupID": "9876",
+            "patchVersion": "123",
+            "refCounts": null,
+            "rowKey": {
+              "id": "2",
             },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-        ],
-        [
-          "pokePart",
           {
-            "pokeID": "123",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100.0",
-                  "parent": null,
-                  "title": "new title",
-                },
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "123",
-            "pokeID": "123",
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('process advancement with schema change', async () => {
-    const client = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ]);
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": null,
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
+            "clientGroupID": "9876",
+            "patchVersion": "124",
+            "refCounts": null,
+            "rowKey": {
+              "id": "1",
             },
-            "pokeID": "00:01",
+            "rowVersion": "123",
+            "schema": "",
+            "table": "issues",
           },
-        ],
-        [
-          "pokeEnd",
           {
-            "cookie": "00:01",
-            "pokeID": "00:01",
-          },
-        ],
-      ]
-    `);
-
-    stateChanges.push({state: 'version-ready'});
-    expect((await nextPoke(client))[0]).toEqual([
-      'pokeStart',
-      {
-        baseCookie: '00:01',
-        pokeID: '01',
-        schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
-      },
-    ]);
-
-    replicator.processTransaction(
-      '07',
-      messages.addColumn('issues', 'newColumn', {dataType: 'TEXT', pos: 0}),
-    );
-
-    stateChanges.push({state: 'version-ready'});
-
-    // The "newColumn" should be arrive in the nextPoke.
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "01",
-            "pokeID": "07",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
+            "clientGroupID": "9876",
+            "patchVersion": "124",
+            "refCounts": null,
+            "rowKey": {
+              "id": "3",
             },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-        ],
-        [
-          "pokePart",
           {
-            "pokeID": "07",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "newColumn": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "newColumn": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "newColumn": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "newColumn": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "07",
-            "pokeID": "07",
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('process advancement with schema change that breaks client support', async () => {
-    const client = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ]);
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": null,
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
+            "clientGroupID": "9876",
+            "patchVersion": "124",
+            "refCounts": null,
+            "rowKey": {
+              "id": "4",
             },
-            "pokeID": "00:01",
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-        ],
-        [
-          "pokeEnd",
           {
-            "cookie": "00:01",
-            "pokeID": "00:01",
+            "clientGroupID": "9876",
+            "patchVersion": "124",
+            "refCounts": null,
+            "rowKey": {
+              "id": "5",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
           },
-        ],
-      ]
-    `);
-
-    stateChanges.push({state: 'version-ready'});
-    expect((await nextPoke(client))[0]).toEqual([
-      'pokeStart',
-      {
-        baseCookie: '00:01',
-        pokeID: '01',
-        schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
-      },
-    ]);
-
-    replicator.processTransaction('07', messages.dropColumn('issues', 'owner'));
-
-    stateChanges.push({state: 'version-ready'});
-
-    const dequeuePromise = client.dequeue();
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ProtocolError);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
-      kind: ErrorKind.SchemaVersionNotSupported,
-      message:
-        'The "issues"."owner" column does not exist or is not one of the replicated columns: "big","id","json","parent","title".',
-      origin: ErrorOrigin.ZeroCache,
-    });
+        ]
+      `);
   });
 
   test('process advancement with lmid change, client has no queries.  See https://bugs.rocicorp.dev/issue/3628', async () => {
@@ -2978,10 +2692,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -3021,10 +2731,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "01",
             "pokeID": "02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -3133,10 +2839,10 @@ describe('view-syncer/service', () => {
     const client2 = connect(
       {
         clientID: 'bar',
+        profileID: 'p0000g00000003203',
         wsID: '9382',
         baseCookie: preAdvancement.cookie,
         protocolVersion: PROTOCOL_VERSION,
-        schemaVersion: 2,
         tokenData: undefined,
         httpCookie: undefined,
       },
@@ -3157,10 +2863,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "01",
             "pokeID": "123:01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -3255,7 +2957,6 @@ describe('view-syncer/service', () => {
     expect(preAdvancement).toEqual({
       baseCookie: '00:01',
       pokeID: '01',
-      schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
     });
 
     replicator.processTransaction(
@@ -3286,10 +2987,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": null,
             "pokeID": "123:01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -3438,10 +3135,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": null,
             "pokeID": "07:02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -3735,10 +3428,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "01",
             "pokeID": "123",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -3806,65 +3495,61 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
 
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "01",
-            "pokeID": "123",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "pokeID": "123",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
+            [
+              [
+                "pokeStart",
+                {
+                  "baseCookie": "01",
+                  "pokeID": "123",
                 },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "foo",
+              ],
+              [
+                "pokePart",
+                {
+                  "pokeID": "123",
+                  "rowsPatch": [
+                    {
+                      "op": "put",
+                      "tableName": "issues",
+                      "value": {
+                        "big": 9007199254740991,
+                        "id": "1",
+                        "json": null,
+                        "owner": "100",
+                        "parent": null,
+                        "title": "parent issue foo",
+                      },
+                    },
+                    {
+                      "op": "put",
+                      "tableName": "comments",
+                      "value": {
+                        "id": "1",
+                        "issueID": "1",
+                        "text": "foo",
+                      },
+                    },
+                    {
+                      "op": "put",
+                      "tableName": "comments",
+                      "value": {
+                        "id": "2",
+                        "issueID": "1",
+                        "text": "bar",
+                      },
+                    },
+                  ],
                 },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "bar",
+              ],
+              [
+                "pokeEnd",
+                {
+                  "cookie": "123",
+                  "pokeID": "123",
                 },
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "123",
-            "pokeID": "123",
-          },
-        ],
-      ]
-    `);
+              ],
+            ]
+          `);
   });
 
   test('query with not exists and related', async () => {
@@ -3895,10 +3580,6 @@ describe('view-syncer/service', () => {
           {
             "baseCookie": "01",
             "pokeID": "123",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [

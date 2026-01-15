@@ -17,8 +17,12 @@ import {
   NOBODY_CAN,
 } from '../../../../zero-schema/src/permissions.ts';
 import type {Schema as ZeroSchema} from '../../../../zero-types/src/schema.ts';
-import {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import type {Row} from '../../../../zql/src/query/query.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
@@ -240,28 +244,28 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
   () => {
     const allowIfAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+      {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
     ) => cmpLit(authData.role, '=', 'admin');
 
     const allowIfNotAdminLockedRow = (
       _authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'adminOnlyRow'>,
+      {cmp}: ExpressionBuilder<'adminOnlyRow', Schema>,
     ) => cmp('adminLocked', false);
     const allowIfNotAdminLockedCell = (
       _authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'adminOnlyCell'>,
+      {cmp}: ExpressionBuilder<'adminOnlyCell', Schema>,
     ) => cmp('adminLocked', false);
     const allowIfLoggedIn = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+      {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
     const allowIfPostMutationIDMatchesLoggedInUser = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'userMatch'>,
+      {cmp}: ExpressionBuilder<'userMatch', Schema>,
     ) => cmp('id', '=', authData.sub);
     const allowIfOwner = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'pkSecurity'>,
+      {cmp}: ExpressionBuilder<'pkSecurity', Schema>,
     ) => cmp('ownerId', '=', authData.sub);
 
     return {
@@ -364,6 +368,7 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
 let upstream: PostgresDB;
 let replica: Database;
 let authorizer: WriteAuthorizerImpl;
+let writeAuthzStorage: DatabaseStorage;
 let lmid = 0;
 const lc = createSilentLogContext();
 beforeEach<PgTest>(async ({testDBs}) => {
@@ -377,7 +382,18 @@ beforeEach<PgTest>(async ({testDBs}) => {
     .prepare(`UPDATE "${APP_ID}.permissions" SET permissions = ?, hash = ?`)
     .run(perms, h128(perms).toString(16));
 
-  authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, APP_ID, CG_ID);
+  const storageDb = new Database(lc, ':memory:');
+  storageDb.prepare(CREATE_STORAGE_TABLE).run();
+  writeAuthzStorage = new DatabaseStorage(storageDb);
+
+  authorizer = new WriteAuthorizerImpl(
+    lc,
+    zeroConfig,
+    replica,
+    APP_ID,
+    CG_ID,
+    writeAuthzStorage,
+  );
   lmid = 0;
 
   return () => testDBs.drop(upstream);

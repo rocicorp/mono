@@ -1,11 +1,12 @@
 import {describe, expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
+import {consume} from '../ivm/stream.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
 
-function addData(queryDelegate: QueryDelegate<unknown>) {
+function addData(queryDelegate: QueryDelegate) {
   const userSource = must(queryDelegate.getSource('user'));
   const issueSource = must(queryDelegate.getSource('issue'));
   const commentSource = must(queryDelegate.getSource('comment'));
@@ -13,296 +14,375 @@ function addData(queryDelegate: QueryDelegate<unknown>) {
   const labelSource = must(queryDelegate.getSource('label'));
   const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
 
-  userSource.push({
-    type: 'add',
-    row: {id: '001', name: 'Alice', metadata: null},
-  });
-  userSource.push({type: 'add', row: {id: '002', name: 'Bob', metadata: null}});
-  userSource.push({
-    type: 'add',
-    row: {id: '003', name: 'Charlie', metadata: {foo: 1}},
-  });
-  userSource.push({
-    type: 'add',
-    row: {id: '004', name: 'Daniel', metadata: null},
-  });
+  consume(
+    userSource.push({
+      type: 'add',
+      row: {id: '001', name: 'Alice', metadata: null},
+    }),
+  );
+  consume(
+    userSource.push({
+      type: 'add',
+      row: {id: '002', name: 'Bob', metadata: null},
+    }),
+  );
+  consume(
+    userSource.push({
+      type: 'add',
+      row: {id: '003', name: 'Charlie', metadata: {foo: 1}},
+    }),
+  );
+  consume(
+    userSource.push({
+      type: 'add',
+      row: {id: '004', name: 'Daniel', metadata: null},
+    }),
+  );
 
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '101',
-      title: 'Issue 1',
-      description: 'Description 1',
-      closed: false,
-      ownerId: '001',
-      createdAt: 1,
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '102',
-      title: 'Issue 2',
-      description: 'Description 2',
-      closed: false,
-      ownerId: '001',
-      createdAt: 2,
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '103',
-      title: 'Issue 3',
-      description: 'Description 3',
-      closed: false,
-      ownerId: '001',
-      createdAt: 3,
-    },
-  });
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '101',
+        title: 'Issue 1',
+        description: 'Description 1',
+        closed: false,
+        ownerId: '001',
+        createdAt: 1,
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '102',
+        title: 'Issue 2',
+        description: 'Description 2',
+        closed: false,
+        ownerId: '001',
+        createdAt: 2,
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '103',
+        title: 'Issue 3',
+        description: 'Description 3',
+        closed: false,
+        ownerId: '001',
+        createdAt: 3,
+      },
+    }),
+  );
 
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '104',
-      title: 'Issue 4',
-      description: 'Description 4',
-      closed: false,
-      ownerId: '002',
-      createdAt: 4,
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '105',
-      title: 'Issue 5',
-      description: 'Description 5',
-      closed: false,
-      ownerId: '002',
-      createdAt: 5,
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '106',
-      title: 'Issue 6',
-      description: 'Description 6',
-      closed: true,
-      ownerId: '002',
-      createdAt: 6,
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '107',
-      title: 'Issue 7',
-      description: 'Description 7',
-      closed: true,
-      ownerId: '003',
-      createdAt: 7,
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '108',
-      title: 'Issue 8',
-      description: 'Description 8',
-      closed: true,
-      ownerId: '003',
-      createdAt: 8,
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '109',
-      title: 'Issue 9',
-      description: 'Description 9',
-      closed: false,
-      ownerId: '003',
-      createdAt: 9,
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '110',
-      title: 'Issue 10',
-      description: 'Description 10',
-      closed: false,
-      ownerId: '004',
-      createdAt: 10,
-    },
-  });
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '104',
+        title: 'Issue 4',
+        description: 'Description 4',
+        closed: false,
+        ownerId: '002',
+        createdAt: 4,
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '105',
+        title: 'Issue 5',
+        description: 'Description 5',
+        closed: false,
+        ownerId: '002',
+        createdAt: 5,
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '106',
+        title: 'Issue 6',
+        description: 'Description 6',
+        closed: true,
+        ownerId: '002',
+        createdAt: 6,
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '107',
+        title: 'Issue 7',
+        description: 'Description 7',
+        closed: true,
+        ownerId: '003',
+        createdAt: 7,
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '108',
+        title: 'Issue 8',
+        description: 'Description 8',
+        closed: true,
+        ownerId: '003',
+        createdAt: 8,
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '109',
+        title: 'Issue 9',
+        description: 'Description 9',
+        closed: false,
+        ownerId: '003',
+        createdAt: 9,
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '110',
+        title: 'Issue 10',
+        description: 'Description 10',
+        closed: false,
+        ownerId: '004',
+        createdAt: 10,
+      },
+    }),
+  );
 
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '201',
-      issueId: '101',
-      text: 'Comment 1',
-      authorId: '001',
-      createdAt: 1,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '202',
-      issueId: '101',
-      text: 'Comment 2',
-      authorId: '002',
-      createdAt: 2,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '203',
-      issueId: '101',
-      text: 'Comment 3',
-      authorId: '003',
-      createdAt: 3,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '204',
-      issueId: '102',
-      text: 'Comment 4',
-      authorId: '001',
-      createdAt: 4,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '205',
-      issueId: '102',
-      text: 'Comment 5',
-      authorId: '002',
-      createdAt: 5,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '206',
-      issueId: '102',
-      text: 'Comment 6',
-      authorId: '003',
-      createdAt: 6,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '207',
-      issueId: '103',
-      text: 'Comment 7',
-      authorId: '001',
-      createdAt: 7,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '208',
-      issueId: '103',
-      text: 'Comment 8',
-      authorId: '002',
-      createdAt: 8,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '209',
-      issueId: '103',
-      text: 'Comment 9',
-      authorId: '003',
-      createdAt: 9,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '210',
-      issueId: '105',
-      text: 'Comment 10',
-      authorId: '001',
-      createdAt: 10,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '211',
-      issueId: '105',
-      text: 'Comment 11',
-      authorId: '002',
-      createdAt: 11,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '212',
-      issueId: '105',
-      text: 'Comment 12',
-      authorId: '003',
-      createdAt: 12,
-    },
-  });
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '201',
+        issueId: '101',
+        text: 'Comment 1',
+        authorId: '001',
+        createdAt: 1,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '202',
+        issueId: '101',
+        text: 'Comment 2',
+        authorId: '002',
+        createdAt: 2,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '203',
+        issueId: '101',
+        text: 'Comment 3',
+        authorId: '003',
+        createdAt: 3,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '204',
+        issueId: '102',
+        text: 'Comment 4',
+        authorId: '001',
+        createdAt: 4,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '205',
+        issueId: '102',
+        text: 'Comment 5',
+        authorId: '002',
+        createdAt: 5,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '206',
+        issueId: '102',
+        text: 'Comment 6',
+        authorId: '003',
+        createdAt: 6,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '207',
+        issueId: '103',
+        text: 'Comment 7',
+        authorId: '001',
+        createdAt: 7,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '208',
+        issueId: '103',
+        text: 'Comment 8',
+        authorId: '002',
+        createdAt: 8,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '209',
+        issueId: '103',
+        text: 'Comment 9',
+        authorId: '003',
+        createdAt: 9,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '210',
+        issueId: '105',
+        text: 'Comment 10',
+        authorId: '001',
+        createdAt: 10,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '211',
+        issueId: '105',
+        text: 'Comment 11',
+        authorId: '002',
+        createdAt: 11,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '212',
+        issueId: '105',
+        text: 'Comment 12',
+        authorId: '003',
+        createdAt: 12,
+      },
+    }),
+  );
 
-  revisionSource.push({
-    type: 'add',
-    row: {id: '301', commentId: '209', text: 'Revision 1', authorId: '001'},
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {id: '302', commentId: '209', text: 'Revision 2', authorId: '001'},
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {id: '303', commentId: '209', text: 'Revision 3', authorId: '001'},
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {id: '304', commentId: '208', text: 'Revision 1', authorId: '002'},
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {id: '305', commentId: '208', text: 'Revision 2', authorId: '002'},
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {id: '306', commentId: '208', text: 'Revision 3', authorId: '002'},
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {id: '307', commentId: '211', text: 'Revision 1', authorId: '003'},
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {id: '308', commentId: '211', text: 'Revision 2', authorId: '003'},
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {id: '309', commentId: '211', text: 'Revision 3', authorId: '003'},
-  });
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '301', commentId: '209', text: 'Revision 1', authorId: '001'},
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '302', commentId: '209', text: 'Revision 2', authorId: '001'},
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '303', commentId: '209', text: 'Revision 3', authorId: '001'},
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '304', commentId: '208', text: 'Revision 1', authorId: '002'},
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '305', commentId: '208', text: 'Revision 2', authorId: '002'},
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '306', commentId: '208', text: 'Revision 3', authorId: '002'},
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '307', commentId: '211', text: 'Revision 1', authorId: '003'},
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '308', commentId: '211', text: 'Revision 2', authorId: '003'},
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {id: '309', commentId: '211', text: 'Revision 3', authorId: '003'},
+    }),
+  );
 
-  labelSource.push({type: 'add', row: {id: '401', name: 'bug'}});
-  labelSource.push({type: 'add', row: {id: '402', name: 'feature'}});
+  consume(labelSource.push({type: 'add', row: {id: '401', name: 'bug'}}));
+  consume(labelSource.push({type: 'add', row: {id: '402', name: 'feature'}}));
 
-  issueLabelSource.push({type: 'add', row: {issueId: '103', labelId: '401'}});
-  issueLabelSource.push({type: 'add', row: {issueId: '102', labelId: '401'}});
-  issueLabelSource.push({type: 'add', row: {issueId: '102', labelId: '402'}});
+  consume(
+    issueLabelSource.push({type: 'add', row: {issueId: '103', labelId: '401'}}),
+  );
+  consume(
+    issueLabelSource.push({type: 'add', row: {issueId: '102', labelId: '401'}}),
+  );
+  consume(
+    issueLabelSource.push({type: 'add', row: {issueId: '102', labelId: '402'}}),
+  );
 }
 
 describe('kitchen sink query', () => {
@@ -343,10 +423,6 @@ describe('kitchen sink query', () => {
                 "title",
                 "asc",
               ],
-              [
-                "id",
-                "asc",
-              ],
             ],
             "related": [
               {
@@ -360,12 +436,6 @@ describe('kitchen sink query', () => {
                 },
                 "subquery": {
                   "alias": "owner",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "table": "user",
                 },
                 "system": "client",
@@ -386,10 +456,6 @@ describe('kitchen sink query', () => {
                     [
                       "createdAt",
                       "desc",
-                    ],
-                    [
-                      "id",
-                      "asc",
                     ],
                   ],
                   "related": [
@@ -432,16 +498,6 @@ describe('kitchen sink query', () => {
                 "hidden": true,
                 "subquery": {
                   "alias": "labels",
-                  "orderBy": [
-                    [
-                      "issueId",
-                      "asc",
-                    ],
-                    [
-                      "labelId",
-                      "asc",
-                    ],
-                  ],
                   "related": [
                     {
                       "correlation": {
@@ -454,12 +510,6 @@ describe('kitchen sink query', () => {
                       },
                       "subquery": {
                         "alias": "labels",
-                        "orderBy": [
-                          [
-                            "id",
-                            "asc",
-                          ],
-                        ],
                         "table": "label",
                       },
                       "system": "client",
@@ -473,7 +523,10 @@ describe('kitchen sink query', () => {
             "start": {
               "exclusive": true,
               "row": {
+                "closed": false,
+                "description": "Description 1",
                 "id": "101",
+                "ownerId": "001",
                 "title": "Issue 1",
               },
             },

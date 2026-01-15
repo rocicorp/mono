@@ -1,5 +1,7 @@
+import {useZero} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useRef, useState} from 'react';
+import {mutators} from '../../../shared/mutators.ts';
 import {Button} from '../../components/button.tsx';
 import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
@@ -8,7 +10,6 @@ import {
 } from '../../components/image-upload-area.tsx';
 import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 
@@ -32,17 +33,19 @@ export function CommentComposer({
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
-      z.mutate.comment.add({
-        id: nanoid(),
-        issueID,
-        body: currentBody,
-        created: Date.now(),
-      });
+      z.mutate(
+        mutators.comment.add({
+          id: nanoid(),
+          issueID,
+          body: currentBody,
+          created: Date.now(),
+        }),
+      );
       onDone?.();
       return;
     }
 
-    z.mutate.comment.edit({id, body: currentBody});
+    z.mutate(mutators.comment.edit({id, body: currentBody}));
     onDone?.();
   };
 
@@ -108,7 +111,7 @@ export function CommentComposer({
           className="secondary-button"
           eventName={id ? 'Save comment edits' : 'Add new comment'}
           onAction={save}
-          disabled={currentBody.trim().length === 0 || isOffline}
+          disabled={currentBody.trim().length === 0}
         >
           {id ? 'Save' : 'Add comment'}
         </Button>

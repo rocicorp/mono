@@ -1,13 +1,15 @@
 import {describe, expect, expectTypeOf, test} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {createBuilder} from './create-builder.ts';
 import {QueryParseError} from './error.ts';
 import {
-  createBuilder,
+  type SyncedQuery,
   syncedQuery,
   syncedQueryWithContext,
   withValidation,
 } from './named.ts';
-import {queryWithContext} from './query-internals.ts';
+import {asQueryInternals} from './query-internals.ts';
 import type {QueryResultType, QueryReturn, QueryRowType, Row} from './query.ts';
 import {schema} from './test/test-schemas.ts';
 
@@ -108,7 +110,7 @@ test('syncedQuery', () => {
     readonly createdAt: number;
   }>();
 
-  const q = queryWithContext(query, undefined);
+  const q = asQueryInternals(query);
   expect(q.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
@@ -128,14 +130,12 @@ test('syncedQuery', () => {
       },
       type: 'simple',
     },
-    orderBy: [['id', 'asc']],
   });
 
   const wv = withValidation(def);
   expect(wv.queryName).toEqual('myQuery');
   expect(wv.parse).toBeDefined();
   expect(wv.takesContext).toEqual(true);
-  // @ts-expect-error 123 is not a string
   expect(() => wv('ignored', 123)).toThrow(
     'invalid_type at .0 (expected string)',
   );
@@ -170,7 +170,7 @@ test('syncedQuery', () => {
     readonly createdAt: number;
   }>();
 
-  const vq = queryWithContext(vquery, undefined);
+  const vq = asQueryInternals(vquery);
   expect(vq.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
@@ -190,7 +190,6 @@ test('syncedQuery', () => {
       },
       type: 'simple',
     },
-    orderBy: [['id', 'asc']],
   });
 });
 
@@ -236,7 +235,7 @@ test('syncedQueryWithContext', () => {
     readonly createdAt: number;
   }>();
 
-  const q = queryWithContext(query2, undefined);
+  const q = asQueryInternals(query2);
   expect(q.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
@@ -273,14 +272,12 @@ test('syncedQueryWithContext', () => {
       ],
       type: 'and',
     },
-    orderBy: [['id', 'asc']],
   });
 
   const wv = withValidation(def);
   expect(wv.queryName).toEqual('myQuery');
   expect(wv.parse).toBeDefined();
   expect(wv.takesContext).toEqual(true);
-  // @ts-expect-error 123 is not a string
   expect(() => wv('ignored', 123)).toThrow(
     'invalid_type at .0 (expected string)',
   );
@@ -315,7 +312,7 @@ test('syncedQueryWithContext', () => {
     readonly createdAt: number;
   }>();
 
-  const vq = queryWithContext(vquery2, undefined);
+  const vq = asQueryInternals(vquery2);
   expect(vq.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
@@ -352,7 +349,6 @@ test('syncedQueryWithContext', () => {
       ],
       type: 'and',
     },
-    orderBy: [['id', 'asc']],
   });
 });
 
@@ -365,7 +361,6 @@ test('withValidation throws QueryParseError on parse failure', () => {
 
   let thrownError: Error | undefined;
   try {
-    // @ts-expect-error 123 is not a string
     wv('ignored', 123);
     expect.fail('Expected QueryParseError to be thrown');
   } catch (error) {
@@ -391,7 +386,6 @@ test('withValidation throws QueryParseError for syncedQueryWithContext', () => {
 
   let thrownError: Error | undefined;
   try {
-    // @ts-expect-error 'not-a-number' is not a number
     wv('user1', 'not-a-number', 'also-not-a-number');
     expect.fail('Expected QueryParseError to be thrown');
   } catch (error) {
@@ -405,25 +399,42 @@ test('withValidation throws QueryParseError for syncedQueryWithContext', () => {
   );
 });
 
+test('withValidation returns SyncedQuery with ReadonlyJSONValue[] args', () => {
+  const idArgs = v.tuple([v.string()]);
+  const def = syncedQuery('myQuery', idArgs, (id: string) =>
+    builder.issue.where('id', id),
+  );
+
+  // Before withValidation, args type is [string]
+  expectTypeOf(def).toEqualTypeOf<
+    SyncedQuery<'myQuery', unknown, false, [string], ReturnType<typeof def>>
+  >();
+
+  const wv = withValidation(def);
+
+  // After withValidation, args type is ReadonlyJSONValue[]
+  expectTypeOf(wv).toEqualTypeOf<
+    SyncedQuery<
+      'myQuery',
+      unknown,
+      true,
+      ReadonlyJSONValue[],
+      ReturnType<typeof def>
+    >
+  >();
+});
+
 // TODO: test unions
 
 test('makeSchemaQuery', () => {
   const builders = createBuilder(schema);
-  const q1 = queryWithContext(
-    queryWithContext(builders.issue.where('id', '123'), undefined).nameAndArgs(
-      'myName',
-      ['123'],
-    ),
-    undefined,
+  const q1 = asQueryInternals(
+    asQueryInternals(builders.issue.where('id', '123')).nameAndArgs('myName', [
+      '123',
+    ]),
   );
   expect(q1.ast).toMatchInlineSnapshot(`
     {
-      "orderBy": [
-        [
-          "id",
-          "asc",
-        ],
-      ],
       "table": "issue",
       "where": {
         "left": {

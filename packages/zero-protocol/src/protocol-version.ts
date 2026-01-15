@@ -46,7 +46,11 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 38 adds structured push/transform error responses (0.25)
 // -- version 39 removes per-transform error types and adds `message` to app error (0.25)
 // -- version 40 adds `dbRowScansByQuery` to AnalyzeQueryResult (0.25)
-export const PROTOCOL_VERSION = 40;
+// -- version 41 makes ClientSchema.primaryKey required (0.25)
+// -- version 42 adds planner events to AnalyzeQueryResult (0.25)
+// -- version 43 renames `plans` to `sqlitePlans`, `plannerEvents` to `joinPlans`, and `plannerDebug` option to `joinPlans` (0.25)
+// -- version 44 adds profileID to connection URL (0.25)
+export const PROTOCOL_VERSION = 44;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
@@ -58,6 +62,6 @@ export const PROTOCOL_VERSION = 40;
  * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
  * closed with a `VersionNotSupported` error.
  */
-export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 18;
+export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 30;
 
 assert(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL < PROTOCOL_VERSION);

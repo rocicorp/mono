@@ -1,6 +1,6 @@
 import {joinIterables, wrapIterable} from '../../../../shared/src/iterables.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
-import {Subscriber} from './subscriber.ts';
+import type {Subscriber} from './subscriber.ts';
 
 export class Forwarder {
   readonly #active = new Set<Subscriber>();

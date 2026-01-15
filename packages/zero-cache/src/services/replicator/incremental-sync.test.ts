@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
   afterEach,
@@ -207,33 +207,38 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '0b',
           },
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '06',
+            pos: 0n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":123}',
           },
           {
             stateVersion: '06',
+            pos: 1n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":456}',
           },
           {
             stateVersion: '0b',
+            pos: 0n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789}',
           },
           {
             stateVersion: '0b',
+            pos: 1n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":987}',
           },
           {
             stateVersion: '0b',
+            pos: 2n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":234}',

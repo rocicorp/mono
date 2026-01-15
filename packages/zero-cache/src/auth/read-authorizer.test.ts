@@ -10,9 +10,9 @@ import {
   definePermissions,
 } from '../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
-import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
-import {staticQuery} from '../../../zql/src/query/static-query.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
 import {transformQuery} from './read-authorizer.ts';
 
 const lc = createSilentLogContext();
@@ -153,7 +153,7 @@ const permissionRules = must(
         select: [
           (
             authData: {role: string},
-            eb: ExpressionBuilder<Schema, 'adminReadable'>,
+            eb: ExpressionBuilder<'adminReadable', Schema>,
           ) => eb.cmpLit(authData.role, '=', 'admin'),
         ],
       },
@@ -163,7 +163,7 @@ const permissionRules = must(
         select: [
           (
             _authData: {role: string},
-            eb: ExpressionBuilder<Schema, 'readableThruUnreadable'>,
+            eb: ExpressionBuilder<'readableThruUnreadable', Schema>,
           ) => eb.exists('unreadable'),
         ],
       },
@@ -180,11 +180,10 @@ describe('unreadable tables', () => {
   ];
   test('top-level', () => {
     for (const tableName of unreadables) {
-      const query = staticQuery(schema, tableName);
+      const query = newStaticQuery(schema, tableName);
       expect(
         transformQuery(lc, ast(query), permissionRules, authData),
       ).toStrictEqual({
-        orderBy: [['id', 'asc']],
         related: undefined,
         table: tableName,
         where: {
@@ -196,19 +195,13 @@ describe('unreadable tables', () => {
   });
 
   test('related', () => {
-    const query = staticQuery(schema, 'readable')
+    const query = newStaticQuery(schema, 'readable')
       .related('unreadable')
       .related('readable');
 
     expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
-          "orderBy": [
-            [
-              "id",
-              "asc",
-            ],
-          ],
           "related": [
             {
               "correlation": {
@@ -221,12 +214,6 @@ describe('unreadable tables', () => {
               },
               "subquery": {
                 "alias": "unreadable",
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
                 "related": undefined,
                 "table": "unreadable",
                 "where": {
@@ -247,12 +234,6 @@ describe('unreadable tables', () => {
               },
               "subquery": {
                 "alias": "readable",
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
                 "related": undefined,
                 "table": "readable",
                 "where": {
@@ -273,12 +254,6 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
-          "orderBy": [
-            [
-              "id",
-              "asc",
-            ],
-          ],
           "related": [
             {
               "correlation": {
@@ -291,12 +266,6 @@ describe('unreadable tables', () => {
               },
               "subquery": {
                 "alias": "unreadable",
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
                 "related": undefined,
                 "table": "unreadable",
                 "where": {
@@ -317,12 +286,6 @@ describe('unreadable tables', () => {
               },
               "subquery": {
                 "alias": "readable",
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
                 "related": undefined,
                 "table": "readable",
                 "where": {
@@ -346,7 +309,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').related('readable', q =>
+          newStaticQuery(schema, 'readable').related('readable', q =>
             q.related('readable', q => q.related('unreadable')),
           ),
         ),
@@ -355,12 +318,6 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": [
           {
             "correlation": {
@@ -373,12 +330,6 @@ describe('unreadable tables', () => {
             },
             "subquery": {
               "alias": "readable",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
               "related": [
                 {
                   "correlation": {
@@ -391,12 +342,6 @@ describe('unreadable tables', () => {
                   },
                   "subquery": {
                     "alias": "readable",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
                     "related": [
                       {
                         "correlation": {
@@ -409,12 +354,6 @@ describe('unreadable tables', () => {
                         },
                         "subquery": {
                           "alias": "unreadable",
-                          "orderBy": [
-                            [
-                              "id",
-                              "asc",
-                            ],
-                          ],
                           "related": undefined,
                           "table": "unreadable",
                           "where": {
@@ -455,7 +394,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').related('readable', q =>
+          newStaticQuery(schema, 'readable').related('readable', q =>
             q.related('readable', q => q.related('unreadable')),
           ),
         ),
@@ -464,12 +403,6 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": [
           {
             "correlation": {
@@ -482,12 +415,6 @@ describe('unreadable tables', () => {
             },
             "subquery": {
               "alias": "readable",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
               "related": [
                 {
                   "correlation": {
@@ -500,12 +427,6 @@ describe('unreadable tables', () => {
                   },
                   "subquery": {
                     "alias": "readable",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
                     "related": [
                       {
                         "correlation": {
@@ -518,12 +439,6 @@ describe('unreadable tables', () => {
                         },
                         "subquery": {
                           "alias": "unreadable",
-                          "orderBy": [
-                            [
-                              "id",
-                              "asc",
-                            ],
-                          ],
                           "related": undefined,
                           "table": "unreadable",
                           "where": {
@@ -563,18 +478,12 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         lc,
-        ast(staticQuery(schema, 'readable').related('unreadable')),
+        ast(newStaticQuery(schema, 'readable').related('unreadable')),
         permissionRules,
         authData,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": [
           {
             "correlation": {
@@ -587,12 +496,6 @@ describe('unreadable tables', () => {
             },
             "subquery": {
               "alias": "unreadable",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
               "related": undefined,
               "table": "unreadable",
               "where": {
@@ -613,18 +516,12 @@ describe('unreadable tables', () => {
   });
 
   test('subqueries in conditions are replaced by `const true` or `const false` expressions', () => {
-    const query = staticQuery(schema, 'readable').whereExists('unreadable');
+    const query = newStaticQuery(schema, 'readable').whereExists('unreadable');
 
     // `unreadable` should be replaced by `false` condition.
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
-          "orderBy": [
-            [
-              "id",
-              "asc",
-            ],
-          ],
           "related": undefined,
           "table": "readable",
           "where": {
@@ -643,12 +540,6 @@ describe('unreadable tables', () => {
                   },
                   "subquery": {
                     "alias": "zsubq_unreadable",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
                     "related": undefined,
                     "table": "unreadable",
                     "where": {
@@ -668,12 +559,6 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
-          "orderBy": [
-            [
-              "id",
-              "asc",
-            ],
-          ],
           "related": undefined,
           "table": "readable",
           "where": {
@@ -692,12 +577,6 @@ describe('unreadable tables', () => {
                   },
                   "subquery": {
                     "alias": "zsubq_unreadable",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
                     "related": undefined,
                     "table": "unreadable",
                     "where": {
@@ -720,7 +599,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').where(({not, exists}) =>
+          newStaticQuery(schema, 'readable').where(({not, exists}) =>
             not(exists('unreadable')),
           ),
         ),
@@ -729,12 +608,6 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -752,12 +625,6 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_unreadable",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "unreadable",
                   "where": {
@@ -778,7 +645,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').where(({not, exists}) =>
+          newStaticQuery(schema, 'readable').where(({not, exists}) =>
             not(exists('unreadable')),
           ),
         ),
@@ -787,12 +654,6 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -810,12 +671,6 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_unreadable",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "unreadable",
                   "where": {
@@ -838,7 +693,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').whereExists('readable', q =>
+          newStaticQuery(schema, 'readable').whereExists('readable', q =>
             q.whereExists('unreadable', q => q.where('id', '1')),
           ),
         ),
@@ -847,12 +702,6 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -871,12 +720,6 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_readable",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "readable",
                   "where": {
@@ -895,12 +738,6 @@ describe('unreadable tables', () => {
                           },
                           "subquery": {
                             "alias": "zsubq_unreadable",
-                            "orderBy": [
-                              [
-                                "id",
-                                "asc",
-                              ],
-                            ],
                             "related": undefined,
                             "table": "unreadable",
                             "where": {
@@ -930,7 +767,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable').whereExists('readable', q =>
+          newStaticQuery(schema, 'readable').whereExists('readable', q =>
             q.whereExists('unreadable', q => q.where('id', '1')),
           ),
         ),
@@ -939,12 +776,6 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -963,12 +794,6 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_readable",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "readable",
                   "where": {
@@ -987,12 +812,6 @@ describe('unreadable tables', () => {
                           },
                           "subquery": {
                             "alias": "zsubq_unreadable",
-                            "orderBy": [
-                              [
-                                "id",
-                                "asc",
-                              ],
-                            ],
                             "related": undefined,
                             "table": "unreadable",
                             "where": {
@@ -1023,7 +842,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable')
+          newStaticQuery(schema, 'readable')
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
@@ -1032,12 +851,6 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -1055,12 +868,6 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_unreadable",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "unreadable",
                   "where": {
@@ -1086,12 +893,6 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_readable",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "readable",
                   "where": {
@@ -1113,7 +914,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'readable')
+          newStaticQuery(schema, 'readable')
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
@@ -1122,12 +923,6 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -1145,12 +940,6 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_unreadable",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "unreadable",
                   "where": {
@@ -1176,12 +965,6 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_readable",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "readable",
                   "where": {
@@ -1205,18 +988,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
       lc,
-      ast(staticQuery(schema, 'readableThruUnreadable')),
+      ast(newStaticQuery(schema, 'readableThruUnreadable')),
       permissionRules,
       undefined,
     ),
   ).toMatchInlineSnapshot(`
     {
-      "orderBy": [
-        [
-          "id",
-          "asc",
-        ],
-      ],
       "related": undefined,
       "table": "readableThruUnreadable",
       "where": {
@@ -1234,12 +1011,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
           "subquery": {
             "alias": "zsubq_unreadable",
             "limit": undefined,
-            "orderBy": [
-              [
-                "id",
-                "asc",
-              ],
-            ],
+            "orderBy": undefined,
             "related": undefined,
             "schema": undefined,
             "start": undefined,
@@ -1256,18 +1028,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
       lc,
-      ast(staticQuery(schema, 'readable').related('readableThruUnreadable')),
+      ast(newStaticQuery(schema, 'readable').related('readableThruUnreadable')),
       permissionRules,
       undefined,
     ),
   ).toMatchInlineSnapshot(`
     {
-      "orderBy": [
-        [
-          "id",
-          "asc",
-        ],
-      ],
       "related": [
         {
           "correlation": {
@@ -1280,12 +1046,6 @@ test('exists rules in permissions are tagged as the permissions system', () => {
           },
           "subquery": {
             "alias": "readableThruUnreadable",
-            "orderBy": [
-              [
-                "id",
-                "asc",
-              ],
-            ],
             "related": undefined,
             "table": "readableThruUnreadable",
             "where": {
@@ -1303,12 +1063,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
                 "subquery": {
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
+                  "orderBy": undefined,
                   "related": undefined,
                   "schema": undefined,
                   "start": undefined,
@@ -1338,7 +1093,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'adminReadable')
+          newStaticQuery(schema, 'adminReadable')
             .related('self1')
             .related('self2'),
         ),
@@ -1348,12 +1103,6 @@ describe('admin readable', () => {
       // all levels of the query (root, self1, self2) should have the admin policy applied.
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": [
           {
             "correlation": {
@@ -1366,12 +1115,6 @@ describe('admin readable', () => {
             },
             "subquery": {
               "alias": "self1",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
               "related": undefined,
               "table": "adminReadable",
               "where": {
@@ -1400,12 +1143,6 @@ describe('admin readable', () => {
             },
             "subquery": {
               "alias": "self2",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
               "related": undefined,
               "table": "adminReadable",
               "where": {
@@ -1445,7 +1182,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'adminReadable')
+          newStaticQuery(schema, 'adminReadable')
             .related('self1', q => q.where('id', '1'))
             .related('self2', q =>
               q.where('id', '2').related('self1', q => q.where('id', '3')),
@@ -1457,12 +1194,6 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": [
           {
             "correlation": {
@@ -1475,12 +1206,6 @@ describe('admin readable', () => {
             },
             "subquery": {
               "alias": "self1",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
               "related": undefined,
               "table": "adminReadable",
               "where": {
@@ -1526,12 +1251,6 @@ describe('admin readable', () => {
             },
             "subquery": {
               "alias": "self2",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
               "related": [
                 {
                   "correlation": {
@@ -1544,12 +1263,6 @@ describe('admin readable', () => {
                   },
                   "subquery": {
                     "alias": "self1",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
                     "related": undefined,
                     "table": "adminReadable",
                     "where": {
@@ -1657,18 +1370,12 @@ describe('admin readable', () => {
     expect(
       transformQuery(
         lc,
-        ast(staticQuery(schema, 'adminReadable').whereExists('self1')),
+        ast(newStaticQuery(schema, 'adminReadable').whereExists('self1')),
         permissionRules,
         authData,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1687,12 +1394,6 @@ describe('admin readable', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_self1",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "adminReadable",
                   "where": {
@@ -1734,7 +1435,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'adminReadable').whereExists('self1', q =>
+          newStaticQuery(schema, 'adminReadable').whereExists('self1', q =>
             q.where('id', '1'),
           ),
         ),
@@ -1743,12 +1444,6 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1767,12 +1462,6 @@ describe('admin readable', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_self1",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "adminReadable",
                   "where": {
@@ -1831,7 +1520,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          staticQuery(schema, 'adminReadable').whereExists('self1', q =>
+          newStaticQuery(schema, 'adminReadable').whereExists('self1', q =>
             q.whereExists('self2'),
           ),
         ),
@@ -1840,12 +1529,6 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "orderBy": [
-          [
-            "id",
-            "asc",
-          ],
-        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1864,12 +1547,6 @@ describe('admin readable', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_self1",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "related": undefined,
                   "table": "adminReadable",
                   "where": {
@@ -1888,12 +1565,6 @@ describe('admin readable', () => {
                           },
                           "subquery": {
                             "alias": "zsubq_self2",
-                            "orderBy": [
-                              [
-                                "id",
-                                "asc",
-                              ],
-                            ],
                             "related": undefined,
                             "table": "adminReadable",
                             "where": {
@@ -1953,6 +1624,8 @@ describe('admin readable', () => {
   });
 });
 
-function ast(query: AnyQuery): AST {
-  return queryWithContext(query, undefined).ast;
+function ast<T extends keyof S['tables'] & string, S extends Schema, R>(
+  query: Query<T, S, R>,
+): AST {
+  return asQueryInternals(query).ast;
 }

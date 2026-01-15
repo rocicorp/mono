@@ -6,31 +6,35 @@ import {
   type Accessor,
   type JSX,
 } from 'solid-js';
-import {afterEach, expect, test, vi} from 'vitest';
-import {assert} from '../../shared/src/asserts.ts';
-import {must} from '../../shared/src/must.ts';
-import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
+import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
+import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
+import {
+  assert,
+  consume,
+  idSymbol,
+  must,
+  newQuery,
+  refCountSymbol,
+  type QueryDelegate,
+} from './bindings.ts';
+import {useQuery, type QueryResult, type UseQueryOptions} from './use-query.ts';
+import {ZeroProvider} from './use-zero.ts';
 import {
   createSchema,
   number,
   relationships,
   string,
   table,
-  Zero,
   type CustomMutatorDefs,
+  type MaterializeOptions,
   type Query,
+  type QueryResultDetails,
   type Schema,
   type TTL,
   type ViewFactory,
-} from '../../zero/src/zero.ts';
-import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
-import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {newQuery} from '../../zql/src/query/query-impl.ts';
-import type {MaterializeOptions} from '../../zql/src/query/query.ts';
-import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
-import {useQuery, type UseQueryOptions} from './use-query.ts';
-import {ZeroProvider} from './use-zero.ts';
+  type Zero,
+} from './zero.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({
@@ -48,8 +52,8 @@ function setupTestEnvironment() {
     schema.tables.table.columns,
     schema.tables.table.primaryKey,
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
 
   const queryDelegate = new QueryDelegateImpl({sources: {table: ms}});
   const tableQuery = newQuery(schema, 'table');
@@ -59,16 +63,16 @@ function setupTestEnvironment() {
 
 afterEach(() => vi.resetAllMocks());
 
-type Context = unknown;
+type C = unknown;
 
-function newMockZero<MD extends CustomMutatorDefs>(
+function newMockZero<MD extends CustomMutatorDefs | undefined = undefined>(
   clientID: string,
-  queryDelegate: QueryDelegate<Context>,
-): Zero<Schema, MD, Context> {
+  queryDelegate: QueryDelegate,
+): Zero<Schema, MD, C> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
-    query: Query<Schema, TTable, TReturn, Context>,
+    query: Query<TTable, Schema, TReturn>,
     factoryOrOptions?:
-      | ViewFactory<Schema, TTable, TReturn, Context, T>
+      | ViewFactory<TTable, Schema, TReturn, T>
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
@@ -78,25 +82,23 @@ function newMockZero<MD extends CustomMutatorDefs>(
       typeof factoryOrOptions === 'function' ? maybeOptions : factoryOrOptions;
     return queryDelegate.materialize(query, factory, options);
   }
-  const zero = {
+  return {
     clientID,
     materialize: m,
-  } as unknown as Zero<Schema, MD, Context>;
-  registerZeroDelegate(zero, queryDelegate);
-  return zero;
+  } as unknown as Zero<Schema, MD, C>;
 }
 
 function useQueryWithZeroProvider<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
   TReturn,
-  MD extends CustomMutatorDefs,
+  MD extends CustomMutatorDefs | undefined,
   TContext,
 >(
   zeroOrZeroSignal:
-    | Zero<Schema, MD, TContext>
-    | Accessor<Zero<Schema, MD, TContext>>,
-  querySignal: () => Query<TSchema, TTable, TReturn>,
+    | Zero<TSchema, MD, TContext>
+    | Accessor<Zero<TSchema, MD, TContext>>,
+  querySignal: () => Query<TTable, TSchema, TReturn>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {
   const isZeroSignal = typeof zeroOrZeroSignal === 'function';
@@ -105,10 +107,17 @@ function useQueryWithZeroProvider<
       {props.children}
     </ZeroProvider>
   );
-  return renderHook(useQuery, {
-    initialProps: [querySignal, options],
-    wrapper: MockZeroProvider,
-  });
+  // Use wrapper function to avoid TypeScript overload resolution issues with renderHook
+  type QuerySignal = Accessor<Query<TTable, TSchema, TReturn>>;
+  type Options = UseQueryOptions | Accessor<UseQueryOptions> | undefined;
+  type Result = QueryResult<TReturn>;
+  return renderHook(
+    (q: QuerySignal, opts: Options) => useQuery(q, opts) as Result,
+    {
+      initialProps: [querySignal, options],
+      wrapper: MockZeroProvider,
+    },
+  );
 }
 
 test('useQuery', async () => {
@@ -129,7 +138,7 @@ test('useQuery', async () => {
   must(queryDelegate.gotCallbacks[0])(true);
   await Promise.resolve();
 
-  ms.push({row: {a: 3, b: 'c'}, type: 'add'});
+  consume(ms.push({row: {a: 3, b: 'c'}, type: 'add'}));
   queryDelegate.commit();
 
   expect(rows()).toEqual([
@@ -170,7 +179,6 @@ test('useQuery with ttl', () => {
   expect(addServerQuerySpy).toHaveBeenCalledTimes(0);
   expect(updateServerQuerySpy).toHaveBeenCalledExactlyOnceWith(
     {
-      orderBy: [['a', 'asc']],
       table: 'table',
     },
     '10m',
@@ -392,10 +400,10 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
     schema.tables.comment.columns,
     schema.tables.comment.primaryKey,
   );
-  issueSource.push({row: {id: 'i1'}, type: 'add'});
-  issueSource.push({row: {id: 'i2'}, type: 'add'});
-  commentSource.push({row: {id: 'c1', issueID: 'i1'}, type: 'add'});
-  commentSource.push({row: {id: 'c2', issueID: 'i1'}, type: 'add'});
+  consume(issueSource.push({row: {id: 'i1'}, type: 'add'}));
+  consume(issueSource.push({row: {id: 'i2'}, type: 'add'}));
+  consume(commentSource.push({row: {id: 'c1', issueID: 'i1'}, type: 'add'}));
+  consume(commentSource.push({row: {id: 'c2', issueID: 'i1'}, type: 'add'}));
 
   const queryDelegate = new QueryDelegateImpl({
     sources: {issue: issueSource, comment: commentSource},
@@ -683,7 +691,9 @@ test('useQuery query deps change testEffect', () => {
         expect(rows()).toEqual([
           {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
         ]);
-        ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}});
+        consume(
+          ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}}),
+        );
         queryDelegate.commit();
       } else if (run === 1) {
         expect(rows()).toEqual([
@@ -797,13 +807,13 @@ test('useQuery view disposed when zero instance changes, new view created', () =
   expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(1);
 
   const mockZero1 = newMockZero(clientID + '1', queryDelegate);
-  const mockZero1MaterializeSpy = vi.spyOn(queryDelegate, 'materialize');
 
   setZero(mockZero1);
 
   expect(destroySpy).toHaveBeenCalledTimes(1);
-  expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(1);
-  expect(mockZero1MaterializeSpy).toHaveBeenCalledTimes(1);
+  // In Vitest 4, spyOn on an already spied method returns the same spy,
+  // so we check the total call count increased by 1 (from 1 to 2)
+  expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(2);
 });
 
 test('useQuery view disposed when query changes and new view is created', () => {
@@ -917,8 +927,178 @@ test('useQuery when ZeroProvider is not-used, view is not-reused if query instan
   const querySignal = () => queries[queryIndex()];
 
   expect(() => {
-    renderHook(useQuery, {
+    renderHook((q: typeof querySignal) => useQuery(q), {
       initialProps: [querySignal],
     });
   }).toThrow('useZero must be used within a ZeroProvider');
+});
+
+describe('maybe queries', () => {
+  // Shared queries and type for maybe query tests
+  const {tableQuery: pluralQuery, queryDelegate} = setupTestEnvironment();
+  const singularQuery = pluralQuery.one();
+  type Row = {readonly a: number; readonly b: string};
+
+  test('plural maybe query (truthy at runtime) returns typed data', () => {
+    const zero = newMockZero('maybe-plural-truthy', queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const maybeQuery = pluralQuery as typeof pluralQuery | null;
+    const {result} = renderHook(
+      () => {
+        // Non-maybe query returns Row[] (no undefined)
+        const [nonMaybeData] = useQuery(() => pluralQuery);
+        expectTypeOf(nonMaybeData()).toMatchTypeOf<readonly Row[]>();
+
+        // Maybe query returns Row[] | undefined
+        return useQuery(() => maybeQuery);
+      },
+      {wrapper: MockZeroProvider},
+    );
+
+    const [data, details] = result;
+
+    expectTypeOf(data()).toMatchTypeOf<readonly Row[] | undefined>();
+    expectTypeOf(details()).toMatchTypeOf<QueryResultDetails>();
+
+    expect(materializeSpy).toHaveBeenCalled();
+  });
+
+  test('plural maybe query (falsy at runtime) returns undefined', () => {
+    const zero = newMockZero('maybe-plural-falsy', queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const maybeQuery = null as typeof pluralQuery | null;
+    const {result} = renderHook(() => useQuery(() => maybeQuery), {
+      wrapper: MockZeroProvider,
+    });
+
+    const [data, details] = result;
+
+    // Type assertions: plural maybe query returns Row[] | undefined
+    expectTypeOf(data()).toMatchTypeOf<readonly Row[] | undefined>();
+    expectTypeOf(details()).toMatchTypeOf<QueryResultDetails>();
+
+    expect(data()).toBe(undefined);
+    expect(details()).toEqual({type: 'unknown'});
+    expect(materializeSpy).not.toHaveBeenCalled();
+  });
+
+  test('singular maybe query (truthy at runtime) returns typed data', () => {
+    const zero = newMockZero('maybe-singular-truthy', queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const maybeQuery = singularQuery as typeof singularQuery | null;
+    const {result} = renderHook(
+      () => {
+        // Non-maybe singular query returns Row | undefined (undefined for no result, not disabled)
+        const [nonMaybeData] = useQuery(() => singularQuery);
+        expectTypeOf(nonMaybeData()).toMatchTypeOf<Row | undefined>();
+
+        // Maybe singular query also returns Row | undefined
+        return useQuery(() => maybeQuery);
+      },
+      {wrapper: MockZeroProvider},
+    );
+
+    const [data, details] = result;
+
+    // Type assertions: singular maybe query returns Row | undefined
+    expectTypeOf(data()).toMatchTypeOf<Row | undefined>();
+    expectTypeOf(details()).toMatchTypeOf<QueryResultDetails>();
+
+    expect(materializeSpy).toHaveBeenCalled();
+  });
+
+  test('singular maybe query (falsy at runtime) returns undefined', () => {
+    const zero = newMockZero('maybe-singular-falsy', queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const maybeQuery = null as typeof singularQuery | null;
+    const {result} = renderHook(() => useQuery(() => maybeQuery), {
+      wrapper: MockZeroProvider,
+    });
+
+    const [data, details] = result;
+
+    // Type assertions: singular maybe query returns Row | undefined
+    expectTypeOf(data()).toMatchTypeOf<Row | undefined>();
+    expectTypeOf(details()).toMatchTypeOf<QueryResultDetails>();
+
+    expect(data()).toBe(undefined);
+    expect(details()).toEqual({type: 'unknown'});
+    expect(materializeSpy).not.toHaveBeenCalled();
+  });
+
+  // These tests verify that transitioning between truthy/falsy queries
+  // properly resets the data to undefined when the query becomes falsy.
+
+  test('query transitioning from truthy to falsy resets data to undefined', () => {
+    const zero = newMockZero('maybe-transition-truthy-to-falsy', queryDelegate);
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const [enabled, setEnabled] = createSignal(true);
+    const {result} = renderHook(
+      () => useQuery(() => enabled() && pluralQuery),
+      {wrapper: MockZeroProvider},
+    );
+
+    const [data] = result;
+
+    // Initially enabled - should have data
+    expect(data()).not.toBe(undefined);
+    expect(Array.isArray(data())).toBe(true);
+
+    // Disable the query - data should become undefined
+    setEnabled(false);
+    expect(data()).toBe(undefined);
+  });
+
+  test('singular query transitioning from truthy to falsy resets data to undefined', () => {
+    const zero = newMockZero('maybe-singular-transition', queryDelegate);
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    const [enabled, setEnabled] = createSignal(true);
+    const {result} = renderHook(
+      () => useQuery(() => enabled() && singularQuery),
+      {wrapper: MockZeroProvider},
+    );
+
+    const [data] = result;
+
+    // Initially enabled - should have data (or undefined if no match, but not because disabled)
+    // The key is that after disabling, it MUST be undefined
+    const initialData = data();
+
+    // Disable the query - data should become undefined
+    setEnabled(false);
+    expect(data()).toBe(undefined);
+
+    // Re-enable - should get data back
+    setEnabled(true);
+    // Data should be restored (same as initial)
+    expect(data()).toEqual(initialData);
+  });
 });

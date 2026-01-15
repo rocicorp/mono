@@ -11,6 +11,7 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
+import {useZero} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {
   forwardRef,
@@ -20,15 +21,14 @@ import {
   useState,
   type ForwardedRef,
 } from 'react';
+import {mutators} from '../../shared/mutators.ts';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
 import {
   findEmojiForCreator,
   normalizeEmoji,
   type Emoji,
 } from '../emoji-utils.ts';
-import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {useLogin} from '../hooks/use-login.tsx';
-import {useZero} from '../hooks/use-zero.ts';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {type ButtonProps} from './button.tsx';
 import {EmojiPicker} from './emoji-picker.tsx';
@@ -52,7 +52,6 @@ export const EmojiPanel = memo(
     ) => {
       const subjectID = commentID ?? issueID;
       const z = useZero();
-      const isOffline = useIsOffline();
 
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
@@ -65,9 +64,9 @@ export const EmojiPanel = memo(
             created: Date.now(),
           } as const;
           if (commentID !== undefined) {
-            z.mutate.emoji.addToComment(args);
+            z.mutate(mutators.emoji.addToComment(args));
           } else {
-            z.mutate.emoji.addToIssue(args);
+            z.mutate(mutators.emoji.addToIssue(args));
           }
         },
         [subjectID, commentID, z],
@@ -75,7 +74,7 @@ export const EmojiPanel = memo(
 
       const removeEmoji = useCallback(
         (id: string) => {
-          z.mutate.emoji.remove(id);
+          z.mutate(mutators.emoji.remove(id));
         },
         [z],
       );
@@ -105,7 +104,6 @@ export const EmojiPanel = memo(
           <div className="emoji-reaction-container" ref={ref}>
             {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
               <EmojiPill
-                disabled={isOffline}
                 key={normalizedEmoji}
                 normalizedEmoji={normalizedEmoji}
                 emojis={emojis}
@@ -116,12 +114,9 @@ export const EmojiPanel = memo(
               />
             ))}
             {login.loginState === undefined ? (
-              <EmojiButton disabled={isOffline} />
+              <EmojiButton />
             ) : (
-              <EmojiMenuButton
-                disabled={isOffline}
-                onEmojiChange={addOrRemoveEmoji}
-              />
+              <EmojiMenuButton onEmojiChange={addOrRemoveEmoji} />
             )}
           </div>
         </FloatingDelayGroup>
@@ -145,13 +140,7 @@ const EmojiButton = memo(
 );
 
 const EmojiMenuButton = memo(
-  ({
-    disabled,
-    onEmojiChange,
-  }: {
-    disabled: boolean;
-    onEmojiChange: AddOrRemoveEmoji;
-  }) => {
+  ({onEmojiChange}: {onEmojiChange: AddOrRemoveEmoji}) => {
     const [isOpen, setIsOpen] = useState(false);
     const {refs, floatingStyles, placement, context} = useFloating({
       open: isOpen,
@@ -188,7 +177,6 @@ const EmojiMenuButton = memo(
       <>
         <EmojiButton
           ref={refs.setReference}
-          disabled={disabled}
           onAction={() => setIsOpen(v => !v)}
           {...getReferenceProps()}
         />

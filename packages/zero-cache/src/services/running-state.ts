@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../shared/src/abort-error.ts';
 import {sleepWithAbort} from '../../../shared/src/sleep.ts';
@@ -145,7 +145,10 @@ export class RunningState {
     if (err instanceof AbortError || err instanceof UnrecoverableError) {
       this.stop(lc, err);
     } else if (this.shouldRun()) {
-      const log = delay < 1000 ? 'info' : delay < 5000 ? 'warn' : 'error';
+      // Use delay-based log level: higher delay means more retries
+      const log: 'info' | 'warn' | 'error' =
+        delay < 1000 ? 'info' : delay < 6500 ? 'warn' : 'error';
+
       lc[log]?.(`retrying ${this.#serviceName} in ${delay} ms`, err);
       await this.sleep(delay);
     }

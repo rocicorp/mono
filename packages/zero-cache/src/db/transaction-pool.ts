@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {stringify} from '../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
@@ -11,7 +12,7 @@ import {
   type PostgresDB,
   type PostgresTransaction,
 } from '../types/pg.ts';
-import * as Mode from './mode-enum.ts';
+import type * as Mode from './mode-enum.ts';
 
 type Mode = Enum<typeof Mode>;
 
@@ -93,8 +94,11 @@ export class TransactionPool {
     maxWorkers = initialWorkers,
     timeoutTasks = TIMEOUT_TASKS, // Overridden for tests.
   ) {
-    assert(initialWorkers > 0);
-    assert(maxWorkers >= initialWorkers);
+    assert(initialWorkers > 0, 'initialWorkers must be positive');
+    assert(
+      maxWorkers >= initialWorkers,
+      'maxWorkers must be >= initialWorkers',
+    );
 
     this.#lc = lc;
     this.#mode = mode;
@@ -224,7 +228,6 @@ export class TransactionPool {
         return last;
       } catch (e) {
         if (e !== this.#failure) {
-          lc.error?.('error from worker', e);
           this.fail(e); // A failure in any worker should fail the pool.
         }
         throw e;
@@ -446,7 +449,10 @@ export class TransactionPool {
    * Decrements the internal reference count, automatically invoking {@link setDone} when it reaches 0.
    */
   unref(count = 1) {
-    assert(count <= this.#refCount);
+    assert(
+      count <= this.#refCount,
+      () => `Cannot unref ${count} when refCount is ${this.#refCount}`,
+    );
 
     this.#refCount -= count;
     if (this.#refCount === 0) {
@@ -464,11 +470,13 @@ export class TransactionPool {
   fail(err: unknown) {
     if (!this.#failure) {
       this.#failure = ensureError(err); // Fail fast: this is checked in the worker loop.
-      if (this.#failure instanceof ControlFlowError) {
-        this.#lc.debug?.(this.#failure);
-      } else {
-        this.#lc.error?.(this.#failure);
-      }
+      const level =
+        this.#failure instanceof ControlFlowError
+          ? 'debug'
+          : this.#failure instanceof AbortError
+            ? 'info'
+            : 'error';
+      this.#lc[level]?.(this.#failure);
 
       for (let i = 0; i < this.#numWorkers; i++) {
         // Enqueue the Error to terminate any workers waiting for tasks.

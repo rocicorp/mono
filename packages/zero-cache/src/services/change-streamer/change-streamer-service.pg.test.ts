@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, vi, type Mock} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
@@ -8,6 +8,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {DEFAULT_BACK_PRESSURE_THRESHOLD} from '../../config/zero-config.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -80,6 +81,7 @@ describe('change-streamer/service', () => {
       },
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
@@ -106,6 +108,14 @@ describe('change-streamer/service', () => {
     return down[1];
   }
 
+  async function verifyNoMoreChanges(sub: Queue<Downstream>) {
+    const down = await sub.dequeue(
+      ['error', {type: 0, message: 'timed-out'}],
+      50,
+    );
+    expect(down).toEqual(['error', {type: 0, message: 'timed-out'}]);
+  }
+
   async function expectAcks(...watermarks: string[]) {
     for (const watermark of watermarks) {
       expect((await acks.dequeue())[2].watermark).toBe(watermark);
@@ -113,6 +123,13 @@ describe('change-streamer/service', () => {
   }
 
   const messages = new ReplicationMessages({foo: 'id'});
+
+  test('get empty changelog state', async () => {
+    expect(await streamer.getChangeLogState()).toEqual({
+      minWatermark: '01',
+      replicaVersion: '01',
+    });
+  });
 
   test('immediate forwarding, transaction storage', async () => {
     const sub = await streamer.subscribe({
@@ -599,6 +616,11 @@ describe('change-streamer/service', () => {
       UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
     `.simple();
 
+    expect(await streamer.getChangeLogState()).toEqual({
+      replicaVersion: '01',
+      minWatermark: '03',
+    });
+
     // Start two subscribers: one at 06 and one at 04
     const sub1 = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
@@ -668,6 +690,11 @@ describe('change-streamer/service', () => {
       ],
     });
 
+    expect(await streamer.getChangeLogState()).toEqual({
+      replicaVersion: '01',
+      minWatermark: '06',
+    });
+
     // No more timeouts should have been scheduled because both initialWatermarks
     // were cleaned up.
     expect(setTimeoutFn).toHaveBeenCalledTimes(3);
@@ -735,6 +762,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -759,6 +787,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -780,6 +809,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -813,6 +843,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -849,6 +880,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -913,6 +945,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -1116,5 +1149,60 @@ describe('change-streamer/service', () => {
     expect(
       await sql`SELECT watermark, pos FROM "zoro_3/cdc"."changeLog"`,
     ).toEqual([{watermark: '05', pos: 3n}]);
+  });
+
+  test('transaction aborted on unexpected termination', async () => {
+    const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    const msgs = drainToQueue(sub);
+
+    changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.end();
+
+    expect(await nextChange(msgs)).toMatchObject({tag: 'status'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'insert'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'rollback'});
+
+    // No more messages should have been sent
+    // No more messages should have been sent
+    await verifyNoMoreChanges(msgs);
+  });
+
+  test('transaction aborted only once', async () => {
+    const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    const msgs = drainToQueue(sub);
+
+    changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    // An explicit abort from change-source
+    changes.push(['rollback', {tag: 'rollback'}]);
+    changes.end();
+
+    expect(await nextChange(msgs)).toMatchObject({tag: 'status'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'insert'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'rollback'});
+
+    // No more messages should have been sent
+    await verifyNoMoreChanges(msgs);
   });
 });

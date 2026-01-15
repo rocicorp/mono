@@ -28,6 +28,7 @@ import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import {type AST} from '../../zero-protocol/src/ast.ts';
+import {clientSchemaFrom} from '../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
@@ -37,7 +38,7 @@ import {
 import type {Source} from '../../zql/src/ivm/source.ts';
 import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import {queryWithContext} from '../../zql/src/query/query-internals.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
@@ -194,19 +195,16 @@ const db = new Database(lc, config.replicaFile);
 const {schema, permissions} = await loadSchemaAndPermissions(
   config.schema.path,
 );
+const clientSchema = clientSchemaFrom(schema).clientSchema;
 
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
 
-class AnalyzeQueryDelegate extends QueryDelegateBase<undefined> {
+class AnalyzeQueryDelegate extends QueryDelegateBase {
   readonly debug = debug;
   readonly defaultQueryComplete = true;
-
-  constructor() {
-    super(undefined);
-  }
 
   getSource(serverTableName: string): Source | undefined {
     let source = sources.get(serverTableName);
@@ -236,7 +234,7 @@ let result: AnalyzeQueryResult;
 
 if (config.ast) {
   // the user likely has a transformed AST since the wire and storage formats are the transformed AST
-  result = await runAst(lc, JSON.parse(config.ast), true, {
+  result = await runAst(lc, clientSchema, JSON.parse(config.ast), true, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,
     clientToServerMapper,
@@ -266,10 +264,10 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   };
 
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<Schema, string, PullRow<string, Schema>, undefined> = f(z);
+  const q: Query<string, Schema, PullRow<string, Schema>> = f(z);
 
-  const ast = queryWithContext(q, undefined).ast;
-  return runAst(lc, ast, false, {
+  const ast = asQueryInternals(q).ast;
+  return runAst(lc, clientSchema, ast, false, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,
     clientToServerMapper,
@@ -296,7 +294,7 @@ async function runHash(hash: string) {
   const ast = rows[0].clientAST as AST;
   colorConsole.log(await formatOutput(ast.table + astToZQL(ast)));
 
-  return runAst(lc, ast, true, {
+  return runAst(lc, clientSchema, ast, true, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,
     clientToServerMapper,
@@ -322,8 +320,8 @@ if (config.outputVendedRows) {
   colorConsole.log(chalk.blue.bold('=== JS Row Scan Values: ===\n'));
   for (const source of sources.values()) {
     colorConsole.log(
-      chalk.bold(`${source.table}:`),
-      debug.getVendedRows()?.[source.table] ?? {},
+      chalk.bold(`${source.tableSchema.name}:`),
+      debug.getVendedRows()?.[source.tableSchema.name] ?? {},
     );
   }
 }
@@ -354,14 +352,14 @@ function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
     const values = Object.values(
-      debug.getVendedRowCounts()?.[source.table] ?? {},
+      debug.getVendedRowCounts()?.[source.tableSchema.name] ?? {},
     );
     for (const v of values) {
       totalRowsConsidered += v;
     }
     colorConsole.log(
-      chalk.bold(source.table + ' vended:'),
-      debug.getVendedRowCounts()?.[source.table] ?? {},
+      chalk.bold(source.tableSchema.name + ' vended:'),
+      debug.getVendedRowCounts()?.[source.tableSchema.name] ?? {},
     );
   }
 

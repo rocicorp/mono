@@ -1,11 +1,8 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "noEmit": false,
-    "emitDeclarationOnly": true
-  },
   "include": [
     "src/zero.ts",
+    "src/bindings.ts",
     "src/react.ts",
     "src/solid.ts",
     "src/react-native.ts",

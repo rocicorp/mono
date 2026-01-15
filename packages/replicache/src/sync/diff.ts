@@ -4,9 +4,10 @@ import {diff as btreeDiff} from '../btree/diff.ts';
 import type {InternalDiff} from '../btree/node.ts';
 import {allEntriesAsDiff, BTreeRead} from '../btree/read.ts';
 import type {Read} from '../dag/store.ts';
-import {Commit, commitFromHash, type Meta} from '../db/commit.ts';
+import type {Commit} from '../db/commit.ts';
+import {commitFromHash, type Meta} from '../db/commit.ts';
 import {readIndexesForRead} from '../db/read.ts';
-import * as FormatVersion from '../format-version-enum.ts';
+import type * as FormatVersion from '../format-version-enum.ts';
 import type {Hash} from '../hash.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;

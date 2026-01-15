@@ -1,11 +1,11 @@
 import react from '@vitejs/plugin-react';
-import {defineConfig, type ViteDevServer} from 'vite';
+import {defineConfig, type PluginOption, type ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import {makeDefine} from '../../packages/shared/src/build.ts';
+import {fastify} from './api/index.ts';
 
 async function configureServer(server: ViteDevServer) {
-  const {fastify} = await import('./api/index.js');
   await fastify.ready();
   server.middlewares.use((req, res, next) => {
     if (!req.url?.startsWith('/api')) {
@@ -18,8 +18,8 @@ async function configureServer(server: ViteDevServer) {
 export default defineConfig({
   plugins: [
     tsconfigPaths(),
-    svgr(),
-    react(),
+    svgr() as unknown as PluginOption,
+    react() as unknown as PluginOption,
     {
       name: 'api-server',
       configureServer,

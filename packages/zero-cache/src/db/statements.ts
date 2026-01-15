@@ -1,5 +1,5 @@
 import type {RunResult} from '@rocicorp/zero-sqlite3';
-import {Database} from '../../../zqlite/src/db.ts';
+import type {Database} from '../../../zqlite/src/db.ts';
 import {StatementCache} from '../../../zqlite/src/internal/statement-cache.ts';
 
 /**

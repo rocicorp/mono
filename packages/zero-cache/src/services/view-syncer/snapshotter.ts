@@ -1,8 +1,10 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
 import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
@@ -12,7 +14,6 @@ import {
   type RowKey,
   type RowValue,
 } from '../../types/row-key.ts';
-import {type SchemaVersions} from '../../types/schema-versions.ts';
 import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
@@ -25,8 +26,6 @@ import {
   getReplicationState,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.ts';
-import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
@@ -91,13 +90,20 @@ export class Snapshotter {
   readonly #lc: LogContext;
   readonly #dbFile: string;
   readonly #appID: string;
+  readonly #pageCacheSizeKib: number | undefined;
   #curr: Snapshot | undefined;
   #prev: Snapshot | undefined;
 
-  constructor(lc: LogContext, dbFile: string, {appID}: AppID) {
+  constructor(
+    lc: LogContext,
+    dbFile: string,
+    {appID}: AppID,
+    pageCacheSizeKib?: number | undefined,
+  ) {
     this.#lc = lc;
     this.#dbFile = dbFile;
     this.#appID = appID;
+    this.#pageCacheSizeKib = pageCacheSizeKib;
   }
 
   /**
@@ -107,7 +113,12 @@ export class Snapshotter {
    */
   init(): this {
     assert(this.#curr === undefined, 'Already initialized');
-    this.#curr = Snapshot.create(this.#lc, this.#dbFile, this.#appID);
+    this.#curr = Snapshot.create(
+      this.#lc,
+      this.#dbFile,
+      this.#appID,
+      this.#pageCacheSizeKib,
+    );
     this.#lc.debug?.(`Initial snapshot at version ${this.#curr.version}`);
     return this;
   }
@@ -168,7 +179,12 @@ export class Snapshotter {
     assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     const next = this.#prev
       ? this.#prev.resetToHead()
-      : Snapshot.create(this.#lc, this.#curr.db.db.name, this.#appID);
+      : Snapshot.create(
+          this.#lc,
+          this.#curr.db.db.name,
+          this.#appID,
+          this.#pageCacheSizeKib,
+        );
     this.#prev = this.#curr;
     this.#curr = next;
     return {prev: this.#prev, curr: this.#curr};
@@ -242,16 +258,18 @@ export class ResetPipelinesSignal extends Error {
   }
 }
 
-function getSchemaVersions(db: StatementRunner, appID: string): SchemaVersions {
-  return db.get(
-    `SELECT minSupportedVersion, maxSupportedVersion FROM "${appID}.schemaVersions"`,
-  );
-}
-
 class Snapshot {
-  static create(lc: LogContext, dbFile: string, appID: string) {
+  static create(
+    lc: LogContext,
+    dbFile: string,
+    appID: string,
+    pageCacheSizeKib: number | undefined,
+  ) {
     const conn = new Database(lc, dbFile);
     conn.pragma('synchronous = OFF'); // Applied changes are ephemeral; COMMIT is never called.
+    if (pageCacheSizeKib !== undefined) {
+      conn.pragma(`cache_size = -${pageCacheSizeKib}`); // Negative = size in KiB
+    }
     const [{journal_mode: mode}] = conn.pragma('journal_mode') as [
       {journal_mode: string},
     ];
@@ -270,7 +288,6 @@ class Snapshot {
   readonly db: StatementRunner;
   readonly #appID: string;
   readonly version: string;
-  readonly schemaVersions: SchemaVersions;
 
   constructor(db: StatementRunner, appID: string) {
     db.beginConcurrent();
@@ -282,12 +299,11 @@ class Snapshot {
     this.db = db;
     this.#appID = appID;
     this.version = stateVersion;
-    this.schemaVersions = getSchemaVersions(db, appID);
   }
 
   numChangesSince(prevVersion: string) {
     const {count} = this.db.get(
-      'SELECT COUNT(*) AS count FROM "_zero.changeLog" WHERE stateVersion > ?',
+      'SELECT COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ?',
       prevVersion,
     );
     return count;
@@ -295,7 +311,7 @@ class Snapshot {
 
   changesSince(prevVersion: string) {
     const cached = this.db.statementCache.get(
-      'SELECT * FROM "_zero.changeLog" WHERE stateVersion > ?',
+      'SELECT * FROM "_zero.changeLog2" WHERE stateVersion > ? ORDER BY stateVersion ASC, pos ASC',
     );
     return {
       changes: cached.statement.iterate(prevVersion),
@@ -403,7 +419,7 @@ class Diff implements SnapshotDiff {
             }
             const {tableSpec, zqlSpec} = must(this.tables.get(table));
 
-            assert(rowKey !== null);
+            assert(rowKey !== null, 'rowKey must be present for row changes');
             const nextValue =
               op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
             let prevValues;

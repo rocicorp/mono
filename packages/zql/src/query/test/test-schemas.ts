@@ -165,6 +165,17 @@ export const schemaOptions = {
 
 export const schema = createSchema(schemaOptions);
 
+/**
+ * Legacy schema with enableLegacyMutators: true for tests that still use
+ * tx.mutate.table.operation(args) pattern. New tests should use `schema` with
+ * `crud` below.
+ */
+export const legacySchema = createSchema({
+  ...schemaOptions,
+  enableLegacyMutators: true,
+  enableLegacyQueries: true,
+});
+
 export const issueSchema = schema.tables.issue;
 export const commentSchema = schema.tables.comment;
 export const issueLabelSchema = schema.tables.issueLabel;

@@ -1,9 +1,8 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
-import {must} from '../../../shared/src/must.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import {assertOrderingIncludesPK} from '../builder/builder.ts';
+import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';
 import {type Change, type EditChange, type RemoveChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import {compareValues, type Comparator, type Node} from './data.ts';
@@ -16,7 +15,7 @@ import {
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {first, take, type Stream} from './stream.ts';
+import {type Stream} from './stream.ts';
 
 const MAX_BOUND_KEY = 'maxBound';
 
@@ -85,7 +84,7 @@ export class Take implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest): Stream<Node> {
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     if (
       !this.#partitionKey ||
       (req.constraint &&
@@ -101,6 +100,10 @@ export class Take implements Operator {
         return;
       }
       for (const inputNode of this.#input.fetch(req)) {
+        if (inputNode === 'yield') {
+          yield inputNode;
+          continue;
+        }
         if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
           return;
         }
@@ -128,6 +131,10 @@ export class Take implements Operator {
       return;
     }
     for (const inputNode of this.#input.fetch(req)) {
+      if (inputNode === 'yield') {
+        yield inputNode;
+        continue;
+      }
       if (this.getSchema().compareRows(inputNode.row, maxBound) > 0) {
         return;
       }
@@ -142,7 +149,7 @@ export class Take implements Operator {
     }
   }
 
-  *#initialFetch(req: FetchRequest): Stream<Node> {
+  *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
     assert(req.start === undefined, 'Start should be undefined');
     assert(!req.reverse, 'Reverse should be false');
     assert(
@@ -166,6 +173,10 @@ export class Take implements Operator {
     let exceptionThrown = false;
     try {
       for (const inputNode of this.#input.fetch(req)) {
+        if (inputNode === 'yield') {
+          yield 'yield';
+          continue;
+        }
         yield inputNode;
         bound = inputNode.row;
         size++;
@@ -194,24 +205,6 @@ export class Take implements Operator {
           'Unexpected early return prevented full hydration',
         );
       }
-    }
-  }
-
-  *cleanup(req: FetchRequest): Stream<Node> {
-    assert(req.start === undefined, 'Start should be undefined');
-    assert(
-      constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
-      'Constraint should match partition key',
-    );
-    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-    this.#storage.del(takeStateKey);
-    let size = 0;
-    for (const inputNode of this.#input.cleanup(req)) {
-      if (size === this.#limit) {
-        return;
-      }
-      size++;
-      yield inputNode;
     }
   }
 
@@ -244,9 +237,9 @@ export class Take implements Operator {
         };
   }
 
-  push(change: Change): void {
+  *push(change: Change): Stream<'yield'> {
     if (change.type === 'edit') {
-      this.#pushEditChange(change);
+      yield* this.#pushEditChange(change);
       return;
     }
 
@@ -269,7 +262,7 @@ export class Take implements Operator {
             : takeState.bound,
           maxBound,
         );
-        this.#output.push(change, this);
+        yield* this.#output.push(change, this);
         return;
       }
       // size === limit
@@ -281,32 +274,46 @@ export class Take implements Operator {
       }
       // added row < bound
       let beforeBoundNode: Node | undefined;
-      let boundNode: Node;
+      let boundNode: Node | undefined;
       if (this.#limit === 1) {
-        boundNode = must(
-          first(
-            this.#input.fetch({
-              start: {
-                row: takeState.bound,
-                basis: 'at',
-              },
-              constraint,
-            }),
-          ),
-        );
+        for (const node of this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'at',
+          },
+          constraint,
+        })) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
+          boundNode = node;
+          break;
+        }
       } else {
-        [boundNode, beforeBoundNode] = take(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'at',
-            },
-            constraint,
-            reverse: true,
-          }),
-          2,
-        );
+        for (const node of this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'at',
+          },
+          constraint,
+          reverse: true,
+        })) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          } else if (boundNode === undefined) {
+            boundNode = node;
+          } else {
+            beforeBoundNode = node;
+            break;
+          }
+        }
       }
+      assert(
+        boundNode !== undefined,
+        'Take: boundNode must be found during fetch',
+      );
       const removeChange: RemoveChange = {
         type: 'remove',
         node: boundNode,
@@ -322,10 +329,8 @@ export class Take implements Operator {
           : beforeBoundNode.row,
         maxBound,
       );
-      this.#withRowHiddenFromFetch(change.node.row, () => {
-        this.#output.push(removeChange, this);
-      });
-      this.#output.push(change, this);
+      yield* this.#pushWithRowHiddenFromFetch(change.node.row, removeChange);
+      yield* this.#output.push(change, this);
     } else if (change.type === 'remove') {
       if (takeState.bound === undefined) {
         // change is after bound
@@ -336,17 +341,22 @@ export class Take implements Operator {
         // change is after bound
         return;
       }
-      const [beforeBoundNode] = take(
-        this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'after',
-          },
-          constraint,
-          reverse: true,
-        }),
-        1,
-      );
+      let beforeBoundNode: Node | undefined;
+      for (const node of this.#input.fetch({
+        start: {
+          row: takeState.bound,
+          basis: 'after',
+        },
+        constraint,
+        reverse: true,
+      })) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
+        beforeBoundNode = node;
+        break;
+      }
 
       let newBound: {node: Node; push: boolean} | undefined;
       if (beforeBoundNode) {
@@ -364,6 +374,10 @@ export class Take implements Operator {
           },
           constraint,
         })) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
           const push = compareRows(node.row, takeState.bound) > 0;
           newBound = {
             node,
@@ -376,14 +390,14 @@ export class Take implements Operator {
       }
 
       if (newBound?.push) {
-        this.#output.push(change, this);
+        yield* this.#output.push(change, this);
         this.#setTakeState(
           takeStateKey,
           takeState.size,
           newBound.node.row,
           maxBound,
         );
-        this.#output.push(
+        yield* this.#output.push(
           {
             type: 'add',
             node: newBound.node,
@@ -398,7 +412,7 @@ export class Take implements Operator {
         newBound?.node.row,
         maxBound,
       );
-      this.#output.push(change, this);
+      yield* this.#output.push(change, this);
     } else if (change.type === 'child') {
       // A 'child' change should be pushed to output if its row
       // is <= bound.
@@ -406,12 +420,12 @@ export class Take implements Operator {
         takeState.bound &&
         compareRows(change.node.row, takeState.bound) <= 0
       ) {
-        this.#output.push(change, this);
+        yield* this.#output.push(change, this);
       }
     }
   }
 
-  #pushEditChange(change: EditChange): void {
+  *#pushEditChange(change: EditChange): Stream<'yield'> {
     assert(
       !this.#partitionKeyComparator ||
         this.#partitionKeyComparator(change.oldNode.row, change.node.row) === 0,
@@ -429,14 +443,15 @@ export class Take implements Operator {
     const oldCmp = compareRows(change.oldNode.row, takeState.bound);
     const newCmp = compareRows(change.node.row, takeState.bound);
 
-    const replaceBoundAndForwardChange = () => {
-      this.#setTakeState(
+    const that = this;
+    const replaceBoundAndForwardChange = function* () {
+      that.#setTakeState(
         takeStateKey,
         takeState.size,
         change.node.row,
         maxBound,
       );
-      this.#output.push(change, this);
+      yield* that.#output.push(change, that);
     };
 
     // The bounds row was changed.
@@ -444,13 +459,13 @@ export class Take implements Operator {
       // The new row is the new bound.
       if (newCmp === 0) {
         // no need to update the state since we are keeping the bounds
-        this.#output.push(change, this);
+        yield* this.#output.push(change, this);
         return;
       }
 
       if (newCmp < 0) {
         if (this.#limit === 1) {
-          replaceBoundAndForwardChange();
+          yield* replaceBoundAndForwardChange();
           return;
         }
 
@@ -458,17 +473,25 @@ export class Take implements Operator {
         // more. We need to find the row before the bounds to determine the new
         // bounds.
 
-        const beforeBoundNode = must(
-          first(
-            this.#input.fetch({
-              start: {
-                row: takeState.bound,
-                basis: 'after',
-              },
-              constraint,
-              reverse: true,
-            }),
-          ),
+        let beforeBoundNode: Node | undefined;
+        for (const node of this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'after',
+          },
+          constraint,
+          reverse: true,
+        })) {
+          if (node === 'yield') {
+            yield node;
+            continue;
+          }
+          beforeBoundNode = node;
+          break;
+        }
+        assert(
+          beforeBoundNode !== undefined,
+          'Take: beforeBoundNode must be found during fetch',
         );
 
         this.#setTakeState(
@@ -477,28 +500,36 @@ export class Take implements Operator {
           beforeBoundNode.row,
           maxBound,
         );
-        this.#output.push(change, this);
+        yield* this.#output.push(change, this);
         return;
       }
 
       assert(newCmp > 0, 'New comparison must be greater than 0');
       // Find the first item at the old bounds. This will be the new bounds.
-      const newBoundNode = must(
-        first(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'at',
-            },
-            constraint,
-          }),
-        ),
+      let newBoundNode: Node | undefined;
+      for (const node of this.#input.fetch({
+        start: {
+          row: takeState.bound,
+          basis: 'at',
+        },
+        constraint,
+      })) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
+        newBoundNode = node;
+        break;
+      }
+      assert(
+        newBoundNode !== undefined,
+        'Take: newBoundNode must be found during fetch',
       );
 
       // The next row is the new row. We can replace the bounds and keep the
       // edit change.
       if (compareRows(newBoundNode.row, change.node.row) === 0) {
-        replaceBoundAndForwardChange();
+        yield* replaceBoundAndForwardChange();
         return;
       }
 
@@ -510,16 +541,11 @@ export class Take implements Operator {
         newBoundNode.row,
         maxBound,
       );
-      this.#withRowHiddenFromFetch(newBoundNode.row, () => {
-        this.#output.push(
-          {
-            type: 'remove',
-            node: change.oldNode,
-          },
-          this,
-        );
+      yield* this.#pushWithRowHiddenFromFetch(newBoundNode.row, {
+        type: 'remove',
+        node: change.oldNode,
       });
-      this.#output.push(
+      yield* this.#output.push(
         {
           type: 'add',
           node: newBoundNode,
@@ -540,17 +566,35 @@ export class Take implements Operator {
       // old was outside, new is inside. Pushing out the old bounds
       assert(newCmp < 0, 'New comparison must be less than 0');
 
-      const [oldBoundNode, newBoundNode] = take(
-        this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-          reverse: true,
-        }),
-        2,
+      let oldBoundNode: Node | undefined;
+      let newBoundNode: Node | undefined;
+      for (const node of this.#input.fetch({
+        start: {
+          row: takeState.bound,
+          basis: 'at',
+        },
+        constraint,
+        reverse: true,
+      })) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        } else if (oldBoundNode === undefined) {
+          oldBoundNode = node;
+        } else {
+          newBoundNode = node;
+          break;
+        }
+      }
+      assert(
+        oldBoundNode !== undefined,
+        'Take: oldBoundNode must be found during fetch',
       );
+      assert(
+        newBoundNode !== undefined,
+        'Take: newBoundNode must be found during fetch',
+      );
+
       // Remove before add to maintain invariant that
       // output size <= limit.
       this.#setTakeState(
@@ -559,16 +603,11 @@ export class Take implements Operator {
         newBoundNode.row,
         maxBound,
       );
-      this.#withRowHiddenFromFetch(change.node.row, () => {
-        this.#output.push(
-          {
-            type: 'remove',
-            node: oldBoundNode,
-          },
-          this,
-        );
+      yield* this.#pushWithRowHiddenFromFetch(change.node.row, {
+        type: 'remove',
+        node: oldBoundNode,
       });
-      this.#output.push(
+      yield* this.#output.push(
         {
           type: 'add',
           node: change.node,
@@ -584,7 +623,7 @@ export class Take implements Operator {
 
       // Both old and new inside of bounds
       if (newCmp < 0) {
-        this.#output.push(change, this);
+        yield* this.#output.push(change, this);
         return;
       }
 
@@ -594,25 +633,33 @@ export class Take implements Operator {
 
       // at this point we need to find the row after the bound and use that or
       // the newRow as the new bound.
-      const afterBoundNode = must(
-        first(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'after',
-            },
-            constraint,
-          }),
-        ),
+      let afterBoundNode: Node | undefined;
+      for (const node of this.#input.fetch({
+        start: {
+          row: takeState.bound,
+          basis: 'after',
+        },
+        constraint,
+      })) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
+        afterBoundNode = node;
+        break;
+      }
+      assert(
+        afterBoundNode !== undefined,
+        'Take: afterBoundNode must be found during fetch',
       );
 
       // The new row is the new bound. Use an edit change.
       if (compareRows(afterBoundNode.row, change.node.row) === 0) {
-        replaceBoundAndForwardChange();
+        yield* replaceBoundAndForwardChange();
         return;
       }
 
-      this.#output.push(
+      yield* this.#output.push(
         {
           type: 'remove',
           node: change.oldNode,
@@ -625,7 +672,7 @@ export class Take implements Operator {
         afterBoundNode.row,
         maxBound,
       );
-      this.#output.push(
+      yield* this.#output.push(
         {
           type: 'add',
           node: afterBoundNode,
@@ -638,10 +685,10 @@ export class Take implements Operator {
     unreachable();
   }
 
-  #withRowHiddenFromFetch(row: Row, fn: () => void) {
+  *#pushWithRowHiddenFromFetch(row: Row, change: Change) {
     this.#rowHiddenFromFetch = row;
     try {
-      fn();
+      yield* this.#output.push(change, this);
     } finally {
       this.#rowHiddenFromFetch = undefined;
     }

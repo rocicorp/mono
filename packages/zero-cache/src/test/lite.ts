@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {tmpdir} from 'node:os';
 import {expect} from 'vitest';
 import {randInt} from '../../../shared/src/rand.ts';

@@ -143,7 +143,7 @@ describe('analyze-query-result schemas', () => {
             'SELECT * FROM users WHERE id = ?': [{id: 1, name: 'Alice'}],
           },
         },
-        plans: {
+        sqlitePlans: {
           'SELECT * FROM users WHERE id = ?': [
             'SEARCH users USING INDEX idx_users_id (id=?)',
           ],
@@ -213,7 +213,7 @@ describe('analyze-query-result schemas', () => {
         syncedRowCount: 10,
         start: 1000,
         end: 1050,
-        plans: {
+        sqlitePlans: {
           'SELECT * FROM users u JOIN posts p ON u.id = p.user_id': [
             'SCAN posts AS p',
             'SEARCH users AS u USING INDEX idx_users_id (id=?)',
@@ -265,7 +265,7 @@ describe('analyze-query-result schemas', () => {
         end: 1100,
         vendedRowCounts: {},
         vendedRows: {},
-        plans: {},
+        sqlitePlans: {},
       };
 
       expect(() =>

@@ -5,6 +5,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
+  flagToEnv,
   parseOptions,
   type Config,
   type ParseOptions,
@@ -24,6 +25,22 @@ import {
   type NormalizedZeroConfig,
 } from './normalize.ts';
 export type {LogConfig} from '../../../otel/src/log-options.ts';
+
+export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
+
+// Technically, any threshold is fine because the point of back pressure
+// is to adjust the rate of incoming messages, and the size of the pending
+// work queue does not affect that mechanism.
+//
+// However, it is theoretically possible to exceed the available memory if
+// the size of changes is very large. This threshold can be improved by
+// roughly measuring the size of the enqueued contents and setting the
+// threshold based on available memory.
+//
+// TODO: switch to a message size-based thresholding when migrating over
+// to stringified JSON messages, which will bound the computation involved
+// in measuring the size of row messages.
+export const DEFAULT_BACK_PRESSURE_THRESHOLD = 100_000;
 
 export const appOptions = {
   id: {
@@ -102,7 +119,7 @@ export const shardOptions = {
 
 const replicaOptions = {
   file: {
-    type: v.string(),
+    type: v.string().default('zero.db'),
     desc: [
       `File path to the SQLite replica that zero-cache maintains.`,
       `This can be lost, but if it is, zero-cache will have to re-replicate next`,
@@ -147,11 +164,17 @@ const authOptions = {
     desc: [
       `A public key in JWK format used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
     ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
   },
   jwksUrl: {
     type: v.string().optional(),
     desc: [
       `A URL that returns a JWK set used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
+    ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
     ],
   },
   secret: {
@@ -159,17 +182,22 @@ const authOptions = {
     desc: [
       `A symmetric key used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
     ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
   },
 };
 
+const makeDeprecationMessage = (flag: string) =>
+  `Use {bold ${flagToEnv(ZERO_ENV_VAR_PREFIX, flag)}} (or {bold --${flag}}) instead.`;
+
 const makeMutatorQueryOptions = (
-  replacement: string | undefined,
+  replacement: 'mutate' | 'query' | undefined,
   suffix: string,
 ) => ({
   url: {
     type: v.array(v.string()).optional(), // optional until we remove CRUD mutations
     desc: [
-      replacement ? `DEPRECATED. Use ${replacement} instead.` : ``,
       `The URL of the API server to which zero-cache will ${suffix}.`,
       ``,
       `{bold IMPORTANT:} URLs are matched using {bold URLPattern}, a standard Web API.`,
@@ -210,12 +238,18 @@ const makeMutatorQueryOptions = (
       ``,
       `For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern`,
     ],
+    ...(replacement
+      ? {deprecated: [makeDeprecationMessage(`${replacement}-url`)]}
+      : {}),
   },
   apiKey: {
     type: v.string().optional(),
     desc: [
       `An optional secret used to authorize zero-cache to call the API server handling writes.`,
     ],
+    ...(replacement
+      ? {deprecated: [makeDeprecationMessage(`${replacement}-api-key`)]}
+      : {}),
   },
   forwardCookies: {
     type: v.boolean().default(false),
@@ -224,13 +258,21 @@ const makeMutatorQueryOptions = (
       `This is useful for passing authentication cookies to the API server.`,
       `If false, cookies are not forwarded.`,
     ],
+    ...(replacement
+      ? {deprecated: [makeDeprecationMessage(`${replacement}-forward-cookies`)]}
+      : {}),
   },
 });
 
 const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');
-const pushOptions = makeMutatorQueryOptions('mutate-url', 'push mutations');
+const pushOptions = makeMutatorQueryOptions('mutate', 'push mutations');
 const queryOptions = makeMutatorQueryOptions(undefined, 'send synced queries');
+const getQueriesOptions = makeMutatorQueryOptions(
+  'query',
+  'send synced queries',
+);
 
+/** @deprecated */
 export type AuthConfig = Config<typeof authOptions>;
 
 // Note: --help will list flags in the order in which they are defined here,
@@ -276,9 +318,12 @@ export const zeroOptions = {
     },
   },
 
+  /** @deprecated */
   push: pushOptions,
   mutate: mutateOptions,
-  getQueries: queryOptions,
+  /** @deprecated */
+  getQueries: getQueriesOptions,
+  query: queryOptions,
 
   cvr: {
     db: {
@@ -346,16 +391,24 @@ export const zeroOptions = {
   },
 
   enableQueryPlanner: {
-    type: v.boolean().default(false),
+    type: v.boolean().default(true),
     desc: [
       `Enable the query planner for optimizing ZQL queries.`,
       ``,
       `The query planner analyzes and optimizes query execution by determining`,
-      `the most efficient join strategies. This feature`,
-      `is being gradually rolled out and may improve performance for complex`,
-      `queries that make use of WHERE EXISTS.`,
+      `the most efficient join strategies.`,
       ``,
-      `When disabled (default), queries use the standard execution path.`,
+      `You can disable the planner if it is picking bad strategies.`,
+    ],
+  },
+
+  yieldThresholdMs: {
+    type: v.number().default(10),
+    desc: [
+      `The maximum amount of time in milliseconds that a sync worker will`,
+      `spend in IVM (processing query hydration and advancement) before yielding`,
+      `to the event loop. Lower values increase responsiveness and fairness at`,
+      `the cost of reduced throughput.`,
     ],
   },
 
@@ -387,6 +440,7 @@ export const zeroOptions = {
 
   shard: shardOptions,
 
+  /** @deprecated */
   auth: authOptions,
 
   port: {
@@ -431,6 +485,7 @@ export const zeroOptions = {
       ],
     },
 
+    /** @deprecated */
     address: {
       type: v.string().optional(),
       deprecated: [
@@ -439,6 +494,7 @@ export const zeroOptions = {
       hidden: true,
     },
 
+    /** @deprecated */
     protocol: {
       type: v.literalUnion('ws', 'wss').default('ws'),
       deprecated: [
@@ -462,6 +518,28 @@ export const zeroOptions = {
       // adjusted to make things work for all environments; it is controlled as a
       // hidden flag as an emergency to unblock people with outlier network configs.
       hidden: true,
+    },
+
+    startupDelayMs: {
+      type: v.number().default(15000),
+      desc: [
+        `The delay to wait before the change-streamer takes over the replication stream`,
+        `(i.e. the handoff during replication-manager updates), to allow loadbalancers to register`,
+        `the task as healthy based on healthcheck parameters. Note that if a change stream request`,
+        `is received during this interval, the delay will be canceled and the takeover will happen`,
+        `immediately, since the incoming request indicates that the task is registered as a target.`,
+      ],
+    },
+
+    backPressureThreshold: {
+      type: v.number().default(DEFAULT_BACK_PRESSURE_THRESHOLD),
+      desc: [
+        `The maximum number of queued changes before back pressure is applied to the`,
+        `change source. When the queue exceeds this threshold, the change-streamer pauses`,
+        `consumption from upstream until the queue drops to 90% of the threshold.`,
+        ``,
+        `Increasing this value may improve throughput at the cost of higher memory usage.`,
+      ],
     },
   },
 
@@ -572,6 +650,14 @@ export const zeroOptions = {
       ],
     },
 
+    endpoint: {
+      type: v.string().optional(),
+      desc: [
+        `The S3-compatible endpoint URL to use for the litestream backup. Only required for non-AWS services.`,
+        `The {bold replication-manager} and {bold view-syncers} must have the same endpoint.`,
+      ],
+    },
+
     port: {
       type: v.number().optional(),
       desc: [
@@ -590,6 +676,24 @@ export const zeroOptions = {
         `a new WAL segment file that will be backed up by litestream. Smaller thresholds`,
         `may improve read performance, at the expense of creating more files to download`,
         `when restoring the replica from the backup.`,
+      ],
+    },
+
+    minCheckpointPageCount: {
+      type: v.number().optional(),
+      desc: [
+        `The WAL page count at which SQLite attempts a PASSIVE checkpoint, which`,
+        `transfers pages to the main database file without blocking writers.`,
+        `Defaults to {bold checkpointThresholdMB * 250} (since SQLite page size is 4KB).`,
+      ],
+    },
+
+    maxCheckpointPageCount: {
+      type: v.number().optional(),
+      desc: [
+        `The WAL page count at which SQLite performs a RESTART checkpoint, which`,
+        `blocks writers until complete. Defaults to {bold minCheckpointPageCount * 10}.`,
+        `Set to {bold 0} to disable RESTART checkpoints entirely.`,
       ],
     },
 
@@ -669,6 +773,7 @@ export const zeroOptions = {
     },
   },
 
+  /** @deprecated */
   targetClientRowCount: {
     type: v.number().default(20_000),
     deprecated: [
@@ -735,8 +840,6 @@ export const zeroOptions = {
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;
-
-export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 
 let loadedConfig: Config<typeof zeroOptions> | undefined;
 

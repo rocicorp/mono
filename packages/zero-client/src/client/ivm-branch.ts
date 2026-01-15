@@ -1,24 +1,26 @@
-import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import {wrapIterable} from '../../../shared/src/iterables.ts';
-import {type Read, type Store} from '../../../replicache/src/dag/store.ts';
-import {using, withRead} from '../../../replicache/src/with-transactions.ts';
-import type {Hash} from '../../../replicache/src/hash.ts';
-import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
-import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
-import {must} from '../../../shared/src/must.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
-import {diff, DiffsMap} from '../../../replicache/src/sync/diff.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 import type {
   InternalDiff,
   InternalDiffOperation,
   NoIndexDiff,
 } from '../../../replicache/src/btree/node.ts';
-import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
-import {readFromHash} from '../../../replicache/src/db/read.ts';
-import type {ZeroReadOptions} from '../../../replicache/src/replicache-options.ts';
 import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
+import {type Read, type Store} from '../../../replicache/src/dag/store.ts';
+import {readFromHash} from '../../../replicache/src/db/read.ts';
+import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
+import type {ZeroReadOptions} from '../../../replicache/src/replicache-options.ts';
+import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
+import type {DiffsMap} from '../../../replicache/src/sync/diff.ts';
+import {diff} from '../../../replicache/src/sync/diff.ts';
+import {using, withRead} from '../../../replicache/src/with-transactions.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {wrapIterable} from '../../../shared/src/iterables.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
+import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 
 /**
  * Replicache needs to rebase mutations onto different
@@ -212,23 +214,29 @@ function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
     const source = must(branch.getSource(name));
     switch (diff.op) {
       case 'del':
-        source.push({
-          type: 'remove',
-          row: diff.oldValue as Row,
-        });
+        consume(
+          source.push({
+            type: 'remove',
+            row: diff.oldValue as Row,
+          }),
+        );
         break;
       case 'add':
-        source.push({
-          type: 'add',
-          row: diff.newValue as Row,
-        });
+        consume(
+          source.push({
+            type: 'add',
+            row: diff.newValue as Row,
+          }),
+        );
         break;
       case 'change':
-        source.push({
-          type: 'edit',
-          row: diff.newValue as Row,
-          oldRow: diff.oldValue as Row,
-        });
+        consume(
+          source.push({
+            type: 'edit',
+            row: diff.newValue as Row,
+            oldRow: diff.oldValue as Row,
+          }),
+        );
         break;
     }
   }

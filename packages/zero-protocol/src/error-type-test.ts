@@ -1,6 +1,6 @@
 import type {Enum} from '../../shared/src/enum.ts';
 import type * as v from '../../shared/src/valita.ts';
-import * as ErrorKind from './error-kind-enum.ts';
+import type * as ErrorKind from './error-kind-enum.ts';
 import type {errorBodySchema} from './error.ts';
 
 type ErrorKind = Enum<typeof ErrorKind>;

@@ -1,13 +1,19 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {type JWTPayload} from 'jose';
 import {pid} from 'node:process';
-import {MessagePort} from 'node:worker_threads';
-import {WebSocketServer, type WebSocket, type ServerOptions} from 'ws';
+import type {MessagePort} from 'node:worker_threads';
+import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
+import {
+  recordConnectionAttempted,
+  recordConnectionSuccess,
+  setActiveClientGroupsGetter,
+} from '../server/anonymous-otel-start.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
@@ -20,18 +26,12 @@ import type {
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {Worker} from '../types/processes.ts';
-import {Subscription} from '../types/subscription.ts';
+import type {Subscription} from '../types/subscription.ts';
 import {installWebSocketReceiver} from '../types/websocket-handoff.ts';
 import type {ConnectParams} from './connect-params.ts';
 import {Connection, sendError} from './connection.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
 import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
-import {
-  recordConnectionSuccess,
-  recordConnectionAttempted,
-  setActiveClientGroupsGetter,
-} from '../server/anonymous-otel-start.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -146,16 +146,18 @@ export class Syncer implements SingletonService {
       const hasPushOrMutate =
         this.#config?.push?.url !== undefined ||
         this.#config?.mutate?.url !== undefined;
-      const hasGetQueries = this.#config?.getQueries?.url !== undefined;
+      const hasQueries =
+        this.#config?.query?.url !== undefined ||
+        this.#config?.getQueries?.url !== undefined;
 
       // must either have one of the token options set or have custom mutations & queries enabled
       const hasExactlyOneTokenOption = tokenOptions.length === 1;
-      const hasCustomEndpoints = hasPushOrMutate && hasGetQueries;
+      const hasCustomEndpoints = hasPushOrMutate && hasQueries;
       if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
         throw new Error(
           'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
             JSON.stringify(tokenOptions) +
-            '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without passing token verification options.',
+            '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
         );
       }
 

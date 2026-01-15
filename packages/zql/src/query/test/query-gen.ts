@@ -4,9 +4,9 @@ import type {Schema} from '../../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../../zero-types/src/server-schema.ts';
 import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 import {NotImplementedError} from '../../error.ts';
-import {queryWithContext} from '../query-internals.ts';
+import {asQueryInternals} from '../query-internals.ts';
 import type {AnyQuery} from '../query.ts';
-import {staticQuery} from '../static-query.ts';
+import {newStaticQuery} from '../static-query.ts';
 import {randomValueForType, selectRandom, shuffle, type Rng} from './util.ts';
 export type Dataset = {
   [table: string]: Row[];
@@ -24,7 +24,7 @@ export function generateQuery(
     data,
     rng,
     faker,
-    staticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
+    newStaticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
     serverSchema,
     [],
   );
@@ -43,7 +43,7 @@ export function generateShrinkableQuery(
     data,
     rng,
     faker,
-    staticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
+    newStaticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
     serverSchema,
     generations,
   );
@@ -100,7 +100,7 @@ function augmentQuery(
   }
 
   function addOrderBy(query: AnyQuery) {
-    const tableName = queryWithContext(query, undefined).ast.table;
+    const tableName = asQueryInternals(query).ast.table;
     const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
     // we wouldn't really order by _every_ column, right?
@@ -139,7 +139,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = queryWithContext(query, undefined).ast.table;
+    const tableName = asQueryInternals(query).ast.table;
     const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
     for (let i = 0; i < numConditions; i++) {
@@ -187,7 +187,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = queryWithContext(query, undefined).ast.table;
+    const tableName = asQueryInternals(query).ast.table;
     const relationships = Object.keys(schema.relationships[tableName] ?? {});
     const relationshipsToAdd = Math.floor(rng() * 4);
     if (relationshipsToAdd === 0) {
@@ -228,7 +228,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = queryWithContext(query, undefined).ast.table;
+    const tableName = asQueryInternals(query).ast.table;
     const relationships = Object.keys(schema.relationships[tableName] ?? {});
     const existsToAdd = Math.floor(rng() * 4);
     if (existsToAdd === 0) {

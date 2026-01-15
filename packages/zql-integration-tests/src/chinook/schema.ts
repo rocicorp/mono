@@ -5,7 +5,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
 // auto-generated from `Chinook_PostgreSql.sql` by Claude
 // Table definitions

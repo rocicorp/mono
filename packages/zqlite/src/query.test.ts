@@ -5,13 +5,14 @@ import {must} from '../../shared/src/must.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {schema} from '../../zql/src/query/test/test-schemas.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 import {Database} from './db.ts';
 import {
   mapResultToClientNames,
   newQueryDelegate,
 } from './test/source-factory.ts';
 
-let queryDelegate: QueryDelegate<unknown>;
+let queryDelegate: QueryDelegate;
 
 const lc = createSilentLogContext();
 
@@ -23,67 +24,79 @@ beforeEach(() => {
   const issueSource = must(queryDelegate.getSource('issues'));
   const labelSource = must(queryDelegate.getSource('label'));
 
-  userSource.push({
-    type: 'add',
-    row: {
-      id: '0001',
-      name: 'Alice',
-      metadata: JSON.stringify({
-        registrar: 'github',
-        login: 'alicegh',
-      }),
-    },
-  });
-  userSource.push({
-    type: 'add',
-    row: {
-      id: '0002',
-      name: 'Bob',
-      metadata: JSON.stringify({
-        registar: 'google',
-        login: 'bob@gmail.com',
-        altContacts: ['bobwave', 'bobyt', 'bobplus'],
-      }),
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '0001',
-      title: 'issue 1',
-      description: 'description 1',
-      closed: false,
-      owner_id: '0001',
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '0002',
-      title: 'issue 2',
-      description: 'description 2',
-      closed: false,
-      owner_id: '0002',
-    },
-  });
-  issueSource.push({
-    type: 'add',
-    row: {
-      id: '0003',
-      title: 'issue 3',
-      description: 'description 3',
-      closed: false,
-      owner_id: null,
-    },
-  });
+  consume(
+    userSource.push({
+      type: 'add',
+      row: {
+        id: '0001',
+        name: 'Alice',
+        metadata: JSON.stringify({
+          registrar: 'github',
+          login: 'alicegh',
+        }),
+      },
+    }),
+  );
+  consume(
+    userSource.push({
+      type: 'add',
+      row: {
+        id: '0002',
+        name: 'Bob',
+        metadata: JSON.stringify({
+          registar: 'google',
+          login: 'bob@gmail.com',
+          altContacts: ['bobwave', 'bobyt', 'bobplus'],
+        }),
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '0001',
+        title: 'issue 1',
+        description: 'description 1',
+        closed: false,
+        owner_id: '0001',
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '0002',
+        title: 'issue 2',
+        description: 'description 2',
+        closed: false,
+        owner_id: '0002',
+      },
+    }),
+  );
+  consume(
+    issueSource.push({
+      type: 'add',
+      row: {
+        id: '0003',
+        title: 'issue 3',
+        description: 'description 3',
+        closed: false,
+        owner_id: null,
+      },
+    }),
+  );
 
-  labelSource.push({
-    type: 'add',
-    row: {
-      id: '0001',
-      name: 'bug',
-    },
-  });
+  consume(
+    labelSource.push({
+      type: 'add',
+      row: {
+        id: '0001',
+        name: 'bug',
+      },
+    }),
+  );
 });
 
 test('row type', () => {
@@ -231,13 +244,15 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
   expect(view.data).toMatchInlineSnapshot(`[]`);
 
   const labelSource = must(queryDelegate.getSource('issueLabel'));
-  labelSource.push({
-    type: 'add',
-    row: {
-      issueId: '0001',
-      labelId: '0001',
-    },
-  });
+  consume(
+    labelSource.push({
+      type: 'add',
+      row: {
+        issueId: '0001',
+        labelId: '0001',
+      },
+    }),
+  );
 
   expect(mapResultToClientNames(view.data, schema, 'issue'))
     .toMatchInlineSnapshot(`
@@ -259,13 +274,15 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
       ]
     `);
 
-  labelSource.push({
-    type: 'remove',
-    row: {
-      issueId: '0001',
-      labelId: '0001',
-    },
-  });
+  consume(
+    labelSource.push({
+      type: 'remove',
+      row: {
+        issueId: '0001',
+        labelId: '0001',
+      },
+    }),
+  );
 
   expect(view.data).toMatchInlineSnapshot(`[]`);
 });
@@ -274,35 +291,41 @@ test('schema applied `one`', async () => {
   // test only one item is returned when `one` is applied to a relationship in the schema
   const commentSource = must(queryDelegate.getSource('comments'));
   const revisionSource = must(queryDelegate.getSource('revision'));
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '0001',
-      authorId: '0001',
-      issue_id: '0001',
-      text: 'comment 1',
-      createdAt: 1,
-    },
-  });
-  commentSource.push({
-    type: 'add',
-    row: {
-      id: '0002',
-      authorId: '0002',
-      issue_id: '0001',
-      text: 'comment 2',
-      createdAt: 2,
-    },
-  });
-  revisionSource.push({
-    type: 'add',
-    row: {
-      id: '0001',
-      authorId: '0001',
-      commentId: '0001',
-      text: 'revision 1',
-    },
-  });
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '0001',
+        authorId: '0001',
+        issue_id: '0001',
+        text: 'comment 1',
+        createdAt: 1,
+      },
+    }),
+  );
+  consume(
+    commentSource.push({
+      type: 'add',
+      row: {
+        id: '0002',
+        authorId: '0002',
+        issue_id: '0001',
+        text: 'comment 2',
+        createdAt: 2,
+      },
+    }),
+  );
+  consume(
+    revisionSource.push({
+      type: 'add',
+      row: {
+        id: '0001',
+        authorId: '0001',
+        commentId: '0001',
+        text: 'revision 1',
+      },
+    }),
+  );
   const query = newQuery(schema, 'issue')
     .related('owner')
     .related('comments', q => q.related('author').related('revisions'))

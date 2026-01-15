@@ -1,25 +1,27 @@
 import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
+import {emptyArray} from '../../shared/src/sentinels.ts';
 import {
   applyChange,
+  idSymbol,
+  skipYields,
+  type ViewChange,
+} from './bindings.ts';
+import {
   type AnyViewFactory,
   type Change,
   type Entry,
+  type ErroredQuery,
   type Format,
   type Input,
   type Node,
   type Output,
   type Query,
+  type QueryErrorDetails,
+  type QueryResultDetails,
   type Schema,
   type Stream,
   type TTL,
-  type ViewChange,
-} from '../../zero-client/src/mod.js';
-import type {
-  QueryErrorDetails,
-  QueryResultDetails,
-} from '../../zero-client/src/types/query-result.ts';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
+} from './zero.ts';
 
 export type State = [Entry, QueryResultDetails];
 
@@ -67,7 +69,7 @@ export class SolidView implements Output {
 
     const initialRoot = this.#createEmptyRoot();
     this.#applyChangesToRoot(
-      input.fetch({}),
+      skipYields(input.fetch({})),
       node => ({type: 'add', node}),
       initialRoot,
     );
@@ -146,7 +148,7 @@ export class SolidView implements Output {
     }
   };
 
-  push(change: Change): void {
+  push(change: Change) {
     // Delay updating the solid store state until the transaction commit
     // (because each update of the solid store is quite expensive).  If
     // this.#builderRoot is defined apply the changes to it (we are building
@@ -158,6 +160,7 @@ export class SolidView implements Output {
     } else {
       this.#pendingChanges.push(materializeRelationships(change));
     }
+    return emptyArray;
   }
 
   #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => ViewChange): void {
@@ -231,7 +234,7 @@ function materializeNodeRelationships(node: Node): Node {
   const relationships: Record<string, () => Stream<Node>> = {};
   for (const relationship in node.relationships) {
     const materialized: Node[] = [];
-    for (const n of node.relationships[relationship]()) {
+    for (const n of skipYields(node.relationships[relationship]())) {
       materialized.push(materializeNodeRelationships(n));
     }
     relationships[relationship] = () => materialized;
@@ -252,12 +255,11 @@ export function createSolidViewFactory(
   retry?: () => void,
 ) {
   function solidViewFactory<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
-    TContext,
   >(
-    _query: Query<TSchema, TTable, TReturn, TContext>,
+    _query: Query<TTable, TSchema, TReturn>,
     input: Input,
     format: Format,
     onDestroy: () => void,

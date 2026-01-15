@@ -1,6 +1,7 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
-import postgres, {type PendingQuery, type Row} from 'postgres';
+import type postgres from 'postgres';
+import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import {disableStatementTimeout, type PostgresDB} from '../../../types/pg.ts';
@@ -48,6 +49,7 @@ function createChangeLogTable(shard: ShardID) {
 export type ReplicationState = {
   lastWatermark: string;
   owner: string | null;
+  ownerAddress: string | null;
 };
 
 export function createReplicationStateTable(shard: ShardID) {
@@ -126,8 +128,10 @@ export async function ensureReplicationConfig(
 ) {
   const {publications, replicaVersion, watermark} = subscriptionState;
   const replicaConfig = {publications, replicaVersion};
-  const replicationState: Partial<ReplicationState> = {
+  const replicationState: ReplicationState = {
     lastWatermark: replicaVersion,
+    owner: null,
+    ownerAddress: null,
   };
   const schema = cdcSchema(shard);
 
@@ -162,10 +166,16 @@ export async function ensureReplicationConfig(
           `Data in cdc tables @${replicaVersion} is incompatible ` +
             `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
         );
+        // Note: The replicationState table is explicitly not TRUNCATE'd.
+        //       Any existing row must be overwritten by an UPDATE or
+        //       INSERT ... ON CONFLICT clause in order to correctly abort
+        //       any pending transaction by a concurrently running
+        //       change-streamer. Deleting the existing row and creating
+        //       a new one, on the other hand, may not properly trigger the
+        //       SERIALIZATION failure necessary to abort the pending tx.
         stmts.push(
           sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
           sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
-          sql`TRUNCATE TABLE ${sql(schema)}."replicationState"`,
         );
       }
     }
@@ -173,8 +183,8 @@ export async function ensureReplicationConfig(
     if (results.length === 0 || stmts.length > 0) {
       stmts.push(
         sql`INSERT INTO ${sql(schema)}."replicationConfig" ${sql(replicaConfig)}`,
-        sql`INSERT INTO ${sql(schema)}."replicationState" 
-           ${sql(replicationState)}`,
+        sql`INSERT INTO ${sql(schema)}."replicationState"  ${sql(replicationState)} 
+              ON CONFLICT (lock) DO UPDATE SET ${sql(replicationState)}`,
       );
       return Promise.all(stmts);
     }

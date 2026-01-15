@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -183,33 +183,38 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '0b',
           },
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '06',
+            pos: 0n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":123}',
           },
           {
             stateVersion: '06',
+            pos: 1n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":456}',
           },
           {
             stateVersion: '0b',
+            pos: 0n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789}',
           },
           {
             stateVersion: '0b',
+            pos: 1n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":987}',
           },
           {
             stateVersion: '0b',
+            pos: 2n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":234}',
@@ -265,9 +270,10 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '0a',
           },
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0a',
+            pos: 1n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":123}',
@@ -352,27 +358,31 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '06',
           },
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '06',
+            pos: 2n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789,"orgID":2}',
           },
           {
             stateVersion: '0a',
+            pos: 0n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":456,"orgID":1}',
           },
           {
             stateVersion: '0a',
+            pos: 1n,
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
             stateVersion: '0a',
+            pos: 2n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":123,"orgID":2}',
@@ -437,27 +447,31 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '07',
           },
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '07',
+            pos: 2n,
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":789,"orgID":2}',
           },
           {
             stateVersion: '0c',
+            pos: 0n,
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
             stateVersion: '0c',
+            pos: 1n,
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":0,"issueID":456,"orgID":1}',
           },
           {
             stateVersion: '0c',
+            pos: 2n,
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":987,"orgID":2}',
@@ -500,39 +514,45 @@ describe('replicator/incremental-sync', () => {
           {id: 6n, ['_0_version']: '0e'},
         ],
         baz: [],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 3n,
             table: 'bar',
             op: 's',
             rowKey: '{"id":4}',
           },
           {
             stateVersion: '0e',
+            pos: 4n,
             table: 'bar',
             op: 's',
             rowKey: '{"id":5}',
           },
           {
             stateVersion: '0e',
+            pos: 5n,
             table: 'bar',
             op: 's',
             rowKey: '{"id":6}',
           },
           {
             stateVersion: '0e',
-            table: 'baz',
-            op: 't',
-            rowKey: '',
-          },
-          {
-            stateVersion: '0i',
+            pos: -1n,
             table: 'foo',
             op: 't',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0i',
+            pos: -1n,
+            table: 'foo',
+            op: 't',
+            rowKey: '0i',
+          },
+          {
+            stateVersion: '0i',
+            pos: 0n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":101}',
@@ -583,29 +603,33 @@ describe('replicator/incremental-sync', () => {
           {id: 123n, bool: 0n, desc: 'foobar', ['_0_version']: '0b'},
           {id: 987n, bool: 1n, desc: 'barfoo', ['_0_version']: '0b'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             op: 's',
             rowKey: '{"id":123}',
             stateVersion: '0b',
+            pos: 1n,
             table: 'full',
           },
           {
             op: 'd',
             rowKey: '{"id":456}',
             stateVersion: '0b',
-            table: 'full',
-          },
-          {
-            op: 'd',
-            rowKey: '{"id":789}',
-            stateVersion: '0b',
+            pos: 2n,
             table: 'full',
           },
           {
             op: 's',
             rowKey: '{"id":987}',
             stateVersion: '0b',
+            pos: 3n,
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":789}',
+            stateVersion: '0b',
+            pos: 4n,
             table: 'full',
           },
         ],
@@ -672,65 +696,75 @@ describe('replicator/incremental-sync', () => {
           {id: 321n, bool: 0n, desc: 'voo', ['_0_version']: '06'},
           {id: 456n, bool: 0n, desc: null, ['_0_version']: '06'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             op: 's',
             rowKey: '{"id":1}',
             stateVersion: '06',
+            pos: 0n,
             table: 'foo',
           },
           {
             op: 's',
             rowKey: '{"id":789}',
             stateVersion: '06',
+            pos: 1n,
             table: 'foo',
           },
           {
             op: 'd',
             rowKey: '{"id":999}',
             stateVersion: '06',
+            pos: 2n,
             table: 'foo',
           },
           {
             op: 's',
             rowKey: '{"id":234}',
             stateVersion: '06',
+            pos: 3n,
             table: 'foo',
           },
           {
             op: 'd',
             rowKey: '{"id":1000}',
             stateVersion: '06',
+            pos: 4n,
             table: 'foo',
           },
           {
             op: 's',
             rowKey: '{"id":2}',
             stateVersion: '06',
+            pos: 5n,
             table: 'full',
           },
           {
             op: 'd',
             rowKey: '{"id":333}',
             stateVersion: '06',
+            pos: 6n,
             table: 'full',
           },
           {
             op: 's',
             rowKey: '{"id":321}',
             stateVersion: '06',
+            pos: 7n,
             table: 'full',
           },
           {
             op: 's',
             rowKey: '{"id":456}',
             stateVersion: '06',
+            pos: 9n,
             table: 'full',
           },
           {
             op: 'd',
             rowKey: '{"id":2000}',
             stateVersion: '06',
+            pos: 10n,
             table: 'full',
           },
         ],
@@ -766,21 +800,24 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         transaction: [],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '07',
+            pos: -1n,
             table: 'transaction',
             op: 't',
-            rowKey: '',
+            rowKey: '07',
           },
           {
             stateVersion: '07',
+            pos: 1n,
             table: 'transaction',
             op: 'd',
             rowKey: '{"column":1}',
           },
           {
             stateVersion: '07',
+            pos: 3n,
             table: 'transaction',
             op: 'd',
             rowKey: '{"column":2}',
@@ -843,24 +880,27 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '08',
           },
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '08',
+            pos: 1n,
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
             stateVersion: '08',
-            table: 'issues',
-            op: 's',
-            rowKey: '{"bool":0,"issueID":456,"orgID":1}',
-          },
-          {
-            stateVersion: '08',
+            pos: 4n,
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":0,"issueID":789,"orgID":2}',
+          },
+          {
+            stateVersion: '08',
+            pos: 5n,
+            table: 'issues',
+            op: 's',
+            rowKey: '{"bool":0,"issueID":456,"orgID":1}',
           },
         ],
       },
@@ -909,21 +949,24 @@ describe('replicator/incremental-sync', () => {
           {id: 'bar', count: 2n, bool: 1n, serial: 1n, ['_0_version']: '0e'},
           {id: 'baz', count: 3n, bool: 0n, serial: 2n, ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 0n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":"bar"}',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":"baz"}',
@@ -1000,21 +1043,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, ['_0_version']: '0e'},
           {id: 4n, ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
-            table: 'bar',
-            op: 'r',
-            rowKey: '',
-          },
-          {
-            stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 0n,
             table: 'bar',
             op: 's',
             rowKey: '{"id":4}',
@@ -1121,15 +1160,17 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '0e',
           },
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 0n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1207,15 +1248,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, ['_0_version']: '0e'},
           {id: 4n, ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1277,15 +1320,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
           {id: 4n, newName: 'yay', ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1362,15 +1407,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
           {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1450,15 +1497,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
           {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1536,15 +1585,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
           {id: 4n, newName: 'yay', ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1627,15 +1678,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, num: 1n, ['_0_version']: '0e'},
           {id: 4n, num: 23n, ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1714,15 +1767,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, num: 1n, ['_0_version']: '0e'},
           {id: 4n, num: 23n, ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1811,15 +1866,17 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, number: 1n, ['_0_version']: '0e'},
           {id: 4n, number: 23n, ['_0_version']: '0e'},
         ],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
           {
             stateVersion: '0e',
+            pos: 1n,
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1881,12 +1938,13 @@ describe('replicator/incremental-sync', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
         ],
       },
@@ -1915,12 +1973,13 @@ describe('replicator/incremental-sync', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: -1n,
             table: 'foo',
             op: 'r',
-            rowKey: '',
+            rowKey: '0e',
           },
         ],
       },
@@ -1946,7 +2005,7 @@ describe('replicator/incremental-sync', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        ['_zero.changeLog']: [],
+        ['_zero.changeLog2']: [],
       },
       indexSpecs: [
         {
@@ -2017,12 +2076,13 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         transaction: [],
-        ['_zero.changeLog']: [
+        ['_zero.changeLog2']: [
           {
             stateVersion: '07',
+            pos: -1n,
             table: 'transaction',
             op: 'r',
-            rowKey: '',
+            rowKey: '07',
           },
         ],
       },
@@ -2077,7 +2137,11 @@ describe('replicator/incremental-sync', () => {
         if (includeChangeLog) {
           expectTables(replica, c.data, 'bigint');
         } else {
-          expectTables(replica, {...c.data, ['_zero.changeLog']: []}, 'bigint');
+          expectTables(
+            replica,
+            {...c.data, ['_zero.changeLog2']: []},
+            'bigint',
+          );
         }
 
         if (c.tableSpecs) {

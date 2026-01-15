@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 // @circular-dep-ignore
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 // @circular-dep-ignore
@@ -17,19 +17,24 @@ import {
   buildPipeline,
   type BuilderDelegate,
 } from '../../../zql/src/builder/builder.ts';
+import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
+import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
-import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {hydrate} from './view-syncer/pipeline-driver.ts';
+import type {TokenData} from './view-syncer/view-syncer.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 
 export type RunAstOptions = {
   applyPermissions?: boolean | undefined;
-  authData?: string | undefined;
+  authData?: TokenData | undefined;
   clientToServerMapper?: NameMapper | undefined;
+  costModel?: ConnectionCostModel | undefined;
   db: Database;
   host: BuilderDelegate;
   permissions?: PermissionsConfig | undefined;
+  planDebugger?: PlanDebugger | undefined;
   syncedRows?: boolean | undefined;
   tableSpecs: Map<string, LiteAndZqlSpec>;
   vendedRows?: boolean | undefined;
@@ -37,11 +42,13 @@ export type RunAstOptions = {
 
 export async function runAst(
   lc: LogContext,
+  clientSchema: ClientSchema,
   ast: AST,
   isTransformed: boolean,
   options: RunAstOptions,
+  yieldProcess: () => Promise<void>,
 ): Promise<AnalyzeQueryResult> {
-  const {clientToServerMapper, permissions, host, db} = options;
+  const {clientToServerMapper, permissions, host} = options;
   const result: AnalyzeQueryResult = {
     warnings: [],
     syncedRows: undefined,
@@ -60,8 +67,8 @@ export async function runAst(
     ast = mapAST(ast, must(clientToServerMapper));
   }
   if (options.applyPermissions) {
-    const authData = options.authData ? JSON.parse(options.authData) : {};
-    if (!options.authData) {
+    const authData = options.authData?.decoded;
+    if (!authData) {
       result.warnings.push(
         'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
       );
@@ -77,16 +84,26 @@ export async function runAst(
     result.afterPermissions = await formatOutput(ast.table + astToZQL(ast));
   }
 
-  const tableSpecs = computeZqlSpecs(lc, db);
-  const pipeline = buildPipeline(ast, host, 'query-id');
+  const pipeline = buildPipeline(
+    ast,
+    host,
+    'query-id',
+    options.costModel,
+    lc,
+    options.planDebugger,
+  );
 
   const start = performance.now();
 
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
   const seenByTable: Set<string> = new Set();
-  for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
-    assert(rowChange.type === 'add');
+  for (const rowChange of hydrate(pipeline, hashOfAST(ast), clientSchema)) {
+    if (rowChange === 'yield') {
+      await yieldProcess();
+      continue;
+    }
+    assert(rowChange.type === 'add', 'Hydration only handles add row changes');
 
     // yield to other tasks to avoid blocking for too long
     if (syncedRowCount % 10 === 0) {

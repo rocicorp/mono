@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
@@ -38,14 +38,6 @@ describe('view-syncer/snapshotter', () => {
           _0_version    TEXT NOT NULL
         );
         INSERT INTO "my_app.permissions" ("lock", "_0_version") VALUES (1, '01');
-        CREATE TABLE "my_app.schemaVersions" (
-          "lock"                INT PRIMARY KEY,
-          "minSupportedVersion" INTEGER,
-          "maxSupportedVersion" INTEGER,
-          _0_version            TEXT NOT NULL
-        );
-        INSERT INTO "my_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-          VALUES (1, 1, 1, '01');  
         CREATE TABLE issues(id INT PRIMARY KEY, owner INTEGER, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
         CREATE TABLE users(id INT PRIMARY KEY, handle TEXT UNIQUE, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
         CREATE TABLE comments(id INT PRIMARY KEY, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
@@ -73,13 +65,9 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('initial snapshot', () => {
-    const {db, version, schemaVersions} = s.current();
+    const {db, version} = s.current();
 
     expect(version).toBe('01');
-    expect(schemaVersions).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 1,
-    });
     expectTables(db.db, {
       issues: [
         {id: 1, owner: 10, desc: 'foo', ignore: 'zzz', ['_0_version']: '01'},
@@ -111,66 +99,6 @@ describe('view-syncer/snapshotter', () => {
     users: 'id',
     comments: 'id',
     ['my_app.permissions']: 'lock',
-  });
-
-  const appMessages = new ReplicationMessages(
-    {
-      schemaVersions: 'lock',
-    },
-    'my_app',
-  );
-
-  test('schemaVersions change', () => {
-    expect(s.current().version).toBe('01');
-    expect(s.current().schemaVersions).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 1,
-    });
-
-    replicator.processTransaction(
-      '07',
-      appMessages.update('schemaVersions', {
-        lock: true,
-        minSupportedVersion: 1,
-        maxSupportedVersion: 2,
-      }),
-    );
-
-    const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('01');
-    expect(diff.curr.version).toBe('07');
-    expect(diff.changes).toBe(1);
-
-    expect(s.current().version).toBe('07');
-    expect(s.current().schemaVersions).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 2,
-    });
-
-    expect([...diff]).toMatchInlineSnapshot(`
-      [
-        {
-          "nextValue": {
-            "_0_version": "07",
-            "lock": 1,
-            "maxSupportedVersion": 2,
-            "minSupportedVersion": 1,
-          },
-          "prevValues": [
-            {
-              "_0_version": "01",
-              "lock": 1,
-              "maxSupportedVersion": 1,
-              "minSupportedVersion": 1,
-            },
-          ],
-          "rowKey": {
-            "lock": 1,
-          },
-          "table": "my_app.schemaVersions",
-        },
-      ]
-    `);
   });
 
   test('multiple prev values', () => {
@@ -241,6 +169,19 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": {
             "_0_version": "09",
+            "desc": null,
+            "id": 4,
+            "owner": 20,
+          },
+          "prevValues": [],
+          "rowKey": {
+            "id": 4,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": {
+            "_0_version": "09",
             "desc": "food",
             "id": 1,
             "owner": 10,
@@ -274,6 +215,19 @@ describe('view-syncer/snapshotter', () => {
           "table": "issues",
         },
         {
+          "nextValue": {
+            "_0_version": "09",
+            "desc": "bard",
+            "id": 5,
+            "owner": 10,
+          },
+          "prevValues": [],
+          "rowKey": {
+            "id": 5,
+          },
+          "table": "issues",
+        },
+        {
           "nextValue": null,
           "prevValues": [
             {
@@ -288,6 +242,12 @@ describe('view-syncer/snapshotter', () => {
           },
           "table": "issues",
         },
+      ]
+    `);
+
+    // Diff should be reusable as long as advance() hasn't been called.
+    expect([...diff1]).toMatchInlineSnapshot(`
+      [
         {
           "nextValue": {
             "_0_version": "09",
@@ -304,6 +264,41 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": {
             "_0_version": "09",
+            "desc": "food",
+            "id": 1,
+            "owner": 10,
+          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "foo",
+              "id": 1,
+              "owner": 10,
+            },
+          ],
+          "rowKey": {
+            "id": 1,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": null,
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "bar",
+              "id": 2,
+              "owner": 10,
+            },
+          ],
+          "rowKey": {
+            "id": 2,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": {
+            "_0_version": "09",
             "desc": "bard",
             "id": 5,
             "owner": 10,
@@ -314,90 +309,23 @@ describe('view-syncer/snapshotter', () => {
           },
           "table": "issues",
         },
+        {
+          "nextValue": null,
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "baz",
+              "id": 3,
+              "owner": 20,
+            },
+          ],
+          "rowKey": {
+            "id": 3,
+          },
+          "table": "issues",
+        },
       ]
     `);
-
-    // Diff should be reusable as long as advance() hasn't been called.
-    expect([...diff1]).toMatchInlineSnapshot(`
-            [
-              {
-                "nextValue": {
-                  "_0_version": "09",
-                  "desc": "food",
-                  "id": 1,
-                  "owner": 10,
-                },
-                "prevValues": [
-                  {
-                    "_0_version": "01",
-                    "desc": "foo",
-                    "id": 1,
-                    "owner": 10,
-                  },
-                ],
-                "rowKey": {
-                  "id": 1,
-                },
-                "table": "issues",
-              },
-              {
-                "nextValue": null,
-                "prevValues": [
-                  {
-                    "_0_version": "01",
-                    "desc": "bar",
-                    "id": 2,
-                    "owner": 10,
-                  },
-                ],
-                "rowKey": {
-                  "id": 2,
-                },
-                "table": "issues",
-              },
-              {
-                "nextValue": null,
-                "prevValues": [
-                  {
-                    "_0_version": "01",
-                    "desc": "baz",
-                    "id": 3,
-                    "owner": 20,
-                  },
-                ],
-                "rowKey": {
-                  "id": 3,
-                },
-                "table": "issues",
-              },
-              {
-                "nextValue": {
-                  "_0_version": "09",
-                  "desc": null,
-                  "id": 4,
-                  "owner": 20,
-                },
-                "prevValues": [],
-                "rowKey": {
-                  "id": 4,
-                },
-                "table": "issues",
-              },
-              {
-                "nextValue": {
-                  "_0_version": "09",
-                  "desc": "bard",
-                  "id": 5,
-                  "owner": 10,
-                },
-                "prevValues": [],
-                "rowKey": {
-                  "id": 5,
-                },
-                "table": "issues",
-              },
-            ]
-          `);
 
     // Replicate a second transaction
     replicator.processTransaction(
@@ -413,19 +341,6 @@ describe('view-syncer/snapshotter', () => {
 
     expect([...diff2]).toMatchInlineSnapshot(`
       [
-        {
-          "nextValue": {
-            "_0_version": "0d",
-            "desc": "bard",
-            "id": 2,
-            "owner": 10,
-          },
-          "prevValues": [],
-          "rowKey": {
-            "id": 2,
-          },
-          "table": "issues",
-        },
         {
           "nextValue": null,
           "prevValues": [
@@ -453,6 +368,19 @@ describe('view-syncer/snapshotter', () => {
           ],
           "rowKey": {
             "id": 5,
+          },
+          "table": "issues",
+        },
+        {
+          "nextValue": {
+            "_0_version": "0d",
+            "desc": "bard",
+            "id": 2,
+            "owner": 10,
+          },
+          "prevValues": [],
+          "rowKey": {
+            "id": 2,
           },
           "table": "issues",
         },

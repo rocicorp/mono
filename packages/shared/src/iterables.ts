@@ -1,5 +1,3 @@
-import {assert} from './asserts.ts';
-
 export function* joinIterables<T>(...iters: Iterable<T>[]) {
   for (const iter of iters) {
     yield* iter;
@@ -44,70 +42,54 @@ export function* once<T>(stream: Iterable<T>): Iterable<T> {
   it.return?.();
 }
 
-// TODO(arv): Use ES2024 Iterable.from when available
+// ES2024 Iterator helpers are available in Node 22+ and part of ES2024.
 // https://github.com/tc39/proposal-iterator-helpers
 
-class IterWrapper<T> implements Iterable<T> {
-  iter: Iterable<T>;
-  constructor(iter: Iterable<T>) {
-    this.iter = iter;
+type IteratorWithHelpers<T> = Iterator<T> & {
+  map<U>(f: (t: T, index: number) => U): IteratorWithHelpers<U>;
+  filter(p: (t: T, index: number) => boolean): IteratorWithHelpers<T>;
+  [Symbol.iterator](): IteratorWithHelpers<T>;
+};
+
+type IteratorConstructor = {
+  from<T>(this: void, iter: Iterable<T>): IteratorWithHelpers<T>;
+};
+
+// Check if native Iterator.from is available and bind it once at startup
+// We use globalThis to access the runtime value safely
+const iteratorCtor = (globalThis as {Iterator?: IteratorConstructor}).Iterator;
+const nativeIteratorFrom = iteratorCtor?.from as
+  | (<T>(iter: Iterable<T>) => IteratorWithHelpers<T>)
+  | undefined;
+
+const iteratorFrom: <T>(e: Iterable<T>) => IteratorWithHelpers<T> =
+  nativeIteratorFrom ?? (e => new IterWrapper(e));
+
+// Fallback implementation for environments without ES2024 Iterator helpers
+class IterWrapper<T> implements IteratorWithHelpers<T>, IterableIterator<T> {
+  readonly #iterator: Iterator<T>;
+
+  constructor(iterable: Iterable<T>) {
+    this.#iterator = iterable[Symbol.iterator]();
   }
 
-  [Symbol.iterator]() {
-    return this.iter[Symbol.iterator]();
+  next(): IteratorResult<T> {
+    return this.#iterator.next();
+  }
+
+  [Symbol.iterator](): IteratorWithHelpers<T> {
+    return this;
   }
 
   map<U>(f: (t: T, index: number) => U): IterWrapper<U> {
-    return new IterWrapper(mapIter(this.iter, f));
+    return new IterWrapper(mapIter(this, f));
   }
 
   filter(p: (t: T, index: number) => boolean): IterWrapper<T> {
-    return new IterWrapper(filterIter(this.iter, p));
+    return new IterWrapper(filterIter(this, p));
   }
 }
 
-export function wrapIterable<T>(iter: Iterable<T>): IterWrapper<T> {
-  return new IterWrapper(iter);
-}
-
-export function* mergeIterables<T>(
-  iterables: Iterable<T>[],
-  comparator: (l: T, r: T) => number,
-  distinct = false,
-): IterableIterator<T> {
-  const iterators = iterables.map(i => i[Symbol.iterator]());
-  try {
-    const current = iterators.map(i => i.next());
-    let lastYielded: T | undefined;
-    while (current.some(c => !c.done)) {
-      const min = current.reduce(
-        (acc: [T, number] | undefined, c, i): [T, number] | undefined => {
-          if (c.done) {
-            return acc;
-          }
-          if (acc === undefined || comparator(c.value, acc[0]) < 0) {
-            return [c.value, i];
-          }
-          return acc;
-        },
-        undefined,
-      );
-
-      assert(min !== undefined, 'min is undefined');
-      current[min[1]] = iterators[min[1]].next();
-      if (
-        lastYielded !== undefined &&
-        distinct &&
-        comparator(lastYielded, min[0]) === 0
-      ) {
-        continue;
-      }
-      lastYielded = min[0];
-      yield min[0];
-    }
-  } finally {
-    for (const it of iterators) {
-      it.return?.();
-    }
-  }
+export function wrapIterable<T>(iter: Iterable<T>): IteratorWithHelpers<T> {
+  return iteratorFrom(iter);
 }

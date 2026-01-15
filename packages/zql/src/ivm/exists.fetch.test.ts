@@ -1,4 +1,4 @@
-import {expect, suite, test} from 'vitest';
+import {expect, suite, test, vi} from 'vitest';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
@@ -13,7 +13,8 @@ import {Snitch, type SnitchMessage} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {buildFilterPipeline} from './filter-operators.ts';
+import {buildFilterPipeline, type FilterInput} from './filter-operators.ts';
+import {consume} from './stream.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 
 const base = {
@@ -53,7 +54,12 @@ const threeParentsTwoWithChildrenTest: FetchTest = {
     [{id: 'i1'}, {id: 'i2'}, {id: 'i3'}],
     [
       {id: 'c1', issueID: 'i1'},
-      {id: 'c2', issueID: 'i3'},
+      {id: 'c2', issueID: 'i1'},
+      {id: 'c3', issueID: 'i3'},
+      {id: 'c4', issueID: 'i3'},
+      {id: 'c5', issueID: 'i3'},
+      {id: 'c6', issueID: 'i4'},
+      {id: 'c7', issueID: 'i4'},
     ],
   ],
   existsType: 'EXISTS',
@@ -67,30 +73,25 @@ const threeParentsNoChildrenTest: FetchTest = {
 
 suite('EXISTS', () => {
   test('one parent with child', () => {
-    const {messages, storage, hydrate} = fetchTest(oneParentWithChildTest);
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
+      oneParentWithChildTest,
+    );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
           ],
           [
             "1",
@@ -129,11 +130,8 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -157,33 +155,26 @@ suite('EXISTS', () => {
   });
 
   test('one parent with child - reversed', () => {
-    const {messages, storage, hydrate} = fetchTest(
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
       oneParentWithChildTest,
       true,
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "1",
             "fetch",
             {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
           ],
           [
             "0",
@@ -222,11 +213,8 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -250,30 +238,24 @@ suite('EXISTS', () => {
   });
 
   test('one parent no child', () => {
-    const {messages, storage, hydrate} = fetchTest(oneParentNoChildTest);
+    const {messages, storage, cacheHitCounts, hydrate} =
+      fetchTest(oneParentNoChildTest);
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -294,25 +276,18 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
   test('one parent no child - reversed', () => {
-    const {messages, storage, hydrate} = fetchTest(oneParentNoChildTest, true);
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
+      oneParentNoChildTest,
+      true,
+    );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [
           [
             "1",
@@ -330,33 +305,25 @@ suite('EXISTS', () => {
       }
     `);
     expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
   test('three parents, two with children', () => {
-    const {messages, storage, hydrate} = fetchTest(
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
       threeParentsTwoWithChildrenTest,
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
+        "fetch": [
           [
             "0",
-            "cleanup",
+            "fetch",
             {},
           ],
           [
             "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -365,19 +332,21 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
               },
             },
-          ],
-        ],
-        "fetch": [
-          [
-            "0",
-            "fetch",
-            {},
           ],
           [
             "1",
@@ -452,13 +421,8 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -468,6 +432,13 @@ suite('EXISTS', () => {
                 "relationships": {},
                 "row": {
                   "id": "c1",
+                  "issueID": "i1",
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "id": "c2",
                   "issueID": "i1",
                 },
               },
@@ -483,7 +454,21 @@ suite('EXISTS', () => {
               {
                 "relationships": {},
                 "row": {
-                  "id": "c2",
+                  "id": "c3",
+                  "issueID": "i3",
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "id": "c4",
+                  "issueID": "i3",
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "id": "c5",
                   "issueID": "i3",
                 },
               },
@@ -498,38 +483,13 @@ suite('EXISTS', () => {
   });
 
   test('three parents, two children - reversed', () => {
-    const {messages, storage, hydrate} = fetchTest(
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
       threeParentsTwoWithChildrenTest,
       true,
     );
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i1",
-              },
-            },
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i3",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "1",
@@ -542,6 +502,60 @@ suite('EXISTS', () => {
             {
               "constraint": {
                 "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i4",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
               },
             },
           ],
@@ -584,7 +598,43 @@ suite('EXISTS', () => {
             "fetch",
             {
               "constraint": {
+                "id": "i4",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
                 "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
               },
             },
           ],
@@ -600,10 +650,12 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 1,
-        "row/["i3"]/["c2"]": 1,
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`
+      Map {
+        "["i1"]" => 1,
+        "["i3"]" => 2,
+        "["i4"]" => 1,
       }
     `);
     expect(hydrate).toMatchInlineSnapshot(`
@@ -621,6 +673,22 @@ suite('EXISTS', () => {
           },
           "row": {
             "id": "c1",
+            "issueID": "i1",
+          },
+        },
+        {
+          "relationships": {
+            "from_comments": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "i1",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "c2",
             "issueID": "i1",
           },
         },
@@ -636,7 +704,39 @@ suite('EXISTS', () => {
             ],
           },
           "row": {
-            "id": "c2",
+            "id": "c3",
+            "issueID": "i3",
+          },
+        },
+        {
+          "relationships": {
+            "from_comments": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "i3",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "c4",
+            "issueID": "i3",
+          },
+        },
+        {
+          "relationships": {
+            "from_comments": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "i3",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "c5",
             "issueID": "i3",
           },
         },
@@ -645,18 +745,20 @@ suite('EXISTS', () => {
   });
 
   test('three parents no children', () => {
-    const {messages, storage, hydrate} = fetchTest(threeParentsNoChildrenTest);
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
+      threeParentsNoChildrenTest,
+    );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
+        "fetch": [
           [
             "0",
-            "cleanup",
+            "fetch",
             {},
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -665,7 +767,7 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -674,19 +776,12 @@ suite('EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
               },
             },
-          ],
-        ],
-        "fetch": [
-          [
-            "0",
-            "fetch",
-            {},
           ],
         ],
         "initialFetch": [
@@ -725,31 +820,19 @@ suite('EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-        "row//["i2"]": 0,
-        "row//["i3"]": 0,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
   test('three parents no children - reversed', () => {
-    const {messages, storage, hydrate} = fetchTest(
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
       threeParentsNoChildrenTest,
       true,
     );
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [
           [
             "1",
@@ -767,39 +850,33 @@ suite('EXISTS', () => {
       }
     `);
     expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 });
 
 suite('NOT EXISTS', () => {
   test('one parent with child', () => {
-    const {messages, storage, hydrate} = fetchTest({
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest({
       ...oneParentWithChildTest,
       existsType: 'NOT EXISTS',
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -820,16 +897,13 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
   test('one parent with child - reversed', () => {
-    const {messages, storage, hydrate} = fetchTest(
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
       {
         ...oneParentWithChildTest,
         existsType: 'NOT EXISTS',
@@ -839,27 +913,20 @@ suite('NOT EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "1",
             "fetch",
             {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -880,42 +947,32 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
   test('one parent no child', () => {
-    const {messages, storage, hydrate} = fetchTest({
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest({
       ...oneParentNoChildTest,
       existsType: 'NOT EXISTS',
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
         "fetch": [
           [
             "0",
             "fetch",
             {},
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
           ],
           [
             "1",
@@ -954,11 +1011,8 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -974,7 +1028,7 @@ suite('NOT EXISTS', () => {
   });
 
   test('one parent, no child - reversed', () => {
-    const {messages, storage, hydrate} = fetchTest(
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
       {
         ...oneParentNoChildTest,
         existsType: 'NOT EXISTS',
@@ -984,13 +1038,6 @@ suite('NOT EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-        ],
         "fetch": [
           [
             "1",
@@ -1008,25 +1055,26 @@ suite('NOT EXISTS', () => {
       }
     `);
     expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 
   test('three parents, two with children', () => {
-    const {messages, storage, hydrate} = fetchTest({
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest({
       ...threeParentsTwoWithChildrenTest,
       existsType: 'NOT EXISTS',
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
+        "fetch": [
           [
             "0",
-            "cleanup",
+            "fetch",
             {},
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1035,28 +1083,21 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i3",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
               },
             },
           ],
-        ],
-        "fetch": [
           [
-            "0",
+            "1",
             "fetch",
-            {},
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
           ],
           [
             "1",
@@ -1113,13 +1154,8 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 1,
-        "row//["i2"]": 0,
-        "row//["i3"]": 1,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -1135,7 +1171,7 @@ suite('NOT EXISTS', () => {
   });
 
   test('three parents, two with children - reversed', () => {
-    const {messages, storage, hydrate} = fetchTest(
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
       {
         ...threeParentsTwoWithChildrenTest,
         existsType: 'NOT EXISTS',
@@ -1144,15 +1180,15 @@ suite('NOT EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
+        "fetch": [
           [
             "1",
-            "cleanup",
+            "fetch",
             {},
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i1",
@@ -1161,19 +1197,39 @@ suite('NOT EXISTS', () => {
           ],
           [
             "0",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "id": "i3",
               },
             },
           ],
-        ],
-        "fetch": [
           [
-            "1",
+            "0",
             "fetch",
-            {},
+            {
+              "constraint": {
+                "id": "i4",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i4",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i4",
+              },
+            },
           ],
         ],
         "initialFetch": [
@@ -1200,34 +1256,84 @@ suite('NOT EXISTS', () => {
               },
             },
           ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i4",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i4",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i4",
+              },
+            },
+          ],
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row/["i1"]/["c1"]": 1,
-        "row/["i3"]/["c2"]": 1,
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`
+      Map {
+        "["i1"]" => 1,
+        "["i3"]" => 2,
+        "["i4"]" => 1,
       }
     `);
-    expect(hydrate).toMatchInlineSnapshot(`[]`);
+    expect(hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "from_comments": [],
+          },
+          "row": {
+            "id": "c6",
+            "issueID": "i4",
+          },
+        },
+        {
+          "relationships": {
+            "from_comments": [],
+          },
+          "row": {
+            "id": "c7",
+            "issueID": "i4",
+          },
+        },
+      ]
+    `);
   });
 
   test('three parents, no children', () => {
-    const {messages, storage, hydrate} = fetchTest({
+    const {messages, storage, cacheHitCounts, hydrate} = fetchTest({
       ...threeParentsNoChildrenTest,
       existsType: 'NOT EXISTS',
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
+        "fetch": [
           [
             "0",
-            "cleanup",
+            "fetch",
             {},
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1236,7 +1342,7 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -1245,19 +1351,12 @@ suite('NOT EXISTS', () => {
           ],
           [
             "1",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i3",
               },
             },
-          ],
-        ],
-        "fetch": [
-          [
-            "0",
-            "fetch",
-            {},
           ],
           [
             "1",
@@ -1350,13 +1449,8 @@ suite('NOT EXISTS', () => {
         ],
       }
     `);
-    expect(storage).toMatchInlineSnapshot(`
-      {
-        "row//["i1"]": 0,
-        "row//["i2"]": 0,
-        "row//["i3"]": 0,
-      }
-    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
     expect(hydrate).toMatchInlineSnapshot(`
       [
         {
@@ -1389,7 +1483,7 @@ suite('NOT EXISTS', () => {
 });
 
 test('three parents, no children - reversed', () => {
-  const {messages, storage, hydrate} = fetchTest(
+  const {messages, storage, cacheHitCounts, hydrate} = fetchTest(
     {
       ...threeParentsNoChildrenTest,
       existsType: 'NOT EXISTS',
@@ -1399,13 +1493,6 @@ test('three parents, no children - reversed', () => {
 
   expect(messages).toMatchInlineSnapshot(`
     {
-      "cleanup": [
-        [
-          "1",
-          "cleanup",
-          {},
-        ],
-      ],
       "fetch": [
         [
           "1",
@@ -1423,11 +1510,47 @@ test('three parents, no children - reversed', () => {
     }
   `);
   expect(storage).toMatchInlineSnapshot(`{}`);
+  expect(cacheHitCounts).toMatchInlineSnapshot(`Map {}`);
   expect(hydrate).toMatchInlineSnapshot(`[]`);
 });
 
-// This test runs the join through three phases:
-// initial fetch, fetch, and cleanup.
+test('Exists forwards beginFilter/endFilter', () => {
+  const mockInput = {
+    setFilterOutput: vi.fn(),
+    getSchema: vi.fn(() => ({
+      relationships: {
+        rel: {
+          type: 'many',
+          source: 'child',
+          sourceField: ['childID'],
+          destField: ['id'],
+        },
+      },
+      primaryKey: ['id'],
+    })),
+    destroy: vi.fn(),
+  } as unknown as FilterInput;
+
+  const exists = new Exists(mockInput, 'rel', ['id'], 'EXISTS');
+
+  const mockOutput = {
+    push: vi.fn(),
+    filter: vi.fn(),
+    beginFilter: vi.fn(),
+    endFilter: vi.fn(),
+  };
+
+  exists.setFilterOutput(mockOutput);
+
+  exists.beginFilter();
+  expect(mockOutput.beginFilter).toHaveBeenCalled();
+
+  exists.endFilter();
+  expect(mockOutput.endFilter).toHaveBeenCalled();
+});
+
+// This test runs the join through two phases:
+// initial fetch and fetch.
 function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
   const log: SnitchMessage[] = [];
 
@@ -1441,7 +1564,7 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
       t.primaryKeys[i],
     );
     for (const row of rows) {
-      source.push({type: 'add', row});
+      consume(source.push({type: 'add', row}));
     }
     const snitch = new Snitch(source.connect(ordering), String(i), log);
     return {
@@ -1455,12 +1578,12 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
   }
 
   const existsStorage = new MemoryStorage();
+  const cacheHitCounts = new Map();
 
   const filter = buildFilterPipeline(
     new Join({
       parent: sources[0].snitch,
       child: sources[1].snitch,
-      storage: new MemoryStorage(),
       ...(reverse
         ? {
             parentKey: t.join.childKey,
@@ -1475,10 +1598,10 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
     filterInput =>
       new Exists(
         filterInput,
-        existsStorage,
         reverse ? 'from_' + t.join.relationshipName : t.join.relationshipName,
         reverse ? t.join.childKey : t.join.parentKey,
         t.existsType,
+        cacheHitCounts,
       ),
   );
 
@@ -1488,18 +1611,17 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
     messages: {
       initialFetch: [],
       fetch: [],
-      cleanup: [],
     },
+    cacheHitCounts,
   };
-  for (const [method, fetchType] of [
-    ['fetch', 'initialFetch'],
-    ['fetch', 'fetch'],
-    ['cleanup', 'cleanup'],
-  ] as const) {
+  for (const fetchType of ['initialFetch', 'fetch'] as const) {
     log.length = 0;
 
+    const prevCacheHitCounts = new Map(cacheHitCounts);
+    cacheHitCounts.clear();
+
     const c = new Catch(filter);
-    const r = c[method]();
+    const r = c.fetch({});
     expect(c.pushes).toEqual([]);
 
     switch (fetchType) {
@@ -1511,11 +1633,7 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
       case 'fetch': {
         expect(r).toEqual(result.hydrate);
         expect(existsStorage.cloneData()).toEqual(result.storage);
-        break;
-      }
-      case 'cleanup': {
-        expect(r).toEqual(result.hydrate);
-        expect(existsStorage.cloneData()).toEqual({});
+        expect(cacheHitCounts).toEqual(prevCacheHitCounts);
         break;
       }
       default:
@@ -1543,8 +1661,8 @@ type FetchTestResults = {
   messages: {
     initialFetch: SnitchMessage[];
     fetch: SnitchMessage[];
-    cleanup: SnitchMessage[];
   };
   storage: Record<string, JSONValue>;
   hydrate: CaughtNode[];
+  cacheHitCounts: Map<string, number>;
 };

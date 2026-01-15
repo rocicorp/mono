@@ -1,22 +1,26 @@
-import {beforeEach, describe, expect, test, assert} from 'vitest';
+import {assert, beforeEach, describe, expect, test} from 'vitest';
+import {zip} from '../../shared/src/arrays.ts';
 import {
   getClientsTableDefinition,
   getMutationsTableDefinition,
 } from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {zip} from '../../shared/src/arrays.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
-import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
-import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {ApplicationError} from '../../zero-protocol/src/application-error.ts';
-import {PostgresJSConnection} from './adapters/postgresjs.ts';
-import {PushProcessor} from './push-processor.ts';
-import {ZQLDatabase} from './zql-database.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
-import {OutOfOrderMutation} from './process-mutations.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
+import {
+  CLEANUP_RESULTS_MUTATION_NAME,
+  type MutationResult,
+  type PushBody,
+} from '../../zero-protocol/src/push.ts';
+import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
+import {PostgresJSConnection} from './adapters/postgresjs.ts';
+import {OutOfOrderMutation} from './process-mutations.ts';
+import {PushProcessor} from './push-processor.ts';
+import {ZQLDatabase} from './zql-database.ts';
 
 let pg: PostgresDB;
 const params = {
@@ -38,7 +42,7 @@ beforeEach(async () => {
 
 function makePush(
   mid: number | number[],
-  mutatorName: string | string[] = customMutatorKey('foo', 'bar'),
+  mutatorName: string | string[] = customMutatorKey('|', ['foo', 'bar']),
 ): PushBody {
   const mids = Array.isArray(mid) ? mid : [mid];
   const mutatorNames = Array.isArray(mutatorName) ? mutatorName : [mutatorName];
@@ -214,7 +218,7 @@ test('lmid still moves forward if the mutator implementation throws', async () =
   const result = await processor.process(
     mutators,
     params,
-    makePush(3, customMutatorKey('foo', 'baz')),
+    makePush(3, customMutatorKey('|', ['foo', 'baz'])),
   );
   expect(result).toEqual({
     mutations: [
@@ -257,7 +261,10 @@ test('processes all mutations, even if all mutations throw app errors', async ()
     await processor.process(
       mutators,
       params,
-      makePush([1, 2, 3, 4], Array(4).fill(customMutatorKey('foo', 'baz'))),
+      makePush(
+        [1, 2, 3, 4],
+        Array(4).fill(customMutatorKey('|', ['foo', 'baz'])),
+      ),
     ),
   ).toEqual({
     mutations: Array.from({length: 4}, (_, i) => ({
@@ -300,7 +307,10 @@ test('processes all mutations, even if all mutations have been seen before', asy
   await processor.process(
     mutators,
     params,
-    makePush([1, 2, 3, 4], Array(4).fill(customMutatorKey('foo', 'bar'))),
+    makePush(
+      [1, 2, 3, 4],
+      Array(4).fill(customMutatorKey('|', ['foo', 'bar'])),
+    ),
   );
 
   async function resend(basis: number, mutator: string) {
@@ -328,17 +338,20 @@ test('processes all mutations, even if all mutations have been seen before', asy
   }
 
   // re-send the same mutations
-  await resend(0, customMutatorKey('foo', 'bar'));
+  await resend(0, customMutatorKey('|', ['foo', 'bar']));
 
   // process a bunch of mutations that throw app errors
   await processor.process(
     mutators,
     params,
-    makePush([5, 6, 7, 8], Array(4).fill(customMutatorKey('foo', 'baz'))),
+    makePush(
+      [5, 6, 7, 8],
+      Array(4).fill(customMutatorKey('|', ['foo', 'baz'])),
+    ),
   );
 
   // re-send the same mutations that throw app errors
-  await resend(4, customMutatorKey('foo', 'baz'));
+  await resend(4, customMutatorKey('|', ['foo', 'baz']));
 
   expect(
     await pg`select "clientGroupID", "clientID", "mutationID", "result" from "zero_0"."mutations" order by "mutationID"`,
@@ -538,10 +551,10 @@ test('stops processing mutations as soon as it hits an out of order mutation', a
     makePush(
       [1, 2, 5, 4],
       [
-        customMutatorKey('foo', 'bar'),
-        customMutatorKey('foo', 'bar'),
-        customMutatorKey('foo', 'bar'),
-        customMutatorKey('foo', 'bar'),
+        customMutatorKey('|', ['foo', 'bar']),
+        customMutatorKey('|', ['foo', 'bar']),
+        customMutatorKey('|', ['foo', 'bar']),
+        customMutatorKey('|', ['foo', 'bar']),
       ],
     ),
   );
@@ -590,7 +603,7 @@ test('a mutation throws an app error then an ooo mutation error', async () => {
   const response = await processor.process(
     mutators,
     params,
-    makePush(1, customMutatorKey('foo', 'baz')),
+    makePush(1, customMutatorKey('|', ['foo', 'baz'])),
   );
 
   assert('kind' in response, 'expected push failed response');
@@ -630,7 +643,7 @@ test('mutation throws an app error then an already processed error', async () =>
   const response = await processor.process(
     mutators,
     params,
-    makePush(1, customMutatorKey('foo', 'baz')),
+    makePush(1, customMutatorKey('|', ['foo', 'baz'])),
   );
 
   // When MutationAlreadyProcessedError is thrown during error retry,
@@ -680,7 +693,7 @@ test('mutators with and without namespaces', async () => {
     await processor.process(
       mutators,
       params,
-      makePush(1, customMutatorKey('namespaced', 'pass')),
+      makePush(1, customMutatorKey('|', ['namespaced', 'pass'])),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -714,7 +727,7 @@ test('mutators with and without namespaces', async () => {
     await processor.process(
       mutators,
       params,
-      makePush(3, customMutatorKey('namespaced', 'reject')),
+      makePush(3, customMutatorKey('|', ['namespaced', 'reject'])),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -777,6 +790,249 @@ test('mutators with and without namespaces', async () => {
       },
     },
   ]);
+});
+
+test('mutators with arbitrary depth nesting', async () => {
+  const processor = new PushProcessor(
+    new ZQLDatabase(new PostgresJSConnection(pg), {
+      tables: {},
+      relationships: {},
+      version: 1,
+    }),
+  );
+  const mutators = {
+    level1: {
+      level2: {
+        level3: {
+          pass: () => Promise.resolve(),
+          reject: () => Promise.reject(new Error('deep application error')),
+        },
+      },
+    },
+    deep: {
+      nested: {
+        structure: {
+          works: {
+            fine: () => Promise.resolve(),
+          },
+        },
+      },
+    },
+  };
+
+  // Test 3-level nesting - pass
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(1, 'level1|level2|level3|pass'),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 1,
+          },
+          "result": {},
+        },
+      ],
+    }
+  `);
+
+  // Test 3-level nesting - reject
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(2, 'level1|level2|level3|reject'),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 2,
+          },
+          "result": {
+            "error": "app",
+            "message": "deep application error",
+          },
+        },
+      ],
+    }
+  `);
+
+  // Test 5-level nesting
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(3, 'deep|nested|structure|works|fine'),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 3,
+          },
+          "result": {},
+        },
+      ],
+    }
+  `);
+
+  await checkClientsTable(pg, 3);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 2n,
+      result: {
+        error: 'app',
+        message: 'deep application error',
+      },
+    },
+  ]);
+});
+
+describe('cleanup mutations', () => {
+  test('cleanup mutation deletes mutation results from database', async () => {
+    const processor = new PushProcessor(
+      new ZQLDatabase(new PostgresJSConnection(pg), {
+        tables: {},
+        relationships: {},
+        version: 1,
+      }),
+    );
+
+    // First, create some mutation results by processing failing mutations
+    await processor.process(
+      mutators,
+      params,
+      makePush([1, 2, 3], Array(3).fill(customMutatorKey('|', ['foo', 'baz']))),
+    );
+
+    // Verify results were written
+    await checkMutationsTable(pg, [
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 1n,
+        result: {error: 'app', message: 'application error'},
+      },
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 2n,
+        result: {error: 'app', message: 'application error'},
+      },
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 3n,
+        result: {error: 'app', message: 'application error'},
+      },
+    ]);
+    await checkClientsTable(pg, 3);
+
+    // Send cleanup mutation to delete results up to mutation 2
+    const cleanupResult = await processor.process(mutators, params, {
+      pushVersion: 1,
+      clientGroupID: 'cgid',
+      requestID: 'cleanup-rid',
+      schemaVersion: 1,
+      timestamp: 42,
+      mutations: [
+        {
+          type: 'custom',
+          clientID: 'cid',
+          id: 0,
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          timestamp: 42,
+          args: [
+            {
+              clientGroupID: 'cgid',
+              clientID: 'cid',
+              upToMutationID: 2,
+            },
+          ],
+        },
+      ],
+    });
+
+    // Verify cleanup returns empty mutations (fire-and-forget)
+    expect(cleanupResult).toEqual({mutations: []});
+
+    // Verify only mutation 3 remains (mutations 1 and 2 were deleted)
+    await checkMutationsTable(pg, [
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 3n,
+        result: {error: 'app', message: 'application error'},
+      },
+    ]);
+
+    // Verify LMID was not affected
+    await checkClientsTable(pg, 3);
+  });
+
+  test('cleanup mutation does not invoke user mutators', async () => {
+    const callTracker = {called: false};
+    const trackingMutators = {
+      foo: {
+        bar: () => {
+          callTracker.called = true;
+          return Promise.resolve();
+        },
+        baz: () => Promise.reject(new Error('application error')),
+      },
+    };
+
+    const processor = new PushProcessor(
+      new ZQLDatabase(new PostgresJSConnection(pg), {
+        tables: {},
+        relationships: {},
+        version: 1,
+      }),
+    );
+
+    // Send cleanup mutation
+    await processor.process(trackingMutators, params, {
+      pushVersion: 1,
+      clientGroupID: 'cgid',
+      requestID: 'cleanup-rid',
+      schemaVersion: 1,
+      timestamp: 42,
+      mutations: [
+        {
+          type: 'custom',
+          clientID: 'cid',
+          id: 0,
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          timestamp: 42,
+          args: [
+            {
+              clientGroupID: 'cgid',
+              clientID: 'cid',
+              upToMutationID: 5,
+            },
+          ],
+        },
+      ],
+    });
+
+    // Verify user mutator was NOT called
+    expect(callTracker.called).toBe(false);
+
+    // Verify no LMID was set (cleanup doesn't track LMID)
+    await checkClientsTable(pg, undefined);
+  });
 });
 
 async function checkClientsTable(

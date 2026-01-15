@@ -28,8 +28,7 @@
     "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
     "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
-    "postpack": "mv README.md README-external.md && mv README-org.md README.md",
-    "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts"
+    "postpack": "mv README.md README-external.md && mv README-org.md README.md"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
@@ -40,23 +39,22 @@
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/prettier-config": "^0.4.0",
-    "@rocicorp/zero-sqlite3": "^1.0.12",
+    "@rocicorp/zero-sqlite3": "^1.0.14",
     "@types/command-line-usage": "^5.0.2",
-    "@vitest/runner": "3.2.4",
+    "@vitest/runner": "4.0.15",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.25.10",
     "expo-sqlite": ">=15",
-    "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
-    "typescript": "~5.8.2",
-    "vitest": "3.2.4"
+    "typescript": "~5.9.3",
+    "vitest": "4.0.15"
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-sqlite3": "^1.0.12",
+    "@rocicorp/zero-sqlite3": "^1.0.14",
     "expo-sqlite": ">=15"
   },
   "peerDependenciesMeta": {

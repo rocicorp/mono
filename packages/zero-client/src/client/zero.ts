@@ -1,4 +1,4 @@
-import {type LogLevel} from '@rocicorp/logger';
+import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {
@@ -17,7 +17,6 @@ import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import type {
   MutatorDefs,
-  MutatorReturn,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from '../../../replicache/src/types.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
@@ -25,10 +24,10 @@ import {
   getBrowserGlobal,
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
-import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {promiseRace} from '../../../shared/src/promise-race.ts';
@@ -37,7 +36,6 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -79,33 +77,46 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {
+  DefaultContext,
+  DefaultSchema,
+} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
-import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
+import {
+  isMutatorRegistry,
+  iterateMutators,
+} from '../../../zql/src/mutate/mutator-registry.ts';
+import type {
+  AnyMutator,
+  MutateRequest,
+} from '../../../zql/src/mutate/mutator.ts';
+import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
   type ClientMetricMap,
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {
+  type QueryOrQueryRequest,
+  addContextToQuery,
+} from '../../../zql/src/query/query-registry.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
-  type PullRow,
-  type Query,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
+import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
-import {registerZeroDelegate} from './bindings.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {
   ConnectionManager,
-  type ConnectionState,
+  type ConnectionManagerState,
   throwIfConnectionError,
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -113,19 +124,11 @@ import {type Connection, ConnectionImpl} from './connection.ts';
 import {ZeroContext} from './context.ts';
 import {
   type BatchMutator,
-  type CRUDMutator,
-  type DBMutator,
   type WithCRUD,
-  makeCRUDMutate,
-  makeCRUDMutator,
+  addTableCRUDProperties,
+  makeCRUDMutateBatch,
 } from './crud.ts';
-import type {
-  CustomMutatorDefs,
-  CustomMutatorImpl,
-  MakeCustomMutatorInterfaces,
-  MutatorResult,
-} from './custom.ts';
-import {makeReplicacheMutator} from './custom.ts';
+import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
@@ -147,6 +150,9 @@ import {
 import {Inspector} from './inspector/inspector.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
+import type {MakeMutatePropertyType} from './make-mutate-property.ts';
+import {addCustomMutatorsProperties} from './make-mutate-property.ts';
+import {makeReplicacheMutators} from './make-replicache-mutators.ts';
 import {
   DID_NOT_CONNECT_VALUE,
   MetricManager,
@@ -167,23 +173,19 @@ import {
 } from './reload-error-handler.ts';
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
-import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {
   ZeroRep,
   fromReplicacheAuthToken,
   toReplicacheAuthToken,
 } from './zero-rep.ts';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 
 export type NoRelations = Record<string, never>;
 
-export type MakeEntityQueriesFromSchema<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Query<S, K>;
-};
-
 declare const TESTING: boolean;
 
-export type TestingContext<TContext> = {
+export type TestingContext = {
   puller: Puller;
   pusher: Pusher;
   setReload: (r: () => void) => void;
@@ -191,14 +193,15 @@ export type TestingContext<TContext> = {
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
   connectionManager: () => ConnectionManager;
-  queryDelegate: () => QueryDelegate<TContext>;
+  queryDelegate: () => QueryDelegate;
+  enableRefresh: () => boolean;
 };
 
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
-interface TestZero<TContext> {
-  [exposedToTestingSymbol]?: TestingContext<TContext>;
+interface TestZero {
+  [exposedToTestingSymbol]?: TestingContext;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
     server: string | null;
@@ -208,9 +211,9 @@ interface TestZero<TContext> {
 function asTestZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined,
-  Context,
->(z: Zero<S, MD, Context>): TestZero<Context> {
-  return z as TestZero<Context>;
+  C,
+>(z: Zero<S, MD, C>): TestZero {
+  return z as TestZero;
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
@@ -233,10 +236,8 @@ export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5_000;
 /**
  * The amount of time we allow for continuous connecting attempts before
  * transitioning to disconnected state.
- *
- * Default to 5 minutes.
  */
-export const DEFAULT_DISCONNECT_TIMEOUT_MS = 5 * 60 * 1_000;
+export const DEFAULT_DISCONNECT_TIMEOUT_MS = 60 * 1_000;
 
 /**
  * The amount of time we wait for a connection to be established before we
@@ -306,10 +307,19 @@ const CLOSE_CODE_NORMAL = 1000;
 const CLOSE_CODE_GOING_AWAY = 1001;
 type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
+export type ZeroMutate<
+  S extends Schema,
+  MD extends CustomMutatorDefs | undefined,
+  C,
+> = MakeMutatePropertyType<S, MD, C> &
+  // Also callable with MutateRequest: zero.mutate(mr)
+  // oxlint-disable-next-line no-explicit-any
+  ((mr: MutateRequest<any, S, C, any>) => MutatorResult);
+
 export class Zero<
-  const S extends Schema,
+  const S extends Schema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  TContext = unknown,
+  C = DefaultContext,
 > {
   readonly version = version;
 
@@ -318,7 +328,7 @@ export class Zero<
   readonly userID: string;
   readonly storageKey: string;
 
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
   readonly #clientSchema: ClientSchema;
@@ -354,8 +364,6 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
-  #onError: (error: ZeroError | ApplicationError) => void;
-
   readonly #onlineManager: OnlineManager;
 
   readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
@@ -375,6 +383,8 @@ export class Zero<
     // intentionally empty
   };
 
+  #forceEnableRefresh = false;
+
   /**
    * The timeout in milliseconds for ping operations. Controls both:
    * - How long to wait in idle before sending a ping
@@ -386,7 +396,7 @@ export class Zero<
    */
   pingTimeoutMs: number;
 
-  readonly #zeroContext: ZeroContext<TContext>;
+  readonly #zeroContext: ZeroContext;
 
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
   #lastMutationIDReceived = 0;
@@ -418,9 +428,14 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD, TContext>;
+  readonly #options: ZeroOptions<S, MD, C>;
 
-  readonly query: MakeEntityQueriesFromSchema<S>;
+  /**
+   * Query builders for each table in the schema.
+   *
+   * @deprecated Use {@linkcode createBuilder} to create query builders instead.
+   */
+  readonly query: ConditionalSchemaQuery<S>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -433,7 +448,8 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD, TContext>) {
+
+  constructor(options: ZeroOptions<S, MD, C>) {
     const {
       userID,
       storageKey,
@@ -442,25 +458,26 @@ export class Zero<
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       pingTimeoutMs = DEFAULT_PING_TIMEOUT_MS,
-      disconnectTimeout = DEFAULT_DISCONNECT_TIMEOUT_MS,
+      disconnectTimeoutMs = DEFAULT_DISCONNECT_TIMEOUT_MS,
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
-    } = options as ZeroOptions<S, MD>;
+    } = options;
     if (!userID) {
       throw new ClientError({
         kind: ClientErrorKind.Internal,
         message: 'ZeroOptions.userID must not be empty.',
       });
     }
-    const server = getServer(options.server);
+    const cacheURL = options.cacheURL ?? options.server;
+    const server = getServer(cacheURL);
     this.#enableAnalytics = shouldEnableAnalytics(
       server,
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
 
-    let {kvStore = 'idb'} = options as ZeroOptions<S, MD>;
+    let {kvStore = 'idb'} = options;
     if (kvStore === 'idb') {
       if (!getBrowserGlobal('indexedDB')) {
         // oxlint-disable-next-line no-console
@@ -496,103 +513,38 @@ export class Zero<
     const logOptions = this.#logOptions;
 
     this.#connectionManager = new ConnectionManager({
-      disconnectTimeout,
+      disconnectTimeout: disconnectTimeoutMs,
     });
 
-    const syncConnectionState = (state: ConnectionState) => {
+    const syncConnectionState = (state: ConnectionManagerState) => {
       this.#onlineManager.setOnline(state.name === ConnectionStatus.Connected);
 
       if (state.name === ConnectionStatus.Closed) {
         this.#queryManager.handleClosed(state.reason);
       }
-
-      if (
-        'reason' in state &&
-        state.reason !== undefined &&
-        state.name !== ConnectionStatus.Closed
-      ) {
-        this.#onError(state.reason);
-      }
     };
     syncConnectionState(this.#connectionManager.state);
     this.#connectionManager.subscribe(syncConnectionState);
 
-    const {enableLegacyMutators = true, enableLegacyQueries = true} = schema;
-
-    const replicacheMutators: MutatorDefs & {
-      [CRUD_MUTATION_NAME]: CRUDMutator;
-    } = {
-      [CRUD_MUTATION_NAME]: enableLegacyMutators
-        ? makeCRUDMutator(schema)
-        : () =>
-            Promise.reject(
-              new ClientError({
-                kind: ClientErrorKind.Internal,
-                message: 'Zero CRUD mutators are not enabled.',
-              }),
-            ),
-    };
-    this.#ivmMain = new IVMSourceBranch(schema.tables);
-
-    function assertUnique(key: string) {
-      assert(
-        replicacheMutators[key] === undefined,
-        `A mutator, or mutator namespace, has already been defined for ${key}`,
-      );
-    }
-
-    const {onError} = options;
-
     const sink = logOptions.logSink;
-    const lc = new ZeroLogContext(logOptions.logLevel, {}, sink);
-
-    this.#onError = onError
-      ? error => {
-          void onError(error);
-        }
-      : error => {
-          lc.error?.('An error occurred in Zero', error);
-        };
+    const lc = new LogContext(logOptions.logLevel, {}, sink);
 
     this.#mutationTracker = new MutationTracker(
       lc,
       (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
       error => this.#disconnect(lc, error),
     );
-    if (options.mutators) {
-      for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
-        options.mutators,
-      )) {
-        if (typeof mutatorOrMutators === 'function') {
-          const key = namespaceOrKey as string;
-          assertUnique(key);
-          replicacheMutators[key] = makeReplicacheMutator(
-            lc,
-            mutatorOrMutators,
-            schema,
-            // Replicache expects mutators to only be able to return JSON
-            // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
-          ) as () => MutatorReturn;
-          continue;
-        }
-        if (typeof mutatorOrMutators === 'object') {
-          for (const [name, mutator] of Object.entries(mutatorOrMutators)) {
-            const key = customMutatorKey(
-              namespaceOrKey as string,
-              name as string,
-            );
-            assertUnique(key);
-            replicacheMutators[key] = makeReplicacheMutator(
-              lc,
-              mutator as CustomMutatorImpl<S>,
-              schema,
-            ) as () => MutatorReturn;
-          }
-          continue;
-        }
-        unreachable(mutatorOrMutators);
-      }
-    }
+
+    this.#ivmMain = new IVMSourceBranch(schema.tables);
+
+    const {enableLegacyQueries = false} = schema;
+
+    const replicacheMutators = makeReplicacheMutators<S, C>(
+      schema,
+      options.mutators,
+      this.context,
+      lc,
+    );
 
     this.storageKey = storageKey ?? '';
 
@@ -603,7 +555,7 @@ export class Zero<
     const nameKey = JSON.stringify({
       storageKey: this.storageKey,
       mutateUrl: options.mutateURL ?? '',
-      queryUrl: options.getQueriesURL ?? '',
+      queryUrl: options.queryURL ?? options.getQueriesURL ?? '',
     });
     const hashedKey = h64(nameKey).toString(36);
 
@@ -629,7 +581,6 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
-      this.#options.context as TContext,
       (ast, ttl, gotCallback) => {
         if (enableLegacyQueries) {
           return this.#queryManager.addLegacy(ast, ttl, gotCallback);
@@ -652,14 +603,13 @@ export class Zero<
       assertValidRunOptions,
     );
 
-    // Register the delegate for bindings to access via WeakMap.
-    // This avoids exposing the delegate as a public API on Zero.
-    registerZeroDelegate(this, this.#zeroContext);
+    this.query = createRunnableBuilder(this.#zeroContext, schema);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
       enablePullAndPushInOpen: false, // Zero calls push in its connection management code
+      enableRefresh: () => this.#enableRefresh(),
       onClientsDeleted: deletedClients =>
         this.#deleteClientsManager.onClientsDeleted(deletedClients),
       zero: new ZeroRep(
@@ -729,46 +679,56 @@ export class Zero<
     this.#onClientStateNotFound = onClientStateNotFoundCallback;
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
-
     const mutatorProxy = new MutatorProxy(
+      this.#lc,
       this.#connectionManager,
       this.#mutationTracker,
-      // we track app errors here since this wraps both client and server errors
-      applicationError => this.#onError(applicationError),
     );
 
-    if (options.mutators) {
-      for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
-        options.mutators,
-      )) {
-        if (typeof mutatorsOrMutator === 'function') {
-          mutate[namespaceOrKey] = mutatorProxy.wrapCustomMutator(
-            must(rep.mutate[namespaceOrKey as string]) as unknown as (
-              ...args: unknown[]
-            ) => MutatorResult,
-          );
-          continue;
-        }
+    // Create a callable function that handles zero.mutate(mr) calls.
+    // The CRUD table properties (e.g. zero.mutate.issues.insert(args)) are added by makeCRUDMutate.
+    const {mutators} = options;
 
-        let existing = mutate[namespaceOrKey];
-        if (existing === undefined) {
-          existing = {};
-          mutate[namespaceOrKey] = existing;
-        }
+    // If mutators is a MutatorRegistry, we store the mutator in a Map so we can quickly check if it was registered.
+    const registeredMutators: Set<AnyMutator> = new Set(
+      isMutatorRegistry(mutators) ? iterateMutators(mutators) : undefined,
+    );
 
-        for (const name of Object.keys(mutatorsOrMutator)) {
-          existing[name] = mutatorProxy.wrapCustomMutator(
-            must(
-              rep.mutate[customMutatorKey(namespaceOrKey, name)],
-            ) as unknown as (...args: unknown[]) => MutatorResult,
-          );
-        }
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    const callableMutate = (mr: MutateRequest<any, S, C, any>) => {
+      if (!registeredMutators.has(mr.mutator)) {
+        throw new Error(
+          `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
+            `Mutators must be registered with the Zero constructor before use.`,
+        );
       }
+      const repMutator = rep.mutate[mr.mutator.mutatorName] as unknown as (
+        args?: unknown,
+      ) => MutatorResult;
+      return mutatorProxy.wrapCustomMutator(
+        mr.mutator.mutatorName,
+        repMutator,
+      )(mr.args);
+    };
+
+    const mutateBatch = makeCRUDMutateBatch<S>(schema, rep.mutate);
+
+    if (schema.enableLegacyMutators) {
+      addTableCRUDProperties(schema, callableMutate, rep.mutate);
     }
 
-    this.mutate = mutate;
+    // This is the legacy mutators. They are added to zero.mutate.<mutatorName>.
+    if (mutators && !isMutatorRegistry(mutators)) {
+      addCustomMutatorsProperties(
+        mutators as CustomMutatorDefs,
+        mutatorProxy,
+        callableMutate as unknown as Record<string, unknown>,
+        rep.mutate,
+      );
+    }
+
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    this.mutate = callableMutate as any;
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
@@ -784,9 +744,6 @@ export class Zero<
       error => {
         this.#disconnect(lc, error);
       },
-      error => {
-        void this.#onError(error);
-      },
     );
 
     this.#clientToServer = clientToServer(schema.tables);
@@ -796,9 +753,8 @@ export class Zero<
       rep.perdag,
       this.#lc,
       this.#rep.clientGroupID,
+      rep.clientID,
     );
-
-    this.query = this.#registerQueries(schema);
 
     reportReloadReason(this.#lc);
 
@@ -844,8 +800,21 @@ export class Zero<
         socketResolver: () => this.#socketResolver,
         connectionManager: () => this.#connectionManager,
         queryDelegate: () => this.#zeroContext,
+        enableRefresh: () => this.#enableRefresh(),
       };
     }
+  }
+
+  #enableRefresh(): boolean {
+    // Don't refresh if connected or connecting, unless #forceEnableRefresh to
+    // avoid receiving new snapshots from refresh before receiving the new
+    // snapshot via poke from the connection (which results in a "unexpected
+    // base cookie for poke" error).
+    return (
+      this.#forceEnableRefresh ||
+      (!this.#connectionManager.is(ConnectionStatus.Connected) &&
+        !this.#connectionManager.is(ConnectionStatus.Connecting))
+    );
   }
 
   #expose() {
@@ -925,9 +894,17 @@ export class Zero<
    */
   preload<
     TTable extends keyof S['tables'] & string,
-    TReturn extends PullRow<TTable, S>,
-  >(query: Query<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
-    return this.#zeroContext.preload(query, options);
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
+    options?: PreloadOptions,
+  ) {
+    return this.#zeroContext.preload(
+      addContextToQuery(query, this.context),
+      options,
+    );
   }
 
   /**
@@ -950,15 +927,23 @@ export class Zero<
    * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
    * ```
    */
-  run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
+  run<
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.#zeroContext.run(query, runOptions);
+    return this.#zeroContext.run(
+      addContextToQuery(query, this.context),
+      runOptions,
+    );
   }
 
-  get context(): TContext {
-    return this.#options.context as TContext;
+  get context(): C {
+    return this.#options.context as C;
   }
 
   /**
@@ -985,22 +970,39 @@ export class Zero<
    * const customView = zero.materialize(userQuery, (query) => new MyCustomView(query));
    * ```
    */
-  materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
+  materialize<
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
-  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
-    factory: ViewFactory<S, TTable, TReturn, TContext, T>,
+  materialize<
+    T,
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
+    factory: ViewFactory<TTable, S, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
-  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
-    factoryOrOptions?:
-      | ViewFactory<S, TTable, TReturn, TContext, T>
-      | MaterializeOptions,
+  materialize<
+    T,
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
+    factoryOrOptions?: ViewFactory<TTable, S, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
+    const q = addContextToQuery(query, this.context);
+
     let factory;
     let options;
     if (typeof factoryOrOptions === 'function') {
@@ -1009,7 +1011,7 @@ export class Zero<
     } else {
       options = factoryOrOptions;
     }
-    return this.#zeroContext.materialize(query, factory, options);
+    return this.#zeroContext.materialize(q, factory, options);
   }
 
   /**
@@ -1070,13 +1072,23 @@ export class Zero<
   }
 
   /**
-   * Provides simple "CRUD" mutations for the tables in the schema.
+   * Use to execute mutations. The primary flow is to call
+   * `zero.mutate(mutationRequest)` with your registered custom mutators:
    *
-   * Each table has `create`, `set`, `update`, and `delete` methods.
+   * ```ts
+   * await zero.mutate(
+   *   mutators.myMutator({id: '1', title: 'First issue'}),
+   * );
+   * ```
+   *
+   * When `schema.enableLegacyMutators` is true, legacy conveniences are added:
+   * - Table-scoped CRUD helpers, e.g. `zero.mutate.issue.create` / `set` / `update` / `delete`
+   * - Your custom mutators exposed directly on `zero.mutate`
    *
    * ```ts
    * await zero.mutate.issue.create({id: '1', title: 'First issue', priority: 'high'});
    * await zero.mutate.comment.create({id: '1', text: 'First comment', issueID: '1'});
+   * await zero.mutate.myMutator({id: '1', title: 'First issue'});
    * ```
    *
    * The `update` methods support partials. Unspecified or `undefined` fields
@@ -1087,11 +1099,7 @@ export class Zero<
    * await zero.mutate.issue.update({id: '1', title: 'Updated title'});
    * ```
    */
-  readonly mutate: MD extends CustomMutatorDefs
-    ? S['enableLegacyMutators'] extends false
-      ? MakeCustomMutatorInterfaces<S, MD, TContext>
-      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD, TContext>>
-    : DBMutator<S>;
+  readonly mutate: ZeroMutate<S, MD, C>;
 
   /**
    * Provides a way to batch multiple CRUD mutations together:
@@ -1109,6 +1117,8 @@ export class Zero<
    *
    * `mutateBatch` is not allowed inside another `mutateBatch` call. Doing so
    * will throw an error.
+   *
+   * @deprecated Use `zero.mutate(mutationRequest)`
    */
   readonly mutateBatch: BatchMutator<S>;
 
@@ -1358,7 +1368,7 @@ export class Zero<
 
   // An error on the connection is fatal for the connection.
   async #handleErrorMessage(
-    lc: ZeroLogContext,
+    lc: LogContext,
     downMessage: ErrorMessage,
   ): Promise<void> {
     const [, {kind, message}] = downMessage;
@@ -1401,7 +1411,7 @@ export class Zero<
   }
 
   async #handleConnectedMessage(
-    lc: ZeroLogContext,
+    lc: LogContext,
     connectedMessage: ConnectedMessage,
   ): Promise<void> {
     const now = Date.now();
@@ -1492,7 +1502,7 @@ export class Zero<
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
           userPushURL: this.#options.mutateURL,
-          userQueryURL: this.#options.getQueriesURL,
+          userQueryURL: this.#options.queryURL ?? this.#options.getQueriesURL,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1510,8 +1520,8 @@ export class Zero<
    * request to the server.
    *
    * {@link #connect} will throw an assertion error if the
-   * {@link #connectionManager} status is not {@link ConnectionState.Disconnected}
-   * or {@link ConnectionState.Connecting}.
+   * {@link #connectionManager} status is not {@link ConnectionManagerState.Disconnected}
+   * or {@link ConnectionManagerState.Connecting}.
    * Callers MUST check the connection status before calling this method and log
    * an error as needed.
    *
@@ -1523,7 +1533,7 @@ export class Zero<
    * attempt times out.
    */
   async #connect(
-    lc: ZeroLogContext,
+    lc: LogContext,
     additionalConnectParams: Record<string, string> | undefined,
   ): Promise<void> {
     if (this.closed) {
@@ -1601,7 +1611,7 @@ export class Zero<
       this.#options.logLevel === 'debug',
       lc,
       this.#options.mutateURL,
-      this.#options.getQueriesURL,
+      this.#options.queryURL ?? this.#options.getQueriesURL,
       additionalConnectParams,
       await this.#activeClientsManager,
       this.#options.maxHeaderLength,
@@ -1634,11 +1644,7 @@ export class Zero<
     }
   }
 
-  #disconnect(
-    lc: ZeroLogContext,
-    reason: ZeroError,
-    closeCode?: CloseCode,
-  ): void {
+  #disconnect(lc: LogContext, reason: ZeroError, closeCode?: CloseCode): void {
     if (shouldReportConnectError(reason)) {
       this.#connectErrorCount++;
       this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
@@ -1728,12 +1734,12 @@ export class Zero<
     }
   }
 
-  #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
+  #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeStart(pokeMessage[1]);
   }
 
-  #handlePokePart(_lc: ZeroLogContext, pokeMessage: PokePartMessage): void {
+  #handlePokePart(_lc: LogContext, pokeMessage: PokePartMessage): void {
     this.#abortPingTimeout();
     const lastMutationIDChangeForSelf = this.#pokeHandler.handlePokePart(
       pokeMessage[1],
@@ -1743,7 +1749,7 @@ export class Zero<
     }
   }
 
-  #handlePokeEnd(_lc: ZeroLogContext, pokeMessage: PokeEndMessage): void {
+  #handlePokeEnd(_lc: LogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
   }
@@ -1770,7 +1776,7 @@ export class Zero<
   }
 
   #handlePullResponse(
-    lc: ZeroLogContext,
+    lc: LogContext,
     pullResponseMessage: PullResponseMessage,
   ): void {
     this.#abortPingTimeout();
@@ -1863,7 +1869,7 @@ export class Zero<
 
     if (this.#server === null) {
       this.#lc.info?.('No socket origin provided, not starting connect loop.');
-      this.#connectionManager.error(
+      this.#connectionManager.disconnected(
         new ClientError({
           kind: ClientErrorKind.NoSocketOrigin,
           message: 'No server socket origin provided',
@@ -2041,7 +2047,7 @@ export class Zero<
         );
 
         const transition = getErrorConnectionTransition(ex);
-
+        let sleepMs: number | undefined = undefined;
         switch (transition.status) {
           case NO_STATUS_TRANSITION: {
             // We continue the loop because the error does not indicate
@@ -2064,7 +2070,7 @@ export class Zero<
               'ms before reconnecting due to error, state:',
               this.#connectionManager.state,
             );
-            await sleep(backoffMs);
+            sleepMs = backoffMs;
             break;
           }
           case ConnectionStatus.NeedsAuth: {
@@ -2091,6 +2097,31 @@ export class Zero<
           }
           default:
             unreachable(transition);
+        }
+
+        // refresh to ensure any persisted snapshots that we're not refreshed
+        // becasue refreshes are disabled while connecting and connected and
+        // were not received via poke from the server, are picked up.
+        // Do this before back off sleep.
+        if (transition.status !== ConnectionStatus.Closed) {
+          try {
+            this.#forceEnableRefresh = true;
+            await this.#rep.runRefresh();
+          } catch (ex) {
+            if (ex instanceof AbortError) {
+              this.#lc.debug?.(
+                `Refresh from storage did not complete before close.`,
+              );
+            } else {
+              this.#lc.error?.(`Error during refresh from storage`, ex);
+            }
+          } finally {
+            this.#forceEnableRefresh = false;
+          }
+        }
+
+        if (sleepMs) {
+          await sleep(sleepMs);
         }
       }
     }
@@ -2211,7 +2242,7 @@ export class Zero<
   /**
    * Starts a ping and waits for a pong.
    */
-  async #ping(lc: ZeroLogContext): Promise<void> {
+  async #ping(lc: LogContext): Promise<void> {
     lc.debug?.('pinging');
     const {promise, resolve} = resolver();
     this.#onPong = resolve;
@@ -2308,16 +2339,6 @@ export class Zero<
     // }
   }
 
-  #registerQueries(schema: Schema): MakeEntityQueriesFromSchema<S> {
-    const rv = {} as Record<string, Query<Schema, string>>;
-    // Not using parse yet
-    for (const name of Object.keys(schema.tables)) {
-      rv[name] = newQuery(schema, name);
-    }
-
-    return rv as MakeEntityQueriesFromSchema<S>;
-  }
-
   /**
    * `inspector` is an object that can be used to inspect the state of the
    * queries a Zero instance uses. It is intended for debugging purposes.
@@ -2335,7 +2356,7 @@ export class Zero<
         this.#zeroContext,
         async () => {
           await this.#connectResolver.promise;
-          return this.#socket!;
+          return must(this.#socket);
         },
       ));
     }
@@ -2385,7 +2406,7 @@ export async function createSocket(
   lmid: number,
   wsid: string,
   debugPerf: boolean,
-  lc: ZeroLogContext,
+  lc: LogContext,
   userPushURL: string | undefined,
   userQueryURL: string | undefined,
   additionalConnectParams: Record<string, string> | undefined,
@@ -2398,31 +2419,19 @@ export async function createSocket(
     DeleteClientsBody | undefined,
   ]
 > {
-  const url = new URL(
-    appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
+  const url = await createConnectionURL(
+    socketOrigin,
+    clientID,
+    clientGroupID,
+    userID,
+    baseCookie,
+    lmid,
+    wsid,
+    rep,
+    debugPerf,
+    additionalConnectParams,
+    lc,
   );
-  const {searchParams} = url;
-  searchParams.set('clientID', clientID);
-  searchParams.set('clientGroupID', clientGroupID);
-  searchParams.set('userID', userID);
-  searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
-  searchParams.set('ts', String(performance.now()));
-  searchParams.set('lmid', String(lmid));
-  searchParams.set('wsid', wsid);
-  if (debugPerf) {
-    searchParams.set('debugPerf', true.toString());
-  }
-  if (additionalConnectParams) {
-    for (const k in additionalConnectParams) {
-      if (searchParams.has(k)) {
-        lc.warn?.(`skipping conflicting parameter ${k}`);
-      } else {
-        searchParams.set(k, additionalConnectParams[k]);
-      }
-    }
-  }
-
-  lc.info?.('Connecting to', url.toString());
 
   // Pass auth to the server via the `Sec-WebSocket-Protocol` header by passing
   // it as a `protocol` to the `WebSocket` constructor.  The empty string is an
@@ -2478,6 +2487,48 @@ export async function createSocket(
   ];
 }
 
+export async function createConnectionURL(
+  socketOrigin: HTTPString | WSString,
+  clientID: string,
+  clientGroupID: string,
+  userID: string,
+  baseCookie: string | null,
+  lmid: number,
+  wsid: string,
+  rep: Pick<ReplicacheImpl<{}>, 'profileID'>,
+  debugPerf: boolean,
+  additionalConnectParams: Record<string, string> | undefined,
+  lc: LogContext<unknown[], unknown[], unknown[], unknown[]>,
+) {
+  const url = new URL(
+    appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
+  );
+  const {searchParams} = url;
+  searchParams.set('clientID', clientID);
+  searchParams.set('clientGroupID', clientGroupID);
+  searchParams.set('userID', userID);
+  searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
+  searchParams.set('ts', String(performance.now()));
+  searchParams.set('lmid', String(lmid));
+  searchParams.set('wsid', wsid);
+  searchParams.set('profileID', await rep.profileID);
+  if (debugPerf) {
+    searchParams.set('debugPerf', true.toString());
+  }
+  if (additionalConnectParams) {
+    for (const k in additionalConnectParams) {
+      if (searchParams.has(k)) {
+        lc.warn?.(`skipping conflicting parameter ${k}`);
+      } else {
+        searchParams.set(k, additionalConnectParams[k]);
+      }
+    }
+  }
+
+  lc.info?.('Connecting to', url.toString());
+  return url;
+}
+
 function skipEmptyArray<T>(
   arr: readonly T[] | undefined,
 ): readonly T[] | undefined {
@@ -2528,16 +2579,13 @@ function convertDeletedClientsToBody(
  */
 function addWebSocketIDFromSocketToLogContext(
   {url}: {url: string},
-  lc: ZeroLogContext,
-): ZeroLogContext {
+  lc: LogContext,
+): LogContext {
   const wsid = new URL(url).searchParams.get('wsid') ?? nanoid();
   return addWebSocketIDToLogContext(wsid, lc);
 }
 
-function addWebSocketIDToLogContext(
-  wsid: string,
-  lc: ZeroLogContext,
-): ZeroLogContext {
+function addWebSocketIDToLogContext(wsid: string, lc: LogContext): LogContext {
   return lc.withContext('wsid', wsid);
 }
 

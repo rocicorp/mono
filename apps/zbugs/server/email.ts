@@ -1,5 +1,4 @@
-import {type Row, type Transaction} from '@rocicorp/zero';
-import {schema, type Schema} from '../shared/schema.ts';
+import {type Row, type ServerTransaction} from '@rocicorp/zero';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
 
 export async function sendEmail({
@@ -12,13 +11,13 @@ export async function sendEmail({
   issue,
   attachments = [],
 }: {
-  tx: Transaction<Schema>;
+  tx: ServerTransaction;
   email: string;
   title: string;
   message: string;
   link: string;
   unsubscribeLink: string;
-  issue: Row<typeof schema.tables.issue>;
+  issue: Row['issue'];
   attachments?: {
     filename: string;
     contentType: string;

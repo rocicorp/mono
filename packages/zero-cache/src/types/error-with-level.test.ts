@@ -4,6 +4,30 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {getLogLevel, ProtocolErrorWithLevel} from './error-with-level.ts';
 
+describe('ProtocolErrorWithLevel', () => {
+  test('creates error with specified log level', () => {
+    const error = new ProtocolErrorWithLevel(
+      {
+        kind: ErrorKind.Internal,
+        message: 'test message',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'warn',
+    );
+    expect(error.message).toBe('test message');
+    expect(error.logLevel).toBe('warn');
+  });
+
+  test('defaults to warn log level', () => {
+    const error = new ProtocolErrorWithLevel({
+      kind: ErrorKind.Internal,
+      message: 'test message',
+      origin: ErrorOrigin.ZeroCache,
+    });
+    expect(error.logLevel).toBe('warn');
+  });
+});
+
 describe('getLogLevel', () => {
   test('returns the explicit level from ProtocolErrorWithLevel', () => {
     const error = new ProtocolErrorWithLevel(

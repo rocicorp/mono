@@ -2,37 +2,38 @@ import {type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
-import {type Schema} from '../../shared/schema.ts';
+import {queries} from '../../shared/queries.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 import {Combobox} from './combobox.tsx';
-import {queries} from '../../shared/queries.ts';
+
+type User = Row['user'];
 
 type Props = {
   projectName: string;
   onSelect?: ((user: User | undefined) => void) | undefined;
   selected?: {login?: string | undefined} | undefined;
   disabled?: boolean | undefined;
+  enabledOffline?: boolean | undefined;
   unselectedLabel?: string | undefined;
   placeholder?: string | undefined;
   allowNone?: boolean | undefined;
   filter?: 'crew' | 'creators' | 'assignees' | undefined;
 };
 
-type User = Row<Schema['tables']['user']>;
-
 export function UserPicker({
   projectName,
   onSelect,
   selected,
   disabled,
+  enabledOffline,
   unselectedLabel,
   placeholder,
   allowNone = true,
   filter = undefined,
 }: Props) {
   const [unsortedUsers] = useQuery(
-    queries.userPickerV2({
+    queries.usersForProject({
       projectName,
       disabled: !!disabled,
       login: selected?.login,
@@ -96,6 +97,7 @@ export function UserPicker({
 
   return (
     <Combobox
+      enabledOffline={enabledOffline}
       disabled={disabled}
       onChange={c => handleSelect(c)}
       items={items}

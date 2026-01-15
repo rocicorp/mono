@@ -9,17 +9,17 @@ jobs:
     runs-on: ubuntu-latest
     name: Mirror main branch to sandbox and gigabugs branch
     steps:
-    - name: Mirror main to sandbox
-      id: mirror-sandbox
-      uses: google/mirror-branch-action@v2.0
-      with:
-        github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-        source: 'main'
-        dest: 'sandbox'
-    - name: Mirror main to gigabugs
-      id: mirror-gigabugs
-      uses: google/mirror-branch-action@v2.0
-      with:
-        github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-        source: 'main'
-        dest: 'gigabugs'
+      - name: Mirror main to sandbox
+        id: mirror-sandbox
+        uses: google/mirror-branch-action@v2.0
+        with:
+          github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          source: 'main'
+          dest: 'sandbox'
+      - name: Mirror main to gigabugs
+        id: mirror-gigabugs
+        uses: google/mirror-branch-action@v2.0
+        with:
+          github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          source: 'main'
+          dest: 'gigabugs'

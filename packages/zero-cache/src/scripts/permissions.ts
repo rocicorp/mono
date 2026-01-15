@@ -17,10 +17,7 @@ export const deployPermissionsOptions = {
   schema: {
     path: {
       type: v.string().default('schema.ts'),
-      desc: [
-        'Relative path to the file containing the schema definition.',
-        'The file must have a default export of type SchemaConfig.',
-      ],
+      desc: ['Relative path to the file containing the schema definition.'],
       alias: 'p',
     },
   },
@@ -87,15 +84,15 @@ export async function loadSchemaAndPermissions(
   const typeModuleErrorMessage = () =>
     `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
 
-  colorConsole.info(`Loading permissions from ${schemaPath}`);
+  colorConsole.info(`Loading schema from ${schemaPath}`);
+
   const dir = dirname(fileURLToPath(import.meta.url));
   const absoluteSchemaPath = resolve(schemaPath);
   const relativeDir = relative(dir, dirname(absoluteSchemaPath));
-  let relativePath = join(
-    // tsImport expects the relativePath to be a path and not just a filename.
-    relativeDir.length ? relativeDir : `.${sep}`,
-    basename(absoluteSchemaPath),
-  );
+  let relativePath =
+    relativeDir.length && relativeDir !== '.'
+      ? join(relativeDir, basename(absoluteSchemaPath))
+      : `.${sep}${basename(absoluteSchemaPath)}`;
 
   // tsImport doesn't expect to receive slashes in the Windows format when running
   // on Windows. They need to be converted to *nix format.
@@ -122,7 +119,7 @@ export async function loadSchemaAndPermissions(
 
   if (!isSchemaConfig(module)) {
     colorConsole.error(
-      `Schema file ${schemaPath} must export [schema] and [permissions].` +
+      `Schema file ${schemaPath} must export [schema].` +
         typeModuleErrorMessage(),
     );
     process.exit(1);
@@ -132,9 +129,16 @@ export async function loadSchemaAndPermissions(
     const perms =
       await (schemaConfig.permissions as unknown as Promise<unknown>);
     const {schema} = schemaConfig;
+
+    if (perms) {
+      colorConsole.warn?.(
+        'Permissions are deprecated and will be removed in an upcoming release. See: https://zero.rocicorp.dev/docs/auth.',
+      );
+    }
+
     return {
       schema,
-      permissions: v.parse(perms, permissionsConfigSchema),
+      permissions: v.parse(perms ?? {}, permissionsConfigSchema),
     };
   } catch (e) {
     colorConsole.error(`Failed to parse Permissions object`);

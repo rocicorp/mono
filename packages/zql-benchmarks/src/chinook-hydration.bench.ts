@@ -1,6 +1,7 @@
 import {runBenchmarks} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
+import {expect, test} from 'vitest';
 
 const pgContent = await getChinook();
 
@@ -10,6 +11,7 @@ await runBenchmarks(
     type: 'hydration',
     pgContent,
     zqlSchema: schema,
+    only: 'all playlists',
   },
   [
     {
@@ -61,3 +63,7 @@ await runBenchmarks(
     },
   ],
 );
+
+test('no-op', () => {
+  expect(true).toBe(true);
+});

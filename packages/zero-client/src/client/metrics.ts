@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {
@@ -7,7 +8,6 @@ import {
   type ZeroErrorKind,
 } from './error.ts';
 import {MetricName} from './metric-name.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
 // This value is used to indicate that the client's last connection attempt
 // failed. We don't make this -1 because we want to stack this never connected
@@ -69,7 +69,7 @@ export type MetricManagerOptions = {
   host: string;
   source: string;
   reporter: MetricsReporter;
-  lc: ZeroLogContext;
+  lc: LogContext;
 };
 
 /**
@@ -80,7 +80,7 @@ export class MetricManager {
   #reportIntervalMs: number;
   #host: string;
   #reporter: MetricsReporter;
-  #lc: ZeroLogContext;
+  #lc: LogContext;
   #timerID: ReturnType<typeof setInterval> | null;
 
   constructor(opts: MetricManagerOptions) {
@@ -115,11 +115,7 @@ export class MetricManager {
   // - If disconnect() is called with a defined #connectStart then we record
   //   DID_NOT_CONNECT_VALUE and set #connectStart to undefined.
   //
-  // TODO It's clear after playing with the connection code we should encapsulate
-  // the ConnectionState along with its state transitions and possibly behavior.
-  // In that world the metric gauge(s) and bookkeeping like #connectStart would
-  // be encapsulated with the ConnectionState. This will probably happen as part
-  // of https://github.com/rocicorp/reflect-server/issues/255.
+  // TODO: this should be folded into the ConnectionManager.
   readonly timeToConnectMs = this.#register(
     new Gauge(MetricName.TimeToConnectMs),
   );

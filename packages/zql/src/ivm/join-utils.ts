@@ -1,4 +1,4 @@
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
@@ -11,15 +11,27 @@ export type JoinChangeOverlay = {
   position: Row | undefined;
 };
 
-export function* generateWithOverlay(
+export function generateWithOverlayNoYield(
   stream: Stream<Node>,
   overlay: Change,
   schema: SourceSchema,
 ): Stream<Node> {
+  return generateWithOverlay(stream, overlay, schema) as Stream<Node>;
+}
+
+export function* generateWithOverlay(
+  stream: Stream<Node | 'yield'>,
+  overlay: Change,
+  schema: SourceSchema,
+): Stream<Node | 'yield'> {
   let applied = false;
   let editOldApplied = false;
   let editNewApplied = false;
   for (const node of stream) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
     let yieldNode = true;
     if (!applied) {
       switch (overlay.type) {
@@ -90,14 +102,20 @@ export function* generateWithOverlay(
       applied = true;
       yield overlay.node;
     } else if (overlay.type === 'edit') {
-      assert(editNewApplied);
+      assert(
+        editNewApplied,
+        'edit overlay: new node must be applied before old node',
+      );
       editOldApplied = true;
       applied = true;
       yield overlay.oldNode;
     }
   }
 
-  assert(applied);
+  assert(
+    applied,
+    'overlayGenerator: overlay was never applied to any fetched node',
+  );
 }
 
 export function rowEqualsForCompoundKey(
@@ -125,4 +143,25 @@ export function isJoinMatch(
     }
   }
   return true;
+}
+
+/**
+ * Builds a constraint object by mapping values from `sourceRow` using `sourceKey`
+ * to keys specified by `targetKey`. Returns `undefined` if any source value is `null`,
+ * since null foreign keys cannot match any rows.
+ */
+export function buildJoinConstraint(
+  sourceRow: Row,
+  sourceKey: CompoundKey,
+  targetKey: CompoundKey,
+): Record<string, Value> | undefined {
+  const constraint: Record<string, Value> = {};
+  for (let i = 0; i < targetKey.length; i++) {
+    const value = sourceRow[sourceKey[i]];
+    if (value === null) {
+      return undefined;
+    }
+    constraint[targetKey[i]] = value;
+  }
+  return constraint;
 }

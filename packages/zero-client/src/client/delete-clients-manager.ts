@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {
   confirmDeletedClients,
@@ -9,12 +10,27 @@ import {
   withRead,
   withWrite,
 } from '../../../replicache/src/with-transactions.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {
   DeleteClientsBody,
   DeleteClientsMessage,
 } from '../../../zero-protocol/src/delete-clients.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
+
+function filterAndAssert(
+  deletedClients: DeletedClients,
+  clientGroupID: ClientGroupID,
+  clientID: string,
+  caller: string,
+): string[] {
+  const clientIDs = deletedClients
+    .filter(dc => dc.clientGroupID === clientGroupID)
+    .map(dc => dc.clientID);
+  for (const cid of clientIDs) {
+    assert(cid !== clientID, `cannot delete self in ${caller}`);
+  }
+  return clientIDs;
+}
 
 /**
  * Replicache will tell us when it deletes clients from the persistent storage
@@ -27,20 +43,23 @@ import type {ZeroLogContext} from './zero-log-context.ts';
  */
 export class DeleteClientsManager {
   readonly #send: (msg: DeleteClientsMessage) => void;
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
   readonly #dagStore: Store;
   readonly #clientGroupID: Promise<ClientGroupID>;
+  readonly #clientID: string;
 
   constructor(
     send: (msg: DeleteClientsMessage) => void,
     dagStore: Store,
-    lc: ZeroLogContext,
+    lc: LogContext,
     clientGroupID: Promise<ClientGroupID>,
+    clientID: string,
   ) {
     this.#send = send;
     this.#dagStore = dagStore;
     this.#lc = lc;
     this.#clientGroupID = clientGroupID;
+    this.#clientID = clientID;
   }
 
   /**
@@ -50,12 +69,16 @@ export class DeleteClientsManager {
   async onClientsDeleted(deletedClients: DeletedClients): Promise<void> {
     this.#lc.debug?.('DeletedClientsManager, send:', deletedClients);
     const clientGroupID = await this.#clientGroupID;
+    const clientIDs = filterAndAssert(
+      deletedClients,
+      clientGroupID,
+      this.#clientID,
+      'onClientsDeleted',
+    );
     this.#send([
       'deleteClients',
       {
-        clientIDs: deletedClients
-          .filter(dc => dc.clientGroupID === clientGroupID)
-          .map(dc => dc.clientID),
+        clientIDs,
       },
     ]);
   }
@@ -70,10 +93,12 @@ export class DeleteClientsManager {
       getDeletedClients(dagRead),
     );
 
-    // Only send client ids that belong to this client group
-    const clientIDs = deleted
-      .filter(d => d.clientGroupID === clientGroupID)
-      .map(d => d.clientID);
+    const clientIDs = filterAndAssert(
+      deleted,
+      clientGroupID,
+      this.#clientID,
+      'sendDeletedClientsToServer',
+    );
 
     if (clientIDs.length > 0) {
       this.#send(['deleteClients', {clientIDs}]);
@@ -103,6 +128,12 @@ export class DeleteClientsManager {
       getDeletedClients(read),
     );
     const clientGroupID = await this.#clientGroupID;
+    filterAndAssert(
+      deletedClients,
+      clientGroupID,
+      this.#clientID,
+      'getDeletedClients',
+    );
     return deletedClients.filter(d => d.clientGroupID === clientGroupID);
   }
 }

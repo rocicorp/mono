@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify from 'fastify';
 import {beforeEach, describe, expect, type MockedFunction, vi} from 'vitest';
@@ -46,6 +46,8 @@ describe('change-streamer/http', () => {
   >;
   let snapshotFn: MockedFunction<(id: string) => Subscription<SnapshotMessage>>;
   let endReservationFn: MockedFunction<(id: string) => void>;
+  let runFn: MockedFunction<() => Promise<void>>;
+  let stopFn: MockedFunction<() => Promise<void>>;
 
   let serverAddress: string;
   let dispatcherAddress: string;
@@ -75,6 +77,8 @@ describe('change-streamer/http', () => {
     subscribeFn = vi.fn();
     snapshotFn = vi.fn();
     endReservationFn = vi.fn();
+    runFn = vi.fn();
+    stopFn = vi.fn();
 
     const [parent, sender] = inProcChannel();
 
@@ -89,14 +93,24 @@ describe('change-streamer/http', () => {
       dispatcher.server,
     );
 
+    const service = resolver();
+
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
     const server = new ChangeStreamerHttpServer(
       lc,
       createTestConfig(),
-      {port: 0},
+      {port: 0, startupDelayMs: 10000},
       parent,
-      {subscribe: subscribeFn.mockResolvedValue(downstream)},
+      {
+        id: 'change-streamer',
+        subscribe: subscribeFn.mockResolvedValue(downstream),
+        run: runFn.mockImplementation(() => service.promise),
+        stop: stopFn.mockImplementation(() => {
+          service.resolve();
+          return service.promise;
+        }),
+      },
       {
         startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
         endReservation: endReservationFn,
@@ -137,12 +151,24 @@ describe('change-streamer/http', () => {
 
   test('health checks and keepalives', async () => {
     const [parent] = inProcChannel();
+    const service = resolver();
     const server = new ChangeStreamerHttpServer(
       lc,
       createTestConfig(),
-      {port: 0},
+      {
+        port: 0,
+        startupDelayMs: 10000,
+      },
       parent,
-      {subscribe: vi.fn()},
+      {
+        id: 'change-streamer',
+        subscribe: subscribeFn.mockResolvedValue(downstream),
+        run: runFn.mockImplementation(() => service.promise),
+        stop: stopFn.mockImplementation(() => {
+          service.resolve();
+          return service.promise;
+        }),
+      },
       null,
     );
     const baseURL = await server.start();
@@ -155,6 +181,9 @@ describe('change-streamer/http', () => {
 
     res = await fetch(`${baseURL}/keepalive`);
     expect(res.ok).toBe(true);
+
+    // The ChangeStreamerService should not yet have been started.
+    expect(runFn).not.toHaveBeenCalledOnce();
 
     void server.stop();
   });
@@ -175,13 +204,13 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v4. Supported protocols: [v1 ... v3]`,
+        `Cannot service client at protocol v5. Supported protocols: [v1 ... v4]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v4. Supported protocols: [v1 ... v3]`,
+        `Cannot service client at protocol v5. Supported protocols: [v1 ... v4]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
@@ -220,7 +249,12 @@ describe('change-streamer/http', () => {
 
       const status = [
         'status',
-        {tag: 'status', backupURL: 's3://foo/bar'},
+        {
+          tag: 'status',
+          backupURL: 's3://foo/bar',
+          replicaVersion: '148',
+          minWatermark: '188',
+        },
       ] satisfies SnapshotMessage;
 
       snapshotStream.push(status);
@@ -273,6 +307,10 @@ describe('change-streamer/http', () => {
 
       expect(subscribeFn).toHaveBeenCalledOnce();
       expect(subscribeFn.mock.calls[0][0]).toEqual(ctx);
+
+      // The ChangeStreamerService should be started when an
+      // incoming subscription is received
+      expect(runFn).toHaveBeenCalledOnce();
     },
   );
 

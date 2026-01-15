@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
@@ -17,6 +17,7 @@ import {
   type ChangeStreamMessage,
 } from '../change-source/protocol/current/downstream.ts';
 import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.ts';
+import {publishReplicationError} from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
@@ -52,6 +53,7 @@ export async function initializeStreamer(
   changeSource: ChangeSource,
   subscriptionState: SubscriptionState,
   autoReset: boolean,
+  backPressureThreshold: number,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
@@ -75,6 +77,7 @@ export async function initializeStreamer(
     replicaVersion,
     changeSource,
     autoReset,
+    backPressureThreshold,
     setTimeoutFn,
   );
 }
@@ -291,6 +294,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     replicaVersion: string,
     source: ChangeSource,
     autoReset: boolean,
+    backPressureThreshold: number,
     setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
@@ -309,6 +313,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
       err => this.stop(err),
+      backPressureThreshold,
     );
     this.#forwarder = new Forwarder();
     this.#autoReset = autoReset;
@@ -323,7 +328,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     await this.#storer.assumeOwnership();
     // The storer will, in turn, detect changes to ownership and stop
     // the change-streamer appropriately.
-    this.#storer.run().catch(e => this.stop(e));
+    this.#storer
+      .run()
+      .then(() => this.stop())
+      .catch(e => this.stop(e));
 
     while (this.#state.shouldRun()) {
       let err: unknown;
@@ -367,7 +375,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           this.#storer.store([watermark, change]);
           this.#forwarder.forward([watermark, change]);
 
-          if (type === 'commit') {
+          if (type === 'commit' || type === 'rollback') {
             watermark = null;
           }
 
@@ -403,6 +411,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     switch (tag) {
       case 'reset-required':
         await markResetRequired(this.#changeDB, this.#shard);
+        await publishReplicationError(
+          this.#lc,
+          'Replicating',
+          msg.message ?? 'Resync required',
+          msg.errorDetails,
+        );
         if (this.#autoReset) {
           this.#lc.warn?.('shutting down for auto-reset');
           await this.stop(new AutoResetSignal());
@@ -457,6 +471,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     if (origSize === 0) {
       this.#state.setTimeout(() => this.#purgeOldChanges(), CLEANUP_DELAY_MS);
     }
+  }
+
+  async getChangeLogState(): Promise<{
+    replicaVersion: string;
+    minWatermark: string;
+  }> {
+    const minWatermark = await this.#storer.getMinWatermarkForCatchup();
+    return {
+      replicaVersion: this.#replicaVersion,
+      minWatermark: minWatermark ?? this.#replicaVersion,
+    };
   }
 
   async #purgeOldChanges(): Promise<void> {

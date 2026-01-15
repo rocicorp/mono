@@ -1,6 +1,6 @@
 import websocket from '@fastify/websocket';
-import {LogContext} from '@rocicorp/logger';
-import {IncomingMessage} from 'node:http';
+import type {LogContext} from '@rocicorp/logger';
+import type {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -13,7 +13,8 @@ import {streamIn, streamOut, type Source} from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
-import {HttpService, type Options} from '../http-service.ts';
+import {HttpService} from '../http-service.ts';
+import type {Service} from '../service.ts';
 import type {BackupMonitor} from './backup-monitor.ts';
 import {
   downstreamSchema,
@@ -34,9 +35,16 @@ const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
+type Options = {
+  port: number;
+  startupDelayMs: number;
+};
+
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
-  readonly #changeStreamer: ChangeStreamer;
+  readonly #lc: LogContext;
+  readonly #opts: Options;
+  readonly #changeStreamer: ChangeStreamer & Service;
   readonly #backupMonitor: BackupMonitor | null;
 
   constructor(
@@ -44,7 +52,7 @@ export class ChangeStreamerHttpServer extends HttpService {
     config: ZeroConfig,
     opts: Options,
     parent: Worker,
-    changeStreamer: ChangeStreamer,
+    changeStreamer: ChangeStreamer & Service,
     backupMonitor: BackupMonitor | null,
   ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
@@ -84,6 +92,8 @@ export class ChangeStreamerHttpServer extends HttpService {
       );
     });
 
+    this.#lc = lc;
+    this.#opts = opts;
     this.#changeStreamer = changeStreamer;
     this.#backupMonitor = backupMonitor;
   }
@@ -116,7 +126,7 @@ export class ChangeStreamerHttpServer extends HttpService {
     }
   };
 
-  readonly #reserveSnapshot = (ws: WebSocket, req: RequestHeaders) => {
+  readonly #reserveSnapshot = async (ws: WebSocket, req: RequestHeaders) => {
     try {
       const url = new URL(
         req.url ?? '',
@@ -128,7 +138,7 @@ export class ChangeStreamerHttpServer extends HttpService {
         throw new Error('Missing taskID in snapshot request');
       }
       const downstream =
-        this.#getBackupMonitor().startSnapshotReservation(taskID);
+        await this.#getBackupMonitor().startSnapshotReservation(taskID);
       void streamOut(this._lc, downstream, ws);
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
@@ -138,6 +148,9 @@ export class ChangeStreamerHttpServer extends HttpService {
   readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
     try {
       const ctx = getSubscriberContext(req);
+      if (ctx.mode === 'serving') {
+        this.#ensureChangeStreamerStarted('incoming subscription');
+      }
 
       const downstream = await this.#changeStreamer.subscribe(ctx);
       if (ctx.initial && ctx.taskID && this.#backupMonitor) {
@@ -150,6 +163,39 @@ export class ChangeStreamerHttpServer extends HttpService {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
   };
+
+  #changeStreamerStarted = false;
+
+  #ensureChangeStreamerStarted(reason: string) {
+    if (!this.#changeStreamerStarted && this._state.shouldRun()) {
+      this.#lc.info?.(`starting ChangeStreamerService: ${reason}`);
+      void this.#changeStreamer
+        .run()
+        .catch(e =>
+          this.#lc.warn?.(`ChangeStreamerService ended with error`, e),
+        )
+        .finally(() => this.stop());
+
+      this.#changeStreamerStarted = true;
+    }
+  }
+
+  protected override _onStart(): void {
+    const {startupDelayMs} = this.#opts;
+    this._state.setTimeout(
+      () =>
+        this.#ensureChangeStreamerStarted(
+          `startup delay elapsed (${startupDelayMs} ms)`,
+        ),
+      startupDelayMs,
+    );
+  }
+
+  protected override async _onStop(): Promise<void> {
+    if (this.#changeStreamerStarted) {
+      await this.#changeStreamer.stop();
+    }
+  }
 }
 
 export class ChangeStreamerHttpClient implements ChangeStreamer {

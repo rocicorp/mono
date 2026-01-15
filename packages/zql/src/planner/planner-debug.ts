@@ -1,6 +1,20 @@
-import type {Condition} from '../../../zero-protocol/src/ast.ts';
+import type * as v from '../../../shared/src/valita.ts';
+import type {
+  Condition,
+  Ordering,
+  ValuePosition,
+} from '../../../zero-protocol/src/ast.ts';
+import type {
+  attemptStartEventJSONSchema,
+  bestPlanSelectedEventJSONSchema,
+  connectionSelectedEventJSONSchema,
+  nodeConstraintEventJSONSchema,
+  PlanDebugEventJSON,
+  planFailedEventJSONSchema,
+} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {CostEstimate, JoinType} from './planner-node.ts';
+import type {PlanState} from './planner-graph.ts';
 
 /**
  * Structured debug events emitted during query planning.
@@ -11,11 +25,7 @@ import type {CostEstimate, JoinType} from './planner-node.ts';
 /**
  * Starting a new planning attempt with a different root connection.
  */
-export type AttemptStartEvent = {
-  type: 'attempt-start';
-  attemptNumber: number;
-  totalAttempts: number;
-};
+export type AttemptStartEvent = v.Infer<typeof attemptStartEventJSONSchema>;
 
 /**
  * Snapshot of connection costs before selecting the next connection.
@@ -26,23 +36,19 @@ export type ConnectionCostsEvent = {
   costs: Array<{
     connection: string;
     cost: number;
-    costEstimate: CostEstimate;
+    costEstimate: Omit<CostEstimate, 'fanout'>;
     pinned: boolean;
-    constraints: Map<string, PlannerConstraint | undefined>;
-    constraintCosts: Map<string, CostEstimate>;
+    constraints: Record<string, PlannerConstraint | undefined>;
+    constraintCosts: Record<string, Omit<CostEstimate, 'fanout'>>;
   }>;
 };
 
 /**
  * A connection was chosen and pinned.
  */
-export type ConnectionSelectedEvent = {
-  type: 'connection-selected';
-  attemptNumber: number;
-  connection: string;
-  cost: number;
-  isRoot: boolean; // First connection in this attempt
-};
+export type ConnectionSelectedEvent = v.Infer<
+  typeof connectionSelectedEventJSONSchema
+>;
 
 /**
  * Constraints have been propagated through the graph.
@@ -52,8 +58,8 @@ export type ConstraintsPropagatedEvent = {
   attemptNumber: number;
   connectionConstraints: Array<{
     connection: string;
-    constraints: Map<string, PlannerConstraint | undefined>;
-    constraintCosts: Map<string, CostEstimate>;
+    constraints: Record<string, PlannerConstraint | undefined>;
+    constraintCosts: Record<string, Omit<CostEstimate, 'fanout'>>;
   }>;
 };
 
@@ -70,31 +76,20 @@ export type PlanCompleteEvent = {
     type: JoinType;
   }>;
   // Planning snapshot that can be restored and applied to AST
-  planSnapshot?: unknown; // PlanState from planner-graph.ts
+  planSnapshot: PlanState;
 };
 
 /**
  * Planning attempt failed (e.g., unflippable join).
  */
-export type PlanFailedEvent = {
-  type: 'plan-failed';
-  attemptNumber: number;
-  reason: string;
-};
+export type PlanFailedEvent = v.Infer<typeof planFailedEventJSONSchema>;
 
 /**
  * The best plan across all attempts was selected.
  */
-export type BestPlanSelectedEvent = {
-  type: 'best-plan-selected';
-  bestAttemptNumber: number;
-  totalCost: number;
-  flipPattern: number; // Bitmask indicating which joins are flipped
-  joinStates: Array<{
-    join: string;
-    type: JoinType;
-  }>;
-};
+export type BestPlanSelectedEvent = v.Infer<
+  typeof bestPlanSelectedEventJSONSchema
+>;
 
 /**
  * A node computed its cost estimate during planning.
@@ -108,8 +103,9 @@ export type NodeCostEvent = {
   node: string;
   branchPattern: number[];
   downstreamChildSelectivity: number;
-  costEstimate: CostEstimate;
+  costEstimate: Omit<CostEstimate, 'fanout'>;
   filters?: Condition | undefined; // Only for connections
+  ordering?: Ordering | undefined; // Only for connections
   joinType?: JoinType | undefined; // Only for joins
 };
 
@@ -118,15 +114,7 @@ export type NodeCostEvent = {
  * Emitted by nodes during propagateConstraints() traversal.
  * attemptNumber is added by the debugger.
  */
-export type NodeConstraintEvent = {
-  type: 'node-constraint';
-  attemptNumber?: number;
-  nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
-  node: string;
-  branchPattern: number[];
-  constraint: PlannerConstraint | undefined;
-  from: string; // Name of the node that sent this constraint
-};
+export type NodeConstraintEvent = v.Infer<typeof nodeConstraintEventJSONSchema>;
 
 /**
  * Union of all debug event types.
@@ -188,60 +176,38 @@ export class AccumulatorDebugger implements PlanDebugger {
    * Format events as a human-readable string.
    */
   format(): string {
-    const lines: string[] = [];
-
-    // Group events by attempt
-    const eventsByAttempt = new Map<number, PlanDebugEvent[]>();
-    let bestPlanEvent: BestPlanSelectedEvent | undefined;
-
-    for (const event of this.events) {
-      if ('attemptNumber' in event) {
-        const attempt = event.attemptNumber;
-        let attemptEvents = eventsByAttempt.get(attempt);
-        if (!attemptEvents) {
-          attemptEvents = [];
-          eventsByAttempt.set(attempt, attemptEvents);
-        }
-        attemptEvents.push(event);
-      } else if (event.type === 'best-plan-selected') {
-        // Save for displaying at the end
-        bestPlanEvent = event;
-      }
-    }
-
-    // Format each attempt as a compact summary
-    for (const [attemptNum, events] of eventsByAttempt.entries()) {
-      lines.push(...formatAttemptSummary(attemptNum, events));
-      lines.push(''); // Blank line between attempts
-    }
-
-    // Show the final plan selection
-    if (bestPlanEvent) {
-      lines.push('─'.repeat(60));
-      lines.push(
-        `✓ Best plan: Attempt ${bestPlanEvent.bestAttemptNumber + 1} (cost=${bestPlanEvent.totalCost.toFixed(2)})`,
-      );
-      if (bestPlanEvent.joinStates.length > 0) {
-        lines.push('  Join types:');
-        for (const j of bestPlanEvent.joinStates) {
-          lines.push(`    ${j.join}: ${j.type}`);
-        }
-      }
-      lines.push('─'.repeat(60));
-    }
-
-    return lines.join('\n');
+    return formatPlannerEvents(this.events);
   }
 }
 
 /**
  * Format a constraint object as a human-readable string.
  */
-function formatConstraint(constraint: PlannerConstraint | undefined): string {
+function formatConstraint(
+  constraint: PlannerConstraint | Record<string, unknown> | null | undefined,
+): string {
   if (!constraint) return '{}';
   const keys = Object.keys(constraint);
   if (keys.length === 0) return '{}';
   return '{' + keys.join(', ') + '}';
+}
+
+/**
+ * Format a ValuePosition (column, literal, or static parameter) as a human-readable string.
+ */
+function formatValuePosition(value: ValuePosition): string {
+  switch (value.type) {
+    case 'column':
+      return value.name;
+    case 'literal':
+      // Format literal values with SQL-style quoting for strings
+      if (typeof value.value === 'string') {
+        return `'${value.value}'`;
+      }
+      return JSON.stringify(value.value);
+    case 'static':
+      return `@${value.anchor}.${Array.isArray(value.field) ? value.field.join('.') : value.field}`;
+  }
 }
 
 /**
@@ -252,7 +218,7 @@ function formatFilter(filter: Condition | undefined): string {
 
   switch (filter.type) {
     case 'simple':
-      return `${filter.left.type === 'column' ? filter.left.name : JSON.stringify(filter.left)} ${filter.op} ${filter.right.type === 'literal' ? JSON.stringify(filter.right.value) : JSON.stringify(filter.right)}`;
+      return `${formatValuePosition(filter.left)} ${filter.op} ${formatValuePosition(filter.right)}`;
     case 'and':
       return `(${filter.conditions.map(formatFilter).join(' AND ')})`;
     case 'or':
@@ -265,11 +231,21 @@ function formatFilter(filter: Condition | undefined): string {
 }
 
 /**
+ * Format an Ordering as a human-readable string.
+ */
+function formatOrdering(ordering: Ordering | undefined): string {
+  if (!ordering || ordering.length === 0) return 'none';
+  return ordering
+    .map(([field, direction]) => `${field} ${direction}`)
+    .join(', ');
+}
+
+/**
  * Format a compact summary for a single planning attempt.
  */
 function formatAttemptSummary(
   attemptNum: number,
-  events: PlanDebugEvent[],
+  events: (PlanDebugEvent | PlanDebugEventJSON)[],
 ): string[] {
   const lines: string[] = [];
 
@@ -291,8 +267,14 @@ function formatAttemptSummary(
   );
 
   // Collect connection costs (use array to preserve all connections, including duplicates)
-  const connectionCostEvents: NodeCostEvent[] = [];
-  const connectionConstraintEvents: NodeConstraintEvent[] = [];
+  const connectionCostEvents: (
+    | NodeCostEvent
+    | Extract<PlanDebugEventJSON, {type: 'node-cost'}>
+  )[] = [];
+  const connectionConstraintEvents: (
+    | NodeConstraintEvent
+    | Extract<PlanDebugEventJSON, {type: 'node-constraint'}>
+  )[] = [];
 
   for (const event of events) {
     if (event.type === 'node-cost' && event.nodeType === 'connection') {
@@ -316,6 +298,7 @@ function formatAttemptSummary(
 
       const constraintStr = formatConstraint(constraint);
       const filterStr = formatFilter(cost.filters);
+      const orderingStr = formatOrdering(cost.ordering);
       const limitStr =
         cost.costEstimate.limit !== undefined
           ? cost.costEstimate.limit.toString()
@@ -333,11 +316,15 @@ function formatAttemptSummary(
       );
       lines.push(`      constraints=${constraintStr}`);
       lines.push(`      filters=${filterStr}`);
+      lines.push(`      ordering=${orderingStr}`);
     }
   }
 
   // Collect join costs from node-cost events
-  const joinCosts: NodeCostEvent[] = [];
+  const joinCosts: (
+    | NodeCostEvent
+    | Extract<PlanDebugEventJSON, {type: 'node-cost'}>
+  )[] = [];
   for (const event of events) {
     if (event.type === 'node-cost' && event.nodeType === 'join') {
       joinCosts.push(event);
@@ -385,4 +372,165 @@ function formatAttemptSummary(
   }
 
   return lines;
+}
+
+/**
+ * Convert undefined values to null in a constraint object for JSON serialization.
+ * PlannerConstraint uses Record<string, undefined> which loses keys during JSON.stringify.
+ */
+function convertConstraintUndefinedToNull(
+  constraint: PlannerConstraint | Record<string, unknown> | undefined | null,
+): Record<string, unknown> | undefined | null {
+  if (constraint === undefined) {
+    return undefined;
+  }
+  if (constraint === null) {
+    return null;
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(constraint)) {
+    result[key] = val === undefined ? null : val;
+  }
+  return result;
+}
+
+/**
+ * Serialize a single debug event to JSON-compatible format.
+ * The fanout function is already omitted when events are created.
+ * The planSnapshot is excluded as it's internal state not needed for debugging.
+ * Undefined values in constraints are converted to null for JSON serialization.
+ */
+function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
+  // Remove planSnapshot from plan-complete events
+  if (event.type === 'plan-complete') {
+    const {planSnapshot: _, ...rest} = event;
+    return rest as PlanDebugEventJSON;
+  }
+
+  // Convert constraint undefined values to null for specific event types
+  if (event.type === 'node-constraint') {
+    return {
+      ...event,
+      constraint: convertConstraintUndefinedToNull(event.constraint),
+    } as PlanDebugEventJSON;
+  }
+
+  if (event.type === 'connection-costs') {
+    return {
+      ...event,
+      costs: event.costs.map(cost => ({
+        ...cost,
+        constraints: Object.fromEntries(
+          Object.entries(cost.constraints).map(([key, val]) => [
+            key,
+            convertConstraintUndefinedToNull(val),
+          ]),
+        ),
+      })),
+    } as PlanDebugEventJSON;
+  }
+
+  if (event.type === 'constraints-propagated') {
+    return {
+      ...event,
+      connectionConstraints: event.connectionConstraints.map(cc => ({
+        ...cc,
+        constraints: Object.fromEntries(
+          Object.entries(cc.constraints).map(([key, val]) => [
+            key,
+            convertConstraintUndefinedToNull(val),
+          ]),
+        ),
+      })),
+    } as PlanDebugEventJSON;
+  }
+
+  return event as PlanDebugEventJSON;
+}
+
+/**
+ * Serialize an array of debug events to JSON-compatible format.
+ * The fanout function is already omitted when events are created.
+ * The planSnapshot is excluded as it's internal state not needed for debugging.
+ */
+export function serializePlanDebugEvents(
+  events: PlanDebugEvent[],
+): PlanDebugEventJSON[] {
+  return events.map(serializeEvent);
+}
+
+/**
+ * Format planner debug events as a human-readable string.
+ * Works with JSON-serialized events (from inspector API) or native events (from AccumulatorDebugger).
+ *
+ * @param events - Array of planner debug events (either JSON or native format)
+ * @returns Formatted string showing planning attempts, costs, and final plan selection
+ *
+ * @example
+ * ```typescript
+ * const result = await inspector.analyzeQuery(query, { joinPlans: true });
+ * if (result.joinPlans) {
+ *   console.log(formatPlannerEvents(result.joinPlans));
+ * }
+ * ```
+ */
+export function formatPlannerEvents(
+  events: PlanDebugEventJSON[] | PlanDebugEvent[],
+): string {
+  const lines: string[] = [];
+
+  // Group events by attempt
+  const eventsByAttempt = new Map<
+    number,
+    (PlanDebugEventJSON | PlanDebugEvent)[]
+  >();
+  let bestPlanEvent:
+    | {
+        type: 'best-plan-selected';
+        bestAttemptNumber: number;
+        totalCost: number;
+        flipPattern: number;
+        joinStates: Array<{join: string; type: string}>;
+      }
+    | undefined;
+
+  for (const event of events) {
+    if ('attemptNumber' in event) {
+      const attempt = event.attemptNumber;
+      if (attempt !== undefined) {
+        let attemptEvents = eventsByAttempt.get(attempt);
+        if (!attemptEvents) {
+          attemptEvents = [];
+          eventsByAttempt.set(attempt, attemptEvents);
+        }
+        attemptEvents.push(event);
+      }
+    } else if (event.type === 'best-plan-selected') {
+      // Save for displaying at the end
+      bestPlanEvent = event;
+    }
+  }
+
+  // Format each attempt as a compact summary
+  for (const [attemptNum, events] of eventsByAttempt.entries()) {
+    lines.push(...formatAttemptSummary(attemptNum, events));
+    lines.push(''); // Blank line between attempts
+  }
+
+  // Show the final plan selection
+  if (bestPlanEvent) {
+    lines.push('─'.repeat(60));
+    lines.push(
+      `✓ Best plan: Attempt ${bestPlanEvent.bestAttemptNumber + 1} (cost=${bestPlanEvent.totalCost.toFixed(2)})`,
+    );
+    if (bestPlanEvent.joinStates.length > 0) {
+      lines.push('  Join types:');
+      for (const j of bestPlanEvent.joinStates) {
+        lines.push(`    ${j.join}: ${j.type}`);
+      }
+    }
+    lines.push('─'.repeat(60));
+  }
+
+  return lines.join('\n');
 }

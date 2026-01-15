@@ -38,6 +38,13 @@ import type {ShardID} from '../types/shards.ts';
  * Token expiration isn't expected to be exact so this 5 second
  * caching shouldn't cause unexpected behavior. E.g., many JWT libraries
  * implement leeway for expiration checks: https://github.com/panva/jose/blob/main/docs/jwt/verify/interfaces/JWTVerifyOptions.md#clocktolerance
+ *
+ * The ViewSyncer will call the API server 3-4 times with the exact same queries
+ * if we do not cache requests.
+ *
+ * Caching is safe here because the cache key encodes both
+ * the user's cookies and auth token. A user cannot see another user's
+ * transformed queries unless they share the same token and cookies.
  */
 export class CustomQueryTransformer {
   readonly #shard: ShardID;
@@ -108,8 +115,9 @@ export class CustomQueryTransformer {
         userQueryURL ??
           must(
             this.#config.url[0],
-            'A ZERO_GET_QUERIES_URL must be configured for custom queries',
+            'A ZERO_QUERY_URL must be configured for custom queries',
           ),
+        userQueryURL !== undefined,
         this.#urlPatterns,
         this.#shard,
         headerOptions,
@@ -142,8 +150,6 @@ export class CustomQueryTransformer {
 
       return newResponses.concat(cachedResponses);
     } catch (e) {
-      this.#lc.error?.('failed to transform queries', e);
-
       if (
         isProtocolError(e) &&
         e.errorBody.kind === ErrorKind.TransformFailed

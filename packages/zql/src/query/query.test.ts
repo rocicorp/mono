@@ -223,6 +223,14 @@ type TestSchemaWithMoreRelationships =
 type TestSchema = Schema['tables']['test'];
 
 describe('types', () => {
+  test('Row indexed by table name matches schema columns', () => {
+    expectTypeOf<Row<typeof schema>['test']>().toEqualTypeOf<{
+      readonly s: string;
+      readonly b: boolean;
+      readonly n: number;
+    }>();
+  });
+
   test('Row helper shape for table schemas', () => {
     type TestRow = Row<typeof schema.tables.test>;
 
@@ -240,7 +248,7 @@ describe('types', () => {
   });
 
   test('Row helper shape for queries and query factories', () => {
-    type BaseQuery = Query<Schema, 'test'>;
+    type BaseQuery = Query<'test', Schema>;
     expectTypeOf<Row<BaseQuery>>().toEqualTypeOf<{
       readonly s: string;
       readonly b: boolean;
@@ -257,13 +265,13 @@ describe('types', () => {
       | undefined
     >();
 
-    type QueryFactory = (limit?: number) => Query<Schema, 'test'>;
+    type QueryFactory = (limit?: number) => Query<'test', Schema>;
     type FactoryRow = Row<QueryFactory>;
     expectTypeOf<FactoryRow>().toEqualTypeOf<Row<BaseQuery>>();
   });
 
   test('QueryRowType extracts return types', () => {
-    type TableQuery = Query<Schema, 'test'>;
+    type TableQuery = Query<'test', Schema>;
     type TableQueryRow = QueryRowType<TableQuery>;
     expectTypeOf<TableQueryRow>().toEqualTypeOf<{
       readonly s: string;
@@ -293,7 +301,7 @@ describe('types', () => {
   });
 
   test('QueryResultType builds human readable arrays', () => {
-    type TableQuery = Query<Schema, 'test'>;
+    type TableQuery = Query<'test', Schema>;
 
     expectTypeOf<QueryResultType<TableQuery>>().toEqualTypeOf<
       {
@@ -315,7 +323,7 @@ describe('types', () => {
   });
 
   test('simple select', () => {
-    const query = mockQuery as unknown as Query<Schema, 'test'>;
+    const query = mockQuery as unknown as Query<'test', Schema>;
 
     // no select? All fields are returned.
     expectTypeOf<QueryReturn<typeof query>>().toExtend<
@@ -324,13 +332,13 @@ describe('types', () => {
   });
 
   test('simple select with enums', () => {
-    const query = mockQuery as unknown as Query<Schema, 'testWithEnums'>;
+    const query = mockQuery as unknown as Query<'testWithEnums', Schema>;
     expectTypeOf<QueryReturn<typeof query>>().toExtend<{
       s: string;
       e: 'open' | 'closed';
     }>();
 
-    const q2 = mockQuery as unknown as Query<Schema, 'schemaWithAdvancedTypes'>;
+    const q2 = mockQuery as unknown as Query<'schemaWithAdvancedTypes', Schema>;
     q2.where('e', '=', 'open');
     // @ts-expect-error - invalid enum value
     q2.where('e', 'bogus');
@@ -354,8 +362,8 @@ describe('types', () => {
 
   test('related with advanced types', () => {
     const query = mockQuery as unknown as Query<
-      Schema,
-      'schemaWithAdvancedTypes'
+      'schemaWithAdvancedTypes',
+      Schema
     >;
 
     const query2 = query.related('self');
@@ -386,8 +394,8 @@ describe('types', () => {
 
   test('related', () => {
     const query = mockQuery as unknown as Query<
-      Schema,
-      'testWithRelationships'
+      'testWithRelationships',
+      Schema
     >;
 
     // @ts-expect-error - cannot traverse a relationship that does not exist
@@ -403,8 +411,8 @@ describe('types', () => {
 
     // Many calls to related builds up the related object.
     const query3 = mockQuery as unknown as Query<
-      Schema,
-      'testWithMoreRelationships'
+      'testWithMoreRelationships',
+      Schema
     >;
     const q3 = query3
       .related('self')
@@ -425,7 +433,7 @@ describe('types', () => {
   });
 
   test('related with enums', () => {
-    const query = mockQuery as unknown as Query<Schema, 'testWithEnums'>;
+    const query = mockQuery as unknown as Query<'testWithEnums', Schema>;
 
     const query2 = query.related('self');
     expectTypeOf<QueryReturn<typeof query2>>().toExtend<
@@ -436,7 +444,7 @@ describe('types', () => {
   });
 
   test('where against enum field', () => {
-    const query = mockQuery as unknown as Query<Schema, 'testWithEnums'>;
+    const query = mockQuery as unknown as Query<'testWithEnums', Schema>;
 
     query.where('e', '=', 'open');
     query.where('e', '=', 'closed');
@@ -445,7 +453,7 @@ describe('types', () => {
   });
 
   test('one', () => {
-    const q1 = mockQuery as unknown as Query<Schema, 'test'>;
+    const q1 = mockQuery as unknown as Query<'test', Schema>;
     expectTypeOf<QueryReturn<ReturnType<typeof q1.one>>>().toExtend<
       | {
           readonly s: string;
@@ -455,7 +463,7 @@ describe('types', () => {
       | undefined
     >();
 
-    const q1_1 = mockQuery as unknown as Query<Schema, 'test'>;
+    const q1_1 = mockQuery as unknown as Query<'test', Schema>;
     const q1_1_one = q1_1.one().one();
     expectTypeOf<QueryReturn<typeof q1_1_one>>().toExtend<
       | {
@@ -466,7 +474,7 @@ describe('types', () => {
       | undefined
     >();
 
-    const q2 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
+    const q2 = mockQuery as unknown as Query<'testWithRelationships', Schema>;
     const q2_one = q2.related('test').one();
     expectTypeOf<QueryReturn<typeof q2_one>>().toExtend<
       | {
@@ -482,7 +490,7 @@ describe('types', () => {
       | undefined
     >();
 
-    const q2_1 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
+    const q2_1 = mockQuery as unknown as Query<'testWithRelationships', Schema>;
     const q2_1_one = q2_1.one().related('test');
     expectTypeOf<QueryReturn<typeof q2_1_one>>().toExtend<
       | {
@@ -498,7 +506,7 @@ describe('types', () => {
       | undefined
     >();
 
-    const q2_2 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
+    const q2_2 = mockQuery as unknown as Query<'testWithRelationships', Schema>;
     const q2_2_rel = q2_2.related('test', t => t.one());
     expectTypeOf<QueryReturn<typeof q2_2_rel>>().toExtend<{
       readonly s: string;
@@ -513,7 +521,7 @@ describe('types', () => {
         | undefined;
     }>();
 
-    const q2_3 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
+    const q2_3 = mockQuery as unknown as Query<'testWithRelationships', Schema>;
     const q2_3_rel = q2_3.related('test', t => t.one().where('b', true));
     expectTypeOf<QueryReturn<typeof q2_3_rel>>().toExtend<{
       readonly s: string;
@@ -529,8 +537,8 @@ describe('types', () => {
     }>();
 
     const q3 = mockQuery as unknown as Query<
-      Schema,
-      'testWithMoreRelationships'
+      'testWithMoreRelationships',
+      Schema
     >;
     const q3_one = q3.related('test').related('self').one();
     expectTypeOf<QueryReturn<typeof q3_one>>().toExtend<
@@ -553,8 +561,8 @@ describe('types', () => {
     >();
 
     const q3_1 = mockQuery as unknown as Query<
-      Schema,
-      'testWithMoreRelationships'
+      'testWithMoreRelationships',
+      Schema
     >;
     const q3_1_one = q3_1
       .related('test', t => t.one())
@@ -586,8 +594,8 @@ describe('types', () => {
 
   test('related in subquery position', () => {
     const query = mockQuery as unknown as Query<
-      Schema,
-      'testWithMoreRelationships'
+      'testWithMoreRelationships',
+      Schema
     >;
 
     const query2 = query.related('self', query => query.related('test'));
@@ -604,7 +612,7 @@ describe('types', () => {
   });
 
   test('where', () => {
-    const query = mockQuery as unknown as Query<Schema, 'test'>;
+    const query = mockQuery as unknown as Query<'test', Schema>;
 
     const query2 = query.where('s', '=', 'foo');
     expectTypeOf<QueryReturn<typeof query2>>().toExtend<Row<TestSchema>>();
@@ -619,7 +627,7 @@ describe('types', () => {
   });
 
   test('where-parameters', () => {
-    const query = mockQuery as unknown as Query<Schema, 'test'>;
+    const query = mockQuery as unknown as Query<'test', Schema>;
 
     query.where('s', '=', {
       [toStaticParam]: () => staticParam('authData', 'aud'),
@@ -632,7 +640,7 @@ describe('types', () => {
   });
 
   test('where-optional-op', () => {
-    const query = mockQuery as unknown as Query<Schema, 'test'>;
+    const query = mockQuery as unknown as Query<'test', Schema>;
 
     const query2 = query.where('s', 'foo');
     expectTypeOf<QueryReturn<typeof query2>>().toExtend<Row<TestSchema>>();
@@ -647,7 +655,7 @@ describe('types', () => {
   });
 
   test('where-in', () => {
-    const query = mockQuery as unknown as Query<Schema, 'test'>;
+    const query = mockQuery as unknown as Query<'test', Schema>;
 
     // @ts-expect-error - `IN` must take an array!
     query.where('s', 'IN', 'foo');
@@ -656,7 +664,7 @@ describe('types', () => {
   });
 
   test('where-null', () => {
-    const q1 = mockQuery as unknown as Query<Schema, 'test'>;
+    const q1 = mockQuery as unknown as Query<'test', Schema>;
 
     // @ts-expect-error - cannot compare with null
     q1.where('s', '=', null);
@@ -682,7 +690,7 @@ describe('types', () => {
     // @ts-expect-error - same with IS NOT
     q1.where('s', 'IS NOT', undefined);
 
-    const q2 = mockQuery as unknown as Query<Schema, 'testWithNulls'>;
+    const q2 = mockQuery as unknown as Query<'testWithNulls', Schema>;
 
     // @ts-expect-error - = cannot be used with null, must use IS
     q2.where('s', null);
@@ -704,7 +712,7 @@ describe('types', () => {
   });
 
   test('start', () => {
-    const query = mockQuery as unknown as Query<Schema, 'test'>;
+    const query = mockQuery as unknown as Query<'test', Schema>;
     const query2 = query.start({b: true, s: 'foo'});
     expectTypeOf<QueryReturn<typeof query2>>().toExtend<Row<TestSchema>>();
     const query3 = query.start({b: true, s: 'foo'}, {inclusive: true});
@@ -792,7 +800,7 @@ describe('schema structure', () => {
 });
 
 test('complex expressions', () => {
-  const query = mockQuery as unknown as Query<Schema, 'test'>;
+  const query = mockQuery as unknown as Query<'test', Schema>;
 
   query.where(({cmp, or}) =>
     or(cmp('b', '!=', true), cmp('s', 'IN', ['foo', 'bar'])),
@@ -814,7 +822,7 @@ test('complex expressions', () => {
 });
 
 test('json type', () => {
-  const query = mockQuery as unknown as Query<Schema, 'testWithJson'>;
+  const query = mockQuery as unknown as Query<'testWithJson', Schema>;
   const oneQuery = query.one();
   expectTypeOf<QueryReturn<typeof oneQuery>>().toExtend<
     {a: string; j: ReadonlyJSONValue} | undefined
@@ -832,7 +840,7 @@ test('json type', () => {
 });
 
 test('array type', () => {
-  const query = mockQuery as unknown as Query<Schema, 'testWithArray'>;
+  const query = mockQuery as unknown as Query<'testWithArray', Schema>;
   const oneQuery = query.one();
   expectTypeOf<QueryReturn<typeof oneQuery>>().toExtend<
     | {
@@ -874,7 +882,7 @@ function takeSchema(x: TableSchema) {
 
 describe('Where expression factory and builder', () => {
   test('does not change the type', () => {
-    const query = mockQuery as unknown as Query<Schema, 'test'>;
+    const query = mockQuery as unknown as Query<'test', Schema>;
 
     const query2 = query.where('n', '>', 42);
     expectTypeOf(query2).toEqualTypeOf(query);
@@ -901,7 +909,7 @@ describe('Where expression factory and builder', () => {
   });
 
   test('and, or, not, cmp, eb', () => {
-    const query = mockQuery as unknown as Query<Schema, 'test'>;
+    const query = mockQuery as unknown as Query<'test', Schema>;
 
     query.where(({and, cmp, or}) =>
       and(cmp('n', '>', 42), or(cmp('b', true), cmp('s', 'foo'))),
@@ -920,8 +928,8 @@ describe('Where expression factory and builder', () => {
 
   test('exists', () => {
     const query = mockQuery as unknown as Query<
-      Schema,
-      'testWithMoreRelationships'
+      'testWithMoreRelationships',
+      Schema
     >;
 
     // can check relationships
@@ -966,7 +974,7 @@ describe('Where expression factory and builder', () => {
 
   describe('allow undefined terms', () => {
     test('and', () => {
-      const query = mockQuery as unknown as Query<Schema, 'test'>;
+      const query = mockQuery as unknown as Query<'test', Schema>;
 
       query.where(({and}) => and());
       query.where(({and}) => and(undefined));
@@ -976,7 +984,7 @@ describe('Where expression factory and builder', () => {
     });
 
     test('or', () => {
-      const query = mockQuery as unknown as Query<Schema, 'test'>;
+      const query = mockQuery as unknown as Query<'test', Schema>;
 
       query.where(({or}) => or());
       query.where(({or}) => or(undefined));
@@ -987,9 +995,9 @@ describe('Where expression factory and builder', () => {
   });
 
   test('expression builder append from array', () => {
-    const q = mockQuery as unknown as Query<Schema, 'test'>;
+    const q = mockQuery as unknown as Query<'test', Schema>;
     const numbers = [1, 23, 456];
-    const f: ExpressionFactory<Schema, 'test'> = b => {
+    const f: ExpressionFactory<'test', Schema> = b => {
       const exprs = [];
       for (const n of numbers) {
         exprs.push(b.cmp('n', '>', n));
@@ -1005,10 +1013,10 @@ describe('Where expression factory and builder', () => {
       [K in keyof T]: [K, T[K]];
     }[keyof T][];
 
-    const q = mockQuery as unknown as Query<Schema, 'test'>;
+    const q = mockQuery as unknown as Query<'test', Schema>;
     const o = {n: 1, s: 'hi', b: true};
     const entries = Object.entries(o) as Entries<typeof o>;
-    const f: ExpressionFactory<Schema, 'test'> = b => {
+    const f: ExpressionFactory<'test', Schema> = b => {
       const exprs = [];
       for (const [n, v] of entries) {
         exprs.push(b.cmp(n, v));
@@ -1021,7 +1029,7 @@ describe('Where expression factory and builder', () => {
 });
 
 test('one', () => {
-  const q = mockQuery as unknown as Query<Schema, 'test'>;
+  const q = mockQuery as unknown as Query<'test', Schema>;
   const q1 = q;
   const q2 = q.one();
 
@@ -1043,7 +1051,7 @@ test('one', () => {
 });
 
 test('one in related subquery', () => {
-  const q = mockQuery as unknown as Query<Schema, 'testWithOneRelationships'>;
+  const q = mockQuery as unknown as Query<'testWithOneRelationships', Schema>;
   const q1 = q.related('testWithRelationships');
 
   expectTypeOf<QueryReturn<typeof q1>>().toExtend<{

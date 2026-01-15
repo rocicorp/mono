@@ -6,22 +6,21 @@ import type {Format} from '../ivm/view.ts';
 import type {CustomQueryID} from './named.ts';
 import type {Query} from './query.ts';
 
-export const queryInternalsTag = Symbol('QueryInternals');
+export const queryInternalsTag = Symbol();
 
 /**
  * Internal interface for query implementation details.
  * This is not part of the public API and should only be accessed via
- * the {@linkcode withContext} or {@linkcode queryWithContext} function.
+ * the {@linkcode asQueryInternals} function.
  *
  * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
  * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
  */
 export interface QueryInternals<
-  TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
   TReturn,
-  TContext,
 > {
   readonly [queryInternalsTag]: true;
 
@@ -67,42 +66,46 @@ export interface QueryInternals<
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TSchema, TTable, TReturn, TContext>;
+  ): Query<TTable, TSchema, TReturn>;
 }
 
 /**
- * Helper function to resolve a query with context.
- * This is used by binding libraries (React, Solid, etc.) to inject context
- * into queries without exposing the QueryDelegate interface.
- *
- * This function calls the `withContext` method on queries that support it
- * (such as ChainedQuery and RootNamedQuery) and returns the resolved query
- * as a QueryInternals, which provides access to internal query details
- * needed for materialization.
+ * Helper function to cast a Query to QueryInternals.
+ * This is used in tests and internal code to access query implementation details.
+ * The function asserts that the query has the queryInternalsTag to ensure it
+ * properly implements the QueryInternals interface.
  *
  * @internal
  */
-export function queryWithContext<
-  TSchema extends ZeroSchema,
+export function asQueryInternals<
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
   TReturn,
-  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn, TContext>,
-  ctx: TContext,
-): QueryInternals<TSchema, TTable, TReturn, TContext> {
-  assert('withContext' in query);
-  const withCtx = query as unknown as {
-    withContext(ctx: TContext): Query<TSchema, TTable, TReturn, TContext>;
-  };
-  // The returned query implements both Query and QueryInternals
-  return withCtx.withContext(ctx) as unknown as QueryInternals<
-    TSchema,
-    TTable,
-    TReturn,
-    TContext
-  >;
+  query: Query<TTable, TSchema, TReturn>,
+): QueryInternals<TTable, TSchema, TReturn> {
+  assert(queryInternalsTag in query, 'Query does not implement QueryInternals');
+  return query as unknown as QueryInternals<TTable, TSchema, TReturn>;
+}
+
+export function isQueryInternals<
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
+  TReturn,
+>(obj: unknown): obj is QueryInternals<TTable, TSchema, TReturn> {
+  return typeof obj === 'object' && obj !== null && queryInternalsTag in obj;
+}
+
+export function asQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
+  TReturn,
+>(
+  queryInternals: QueryInternals<TTable, TSchema, TReturn>,
+): Query<TTable, TSchema, TReturn> {
+  assert(queryInternalsTag in queryInternals);
+  return queryInternals as unknown as Query<TTable, TSchema, TReturn>;
 }
 
 // oxlint-disable-next-line no-explicit-any
-export type AnyQueryInternals = QueryInternals<ZeroSchema, string, any, any>;
+export type AnyQueryInternals = QueryInternals<string, ZeroSchema, any>;

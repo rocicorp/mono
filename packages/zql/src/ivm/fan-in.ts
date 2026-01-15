@@ -1,5 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import {identity} from '../../../shared/src/sentinels.ts';
+import {emptyArray, identity} from '../../../shared/src/sentinels.ts';
 import type {Change} from './change.ts';
 import {type Node} from './data.ts';
 import type {FanOut} from './fan-out.ts';
@@ -55,15 +55,24 @@ export class FanIn implements FilterOperator {
     return this.#schema;
   }
 
-  filter(node: Node, cleanup: boolean): boolean {
-    return this.#output.filter(node, cleanup);
+  beginFilter(): void {
+    this.#output.beginFilter();
+  }
+
+  endFilter(): void {
+    this.#output.endFilter();
+  }
+
+  *filter(node: Node): Generator<'yield', boolean> {
+    return yield* this.#output.filter(node);
   }
 
   push(change: Change) {
     this.#accumulatedPushes.push(change);
+    return emptyArray;
   }
 
-  fanOutDonePushingToAllBranches(fanOutChangeType: Change['type']) {
+  *fanOutDonePushingToAllBranches(fanOutChangeType: Change['type']) {
     if (this.#inputs.length === 0) {
       assert(
         this.#accumulatedPushes.length === 0,
@@ -72,7 +81,7 @@ export class FanIn implements FilterOperator {
       return;
     }
 
-    pushAccumulatedChanges(
+    yield* pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
       this,

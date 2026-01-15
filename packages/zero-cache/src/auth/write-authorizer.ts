@@ -1,14 +1,10 @@
 import type {SQLQuery} from '@databases/sql';
 import type {MaybePromise} from '@opentelemetry/resources';
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
-import {tmpdir} from 'node:os';
-import path from 'node:path';
-import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import {
@@ -29,17 +25,16 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
-import {
-  asStaticQuery,
-  staticQuery,
-} from '../../../zql/src/query/static-query.ts';
-import {
+import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
+import type {
+  ClientGroupStorage,
   DatabaseStorage,
-  type ClientGroupStorage,
 } from '../../../zqlite/src/database-storage.ts';
-import {Database} from '../../../zqlite/src/db.ts';
+import type {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
 import {
   fromSQLiteTypes,
@@ -82,6 +77,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #appID: string;
   readonly #logConfig: LogConfig;
   readonly #cgStorage: ClientGroupStorage;
+  readonly #config: ZeroConfig;
 
   #loadedPermissions: LoadedPermissions | null = null;
 
@@ -91,17 +87,14 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     replica: Database,
     appID: string,
     cgID: string,
+    writeAuthzStorage: DatabaseStorage,
   ) {
     this.#appID = appID;
+    this.#config = config;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
     this.#schema = getSchema(this.#lc, replica);
     this.#replica = replica;
-    const tmpDir = config.storageDBTmpDir ?? tmpdir();
-    const writeAuthzStorage = DatabaseStorage.create(
-      lc,
-      path.join(tmpDir, `mutagen-${pid}-${randInt(1000000, 9999999)}`),
-    );
     this.#cgStorage = writeAuthzStorage.createClientGroupStorage(cgID);
     this.#builderDelegate = {
       getSource: name => this.#getSource(name),
@@ -122,6 +115,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       this.#statementRunner,
       this.#appID,
       this.#loadedPermissions,
+      this.#config,
     ).permissions;
   }
 
@@ -163,10 +157,12 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         const source = this.#getSource(op.tableName);
         switch (op.op) {
           case 'insert': {
-            source.push({
-              type: 'add',
-              row: op.value,
-            });
+            consume(
+              source.push({
+                type: 'add',
+                row: op.value,
+              }),
+            );
             break;
           }
           // TODO(mlaw): what if someone updates the same thing twice?
@@ -175,18 +171,22 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           // next requirePreMutationRow will just return the row that was
           // pushed in.
           case 'update': {
-            source.push({
-              type: 'edit',
-              oldRow: this.#requirePreMutationRow(op),
-              row: op.value,
-            });
+            consume(
+              source.push({
+                type: 'edit',
+                oldRow: this.#requirePreMutationRow(op),
+                row: op.value,
+              }),
+            );
             break;
           }
           case 'delete': {
-            source.push({
-              type: 'remove',
-              row: this.#requirePreMutationRow(op),
-            });
+            consume(
+              source.push({
+                type: 'remove',
+                row: this.#requirePreMutationRow(op),
+              }),
+            );
             break;
           }
         }
@@ -292,7 +292,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       throw new Error(`Table ${tableName} not found`);
     }
     const {columns, primaryKey} = tableSpec.tableSpec;
-    assert(primaryKey.length);
+    assert(
+      primaryKey.length,
+      () => `Table ${tableName} must have a primary key`,
+    );
     source = new TableSource(
       this.#lc,
       this.#logConfig,
@@ -351,11 +354,11 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     authData: JWTPayload | undefined,
     op: ActionOpMap[A],
   ) {
-    const rules = must(this.#loadedPermissions).permissions?.tables[
+    const rules = must(this.#loadedPermissions)?.permissions?.tables?.[
       op.tableName
     ];
     const rowPolicies = rules?.row;
-    let rowQuery = staticQuery(this.#schema, op.tableName);
+    let rowQuery = newStaticQuery(this.#schema, op.tableName);
 
     const primaryKeyValues = this.#getPrimaryKey(op.tableName, op.value);
 
@@ -487,7 +490,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     applicableRowPolicy: Policy | undefined,
     applicableCellPolicies: Policy[],
     authData: JWTPayload | undefined,
-    rowQuery: Query<Schema, string>,
+    rowQuery: Query<string, Schema>,
   ) {
     if (!(await this.#passesPolicy(applicableRowPolicy, authData, rowQuery))) {
       return false;
@@ -509,7 +512,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   #passesPolicy(
     policy: Policy | undefined,
     authData: JWTPayload | undefined,
-    rowQuery: Query<Schema, string>,
+    rowQuery: Query<string, Schema>,
   ): MaybePromise<boolean> {
     if (policy === undefined) {
       return false;
@@ -517,7 +520,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = asStaticQuery(rowQuery).ast;
+    let rowQueryAst = asQueryInternals(rowQuery).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,
@@ -560,7 +563,7 @@ function updateWhere(where: Condition | undefined, policy: Policy) {
       {
         type: 'or',
         conditions: policy.map(([action, rule]) => {
-          assert(action);
+          assert(action, 'action must be defined in policy');
           return rule;
         }),
       },

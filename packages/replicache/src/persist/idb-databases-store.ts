@@ -4,6 +4,7 @@ import {
   assertObject,
   assertString,
 } from '../../../shared/src/asserts.ts';
+import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {CreateStore, Read, Store} from '../kv/store.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
@@ -11,7 +12,7 @@ import {getIDBDatabasesDBName} from './idb-databases-store-db-name.ts';
 import {makeClientID} from './make-client-id.ts';
 
 const DBS_KEY = 'dbs';
-const PROFILE_ID_KEY = 'profileId';
+export const PROFILE_ID_KEY = 'profileId';
 
 // TODO: make an opaque type
 export type IndexedDBName = string;
@@ -110,9 +111,21 @@ export class IDBDatabasesStore {
     return withWrite(this.#kvStore, async write => {
       let profileId = await write.get(PROFILE_ID_KEY);
       if (profileId === undefined) {
-        // Profile id is 'p' followed by a random number.
-        profileId = `p${makeClientID()}`;
+        // Not in the kv store. Try localStorage in case we are using a non persistent kv store.
+        const maybeLocalStorage = getBrowserGlobal('localStorage');
+        if (maybeLocalStorage) {
+          profileId = maybeLocalStorage.getItem(PROFILE_ID_KEY) ?? undefined;
+        }
+
+        if (profileId === undefined) {
+          // Profile id is 'p' followed by a random number.
+          profileId = `p${makeClientID()}`;
+        }
+
         await write.put(PROFILE_ID_KEY, profileId);
+        if (maybeLocalStorage) {
+          maybeLocalStorage.setItem(PROFILE_ID_KEY, profileId);
+        }
       }
       assertString(profileId);
       return profileId;

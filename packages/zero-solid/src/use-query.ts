@@ -1,21 +1,44 @@
-import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
-import {createStore} from 'solid-js/store';
-import type {ClientID} from '../../replicache/src/sync/ids.ts';
-import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
-import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
-import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {
-  createSolidViewFactory,
-  UNKNOWN,
-  type SolidView,
-  type State,
-} from './solid-view.ts';
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  untrack,
+  type Accessor,
+} from 'solid-js';
+import {createStore} from 'solid-js/store';
+import {
+  addContextToQuery,
+  asQueryInternals,
+  DEFAULT_TTL_MS,
+} from './bindings.ts';
+import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
 import {useZero} from './use-zero.ts';
+import {
+  type DefaultContext,
+  type DefaultSchema,
+  type Falsy,
+  type HumanReadable,
+  type PullRow,
+  type QueryOrQueryRequest,
+  type QueryResultDetails,
+  type ReadonlyJSONValue,
+  type Schema,
+  type TTL,
+} from './zero.ts';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,
+  Accessor<QueryResultDetails & {}>,
+];
+
+/**
+ * Result type for "maybe queries" - queries that may be falsy.
+ * The data value can be undefined when the query is falsy/disabled.
+ */
+export type MaybeQueryResult<TReturn> = readonly [
+  Accessor<HumanReadable<TReturn> | undefined>,
   Accessor<QueryResultDetails & {}>,
 ];
 
@@ -36,25 +59,67 @@ export type UseQueryOptions = {
  * @deprecated Use {@linkcode useQuery} instead.
  */
 export function createQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
+  querySignal: Accessor<
+    QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+  >,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
 ): QueryResult<TReturn> {
   return useQuery(querySignal, options);
 }
 
+// Overload 1: Query - returns QueryResult<TReturn>
 export function useQuery<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
 >(
-  querySignal: Accessor<Query<TSchema, TTable, TReturn, TContext>>,
+  querySignal: Accessor<
+    QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+  >,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Maybe query
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  querySignal: Accessor<
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy
+  >,
+  options?: UseQueryOptions | Accessor<UseQueryOptions>,
+): MaybeQueryResult<TReturn>;
+
+// Implementation
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  querySignal: Accessor<
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy
+  >,
+  options?: UseQueryOptions | Accessor<UseQueryOptions>,
+): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
   const [state, setState] = createStore<State>([
     {
       '': undefined,
@@ -68,64 +133,67 @@ export function useQuery<
     setRefetchKey(k => k + 1);
   };
 
-  let view: SolidView | undefined = undefined;
+  const zero = useZero<TSchema, undefined, TContext>();
 
-  // Wrap in in createComputed to ensure a new view is created if the querySignal changes.
-  createComputed<
-    [
-      SolidView | undefined,
-      ClientID | undefined,
-      Query<TSchema, TTable, TReturn, TContext> | undefined,
-      string | undefined,
-      TTL | undefined,
-      number,
-    ]
-  >(
-    ([
-      prevView,
-      prevClientID,
-      prevQuery,
-      prevQueryHash,
-      prevTtl,
-      prevRefetchKey,
-    ]) => {
-      const zero = useZero()();
-      const currentRefetchKey = refetchKey(); // depend on refetchKey to force re-evaluation
-      const {clientID} = zero;
-      const query = querySignal();
-      const bindings = bindingsForZero(zero);
-      const queryHash = bindings.hash(query);
-      const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;
-      if (
-        !prevView ||
-        clientID !== prevClientID ||
-        prevRefetchKey !== currentRefetchKey ||
-        (query !== prevQuery &&
-          (clientID === undefined || queryHash !== prevQueryHash))
-      ) {
-        if (prevView) {
-          prevView.destroy();
-        }
-        view = bindings.materialize(
-          query,
-          createSolidViewFactory(setState, refetch),
-          {ttl},
-        );
-      } else {
-        view = prevView;
-        if (ttl !== prevTtl) {
-          view.updateTTL(ttl);
-        }
-      }
-
-      return [view, clientID, query, queryHash, ttl, currentRefetchKey];
-    },
-    [undefined, undefined, undefined, undefined, undefined, initialRefetchKey],
-  );
-
-  onCleanup(() => {
-    view?.destroy();
+  // Handle possibly falsy queries
+  const q = createMemo(() => {
+    const query = querySignal();
+    if (!query) return undefined;
+    return addContextToQuery(query, zero().context);
   });
+
+  const qi = createMemo(() => {
+    const query = q();
+    if (!query) return undefined;
+    return asQueryInternals(query);
+  });
+
+  const hash = createMemo(() => qi()?.hash());
+  const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
+
+  const initialTTL = ttl();
+
+  const view = createMemo(() => {
+    // Depend on hash instead of query to avoid recreating the view when the
+    // query object changes but the hash is the same.
+    const currentHash = hash();
+    refetchKey();
+
+    // If query is falsy, don't create a view and reset state to undefined
+    if (currentHash === undefined) {
+      setState([{'': undefined}, UNKNOWN]);
+      return undefined;
+    }
+
+    const untrackedQuery = untrack(q);
+    if (!untrackedQuery) {
+      setState([{'': undefined}, UNKNOWN]);
+      return undefined;
+    }
+
+    const v = zero().materialize(
+      untrackedQuery,
+      createSolidViewFactory(setState, refetch),
+      {
+        ttl: initialTTL,
+      },
+    );
+
+    onCleanup(() => v.destroy());
+
+    return v;
+  });
+
+  // Update TTL on existing view when it changes.
+  createEffect(
+    on(
+      ttl,
+      currentTTL => {
+        view()?.updateTTL(currentTTL);
+      },
+      {defer: true},
+    ),
+  );
 
   return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
 }

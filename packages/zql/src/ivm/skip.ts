@@ -40,25 +40,21 @@ export class Skip implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
-    return this.#fetchOrCleanup('fetch', req);
-  }
-
-  cleanup(req: FetchRequest): Stream<Node> {
-    return this.#fetchOrCleanup('fetch', req);
-  }
-
-  *#fetchOrCleanup(method: 'fetch' | 'cleanup', req: FetchRequest) {
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     const start = this.#getStart(req);
     if (start === 'empty') {
       return;
     }
-    const nodes = this.#input[method]({...req, start});
+    const nodes = this.#input.fetch({...req, start});
     if (!req.reverse) {
       yield* nodes;
       return;
     }
     for (const node of nodes) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
       if (!this.#shouldBePresent(node.row)) {
         return;
       }
@@ -79,17 +75,22 @@ export class Skip implements Operator {
     return cmp < 0 || (cmp === 0 && !this.#bound.exclusive);
   }
 
-  push(change: Change): void {
+  *push(change: Change): Stream<'yield'> {
     const shouldBePresent = (row: Row) => this.#shouldBePresent(row);
     if (change.type === 'edit') {
-      maybeSplitAndPushEditChange(change, shouldBePresent, this.#output, this);
+      yield* maybeSplitAndPushEditChange(
+        change,
+        shouldBePresent,
+        this.#output,
+        this,
+      );
       return;
     }
 
     change satisfies AddChange | RemoveChange | ChildChange;
 
     if (shouldBePresent(change.node.row)) {
-      this.#output.push(change, this);
+      yield* this.#output.push(change, this);
     }
   }
 

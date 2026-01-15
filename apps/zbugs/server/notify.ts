@@ -1,8 +1,7 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
-import type {TransactionSql} from 'postgres';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
-import {builder, schema, type Schema} from '../shared/schema.ts';
+import {builder, type schema} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
 import type {PostCommitTask} from './server-mutators.ts';
@@ -49,7 +48,7 @@ type NotificationArgs = {issueID: string} & (
 );
 
 export async function notify(
-  tx: ServerTransaction<Schema, TransactionSql, AuthData | undefined>,
+  tx: ServerTransaction,
   authData: AuthData | undefined,
   args: NotificationArgs,
   postCommitTasks: PostCommitTask[],
@@ -257,7 +256,7 @@ const emailRegex =
   /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
 export async function gatherRecipients(
-  tx: ServerTransaction<Schema, TransactionSql, AuthData | undefined>,
+  tx: ServerTransaction,
   issueID: string,
   actorID: string,
   excludeActor = true,

@@ -6,13 +6,13 @@ import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
-import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {pick} from '../helpers/planner.ts';
 import {builder} from './schema.ts';
 
 function ast(q: AnyQuery) {
-  return queryWithContext(q, undefined).ast;
+  return asQueryInternals(q).ast;
 }
 
 /**
@@ -54,7 +54,11 @@ function normalizeConditionFlipFlags(condition: Condition): Condition {
 
 describe('one join', () => {
   test('no changes in cost', () => {
-    const costModel = () => ({startupCost: 0, rows: 10});
+    const costModel = () => ({
+      startupCost: 0,
+      rows: 10,
+      fanout: () => ({fanout: 3, confidence: 'none' as const}),
+    });
     const unplanned = ast(builder.track.whereExists('album'));
     const planned = planQuery(unplanned, costModel);
 
@@ -128,6 +132,7 @@ describe('two joins via or', () => {
   });
 
   test('track.exists(album).or.exists(invoiceLines): track < invoiceLines > album', () => {
+    const defaultFanout = () => ({fanout: 3, confidence: 'none' as const});
     const costModel = (
       table: string,
       _sort: Ordering,
@@ -141,9 +146,9 @@ describe('two joins via or', () => {
             constraint.hasOwnProperty('id'),
             'Expected constraint to have id',
           );
-          return {startupCost: 0, rows: 1};
+          return {startupCost: 0, rows: 1, fanout: defaultFanout};
         }
-        return {startupCost: 0, rows: 2}; // only 2 albums with the name 'Outlaw Blues'
+        return {startupCost: 0, rows: 2, fanout: defaultFanout}; // only 2 albums with the name 'Outlaw Blues'
       }
 
       if (table === 'invoiceLine') {
@@ -156,23 +161,23 @@ describe('two joins via or', () => {
           // TODO: We cannot get this to flip one and not the other without incorporating
           // limits and selectivity into the cost model. For now, just return a low cost to
           // simulate the track quickly matching invoices and returning early.
-          return {startupCost: 0, rows: 0.1};
+          return {startupCost: 0, rows: 0.1, fanout: defaultFanout};
         }
 
-        return {startupCost: 0, rows: 10_000};
+        return {startupCost: 0, rows: 10_000, fanout: defaultFanout};
       }
 
       if (table === 'track') {
         if (constraint !== undefined) {
           if (constraint.hasOwnProperty('id')) {
-            return {startupCost: 0, rows: 1};
+            return {startupCost: 0, rows: 1, fanout: defaultFanout};
           }
           if (constraint.hasOwnProperty('albumId')) {
-            return {startupCost: 0, rows: 10};
+            return {startupCost: 0, rows: 10, fanout: defaultFanout};
           }
           throw new Error('Unexpected constraint on track');
         }
-        return {startupCost: 0, rows: 1_000};
+        return {startupCost: 0, rows: 1_000, fanout: defaultFanout};
       }
 
       throw new Error(`Unexpected table: ${table}`);
@@ -244,11 +249,10 @@ describe('double nested exists', () => {
     );
 
     // join order: artist -> album -> track
-    // With semi-join overhead, planner now flips both joins to avoid overhead
     expect(pick(planned, ['where', 'flip'])).toBe(true);
     expect(
       pick(planned, ['where', 'related', 'subquery', 'where', 'flip']),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -304,6 +308,7 @@ describe('related calls get plans', () => {
   });
 
   test('1:many may flip', () => {
+    const defaultFanout = () => ({fanout: 3, confidence: 'none' as const});
     const unplanned = ast(
       builder.album.related('tracks', q =>
         q.whereExists('genre', q => q.where('name', 'Foo')),
@@ -326,16 +331,19 @@ describe('related calls get plans', () => {
           return {
             rows: 1,
             startupCost: 0,
+            fanout: defaultFanout,
           };
         }
         return {
           rows: 10_000,
           startupCost: 0,
+          fanout: defaultFanout,
         };
       }
       return {
         rows: 10,
         startupCost: 0,
+        fanout: defaultFanout,
       };
     };
 
@@ -418,6 +426,8 @@ test('ors anded one after the other', () => {
 });
 
 function makeCostModel(costs: Record<string, number>) {
+  const defaultFanout = () => ({fanout: 3, confidence: 'none' as const});
+
   return (
     table: string,
     _sort: Ordering,
@@ -430,6 +440,7 @@ function makeCostModel(costs: Record<string, number>) {
       return {
         startupCost: 0,
         rows: 1,
+        fanout: defaultFanout,
       };
     }
 
@@ -438,6 +449,7 @@ function makeCostModel(costs: Record<string, number>) {
       return {
         startupCost: 0,
         rows: 100,
+        fanout: defaultFanout,
       };
     }
 
@@ -446,6 +458,7 @@ function makeCostModel(costs: Record<string, number>) {
       return {
         startupCost: 0,
         rows: 10,
+        fanout: defaultFanout,
       };
     }
 
@@ -454,6 +467,7 @@ function makeCostModel(costs: Record<string, number>) {
     return {
       startupCost: 0,
       rows: ret,
+      fanout: defaultFanout,
     };
   };
 }

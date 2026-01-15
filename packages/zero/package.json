@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "description": "Zero is a web framework for serverless web development.",
   "author": "Rocicorp, Inc.",
   "repository": {
@@ -14,16 +14,14 @@
     "url": "https://bugs.rocicorp.dev"
   },
   "scripts": {
-    "build": "rm -rf out && npm run build-server && npm run build-client",
-    "build-client": "tsc -p tsconfig.client.json && tsx tool/build.js",
-    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js out/zero/src/analyze-query.js out/zero/src/transform-query.js out/zero/src/zero-out.js",
+    "build": "node --experimental-strip-types --no-warnings tool/build.ts",
+    "build:watch": "node --experimental-strip-types --no-warnings tool/build.ts --watch",
     "check-types": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json",
     "check-types:client:watch": "tsc -p tsconfig.client.json --watch",
     "check-types:server:watch": "tsc -p tsconfig.server.json --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "oxlint --type-aware src/",
-    "prepack": "cp ../zero-cache/src/services/litestream/config.yml ./out/zero-cache/src/services/litestream/",
     "docs": "node --experimental-strip-types --no-warnings tool/generate-docs.ts",
     "docs:server": "node --watch --experimental-strip-types --no-warnings tool/generate-docs.ts --server"
   },
@@ -48,7 +46,8 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.12",
+    "@rocicorp/zero-sqlite3": "^1.0.14",
+    "@standard-schema/spec": "^1.0.0",
     "@types/basic-auth": "^1.1.8",
     "basic-auth": "^2.0.1",
     "chalk": "^5.3.0",
@@ -72,7 +71,6 @@
     "postgres": "^3.4.4",
     "prettier": "^3.5.3",
     "semver": "^7.5.4",
-    "@standard-schema/spec": "^1.0.0",
     "tsx": "^4.19.1",
     "url-pattern": "^1.0.3",
     "urlpattern-polyfill": "^10.1.0",
@@ -81,17 +79,17 @@
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/prettier-config": "^0.4.0",
-    "@vitest/runner": "3.2.4",
+    "@vitest/runner": "4.0.15",
     "analyze-query": "0.0.0",
     "ast-to-zql": "0.0.0",
-    "esbuild": "^0.25.10",
     "expo-sqlite": ">=15",
     "replicache": "15.2.1",
     "shared": "0.0.0",
-    "typedoc": "^0.28.2",
-    "typedoc-plugin-markdown": "^4.6.1",
-    "typescript": "~5.8.2",
-    "vitest": "3.2.4",
+    "typedoc": "^0.28.15",
+    "typedoc-plugin-markdown": "^4.9.0",
+    "typescript": "~5.9.3",
+    "vite": "7.2.7",
+    "vitest": "4.0.15",
     "zero-cache": "0.0.0",
     "zero-client": "0.0.0",
     "zero-pg": "0.0.0",
@@ -113,13 +111,17 @@
     }
   },
   "type": "module",
-  "main": "out/zero.js",
-  "module": "out/zero.js",
-  "types": "out/zero-client/src/mod.d.ts",
+  "main": "out/zero/src/zero.js",
+  "module": "out/zero/src/zero.js",
+  "types": "out/zero/src/zero.d.ts",
   "exports": {
     ".": {
-      "types": "./out/zero-client/src/mod.d.ts",
-      "default": "./out/zero.js"
+      "types": "./out/zero/src/zero.d.ts",
+      "default": "./out/zero/src/zero.js"
+    },
+    "./bindings": {
+      "types": "./out/zero/src/bindings.d.ts",
+      "default": "./out/zero/src/bindings.js"
     },
     "./change-protocol/v0": {
       "types": "./out/zero/src/change-protocol/v0.d.ts",
@@ -127,50 +129,54 @@
     },
     "./expo-sqlite": {
       "types": "./out/zero/src/expo-sqlite.d.ts",
-      "default": "./out/expo-sqlite.js"
+      "default": "./out/zero/src/expo-sqlite.js"
     },
     "./op-sqlite": {
       "types": "./out/zero/src/op-sqlite.d.ts",
-      "default": "./out/op-sqlite.js"
+      "default": "./out/zero/src/op-sqlite.js"
     },
     "./pg": {
-      "types": "./out/zero-pg/src/mod.d.ts",
+      "types": "./out/zero/src/pg.d.ts",
       "default": "./out/zero/src/pg.js"
     },
     "./react": {
-      "types": "./out/zero-react/src/mod.d.ts",
-      "default": "./out/react.js"
+      "types": "./out/zero/src/react.d.ts",
+      "default": "./out/zero/src/react.js"
     },
     "./react-native": {
       "types": "./out/zero/src/react-native.d.ts",
-      "default": "./out/react-native.js"
+      "default": "./out/zero/src/react-native.js"
     },
     "./server": {
-      "types": "./out/zero-server/src/mod.d.ts",
+      "types": "./out/zero/src/server.d.ts",
       "default": "./out/zero/src/server.js"
     },
     "./server/adapters/drizzle": {
-      "types": "./out/zero-server/src/adapters/drizzle.d.ts",
+      "types": "./out/zero/src/adapters/drizzle.d.ts",
       "default": "./out/zero/src/adapters/drizzle.js"
     },
+    "./server/adapters/prisma": {
+      "types": "./out/zero/src/adapters/prisma.d.ts",
+      "default": "./out/zero/src/adapters/prisma.js"
+    },
     "./server/adapters/pg": {
-      "types": "./out/zero-server/src/adapters/pg.d.ts",
+      "types": "./out/zero/src/adapters/pg.d.ts",
       "default": "./out/zero/src/adapters/pg.js"
     },
     "./server/adapters/postgresjs": {
-      "types": "./out/zero-server/src/adapters/postgresjs.d.ts",
+      "types": "./out/zero/src/adapters/postgresjs.d.ts",
       "default": "./out/zero/src/adapters/postgresjs.js"
     },
     "./solid": {
-      "types": "./out/zero-solid/src/mod.d.ts",
-      "default": "./out/solid.js"
+      "types": "./out/zero/src/solid.d.ts",
+      "default": "./out/zero/src/solid.js"
     },
     "./sqlite": {
       "types": "./out/zero/src/sqlite.d.ts",
-      "default": "./out/sqlite.js"
+      "default": "./out/zero/src/sqlite.js"
     },
     "./zqlite": {
-      "types": "./out/zqlite/src/mod.d.ts",
+      "types": "./out/zero/src/zqlite.d.ts",
       "default": "./out/zero/src/zqlite.js"
     }
   },

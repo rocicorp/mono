@@ -1,10 +1,10 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
 import type {JSONValue} from '../../../shared/src/json.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {AST, Condition} from '../../../zero-protocol/src/ast.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {bindStaticParameters} from '../../../zql/src/builder/builder.ts';
-import type {LogContext} from '@rocicorp/logger';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 
 export type TransformedAndHashed = {
@@ -63,7 +63,7 @@ function transformQueryInternal(
   query: AST,
   permissionRules: PermissionsConfig,
 ): AST {
-  let rowSelectRules = permissionRules.tables[query.table]?.row?.select;
+  let rowSelectRules = permissionRules?.tables?.[query.table]?.row?.select;
 
   if (!rowSelectRules || rowSelectRules.length === 0) {
     // If there are no rules, we default to not allowing any rows to be selected.

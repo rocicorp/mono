@@ -1,16 +1,15 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
-import {sleep} from '../../shared/src/sleep.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
-import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import {mapAST} from '../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
 import type {PermissionsConfig} from '../../zero-schema/src/compiled-permissions.ts';
@@ -35,11 +34,12 @@ export type RunAstOptions = {
 
 export async function runAst(
   lc: LogContext,
+  clientSchema: ClientSchema,
   ast: AST,
   isTransformed: boolean,
   options: RunAstOptions,
 ): Promise<AnalyzeQueryResult> {
-  const {clientToServerMapper, permissions, host, db} = options;
+  const {clientToServerMapper, permissions, host} = options;
   const result: AnalyzeQueryResult = {
     warnings: [],
     syncedRows: undefined,
@@ -57,6 +57,10 @@ export async function runAst(
     ast = mapAST(ast, must(clientToServerMapper));
   }
   if (options.applyPermissions) {
+    result.warnings.push(
+      'Permissions are deprecated and will be removed in an upcoming release. See: https://zero.rocicorp.dev/docs/auth.',
+    );
+
     const authData = options.authData ? JSON.parse(options.authData) : {};
     if (!options.authData) {
       result.warnings.push(
@@ -67,14 +71,15 @@ export async function runAst(
       lc,
       'clientGroupIDForAnalyze',
       ast,
-      must(permissions),
+      must(
+        permissions,
+        'Permissions are required when applyPermissions is true',
+      ),
       authData,
       false,
     ).transformedAst;
     result.afterPermissions = await formatOutput(ast.table + astToZQL(ast));
   }
-
-  const tableSpecs = computeZqlSpecs(lc, db);
   const pipeline = buildPipeline(ast, host, 'query-id');
 
   const start = performance.now();
@@ -82,16 +87,11 @@ export async function runAst(
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
   const seenByTable: Set<string> = new Set();
-  for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
+  for (const rowChange of hydrate(pipeline, hashOfAST(ast), clientSchema)) {
+    if (rowChange === 'yield') {
+      continue;
+    }
     assert(rowChange.type === 'add');
-
-    // yield to other tasks to avoid blocking for too long
-    if (syncedRowCount % 10 === 0) {
-      await Promise.resolve();
-    }
-    if (syncedRowCount % 100 === 0) {
-      await sleep(1);
-    }
 
     let rows: Row[] = rowsByTable[rowChange.table];
     const s = rowChange.table + '.' + JSON.stringify(rowChange.row);

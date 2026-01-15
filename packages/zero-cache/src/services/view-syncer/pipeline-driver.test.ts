@@ -1,8 +1,15 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  boolean,
+  number,
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
@@ -11,6 +18,7 @@ import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
+import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
@@ -19,11 +27,18 @@ import {
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
 import {getMutationResultsQuery} from './cvr.ts';
-import {PipelineDriver} from './pipeline-driver.ts';
+import {PipelineDriver, type Timer} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 import {TimeSliceTimer} from './view-syncer.ts';
 
+const NO_TIME_ADVANCEMENT_TIMER: Timer = {
+  elapsedLap: () => 0,
+  totalElapsed: () => 0,
+};
+
 describe('view-syncer/pipeline-driver', () => {
+  const shardID: ShardID = {appID: 'zeroz', shardNum: 1};
+  const mutationsTableName = `${upstreamSchema(shardID)}.mutations`;
   let dbFile: DbFile;
   let db: DB;
   let lc: LogContext;
@@ -41,27 +56,19 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines = new PipelineDriver(
       lc,
       testLogConfig,
-      new Snapshotter(lc, dbFile.path, {appID: 'zeroz'}),
-      {appID: 'zeroz', shardNum: 1},
+      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+      shardID,
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
       new InspectorDelegate(undefined),
+      () => 200 /** yield threshold */,
     );
 
     db = dbFile.connect(lc);
     initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
-      CREATE TABLE "zeroz.schemaVersions" (
-        -- Note: Using "INT" to avoid the special semantics of "INTEGER PRIMARY KEY" in SQLite.
-        "lock"                INT PRIMARY KEY,
-        "minSupportedVersion" INT,
-        "maxSupportedVersion" INT,
-        _0_version            TEXT NOT NULL
-      );
-      INSERT INTO "zeroz.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-        VALUES (1, 1, 1, '123');
-      CREATE TABLE "zeroz.mutations" (
+      CREATE TABLE "${mutationsTableName}" (
         "clientGroupID"  TEXT,
         "clientID"       TEXT,
         "mutationID"     INTEGER,
@@ -122,6 +129,43 @@ describe('view-syncer/pipeline-driver', () => {
 
   afterEach(() => {
     dbFile.delete();
+  });
+
+  const issues = table('issues')
+    .columns({
+      id: string(),
+      closed: boolean(),
+    })
+    .primaryKey('id');
+  const comments = table('comments')
+    .columns({
+      id: string(),
+      issueID: string(),
+      upvotes: number(),
+    })
+    .primaryKey('id');
+  const issueLabels = table('issueLabels')
+    .columns({
+      issueID: string(),
+      labelID: string(),
+      legacyID: string(),
+    })
+    .primaryKey('issueID', 'labelID');
+  const labels = table('labels')
+    .columns({
+      id: string(),
+      name: string(),
+    })
+    .primaryKey('id');
+  const uniques = table('uniques')
+    .columns({
+      id: string(),
+      name: string(),
+    })
+    .primaryKey('id');
+
+  const clientSchema = createSchema({
+    tables: [issues, comments, issueLabels, labels, uniques],
   });
 
   const ISSUES_AND_COMMENTS: AST = {
@@ -305,32 +349,28 @@ describe('view-syncer/pipeline-driver', () => {
   };
 
   const messages = new ReplicationMessages({
-    'issues': 'id',
-    'comments': 'id',
-    'issueLabels': ['issueID', 'labelID'],
-    'uniques': 'id',
-    'zeroz.mutations': ['clientGroupID', 'clientID', 'mutationID'],
+    issues: 'id',
+    comments: 'id',
+    issueLabels: ['issueID', 'labelID'],
+    uniques: 'id',
+    [mutationsTableName]: ['clientGroupID', 'clientID', 'mutationID'],
   });
-  const zeroMessages = new ReplicationMessages(
-    {schemaVersions: 'lock'},
-    'zeroz',
-  );
 
   function startTimer() {
     return new TimeSliceTimer().startWithoutYielding();
   }
 
-  function changes() {
-    return [...pipelines.advance(startTimer()).changes];
+  function changes(timer: Timer = NO_TIME_ADVANCEMENT_TIMER) {
+    return [...pipelines.advance(timer).changes];
   }
 
   test('replica version', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     expect(pipelines.replicaVersion).toBe('123');
   });
 
   test('add query', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
 
     expect([
       ...pipelines.addQuery(
@@ -451,7 +491,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('insert', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -520,7 +560,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('delete', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -542,15 +582,6 @@ describe('view-syncer/pipeline-driver', () => {
           "queryHash": "hash1",
           "row": undefined,
           "rowKey": {
-            "id": "21",
-          },
-          "table": "comments",
-          "type": "remove",
-        },
-        {
-          "queryHash": "hash1",
-          "row": undefined,
-          "rowKey": {
             "id": "1",
           },
           "table": "issues",
@@ -565,12 +596,21 @@ describe('view-syncer/pipeline-driver', () => {
           "table": "comments",
           "type": "remove",
         },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "21",
+          },
+          "table": "comments",
+          "type": "remove",
+        },
       ]
     `);
   });
 
   test('truncate', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -586,7 +626,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('update', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -655,29 +695,68 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('timeout on slow advancement', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
-        totalElapsed: () => 10,
+        // hydration time
+        totalElapsed: () => 100,
+        elapsedLap: () => 100,
       }),
     ];
 
-    replicator.processTransaction(
-      '134',
-      // Timeout only kicks in at 20 changes.
-      ...Array.from({length: 20}, (_, i) =>
-        messages.insert('issues', {id: String(30 + i)}),
-      ),
+    replicator.processTransaction('134', messages.insert('issues', {id: 'i1'}));
+
+    // 60ms is larger than half of the hydration time.
+    expect(() => [
+      ...pipelines.advance({totalElapsed: () => 60, elapsedLap: () => 60})
+        .changes,
+    ]).toThrowErrorMatchingInlineSnapshot(
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 60 ms. Advancement time limited based on total hydration time of 100 ms.]`,
     );
 
-    // 6ms is larger than half of the hydration time.
+    // Test that after reset hydration and advancement work.
+    pipelines.reset(clientSchema);
+
+    expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
+
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
+        // hydration time
+        totalElapsed: () => 100,
+        elapsedLap: () => 100,
+      }),
+    ];
+
+    replicator.processTransaction('140', messages.insert('issues', {id: 'i1'}));
+
     expect(() => [
-      ...pipelines.advance({totalElapsed: () => 6}).changes,
-    ]).toThrow(ResetPipelinesSignal);
+      ...pipelines.advance({totalElapsed: () => 20, elapsedLap: () => 20})
+        .changes,
+    ]).not.toThrow();
+  });
+
+  test('advancement timeout has a minimum limit', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
+        // very low hydration time
+        totalElapsed: () => 25,
+        elapsedLap: () => 25,
+      }),
+    ];
+
+    replicator.processTransaction('134', messages.insert('issues', {id: 'i1'}));
+
+    // 29 is larger than the hydration time but less than the minimum
+    // advancement time limit
+    expect(() => [
+      ...pipelines.advance({totalElapsed: () => 29, elapsedLap: () => 29})
+        .changes,
+    ]).not.toThrow();
   });
 
   test('reset', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -739,7 +818,7 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     pipelines.advanceWithoutDiff();
-    pipelines.reset(null);
+    pipelines.reset(clientSchema);
 
     expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
 
@@ -856,41 +935,39 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('update unique non-primary key', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     expect([
       ...pipelines.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer()),
     ]).toMatchInlineSnapshot(`
-        [
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "foo",
-              "name": "bar",
-            },
-            "rowKey": {
-              "id": "foo",
-              "name": "bar",
-            },
-            "table": "uniques",
-            "type": "add",
+      [
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "id": "foo",
+            "name": "bar",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "boo",
-              "name": "dar",
-            },
-            "rowKey": {
-              "id": "boo",
-              "name": "dar",
-            },
-            "table": "uniques",
-            "type": "add",
+          "rowKey": {
+            "id": "foo",
           },
-        ]
-      `);
+          "table": "uniques",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "id": "boo",
+            "name": "dar",
+          },
+          "rowKey": {
+            "id": "boo",
+          },
+          "table": "uniques",
+          "type": "add",
+        },
+      ]
+    `);
 
     replicator.processTransaction(
       '134',
@@ -906,16 +983,6 @@ describe('view-syncer/pipeline-driver', () => {
       [
         {
           "queryHash": "hash1",
-          "row": undefined,
-          "rowKey": {
-            "id": "boo",
-            "name": "dar",
-          },
-          "table": "uniques",
-          "type": "remove",
-        },
-        {
-          "queryHash": "hash1",
           "row": {
             "_0_version": "134",
             "id": "boo",
@@ -923,51 +990,48 @@ describe('view-syncer/pipeline-driver', () => {
           },
           "rowKey": {
             "id": "boo",
-            "name": "far",
           },
           "table": "uniques",
-          "type": "add",
+          "type": "edit",
         },
       ]
     `);
   });
 
   test('unique constraint conflict due to changelog compression', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     expect([
       ...pipelines.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer()),
     ]).toMatchInlineSnapshot(`
-        [
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "foo",
-              "name": "bar",
-            },
-            "rowKey": {
-              "id": "foo",
-              "name": "bar",
-            },
-            "table": "uniques",
-            "type": "add",
+      [
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "id": "foo",
+            "name": "bar",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "boo",
-              "name": "dar",
-            },
-            "rowKey": {
-              "id": "boo",
-              "name": "dar",
-            },
-            "table": "uniques",
-            "type": "add",
+          "rowKey": {
+            "id": "foo",
           },
-        ]
-      `);
+          "table": "uniques",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "id": "boo",
+            "name": "dar",
+          },
+          "rowKey": {
+            "id": "boo",
+          },
+          "table": "uniques",
+          "type": "add",
+        },
+      ]
+    `);
 
     replicator.processTransaction(
       '134',
@@ -983,7 +1047,6 @@ describe('view-syncer/pipeline-driver', () => {
           "row": undefined,
           "rowKey": {
             "id": "foo",
-            "name": "bar",
           },
           "table": "uniques",
           "type": "remove",
@@ -997,7 +1060,6 @@ describe('view-syncer/pipeline-driver', () => {
           },
           "rowKey": {
             "id": "baz",
-            "name": "bar",
           },
           "table": "uniques",
           "type": "add",
@@ -1011,7 +1073,6 @@ describe('view-syncer/pipeline-driver', () => {
           },
           "rowKey": {
             "id": "foo",
-            "name": "wuzzy",
           },
           "table": "uniques",
           "type": "add",
@@ -1021,7 +1082,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('whereExists query', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -1057,7 +1118,6 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "1",
             "labelID": "1",
-            "legacyID": "1-1",
           },
           "table": "issueLabels",
           "type": "remove",
@@ -1076,7 +1136,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('whereExists added by permissions return no rows', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     expect([
       ...pipelines.addQuery(
         'hash1',
@@ -1135,7 +1195,6 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "1",
             "labelID": "1",
-            "legacyID": "1-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -1246,7 +1305,7 @@ describe('view-syncer/pipeline-driver', () => {
       ],
     };
 
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [...pipelines.addQuery('hash1', 'queryID1', query, startTimer())];
 
     replicator.processTransaction(
@@ -1284,7 +1343,6 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
-            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -1313,7 +1371,6 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
-            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -1360,7 +1417,6 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
-            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "remove",
@@ -1380,7 +1436,6 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
-            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "remove",
@@ -1399,7 +1454,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('getRow', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
 
     [
       ...pipelines.addQuery(
@@ -1466,12 +1521,15 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('get mutation results', () => {
-    pipelines.init(null);
-    const mutationResultsQuery = getMutationResultsQuery('zeroz', 'cg1');
+    pipelines.init(clientSchema);
+    const mutationResultsQuery = getMutationResultsQuery(
+      upstreamSchema(shardID),
+      'cg1',
+    );
 
     replicator.processTransaction(
       '134',
-      messages.insert('zeroz.mutations', {
+      messages.insert(mutationsTableName, {
         clientGroupID: 'cg1',
         clientID: 'c1',
         mutationID: 1,
@@ -1489,7 +1547,7 @@ describe('view-syncer/pipeline-driver', () => {
     ];
 
     expect(
-      pipelines.getRow('zeroz.mutations', {
+      pipelines.getRow(mutationsTableName, {
         clientGroupID: 'cg1',
         clientID: 'c1',
         mutationID: 1,
@@ -1497,58 +1555,8 @@ describe('view-syncer/pipeline-driver', () => {
     ).toMatchInlineSnapshot(`undefined`);
   });
 
-  test('schemaVersions change and insert', () => {
-    pipelines.init(null);
-    [
-      ...pipelines.addQuery(
-        'hash1',
-        'queryID1',
-        ISSUES_AND_COMMENTS,
-        startTimer(),
-      ),
-    ];
-
-    replicator.processTransaction(
-      '134',
-      messages.insert('issues', {id: '4', closed: 0}),
-      zeroMessages.update('schemaVersions', {
-        lock: true,
-        minSupportedVersion: 1,
-        maxSupportedVersion: 2,
-      }),
-    );
-
-    expect(pipelines.currentSchemaVersions()).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 1,
-    });
-
-    expect(changes()).toMatchInlineSnapshot(`
-      [
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "134",
-            "closed": false,
-            "id": "4",
-          },
-          "rowKey": {
-            "id": "4",
-          },
-          "table": "issues",
-          "type": "add",
-        },
-      ]
-    `);
-
-    expect(pipelines.currentSchemaVersions()).toEqual({
-      minSupportedVersion: 1,
-      maxSupportedVersion: 2,
-    });
-  });
-
   test('multiple advancements', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -1632,7 +1640,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('remove query', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -1704,7 +1712,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('push fails on out of bounds numbers', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery(
         'hash1',

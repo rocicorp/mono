@@ -1,15 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
-import {IncomingMessage, Server} from 'node:http';
-import {Socket} from 'node:net';
-import {WebSocketServer, type WebSocket, type ServerOptions} from 'ws';
+import type {IncomingMessage} from 'node:http';
+import {Server} from 'node:http';
+import type {Socket} from 'node:net';
+import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {serializableSubset, type IncomingMessageSubset} from './http.ts';
-import {
-  MESSAGE_TYPES,
-  type Receiver,
-  type Sender,
-  type Worker,
-} from './processes.ts';
+import type {MESSAGE_TYPES} from './processes.ts';
+import {type Receiver, type Sender, type Worker} from './processes.ts';
 import {closeWithError, PROTOCOL_ERROR} from './ws.ts';
 
 export type HandoffSpec<P> = {
@@ -40,7 +37,7 @@ export type WebSocketReceiver<P> = (
 export type WebSocketHandoffHandler = (
   message: IncomingMessageSubset,
   socket: Socket,
-  head: Buffer,
+  head: ArrayBuffer,
 ) => void;
 
 /**
@@ -58,7 +55,11 @@ export function createWebSocketHandoffHandler<P>(
       noServer: true,
     },
   );
-  return (message: IncomingMessageSubset, socket: Socket, head: Buffer) => {
+  return (
+    message: IncomingMessageSubset,
+    socket: Socket,
+    head: ArrayBuffer,
+  ) => {
     let sent = false;
 
     function send({payload, sender}: HandoffSpec<P>) {
@@ -83,8 +84,11 @@ export function createWebSocketHandoffHandler<P>(
       // Returning an error on the HTTP handshake looks like a hanging connection
       // (at least from Chrome) and doesn't report any meaningful error in the browser.
       // Instead, finish the upgrade to a websocket and then close it with an error.
-      wss.handleUpgrade(message as IncomingMessage, socket, head, ws =>
-        closeWithError(lc, ws, error, PROTOCOL_ERROR),
+      wss.handleUpgrade(
+        message as IncomingMessage,
+        socket,
+        Buffer.from(head),
+        ws => closeWithError(lc, ws, error, PROTOCOL_ERROR),
       );
     }
 
@@ -119,7 +123,7 @@ export function installWebSocketHandoff<P>(
     // handoff messages from this worker's parent.
     source.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
       const {message, head} = msg;
-      handle(message, socket as Socket, Buffer.from(head));
+      handle(message, socket as Socket, head);
     });
   }
 }

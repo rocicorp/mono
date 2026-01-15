@@ -31,7 +31,7 @@ test('permission rules create query ASTs', async () => {
     () => {
       const allowIfAdmin = (
         authData: AuthData,
-        {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+        {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
       ) => cmpLit(authData.role, '=', 'admin');
 
       return {
@@ -130,7 +130,7 @@ test('nested parameters', async () => {
     () => {
       const allowIfAdmin = (
         authData: AuthData,
-        {or, cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+        {or, cmpLit}: ExpressionBuilder<string, ZeroSchema>,
       ) =>
         or(
           cmpLit(authData.role, '=', 'admin'),
@@ -139,7 +139,7 @@ test('nested parameters', async () => {
 
       const allowIfSelf = (
         authData: AuthData,
-        {cmp}: ExpressionBuilder<typeof schema, 'user'>,
+        {cmp}: ExpressionBuilder<'user', typeof schema>,
       ) => cmp('id', authData.attributes.id);
 
       return {

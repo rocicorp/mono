@@ -6,9 +6,12 @@ import {getPublicationInfo, type PublicationInfo} from './published.ts';
 
 describe('tables/published', () => {
   let db: postgres.Sql;
+  let pgVersion: number;
+
   beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('published_tables_test');
-
+    [{pgVersion}] =
+      await db`SELECT current_setting('server_version_num')::int as "pgVersion"`;
     return () => testDBs.drop(db);
   });
 
@@ -1468,6 +1471,151 @@ describe('tables/published', () => {
       )
     ).toMatchInlineSnapshot(`
       "[
+        {
+          "schema": "test",
+          "tableName": "issues",
+          "name": "issues_pkey",
+          "unique": true,
+          "isReplicaIdentity": false,
+          "isImmediate": true,
+          "columns": {
+            "issue_id": "ASC"
+          }
+        },
+        {
+          "schema": "test",
+          "tableName": "users",
+          "name": "users_pkey",
+          "unique": true,
+          "isReplicaIdentity": false,
+          "isImmediate": true,
+          "columns": {
+            "user_id": "ASC"
+          }
+        }
+      ]"
+    `);
+  });
+
+  test('includes generated columns for pg 18+', async ({skip}) => {
+    if (pgVersion < 180000) {
+      skip();
+    }
+    (
+      await runAndExpectIndexes(
+        /*sql*/ `
+      CREATE SCHEMA test;
+      CREATE TABLE test.issues (
+        issue_id INTEGER PRIMARY KEY,
+        org_id INTEGER CHECK (org_id > 0),
+        component_id INTEGER,
+        included INTEGER GENERATED ALWAYS AS (issue_id + 1) STORED
+      );
+      CREATE TABLE test.users (
+        user_id INTEGER PRIMARY KEY,
+        birthday TIMESTAMPTZ
+      );
+      CREATE INDEX idx_with_expression ON test.issues (org_id, (component_id + 1));
+      CREATE INDEX partial_idx ON test.issues (component_id) WHERE org_id > 1000;
+      CREATE INDEX idx_with_gen ON test.issues (issue_id, org_id, component_id, included);
+      CREATE INDEX birthday_idx ON test.users (user_id, birthday);
+      CREATE PUBLICATION zero_data FOR TABLE test.issues, TABLE test.users (user_id) 
+             WITH (publish_generated_columns=stored);`,
+        {
+          publications: [
+            {
+              pubname: 'zero_data',
+              pubinsert: true,
+              pubupdate: true,
+              pubdelete: true,
+              pubtruncate: true,
+            },
+          ],
+          tables: [
+            {
+              oid: expect.any(Number),
+              schema: 'test',
+              name: 'issues',
+              replicaIdentity: 'd',
+              columns: {
+                issue_id: {
+                  pos: 1,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+                org_id: {
+                  pos: 2,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: false,
+                  dflt: null,
+                },
+                component_id: {
+                  pos: 3,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: false,
+                  dflt: null,
+                },
+                included: {
+                  pos: 4,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: false,
+                  dflt: '(issue_id + 1)',
+                },
+              },
+              primaryKey: ['issue_id'],
+              publications: {['zero_data']: {rowFilter: null}},
+            },
+            {
+              oid: expect.any(Number),
+              schema: 'test',
+              name: 'users',
+              replicaIdentity: 'd',
+              columns: {
+                ['user_id']: {
+                  pos: 1,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+              },
+              primaryKey: ['user_id'],
+              publications: {['zero_data']: {rowFilter: null}},
+            },
+          ],
+        },
+      )
+    ).toMatchInlineSnapshot(`
+      "[
+        {
+          "schema": "test",
+          "tableName": "issues",
+          "name": "idx_with_gen",
+          "unique": false,
+          "isReplicaIdentity": false,
+          "isImmediate": true,
+          "columns": {
+            "issue_id": "ASC",
+            "org_id": "ASC",
+            "component_id": "ASC",
+            "included": "ASC"
+          }
+        },
         {
           "schema": "test",
           "tableName": "issues",

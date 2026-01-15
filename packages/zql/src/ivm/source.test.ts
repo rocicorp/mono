@@ -10,6 +10,7 @@ import type {Constraint} from './constraint.ts';
 import type {FetchRequest, Input, Output, Start} from './operator.ts';
 import type {SourceChange} from './source.ts';
 import {createSource} from './test/source-factory.ts';
+import {consume} from './stream.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
@@ -49,6 +50,7 @@ class OverlaySpy implements Output {
 
   push() {
     this.onPush();
+    return [];
   }
 }
 
@@ -60,19 +62,43 @@ test('simple-fetch', () => {
   const out = new Catch(s.connect(sort));
   expect(out.fetch()).toEqual([]);
 
-  s.push({type: 'add', row: {a: 3}});
+  consume(s.push({type: 'add', row: {a: 3}}));
   expect(out.fetch()).toEqual(asNodes([{a: 3}]));
 
-  s.push({type: 'add', row: {a: 1}});
-  s.push({type: 'add', row: {a: 2}});
+  consume(s.push({type: 'add', row: {a: 1}}));
+  consume(s.push({type: 'add', row: {a: 2}}));
   expect(out.fetch()).toEqual(asNodes([{a: 1}, {a: 2}, {a: 3}]));
 
-  s.push({type: 'remove', row: {a: 1}});
+  consume(s.push({type: 'remove', row: {a: 1}}));
   expect(out.fetch()).toEqual(asNodes([{a: 2}, {a: 3}]));
 
-  s.push({type: 'remove', row: {a: 2}});
-  s.push({type: 'remove', row: {a: 3}});
+  consume(s.push({type: 'remove', row: {a: 2}}));
+  consume(s.push({type: 'remove', row: {a: 3}}));
   expect(out.fetch()).toEqual([]);
+});
+
+test('sort missing primary key columns', () => {
+  const s = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}, c: {type: 'string'}},
+    ['a'],
+  );
+  expect(() => s.connect([])).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Ordering must include all primary key fields. Missing: a.]`,
+  );
+  expect(() => s.connect([['b', 'asc']])).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Ordering must include all primary key fields. Missing: a.]`,
+  );
+  expect(() =>
+    s.connect([
+      ['b', 'asc'],
+      ['c', 'desc'],
+    ]),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Ordering must include all primary key fields. Missing: a.]`,
+  );
 });
 
 test('fetch-with-constraint', () => {
@@ -90,9 +116,9 @@ test('fetch-with-constraint', () => {
     ['a'],
   );
   const out = new Catch(s.connect(sort));
-  s.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}});
-  s.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}});
-  s.push({type: 'add', row: {a: 2, b: false, c: null, d: null}});
+  consume(s.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}}));
+  consume(s.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}}));
+  consume(s.push({type: 'add', row: {a: 2, b: false, c: null, d: null}}));
 
   expect(out.fetch({constraint: {b: true}})).toEqual(
     asNodes([
@@ -151,8 +177,8 @@ test('fetch-start', () => {
     asNodes([]),
   );
 
-  s.push({type: 'add', row: {a: 2}});
-  s.push({type: 'add', row: {a: 3}});
+  consume(s.push({type: 'add', row: {a: 2}}));
+  consume(s.push({type: 'add', row: {a: 3}}));
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(
     asNodes([{a: 2}, {a: 3}]),
   );
@@ -167,7 +193,7 @@ test('fetch-start', () => {
     asNodes([]),
   );
 
-  s.push({type: 'remove', row: {a: 3}});
+  consume(s.push({type: 'remove', row: {a: 3}}));
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(
     asNodes([{a: 2}]),
   );
@@ -196,8 +222,8 @@ test('fetch-start reverse', () => {
     out.fetch({start: {row: {a: 2}, basis: 'after'}, reverse: true}),
   ).toEqual(asNodes([]));
 
-  s.push({type: 'add', row: {a: 2}});
-  s.push({type: 'add', row: {a: 3}});
+  consume(s.push({type: 'add', row: {a: 2}}));
+  consume(s.push({type: 'add', row: {a: 3}}));
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}, reverse: true})).toEqual(
     asNodes([{a: 2}]),
   );
@@ -212,7 +238,7 @@ test('fetch-start reverse', () => {
     out.fetch({start: {row: {a: 3}, basis: 'after'}, reverse: true}),
   ).toEqual(asNodes([{a: 2}]));
 
-  s.push({type: 'remove', row: {a: 3}});
+  consume(s.push({type: 'remove', row: {a: 3}}));
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}, reverse: true})).toEqual(
     asNodes([{a: 2}]),
   );
@@ -241,7 +267,7 @@ suite('fetch-with-constraint-and-start', () => {
       ['a'],
     );
     for (const row of c.startData) {
-      s.push({type: 'add', row});
+      consume(s.push({type: 'add', row}));
     }
     const out = new Catch(s.connect(sort));
     return out.fetch({
@@ -570,10 +596,10 @@ test('push', () => {
 
   expect(out.pushes).toEqual([]);
 
-  s.push({type: 'add', row: {a: 2}});
+  consume(s.push({type: 'add', row: {a: 2}}));
   expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 2}}]));
 
-  s.push({type: 'add', row: {a: 1}});
+  consume(s.push({type: 'add', row: {a: 1}}));
   expect(out.pushes).toEqual(
     asChanges([
       {type: 'add', row: {a: 2}},
@@ -581,8 +607,8 @@ test('push', () => {
     ]),
   );
 
-  s.push({type: 'remove', row: {a: 1}});
-  s.push({type: 'remove', row: {a: 2}});
+  consume(s.push({type: 'remove', row: {a: 1}}));
+  consume(s.push({type: 'remove', row: {a: 2}}));
   expect(out.pushes).toEqual(
     asChanges([
       {type: 'add', row: {a: 2}},
@@ -594,13 +620,15 @@ test('push', () => {
 
   // Remove row that isn't there
   out.reset();
-  expect(() => s.push({type: 'remove', row: {a: 1}})).toThrow('Row not found');
+  expect(() => consume(s.push({type: 'remove', row: {a: 1}}))).toThrow(
+    'Row not found',
+  );
   expect(out.pushes).toEqual(asChanges([]));
 
   // Add row twice
-  s.push({type: 'add', row: {a: 1}});
+  consume(s.push({type: 'add', row: {a: 1}}));
   expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
-  expect(() => s.push({type: 'add', row: {a: 1}})).toThrow(
+  expect(() => consume(s.push({type: 'add', row: {a: 1}}))).toThrow(
     'Row already exists',
   );
   expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
@@ -633,7 +661,7 @@ test('overlay-source-isolation', () => {
   o2.onPush = fetchAll;
   o3.onPush = fetchAll;
 
-  s.push({type: 'add', row: {a: 2}});
+  consume(s.push({type: 'add', row: {a: 2}}));
   expect(o1.fetches).toEqual([
     asNodes([{a: 2}]),
     asNodes([{a: 2}]),
@@ -680,16 +708,18 @@ test('overlay-source-isolation with split edit', () => {
   o2.onPush = fetchAll;
   o3.onPush = fetchAll;
 
-  s.push({type: 'add', row: {a: 2, b: 'foo', c: 1}});
-  s.push({type: 'add', row: {a: 3, b: 'bar', c: 1}});
+  consume(s.push({type: 'add', row: {a: 2, b: 'foo', c: 1}}));
+  consume(s.push({type: 'add', row: {a: 3, b: 'bar', c: 1}}));
 
   clearAll();
 
-  s.push({
-    type: 'edit',
-    oldRow: {a: 2, b: 'foo', c: 1},
-    row: {a: 2, b: 'foo2', c: 1},
-  });
+  consume(
+    s.push({
+      type: 'edit',
+      oldRow: {a: 2, b: 'foo', c: 1},
+      row: {a: 2, b: 'foo2', c: 1},
+    }),
+  );
 
   // o2 needs edit split, edit is split for all connections,
   // so 2 pushes each
@@ -966,11 +996,13 @@ test('overlay-source-isolation with split edit', () => {
 
   clearAll();
 
-  s.push({
-    type: 'edit',
-    oldRow: {a: 3, b: 'bar', c: 1},
-    row: {a: 3, b: 'bar', c: 2},
-  });
+  consume(
+    s.push({
+      type: 'edit',
+      oldRow: {a: 3, b: 'bar', c: 1},
+      row: {a: 3, b: 'bar', c: 2},
+    }),
+  );
 
   // o2 and o3 need edit split, edit is split for all connections,
   // so 2 pushes each
@@ -1256,7 +1288,7 @@ suite('overlay-vs-fetch-start', () => {
       'a',
     ]);
     for (const row of c.startData) {
-      s.push({type: 'add', row});
+      consume(s.push({type: 'add', row}));
     }
     const out = new OverlaySpy(s.connect(sort));
     out.onPush = () =>
@@ -1265,7 +1297,7 @@ suite('overlay-vs-fetch-start', () => {
         reverse: c.reverse,
       });
     try {
-      s.push(c.change);
+      consume(s.push(c.change));
     } catch (e) {
       return {
         e: (e as Error).message,
@@ -2035,7 +2067,7 @@ suite('overlay-vs-constraint', () => {
       ['a'],
     );
     for (const row of c.startData) {
-      s.push({type: 'add', row});
+      consume(s.push({type: 'add', row}));
     }
     const out = new OverlaySpy(s.connect(sort));
     out.onPush = () =>
@@ -2043,7 +2075,7 @@ suite('overlay-vs-constraint', () => {
         constraint: c.constraint,
       });
     try {
-      s.push(c.change);
+      consume(s.push(c.change));
     } catch (e) {
       return {
         e: (e as Error).message,
@@ -2212,13 +2244,13 @@ suite('overlay-vs-filter', () => {
       ['a', 'b'],
     );
     for (const row of c.startData) {
-      s.push({type: 'add', row});
+      consume(s.push({type: 'add', row}));
     }
     const sourceInput = s.connect(sort, c.filter);
     const out = new OverlaySpy(sourceInput);
     out.onPush = () => out.fetch({});
     try {
-      s.push(c.change);
+      consume(s.push(c.change));
     } catch (e) {
       return {
         e: (e as Error).message,
@@ -2635,7 +2667,7 @@ suite('overlay-vs-constraint-and-start', () => {
       ['a'],
     );
     for (const row of c.startData) {
-      s.push({type: 'add', row});
+      consume(s.push({type: 'add', row}));
     }
     const out = new OverlaySpy(s.connect(sort));
     out.onPush = () =>
@@ -2644,7 +2676,7 @@ suite('overlay-vs-constraint-and-start', () => {
         constraint: c.constraint,
       });
     try {
-      s.push(c.change);
+      consume(s.push(c.change));
     } catch (e) {
       return {
         e: (e as Error).message,
@@ -3124,9 +3156,9 @@ test('per-output-sorts', () => {
   const out1 = new Catch(s.connect(sort1));
   const out2 = new Catch(s.connect(sort2));
 
-  s.push({type: 'add', row: {a: 2, b: 3}});
-  s.push({type: 'add', row: {a: 1, b: 2}});
-  s.push({type: 'add', row: {a: 3, b: 1}});
+  consume(s.push({type: 'add', row: {a: 2, b: 3}}));
+  consume(s.push({type: 'add', row: {a: 1, b: 2}}));
+  consume(s.push({type: 'add', row: {a: 3, b: 1}}));
 
   expect(out1.fetch({})).toEqual(
     asNodes([
@@ -3156,9 +3188,9 @@ test('streams-are-one-time-only', () => {
     {a: {type: 'number'}},
     ['a'],
   );
-  source.push({type: 'add', row: {a: 1}});
-  source.push({type: 'add', row: {a: 2}});
-  source.push({type: 'add', row: {a: 3}});
+  consume(source.push({type: 'add', row: {a: 1}}));
+  consume(source.push({type: 'add', row: {a: 2}}));
+  consume(source.push({type: 'add', row: {a: 3}}));
 
   const conn = source.connect([['a', 'asc']]);
   const stream = conn.fetch({});
@@ -3192,9 +3224,9 @@ test('json is a valid type to read and write to/from a source', () => {
     ['a'],
   );
 
-  source.push({type: 'add', row: {a: 1, j: {foo: 'bar'}}});
-  source.push({type: 'add', row: {a: 2, j: {baz: 'qux'}}});
-  source.push({type: 'add', row: {a: 3, j: {foo: 'foo'}}});
+  consume(source.push({type: 'add', row: {a: 1, j: {foo: 'bar'}}}));
+  consume(source.push({type: 'add', row: {a: 2, j: {baz: 'qux'}}}));
+  consume(source.push({type: 'add', row: {a: 3, j: {foo: 'foo'}}}));
 
   const out = new Catch(source.connect([['a', 'asc']]));
   expect(out.fetch({})).toEqual(
@@ -3205,9 +3237,9 @@ test('json is a valid type to read and write to/from a source', () => {
     ]),
   );
 
-  source.push({type: 'add', row: {a: 4, j: {foo: 'foo'}}});
-  source.push({type: 'add', row: {a: 5, j: {baz: 'qux'}}});
-  source.push({type: 'add', row: {a: 6, j: {foo: 'bar'}}});
+  consume(source.push({type: 'add', row: {a: 4, j: {foo: 'foo'}}}));
+  consume(source.push({type: 'add', row: {a: 5, j: {baz: 'qux'}}}));
+  consume(source.push({type: 'add', row: {a: 6, j: {foo: 'bar'}}}));
   expect(out.pushes).toEqual([
     {
       type: 'add',
@@ -3225,25 +3257,27 @@ test('json is a valid type to read and write to/from a source', () => {
 
   // check edit and remove too
   out.reset();
-  source.push({
-    type: 'edit',
-    oldRow: {a: 4, j: {foo: 'foo'}},
-    row: {a: 4, j: {foo: 'bar'}},
-  });
-  source.push({type: 'remove', row: {a: 5, j: {baz: 'qux'}}});
+  consume(
+    source.push({
+      type: 'edit',
+      oldRow: {a: 5, j: {baz: 'qux'}},
+      row: {a: 5, j: {baz: 'qux2'}},
+    }),
+  );
+  consume(source.push({type: 'remove', row: {a: 5, j: {baz: 'qux'}}}));
   expect(out.pushes).toMatchInlineSnapshot(`
     [
       {
         "oldRow": {
-          "a": 4,
+          "a": 5,
           "j": {
-            "foo": "foo",
+            "baz": "qux",
           },
         },
         "row": {
-          "a": 4,
+          "a": 5,
           "j": {
-            "foo": "bar",
+            "baz": "qux2",
           },
         },
         "type": "edit",
@@ -3296,7 +3330,7 @@ test('json is a valid type to read and write to/from a source', () => {
         "row": {
           "a": 4,
           "j": {
-            "foo": "bar",
+            "foo": "foo",
           },
         },
       },
@@ -3325,9 +3359,9 @@ test('IS and IS NOT comparisons against null', () => {
     ['a'],
   );
 
-  source.push({type: 'add', row: {a: 1, s: 'foo'}});
-  source.push({type: 'add', row: {a: 2, s: 'bar'}});
-  source.push({type: 'add', row: {a: 3, s: null}});
+  consume(source.push({type: 'add', row: {a: 1, s: 'foo'}}));
+  consume(source.push({type: 'add', row: {a: 2, s: 'bar'}}));
+  consume(source.push({type: 'add', row: {a: 3, s: null}}));
 
   let out = new Catch(
     source.connect([['a', 'asc']], {
@@ -3424,6 +3458,7 @@ test('IS and IS NOT comparisons against null', () => {
   `);
 });
 
+// eslint-disable-next-line eslint-plugin-jest/expect-expect -- assertions in check() helper
 test('constant/literal expression', () => {
   const source = createSource(
     lc,
@@ -3433,8 +3468,8 @@ test('constant/literal expression', () => {
     ['n'],
   );
 
-  source.push({type: 'add', row: {n: 1, b: true, s: 'foo'}});
-  source.push({type: 'add', row: {n: 2, b: false, s: 'bar'}});
+  consume(source.push({type: 'add', row: {n: 1, b: true, s: 'foo'}}));
+  consume(source.push({type: 'add', row: {n: 2, b: false, s: 'bar'}}));
   const allData = asNodes([
     {n: 1, b: true, s: 'foo'},
     {n: 2, b: false, s: 'bar'},
@@ -3471,4 +3506,135 @@ test('constant/literal expression', () => {
   check('foo', 'bar', []);
   check(1, [1, 2, 3], allData, 'IN');
   check(1, [2, 4, 6], [], 'IN');
+});
+
+// Tests that verify the epoch-based overlay approach is semantically equivalent
+// to the old index-based approach. The key invariant:
+// When pushing to connection[i], connections[0..i] should see the overlay,
+// while connections[i+1..n] should NOT see the overlay.
+suite('epoch-based overlay semantic equivalence', () => {
+  test('add: overlay visibility follows connection push order', () => {
+    const sort = [['a', 'asc']] as const;
+    const s = createSource(lc, testLogConfig, 'table', {a: {type: 'number'}}, [
+      'a',
+    ]);
+
+    // Create 4 connections
+    const spies = [
+      new OverlaySpy(s.connect(sort)),
+      new OverlaySpy(s.connect(sort)),
+      new OverlaySpy(s.connect(sort)),
+      new OverlaySpy(s.connect(sort)),
+    ];
+
+    // Track which rows each connection sees during each push phase
+    const observations: [Row[][], Row[][], Row[][], Row[][]] = [[], [], [], []];
+
+    // Each connection records what it sees when ANY connection is pushed to
+    const recordAll = () => {
+      for (let i = 0; i < observations.length; i++) {
+        // Fetch from each spy and then figure out what each spy saw
+        spies[i].fetch({});
+        observations[i].push(
+          spies[i].fetches[spies[i].fetches.length - 1].map(n =>
+            n !== 'yield' ? n.row : {},
+          ),
+        );
+      }
+    };
+
+    spies.forEach(spy => {
+      spy.onPush = recordAll;
+    });
+
+    // Push an add - this will trigger 4 push phases (one per connection)
+    consume(s.push({type: 'add', row: {a: 1}}));
+
+    // Verify the invariant: connection sees overlay iff its index <= current push target
+    // Phase 0: pushing to conn[0], only conn[0] should see overlay
+    // Phase 1: pushing to conn[1], conn[0,1] should see overlay
+    // Phase 2: pushing to conn[2], conn[0,1,2] should see overlay
+    // Phase 3: pushing to conn[3], conn[0,1,2,3] should see overlay
+    for (let pushPhase = 0; pushPhase < 4; pushPhase++) {
+      for (let connIdx = 0; connIdx < 4; connIdx++) {
+        const sawRow = observations[connIdx][pushPhase].some(r => r.a === 1);
+        const shouldSeeOverlay = connIdx <= pushPhase;
+        expect(sawRow).toBe(shouldSeeOverlay);
+      }
+    }
+  });
+
+  test('split edit: each sub-operation has correct overlay visibility', () => {
+    const sort = [['a', 'asc']] as const;
+    const s = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'number'}, b: {type: 'string'}},
+      ['a'],
+    );
+
+    // Add initial data
+    consume(s.push({type: 'add', row: {a: 1, b: 'old'}}));
+
+    // Create 3 connections - middle one has splitEditKeys on 'b'
+    const spies = [
+      new OverlaySpy(s.connect(sort)),
+      new OverlaySpy(s.connect(sort, undefined, new Set(['b']))), // triggers split
+      new OverlaySpy(s.connect(sort)),
+    ];
+
+    const observations: Row[][][] = [[], [], []];
+
+    const recordAll = () => {
+      for (let i = 0; i < 3; i++) {
+        spies[i].fetch({});
+        observations[i].push(
+          spies[i].fetches[spies[i].fetches.length - 1].map(n =>
+            n !== 'yield' ? n.row : {},
+          ),
+        );
+      }
+    };
+
+    spies.forEach(spy => {
+      spy.onPush = recordAll;
+    });
+
+    // Push an edit that will be split into remove + add
+    consume(
+      s.push({type: 'edit', oldRow: {a: 1, b: 'old'}, row: {a: 1, b: 'new'}}),
+    );
+
+    // Split edit creates 6 push phases: 3 for remove, 3 for add
+    expect(observations[0].length).toBe(6);
+
+    // Phases 0-2: remove operation
+    // Phase 0: pushing remove to conn[0], only conn[0] sees row removed
+    // Phase 1: pushing remove to conn[1], conn[0,1] see row removed
+    // Phase 2: pushing remove to conn[2], all see row removed
+    for (let phase = 0; phase < 3; phase++) {
+      for (let connIdx = 0; connIdx < 3; connIdx++) {
+        const sawOld = observations[connIdx][phase].some(r => r.b === 'old');
+        const sawNew = observations[connIdx][phase].some(r => r.b === 'new');
+        const seesRemoveOverlay = connIdx <= phase;
+        expect(sawOld).toBe(!seesRemoveOverlay);
+        expect(sawNew).toBe(false);
+      }
+    }
+
+    // Phases 3-5: add operation (after remove committed)
+    // Phase 3: pushing add to conn[0], only conn[0] sees new row
+    // Phase 4: pushing add to conn[1], conn[0,1] see new row
+    // Phase 5: pushing add to conn[2], all see new row
+    for (let phase = 3; phase < 6; phase++) {
+      for (let connIdx = 0; connIdx < 3; connIdx++) {
+        const sawOld = observations[connIdx][phase].some(r => r.b === 'old');
+        const sawNew = observations[connIdx][phase].some(r => r.b === 'new');
+        const seesAddOverlay = connIdx <= phase - 3;
+        expect(sawOld).toBe(false);
+        expect(sawNew).toBe(seesAddOverlay);
+      }
+    }
+  });
 });

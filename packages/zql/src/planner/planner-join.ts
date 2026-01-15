@@ -4,6 +4,7 @@ import {
   type PlannerConstraint,
 } from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
+import {omitFanout} from './planner-node.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
@@ -183,20 +184,18 @@ export class PlannerJoin {
    */
   propagateUnlimit(): void {
     assert(this.#type === 'flipped', 'Can only unlimit a flipped join');
-    this.#parent.propagateUnlimitFromFlippedJoin();
+    // Parent stays limited; child becomes unlimited
     this.#child.propagateUnlimitFromFlippedJoin(); // Up the child chain
   }
 
   /**
    * Called when a parent join is flipped and this join is part of its child subgraph.
-   * - Semi-join: continue propagation to parent (the outer loop)
-   * - Flipped join: stop propagation (already unlimited when it was flipped)
+   * Continue propagation to parent (the outer loop).
+   * If we are hitting a semi-join, the parent drives.
+   * If we are hitting a flip-join, well now we have to unlimit its parent too!
    */
   propagateUnlimitFromFlippedJoin(): void {
-    if (this.#type === 'semi') {
-      this.#parent.propagateUnlimitFromFlippedJoin();
-    }
-    // For flipped joins, stop propagation
+    this.#parent.propagateUnlimitFromFlippedJoin();
   }
 
   propagateConstraints(
@@ -269,6 +268,9 @@ export class PlannerJoin {
      * Each one will constrain how often a parent row passes all constraints.
      * This means that we have to scan more and more parent rows the more
      * constraints we add.
+     *
+     * DownstreamChildSelectivity factors in fanout factor
+     * from parent -> child
      */
     downstreamChildSelectivity: number,
     /**
@@ -307,6 +309,23 @@ export class PlannerJoin {
      * rows are returned.
      */
     const child = this.#child.estimateCost(1, branchPattern, planDebugger);
+
+    const fanoutFactor = child.fanout(Object.keys(this.#childConstraint));
+    // Factor in how many child rows match a parent row.
+    // E.g., if an issue has 10 comments on average then we're more
+    // likely to hit a comment compared to if an issue has 1 comment on average.
+    // If an index is all nulls (no parents match any children)
+    // this will collapse to 0.
+    const scaledChildSelectivity =
+      1 - Math.pow(1 - child.selectivity, fanoutFactor.fanout);
+
+    // Why do we not need fanout in the other direction?
+    // E.g., for an `inventory -> film` flipped-join, if each film has 100 inventories (100 copies)
+    // then we're more likely to hit an inventory row compared to if each film has 1 inventory.
+    // Flipped-join already accounts for this because the child selectivity is implicitly accounted
+    // for. The returned row estimate of the child is already representative of how many
+    // rows the child will have post-filtering.
+
     /**
      * How selective is the graph from this point forward?
      * If we are _very_ selective then we must scan more parent rows
@@ -323,7 +342,9 @@ export class PlannerJoin {
     const parent = this.#parent.estimateCost(
       // Selectivity flows up the graph from child to parent
       // so we can determine the total selectivity of all ANDed exists checks.
-      child.selectivity * downstreamChildSelectivity,
+      this.#type === 'flipped'
+        ? 1 * downstreamChildSelectivity
+        : scaledChildSelectivity * downstreamChildSelectivity,
       branchPattern,
       planDebugger,
     );
@@ -338,7 +359,9 @@ export class PlannerJoin {
             ? parent.returnedRows
             : Math.min(
                 parent.returnedRows,
-                parent.limit / downstreamChildSelectivity,
+                downstreamChildSelectivity === 0
+                  ? 0
+                  : parent.limit / downstreamChildSelectivity,
               ),
         cost:
           parent.cost +
@@ -346,36 +369,43 @@ export class PlannerJoin {
         returnedRows: parent.returnedRows * child.selectivity,
         selectivity: child.selectivity * parent.selectivity,
         limit: parent.limit,
+        fanout: parent.fanout,
       };
     } else {
       costEstimate = {
         startupCost: child.startupCost,
         scanEst:
           parent.limit === undefined
-            ? parent.returnedRows
+            ? parent.returnedRows * child.returnedRows
             : Math.min(
                 parent.returnedRows * child.returnedRows,
-                parent.limit / downstreamChildSelectivity,
+                downstreamChildSelectivity === 0
+                  ? 0
+                  : parent.limit / downstreamChildSelectivity,
               ),
         cost:
           child.cost +
           child.scanEst * (parent.startupCost + parent.cost + parent.scanEst),
-        returnedRows:
-          parent.returnedRows * child.returnedRows * child.selectivity,
+        // the child selectivity is not relevant here because it has already been taken into account via the flipping.
+        // I.e., `child.returnedRows` is the estimated number of rows produced by the child _after_ taking filtering into account.
+        returnedRows: parent.returnedRows * child.returnedRows,
         selectivity: parent.selectivity * child.selectivity,
         limit: parent.limit,
+        fanout: parent.fanout,
       };
     }
 
-    planDebugger?.log({
-      type: 'node-cost',
-      nodeType: 'join',
-      node: this.getName(),
-      branchPattern,
-      downstreamChildSelectivity,
-      costEstimate,
-      joinType: this.#type,
-    });
+    if (planDebugger) {
+      planDebugger.log({
+        type: 'node-cost',
+        nodeType: 'join',
+        node: this.getName(),
+        branchPattern,
+        downstreamChildSelectivity,
+        costEstimate: omitFanout(costEstimate),
+        joinType: this.#type,
+      });
+    }
 
     return costEstimate;
   }

@@ -1,9 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {
-  stringify,
-  type JSONObject,
-} from '../../../../shared/src/bigint-json.ts';
+import {type JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {
   deepEqual,
@@ -31,7 +28,6 @@ import {rowIDString} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
-import {KeyColumns} from './key-columns.ts';
 import {
   cmpVersions,
   maxVersion,
@@ -63,6 +59,7 @@ export type CVR = {
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
   clientSchema: ClientSchema | null;
+  profileID: string | null;
 };
 
 /** Exported immutable CVR type. */
@@ -76,6 +73,7 @@ export type CVRSnapshot = {
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
   readonly clientSchema: ClientSchema | null;
+  readonly profileID: string | null;
 };
 
 const CLIENT_LMID_QUERY_ID = 'lmids';
@@ -285,6 +283,24 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         message: `Provided schema does not match previous schema`,
         origin: ErrorOrigin.ZeroCache,
       });
+    }
+  }
+
+  setProfileID(lc: LogContext, profileID: string) {
+    if (this._cvr.profileID !== profileID) {
+      if (
+        this._cvr.profileID !== null &&
+        !this._cvr.profileID.startsWith('cg')
+      ) {
+        // We expect profile ID's to change from null or from the back-filled
+        // "cg..." value. Log a warning otherwise to surface unexpected or
+        // pathological conditions.
+        lc.warn?.(
+          `changing profile ID from ${this._cvr.profileID} to ${profileID}`,
+        );
+      }
+      this._cvr.profileID = profileID;
+      this._cvrStore.putInstance(this._cvr);
     }
   }
 
@@ -521,7 +537,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #receivedRows = new CustomKeyMap<RowID, RefCounts | null>(
     rowIDString,
   );
-  readonly #replacedRows = new CustomKeyMap<RowID, boolean>(rowIDString);
   readonly #lastPatches = new CustomKeyMap<RowID, RowPatchInfo>(rowIDString);
 
   #existingRows: Promise<Iterable<RowRecord>> | undefined = undefined;
@@ -544,7 +559,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       (cvr.replicaVersion ?? replicaVersion) <= replicaVersion,
       `Cannot sync from an older replicaVersion: CVR=${cvr.replicaVersion}, DB=${replicaVersion}`,
     );
-    assert(stateVersion >= cvr.version.stateVersion);
+    assert(
+      stateVersion >= cvr.version.stateVersion,
+      () =>
+        `stateVersion (${stateVersion}) must be >= cvr.version.stateVersion (${cvr.version.stateVersion})`,
+    );
     if (stateVersion > cvr.version.stateVersion) {
       this._setVersion({stateVersion});
     }
@@ -601,7 +620,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     let total = 0;
     for (const existing of allRowRecords) {
       total++;
-      assert(existing.refCounts !== null); // allRowRecords does not include null.
+      assert(
+        existing.refCounts !== null,
+        'allRowRecords should not include null refCounts',
+      );
       for (const id of Object.keys(existing.refCounts)) {
         if (this.#removedOrExecutedQueryIDs.has(id)) {
           results.set(existing.id, existing);
@@ -627,7 +649,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This must be called for all executed queries.
    */
   #trackExecuted(queryID: string, transformationHash: string): Patch[] {
-    assert(!this.#removedOrExecutedQueryIDs.has(queryID));
+    assert(
+      !this.#removedOrExecutedQueryIDs.has(queryID),
+      () => `Query ${queryID} already tracked as executed or removed`,
+    );
     this.#removedOrExecutedQueryIDs.add(queryID);
 
     let gotQueryPatch: Patch | undefined;
@@ -666,7 +691,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const query = this._cvr.queries[queryID];
     assertNotInternal(query);
 
-    assert(!this.#removedOrExecutedQueryIDs.has(queryID));
+    assert(
+      !this.#removedOrExecutedQueryIDs.has(queryID),
+      () => `Query ${queryID} already tracked as executed or removed`,
+    );
     this.#removedOrExecutedQueryIDs.add(queryID);
     delete this._cvr.queries[queryID];
 
@@ -693,8 +721,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return this._cvr.version;
   }
 
-  #keyColumns: KeyColumns | undefined;
-
   /**
    * Tracks rows received from executing queries. This will update row records
    * and row patches if the received rows have a new version. The method also
@@ -702,34 +728,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * patchVersion so that only the patches new to the clients are sent.
    */
   async received(
-    lc: LogContext,
+    _lc: LogContext,
     rows: Map<RowID, RowUpdate>,
   ): Promise<PatchToVersion[]> {
     const patches: PatchToVersion[] = [];
-
     const existingRows = await this._cvrStore.getRowRecords();
-    this.#keyColumns ??= new KeyColumns(existingRows.values());
 
     for (const [id, update] of rows.entries()) {
       const {contents, version, refCounts} = update;
 
       let existing = existingRows.get(id);
-      if (!existing && contents) {
-        // See if the row being put is referenced in the CVR using a different ID.
-        const oldID = this.#keyColumns.getOldRowID(id, contents);
-        if (oldID) {
-          existing = existingRows.get(oldID);
-          if (existing && !this.#replacedRows.get(oldID)) {
-            lc.debug?.(`replacing ${stringify(oldID)} with ${stringify(id)}`);
-            this.#replacedRows.set(oldID, true);
-            this._cvrStore.delRowRecord(oldID);
-            // Force the updates for these rows to happen, even if they look like
-            // no-ops on their own.
-            this._cvrStore.forceUpdates(oldID, id);
-          }
-        }
-      }
-
       // Accumulate all received refCounts to determine which rows to prune.
       const previouslyReceived = this.#receivedRows.get(id);
 
@@ -797,7 +805,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           }
         }
       } else if (contents) {
-        assert(rowVersion);
+        assert(rowVersion, 'rowVersion is required when contents is present');
         // dedupe
         if (!lastPatch?.rowVersion || lastPatch.rowVersion < rowVersion) {
           patches.push({
@@ -831,7 +839,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   async deleteUnreferencedRows(lc?: LogContext): Promise<PatchToVersion[]> {
     if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config-only changes.
-      assert(this.#receivedRows.size === 0);
+      assert(
+        this.#receivedRows.size === 0,
+        () =>
+          `Expected no received rows for query-less update, got ${this.#receivedRows.size}`,
+      );
       return [];
     }
 
@@ -858,10 +870,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   #deleteUnreferencedRow(existing: RowRecord): RowID | null {
-    if (
-      this.#receivedRows.get(existing.id) ||
-      this.#replacedRows.get(existing.id)
-    ) {
+    if (this.#receivedRows.get(existing.id)) {
       return null;
     }
 

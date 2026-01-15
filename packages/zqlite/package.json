@@ -24,7 +24,7 @@
     "nanoid": "^5.1.2",
     "otel": "0.0.0",
     "shared": "0.0.0",
-    "typescript": "~5.8.2",
+    "typescript": "~5.9.3",
     "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",
     "zero-types": "0.0.0",
@@ -35,7 +35,7 @@
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
     "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/zero-sqlite3": "^1.0.12",
+    "@rocicorp/zero-sqlite3": "^1.0.14",
     "zql": "0.0.0"
   }
 }

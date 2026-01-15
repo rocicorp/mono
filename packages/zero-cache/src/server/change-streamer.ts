@@ -35,7 +35,13 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const {
     taskID,
-    changeStreamer: {port, address, protocol},
+    changeStreamer: {
+      port,
+      address,
+      protocol,
+      startupDelayMs,
+      backPressureThreshold,
+    },
     upstream,
     change,
     replica,
@@ -88,6 +94,8 @@ export default async function runWorker(
         changeSource,
         subscriptionState,
         autoReset ?? false,
+        backPressureThreshold,
+        setTimeout,
       );
       break;
     } catch (e) {
@@ -131,7 +139,7 @@ export default async function runWorker(
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
     config,
-    {port},
+    {port, startupDelayMs},
     parent,
     changeStreamer,
     monitor instanceof BackupMonitor ? monitor : null,
@@ -139,13 +147,9 @@ export default async function runWorker(
 
   parent.send(['ready', {ready: true}]);
 
-  return runUntilKilled(
-    lc,
-    parent,
-    changeStreamer,
-    changeStreamerWebServer,
-    monitor,
-  );
+  // Note: The changeStreamer itself is not started here; it is started by the
+  //       changeStreamerWebServer.
+  return runUntilKilled(lc, parent, changeStreamerWebServer, monitor);
 }
 
 // fork()

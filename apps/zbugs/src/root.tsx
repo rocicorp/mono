@@ -1,6 +1,10 @@
+import {useConnectionState} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import {Redirect, Route, Switch} from 'wouter';
+import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
+import {LoadingSpinner} from './components/loading-spinner.tsx';
 import {Nav} from './components/nav.tsx';
+import {useLogin} from './hooks/use-login.tsx';
 import {useSoftNav} from './hooks/use-softnav.ts';
 import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage, IssueRedirect} from './pages/issue/issue-page.tsx';
@@ -12,10 +16,6 @@ import {
   routes,
   useProjectName,
 } from './routes.tsx';
-import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
-import {useZeroConnectionState} from '@rocicorp/zero/react';
-import {ConnectionStatus} from '@rocicorp/zero';
-import {useLogin} from './hooks/use-login.tsx';
 
 function OGImageUpdater() {
   const projectName = useProjectName();
@@ -83,17 +83,18 @@ export function Root() {
   }, []);
 
   const login = useLogin();
-  const connectionState = useZeroConnectionState();
+  const connectionState = useConnectionState();
 
   // if we're in needs-auth state, log out the user
   useEffect(() => {
-    if (connectionState.name === ConnectionStatus.NeedsAuth) {
+    if (connectionState.name === 'needs-auth') {
       login.logout();
     }
   }, [connectionState, login]);
 
   return (
     <ListContextProvider>
+      {!contentReady && <LoadingSpinner />}
       <div
         className="app-container flex p-8"
         style={{visibility: contentReady ? 'visible' : 'hidden'}}
@@ -106,7 +107,7 @@ export function Root() {
             />
           </Route>
           <Route path={routes.deprecatedIssue}>
-            <IssueRedirect></IssueRedirect>
+            <IssueRedirect onReady={() => setContentReady(true)} />
           </Route>
           <Route path="/p/:projectName" nest>
             <OGImageUpdater />

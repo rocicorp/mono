@@ -24,7 +24,6 @@ vi.mock('../server/anonymous-otel-start.ts', () => ({
   recordConnectionAttempted: vi.fn(),
   setActiveClientGroupsGetter: vi.fn(),
 }));
-const mockDB = (() => {}) as unknown as PostgresDB;
 
 import {LogContext} from '@rocicorp/logger';
 import fs from 'node:fs/promises';
@@ -35,6 +34,10 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import * as jwt from '../auth/jwt.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -46,7 +49,6 @@ import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ActivityBasedService} from '../services/service.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
-import type {PostgresDB} from '../types/pg.ts';
 import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
 import {Syncer} from './syncer.ts';
 
@@ -76,6 +78,10 @@ function makeFactories(
   mutagensOut: MutagenService[],
   pushersOut: PusherService[],
 ) {
+  const storageDb = new Database(lc, ':memory:');
+  storageDb.prepare(CREATE_STORAGE_TABLE).run();
+  const writeAuthzStorage = new DatabaseStorage(storageDb);
+
   return {
     viewSyncerFactory: (id: string) =>
       ({
@@ -98,13 +104,13 @@ function makeFactories(
           replica: {file: tempFile},
           perUserMutationLimit: {},
         } as ZeroConfig,
+        writeAuthzStorage,
       );
       mutagensOut.push(ret);
       return ret;
     },
     pusherFactory: (id: string) => {
       const ret = new PusherService(
-        mockDB,
         {} as ZeroConfig,
         {url: ['http://example.com'], forwardCookies: false},
         lc,
@@ -139,7 +145,7 @@ const baseParams = {
   clientGroupID: '1',
   userID: 'anon',
   wsID: '1',
-  protocolVersion: 21,
+  protocolVersion: 30,
 };
 
 function makeParams(clientID: number, params: any = {}) {
@@ -254,7 +260,7 @@ describe('connection telemetry', () => {
 
   test('should record connection success for valid protocol version', () => {
     // Create a connection with valid protocol version
-    newConnection(1, {protocolVersion: 21});
+    newConnection(1);
 
     // Should record connection success
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
@@ -262,9 +268,9 @@ describe('connection telemetry', () => {
 
   test('should record multiple successful connections', () => {
     // Create multiple connections with valid protocol version
-    newConnection(1, {protocolVersion: 21});
-    newConnection(2, {protocolVersion: 21});
-    newConnection(3, {protocolVersion: 21});
+    newConnection(1);
+    newConnection(2);
+    newConnection(3);
 
     // Should record multiple connection successes
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(3);
@@ -272,7 +278,9 @@ describe('connection telemetry', () => {
 
   test('should record connection attempted for each connection', () => {
     // Create connections - both should record attempts
-    newConnection(1, {protocolVersion: 21});
+    // supported protocol version
+    newConnection(1);
+    // unsupported protocol version
     newConnection(2, {protocolVersion: 21});
 
     // Should record connection attempts
@@ -346,9 +354,9 @@ describe('jwt auth without options', () => {
     const env = setupSyncer(lc, {
       // No auth options set; should not verify token
       auth: {},
-      // set custom mutations & get queries to avoid token verification
+      // set custom mutations & queries to avoid token verification
       mutate: {url: ['http://mutate.example.com']},
-      getQueries: {url: ['http://queries.example.com']},
+      query: {url: ['http://queries.example.com']},
     } as ZeroConfig);
     syncer = env.syncer;
     mutagens = env.mutagens;
@@ -362,7 +370,7 @@ describe('jwt auth without options', () => {
   const newConnection = (clientID: number, params: any = {}) =>
     openConnection(clientID, params);
 
-  test('succeeds when using mutations & get queries and skips verification', () => {
+  test('succeeds when using mutations & queries and skips verification', () => {
     const ws = newConnection(1, {auth: 'dummy-token'});
 
     expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
@@ -399,7 +407,7 @@ describe('jwt auth missing options and missing endpoints', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     const env = setupSyncer(lc, {
-      // No auth and no mutate/getQueries set; should assert on receiving auth
+      // No auth and no mutate/queries set; should assert on receiving auth
       auth: {},
     } as ZeroConfig);
     syncer = env.syncer;
@@ -421,7 +429,6 @@ describe('jwt auth missing options and missing endpoints', () => {
           clientID: `1`,
           userID: 'anon',
           wsID: '1',
-          protocolVersion: 21,
           auth: 'dummy-token',
         },
         {} as any,

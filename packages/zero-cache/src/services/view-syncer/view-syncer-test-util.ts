@@ -34,7 +34,7 @@ import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
-import {TestDBs} from '../../test/db.ts';
+import type {TestDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
@@ -54,6 +54,7 @@ import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
 export const APP_ID = 'this_app';
 export const SHARD_NUM = 2;
 export const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
+export const YIELD_THRESHOLD_MS = 200;
 
 export const EXPECTED_LMIDS_AST: AST = {
   schema: '',
@@ -80,7 +81,7 @@ export const ON_FAILURE = (e: unknown) => {
   throw e;
 };
 
-export const queryConfig: ZeroConfig['getQueries'] = {
+export const queryConfig: ZeroConfig['query'] = {
   url: ['http://my-pull-endpoint.dev/api/zero/pull'],
   forwardCookies: true,
 };
@@ -102,6 +103,11 @@ export const ISSUES_QUERY: AST = {
       value: ['1', '2', '3', '4'],
     },
   },
+  orderBy: [['id', 'asc']],
+};
+
+export const ALL_ISSUES_QUERY: AST = {
+  table: 'issues',
   orderBy: [['id', 'asc']],
 };
 
@@ -317,6 +323,25 @@ export const ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED: AST = {
   ],
 };
 
+export const ISSUES_QUERY_WITH_OWNER: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  related: [
+    {
+      system: 'client',
+      correlation: {
+        parentField: ['owner'],
+        childField: ['id'],
+      },
+      subquery: {
+        table: 'users',
+        alias: 'owner',
+        orderBy: [['id', 'asc']],
+      },
+    },
+  ],
+};
+
 export const ISSUES_QUERY2: AST = {
   table: 'issues',
   orderBy: [['id', 'asc']],
@@ -387,7 +412,7 @@ export type AuthData = {
 };
 export const canSeeIssue = (
   authData: AuthData,
-  eb: ExpressionBuilder<Schema, 'issues'>,
+  eb: ExpressionBuilder<'issues', Schema>,
 ) => eb.cmpLit(authData.role, '=', 'admin');
 
 export const permissions = await definePermissions<AuthData, typeof schema>(
@@ -401,7 +426,7 @@ export const permissions = await definePermissions<AuthData, typeof schema>(
     comments: {
       row: {
         select: [
-          (authData, eb: ExpressionBuilder<Schema, 'comments'>) =>
+          (authData, eb: ExpressionBuilder<'comments', Schema>) =>
             eb.exists('issue', iq =>
               iq.where(({eb}) => canSeeIssue(authData, eb)),
             ),
@@ -584,12 +609,6 @@ export async function setup(
     _0_version       TEXT NOT NULL,
     PRIMARY KEY ("clientGroupID", "clientID", "mutationID")
   );
-  CREATE TABLE "this_app.schemaVersions" (
-    "lock"                INT PRIMARY KEY,
-    "minSupportedVersion" INT,
-    "maxSupportedVersion" INT,
-    _0_version            TEXT NOT NULL
-  );
   CREATE TABLE "this_app.permissions" (
     "lock"        INT PRIMARY KEY,
     "permissions" JSON,
@@ -630,8 +649,6 @@ export async function setup(
 
   INSERT INTO "this_app_2.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
     VALUES ('9876', 'foo', 42, '01');
-  INSERT INTO "this_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-    VALUES (1, 2, 3, '01'); 
   INSERT INTO "this_app.permissions" ("lock", "permissions", "hash", _0_version)
     VALUES (1, NULL, NULL, '01');
 
@@ -667,7 +684,7 @@ export async function setup(
   );
   await initViewSyncerSchema(lc, cvrDB, SHARD);
 
-  const setTimeoutFn = vi.fn();
+  const setTimeoutFn = vi.fn<typeof setTimeout>();
 
   const replicator = fakeReplicator(lc, replica);
   const stateChanges: Subscription<ReplicaState> = Subscription.create();
@@ -677,7 +694,7 @@ export async function setup(
   ).createClientGroupStorage(serviceID);
 
   const config = {
-    getQueries: queryConfig,
+    query: queryConfig,
     adminPassword: TEST_ADMIN_PASSWORD,
     app: {
       id: 'this_app',
@@ -691,12 +708,12 @@ export async function setup(
   } as NormalizedZeroConfig;
 
   // Create the custom query transformer if configured
-  const {getQueries} = config;
+  const {query} = config;
   const customQueryTransformer =
-    getQueries.url &&
+    query.url &&
     new CustomQueryTransformer(
       lc,
-      {url: getQueries.url, forwardCookies: getQueries.forwardCookies},
+      {url: query.url, forwardCookies: query.forwardCookies},
       SHARD,
     );
 
@@ -717,12 +734,14 @@ export async function setup(
       operatorStorage,
       'view-syncer.pg.test.ts',
       inspectorDelegate,
+      () => YIELD_THRESHOLD_MS,
     ),
     stateChanges,
     drainCoordinator,
     100,
     inspectorDelegate,
     customQueryTransformer,
+    op => op(),
     undefined,
     setTimeoutFn,
   );
@@ -737,12 +756,16 @@ export async function setup(
   function connectWithQueueAndSource(
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
-    clientSchema: ClientSchema = defaultClientSchema,
+    clientSchema: ClientSchema | null = defaultClientSchema,
     activeClients?: string[],
   ): {queue: Queue<Downstream>; source: Source<Downstream>} {
     const source = vs.initConnection(ctx, [
       'initConnection',
-      {desiredQueriesPatch, clientSchema, activeClients},
+      {
+        desiredQueriesPatch,
+        clientSchema: clientSchema ?? undefined,
+        activeClients,
+      },
     ]);
     const queue = new Queue<Downstream>();
 
@@ -762,7 +785,7 @@ export async function setup(
   function connect(
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
-    clientSchema?: ClientSchema,
+    clientSchema?: ClientSchema | null,
   ) {
     return connectWithQueueAndSource(ctx, desiredQueriesPatch, clientSchema)
       .queue;
@@ -795,16 +818,11 @@ export const messages = new ReplicationMessages({
   comments: 'id',
 });
 export const appMessages = new ReplicationMessages(
-  {
-    schemaVersions: 'lock',
-    permissions: 'lock',
-  },
+  {permissions: 'lock'},
   'this_app',
 );
 
 export const app2Messages = new ReplicationMessages(
-  {
-    clients: ['clientGroupID', 'clientID'],
-  },
+  {clients: ['clientGroupID', 'clientID']},
   'this_app_2',
 );

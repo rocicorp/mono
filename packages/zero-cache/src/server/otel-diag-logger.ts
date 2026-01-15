@@ -1,5 +1,5 @@
 import {diag, DiagLogLevel} from '@opentelemetry/api';
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 
 function getOtelLogLevel(level: string | undefined): DiagLogLevel | undefined {
   if (!level) return undefined;
@@ -49,26 +49,16 @@ export function setupOtelDiagnosticLogger(
   }
 
   const log = lc.withContext('component', 'otel');
+
+  // Log level ERROR is reserved for unforced application errors. Since otel
+  // errors do not affect application functionality, they are limited to WARN.
   diag.setLogger(
     {
       verbose: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
       debug: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
       info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
       warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
-      error: (msg: string, ...args: unknown[]) => {
-        // Check if this is a known non-critical error that should be a warning
-        if (
-          msg.includes('Request Timeout') ||
-          msg.includes('Unexpected server response: 502') ||
-          msg.includes('Export failed with retryable status') ||
-          msg.includes('Method Not Allowed') ||
-          msg.includes('socket hang up')
-        ) {
-          log.warn?.(msg, ...args);
-        } else {
-          log.error?.(msg, ...args);
-        }
-      },
+      error: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
     },
     {
       logLevel:

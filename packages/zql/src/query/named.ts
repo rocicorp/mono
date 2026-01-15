@@ -1,12 +1,9 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {SchemaQuery} from '../mutate/custom.ts';
-import type {NamedQueryFunction} from './define-query.ts';
 import {QueryParseError} from './error.ts';
-import {newQuery} from './query-impl.ts';
-import {queryWithContext} from './query-internals.ts';
-import {type AnyQuery, type Query} from './query.ts';
+import {asQueryInternals} from './query-internals.ts';
+import {type AnyQuery} from './query.ts';
 
+/** @deprecated */
 export type QueryFn<
   TContext,
   TTakesContext extends boolean,
@@ -16,6 +13,7 @@ export type QueryFn<
   ? {(...args: TArg): TReturnQuery}
   : {(context: TContext, ...args: TArg): TReturnQuery};
 
+/** @deprecated */
 export type SyncedQuery<
   TName extends string,
   TContext,
@@ -83,55 +81,30 @@ export function syncedQueryWithContext<
   return ret;
 }
 
+/** @deprecated */
 function syncedQueryImpl<
   TName extends string,
   TContext,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends AnyQuery,
   // oxlint-disable-next-line no-explicit-any
 >(name: TName, fn: any, takesContext: boolean) {
   return (context: TContext, args: TArg) => {
     const q = takesContext ? fn(context, ...args) : fn(...args);
-    return queryWithContext(q, context).nameAndArgs(name, args) as TReturnQuery;
+    return asQueryInternals(q).nameAndArgs(name, args);
   };
 }
+
+/** @deprecated */
 
 // oxlint-disable-next-line no-explicit-any
 type AnySyncedQuery = SyncedQuery<any, any, any, any, any>;
 
-type AnyNamedQueryFunction = NamedQueryFunction<
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any
->;
-
+/** @deprecated */
 export function withValidation<F extends AnySyncedQuery>(
   fn: F,
   // oxlint-disable-next-line no-explicit-any
-): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
-  ? SyncedQuery<N, C, true, A, R>
-  : never;
-
-export function withValidation<F extends AnyNamedQueryFunction>(fn: F): F;
-
-export function withValidation<
-  F extends AnySyncedQuery | AnyNamedQueryFunction,
->(
-  fn: F,
-  // oxlint-disable-next-line no-explicit-any
-): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
-  ? SyncedQuery<N, C, true, A, R>
+): F extends SyncedQuery<infer N, infer C, any, any, infer R>
+  ? SyncedQuery<N, C, true, ReadonlyJSONValue[], R>
   : F {
   // If we have a parse function this is a SyncedQuery
   if ('parse' in fn) {
@@ -157,57 +130,24 @@ export function withValidation<
     return ret;
   }
 
-  // Otherwise this is a NamedQueryFunction which always validates.
+  // If we don't have a parse function, return the function as-is
+  // (this shouldn't happen in practice)
   // oxlint-disable-next-line no-explicit-any
   return fn as any;
 }
 
+/** @deprecated */
 export type ParseFn<T extends ReadonlyJSONValue[]> = (args: unknown[]) => T;
 
+/** @deprecated */
 export type HasParseFn<T extends ReadonlyJSONValue[]> = {
   parse: ParseFn<T>;
 };
 
+/** @deprecated */
 export type Parser<T extends ReadonlyJSONValue[]> = ParseFn<T> | HasParseFn<T>;
 
 export type CustomQueryID = {
   name: string;
   args: ReadonlyArray<ReadonlyJSONValue>;
 };
-
-/**
- * Returns a set of query builders for the given schema.
- */
-export function createBuilder<S extends Schema, TContext>(
-  s: S,
-): SchemaQuery<S, TContext> {
-  return makeQueryBuilders(s) as SchemaQuery<S, TContext>;
-}
-
-/**
- * This produces the query builders for a given schema.
- * For use in Zero on the server to process custom queries.
- */
-function makeQueryBuilders<S extends Schema, TContext>(
-  schema: S,
-): SchemaQuery<S, TContext> {
-  return new Proxy(
-    {},
-    {
-      // oxlint-disable-next-line no-explicit-any
-      get: (target: Record<string, Query<S, string, any>>, prop: string) => {
-        if (prop in target) {
-          return target[prop];
-        }
-
-        if (!(prop in schema.tables)) {
-          throw new Error(`Table ${prop} does not exist in schema`);
-        }
-
-        const q = newQuery(schema, prop);
-        target[prop] = q;
-        return q;
-      },
-    },
-  ) as SchemaQuery<S, TContext>;
-}

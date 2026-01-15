@@ -9,6 +9,9 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 
 const {WebSocket} = globalThis;
@@ -35,21 +38,29 @@ async function testBasics(userID: string) {
     value: number;
   };
 
+  const schema = createSchema({
+    tables: [
+      table('e')
+        .columns({
+          id: string(),
+          value: number(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    upsertE: defineMutatorWithType<typeof schema>()<E>(({tx, args}) =>
+      tx.mutate.e.upsert(args),
+    ),
+  });
+  const {upsertE} = mutators;
   const z = zeroForTest({
     userID,
-    schema: createSchema({
-      tables: [
-        table('e')
-          .columns({
-            id: string(),
-            value: number(),
-          })
-          .primaryKey('id'),
-      ],
-    }),
+    schema,
+    mutators,
   });
-
-  const q = z.query.e.limit(1);
+  const zql = createBuilder(schema);
+  const q = zql.e.limit(1);
   const view = z.materialize(q);
   const log: (readonly E[])[] = [];
   const removeListener = view.addListener(rows => {
@@ -63,17 +74,17 @@ async function testBasics(userID: string) {
   await sleep(1);
   assert(deepEqual(log, [[]]));
 
-  await z.mutate.e.upsert({id: 'foo', value: 1});
+  await z.mutate(upsertE({id: 'foo', value: 1})).client;
   assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
-  await z.mutate.e.upsert({id: 'foo', value: 2});
+  await z.mutate(upsertE({id: 'foo', value: 2})).client;
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
   removeListener();
 
-  await z.mutate.e.upsert({id: 'foo', value: 3});
+  await z.mutate(upsertE({id: 'foo', value: 3})).client;
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );

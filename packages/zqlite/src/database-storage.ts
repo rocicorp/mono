@@ -1,8 +1,9 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import type {JSONValue} from '../../shared/src/json.ts';
 import type {Storage} from '../../zql/src/ivm/operator.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
-import {Database, Statement} from './db.ts';
+import type {Statement} from './db.ts';
+import {Database} from './db.ts';
 
 export interface ClientGroupStorage {
   /** Creates a {@link Storage} instance for a single operator. */

@@ -5,23 +5,22 @@ import '../../../packages/shared/src/dotenv.ts';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import type {ReadonlyJSONValue} from '@rocicorp/zero';
 import {
-  getMutation,
-  handleGetQueriesRequest,
-  handleMutationRequest,
-} from '@rocicorp/zero/server';
-import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
-import assert from 'assert';
+  mustGetMutator,
+  mustGetQuery,
+  type ReadonlyJSONValue,
+} from '@rocicorp/zero';
+import {handleMutateRequest, handleQueryRequest} from '@rocicorp/zero/server';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import type {IncomingHttpHeaders} from 'http';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
-import postgres from 'postgres';
+import {assert} from '../../../packages/shared/src/asserts.ts';
 import {must} from '../../../packages/shared/src/must.ts';
-import {getQuery} from '../server/get-query.ts';
+import {dbProvider, sql} from '../server/db.ts';
 import {createServerMutators} from '../server/server-mutators.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
+import {queries} from '../shared/queries.ts';
 import {schema} from '../shared/schema.ts';
 import {getPresignedUrl} from '../src/server/upload.ts';
 
@@ -31,15 +30,12 @@ declare module 'fastify' {
   }
 }
 
-const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 type QueryParams = {redirect?: string | undefined};
 let privateJwk: JWK | undefined;
 
 export const fastify = Fastify({
   logger: true,
 });
-
-const dbProvider = zeroPostgresJS(schema, sql);
 
 fastify.register(cookie);
 
@@ -178,13 +174,15 @@ async function mutateHandler(
   }
 
   const postCommitTasks: (() => Promise<void>)[] = [];
-  const mutators = createServerMutators(jwtData, postCommitTasks);
+  const mutators = createServerMutators(postCommitTasks);
 
-  const response = await handleMutationRequest(
-    transact =>
-      transact(dbProvider, (tx, name, args) =>
-        getMutation(mutators, name)(tx, args),
-      ),
+  const response = await handleMutateRequest(
+    dbProvider,
+    (transact, _mutation) =>
+      transact((tx, name, args) => {
+        const mutator = mustGetMutator(mutators, name);
+        return mutator.fn({tx, args, ctx: jwtData});
+      }),
     request.query,
     request.body,
     'info',
@@ -197,17 +195,19 @@ async function mutateHandler(
   reply.send(response);
 }
 
+// this endpoint was kept for backwards compatibility
+// in the transition to /query
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/pull', getQueriesHandler);
+}>('/api/get-queries', queryHandler);
 
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/get-queries', getQueriesHandler);
+}>('/api/query', queryHandler);
 
-async function getQueriesHandler(
+async function queryHandler(
   request: FastifyRequest<{
     Querystring: Record<string, string>;
     Body: ReadonlyJSONValue;
@@ -216,11 +216,13 @@ async function getQueriesHandler(
 ) {
   await withAuth(request, reply, async authData => {
     reply.send(
-      await handleGetQueriesRequest(
-        (name, args) => getQuery(name, args),
+      await handleQueryRequest(
+        (name: string, args: ReadonlyJSONValue | undefined) => {
+          const query = mustGetQuery(queries, name);
+          return query.fn({args, ctx: authData});
+        },
         schema,
         request.body,
-        authData,
       ),
     );
   });

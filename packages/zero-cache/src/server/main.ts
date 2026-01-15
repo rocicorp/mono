@@ -28,6 +28,13 @@ import {
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 import {WorkerDispatcher} from './worker-dispatcher.ts';
+import {
+  CHANGE_STREAMER_URL,
+  MUTATOR_URL,
+  REAPER_URL,
+  REPLICATOR_URL,
+  SYNCER_URL,
+} from './worker-urls.ts';
 
 const clientConnectionBifurcated = false;
 
@@ -69,13 +76,13 @@ export default async function runWorker(
         ];
 
   function loadWorker(
-    modulePath: string,
+    moduleUrl: URL,
     type: WorkerType,
     id?: string | number,
     ...args: string[]
   ): Worker {
-    const worker = childWorker(modulePath, env, ...args, ...internalFlags);
-    const name = path.basename(modulePath) + (id ? ` (${id})` : '');
+    const worker = childWorker(moduleUrl, env, ...args, ...internalFlags);
+    const name = path.basename(moduleUrl.pathname) + (id ? ` (${id})` : '');
     return processes.addWorker(worker, type, name);
   }
 
@@ -95,7 +102,7 @@ export default async function runWorker(
       if (runChangeStreamer) {
         // If the restore failed, e.g. due to a corrupt backup, the
         // replication-manager recovers by re-syncing.
-        lc.error?.('error restoring backup. resyncing the replica.');
+        lc.error?.('error restoring backup. resyncing the replica.', e);
       } else {
         // View-syncers, on the other hand, have no option other than to retry
         // until a valid backup has been published. This is achieved by
@@ -110,7 +117,7 @@ export default async function runWorker(
     resolver();
   const changeStreamer = runChangeStreamer
     ? loadWorker(
-        './server/change-streamer.ts',
+        CHANGE_STREAMER_URL,
         'supporting',
         undefined,
         String(restoreStart.getTime()),
@@ -119,10 +126,7 @@ export default async function runWorker(
 
   const {promise: reaperReady, resolve: reaperStarted} = resolver();
   if (numSyncers > 0) {
-    loadWorker('./server/reaper.ts', 'supporting').once(
-      'message',
-      reaperStarted,
-    );
+    loadWorker(REAPER_URL, 'supporting').once('message', reaperStarted);
   } else {
     reaperStarted();
   }
@@ -135,7 +139,7 @@ export default async function runWorker(
     // Start a backup replicator and corresponding litestream backup process.
     const {promise: backupReady, resolve} = resolver();
     const mode: ReplicaFileMode = 'backup';
-    loadWorker('./server/replicator.ts', 'supporting', mode, mode).once(
+    loadWorker(REPLICATOR_URL, 'supporting', mode, mode).once(
       // Wait for the Replicator's first message (i.e. "ready") before starting
       // litestream backup in order to avoid contending on the lock when the
       // replicator first prepares the db file.
@@ -162,7 +166,7 @@ export default async function runWorker(
       runChangeStreamer && litestream.backupURL ? 'serving-copy' : 'serving';
     const {promise: replicaReady, resolve} = resolver();
     const replicator = loadWorker(
-      './server/replicator.ts',
+      REPLICATOR_URL,
       'supporting',
       mode,
       mode,
@@ -174,15 +178,13 @@ export default async function runWorker(
 
     const notifier = createNotifierFrom(lc, replicator);
     for (let i = 0; i < numSyncers; i++) {
-      syncers.push(
-        loadWorker('./server/syncer.ts', 'user-facing', i + 1, mode),
-      );
+      syncers.push(loadWorker(SYNCER_URL, 'user-facing', i + 1, mode));
     }
     syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
   }
   let mutator: Worker | undefined;
   if (clientConnectionBifurcated) {
-    mutator = loadWorker('./server/mutator.ts', 'supporting', 'mutator');
+    mutator = loadWorker(MUTATOR_URL, 'supporting', 'mutator');
   }
 
   lc.info?.('waiting for workers to be ready ...');

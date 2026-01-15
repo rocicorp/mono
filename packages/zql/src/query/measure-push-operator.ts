@@ -38,12 +38,8 @@ export class MeasurePushOperator implements Operator {
     this.#output = output;
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     return this.#input.fetch(req);
-  }
-
-  cleanup(req: FetchRequest): Stream<Node> {
-    return this.#input.cleanup(req);
   }
 
   getSchema(): SourceSchema {
@@ -54,9 +50,9 @@ export class MeasurePushOperator implements Operator {
     this.#input.destroy();
   }
 
-  push(change: Change): void {
+  *push(change: Change): Stream<'yield'> {
     const startTime = performance.now();
-    this.#output.push(change, this);
+    yield* this.#output.push(change, this);
     this.#metricsDelegate.addMetric(
       this.#metricName,
       performance.now() - startTime,

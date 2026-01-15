@@ -3,9 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "verify": "node src/verify-package-deps.ts",
-    "verify:fix": "node src/verify-package-deps.ts --fix",
+    "verify": "node --experimental-strip-types src/verify-package-deps.ts",
+    "verify:fix": "node --experimental-strip-types src/verify-package-deps.ts --fix",
     "check-types": "tsc",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
@@ -17,7 +21,7 @@
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
     "@types/node": "^22.10.5",
-    "typescript": "~5.8.2"
+    "typescript": "~5.9.3"
   },
   "prettier": "@rocicorp/prettier-config"
 }

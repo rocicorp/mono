@@ -1,24 +1,13 @@
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
-import type {
-  DBConnection,
-  DBTransaction,
-  SchemaCRUD,
-  SchemaQuery,
-} from '../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../zql/src/query/named.ts';
+import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {
   HumanReadable,
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
-import {
-  makeSchemaCRUD,
-  makeServerTransaction,
-  TransactionImpl,
-} from './custom.ts';
+import {CRUDMutatorFactory, type TransactionImpl} from './custom.ts';
 import type {
   Database,
   TransactionProviderHooks,
@@ -32,27 +21,20 @@ import type {
  * writing data that the Zero client does, so that mutator functions can be
  * shared across client and server.
  */
-export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
-  implements Database<TransactionImpl<S, WrappedTransaction, TContext>>
+export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
+  implements Database<TransactionImpl<TSchema, TWrappedTransaction>>
 {
-  readonly connection: DBConnection<WrappedTransaction>;
-  readonly #mutate: (
-    dbTransaction: DBTransaction<WrappedTransaction>,
-    serverSchema: ServerSchema,
-  ) => SchemaCRUD<S>;
-  readonly #query: SchemaQuery<S, TContext>;
-  readonly #schema: S;
+  readonly connection: DBConnection<TWrappedTransaction>;
+  readonly #crudFactory: CRUDMutatorFactory<TSchema>;
 
-  constructor(connection: DBConnection<WrappedTransaction>, schema: S) {
+  constructor(connection: DBConnection<TWrappedTransaction>, schema: TSchema) {
     this.connection = connection;
-    this.#mutate = makeSchemaCRUD(schema);
-    this.#query = createBuilder(schema);
-    this.#schema = schema;
+    this.#crudFactory = new CRUDMutatorFactory(schema);
   }
 
   transaction<R>(
     callback: (
-      tx: TransactionImpl<S, WrappedTransaction, TContext>,
+      tx: TransactionImpl<TSchema, TWrappedTransaction>,
       transactionHooks: TransactionProviderHooks,
     ) => MaybePromise<R>,
     transactionInput?: TransactionProviderInput,
@@ -101,28 +83,34 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
           );
           await dbTx.query(formatted.text, formatted.values);
         },
+
+        async deleteMutationResults(
+          targetClientGroupID,
+          targetClientID,
+          upToMutationID,
+        ) {
+          const formatted = formatPg(
+            sql`DELETE FROM ${sql.ident(upstreamSchema)}."mutations"
+                WHERE "clientGroupID" = ${targetClientGroupID}
+                  AND "clientID" = ${targetClientID}
+                  AND "mutationID" <= ${upToMutationID}`,
+          );
+          await dbTx.query(formatted.text, formatted.values);
+        },
       });
     });
   }
 
-  async #makeServerTransaction(
-    dbTx: DBTransaction<WrappedTransaction>,
+  #makeServerTransaction(
+    dbTx: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
   ) {
-    return await makeServerTransaction(
-      dbTx,
-      clientID,
-      mutationID,
-      this.#schema,
-      this.#mutate,
-      this.#query,
-      undefined as TContext,
-    );
+    return this.#crudFactory.createTransaction(dbTx, clientID, mutationID);
   }
 
-  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
-    query: Query<S, TTable, TReturn, TContext>,
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TTable, TSchema, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.transaction(tx => tx.run(query, options));

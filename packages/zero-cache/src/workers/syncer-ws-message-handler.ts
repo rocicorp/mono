@@ -6,6 +6,7 @@ import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
 import {version} from '../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
@@ -17,7 +18,6 @@ import type {
 } from '../services/view-syncer/view-syncer.ts';
 import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
 
@@ -46,10 +46,10 @@ export class SyncerWsMessageHandler implements MessageHandler {
     const {
       clientGroupID,
       clientID,
+      profileID,
       wsID,
       baseCookie,
       protocolVersion,
-      schemaVersion,
       httpCookie,
     } = connectParams;
     this.#viewSyncer = viewSyncer;
@@ -66,10 +66,10 @@ export class SyncerWsMessageHandler implements MessageHandler {
     this.#pusher = pusher;
     this.#syncContext = {
       clientID,
+      profileID,
       wsID,
       baseCookie,
       protocolVersion,
-      schemaVersion,
       tokenData,
       httpCookie,
     };
@@ -91,7 +91,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           tracer,
           'connection.push',
           async () => {
-            const {clientGroupID, mutations, schemaVersion} = msg[1];
+            const {clientGroupID, mutations} = msg[1];
             if (clientGroupID !== this.#clientGroupID) {
               return [
                 {
@@ -142,7 +142,6 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 const maybeError = await this.#mutagen.processMutation(
                   mutation,
                   this.#authData,
-                  schemaVersion,
                   this.#pusher !== undefined,
                 );
                 if (maybeError !== undefined) {

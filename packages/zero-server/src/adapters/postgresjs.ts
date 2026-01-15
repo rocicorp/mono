@@ -54,7 +54,7 @@ export class PostgresJsTransactionInternal<T extends Record<string, unknown>>
     return this.wrappedTransaction.unsafe(sql, params as JSONValue[]);
   }
 
-  executeQuery<TReturn>(
+  runQuery<TReturn>(
     ast: AST,
     format: Format,
     schema: Schema,
@@ -82,23 +82,29 @@ export class PostgresJsTransactionInternal<T extends Record<string, unknown>>
  * @example
  * ```ts
  * import postgres from 'postgres';
+ * import {defineMutator, defineMutators} from '@rocicorp/zero';
+ * import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
+ * import {z} from 'zod/mini';
  *
  * const sql = postgres(process.env.ZERO_UPSTREAM_DB!);
  * const zql = zeroPostgresJS(schema, sql);
  *
- * // Define the server mutator transaction type using the helper
- * type ServerTx = ServerTransaction<
- *   Schema,
- *   PostgresJsTransaction
- * >;
- *
- * async function createUser(
- *   tx: ServerTx,
- *   {id, name}: {id: string; name: string},
- * ) {
- *   await tx.dbTransaction.wrappedTransaction
- *     .unsafe('INSERT INTO "user" (id, name) VALUES ($1, $2)', [id, name]);
- * }
+ * export const serverMutators = defineMutators({
+ *   user: {
+ *     create: defineMutator(
+ *       z.object({id: z.string(), name: z.string()}),
+ *       async ({tx, args}) => {
+ *         if (tx.location !== 'server') {
+ *           throw new Error('Server-only mutator');
+ *         }
+ *         await tx.dbTransaction.wrappedTransaction`
+ *           INSERT INTO "user" (id, name, status)
+ *           VALUES (${args.id}, ${args.name}, ${'active'})
+ *         `;
+ *       },
+ *     ),
+ *   },
+ * });
  * ```
  */
 export function zeroPostgresJS<

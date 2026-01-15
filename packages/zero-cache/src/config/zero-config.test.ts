@@ -42,57 +42,8 @@ test('zero-cache --help', () => {
                                                                    Note that this number must allow for at least one connection per                                                      
                                                                    sync worker, or zero-cache will fail to start. See num-sync-workers                                                   
                                                                                                                                                                                          
-     --push-url string[]                                           optional                                                                                                              
-       ZERO_PUSH_URL env                                                                                                                                                                 
-                                                                   DEPRECATED. Use mutate-url instead.                                                                                   
-                                                                   The URL of the API server to which zero-cache will push mutations.                                                    
-                                                                                                                                                                                         
-                                                                   IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                                     
-                                                                                                                                                                                         
-                                                                   Pattern Syntax:                                                                                                       
-                                                                     URLPattern uses a simple and intuitive syntax similar to Express routes.                                            
-                                                                     Wildcards and named parameters make it easy to match multiple URLs.                                                 
-                                                                                                                                                                                         
-                                                                   Basic Examples:                                                                                                       
-                                                                     Exact URL match:                                                                                                    
-                                                                       "https://api.example.com/mutate"                                                                                  
-                                                                     Any subdomain using wildcard:                                                                                       
-                                                                       "https://*.example.com/mutate"                                                                                    
-                                                                     Multiple subdomain levels:                                                                                          
-                                                                       "https://*.*.example.com/mutate"                                                                                  
-                                                                     Any path under a domain:                                                                                            
-                                                                       "https://api.example.com/*"                                                                                       
-                                                                     Named path parameters:                                                                                              
-                                                                       "https://api.example.com/:version/mutate"                                                                         
-                                                                       ↳ Matches "https://api.example.com/v1/mutate", "https://api.example.com/v2/mutate", etc.                          
-                                                                                                                                                                                         
-                                                                   Advanced Patterns:                                                                                                    
-                                                                     Optional path segments:                                                                                             
-                                                                       "https://api.example.com/:path?"                                                                                  
-                                                                     Regex in segments (for specific patterns):                                                                          
-                                                                       "https://api.example.com/:version(v\\d+)/mutate"                                                                   
-                                                                       ↳ Matches only "v" followed by digits                                                                             
-                                                                                                                                                                                         
-                                                                   Multiple patterns:                                                                                                    
-                                                                     ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                                              
-                                                                                                                                                                                         
-                                                                   Note: Query parameters and URL fragments (#) are automatically ignored during matching.                               
-                                                                                                                                                                                         
-                                                                   For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern                          
-                                                                                                                                                                                         
-     --push-api-key string                                         optional                                                                                                              
-       ZERO_PUSH_API_KEY env                                                                                                                                                             
-                                                                   An optional secret used to authorize zero-cache to call the API server handling writes.                               
-                                                                                                                                                                                         
-     --push-forward-cookies boolean                                default: false                                                                                                        
-       ZERO_PUSH_FORWARD_COOKIES env                                                                                                                                                     
-                                                                   If true, zero-cache will forward cookies from the request.                                                            
-                                                                   This is useful for passing authentication cookies to the API server.                                                  
-                                                                   If false, cookies are not forwarded.                                                                                  
-                                                                                                                                                                                         
      --mutate-url string[]                                         optional                                                                                                              
        ZERO_MUTATE_URL env                                                                                                                                                               
-                                                                                                                                                                                         
                                                                    The URL of the API server to which zero-cache will push mutations.                                                    
                                                                                                                                                                                          
                                                                    IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                                     
@@ -138,9 +89,8 @@ test('zero-cache --help', () => {
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  
                                                                                                                                                                                          
-     --get-queries-url string[]                                    optional                                                                                                              
-       ZERO_GET_QUERIES_URL env                                                                                                                                                          
-                                                                                                                                                                                         
+     --query-url string[]                                          optional                                                                                                              
+       ZERO_QUERY_URL env                                                                                                                                                                
                                                                    The URL of the API server to which zero-cache will send synced queries.                                               
                                                                                                                                                                                          
                                                                    IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                                     
@@ -176,12 +126,12 @@ test('zero-cache --help', () => {
                                                                                                                                                                                          
                                                                    For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern                          
                                                                                                                                                                                          
-     --get-queries-api-key string                                  optional                                                                                                              
-       ZERO_GET_QUERIES_API_KEY env                                                                                                                                                      
+     --query-api-key string                                        optional                                                                                                              
+       ZERO_QUERY_API_KEY env                                                                                                                                                            
                                                                    An optional secret used to authorize zero-cache to call the API server handling writes.                               
                                                                                                                                                                                          
-     --get-queries-forward-cookies boolean                         default: false                                                                                                        
-       ZERO_GET_QUERIES_FORWARD_COOKIES env                                                                                                                                              
+     --query-forward-cookies boolean                               default: false                                                                                                        
+       ZERO_QUERY_FORWARD_COOKIES env                                                                                                                                                    
                                                                    If true, zero-cache will forward cookies from the request.                                                            
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  
@@ -226,16 +176,21 @@ test('zero-cache --help', () => {
                                                                    take longer than log-slow-hydrate-threshold milliseconds.                                                             
                                                                    This is useful for debugging and performance tuning.                                                                  
                                                                                                                                                                                          
-     --enable-query-planner boolean                                default: false                                                                                                        
+     --enable-query-planner boolean                                default: true                                                                                                         
        ZERO_ENABLE_QUERY_PLANNER env                                                                                                                                                     
                                                                    Enable the query planner for optimizing ZQL queries.                                                                  
                                                                                                                                                                                          
                                                                    The query planner analyzes and optimizes query execution by determining                                               
-                                                                   the most efficient join strategies. This feature                                                                      
-                                                                   is being gradually rolled out and may improve performance for complex                                                 
-                                                                   queries that make use of WHERE EXISTS.                                                                                
+                                                                   the most efficient join strategies.                                                                                   
                                                                                                                                                                                          
-                                                                   When disabled (default), queries use the standard execution path.                                                     
+                                                                   You can disable the planner if it is picking bad strategies.                                                          
+                                                                                                                                                                                         
+     --yield-threshold-ms number                                   default: 10                                                                                                           
+       ZERO_YIELD_THRESHOLD_MS env                                                                                                                                                       
+                                                                   The maximum amount of time in milliseconds that a sync worker will                                                    
+                                                                   spend in IVM (processing query hydration and advancement) before yielding                                             
+                                                                   to the event loop. Lower values increase responsiveness and fairness at                                               
+                                                                   the cost of reduced throughput.                                                                                       
                                                                                                                                                                                          
      --change-db string                                            optional                                                                                                              
        ZERO_CHANGE_DB env                                                                                                                                                                
@@ -249,7 +204,7 @@ test('zero-cache --help', () => {
                                                                    This is used by the change-streamer for catching up                                                                   
                                                                    zero-cache replication subscriptions.                                                                                 
                                                                                                                                                                                          
-     --replica-file string                                         required                                                                                                              
+     --replica-file string                                         default: "zero.db"                                                                                                    
        ZERO_REPLICA_FILE env                                                                                                                                                             
                                                                    File path to the SQLite replica that zero-cache maintains.                                                            
                                                                    This can be lost, but if it is, zero-cache will have to re-replicate next                                             
@@ -320,18 +275,6 @@ test('zero-cache --help', () => {
                                                                    To change the set of publications without disrupting an existing app, a new app                                       
                                                                    should be created.                                                                                                    
                                                                                                                                                                                          
-     --auth-jwk string                                             optional                                                                                                              
-       ZERO_AUTH_JWK env                                                                                                                                                                 
-                                                                   A public key in JWK format used to verify JWTs. Only one of jwk, jwksUrl and secret may be set.                       
-                                                                                                                                                                                         
-     --auth-jwks-url string                                        optional                                                                                                              
-       ZERO_AUTH_JWKS_URL env                                                                                                                                                            
-                                                                   A URL that returns a JWK set used to verify JWTs. Only one of jwk, jwksUrl and secret may be set.                     
-                                                                                                                                                                                         
-     --auth-secret string                                          optional                                                                                                              
-       ZERO_AUTH_SECRET env                                                                                                                                                              
-                                                                   A symmetric key used to verify JWTs. Only one of jwk, jwksUrl and secret may be set.                                  
-                                                                                                                                                                                         
      --port number                                                 default: 4848                                                                                                         
        ZERO_PORT env                                                                                                                                                                     
                                                                    The port for sync connections.                                                                                        
@@ -362,6 +305,22 @@ test('zero-cache --help', () => {
                                                                    runs in the same process tree in local development or a single-node configuration.                                    
                                                                                                                                                                                          
                                                                    If unspecified, defaults to --port + 1.                                                                               
+                                                                                                                                                                                         
+     --change-streamer-startup-delay-ms number                     default: 15000                                                                                                        
+       ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS env                                                                                                                                         
+                                                                   The delay to wait before the change-streamer takes over the replication stream                                        
+                                                                   (i.e. the handoff during replication-manager updates), to allow loadbalancers to register                             
+                                                                   the task as healthy based on healthcheck parameters. Note that if a change stream request                             
+                                                                   is received during this interval, the delay will be canceled and the takeover will happen                             
+                                                                   immediately, since the incoming request indicates that the task is registered as a target.                            
+                                                                                                                                                                                         
+     --change-streamer-back-pressure-threshold number              default: 100000                                                                                                       
+       ZERO_CHANGE_STREAMER_BACK_PRESSURE_THRESHOLD env                                                                                                                                  
+                                                                   The maximum number of queued changes before back pressure is applied to the                                           
+                                                                   change source. When the queue exceeds this threshold, the change-streamer pauses                                      
+                                                                   consumption from upstream until the queue drops to 90% of the threshold.                                              
+                                                                                                                                                                                         
+                                                                   Increasing this value may improve throughput at the cost of higher memory usage.                                      
                                                                                                                                                                                          
      --task-id string                                              optional                                                                                                              
        ZERO_TASK_ID env                                                                                                                                                                  
@@ -450,6 +409,11 @@ test('zero-cache --help', () => {
                                                                    This is only consulted by the replication-manager.                                                                    
                                                                    view-syncers receive this information from the replication-manager.                                                   
                                                                                                                                                                                          
+     --litestream-endpoint string                                  optional                                                                                                              
+       ZERO_LITESTREAM_ENDPOINT env                                                                                                                                                      
+                                                                   The S3-compatible endpoint URL to use for the litestream backup. Only required for non-AWS services.                  
+                                                                   The replication-manager and view-syncers must have the same endpoint.                                                 
+                                                                                                                                                                                         
      --litestream-port number                                      optional                                                                                                              
        ZERO_LITESTREAM_PORT env                                                                                                                                                          
                                                                    Port on which litestream exports metrics, used to determine the replication                                           
@@ -464,6 +428,18 @@ test('zero-cache --help', () => {
                                                                    a new WAL segment file that will be backed up by litestream. Smaller thresholds                                       
                                                                    may improve read performance, at the expense of creating more files to download                                       
                                                                    when restoring the replica from the backup.                                                                           
+                                                                                                                                                                                         
+     --litestream-min-checkpoint-page-count number                 optional                                                                                                              
+       ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT env                                                                                                                                     
+                                                                   The WAL page count at which SQLite attempts a PASSIVE checkpoint, which                                               
+                                                                   transfers pages to the main database file without blocking writers.                                                   
+                                                                   Defaults to checkpointThresholdMB * 250 (since SQLite page size is 4KB).                                              
+                                                                                                                                                                                         
+     --litestream-max-checkpoint-page-count number                 optional                                                                                                              
+       ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT env                                                                                                                                     
+                                                                   The WAL page count at which SQLite performs a RESTART checkpoint, which                                               
+                                                                   blocks writers until complete. Defaults to minCheckpointPageCount * 10.                                               
+                                                                   Set to 0 to disable RESTART checkpoints entirely.                                                                     
                                                                                                                                                                                          
      --litestream-incremental-backup-interval-minutes number       default: 15                                                                                                           
        ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES env                                                                                                                           

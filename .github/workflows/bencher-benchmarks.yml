@@ -11,8 +11,8 @@ jobs:
       checks: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22.x
           cache: 'npm'
@@ -29,7 +29,7 @@ jobs:
 
       - name: Build zero client single file package
         working-directory: packages/zero
-        run: npx tsx tool/build.ts --bundle-sizes --minify
+        run: npx tsx tool/build.ts --bundle-sizes
 
       - name: Compress
         working-directory: packages/zero
@@ -76,8 +76,8 @@ jobs:
       checks: write
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22.x
           cache: 'npm'

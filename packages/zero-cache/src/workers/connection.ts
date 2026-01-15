@@ -1,4 +1,4 @@
-import type {LogContext} from '@rocicorp/logger';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {pipeline, Readable, Writable} from 'node:stream';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket, {createWebSocketStream} from 'ws';
@@ -372,7 +372,32 @@ export function sendError(
   thrown?: unknown,
 ) {
   lc = lc.withContext('errorKind', errorBody.kind);
-  const logLevel = thrown ? getLogLevel(thrown) : 'info';
+
+  let logLevel: LogLevel;
+
+  // If the thrown error is a ProtocolErrorWithLevel, its explicit logLevel takes precedence
+  if (thrown instanceof ProtocolErrorWithLevel) {
+    logLevel = thrown.logLevel;
+  }
+  // Errors with errno or transient socket codes are low-level, transient I/O issues
+  // (e.g., EPIPE, ECONNRESET) and should be warnings, not errors
+  else if (
+    hasErrno(thrown) ||
+    hasTransientSocketCode(thrown) ||
+    isTransientSocketMessage(errorBody.message)
+  ) {
+    logLevel = 'warn';
+  }
+  // Fallback: check errorBody.kind for errors that weren't thrown as ProtocolErrorWithLevel
+  else if (
+    errorBody.kind === ErrorKind.ClientNotFound ||
+    errorBody.kind === ErrorKind.TransformFailed
+  ) {
+    logLevel = 'warn';
+  } else {
+    logLevel = thrown ? getLogLevel(thrown) : 'info';
+  }
+
   lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
   send(lc, ws, ['error', errorBody], 'ignore-backpressure');
 }
@@ -385,4 +410,48 @@ export function findProtocolError(error: unknown): ProtocolError | undefined {
     return findProtocolError(error.cause);
   }
   return undefined;
+}
+
+function hasErrno(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'errno' in error &&
+      typeof (error as {errno: unknown}).errno !== 'undefined',
+  );
+}
+
+// System error codes that indicate transient socket conditions.
+// These are checked via the `code` property on errors.
+const TRANSIENT_SOCKET_ERROR_CODES = new Set([
+  'EPIPE',
+  'ECONNRESET',
+  'ECANCELED',
+]);
+
+// Error messages that indicate transient socket conditions but don't have
+// standard error codes (e.g., WebSocket library errors).
+const TRANSIENT_SOCKET_MESSAGE_PATTERNS = [
+  'socket was closed while data was being compressed',
+];
+
+function hasTransientSocketCode(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const maybeCode =
+    'code' in error ? String((error as {code?: unknown}).code) : undefined;
+  return Boolean(
+    maybeCode && TRANSIENT_SOCKET_ERROR_CODES.has(maybeCode.toUpperCase()),
+  );
+}
+
+function isTransientSocketMessage(message: string | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+  const lower = message.toLowerCase();
+  return TRANSIENT_SOCKET_MESSAGE_PATTERNS.some(pattern =>
+    lower.includes(pattern),
+  );
 }

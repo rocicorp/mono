@@ -4,8 +4,8 @@ import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
 import {BTreeRead} from '../btree/read.ts';
 import type {Read, Write} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
+import type {Commit} from '../db/commit.ts';
 import {
-  Commit,
   type SnapshotMetaDD31,
   commitFromHash,
   commitIsSnapshot,

@@ -32,7 +32,7 @@ export class Snitch implements Operator {
     input: Input,
     name: string,
     log: SnitchMessage[] = [],
-    logTypes: LogType[] = ['fetch', 'push', 'cleanup'],
+    logTypes: LogType[] = ['fetch', 'push'],
   ) {
     this.#input = input;
     this.#name = name;
@@ -60,15 +60,19 @@ export class Snitch implements Operator {
     this.log.push(message);
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     this.#log([this.#name, 'fetch', req]);
     return this.fetchGenerator(req);
   }
 
-  *fetchGenerator(req: FetchRequest): Stream<Node> {
+  *fetchGenerator(req: FetchRequest): Stream<Node | 'yield'> {
     let count = 0;
     try {
       for (const node of this.#input.fetch(req)) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
         count++;
         yield node;
       }
@@ -77,14 +81,11 @@ export class Snitch implements Operator {
     }
   }
 
-  cleanup(req: FetchRequest) {
-    this.#log([this.#name, 'cleanup', req]);
-    return this.#input.cleanup(req);
-  }
-
-  push(change: Change) {
+  *push(change: Change): Stream<'yield'> {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
-    this.#output?.push(change, this);
+    if (this.#output) {
+      yield* this.#output.push(change, this);
+    }
   }
 }
 
@@ -126,7 +127,7 @@ export class FilterSnitch implements FilterOperator {
     input: FilterInput,
     name: string,
     log: SnitchMessage[] = [],
-    logTypes: LogType[] = ['filter', 'push', 'cleanup'],
+    logTypes: LogType[] = ['filter', 'push'],
   ) {
     this.#input = input;
     this.#name = name;
@@ -139,10 +140,18 @@ export class FilterSnitch implements FilterOperator {
     this.#output = output;
   }
 
-  filter(node: Node, cleanup: boolean): boolean {
-    this.#log([this.#name, 'filter', node.row, cleanup ? 'cleanup' : 'fetch']);
-    assert(this.#output);
-    return this.#output.filter(node, cleanup);
+  beginFilter(): void {
+    this.#output?.beginFilter();
+  }
+
+  endFilter(): void {
+    this.#output?.endFilter();
+  }
+
+  *filter(node: Node): Generator<'yield', boolean> {
+    this.#log([this.#name, 'filter', node.row]);
+    assert(this.#output, 'Snitch: output must be set before filter is called');
+    return yield* this.#output.filter(node);
   }
 
   destroy(): void {
@@ -160,24 +169,24 @@ export class FilterSnitch implements FilterOperator {
     this.log.push(message);
   }
 
-  push(change: Change) {
+  *push(change: Change): Stream<'yield'> {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
-    this.#output?.push(change, this);
+    if (this.#output) {
+      yield* this.#output.push(change, this);
+    }
   }
 }
 
 export type SnitchMessage =
   | FetchMessage
   | FetchCountMessage
-  | CleanupMessage
   | PushMessage
   | FilterMessage;
 
 export type FetchCountMessage = [string, 'fetchCount', FetchRequest, number];
 export type FetchMessage = [string, 'fetch', FetchRequest];
-export type CleanupMessage = [string, 'cleanup', FetchRequest];
 export type PushMessage = [string, 'push', ChangeRecord];
-export type FilterMessage = [string, 'filter', Row, 'fetch' | 'cleanup'];
+export type FilterMessage = [string, 'filter', Row];
 
 export type ChangeRecord =
   | AddChangeRecord
@@ -209,4 +218,4 @@ export type EditChangeRecord = {
   oldRow: Row;
 };
 
-export type LogType = 'fetch' | 'push' | 'cleanup' | 'fetchCount' | 'filter';
+export type LogType = 'fetch' | 'push' | 'fetchCount' | 'filter';

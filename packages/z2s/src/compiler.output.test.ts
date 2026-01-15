@@ -214,13 +214,13 @@ test('select from different schema', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "alternate_user_0"."id" as "id","alternate_user_0"."name" as "name","alternate_user_0"."age" as "age"
         FROM "alternate_schema"."user" AS "alternate_user_0"
          
          
-        
-        ) "root"",
+        ORDER BY "alternate_user_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [],
     }
   `);
@@ -313,13 +313,13 @@ test('compile with enum', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "enumTable_0"."id" as "id","enumTable_0"."status" as "status","enumTable_0"."statusArray" as "statusArray"
         FROM "enumTable" AS "enumTable_0"
         WHERE "enumTable_0"."status"::text = $1::text COLLATE "ucs_basic"
          
-        
-        ) "root"",
+        ORDER BY "enumTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [
         "active",
       ],
@@ -344,15 +344,15 @@ test('compile with enumArray', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "enumTable_0"."id" as "id","enumTable_0"."status" as "status","enumTable_0"."statusArray" as "statusArray"
         FROM "enumTable" AS "enumTable_0"
         WHERE "enumTable_0"."statusArray"::text = ARRAY(
               SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
             )
          
-        
-        ) "root"",
+        ORDER BY "enumTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [
         "["active"]",
       ],
@@ -377,13 +377,13 @@ test('compile with timestamp (with timezone)', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithTz" = to_timestamp($1::text::bigint / 1000.0)
          
-        
-        ) "root"",
+        ORDER BY "timestampsTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [
         ""abc"",
       ],
@@ -408,15 +408,15 @@ test('compile with timestamp array (with timezone)', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithTzArray" = ARRAY(
               SELECT to_timestamp(value::text::bigint / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
             )
          
-        
-        ) "root"",
+        ORDER BY "timestampsTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [
         ""abc"",
       ],
@@ -441,13 +441,13 @@ test('compile with timestamp (without timezone)', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'
          
-        
-        ) "root"",
+        ORDER BY "timestampsTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [
         ""abc"",
       ],
@@ -472,15 +472,15 @@ test('compile with timestamp (without timezone) array', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithoutTzArray" = ARRAY(
               SELECT to_timestamp(value::text::bigint / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
             )
          
-        
-        ) "root"",
+        ORDER BY "timestampsTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [
         ""abc"",
       ],
@@ -1255,15 +1255,15 @@ test('related thru junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT (
-            SELECT COALESCE(json_agg(row_to_json("inner_labels")), '[]'::json) FROM (SELECT "label_2"."id" as "id","label_2"."name" as "name" FROM "issue_label" AS "issueLabel_1" JOIN "label" AS "label_2" ON "issueLabel_1"."label_id" = "label_2"."id" WHERE ("issue_0"."id" = "issueLabel_1"."issue_id")    ) "inner_labels"
+            SELECT COALESCE(json_agg(row_to_json("inner_labels")), '[]'::json) FROM (SELECT "label_2"."id" as "id","label_2"."name" as "name" FROM "issue_label" AS "issueLabel_1" JOIN "label" AS "label_2" ON "issueLabel_1"."label_id" = "label_2"."id" WHERE ("issue_0"."id" = "issueLabel_1"."issue_id")  ORDER BY "label_2"."id" COLLATE "ucs_basic" ASC NULLS FIRST  ) "inner_labels"
           ) as "labels","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
         FROM "issue" AS "issue_0"
          
          
-        
-        ) "root"",
+        ORDER BY "issue_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [],
     }
   `);
@@ -1291,20 +1291,20 @@ test('related w/o junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT 
-        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT (
           SELECT COALESCE(json_agg(row_to_json("inner_owner")), '[]'::json) FROM (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
         FROM "user" AS "user_1"
          
         WHERE "issue_0"."ownerId" = "user_1"."id"
-        
+        ORDER BY "user_1"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "inner_owner"
         ) as "owner","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
         FROM "issue" AS "issue_0"
          
          
-        
-        ) "root"",
+        ORDER BY "issue_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
       "values": [],
     }
   `);

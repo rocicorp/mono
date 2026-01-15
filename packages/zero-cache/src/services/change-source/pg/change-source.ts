@@ -2,7 +2,7 @@ import {
   PG_ADMIN_SHUTDOWN,
   PG_OBJECT_IN_USE,
 } from '@drdgvhbh/postgres-error-codes';
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
@@ -47,6 +47,7 @@ import {
   getSubscriptionState,
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
+import type {JSONObject} from '../protocol/current.ts';
 import type {
   DataChange,
   Identifier,
@@ -469,11 +470,21 @@ class ChangeMaker {
     } catch (err) {
       this.#error = {lsn, msg, err, lastLogTime: 0};
       this.#logError(this.#error);
+
+      const message = `Unable to continue replication from LSN ${fromBigInt(lsn)}`;
+      const errorDetails: JSONObject = {error: message};
+      if (err instanceof UnsupportedSchemaChangeError) {
+        errorDetails.reason = err.description;
+        errorDetails.context = err.ddlUpdate.context;
+      } else {
+        errorDetails.reason = String(err);
+      }
+
       // Rollback the current transaction to avoid dangling transactions in
       // downstream processors (i.e. changeLog, replicator).
       return [
         ['rollback', {tag: 'rollback'}],
-        ['control', {tag: 'reset-required'}],
+        ['control', {tag: 'reset-required', message, errorDetails}],
       ];
     }
   }
@@ -489,8 +500,10 @@ class ChangeMaker {
         `Unable to continue replication from LSN ${fromBigInt(lsn)}: ${String(
           err,
         )}`,
-        // 'content' can be a large byte Buffer. Exclude it from logging output.
-        {...msg, content: undefined},
+        err instanceof UnsupportedSchemaChangeError
+          ? err.ddlUpdate.context
+          : // 'content' can be a large byte Buffer. Exclude it from logging output.
+            {...msg, content: undefined},
       );
       error.lastLogTime = now;
     }
@@ -644,47 +657,54 @@ class ChangeMaker {
     preSchema: PublishedSchema,
     update: DdlUpdateEvent,
   ): DataChange[] {
-    const [prevTbl, prevIdx] = specsByID(preSchema);
-    const [nextTbl, nextIdx] = specsByID(update.schema);
-    const changes: DataChange[] = [];
+    try {
+      const [prevTbl, prevIdx] = specsByID(preSchema);
+      const [nextTbl, nextIdx] = specsByID(update.schema);
+      const changes: DataChange[] = [];
 
-    // Validate the new table schemas
-    for (const table of nextTbl.values()) {
-      validate(this.#lc, table, update.schema.indexes);
-    }
+      // Validate the new table schemas
+      for (const table of nextTbl.values()) {
+        validate(this.#lc, table, update.schema.indexes);
+      }
 
-    const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
-    for (const id of droppedIdx) {
-      const {schema, name} = must(prevIdx.get(id));
-      changes.push({tag: 'drop-index', id: {schema, name}});
-    }
+      const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
+      for (const id of droppedIdx) {
+        const {schema, name} = must(prevIdx.get(id));
+        changes.push({tag: 'drop-index', id: {schema, name}});
+      }
 
-    // DROP
-    const [droppedTbl, createdTbl] = symmetricDifferences(prevTbl, nextTbl);
-    for (const id of droppedTbl) {
-      const {schema, name} = must(prevTbl.get(id));
-      changes.push({tag: 'drop-table', id: {schema, name}});
-    }
-    // ALTER
-    const tables = intersection(prevTbl, nextTbl);
-    for (const id of tables) {
-      changes.push(
-        ...this.#getTableChanges(must(prevTbl.get(id)), must(nextTbl.get(id))),
-      );
-    }
-    // CREATE
-    for (const id of createdTbl) {
-      const spec = must(nextTbl.get(id));
-      changes.push({tag: 'create-table', spec});
-    }
+      // DROP
+      const [droppedTbl, createdTbl] = symmetricDifferences(prevTbl, nextTbl);
+      for (const id of droppedTbl) {
+        const {schema, name} = must(prevTbl.get(id));
+        changes.push({tag: 'drop-table', id: {schema, name}});
+      }
+      // ALTER
+      const tables = intersection(prevTbl, nextTbl);
+      for (const id of tables) {
+        changes.push(
+          ...this.#getTableChanges(
+            must(prevTbl.get(id)),
+            must(nextTbl.get(id)),
+          ),
+        );
+      }
+      // CREATE
+      for (const id of createdTbl) {
+        const spec = must(nextTbl.get(id));
+        changes.push({tag: 'create-table', spec});
+      }
 
-    // Add indexes last since they may reference tables / columns that need
-    // to be created first.
-    for (const id of createdIdx) {
-      const spec = must(nextIdx.get(id));
-      changes.push({tag: 'create-index', spec});
+      // Add indexes last since they may reference tables / columns that need
+      // to be created first.
+      for (const id of createdIdx) {
+        const spec = must(nextIdx.get(id));
+        changes.push({tag: 'create-index', spec});
+      }
+      return changes;
+    } catch (e) {
+      throw new UnsupportedSchemaChangeError(String(e), update, {cause: e});
     }
-    return changes;
   }
 
   #getTableChanges(oldTable: TableSpec, newTable: TableSpec): DataChange[] {
@@ -737,12 +757,8 @@ class ChangeMaker {
     for (const id of added) {
       const {name, ...spec} = must(newColumns.get(id));
       const column = {name, spec};
-      try {
-        // Validate that the ChangeProcessor will accept the column change.
-        mapPostgresToLiteColumn(table.name, column);
-      } catch (cause) {
-        throw new UnsupportedSchemaChangeError(String(cause), {cause});
-      }
+      // Validate that the ChangeProcessor will accept the column change.
+      mapPostgresToLiteColumn(table.name, column);
       changes.push({tag: 'add-column', table, column});
     }
     return changes;
@@ -929,14 +945,26 @@ function withoutColumns(relation: PostgresRelation): MessageRelation {
 
 class UnsupportedSchemaChangeError extends Error {
   readonly name = 'UnsupportedSchemaChangeError';
+  readonly description: string;
+  readonly ddlUpdate: DdlUpdateEvent;
 
-  // Schema changes cannot be reliably replicated without event trigger support.
-  constructor(msg: string, options?: ErrorOptions) {
-    super(`Replication halted. Resync the replica to recover: ${msg}`, options);
+  constructor(
+    description: string,
+    ddlUpdate: DdlUpdateEvent,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `Replication halted. Resync the replica to recover: ${description}`,
+      options,
+    );
+    this.description = description;
+    this.ddlUpdate = ddlUpdate;
   }
 }
 
-class MissingEventTriggerSupport extends UnsupportedSchemaChangeError {
+class MissingEventTriggerSupport extends Error {
+  readonly name = 'MissingEventTriggerSupport';
+
   constructor(msg: string) {
     super(
       `${msg}. Schema changes cannot be reliably replicated without event trigger support.`,

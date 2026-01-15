@@ -13,14 +13,12 @@ const focusInput = (input: HTMLInputElement | null) => {
 };
 
 export function LabelPicker({
-  disabled,
   projectName,
   selected,
   onDisassociateLabel,
   onAssociateLabel,
   onCreateNewLabel,
 }: {
-  disabled: boolean;
   projectName: string;
   selected: Set<string>;
   onDisassociateLabel: (id: string) => void;
@@ -29,7 +27,7 @@ export function LabelPicker({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [labels] = useQuery(
-    queries.labelsForProject({projectName}).orderBy('name', 'asc'),
+    queries.labelsOrderByName({projectName, orderBy: 'asc'}),
   );
   const ref = useRef<HTMLDivElement>(null);
 
@@ -41,7 +39,6 @@ export function LabelPicker({
   return (
     <div className={style.root} ref={ref}>
       <Button
-        disabled={disabled}
         title="Add label"
         eventName="Add issue label toggle"
         className={style.addLabel}

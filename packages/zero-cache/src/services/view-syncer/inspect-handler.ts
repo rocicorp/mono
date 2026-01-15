@@ -15,6 +15,8 @@ import {analyzeQuery} from '../analyze.ts';
 import type {ClientHandler} from './client-handler.ts';
 import type {CVRStore} from './cvr-store.ts';
 import type {CVRSnapshot} from './cvr.ts';
+import type {TokenData} from './view-syncer.ts';
+import {must} from '../../../../shared/src/must.ts';
 
 export async function handleInspect(
   lc: LogContext,
@@ -27,7 +29,7 @@ export async function handleInspect(
   config: NormalizedZeroConfig,
   headerOptions: HeaderOptions,
   userQueryURL: string | undefined,
-  authData: string | undefined,
+  authData: TokenData | undefined,
 ): Promise<void> {
   // Check if the client is already authenticated. We only authenticate the clientGroup
   // once per "worker".
@@ -109,7 +111,7 @@ export async function handleInspect(
         let ast = body.ast ?? body.value;
         let legacyQuery = true;
 
-        if (ast === undefined && body.name && body.args) {
+        if (body.name && body.args) {
           // Get the AST from the API server by transforming the named query
           ast = await inspectorDelegate.transformCustomQuery(
             body.name,
@@ -143,11 +145,13 @@ export async function handleInspect(
         const result = await analyzeQuery(
           lc,
           config,
+          must(cvr.clientSchema),
           ast,
           body.options?.syncedRows,
           body.options?.vendedRows,
           permissions,
           authData,
+          body.options?.joinPlans,
         );
         client.sendInspectResponse(lc, {
           op: 'analyze-query',

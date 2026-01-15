@@ -1,5 +1,4 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import {mergeIterables} from '../../../shared/src/iterables.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Change} from './change.ts';
 import type {Constraint} from './constraint.ts';
@@ -92,23 +91,16 @@ export class UnionFanIn implements Operator {
     this.#inputs = inputs;
   }
 
-  cleanup(_req: FetchRequest): Stream<Node> {
-    // Cleanup is going away. Not implemented.
-    return [];
-  }
-
   destroy(): void {
     for (const input of this.#inputs) {
       input.destroy();
     }
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     const iterables = this.#inputs.map(input => input.fetch(req));
-    return mergeIterables(
-      iterables,
-      (l, r) => this.#schema.compareRows(l.row, r.row),
-      true,
+    return mergeFetches(iterables, (l, r) =>
+      this.#schema.compareRows(l.row, r.row),
     );
   }
 
@@ -116,9 +108,9 @@ export class UnionFanIn implements Operator {
     return this.#schema;
   }
 
-  push(change: Change, pusher: InputBase): void {
+  *push(change: Change, pusher: InputBase): Stream<'yield'> {
     if (!this.#fanOutPushStarted) {
-      this.#pushInternalChange(change, pusher);
+      yield* this.#pushInternalChange(change, pusher);
     } else {
       this.#accumulatedPushes.push(change);
     }
@@ -145,13 +137,17 @@ export class UnionFanIn implements Operator {
    * 4. Edits will always come through as child changes as flip join will flip them into children.
    *    An edit that would result in a remove or add will have been split into an add/remove pair rather than being an edit.
    */
-  #pushInternalChange(change: Change, pusher: InputBase): void {
+  *#pushInternalChange(change: Change, pusher: InputBase): Stream<'yield'> {
     if (change.type === 'child') {
-      this.#output.push(change, this);
+      yield* this.#output.push(change, this);
       return;
     }
 
-    assert(change.type === 'add' || change.type === 'remove');
+    assert(
+      change.type === 'add' || change.type === 'remove',
+      () =>
+        `UnionFanIn: expected add or remove change type, got ${change.type}`,
+    );
 
     let hadMatch = false;
     for (const input of this.#inputs) {
@@ -177,16 +173,22 @@ export class UnionFanIn implements Operator {
     assert(hadMatch, 'Pusher was not one of the inputs to union-fan-in!');
 
     // No other branches have the row, so we can push the change.
-    this.#output.push(change, this);
+    yield* this.#output.push(change, this);
   }
 
   fanOutStartedPushing() {
-    assert(this.#fanOutPushStarted === false);
+    assert(
+      this.#fanOutPushStarted === false,
+      'UnionFanIn: fanOutStartedPushing called while already pushing',
+    );
     this.#fanOutPushStarted = true;
   }
 
-  fanOutDonePushing(fanOutChangeType: Change['type']) {
-    assert(this.#fanOutPushStarted);
+  *fanOutDonePushing(fanOutChangeType: Change['type']): Stream<'yield'> {
+    assert(
+      this.#fanOutPushStarted,
+      'UnionFanIn: fanOutDonePushing called without fanOutStartedPushing',
+    );
     this.#fanOutPushStarted = false;
     if (this.#inputs.length === 0) {
       return;
@@ -198,7 +200,7 @@ export class UnionFanIn implements Operator {
       return;
     }
 
-    pushAccumulatedChanges(
+    yield* pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
       this,
@@ -210,5 +212,81 @@ export class UnionFanIn implements Operator {
 
   setOutput(output: Output): void {
     this.#output = output;
+  }
+}
+
+export function* mergeFetches(
+  fetches: Iterable<Node | 'yield'>[],
+  comparator: (l: Node, r: Node) => number,
+): IterableIterator<Node | 'yield'> {
+  const iterators = fetches.map(i => i[Symbol.iterator]());
+  let threw = false;
+  try {
+    const current: (Node | null)[] = [];
+    let lastNodeYielded: Node | undefined;
+    for (let i = 0; i < iterators.length; i++) {
+      const iter = iterators[i];
+      let result = iter.next();
+      // yield yields when initializing
+      while (!result.done && result.value === 'yield') {
+        yield result.value;
+        result = iter.next();
+      }
+      current[i] = result.done ? null : (result.value as Node);
+    }
+    while (current.some(c => c !== null)) {
+      const min = current.reduce(
+        (acc: [Node, number] | undefined, c, i): [Node, number] | undefined => {
+          if (c === null) {
+            return acc;
+          }
+          if (acc === undefined || comparator(c, acc[0]) < 0) {
+            return [c, i];
+          }
+          return acc;
+        },
+        undefined,
+      );
+
+      assert(min !== undefined, 'min is undefined');
+      const [minNode, minIndex] = min;
+      const iter = iterators[minIndex];
+      let result = iter.next();
+      while (!result.done && result.value === 'yield') {
+        yield result.value;
+        result = iter.next();
+      }
+      current[minIndex] = result.done ? null : (result.value as Node);
+      if (
+        lastNodeYielded !== undefined &&
+        comparator(lastNodeYielded, minNode) === 0
+      ) {
+        continue;
+      }
+      lastNodeYielded = minNode;
+      yield minNode;
+    }
+  } catch (e) {
+    threw = true;
+    for (const iter of iterators) {
+      try {
+        iter.throw?.(e);
+      } catch (_cleanupError) {
+        // error in the iter.throw cleanup,
+        // catch so other iterators are cleaned up
+      }
+    }
+    throw e;
+  } finally {
+    if (!threw) {
+      for (const iter of iterators) {
+        try {
+          iter.return?.();
+        } catch (_cleanupError) {
+          // error in the iter.return cleanup,
+          // catch so other iterators are cleaned up
+        }
+      }
+    }
   }
 }

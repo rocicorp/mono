@@ -22,6 +22,7 @@ import {Transaction} from '../../zero-server/src/test/util.ts';
 import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
@@ -81,9 +82,9 @@ const schema = createSchema({
 });
 type Schema = typeof schema;
 
-let issueQuery: Query<Schema, 'issue'>;
+let issueQuery: Query<'issue', Schema>;
 let serverSchema: ServerSchema;
-let queryDelegate: QueryDelegate<unknown>;
+let queryDelegate: QueryDelegate;
 
 beforeAll(async () => {
   pg = await testDBs.create(DB_NAME, undefined, false);
@@ -212,11 +213,7 @@ describe('compiling ZQL to SQL', () => {
   ) {
     test('All bigints in safe Number range', async () => {
       const query = issueQuery.related('comments').limit(2);
-      const c = compile(
-        serverSchema,
-        schema,
-        queryDelegate.withContext(query).ast,
-      );
+      const c = compile(serverSchema, schema, asQueryInternals(query).ast);
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -267,11 +264,7 @@ describe('compiling ZQL to SQL', () => {
 
     test('bigint exceeds safe range', async () => {
       const query = issueQuery.related('comments');
-      const c = compile(
-        serverSchema,
-        schema,
-        queryDelegate.withContext(query).ast,
-      );
+      const c = compile(serverSchema, schema, asQueryInternals(query).ast);
       const sqlQuery = formatPgInternalConvert(c);
       const result = await runPgQuery(
         sqlQuery.text,
@@ -289,11 +282,7 @@ describe('compiling ZQL to SQL', () => {
           .where('hash', '<', Number(Number.MAX_SAFE_INTEGER))
           .where('hash', '!=', Number(Number.MAX_SAFE_INTEGER - 3)),
       );
-      const c = compile(
-        serverSchema,
-        schema,
-        queryDelegate.withContext(query).ast,
-      );
+      const c = compile(serverSchema, schema, asQueryInternals(query).ast);
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -344,11 +333,7 @@ describe('compiling ZQL to SQL', () => {
       const q2 = issueQuery.related('comments', q =>
         q.where('hash', '=', Number.MAX_SAFE_INTEGER - 3),
       );
-      const c2 = compile(
-        serverSchema,
-        schema,
-        queryDelegate.withContext(q2).ast,
-      );
+      const c2 = compile(serverSchema, schema, asQueryInternals(q2).ast);
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(
         await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),

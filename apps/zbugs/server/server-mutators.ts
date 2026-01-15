@@ -1,216 +1,279 @@
-import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
-import type {PostgresJsTransaction} from '@rocicorp/zero/server/adapters/postgresjs';
-import {type AuthData} from '../shared/auth.ts';
+import {
+  defineMutator,
+  defineMutators,
+  type ServerTransaction,
+  type Transaction,
+} from '@rocicorp/zero';
+import {assert} from 'shared/src/asserts.js';
+import {z} from 'zod/mini';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {
-  createMutators,
-  type AddCommentArgs,
-  type AddEmojiArgs,
-  type CreateIssueArgs,
+  createIssueArgsSchema,
+  mutators,
+  updateIssueArgsSchema,
 } from '../shared/mutators.ts';
-import {builder, schema, type Schema} from '../shared/schema.ts';
+import {builder} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
-type MutatorTx = ServerTransaction<
-  Schema,
-  PostgresJsTransaction,
-  AuthData | undefined
->;
 
-export function createServerMutators(
-  authData: AuthData | undefined,
-  postCommitTasks: PostCommitTask[],
-) {
-  const mutators = createMutators(authData);
+function asServerTransaction(tx: Transaction): ServerTransaction {
+  assert(tx.location === 'server', 'Transaction is not a server transaction');
+  return tx;
+}
 
-  return {
-    ...mutators,
-
+export function createServerMutators(postCommitTasks: PostCommitTask[]) {
+  return defineMutators(mutators, {
     issue: {
-      ...mutators.issue,
-
-      async create(
-        tx: MutatorTx,
-        {id, projectID, title, description}: CreateIssueArgs,
-      ) {
-        await mutators.issue.create(tx, {
-          id,
-          projectID,
-          title,
-          description,
-          created: Date.now(),
-          modified: Date.now(),
-        });
-
-        await notify(
+      create: defineMutator(
+        createIssueArgsSchema,
+        async ({
           tx,
-          authData,
-          {kind: 'create-issue', issueID: id},
-          postCommitTasks,
-        );
-      },
+          args: {id, projectID, title, description},
+          ctx: authData,
+        }) => {
+          await mutators.issue.create.fn({
+            tx,
+            args: {
+              id,
+              projectID,
+              title,
+              description,
+              created: Date.now(),
+              modified: Date.now(),
+            },
+            ctx: authData,
+          });
 
-      async update(
-        tx: MutatorTx,
-        args: {id: string} & UpdateValue<typeof schema.tables.issue>,
-      ) {
-        await mutators.issue.update(tx, {
-          ...args,
-          modified: Date.now(),
-        });
+          await notify(
+            asServerTransaction(tx),
+            authData,
+            {kind: 'create-issue', issueID: id},
+            postCommitTasks,
+          );
+        },
+      ),
 
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'update-issue',
-            issueID: args.id,
-            update: args,
-          },
-          postCommitTasks,
-        );
-      },
+      update: defineMutator(
+        updateIssueArgsSchema,
+        async ({tx, args, ctx: authData}) => {
+          await mutators.issue.update.fn({
+            tx,
+            args: {
+              ...args,
+              modified: Date.now(),
+            },
+            ctx: authData,
+          });
 
-      async addLabel(
-        tx: MutatorTx,
-        {issueID, labelID}: {issueID: string; labelID: string},
-      ) {
-        await mutators.issue.addLabel(tx, {issueID, labelID});
+          await notify(
+            asServerTransaction(tx),
+            authData,
+            {
+              kind: 'update-issue',
+              issueID: args.id,
+              update: args,
+            },
+            postCommitTasks,
+          );
+        },
+      ),
 
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'update-issue',
-            issueID,
-            update: {id: issueID},
-          },
-          postCommitTasks,
-        );
-      },
+      addLabel: defineMutator(
+        z.object({
+          issueID: z.string(),
+          labelID: z.string(),
+          projectID: z.optional(z.string()),
+        }),
+        async ({tx, args: {issueID, labelID, projectID}, ctx: authData}) => {
+          await mutators.issue.addLabel.fn({
+            tx,
+            args: {issueID, labelID, projectID},
+            ctx: authData,
+          });
 
-      async removeLabel(
-        tx: MutatorTx,
-        {issueID, labelID}: {issueID: string; labelID: string},
-      ) {
-        await mutators.issue.removeLabel(tx, {issueID, labelID});
+          await notify(
+            asServerTransaction(tx),
+            authData,
+            {
+              kind: 'update-issue',
+              issueID,
+              update: {id: issueID},
+            },
+            postCommitTasks,
+          );
+        },
+      ),
 
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'update-issue',
-            issueID,
-            update: {id: issueID},
-          },
-          postCommitTasks,
-        );
-      },
+      removeLabel: defineMutator(
+        z.object({
+          issueID: z.string(),
+          labelID: z.string(),
+        }),
+        async ({tx, args: {issueID, labelID}, ctx: authData}) => {
+          await mutators.issue.removeLabel.fn({
+            tx,
+            args: {issueID, labelID},
+            ctx: authData,
+          });
+
+          await notify(
+            asServerTransaction(tx),
+            authData,
+            {
+              kind: 'update-issue',
+              issueID,
+              update: {id: issueID},
+            },
+            postCommitTasks,
+          );
+        },
+      ),
     },
 
     emoji: {
-      ...mutators.emoji,
+      addToIssue: defineMutator(
+        z.object({
+          id: z.string(),
+          unicode: z.string(),
+          annotation: z.string(),
+          subjectID: z.string(),
+        }),
+        async ({tx, args, ctx: authData}) => {
+          await mutators.emoji.addToIssue.fn({
+            tx,
+            args: {
+              ...args,
+              created: Date.now(),
+            },
+            ctx: authData,
+          });
 
-      async addToIssue(tx: MutatorTx, args: AddEmojiArgs) {
-        await mutators.emoji.addToIssue(tx, {
-          ...args,
-          created: Date.now(),
-        });
-
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'add-emoji-to-issue',
-            issueID: args.subjectID,
-            emoji: args.unicode,
-          },
-          postCommitTasks,
-        );
-      },
-
-      async addToComment(tx: MutatorTx, args: AddEmojiArgs) {
-        await mutators.emoji.addToComment(tx, {
-          ...args,
-          created: Date.now(),
-        });
-
-        const comment = await tx.run(
-          builder.comment.where('id', args.subjectID).one(),
-        );
-
-        if (!comment) {
-          throw new MutationError(
-            `Comment not found`,
-            MutationErrorCode.NOTIFICATION_FAILED,
-            args.subjectID,
+          await notify(
+            asServerTransaction(tx),
+            authData,
+            {
+              kind: 'add-emoji-to-issue',
+              issueID: args.subjectID,
+              emoji: args.unicode,
+            },
+            postCommitTasks,
           );
-        }
+        },
+      ),
 
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'add-emoji-to-comment',
-            issueID: comment.issueID,
-            commentID: args.subjectID,
-            emoji: args.unicode,
-          },
-          postCommitTasks,
-        );
-      },
+      addToComment: defineMutator(
+        z.object({
+          id: z.string(),
+          unicode: z.string(),
+          annotation: z.string(),
+          subjectID: z.string(),
+        }),
+        async ({tx, args, ctx: authData}) => {
+          await mutators.emoji.addToComment.fn({
+            tx,
+            args: {
+              ...args,
+              created: Date.now(),
+            },
+            ctx: authData,
+          });
+
+          const comment = await tx.run(
+            builder.comment.where('id', args.subjectID).one(),
+          );
+
+          if (!comment) {
+            throw new MutationError(
+              `Comment not found`,
+              MutationErrorCode.NOTIFICATION_FAILED,
+              args.subjectID,
+            );
+          }
+
+          await notify(
+            asServerTransaction(tx),
+            authData,
+            {
+              kind: 'add-emoji-to-comment',
+              issueID: comment.issueID,
+              commentID: args.subjectID,
+              emoji: args.unicode,
+            },
+            postCommitTasks,
+          );
+        },
+      ),
     },
 
     comment: {
-      ...mutators.comment,
+      add: defineMutator(
+        z.object({
+          id: z.string(),
+          issueID: z.string(),
+          body: z.string(),
+        }),
+        async ({tx, args: {id, issueID, body}, ctx: authData}) => {
+          await mutators.comment.add.fn({
+            tx,
+            args: {
+              id,
+              issueID,
+              body,
+              created: Date.now(),
+            },
+            ctx: authData,
+          });
 
-      async add(tx: MutatorTx, {id, issueID, body}: AddCommentArgs) {
-        await mutators.comment.add(tx, {
-          id,
-          issueID,
-          body,
-          created: Date.now(),
-        });
-
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'add-comment',
-            issueID,
-            commentID: id,
-            comment: body,
-          },
-          postCommitTasks,
-        );
-      },
-
-      async edit(tx: MutatorTx, {id, body}: {id: string; body: string}) {
-        await mutators.comment.edit(tx, {id, body});
-
-        const comment = await tx.run(builder.comment.where('id', id).one());
-
-        if (!comment) {
-          throw new MutationError(
-            `Comment not found`,
-            MutationErrorCode.NOTIFICATION_FAILED,
-            id,
+          await notify(
+            asServerTransaction(tx),
+            authData,
+            {
+              kind: 'add-comment',
+              issueID,
+              commentID: id,
+              comment: body,
+            },
+            postCommitTasks,
           );
-        }
+        },
+      ),
 
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'edit-comment',
-            issueID: comment.issueID,
-            commentID: id,
-            comment: body,
-          },
-          postCommitTasks,
-        );
-      },
+      edit: defineMutator(
+        z.object({
+          id: z.string(),
+          body: z.string(),
+        }),
+        async ({tx, args: {id, body}, ctx: authData}) => {
+          await mutators.comment.edit.fn({
+            tx,
+            args: {id, body},
+            ctx: authData,
+          });
+
+          const comment = await tx.run(builder.comment.where('id', id).one());
+
+          if (!comment) {
+            throw new MutationError(
+              `Comment not found`,
+              MutationErrorCode.NOTIFICATION_FAILED,
+              id,
+            );
+          }
+
+          await notify(
+            asServerTransaction(tx),
+            authData,
+            {
+              kind: 'edit-comment',
+              issueID: comment.issueID,
+              commentID: id,
+              comment: body,
+            },
+            postCommitTasks,
+          );
+        },
+      ),
     },
-  } as const;
+  });
 }

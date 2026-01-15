@@ -1,17 +1,15 @@
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import 'urlpattern-polyfill';
-import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
-import {upstreamSchema, type ShardID} from '../types/shards.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {Type} from '../../../shared/src/valita.ts';
-import {
-  isProtocolError,
-  ProtocolError,
-} from '../../../zero-protocol/src/error.ts';
+import {type Type} from '../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
-import {getErrorMessage} from '../../../shared/src/error.ts';
+import {isProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
+import {upstreamSchema, type ShardID} from '../types/shards.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -43,6 +41,7 @@ export type HeaderOptions = {
 export const getBodyPreview = async (
   res: Response,
   lc: LogContext,
+  level: LogLevel,
 ): Promise<string | undefined> => {
   try {
     const body = await res.clone().text();
@@ -51,7 +50,7 @@ export const getBodyPreview = async (
     }
     return body;
   } catch (e) {
-    lc.error?.('failed to get body preview', {
+    lc[level]?.('failed to get body preview', {
       url: res.url,
       error: e instanceof Error ? e.message : String(e),
     });
@@ -65,6 +64,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   source: 'push' | 'transform',
   lc: LogContext,
   url: string,
+  isUserUrl: boolean,
   allowedUrlPatterns: URLPattern[],
   shard: ShardID,
   headerOptions: HeaderOptions,
@@ -75,8 +75,22 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   });
 
   if (!urlMatch(url, allowedUrlPatterns)) {
-    throw new Error(
-      `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+    throw new ProtocolErrorWithLevel(
+      source === 'push'
+        ? {
+            kind: ErrorKind.PushFailed,
+            origin: ErrorOrigin.ZeroCache,
+            reason: ErrorReason.Internal,
+            message: `URL "${url}" is not allowed by the ZERO_MUTATE_URL configuration`,
+            mutationIDs: [],
+          }
+        : {
+            kind: ErrorKind.TransformFailed,
+            origin: ErrorOrigin.ZeroCache,
+            reason: ErrorReason.Internal,
+            message: `URL "${url}" is not allowed by the ZERO_QUERY_URL configuration`,
+            queryIDs: [],
+          },
     );
   }
   const headers: Record<string, string> = {
@@ -110,6 +124,10 @@ export async function fetchFromAPIServer<TValidator extends Type>(
 
   const finalUrl = urlObj.toString();
 
+  // Errors from a user-specified url are treated 4xx errors
+  // (e.g. bad request) as they are developer driven and should not
+  // trigger error-log based alerts.
+  const errLevel: LogLevel = isUserUrl ? 'warn' : 'error';
   try {
     const response = await fetch(finalUrl, {
       method: 'POST',
@@ -118,15 +136,18 @@ export async function fetchFromAPIServer<TValidator extends Type>(
     });
 
     if (!response.ok) {
-      const bodyPreview = await getBodyPreview(response, lc);
+      const bodyPreview = await getBodyPreview(response, lc, errLevel);
 
-      lc.info?.('fetch from API server returned non-OK status', {
+      // Bad Gateway or Gateway Timeout indicate the server was not reached
+      const level =
+        response.status === 502 || response.status === 504 ? errLevel : 'info';
+      lc[level]?.('fetch from API server returned non-OK status', {
         url: finalUrl,
         status: response.status,
         bodyPreview,
       });
 
-      throw new ProtocolError(
+      throw new ProtocolErrorWithLevel(
         source === 'push'
           ? {
               kind: ErrorKind.PushFailed,
@@ -154,12 +175,12 @@ export async function fetchFromAPIServer<TValidator extends Type>(
 
       return validator.parse(json);
     } catch (error) {
-      lc.error?.('failed to parse response', {
+      lc[errLevel]?.('failed to parse response', {
         url: finalUrl,
         error,
       });
 
-      throw new ProtocolError(
+      throw new ProtocolErrorWithLevel(
         source === 'push'
           ? {
               kind: ErrorKind.PushFailed,
@@ -175,6 +196,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
               message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
               queryIDs: [],
             },
+        'error',
         {cause: error},
       );
     }
@@ -183,12 +205,12 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       throw error;
     }
 
-    lc.error?.('failed to fetch from API server with unknown error', {
+    lc[errLevel]?.('failed to fetch from API server with unknown error', {
       url: finalUrl,
       error,
     });
 
-    throw new ProtocolError(
+    throw new ProtocolErrorWithLevel(
       source === 'push'
         ? {
             kind: ErrorKind.PushFailed,
@@ -204,6 +226,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
             message: `Fetch from API server failed with unknown error: ${getErrorMessage(error)}`,
             queryIDs: [],
           },
+      'error',
       {cause: error},
     );
   }

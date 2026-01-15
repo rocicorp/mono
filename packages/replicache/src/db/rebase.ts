@@ -4,11 +4,12 @@ import type {Enum} from '../../../shared/src/enum.ts';
 import type {Write as DagWrite} from '../dag/store.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import type {Hash} from '../hash.ts';
+import type {ZeroTxData} from '../replicache-options.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {WriteTransactionImpl} from '../transactions.ts';
 import type {MutatorDefs} from '../types.ts';
 import {
-  Commit,
+  type Commit,
   type LocalMeta,
   type LocalMetaDD31,
   type Meta,
@@ -16,8 +17,8 @@ import {
   commitFromHash,
   isLocalMetaDD31,
 } from './commit.ts';
-import {Write, newWriteLocal} from './write.ts';
-import type {ZeroTxData} from '../replicache-options.ts';
+import type {Write} from './write.ts';
+import {newWriteLocal} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

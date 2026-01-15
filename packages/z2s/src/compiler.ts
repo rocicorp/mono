@@ -30,6 +30,7 @@ import type {
   ServerSchema,
 } from '../../zero-types/src/server-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
+import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {
   sql,
   sqlConvertColumnArg,
@@ -64,12 +65,19 @@ export type Spec = {
 const ZQL_RESULT_KEY = 'zql_result';
 const ZQL_RESULT_KEY_IDENT = sql.ident(ZQL_RESULT_KEY);
 
+const ZQL_RESULT_TABLE_KEY = 'zql_root';
+const ZQL_RESULT_TABLE_IDENT = sql.ident(ZQL_RESULT_TABLE_KEY);
+
 export function compile(
   serverSchema: ServerSchema,
   zqlSchema: Schema,
   ast: AST,
   format?: Format,
 ): SQLQuery {
+  ast = completeOrdering(
+    ast,
+    tableName => zqlSchema.tables[tableName].primaryKey,
+  );
   const spec: Spec = {
     aliasCount: 0,
     server: {
@@ -79,8 +87,8 @@ export function compile(
     zql: zqlSchema.tables,
   };
   return sql`SELECT 
-    ${toJSON('root', format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
-    FROM (${select(spec, ast, format)}) ${sql.ident('root')}`;
+    ${toJSON(ZQL_RESULT_TABLE_KEY, format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
+    FROM (${select(spec, ast, format)}) ${ZQL_RESULT_TABLE_IDENT}`;
 }
 
 function select(

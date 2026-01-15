@@ -3,27 +3,27 @@ import {createEffect} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {unreachable} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
-import {
-  createSchema,
-  number,
-  string,
-  table,
-  type Query,
-} from '../../zero/src/zero.ts';
-import type {Change} from '../../zql/src/ivm/change.ts';
 import {Join} from '../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 import {Take} from '../../zql/src/ivm/take.ts';
 import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
-import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
-import type {EntryList} from '../../zql/src/ivm/view.ts';
+import {idSymbol, refCountSymbol, unreachable} from './bindings.ts';
 import {SolidView, createSolidViewFactory, type State} from './solid-view.ts';
+import type {EntryList} from './zero.ts';
+import {
+  createSchema,
+  number,
+  string,
+  table,
+  type Change,
+  type Query,
+} from './zero.ts';
 
 const lc = createSilentLogContext();
 
@@ -33,8 +33,8 @@ test('basics', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
 
   let commit: () => void = () => {};
   const onTransactionCommit = (cb: () => void): void => {
@@ -73,7 +73,7 @@ test('basics', () => {
 
   expect(state[1]).toEqual({type: 'complete'});
 
-  ms.push({row: {a: 3, b: 'c'}, type: 'add'});
+  consume(ms.push({row: {a: 3, b: 'c'}, type: 'add'}));
   expect(data()).toEqual(data0);
   commit();
 
@@ -84,8 +84,8 @@ test('basics', () => {
   ];
   expect(data()).toEqual(data1);
 
-  ms.push({row: {a: 2, b: 'b'}, type: 'remove'});
-  ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'remove'}));
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'remove'}));
 
   expect(data()).toEqual(data1);
   commit();
@@ -93,7 +93,7 @@ test('basics', () => {
   const data2 = [{a: 3, b: 'c', [refCountSymbol]: 1, [idSymbol]: '3'}];
   expect(data()).toEqual(data2);
 
-  ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
+  consume(ms.push({row: {a: 3, b: 'c'}, type: 'remove'}));
 
   expect(data()).toEqual(data2);
   commit();
@@ -107,7 +107,7 @@ test('single-format', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
 
   let commit: () => void = () => {};
   const onTransactionCommit = (cb: () => void): void => {
@@ -142,7 +142,7 @@ test('single-format', () => {
   // trying to add another element should be an error
   // pipeline should have been configured with a limit of one
   expect(() => {
-    ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+    consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
     commit();
   }).toThrow(
     "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
@@ -151,7 +151,7 @@ test('single-format', () => {
   // Adding the same element is not an error in the ArrayView but it is an error
   // in the Source. This case is tested in view-apply-change.ts.
 
-  ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'remove'}));
   expect(data()).toEqual(data0);
   commit();
 
@@ -204,22 +204,30 @@ test('tree', () => {
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
   );
-  ms.push({
-    type: 'add',
-    row: {id: 1, name: 'foo', childID: 2},
-  });
-  ms.push({
-    type: 'add',
-    row: {id: 2, name: 'foobar', childID: null},
-  });
-  ms.push({
-    type: 'add',
-    row: {id: 3, name: 'mon', childID: 4},
-  });
-  ms.push({
-    type: 'add',
-    row: {id: 4, name: 'monkey', childID: null},
-  });
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 1, name: 'foo', childID: 2},
+    }),
+  );
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 2, name: 'foobar', childID: null},
+    }),
+  );
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 3, name: 'mon', childID: 4},
+    }),
+  );
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 4, name: 'monkey', childID: null},
+    }),
+  );
 
   const join = new Join({
     parent: ms.connect([
@@ -230,7 +238,6 @@ test('tree', () => {
       ['name', 'desc'],
       ['id', 'desc'],
     ]),
-    storage: new MemoryStorage(),
     parentKey: ['childID'],
     childKey: ['id'],
     relationshipName: 'children',
@@ -318,7 +325,7 @@ test('tree', () => {
   expect(data()).toEqual(data0);
 
   // add parent with child
-  ms.push({type: 'add', row: {id: 5, name: 'chocolate', childID: 2}});
+  consume(ms.push({type: 'add', row: {id: 5, name: 'chocolate', childID: 2}}));
   expect(data()).toEqual(data0);
   commit();
   const data1 = [
@@ -390,7 +397,9 @@ test('tree', () => {
   expect(data()).toEqual(data1);
 
   // remove parent with child
-  ms.push({type: 'remove', row: {id: 5, name: 'chocolate', childID: 2}});
+  consume(
+    ms.push({type: 'remove', row: {id: 5, name: 'chocolate', childID: 2}}),
+  );
   expect(data()).toEqual(data1);
   commit();
   const data2 = [
@@ -446,14 +455,16 @@ test('tree', () => {
   expect(data()).toEqual(data2);
 
   // remove just child
-  ms.push({
-    type: 'remove',
-    row: {
-      id: 2,
-      name: 'foobar',
-      childID: null,
-    },
-  });
+  consume(
+    ms.push({
+      type: 'remove',
+      row: {
+        id: 2,
+        name: 'foobar',
+        childID: null,
+      },
+    }),
+  );
   expect(data()).toEqual(data2);
   commit();
   const data3 = [
@@ -493,14 +504,16 @@ test('tree', () => {
   expect(data()).toEqual(data3);
 
   // add child
-  ms.push({
-    type: 'add',
-    row: {
-      id: 2,
-      name: 'foobaz',
-      childID: null,
-    },
-  });
+  consume(
+    ms.push({
+      type: 'add',
+      row: {
+        id: 2,
+        name: 'foobaz',
+        childID: null,
+      },
+    }),
+  );
   expect(data()).toEqual(data3);
   commit();
   expect(data()).toEqual([
@@ -563,14 +576,18 @@ test('tree-single', () => {
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
   );
-  ms.push({
-    type: 'add',
-    row: {id: 1, name: 'foo', childID: 2},
-  });
-  ms.push({
-    type: 'add',
-    row: {id: 2, name: 'foobar', childID: null},
-  });
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 1, name: 'foo', childID: 2},
+    }),
+  );
+  consume(
+    ms.push({
+      type: 'add',
+      row: {id: 2, name: 'foobar', childID: null},
+    }),
+  );
 
   const take = new Take(
     ms.connect([
@@ -587,7 +604,6 @@ test('tree-single', () => {
       ['name', 'desc'],
       ['id', 'desc'],
     ]),
-    storage: new MemoryStorage(),
     parentKey: ['childID'],
     childKey: ['id'],
     relationshipName: 'child',
@@ -639,10 +655,12 @@ test('tree-single', () => {
   expect(data()).toEqual(data0);
 
   // remove the child
-  ms.push({
-    type: 'remove',
-    row: {id: 2, name: 'foobar', childID: null},
-  });
+  consume(
+    ms.push({
+      type: 'remove',
+      row: {id: 2, name: 'foobar', childID: null},
+    }),
+  );
 
   expect(data()).toEqual(data0);
   commit();
@@ -658,10 +676,12 @@ test('tree-single', () => {
   expect(data()).toEqual(data1);
 
   // remove the parent
-  ms.push({
-    type: 'remove',
-    row: {id: 1, name: 'foo', childID: 2},
-  });
+  consume(
+    ms.push({
+      type: 'remove',
+      row: {id: 1, name: 'foo', childID: 2},
+    }),
+  );
 
   expect(data()).toEqual(data1);
   commit();
@@ -714,9 +734,6 @@ test('collapse', () => {
   };
 
   const input: Input = {
-    cleanup() {
-      return [];
-    },
     fetch() {
       return [];
     },
@@ -789,10 +806,12 @@ test('collapse', () => {
     },
   } as const;
 
-  view.push({
-    type: 'add',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'add',
+      ...changeSansType,
+    }),
+  );
   expect(data()).toEqual(data0);
   commit();
 
@@ -814,53 +833,84 @@ test('collapse', () => {
   ];
   expect(data()).toEqual(data1);
 
-  view.push({
-    type: 'remove',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'remove',
+      ...changeSansType,
+    }),
+  );
   expect(data()).toEqual(data1);
   commit();
 
   const data2: unknown[] = [];
   expect(data()).toEqual(data2);
 
-  view.push({
-    type: 'add',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'add',
+      ...changeSansType,
+    }),
+  );
   // no commit
 
   expect(data()).toEqual(data2);
 
-  view.push({
-    type: 'child',
-    node: {
-      row: {
-        id: 1,
-        name: 'issue',
-      },
-      relationships: {
-        labels: () => [
-          {
-            row: {
-              id: 1,
-              issueId: 1,
-              labelId: 1,
-              extra: 'a',
-            },
-            relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 1,
-                    name: 'label',
+  consume(
+    view.push({
+      type: 'child',
+      node: {
+        row: {
+          id: 1,
+          name: 'issue',
+        },
+        relationships: {
+          labels: () => [
+            {
+              row: {
+                id: 1,
+                issueId: 1,
+                labelId: 1,
+                extra: 'a',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 1,
+                      name: 'label',
+                    },
+                    relationships: {},
                   },
-                  relationships: {},
-                },
-              ],
+                ],
+              },
             },
-          },
-          {
+            {
+              row: {
+                id: 2,
+                issueId: 1,
+                labelId: 2,
+                extra: 'b',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 2,
+                      name: 'label2',
+                    },
+                    relationships: {},
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      child: {
+        relationshipName: 'labels',
+        change: {
+          type: 'add',
+          node: {
             row: {
               id: 2,
               issueId: 1,
@@ -879,35 +929,10 @@ test('collapse', () => {
               ],
             },
           },
-        ],
-      },
-    },
-    child: {
-      relationshipName: 'labels',
-      change: {
-        type: 'add',
-        node: {
-          row: {
-            id: 2,
-            issueId: 1,
-            labelId: 2,
-            extra: 'b',
-          },
-          relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 2,
-                  name: 'label2',
-                },
-                relationships: {},
-              },
-            ],
-          },
         },
       },
-    },
-  });
+    }),
+  );
 
   expect(data()).toEqual(data2);
   commit();
@@ -937,35 +962,81 @@ test('collapse', () => {
   expect(data()).toEqual(data3);
 
   // edit the hidden row
-  view.push({
-    type: 'child',
-    node: {
-      row: {
-        id: 1,
-        name: 'issue',
+  consume(
+    view.push({
+      type: 'child',
+      node: {
+        row: {
+          id: 1,
+          name: 'issue',
+        },
+        relationships: {
+          labels: () => [
+            {
+              row: {
+                id: 1,
+                issueId: 1,
+                labelId: 1,
+                extra: 'a',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 1,
+                      name: 'label',
+                    },
+                    relationships: {},
+                  },
+                ],
+              },
+            },
+            {
+              row: {
+                id: 2,
+                issueId: 1,
+                labelId: 2,
+                extra: 'b2',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 2,
+                      name: 'label2',
+                    },
+                    relationships: {},
+                  },
+                ],
+              },
+            },
+          ],
+        },
       },
-      relationships: {
-        labels: () => [
-          {
+      child: {
+        relationshipName: 'labels',
+        change: {
+          type: 'edit',
+          oldNode: {
             row: {
-              id: 1,
+              id: 2,
               issueId: 1,
-              labelId: 1,
-              extra: 'a',
+              labelId: 2,
+              extra: 'b',
             },
             relationships: {
               labels: () => [
                 {
                   row: {
-                    id: 1,
-                    name: 'label',
+                    id: 2,
+                    name: 'label2',
                   },
                   relationships: {},
                 },
               ],
             },
           },
-          {
+          node: {
             row: {
               id: 2,
               issueId: 1,
@@ -984,54 +1055,10 @@ test('collapse', () => {
               ],
             },
           },
-        ],
-      },
-    },
-    child: {
-      relationshipName: 'labels',
-      change: {
-        type: 'edit',
-        oldNode: {
-          row: {
-            id: 2,
-            issueId: 1,
-            labelId: 2,
-            extra: 'b',
-          },
-          relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 2,
-                  name: 'label2',
-                },
-                relationships: {},
-              },
-            ],
-          },
-        },
-        node: {
-          row: {
-            id: 2,
-            issueId: 1,
-            labelId: 2,
-            extra: 'b2',
-          },
-          relationships: {
-            labels: () => [
-              {
-                row: {
-                  id: 2,
-                  name: 'label2',
-                },
-                relationships: {},
-              },
-            ],
-          },
         },
       },
-    },
-  });
+    }),
+  );
   expect(data()).toEqual(data3);
   commit();
 
@@ -1060,35 +1087,62 @@ test('collapse', () => {
   expect(data()).toEqual(state4);
 
   // edit the leaf
-  view.push({
-    type: 'child',
-    node: {
-      row: {
-        id: 1,
-        name: 'issue',
-      },
-      relationships: {
-        labels: () => [
-          {
-            row: {
-              id: 1,
-              issueId: 1,
-              labelId: 1,
-              extra: 'a',
-            },
-            relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 1,
-                    name: 'label',
+  consume(
+    view.push({
+      type: 'child',
+      node: {
+        row: {
+          id: 1,
+          name: 'issue',
+        },
+        relationships: {
+          labels: () => [
+            {
+              row: {
+                id: 1,
+                issueId: 1,
+                labelId: 1,
+                extra: 'a',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 1,
+                      name: 'label',
+                    },
+                    relationships: {},
                   },
-                  relationships: {},
-                },
-              ],
+                ],
+              },
             },
-          },
-          {
+            {
+              row: {
+                id: 2,
+                issueId: 1,
+                labelId: 2,
+                extra: 'b2',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 2,
+                      name: 'label2x',
+                    },
+                    relationships: {},
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      child: {
+        relationshipName: 'labels',
+        change: {
+          type: 'child',
+          node: {
             row: {
               id: 2,
               issueId: 1,
@@ -1107,55 +1161,30 @@ test('collapse', () => {
               ],
             },
           },
-        ],
-      },
-    },
-    child: {
-      relationshipName: 'labels',
-      change: {
-        type: 'child',
-        node: {
-          row: {
-            id: 2,
-            issueId: 1,
-            labelId: 2,
-            extra: 'b2',
-          },
-          relationships: {
-            labels: () => [
-              {
+          child: {
+            relationshipName: 'labels',
+            change: {
+              type: 'edit',
+              oldNode: {
+                row: {
+                  id: 2,
+                  name: 'label2',
+                },
+                relationships: {},
+              },
+              node: {
                 row: {
                   id: 2,
                   name: 'label2x',
                 },
                 relationships: {},
               },
-            ],
-          },
-        },
-        child: {
-          relationshipName: 'labels',
-          change: {
-            type: 'edit',
-            oldNode: {
-              row: {
-                id: 2,
-                name: 'label2',
-              },
-              relationships: {},
-            },
-            node: {
-              row: {
-                id: 2,
-                name: 'label2x',
-              },
-              relationships: {},
             },
           },
         },
       },
-    },
-  });
+    }),
+  );
   expect(data()).toEqual(state4);
   commit();
 
@@ -1240,7 +1269,7 @@ test('collapse-single', () => {
     },
     setOutput() {},
     push(change: Change) {
-      view.push(change);
+      consume(view.push(change));
     },
   };
 
@@ -1304,10 +1333,12 @@ test('collapse-single', () => {
       },
     },
   } as const;
-  view.push({
-    type: 'add',
-    ...changeSansType,
-  });
+  consume(
+    view.push({
+      type: 'add',
+      ...changeSansType,
+    }),
+  );
 
   expect(data()).toEqual(data0);
   commit();
@@ -1336,8 +1367,8 @@ test('basic with edit pushes', () => {
     {id: {type: 'number'}, b: {type: 'string'}},
     ['id'],
   );
-  ms.push({row: {id: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {id: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {id: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {id: 2, b: 'b'}, type: 'add'}));
 
   let commit: () => void = () => {};
   const onTransactionCommit = (cb: () => void): void => {
@@ -1369,7 +1400,9 @@ test('basic with edit pushes', () => {
   ];
   expect(data()).toEqual(data0);
 
-  ms.push({type: 'edit', row: {id: 2, b: 'b2'}, oldRow: {id: 2, b: 'b'}});
+  consume(
+    ms.push({type: 'edit', row: {id: 2, b: 'b2'}, oldRow: {id: 2, b: 'b'}}),
+  );
 
   expect(data()).toEqual(data0);
   commit();
@@ -1380,7 +1413,9 @@ test('basic with edit pushes', () => {
   ];
   expect(data()).toEqual(data1);
 
-  ms.push({type: 'edit', row: {id: 3, b: 'b3'}, oldRow: {id: 2, b: 'b2'}});
+  consume(
+    ms.push({type: 'edit', row: {id: 3, b: 'b3'}, oldRow: {id: 2, b: 'b2'}}),
+  );
 
   expect(data()).toEqual(data1);
   commit();
@@ -1398,8 +1433,8 @@ test('edit trigger reactivity at the column level', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
 
   let commit: () => void = () => {};
   const onTransactionCommit = (cb: () => void): void => {
@@ -1478,7 +1513,9 @@ test('edit trigger reactivity at the column level', () => {
 
   clearLog();
 
-  ms.push({type: 'edit', row: {a: 2, b: 'b2'}, oldRow: {a: 2, b: 'b'}});
+  consume(
+    ms.push({type: 'edit', row: {a: 2, b: 'b2'}, oldRow: {a: 2, b: 'b'}}),
+  );
 
   expect(data()).toEqual(data0);
   commit();
@@ -1497,7 +1534,9 @@ test('edit trigger reactivity at the column level', () => {
 
   clearLog();
 
-  ms.push({type: 'edit', row: {a: 3, b: 'b3'}, oldRow: {a: 2, b: 'b2'}});
+  consume(
+    ms.push({type: 'edit', row: {a: 3, b: 'b3'}, oldRow: {a: 2, b: 'b2'}}),
+  );
 
   expect(data()).toEqual(data1);
   commit();
@@ -1515,7 +1554,9 @@ test('edit trigger reactivity at the column level', () => {
 
   clearLog();
 
-  ms.push({type: 'edit', row: {a: 0, b: 'b3'}, oldRow: {a: 3, b: 'b3'}});
+  consume(
+    ms.push({type: 'edit', row: {a: 0, b: 'b3'}, oldRow: {a: 3, b: 'b3'}}),
+  );
 
   expect(data()).toEqual(data2);
   commit();
@@ -1555,7 +1596,7 @@ test('tree edit', () => {
     {id: 3, name: 'mon', data: 'c', childID: 4},
     {id: 4, name: 'monkey', data: 'd', childID: null},
   ] as const) {
-    ms.push({type: 'add', row});
+    consume(ms.push({type: 'add', row}));
   }
 
   const join = new Join({
@@ -1567,7 +1608,6 @@ test('tree edit', () => {
       ['name', 'desc'],
       ['id', 'desc'],
     ]),
-    storage: new MemoryStorage(),
     parentKey: ['childID'],
     childKey: ['id'],
     relationshipName: 'children',
@@ -1661,11 +1701,13 @@ test('tree edit', () => {
   expect(data()).toEqual(data0);
 
   // Edit root
-  ms.push({
-    type: 'edit',
-    oldRow: {id: 1, name: 'foo', data: 'a', childID: 2},
-    row: {id: 1, name: 'foo', data: 'a2', childID: 2},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {id: 1, name: 'foo', data: 'a', childID: 2},
+      row: {id: 1, name: 'foo', data: 'a2', childID: 2},
+    }),
+  );
 
   expect(data()).toEqual(data0);
   commit();
@@ -1729,21 +1771,23 @@ test('tree edit', () => {
   expect(data()).toEqual(data1);
 
   // Edit leaf
-  ms.push({
-    type: 'edit',
-    oldRow: {
-      id: 4,
-      name: 'monkey',
-      data: 'd',
-      childID: null,
-    },
-    row: {
-      id: 4,
-      name: 'monkey',
-      data: 'd2',
-      childID: null,
-    },
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {
+        id: 4,
+        name: 'monkey',
+        data: 'd',
+        childID: null,
+      },
+      row: {
+        id: 4,
+        name: 'monkey',
+        data: 'd2',
+        childID: null,
+      },
+    }),
+  );
 
   expect(data()).toEqual(data1);
 
@@ -1822,7 +1866,7 @@ test('edit to change the order', () => {
     {a: 20, b: 'b'},
     {a: 30, b: 'c'},
   ] as const) {
-    ms.push({row, type: 'add'});
+    consume(ms.push({row, type: 'add'}));
   }
 
   let commit: () => void = () => {};
@@ -1856,11 +1900,13 @@ test('edit to change the order', () => {
   ];
   expect(data()).toEqual(data0);
 
-  ms.push({
-    type: 'edit',
-    oldRow: {a: 20, b: 'b'},
-    row: {a: 5, b: 'b2'},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {a: 20, b: 'b'},
+      row: {a: 5, b: 'b2'},
+    }),
+  );
 
   expect(data()).toEqual(data0);
   commit();
@@ -1872,11 +1918,13 @@ test('edit to change the order', () => {
   ];
   expect(data()).toEqual(data1);
 
-  ms.push({
-    type: 'edit',
-    oldRow: {a: 5, b: 'b2'},
-    row: {a: 4, b: 'b3'},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {a: 5, b: 'b2'},
+      row: {a: 4, b: 'b3'},
+    }),
+  );
 
   expect(data()).toEqual(data1);
   commit();
@@ -1888,11 +1936,13 @@ test('edit to change the order', () => {
   ];
   expect(data()).toEqual(data2);
 
-  ms.push({
-    type: 'edit',
-    oldRow: {a: 4, b: 'b3'},
-    row: {a: 20, b: 'b4'},
-  });
+  consume(
+    ms.push({
+      type: 'edit',
+      oldRow: {a: 4, b: 'b3'},
+      row: {a: 20, b: 'b4'},
+    }),
+  );
 
   expect(data()).toEqual(data2);
   commit();
@@ -1933,9 +1983,6 @@ test('edit to preserve relationships', () => {
       return schema;
     },
     fetch() {
-      return [];
-    },
-    cleanup() {
       return [];
     },
     setOutput() {},
@@ -2158,9 +2205,6 @@ test('edit leaf', () => {
   };
 
   const input: Input = {
-    cleanup() {
-      return [];
-    },
     fetch() {
       return [];
     },
@@ -2439,8 +2483,8 @@ test('queryComplete promise', async () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
-  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
 
   const queryCompleteResolver = resolver<true>();
 
@@ -2529,7 +2573,7 @@ test('factory', () => {
   ]);
 
   const view: SolidView = createSolidViewFactory(setState)(
-    undefined as unknown as Query<typeof schema, 'test', TestReturn, unknown>,
+    undefined as unknown as Query<'test', typeof schema, TestReturn>,
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],

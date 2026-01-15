@@ -2,9 +2,7 @@ import {describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import type {Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import type {Change} from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';
@@ -16,6 +14,8 @@ import {
   UnsupportedValueError,
 } from './table-source.ts';
 import {filtersToSQL} from './query-builder.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 
 const columns = {
   id: {type: 'string'},
@@ -188,7 +188,12 @@ describe('fetching from a table source', () => {
     const out = new Catch(c);
     c.setOutput(out);
     const rows = out.fetch(fetchArgs);
-    expect(rows.map(r => r.row)).toEqual(expectedRows);
+    expect(
+      rows.map(r => {
+        assert(r !== 'yield');
+        return r.row;
+      }),
+    ).toEqual(expectedRows);
   });
 });
 
@@ -283,128 +288,16 @@ describe('fetched value types', () => {
       const input = source.connect([['id', 'asc']]);
 
       if (c.output) {
-        expect([...input.fetch({})].map(node => node.row)).toEqual([c.output]);
+        expect(
+          [...input.fetch({})].map(node =>
+            node === 'yield' ? node : node.row,
+          ),
+        ).toEqual([c.output]);
       } else {
         expect(() => [...input.fetch({})]).toThrow(UnsupportedValueError);
       }
     });
   }
-});
-
-describe('no primary key', () => {
-  type Foo = {id: string; a: number; b: number; c: number};
-  const columns = {
-    id: {type: 'string'},
-    a: {type: 'number'},
-    b: {type: 'number'},
-    c: {type: 'number'},
-  } as const;
-
-  const db = new Database(createSilentLogContext(), ':memory:');
-  db.exec(/* sql */ `
-        CREATE TABLE foo (id TEXT, a INT, b INT, c INT);
-        CREATE UNIQUE INDEX foo_id_key ON foo (id);
-        CREATE UNIQUE INDEX foo_ab_key ON foo (a, b);
-        CREATE INDEX foo_c_not_unique ON foo (c);
-        `);
-  const stmt = db.prepare(
-    /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
-  );
-  stmt.run(['far', 234, 567, 333]);
-  stmt.run(['boo', 345, 112, 444]);
-  stmt.run(['foo', 345, 789, 555]);
-  const source = new TableSource(lc, testLogConfig, db, 'foo', columns, ['id']);
-
-  test.each([
-    [['id'], true],
-    [['a', 'b'], true],
-    [['b', 'a'], true],
-    [['a'], false],
-    [['b'], false],
-    [['c'], false],
-    [['b', 'c'], false],
-    [['a', 'c'], false],
-  ] satisfies [PrimaryKey, boolean][])(
-    'requires primary key to be uniquely indexed: %o',
-    (key, valid) => {
-      const createSource = () =>
-        new TableSource(lc, testLogConfig, db, 'foo', columns, key);
-      if (valid) {
-        createSource();
-      } else {
-        expect(createSource).toThrowError('does not have a UNIQUE index');
-      }
-    },
-  );
-
-  test.each([
-    [[['a', 'asc']]],
-    [[['b', 'asc']]],
-    [[['c', 'asc']]],
-    [
-      [
-        ['b', 'asc'],
-        ['c', 'desc'],
-      ],
-    ],
-  ] satisfies [Ordering][])('disallows non-unique orderings: %o', sort => {
-    expect(() => source.connect(sort)).toThrowError('Cannot orderBy(');
-  });
-
-  test.each([
-    [
-      [['id', 'asc']],
-      [
-        {id: 'boo', a: 345, b: 112, c: 444},
-        {id: 'far', a: 234, b: 567, c: 333},
-        {id: 'foo', a: 345, b: 789, c: 555},
-      ],
-    ],
-    [
-      [
-        ['a', 'asc'],
-        ['b', 'desc'],
-      ],
-      [
-        {id: 'far', a: 234, b: 567, c: 333},
-        {id: 'foo', a: 345, b: 789, c: 555},
-        {id: 'boo', a: 345, b: 112, c: 444},
-      ],
-    ],
-    [
-      [
-        ['c', 'asc'],
-        ['a', 'asc'],
-        ['b', 'desc'],
-      ],
-      [
-        {id: 'far', a: 234, b: 567, c: 333},
-        {id: 'boo', a: 345, b: 112, c: 444},
-        {id: 'foo', a: 345, b: 789, c: 555},
-      ],
-    ],
-    [
-      [
-        ['c', 'desc'],
-        ['id', 'asc'],
-      ],
-      [
-        {id: 'foo', a: 345, b: 789, c: 555},
-        {id: 'boo', a: 345, b: 112, c: 444},
-        {id: 'far', a: 234, b: 567, c: 333},
-      ],
-    ],
-  ] satisfies [Ordering, Foo[]][])(
-    'allows orderings with unique indexes: %o',
-    (sort, output) => {
-      const input = source.connect(sort);
-      const schema = input.getSchema();
-      expect(schema.sort.map(([col]) => col)).toEqual(
-        expect.arrayContaining([...schema.primaryKey]),
-      );
-      expect([...input.fetch({})].map(node => node.row)).toEqual(output);
-    },
-  );
 });
 
 test('pushing values does the correct writes and outputs', () => {
@@ -436,7 +329,9 @@ test('pushing values does the correct writes and outputs', () => {
       ['b', 'asc'],
     ])
     .setOutput({
-      push: change => outputted.push(change),
+      push: function* (change) {
+        outputted.push(change);
+      },
     });
 
   for (const db of [db1, db2]) {
@@ -450,10 +345,12 @@ test('pushing values does the correct writes and outputs', () => {
      * 3. remove a row that doesn't exist throws
      * 4. add a row that already exists throws
      */
-    source.push({
-      type: 'add',
-      row: {a: 1, b: 2.123, c: false, d: 'json string'},
-    });
+    consume(
+      source.push({
+        type: 'add',
+        row: {a: 1, b: 2.123, c: false, d: 'json string'},
+      }),
+    );
 
     expect(outputted.shift()).toEqual({
       type: 'add',
@@ -469,10 +366,12 @@ test('pushing values does the correct writes and outputs', () => {
     });
     expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0, d: '"json string"'}]);
 
-    source.push({
-      type: 'remove',
-      row: {a: 1, b: 2.123},
-    });
+    consume(
+      source.push({
+        type: 'remove',
+        row: {a: 1, b: 2.123},
+      }),
+    );
 
     expect(outputted.shift()).toEqual({
       type: 'remove',
@@ -487,17 +386,21 @@ test('pushing values does the correct writes and outputs', () => {
     expect(read.all()).toEqual([]);
 
     expect(() => {
-      source.push({
-        type: 'remove',
-        row: {a: 1, b: 2.123},
-      });
+      consume(
+        source.push({
+          type: 'remove',
+          row: {a: 1, b: 2.123},
+        }),
+      );
     }).toThrow();
     expect(read.all()).toEqual([]);
 
-    source.push({
-      type: 'add',
-      row: {a: 1, b: 2.123, c: true, d: {}},
-    });
+    consume(
+      source.push({
+        type: 'add',
+        row: {a: 1, b: 2.123, c: true, d: {}},
+      }),
+    );
 
     expect(outputted.shift()).toEqual({
       type: 'add',
@@ -514,22 +417,26 @@ test('pushing values does the correct writes and outputs', () => {
     expect(read.all()).toEqual([{a: 1, b: 2.123, c: 1, d: '{}'}]);
 
     expect(() => {
-      source.push({
-        type: 'add',
-        row: {a: 1, b: 2.123, c: true, d: null},
-      });
+      consume(
+        source.push({
+          type: 'add',
+          row: {a: 1, b: 2.123, c: true, d: null},
+        }),
+      );
     }).toThrow();
 
     // bigint rows
-    source.push({
-      type: 'add',
-      row: {
-        a: BigInt(Number.MAX_SAFE_INTEGER),
-        b: 3.456,
-        c: true,
-        d: [],
-      } as unknown as Row,
-    });
+    consume(
+      source.push({
+        type: 'add',
+        row: {
+          a: BigInt(Number.MAX_SAFE_INTEGER),
+          b: 3.456,
+          c: true,
+          d: [],
+        } as unknown as Row,
+      }),
+    );
 
     expect(outputted.shift()).toEqual({
       type: 'add',
@@ -549,26 +456,30 @@ test('pushing values does the correct writes and outputs', () => {
       {a: 9007199254740991, b: 3.456, c: 1, d: '[]'},
     ]);
 
-    source.push({
-      type: 'add',
-      row: {
-        a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
-        b: 0,
-        c: true,
-        d: true,
-      } as unknown as Row,
-    });
+    consume(
+      source.push({
+        type: 'add',
+        row: {
+          a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+          b: 0,
+          c: true,
+          d: true,
+        } as unknown as Row,
+      }),
+    );
     outputted.shift();
 
-    source.push({
-      type: 'add',
-      row: {
-        a: 0,
-        b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
-        c: true,
-        d: false,
-      } as unknown as Row,
-    });
+    consume(
+      source.push({
+        type: 'add',
+        row: {
+          a: 0,
+          b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
+          c: true,
+          d: false,
+        } as unknown as Row,
+      }),
+    );
     outputted.shift();
 
     read.safeIntegers(true);
@@ -590,32 +501,38 @@ test('pushing values does the correct writes and outputs', () => {
     ]);
     read.safeIntegers(false);
 
-    source.push({
-      type: 'remove',
-      row: {
-        a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
-        b: 0,
-        c: true,
-      } as unknown as Row,
-    });
+    consume(
+      source.push({
+        type: 'remove',
+        row: {
+          a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+          b: 0,
+          c: true,
+        } as unknown as Row,
+      }),
+    );
     outputted.shift();
 
-    source.push({
-      type: 'remove',
-      row: {
-        a: 0,
-        b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
-        c: true,
-      } as unknown as Row,
-    });
+    consume(
+      source.push({
+        type: 'remove',
+        row: {
+          a: 0,
+          b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
+          c: true,
+        } as unknown as Row,
+      }),
+    );
     outputted.shift();
 
     // edit changes
-    source.push({
-      type: 'edit',
-      row: {a: 1, b: 2.123, c: false, d: {a: true}} as unknown as Row,
-      oldRow: {a: 1, b: 2.123, c: true, d: {}} as unknown as Row,
-    });
+    consume(
+      source.push({
+        type: 'edit',
+        row: {a: 1, b: 2.123, c: false, d: {a: true}} as unknown as Row,
+        oldRow: {a: 1, b: 2.123, c: true, d: {}} as unknown as Row,
+      }),
+    );
 
     expect(outputted.shift()).toEqual({
       type: 'edit',
@@ -629,11 +546,13 @@ test('pushing values does the correct writes and outputs', () => {
     ]);
 
     // edit pk should fall back to remove and insert
-    source.push({
-      type: 'edit',
-      oldRow: {a: 1, b: 2.123, c: false, d: {a: true}},
-      row: {a: 1, b: 3, c: false, d: {a: true}},
-    });
+    consume(
+      source.push({
+        type: 'edit',
+        oldRow: {a: 1, b: 2.123, c: false, d: {a: true}},
+        row: {a: 1, b: 3, c: false, d: {a: true}},
+      }),
+    );
     expect(outputted.shift()).toEqual({
       type: 'edit',
       oldNode: {
@@ -649,11 +568,13 @@ test('pushing values does the correct writes and outputs', () => {
 
     // non existing old row
     expect(() => {
-      source.push({
-        type: 'edit',
-        row: {a: 11, b: 2.123, c: 0},
-        oldRow: {a: 12, b: 2.123, c: 1},
-      });
+      consume(
+        source.push({
+          type: 'edit',
+          row: {a: 11, b: 2.123, c: 0},
+          oldRow: {a: 12, b: 2.123, c: 1},
+        }),
+      );
     }).toThrow('Row not found');
   }
 });

@@ -1,9 +1,9 @@
+import type {LogContext} from '@rocicorp/logger';
 import * as v from '../../../shared/src/valita.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import type {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {errorKindSchema} from '../../../zero-protocol/src/error.ts';
 import {updateNeededReasonTypeSchema} from './options.ts';
 import type {UpdateNeededReasonType} from './update-needed-reason-type.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
 export const RELOAD_REASON_STORAGE_KEY = '_zeroReloadReason';
 export const RELOAD_BACKOFF_STATE_KEY = '_zeroReloadBackoffState';
@@ -31,7 +31,7 @@ let reloadTimer: ReturnType<typeof setTimeout> | null = null;
 // TODO: This should get pushed down into Replicache and used for reloads we
 // do there.
 export function reloadWithReason(
-  lc: ZeroLogContext,
+  lc: LogContext,
   reload: () => void,
   reason: UpdateNeededReasonType | ErrorKind,
   message: string,
@@ -65,7 +65,7 @@ export function reloadWithReason(
   }, delay);
 }
 
-export function reportReloadReason(lc: ZeroLogContext) {
+export function reportReloadReason(lc: LogContext) {
   if (typeof sessionStorage !== 'undefined') {
     const value = sessionStorage.getItem(RELOAD_REASON_STORAGE_KEY);
     if (value) {
@@ -95,7 +95,7 @@ export function resetBackoff() {
   }
 }
 
-function nextBackoff(lc: ZeroLogContext, now: number): BackoffState {
+function nextBackoff(lc: LogContext, now: number): BackoffState {
   if (typeof sessionStorage === 'undefined') {
     lc.warn?.(
       `sessionStorage not supported. backing off in ${

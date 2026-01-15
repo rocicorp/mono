@@ -1,4 +1,4 @@
-import type {PlannerConnection} from './planner-connection.ts';
+import type {FanoutCostModel, PlannerConnection} from './planner-connection.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerJoin} from './planner-join.ts';
@@ -51,7 +51,17 @@ export type CostEstimate = {
    */
   selectivity: number;
   limit: number | undefined;
+
+  fanout: FanoutCostModel;
 };
+
+/**
+ * Omit the fanout function from a cost estimate for serialization.
+ */
+export function omitFanout(cost: CostEstimate): Omit<CostEstimate, 'fanout'> {
+  const {fanout: _, ...rest} = cost;
+  return rest;
+}
 
 export type NodeType = PlannerNode['kind'];
 

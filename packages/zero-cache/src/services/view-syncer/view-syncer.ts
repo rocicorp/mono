@@ -13,7 +13,6 @@ import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {wrapIterable} from '../../../../shared/src/iterables.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -42,14 +41,14 @@ import {
 } from '../../auth/read-authorizer.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
-import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
+import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import type {HeaderOptions} from '../../custom/fetch.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
-import {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {
   getLogLevel,
   ProtocolErrorWithLevel,
@@ -69,18 +68,19 @@ import {
   type PokeHandler,
   type RowPatch,
 } from './client-handler.ts';
-import {CVRStore} from './cvr-store.ts';
+import {ClientNotFoundError, CVRStore} from './cvr-store.ts';
+import type {CVRUpdater} from './cvr.ts';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
-  CVRUpdater,
   nextEvictionTime,
   type CVRSnapshot,
   type RowUpdate,
 } from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
 import {handleInspect} from './inspect-handler.ts';
-import {PipelineDriver, type RowChange} from './pipeline-driver.ts';
+import type {PipelineDriver} from './pipeline-driver.ts';
+import {type RowChange} from './pipeline-driver.ts';
 import {
   cmpVersions,
   EMPTY_CVR_VERSION,
@@ -111,9 +111,9 @@ export type TokenData = {
 export type SyncContext = {
   readonly clientID: string;
   readonly wsID: string;
+  readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
-  readonly schemaVersion: number | null;
   readonly tokenData: TokenData | undefined;
   readonly httpCookie: string | undefined;
 };
@@ -172,7 +172,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
-  readonly #queryConfig: ZeroConfig['getQueries'];
+  readonly #queryConfig: ZeroConfig['query'];
 
   userQueryURL?: string | undefined;
 
@@ -226,13 +226,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   // auth and cookie headers directly
   #authData: TokenData | undefined;
 
-  // Not sure why lint can't see that this is used?
-  // oxlint-disable-next-line no-unused-private-class-members
   #httpCookie: string | undefined;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
   readonly #setTimeout: SetTimeout;
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
+
+  // Track query replacements for thrashing detection
+  readonly #queryReplacements = new Map<
+    string,
+    {count: number; windowStart: number}
+  >();
 
   readonly #activeClients = getOrCreateUpDownCounter(
     'sync',
@@ -257,10 +261,34 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       unit: 's',
     },
   );
+  readonly #queryTransformations = getOrCreateCounter(
+    'sync',
+    'query.transformations',
+    'Number of query transformations performed',
+  );
+  readonly #queryTransformationTime = getOrCreateHistogram(
+    'sync',
+    'query.transformation-time',
+    {
+      description: 'Time to transform custom queries via API server',
+      unit: 's',
+    },
+  );
+  readonly #queryTransformationHashChanges = getOrCreateCounter(
+    'sync',
+    'query.transformation-hash-changes',
+    'Number of times query transformation hash changed',
+  );
+  readonly #queryTransformationNoOps = getOrCreateCounter(
+    'sync',
+    'query.transformation-no-ops',
+    'Number of times query transformation resulted in no-op (hash unchanged)',
+  );
 
   readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: NormalizedZeroConfig;
+  #runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>;
 
   constructor(
     config: NormalizedZeroConfig,
@@ -276,14 +304,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     slowHydrateThreshold: number,
     inspectorDelegate: InspectorDelegate,
     customQueryTransformer: CustomQueryTransformer | undefined,
+    runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
-    const {getQueries: pullConfig} = config;
+    const queryConfig = config.query?.url ? config.query : config.getQueries;
     this.#config = config;
     this.id = clientGroupID;
     this.#shard = shard;
-    this.#queryConfig = pullConfig;
+    this.#queryConfig = queryConfig;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
@@ -304,7 +333,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.#setTimeout = setTimeoutFn;
-
+    this.#runPriorityOp = runPriorityOp;
     // Wait for the first connection to init.
     this.keepalive();
   }
@@ -332,14 +361,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // ServiceRunner.
         this.#lc.debug?.('state changes are inactive');
         clearTimeout(this.#expiredQueriesTimer);
-        throw new ProtocolErrorWithLevel(
-          {
-            kind: ErrorKind.Rehome,
-            message: 'Reconnect required',
-            origin: ErrorOrigin.ZeroCache,
-          },
-          'warn',
-        );
+        throw new ProtocolErrorWithLevel({
+          kind: ErrorKind.Rehome,
+          message: 'Reconnect required',
+          origin: ErrorOrigin.ZeroCache,
+        });
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
@@ -349,7 +375,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       if (!this.#cvr) {
         this.#lc.debug?.('loading CVR');
-        this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
+        this.#cvr = await this.#runPriorityOp(() =>
+          this.#cvrStore.load(lc, this.#lastConnectTime),
+        );
         this.#ttlClock = this.#cvr.ttlClock;
         this.#ttlClockBase = Date.now();
       } else {
@@ -381,7 +409,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async run(): Promise<void> {
     try {
       // Wait for initialization if we need to process queries.
-      // This ensures authData is available before transforming custom queries.
+      // This ensures authData and cvr.clientSchema are available before
+      // transforming custom queries (dependency on authData) and building
+      // pipelines (dependency on cvr.clientSchema).
       if ((await this.readyState()) === 'draining') {
         this.#lc.debug?.(`draining view-syncer ${this.id} before running`);
         void this.stop();
@@ -394,9 +424,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         assert(state === 'version-ready', 'state should be version-ready'); // This is the only state change used.
 
         await this.#runInLockWithCVR(async (lc, cvr) => {
+          const clientSchema = must(
+            cvr.clientSchema,
+            'cvr.clientSchema missing after initialization',
+          );
           if (!this.#pipelines.initialized()) {
             // On the first version-ready signal, connect to the replica.
-            this.#pipelines.init(cvr.clientSchema);
+            this.#pipelines.init(clientSchema);
           }
           if (
             cvr.replicaVersion !== null &&
@@ -407,11 +441,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               cvr.replicaVersion
             }, DB=${this.#pipelines.replicaVersion}`;
             lc.info?.(`resetting CVR: ${message}`);
-            throw new ProtocolError({
-              kind: ErrorKind.ClientNotFound,
-              message,
-              origin: ErrorOrigin.ZeroCache,
-            });
+            throw new ClientNotFoundError(message);
           }
 
           if (this.#pipelinesSynced) {
@@ -420,7 +450,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               return;
             }
             lc.info?.(`resetting pipelines: ${result.message}`);
-            this.#pipelines.reset(cvr.clientSchema);
+            this.#pipelines.reset(clientSchema);
           }
 
           // Advance the snapshot to the current version.
@@ -448,7 +478,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       this.#cleanup();
     } catch (e) {
-      this.#lc[getLogLevel(e)]?.(`stopping view-syncer: ${String(e)}`, e);
+      this.#lc[getLogLevel(e)]?.(
+        `stopping view-syncer ${this.id}: ${String(e)}`,
+        e,
+      );
       this.#cleanup(e);
     } finally {
       // Always wait for the cvrStore to flush, regardless of how the service
@@ -456,7 +489,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#cvrStore
         .flushed(this.#lc)
         .catch(e => this.#lc[getLogLevel(e)]?.(e));
-      this.#lc.info?.('view-syncer stopped');
+      this.#lc.info?.(`view-syncer ${this.id} finished`);
       this.#stopped.resolve();
     }
   }
@@ -575,15 +608,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return startSpan(tracer, 'vs.initConnection', () => {
       const {
         clientID,
+        profileID,
         wsID,
         baseCookie,
-        schemaVersion,
         tokenData,
         httpCookie,
         protocolVersion,
       } = ctx;
       this.#authData = pickToken(this.#lc, this.#authData, tokenData);
-      this.#initialized.resolve('initialized'); // Signal that initialization is complete.
       this.#lc.debug?.(
         `Picked auth token: ${JSON.stringify(this.#authData?.decoded)}`,
       );
@@ -597,7 +629,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } else {
         // Validate that subsequent clients have compatible parameters
         if (this.userQueryURL !== userQueryURL) {
-          this.#lc.error?.(
+          this.#lc.warn?.(
             'Client provided different query parameters than client group',
             {
               clientID,
@@ -644,7 +676,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         wsID,
         this.#shard,
         baseCookie,
-        schemaVersion,
         downstream,
       );
       this.#clients.get(clientID)?.close(`replaced by wsID: ${wsID}`);
@@ -658,7 +689,30 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       void this.#runInLockForClient(
         ctx,
         initConnectionMessage,
-        this.#handleConfigUpdate,
+        async (lc, clientID, msg: InitConnectionBody, cvr) => {
+          if (cvr.clientSchema === null && !msg.clientSchema) {
+            throw new ProtocolErrorWithLevel({
+              kind: ErrorKind.InvalidConnectionRequest,
+              message:
+                'The initConnection message for a new client group must include client schema.',
+              origin: ErrorOrigin.ZeroCache,
+            });
+          }
+          await this.#handleConfigUpdate(
+            lc,
+            clientID,
+            msg,
+            cvr,
+            // Until the profileID is required in the URL, default it to
+            // `cg${clientGroupID}`, as is done in the schema migration.
+            // As clients update to the zero version with the profileID logic,
+            // the value will be correspondingly in the CVR db.
+            profileID ?? `cg${this.id}`,
+          );
+          // this.#authData  and cvr (in particular cvr.clientSchema) have been
+          // initialized, signal the run loop to run.
+          this.#initialized.resolve('initialized');
+        },
         newClient,
       ).catch(e => newClient.fail(e));
 
@@ -677,15 +731,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: DeleteClientsMessage,
   ): Promise<void> {
-    try {
-      await this.#runInLockForClient(
-        ctx,
-        [msg[0], {deleted: msg[1]}],
-        this.#handleConfigUpdate,
-      );
-    } catch (e) {
-      this.#lc.error?.('deleteClients failed', e);
-    }
+    await this.#runInLockForClient(
+      ctx,
+      [msg[0], {deleted: msg[1]}],
+      this.#handleConfigUpdate,
+    );
   }
 
   #getTTLClock(now: number): TTLClock {
@@ -704,25 +754,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return ttlClock as TTLClock;
   }
 
-  async #flushUpdater(
-    lc: LogContext,
-    updater: CVRUpdater,
-  ): Promise<CVRSnapshot> {
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
-    const {cvr, flushed} = await updater.flush(
-      lc,
-      this.#lastConnectTime,
-      now,
-      ttlClock,
-    );
+  #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
+    return this.#runPriorityOp(async () => {
+      const now = Date.now();
+      const ttlClock = this.#getTTLClock(now);
+      const {cvr, flushed} = await updater.flush(
+        lc,
+        this.#lastConnectTime,
+        now,
+        ttlClock,
+      );
 
-    if (flushed) {
-      // If the CVR was flushed, we restart the ttlClock interval.
-      this.#startTTLClockInterval(lc);
-    }
+      if (flushed) {
+        // If the CVR was flushed, we restart the ttlClock interval.
+        this.#startTTLClockInterval(lc);
+      }
 
-    return cvr;
+      return cvr;
+    });
   }
 
   #startTTLClockInterval(lc: LogContext): void {
@@ -878,6 +927,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       activeClients,
     }: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
+    profileID?: string,
   ) =>
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
       const deletedClientIDs: string[] = [];
@@ -889,6 +939,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         if (clientSchema) {
           updater.setClientSchema(lc, clientSchema);
+        }
+        if (profileID) {
+          updater.setProfileID(lc, profileID);
         }
 
         // Apply requested patches.
@@ -1064,32 +1117,29 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     const transformedQueries: TransformedAndHashed[] = [];
     if (customQueries.size > 0 && !this.#customQueryTransformer) {
-      lc.error?.(
-        'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
+      lc.warn?.(
+        'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    const [_, byOriginalHash] = this.#pipelines.addedQueries();
-    if (this.#customQueryTransformer && customQueries.size > 0) {
-      const filteredCustomQueries = this.#filterCustomQueries(
-        customQueries.values(),
-        byOriginalHash,
-        undefined,
-      );
+    await this.#runPriorityOp(async () => {
+      if (this.#customQueryTransformer && customQueries.size > 0) {
+        // Always transform custom queries, even during initialization,
+        // to ensure authorization validation with current auth context.
+        const transformedCustomQueries =
+          await this.#customQueryTransformer.transform(
+            this.#getHeaderOptions(this.#queryConfig.forwardCookies),
+            customQueries.values(),
+            this.userQueryURL,
+          );
 
-      const transformedCustomQueries =
-        await this.#customQueryTransformer.transform(
-          this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-          filteredCustomQueries,
-          this.userQueryURL,
+        this.#processTransformedCustomQueries(
+          lc,
+          transformedCustomQueries,
+          (q: TransformedAndHashed) => transformedQueries.push(q),
+          customQueries,
         );
-
-      this.#processTransformedCustomQueries(
-        lc,
-        transformedCustomQueries,
-        (q: TransformedAndHashed) => transformedQueries.push(q),
-        customQueries,
-      );
-    }
+      }
+    });
 
     for (const q of otherQueries) {
       const transformed = transformAndHashQuery(
@@ -1122,16 +1172,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           span.setAttribute('queryHash', queryID);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', transformedAst.table);
-          for (const _ of this.#pipelines.addQuery(
+          for (const change of this.#pipelines.addQuery(
             transformationHash,
             queryID,
             transformedAst,
             await timer.start(),
           )) {
-            if (++count % TIME_SLICE_CHECK_SIZE === 0) {
-              if (timer.elapsedLap() > TIME_SLICE_MS) {
-                await timer.yieldProcess();
-              }
+            if (change === 'yield') {
+              await timer.yieldProcess('yield in hydrateUnchangedQueries');
+            } else {
+              count++;
             }
           }
         },
@@ -1165,9 +1215,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     for (const q of transformedCustomQueries) {
       if ('error' in q) {
-        lc.error?.(
-          `Error transforming custom query ${q.name}: ${q.error}${q.details ? ` ${JSON.stringify(q.details)}` : ''}`,
-        );
+        const errorMessage = `Error transforming custom query ${q.name}: ${q.error}${q.details ? ` ${JSON.stringify(q.details)}` : ''}`;
+        lc.warn?.(errorMessage, q);
         appQueryErrors.push(q);
         continue;
       }
@@ -1308,49 +1357,89 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (customQueries.size > 0 && !this.#customQueryTransformer) {
-        lc.error?.(
-          'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
+        lc.warn?.(
+          'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
         );
       }
 
       let erroredQueryIDs: string[] | undefined;
       if (this.#customQueryTransformer && customQueries.size > 0) {
-        const filteredCustomQueries = this.#filterCustomQueries(
-          customQueries.values(),
-          byOriginalHash,
-          (origQuery, existing) => {
-            for (const transformed of existing) {
-              transformedQueries.push({
-                id: origQuery.id,
-                origQuery,
-                transformed: {
-                  id: origQuery.id,
-                  transformationHash: transformed.transformationHash,
-                  transformedAst: transformed.transformedAst,
-                },
-              });
-            }
-          },
-        );
+        // Always re-transform custom queries on client connection for security.
+        // This ensures the user's API server validates authorization with the
+        // current auth context.
+        const transformStart = performance.now();
+        let transformedCustomQueries;
+        try {
+          transformedCustomQueries =
+            await this.#customQueryTransformer.transform(
+              this.#getHeaderOptions(true),
+              customQueries.values(),
+              this.userQueryURL,
+            );
+          this.#queryTransformations.add(1, {result: 'success'});
+        } catch (e) {
+          this.#queryTransformations.add(1, {result: 'error'});
+          throw e;
+        } finally {
+          const transformDuration = (performance.now() - transformStart) / 1000;
+          this.#queryTransformationTime.record(transformDuration);
+        }
 
-        const transformedCustomQueries =
-          await this.#customQueryTransformer.transform(
-            this.#getHeaderOptions(true),
-            filteredCustomQueries,
-            this.userQueryURL,
+        // Check if transform failed entirely (HTTP error or server-side failure).
+        // This should disconnect the client and keep existing pipelines intact.
+        if (
+          !Array.isArray(transformedCustomQueries) &&
+          transformedCustomQueries.kind === ErrorKind.TransformFailed
+        ) {
+          // TransformFailedBody indicates an HTTP or infrastructure error.
+          // Throw to disconnect the client without modifying pipelines.
+          throw new ProtocolErrorWithLevel(
+            transformedCustomQueries,
+            getLogLevel(transformedCustomQueries.kind),
           );
+        }
 
+        // Process the transformed queries and track which ones succeeded.
+        const successfullyTransformed = new Map<string, TransformedAndHashed>();
         erroredQueryIDs = this.#processTransformedCustomQueries(
           lc,
           transformedCustomQueries,
-          (q: TransformedAndHashed) =>
+          (q: TransformedAndHashed) => {
+            successfullyTransformed.set(q.id, q);
             transformedQueries.push({
               id: q.id,
               origQuery: must(customQueries.get(q.id)),
               transformed: q,
-            }),
+            });
+          },
           customQueries,
         );
+
+        // Check for queries whose transformation hash changed and log for debugging.
+        // The old pipelines will be automatically removed via unhydrateQueries,
+        // and new pipelines will be added via addQueries.
+        for (const [queryID, newTransform] of successfullyTransformed) {
+          const existingTransforms = byOriginalHash.get(queryID);
+          if (existingTransforms && existingTransforms.length > 0) {
+            const oldHash = existingTransforms[0].transformationHash;
+            const newHash = newTransform.transformationHash;
+
+            if (oldHash !== newHash) {
+              // Transformation changed - log and check for thrashing.
+              // The unhydrateQueries mechanism below will remove the old pipeline,
+              // and addQueries will add the new one.
+              lc.info?.(
+                `Query ${queryID} transformation changed: ${oldHash} -> ${newHash}`,
+              );
+              this.#checkForThrashing(queryID);
+              this.#queryTransformationHashChanges.add(1);
+            } else {
+              // hash is the same, addQuery will no-op (no re-hydration needed)
+              this.#queryTransformationNoOps.add(1);
+            }
+          }
+          // else: new query, will be added normally
+        }
       }
 
       const serverQueries = transformedQueries.map(
@@ -1396,10 +1485,33 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // These are queries we need to remove from `desired`, not `got`, because they never transformed.
       if (erroredQueryIDs) {
+        // Build a set of transformation hashes that succeeded
+        const successfulHashes = new Set(
+          transformedQueries.map(
+            ({transformed}) => transformed.transformationHash,
+          ),
+        );
+
         for (const queryID of erroredQueryIDs) {
+          // Try to get the last known transformation hash for this query
+          let lastKnownHash: string | undefined;
+
+          // Check if the query exists in the CVR with a transformation hash
+          const cvrQuery = cvr.queries[queryID];
+          if (cvrQuery?.transformationHash) {
+            lastKnownHash = cvrQuery.transformationHash;
+          }
+
+          // If a successfully transformed query has the same hash, we can't remove it
+          // because that would remove the pipeline for the successful query
+          const transformationHash =
+            lastKnownHash && successfulHashes.has(lastKnownHash)
+              ? undefined
+              : lastKnownHash;
+
           removeQueries.push({
             id: queryID,
-            transformationHash: undefined,
+            transformationHash,
           });
         }
       }
@@ -1423,39 +1535,37 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  // Removes queries from `customQueries` that are already
-  // transformed and in the pipelines. We do not want to re-transform
-  // a query that has already been transformed. The reason is that
-  // we do not want a query that is already running to suddenly flip
-  // to error due to re-calling transform.
-  #filterCustomQueries(
-    customQueries: Iterable<CustomQueryRecord>,
-    byOriginalHash: Map<
-      string,
-      {
-        transformationHash: string;
-        transformedAst: AST;
-      }[]
-    >,
-    onExisting:
-      | ((
-          origQuery: CustomQueryRecord,
-          existing: {
-            transformationHash: string;
-            transformedAst: AST;
-          }[],
-        ) => void)
-      | undefined,
-  ) {
-    return wrapIterable(customQueries).filter(origQuery => {
-      const existing = byOriginalHash.get(origQuery.id);
-      if (existing) {
-        onExisting?.(origQuery, existing);
-        return false;
-      }
+  /**
+   * Check if a query is being replaced too frequently (thrashing).
+   * Logs a warning if the query has been replaced more than 3 times in 60 seconds.
+   */
+  #checkForThrashing(queryID: string) {
+    const THRASH_WINDOW_MS = 60_000; // 60 seconds
+    const THRASH_THRESHOLD = 3;
+    const now = Date.now();
 
-      return true;
-    });
+    let record = this.#queryReplacements.get(queryID);
+    if (!record) {
+      record = {count: 1, windowStart: now};
+      this.#queryReplacements.set(queryID, record);
+      return;
+    }
+
+    // If outside the time window, delete the old entry and create a new one
+    if (now - record.windowStart > THRASH_WINDOW_MS) {
+      this.#queryReplacements.delete(queryID);
+      this.#queryReplacements.set(queryID, {count: 1, windowStart: now});
+      return;
+    }
+
+    // Increment count within the window
+    record.count++;
+
+    if (record.count >= THRASH_THRESHOLD) {
+      this.#lc.warn?.(
+        `Query thrashing detected for query ${queryID}. ${record.count} replacements in 60s. This may indicate clients with different auth contexts connecting to the same client group.`,
+      );
+    }
   }
 
   // This must be called from within the #lock.
@@ -1495,11 +1605,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         removeQueries,
       );
       const clients = this.#getClients();
-      const pokers = startPoke(
-        clients,
-        newVersion,
-        this.#pipelines.currentSchemaVersions(),
-      );
+      const pokers = startPoke(clients, newVersion);
       for (const patch of queryPatches) {
         await pokers.addPatch(patch);
       }
@@ -1513,6 +1619,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         // Remove per-query server metrics when query is deleted
         this.#inspectorDelegate.removeQuery(q.id);
+
+        // Clean up thrashing detection for removed queries
+        this.#queryReplacements.delete(q.id);
       }
       for (const hash of unhydrateQueries) {
         this.#pipelines.removeQuery(hash);
@@ -1521,6 +1630,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (ids) {
           for (const id of ids) {
             this.#inspectorDelegate.removeQuery(id);
+            // Clean up thrashing detection for unhydrated queries
+            this.#queryReplacements.delete(id);
           }
         }
       }
@@ -1637,13 +1748,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return startAsyncSpan(tracer, 'vs.#catchupClients', async span => {
       current ??= cvr.version;
       const clients = this.#getClients();
-      const pokers =
-        usePokers ??
-        startPoke(
-          clients,
-          cvr.version,
-          this.#pipelines.currentSchemaVersions(),
-        );
+      const pokers = usePokers ?? startPoke(clients, cvr.version);
       span.setAttribute('numClients', clients.length);
 
       const catchupFrom = clients
@@ -1711,7 +1816,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #processChanges(
     lc: LogContext,
     timer: TimeSliceTimer,
-    changes: Iterable<RowChange>,
+    changes: Iterable<RowChange | 'yield'>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler,
     hashToIDs: Map<string, string[]>,
@@ -1739,6 +1844,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       await startAsyncSpan(tracer, 'loopingChanges', async span => {
         for (const change of changes) {
+          if (change === 'yield') {
+            await timer.yieldProcess('yield in processChanges');
+            continue;
+          }
           const {
             type,
             queryHash: transformationHash,
@@ -1786,12 +1895,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (rows.size % CURSOR_PAGE_SIZE === 0) {
             await processBatch();
           }
-
-          if (rows.size % TIME_SLICE_CHECK_SIZE === 0) {
-            if (timer.elapsedLap() > TIME_SLICE_MS) {
-              await timer.yieldProcess();
-            }
-          }
         }
         if (rows.size) {
           await processBatch();
@@ -1837,7 +1940,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const pokers = startPoke(
         this.#getClients(cvr.version),
         updater.updatedVersion(),
-        this.#pipelines.currentSchemaVersions(),
       );
       lc.debug?.(`applying ${numChanges} to advance to ${version}`);
       const hashToIDs = createHashToIDs(cvr);
@@ -1898,7 +2000,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#config,
       this.#getHeaderOptions(this.#queryConfig.forwardCookies ?? false),
       this.userQueryURL,
-      this.#authData?.raw,
+      this.#authData,
     );
   };
 
@@ -1934,10 +2036,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
 // Update CVR after every 10000 rows.
 const CURSOR_PAGE_SIZE = 10000;
-// Check the elapsed time every 100 rows.
-const TIME_SLICE_CHECK_SIZE = 100;
-// Yield the process after churning for > 500ms.
-const TIME_SLICE_MS = 500;
 
 function createHashToIDs(cvr: CVRSnapshot) {
   const hashToIDs = new Map<string, string[]>();
@@ -1992,11 +2090,7 @@ function checkClientAndCVRVersions(
     cmpVersions(client, NEW_CVR_VERSION) > 0
   ) {
     // CVR is empty but client is not.
-    throw new ProtocolError({
-      kind: ErrorKind.ClientNotFound,
-      message: 'Client not found',
-      origin: ErrorOrigin.ZeroCache,
-    });
+    throw new ClientNotFoundError('Client not found');
   }
 
   if (cmpVersions(client, cvr) > 0) {
@@ -2120,7 +2214,7 @@ export class TimeSliceTimer {
     return this;
   }
 
-  async yieldProcess() {
+  async yieldProcess(_msgForTesting?: string) {
     this.#stopLap();
     await yieldProcess();
     this.#startLap();

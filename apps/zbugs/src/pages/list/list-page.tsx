@@ -1,4 +1,5 @@
-import {useQuery} from '@rocicorp/zero/react';
+import type {Row} from '@rocicorp/zero';
+import {useQuery, useZero} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
@@ -20,7 +21,6 @@ import {
   type ListContext,
   type ListContextParams,
 } from '../../../shared/queries.ts';
-import {type IssueRow} from '../../../shared/schema.ts';
 import InfoIcon from '../../assets/images/icon-info.svg?react';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
@@ -32,7 +32,6 @@ import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
@@ -45,7 +44,7 @@ const MIN_PAGE_SIZE = 100;
 const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
 type Anchor = {
-  startRow: IssueRow | undefined;
+  startRow: Row['issue'] | undefined;
   direction: 'forward' | 'backward';
   index: number;
 };
@@ -520,7 +519,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   });
   useClickOutside([searchBox, startSearchButton], () => {
-    if (Boolean(textFilter)) {
+    if (textFilter) {
       setForceSearchMode(false);
     } else {
       clearAndHideSearch();
@@ -636,6 +635,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         <Filter projectName={projectName} onSelect={onFilter} />
         <div className="sort-control-container">
           <Button
+            enabledOffline
             className="sort-control"
             eventName="Toggle sort type"
             onAction={toggleSortField}
@@ -643,6 +643,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
             {sortField === 'modified' ? 'Modified' : 'Created'}
           </Button>
           <Button
+            enabledOffline
             className={classNames('sort-direction', sortDirection)}
             eventName="Toggle sort direction"
             onAction={toggleSortDirection}

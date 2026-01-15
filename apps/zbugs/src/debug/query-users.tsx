@@ -1,4 +1,4 @@
-import {useQuery} from '../../../../packages/zero-react/src/use-query.tsx';
+import {useQuery} from '@rocicorp/zero/react';
 import {queries} from '../../shared/queries.ts';
 
 export function QueryUsers() {

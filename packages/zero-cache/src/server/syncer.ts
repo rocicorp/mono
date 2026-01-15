@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
@@ -6,6 +7,7 @@ import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
+import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import {warmupConnections} from '../db/warmup.ts';
@@ -14,7 +16,7 @@ import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
-import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
+import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
@@ -25,7 +27,7 @@ import {
   type Worker,
 } from '../types/processes.ts';
 import {getShardID} from '../types/shards.ts';
-import {Subscription} from '../types/subscription.ts';
+import type {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
@@ -35,6 +37,21 @@ import {startOtelAuto} from './otel-start.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
+}
+
+function getCustomQueryConfig(
+  config: Pick<NormalizedZeroConfig, 'query' | 'getQueries'>,
+) {
+  const queryConfig = config.query?.url ? config.query : config.getQueries;
+
+  if (!queryConfig?.url) {
+    return undefined;
+  }
+
+  return {
+    url: queryConfig.url,
+    forwardCookies: queryConfig.forwardCookies ?? false,
+  };
 }
 
 export default function runWorker(
@@ -76,7 +93,11 @@ export default function runWorker(
   const tmpDir = config.storageDBTmpDir ?? tmpdir();
   const operatorStorage = DatabaseStorage.create(
     lc,
-    path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
+    path.join(tmpDir, `sync-worker-${randomUUID()}`),
+  );
+  const writeAuthzStorage = DatabaseStorage.create(
+    lc,
+    path.join(tmpDir, `mutagen-${randomUUID()}`),
   );
 
   const shard = getShardID(config);
@@ -90,20 +111,23 @@ export default function runWorker(
       .withContext('component', 'view-syncer')
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
-    lc.debug?.(`creating view syncer`);
+    lc.debug?.(
+      `creating view syncer. Query Planner Enabled: ${config.enableQueryPlanner}`,
+    );
 
     // Create the custom query transformer if configured
-    const {getQueries} = config;
+    const customQueryConfig = getCustomQueryConfig(config);
     const customQueryTransformer =
-      getQueries.url &&
-      new CustomQueryTransformer(
-        logger,
-        {url: getQueries.url, forwardCookies: getQueries.forwardCookies},
-        shard,
-      );
+      customQueryConfig &&
+      new CustomQueryTransformer(logger, customQueryConfig, shard);
 
     const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
 
+    const priorityOpRunningYieldThresholdMs = Math.max(
+      config.yieldThresholdMs / 4,
+      2,
+    );
+    const normalYieldThresholdMs = Math.max(config.yieldThresholdMs, 2);
     return new ViewSyncerService(
       config,
       logger,
@@ -120,6 +144,10 @@ export default function runWorker(
         operatorStorage.createClientGroupStorage(id),
         id,
         inspectorDelegate,
+        () =>
+          isPriorityOpRunning()
+            ? priorityOpRunningYieldThresholdMs
+            : normalYieldThresholdMs,
         config.enableQueryPlanner,
       ),
       sub,
@@ -127,6 +155,7 @@ export default function runWorker(
       config.log.slowHydrateThreshold,
       inspectorDelegate,
       customQueryTransformer,
+      runPriorityOp,
     );
   };
 
@@ -137,6 +166,7 @@ export default function runWorker(
       id,
       upstreamDB,
       config,
+      writeAuthzStorage,
     );
 
   const pusherFactory =
@@ -144,7 +174,6 @@ export default function runWorker(
       ? undefined
       : (id: string) =>
           new PusherService(
-            upstreamDB,
             config,
             {
               ...config.push,
@@ -179,4 +208,23 @@ if (!singleProcessMode()) {
   void exitAfter(() =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
+}
+
+let priorityOpCounter = 0;
+
+/**
+ * Run an operation with priority, indicating that IVM should use smaller time
+ * slices to allow this operation to proceed more quickly
+ */
+async function runPriorityOp<T>(op: () => Promise<T>) {
+  priorityOpCounter++;
+  try {
+    return await op();
+  } finally {
+    priorityOpCounter--;
+  }
+}
+
+export function isPriorityOpRunning() {
+  return priorityOpCounter > 0;
 }

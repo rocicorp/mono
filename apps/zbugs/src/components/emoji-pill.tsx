@@ -1,3 +1,4 @@
+import {useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useEffect, useState} from 'react';
 import {useIntersectionObserver} from 'usehooks-ts';
@@ -9,7 +10,6 @@ import {
 } from '../emoji-utils.ts';
 import {useDocumentHasFocus} from '../hooks/use-document-has-focus.ts';
 import {useNumericPref} from '../hooks/use-user-pref.ts';
-import {useZero} from '../hooks/use-zero.ts';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {SKIN_TONE_PREF} from './emoji-picker.tsx';
@@ -25,7 +25,6 @@ type AddOrRemoveEmoji = (details: {
 }) => void;
 
 type Props = {
-  disabled: boolean;
   normalizedEmoji: string;
   emojis: Emoji[];
   addOrRemoveEmoji: AddOrRemoveEmoji;
@@ -36,7 +35,6 @@ type Props = {
 
 export const EmojiPill = memo(
   ({
-    disabled,
     normalizedEmoji,
     emojis,
     addOrRemoveEmoji,
@@ -100,7 +98,6 @@ export const EmojiPill = memo(
         <TooltipTrigger>
           <ButtonWithLoginCheck
             ref={ref}
-            disabled={disabled}
             className={classNames('emoji-pill', {
               mine,
               triggered,

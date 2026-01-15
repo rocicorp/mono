@@ -1,30 +1,38 @@
 import {type LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
+import {getValueAtPath} from '../../shared/src/object-traversal.ts';
 import {
   type CustomMutation,
   type MutationResponse,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
-import type {CustomMutatorDefs} from './custom.ts';
 import {
-  type ExtractTransactionType,
   type Database,
-  handleMutationRequest,
+  type ExtractTransactionType,
+  handleMutateRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
-import {must} from '../../shared/src/must.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import type {Transaction} from '../../zql/src/mutate/custom.ts';
+import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
+import {isMutator} from '../../zql/src/mutate/mutator.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 
 export class PushProcessor<
+  _S extends Schema,
   D extends Database<ExtractTransactionType<D>>,
-  MD extends CustomMutatorDefs<ExtractTransactionType<D>>,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs<ExtractTransactionType<D>>,
+  C = undefined,
 > {
   readonly #dbProvider: D;
-  readonly #logLevel;
+  readonly #logLevel: LogLevel;
+  readonly #context: C;
 
-  constructor(dbProvider: D, logLevel: LogLevel = 'info') {
+  constructor(dbProvider: D, context?: C, logLevel: LogLevel = 'info') {
     this.#dbProvider = dbProvider;
+    this.#context = context as C;
     this.#logLevel = logLevel;
   }
 
@@ -58,28 +66,30 @@ export class PushProcessor<
     body?: ReadonlyJSONValue,
   ): Promise<PushResponse> {
     if (queryOrQueryString instanceof Request) {
-      return handleMutationRequest(
-        (transact, mutations) =>
-          this.#processMutation(mutators, transact, mutations),
+      return handleMutateRequest(
+        this.#dbProvider,
+        (transact, mutation) =>
+          this.#processMutation(mutators, transact, mutation),
         queryOrQueryString,
         this.#logLevel,
       );
     }
-    return handleMutationRequest(
+    return handleMutateRequest(
+      this.#dbProvider,
       (transact, mutation) =>
         this.#processMutation(mutators, transact, mutation),
       queryOrQueryString,
-      must(body),
+      must(body, 'body is required when using query params directly'),
       this.#logLevel,
     );
   }
 
   #processMutation(
     mutators: MD,
-    transact: TransactFn,
+    transact: TransactFn<D>,
     _mutation: CustomMutation,
   ): Promise<MutationResponse> {
-    return transact(this.#dbProvider, (tx, name, args) =>
+    return transact((tx, name, args) =>
       this.#dispatchMutation(mutators, tx, name, args),
     );
   }
@@ -88,28 +98,18 @@ export class PushProcessor<
     mutators: MD,
     dbTx: ExtractTransactionType<D>,
     key: string,
-    args: ReadonlyJSONValue,
+    args: ReadonlyJSONValue | undefined,
   ): Promise<void> {
-    const [namespace, name] = splitMutatorKey(key);
-    if (name === undefined) {
-      const mutator = mutators[namespace];
-      assert(
-        typeof mutator === 'function',
-        () => `could not find mutator ${key}`,
-      );
-      return mutator(dbTx, args);
+    // Legacy mutators used | as a separator, new mutators use .
+    const mutator = getValueAtPath(mutators, key, /\.|\|/);
+    assert(typeof mutator === 'function', `could not find mutator ${key}`);
+    if (isMutator(mutator)) {
+      return mutator.fn({
+        args,
+        ctx: this.#context,
+        tx: dbTx as Transaction<Schema, unknown>,
+      });
     }
-
-    const mutatorGroup = mutators[namespace];
-    assert(
-      typeof mutatorGroup === 'object',
-      () => `could not find mutators for namespace ${namespace}`,
-    );
-    const mutator = mutatorGroup[name];
-    assert(
-      typeof mutator === 'function',
-      () => `could not find mutator ${key}`,
-    );
     return mutator(dbTx, args);
   }
 }

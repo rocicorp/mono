@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22.x
           cache: 'npm'
@@ -49,17 +49,11 @@ jobs:
           npm run build-ci
       - name: Resolve Zero protocol versions
         run: |
-          PROTOCOL_FILE=packages/zero/out/zero-protocol/src/protocol-version.js
-          ZERO_SYNC_PROTOCOL_VERSION=$(grep -E "export const PROTOCOL_VERSION" "$PROTOCOL_FILE" | sed -E "s/.*= ([0-9]+);/\1/")
-          ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=$(grep -E "export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL" "$PROTOCOL_FILE" | sed -E "s/.*= ([0-9]+);/\1/")
-          if [ -z "$ZERO_SYNC_PROTOCOL_VERSION" ] || [ -z "$ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION" ]; then
-            echo "Could not extract protocol versions from $PROTOCOL_FILE"
-            exit 1
-          fi
-          {
-            echo "ZERO_SYNC_PROTOCOL_VERSION=$ZERO_SYNC_PROTOCOL_VERSION"
-            echo "ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=$ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION"
-          } >> "$GITHUB_ENV"
+          node --experimental-strip-types -e "
+            import {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from './packages/zero-protocol/src/protocol-version.ts';
+            console.log('ZERO_SYNC_PROTOCOL_VERSION=' + PROTOCOL_VERSION);
+            console.log('ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=' + MIN_SERVER_SUPPORTED_SYNC_PROTOCOL);
+          " >> "$GITHUB_ENV"
       - name: Create package tarball
         run: |
           cd packages/zero
@@ -84,8 +78,9 @@ jobs:
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
-          ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
-          ZERO_GET_QUERIES_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
+          ZERO_ENABLE_QUERY_PLANNER: 'true'
+          ZERO_MUTATE_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_QUERY_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}
           ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
@@ -104,8 +99,9 @@ jobs:
         env:
           ZERO_APP_ID: 'gigabugs1'
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
-          ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
-          ZERO_GET_QUERIES_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
+          ZERO_ENABLE_QUERY_PLANNER: 'true'
+          ZERO_MUTATE_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_QUERY_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2
           ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}

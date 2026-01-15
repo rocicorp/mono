@@ -1,10 +1,10 @@
 import type {SQLQuery} from '@databases/sql';
 import type {LogContext} from '@rocicorp/logger';
+import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
 import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
-import {difference} from '../../shared/src/set-utils.ts';
 import type {Writable} from '../../shared/src/writable.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
@@ -20,29 +20,29 @@ import {
 } from '../../zql/src/builder/filter.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
-  buildSelectQuery,
-  toSQLiteType,
-  type NoSubqueryCondition,
-} from './query-builder.ts';
-import {
   generateWithOverlay,
   generateWithStart,
   genPushAndWriteWithSplitEdit,
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import type {FetchRequest} from '../../zql/src/ivm/operator.ts';
+import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
-import type {
-  Source,
-  SourceChange,
-  SourceInput,
+import {
+  type Source,
+  type SourceChange,
+  type SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
-import {Database, Statement} from './db.ts';
+import type {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
-import SQLite3Database from '@rocicorp/zero-sqlite3';
+import {
+  buildSelectQuery,
+  toSQLiteType,
+  type NoSubqueryCondition,
+} from './query-builder.ts';
+import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -79,16 +79,25 @@ export class TableSource implements Source {
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
+  readonly #shouldYield: () => boolean;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
+  #pushEpoch = 0;
 
+  /**
+   * @param shouldYield a function called after each row is read from the database,
+   * which should return true if the source should yield the special 'yield' value
+   * to yield control back to the caller at the end of the pipeline.  Can
+   * also throw an error to abort the pipeline processing.
+   */
   constructor(
     logContext: LogContext,
     logConfig: LogConfig,
     db: Database,
     tableName: string,
     columns: Record<string, SchemaValue>,
-    primaryKey: readonly [string, ...string[]],
+    primaryKey: PrimaryKey,
+    shouldYield = () => false,
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
@@ -97,6 +106,7 @@ export class TableSource implements Source {
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
+    this.#shouldYield = shouldYield;
 
     assert(
       this.#uniqueIndexes.has(JSON.stringify([...primaryKey].sort())),
@@ -104,8 +114,12 @@ export class TableSource implements Source {
     );
   }
 
-  get table() {
-    return this.#table;
+  get tableSchema() {
+    return {
+      name: this.#table,
+      columns: this.#columns,
+      primaryKey: this.#primaryKey,
+    };
   }
 
   /**
@@ -195,7 +209,7 @@ export class TableSource implements Source {
     return {
       tableName: this.#table,
       columns: this.#columns,
-      primaryKey: this.#selectPrimaryKeyFor(connection.sort),
+      primaryKey: this.#primaryKey,
       sort: connection.sort,
       relationships: {},
       isHidden: false,
@@ -214,7 +228,6 @@ export class TableSource implements Source {
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
-      cleanup: req => this.#cleanup(req, connection),
       setOutput: output => {
         connection.output = output;
       },
@@ -239,8 +252,10 @@ export class TableSource implements Source {
           }
         : undefined,
       compareRows: makeComparator(sort),
+      lastPushedEpoch: 0,
     };
     const schema = this.#getSchema(connection);
+    assertOrderingIncludesPK(sort, this.#primaryKey);
 
     this.#connections.push(connection);
     return input;
@@ -255,11 +270,7 @@ export class TableSource implements Source {
     ) as Row;
   }
 
-  #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
-    return this.#fetch(req, connection);
-  }
-
-  *#fetch(req: FetchRequest, connection: Connection): Stream<Node> {
+  *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
     const query = this.#requestToSQL(req, connection.filters?.condition, sort);
@@ -272,27 +283,27 @@ export class TableSource implements Source {
         ...sqlAndBindings.values,
       );
 
-      const callingConnectionIndex = this.#connections.indexOf(connection);
-      assert(callingConnectionIndex !== -1, 'Connection not found');
-
       const comparator = makeComparator(sort, req.reverse);
 
       debug?.initQuery(this.#table, sqlAndBindings.text);
 
       yield* generateWithStart(
-        generateWithOverlay(
-          req.start?.row,
-          this.#mapFromSQLiteTypes(
-            this.#columns,
-            rowIterator,
-            sqlAndBindings.text,
-            debug,
+        generateWithYields(
+          generateWithOverlay(
+            req.start?.row,
+            this.#mapFromSQLiteTypes(
+              this.#columns,
+              rowIterator,
+              sqlAndBindings.text,
+              debug,
+            ),
+            req.constraint,
+            this.#overlay,
+            connection.lastPushedEpoch,
+            comparator,
+            connection.filters?.predicate,
           ),
-          req.constraint,
-          this.#overlay,
-          callingConnectionIndex,
-          comparator,
-          connection.filters?.predicate,
+          this.#shouldYield,
         ),
         req.start,
         comparator,
@@ -351,9 +362,11 @@ export class TableSource implements Source {
     }
   }
 
-  push(change: SourceChange): void {
-    for (const _ of this.genPush(change)) {
-      // Nothing to do.
+  *push(change: SourceChange): Stream<'yield'> {
+    for (const result of this.genPush(change)) {
+      if (result === 'yield') {
+        yield result;
+      }
     }
   }
 
@@ -371,6 +384,7 @@ export class TableSource implements Source {
       exists,
       setOverlay,
       writeChange,
+      () => ++this.#pushEpoch,
     );
   }
 
@@ -482,24 +496,6 @@ export class TableSource implements Source {
       order,
       request.reverse,
       request.start,
-    );
-  }
-
-  #selectPrimaryKeyFor(sort: Ordering) {
-    const columns = new Set(sort.map(([col]) => col));
-    for (const uniqueColumns of this.#uniqueIndexes.values()) {
-      if (difference(uniqueColumns, columns).size === 0) {
-        assert(uniqueColumns.size > 0);
-        return [...uniqueColumns] as unknown as PrimaryKey;
-      }
-    }
-    throw new Error(
-      `Cannot orderBy(${JSON.stringify(sort.map(([c]) => c))}). ` +
-        (sort.length === 1
-          ? `The column must be unique. `
-          : `One or more columns must form a unique index. `) +
-        `Did you forget to include a primary key or ` +
-        `(non-null) unique index on the "${this.#table}" table?`,
     );
   }
 }
@@ -642,4 +638,13 @@ function nonPrimaryKeys(
   primaryKey: PrimaryKey,
 ) {
   return Object.keys(columns).filter(c => !primaryKey.includes(c));
+}
+
+function* generateWithYields(stream: Stream<Node>, shouldYield: () => boolean) {
+  for (const n of stream) {
+    if (shouldYield()) {
+      yield 'yield';
+    }
+    yield n;
+  }
 }

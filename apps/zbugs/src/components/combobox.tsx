@@ -10,6 +10,7 @@ import {
 } from 'react';
 import DropdownArrow from '../assets/icons/dropdown-arrow.svg?react';
 import {useClickOutside} from '../hooks/use-click-outside.ts';
+import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {umami} from '../umami.ts';
 import styles from './combobox.module.css';
 import {fuzzySearch} from './fuzzy-search.ts';
@@ -26,6 +27,7 @@ interface Props<T> {
   onChange: (selectedValue: T) => void;
   defaultItem?: Omit<Item<T>, 'value'> | undefined;
   disabled?: boolean | undefined;
+  enabledOffline?: boolean | undefined;
   className?: string | undefined;
   editable?: boolean | undefined;
 }
@@ -37,6 +39,7 @@ function Combobox<T>({
   defaultItem,
   className,
   disabled,
+  enabledOffline,
   editable = true,
 }: Props<T>) {
   const [isOpen, setIsOpen] = useState(false);
@@ -44,6 +47,7 @@ function Combobox<T>({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLElement>(null);
   const listboxRef = useRef<HTMLUListElement>(null);
+  const isOffline = useIsOffline();
   const openTimeRef = useRef(0);
 
   const filteredOptions =
@@ -135,13 +139,15 @@ function Combobox<T>({
     }
   };
 
+  const isDisabled = enabledOffline ? disabled : isOffline || disabled;
+
   const iconItem =
     editable && isOpen ? defaultItem : (selectedItem ?? defaultItem);
 
   return (
     <div
       className={classNames(styles.container, className, {
-        [styles.disabled]: disabled,
+        [styles.disabled]: isDisabled,
       })}
     >
       <div className={styles.inputWrapper}>
@@ -154,7 +160,8 @@ function Combobox<T>({
         {editable ? (
           <input
             ref={inputRef as RefObject<HTMLInputElement>}
-            disabled={disabled}
+            disabled={isDisabled}
+            aria-disabled={isDisabled}
             type="text"
             className={classNames(styles.input)}
             value={isOpen ? searchQuery : selectedItem?.text || ''}
@@ -189,7 +196,8 @@ function Combobox<T>({
                 : undefined
             }
             // tabIndex={0}
-            disabled={disabled}
+            disabled={isDisabled}
+            aria-disabled={isDisabled}
             onMouseDown={toggleDropdown}
             onKeyDown={handleKeyDown}
             onBlur={() => setMenuOpen(false)}

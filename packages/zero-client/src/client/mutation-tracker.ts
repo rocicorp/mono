@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
@@ -28,12 +29,11 @@ import {
   type PushOk,
   type PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
-import type {MutationResultSuccessDetails} from './custom.ts';
+import type {MutatorResultSuccessDetails} from './custom.ts';
 import {isZeroError, type ZeroError} from './error.ts';
 import {MUTATIONS_KEY_PREFIX} from './keys.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
-type MutationSuccessType = MutationResultSuccessDetails;
+type MutationSuccessType = MutatorResultSuccessDetails;
 type MutationErrorType = ApplicationError | ZeroError;
 
 let currentEphemeralID = 0;
@@ -56,7 +56,7 @@ export class MutationTracker {
   >;
   readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
   readonly #allMutationsAppliedListeners: Set<() => void>;
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
 
   readonly #ackMutations: (upTo: MutationID) => void;
   readonly #onFatalError: (error: ZeroError) => void;
@@ -66,7 +66,7 @@ export class MutationTracker {
   #currentMutationID: number;
 
   constructor(
-    lc: ZeroLogContext,
+    lc: LogContext,
     ackMutations: (upTo: MutationID) => void,
     onFatalError: (error: ZeroError) => void,
   ) {

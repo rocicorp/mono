@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -13,14 +13,18 @@ import {
 } from '../../../../zql/src/builder/debug-delegate.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
-import type {Input, Storage} from '../../../../zql/src/ivm/operator.ts';
+import {type Input, type Storage} from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {
   Source,
   SourceChange,
   SourceInput,
 } from '../../../../zql/src/ivm/source.ts';
+import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
+import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
+import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
   reloadPermissionsIfChanged,
@@ -35,19 +39,11 @@ import {
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
-import type {SchemaVersions} from '../../types/schema-versions.ts';
-import type {ShardID} from '../../types/shards.ts';
+import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
-import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
-import {
-  ResetPipelinesSignal,
-  Snapshotter,
-  type SnapshotDiff,
-} from './snapshotter.ts';
-import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
-import type {Database} from '../../../../zqlite/src/db.ts';
-import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
+import type {Snapshotter} from './snapshotter.ts';
+import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -83,6 +79,28 @@ type Pipeline = {
   readonly transformationHash: string; // The hash of the transformed AST
 };
 
+type AdvanceContext = {
+  readonly timer: Timer;
+  readonly totalHydrationTimeMs: number;
+  readonly numChanges: number;
+  pos: number;
+};
+
+type HydrateContext = {
+  readonly timer: Timer;
+};
+
+export type Timer = {
+  elapsedLap: () => number;
+  totalElapsed: () => number;
+};
+
+/**
+ * No matter how fast hydration is, advancement is given at least this long to
+ * complete before doing a pipeline reset.
+ */
+const MIN_ADVANCEMENT_TIME_LIMIT_MS = 50;
+
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
@@ -100,8 +118,12 @@ export class PipelineDriver {
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
+  readonly #yieldThresholdMs: () => number;
   #streamer: Streamer | null = null;
+  #hydrateContext: HydrateContext | null = null;
+  #advanceContext: AdvanceContext | null = null;
   #replicaVersion: string | null = null;
+  #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
 
   readonly #advanceTime = getOrCreateHistogram('sync', 'ivm.advance-time', {
@@ -126,6 +148,7 @@ export class PipelineDriver {
     storage: ClientGroupStorage,
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
+    yieldThresholdMs: () => number,
     enablePlanner?: boolean,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
@@ -135,6 +158,7 @@ export class PipelineDriver {
     this.#logConfig = logConfig;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
+    this.#yieldThresholdMs = yieldThresholdMs;
   }
 
   /**
@@ -143,23 +167,10 @@ export class PipelineDriver {
    *
    * Must only be called once.
    */
-  init(clientSchema: ClientSchema | null) {
+  init(clientSchema: ClientSchema) {
     assert(!this.#snapshotter.initialized(), 'Already initialized');
-
-    const {db} = this.#snapshotter.init().current();
-    const fullTables = new Map<string, LiteTableSpec>();
-    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
-    if (clientSchema) {
-      checkClientSchema(
-        this.#shardID,
-        clientSchema,
-        this.#tableSpecs,
-        fullTables,
-      );
-    }
-
-    const {replicaVersion} = getSubscriptionState(db);
-    this.#replicaVersion = replicaVersion;
+    this.#snapshotter.init();
+    this.#initAndResetCommon(clientSchema);
   }
 
   /**
@@ -167,6 +178,43 @@ export class PipelineDriver {
    */
   initialized(): boolean {
     return this.#snapshotter.initialized();
+  }
+
+  /**
+   * Clears the current pipelines and TableSources, returning the PipelineDriver
+   * to its initial state. This should be called in response to a schema change,
+   * as TableSources need to be recomputed.
+   */
+  reset(clientSchema: ClientSchema) {
+    for (const {input} of this.#pipelines.values()) {
+      input.destroy();
+    }
+    this.#pipelines.clear();
+    this.#tables.clear();
+    this.#initAndResetCommon(clientSchema);
+  }
+
+  #initAndResetCommon(clientSchema: ClientSchema) {
+    const {db} = this.#snapshotter.current();
+    const fullTables = new Map<string, LiteTableSpec>();
+    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
+    checkClientSchema(
+      this.#shardID,
+      clientSchema,
+      this.#tableSpecs,
+      fullTables,
+    );
+    const primaryKeys = this.#primaryKeys ?? new Map<string, PrimaryKey>();
+    this.#primaryKeys = primaryKeys;
+    primaryKeys.clear();
+    for (const [table, spec] of this.#tableSpecs.entries()) {
+      if (table.startsWith(upstreamSchema(this.#shardID))) {
+        primaryKeys.set(table, spec.tableSpec.primaryKey);
+      }
+    }
+    buildPrimaryKeys(clientSchema, primaryKeys);
+    const {replicaVersion} = getSubscriptionState(db);
+    this.#replicaVersion = replicaVersion;
   }
 
   /** @returns The replica version. The PipelineDriver must have been initialized. */
@@ -182,16 +230,6 @@ export class PipelineDriver {
   currentVersion(): string {
     assert(this.initialized(), 'Not yet initialized');
     return this.#snapshotter.current().version;
-  }
-
-  /**
-   * Returns the current supported schema version range of the database.  This
-   * will reflect changes to supported schema version range when calling
-   * {@link advance()} once the iteration has begun.
-   */
-  currentSchemaVersions(): SchemaVersions {
-    assert(this.initialized(), 'Not yet initialized');
-    return this.#snapshotter.current().schemaVersions;
   }
 
   /**
@@ -234,33 +272,6 @@ export class PipelineDriver {
       return costModel;
     }
     return undefined;
-  }
-
-  /**
-   * Clears the current pipelines and TableSources, returning the PipelineDriver
-   * to its initial state. This should be called in response to a schema change,
-   * as TableSources need to be recomputed.
-   */
-  reset(clientSchema: ClientSchema | null) {
-    for (const {input} of this.#pipelines.values()) {
-      input.destroy();
-    }
-    this.#pipelines.clear();
-    this.#tables.clear();
-
-    const {db} = this.#snapshotter.current();
-    const fullTables = new Map<string, LiteTableSpec>();
-    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
-    if (clientSchema) {
-      checkClientSchema(
-        this.#shardID,
-        clientSchema,
-        this.#tableSpecs,
-        fullTables,
-      );
-    }
-    const {replicaVersion} = getSubscriptionState(db);
-    this.#replicaVersion = replicaVersion;
   }
 
   /**
@@ -328,9 +339,12 @@ export class PipelineDriver {
     transformationHash: string,
     queryID: string,
     query: AST,
-    timer: {totalElapsed: () => number},
-  ): Iterable<RowChange> {
-    assert(this.initialized());
+    timer: Timer,
+  ): Iterable<RowChange | 'yield'> {
+    assert(
+      this.initialized(),
+      'Pipeline driver must be initialized before adding queries',
+    );
     this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
     if (this.#pipelines.has(transformationHash)) {
       this.#lc.info?.(`query ${transformationHash} already added`, query);
@@ -371,10 +385,26 @@ export class PipelineDriver {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
         streamer.accumulate(transformationHash, schema, [change]);
+        return [];
       },
     });
 
-    yield* hydrate(input, transformationHash, this.#tableSpecs);
+    assert(
+      this.#advanceContext === null,
+      'Cannot hydrate while advance is in progress',
+    );
+    this.#hydrateContext = {
+      timer,
+    };
+    try {
+      yield* hydrateInternal(
+        input,
+        transformationHash,
+        must(this.#primaryKeys),
+      );
+    } finally {
+      this.#hydrateContext = null;
+    }
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowCountsVended) {
@@ -444,122 +474,116 @@ export class PipelineDriver {
    *         `changes` must be iterated over in their entirety in order to
    *         advance the database snapshot.
    */
-  advance(timer: {totalElapsed: () => number}): {
+  advance(timer: Timer): {
     version: string;
     numChanges: number;
-    changes: Iterable<RowChange>;
+    changes: Iterable<RowChange | 'yield'>;
   } {
-    assert(this.initialized());
+    assert(
+      this.initialized(),
+      'Pipeline driver must be initialized before advancing',
+    );
     const diff = this.#snapshotter.advance(this.#tableSpecs);
     const {prev, curr, changes} = diff;
-    this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
-
-    const totalHydrationTimeMs = this.totalHydrationTimeMs();
-
-    // Cancel the advancement processing if it takes longer than half the
-    // total hydration time to make it through half of the advancement.
-    // This serves as both a circuit breaker for very large transactions,
-    // as well as a bound on the amount of time the previous connection locks
-    // the inactive WAL file (as the lock prevents WAL2 from switching to the
-    // free WAL when the current one is over the size limit, which can make
-    // the WAL grow continuously and compound slowness).
-    //
-    // Note: 1/2 is a conservative estimate policy. A lower proportion would
-    // flag slowness sooner, at the expense of larger estimation error.
-    function checkProgress(pos: number) {
-      // Check every 10 changes
-      if (pos % 10 === 0) {
-        const elapsed = timer.totalElapsed();
-        if (elapsed > totalHydrationTimeMs / 2 && pos <= changes / 2) {
-          throw new ResetPipelinesSignal(
-            `advancement exceeded timeout at ${pos} of ${changes} changes (${elapsed} ms)`,
-          );
-        }
-      }
-    }
+    this.#lc.debug?.(
+      `advance ${prev.version} => ${curr.version}: ${changes} changes`,
+    );
 
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#advance(
-        diff,
-        // Somewhat arbitrary: only check progress if there are at least 20
-        // changes (Note that the first check doesn't happen until 10 changes).
-        changes >= 20 ? checkProgress : () => {},
-      ),
+      changes: this.#advance(diff, timer, changes),
     };
   }
 
   *#advance(
     diff: SnapshotDiff,
-    onChange: (pos: number) => void,
-  ): Iterable<RowChange> {
-    let pos = 0;
-    for (const {table, prevValues, nextValue} of diff) {
-      const start = performance.now();
-      let type;
-      try {
-        const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
-        const tableSource = this.#tables.get(table);
-        if (!tableSource) {
-          // no pipelines read from this table, so no need to process the change
-          continue;
+    timer: Timer,
+    numChanges: number,
+  ): Iterable<RowChange | 'yield'> {
+    assert(
+      this.#hydrateContext === null,
+      'Cannot advance while hydration is in progress',
+    );
+    this.#advanceContext = {
+      timer,
+      totalHydrationTimeMs: this.totalHydrationTimeMs(),
+      numChanges,
+      pos: 0,
+    };
+    try {
+      for (const {table, prevValues, nextValue} of diff) {
+        // Advance progress is checked each time a row is fetched
+        // from a TableSource during push processing, but some pushes
+        // don't read any rows.  Check progress here before processing
+        // the next change.
+        if (this.#shouldAdvanceYieldMaybeAbortAdvance()) {
+          yield 'yield';
         }
-        let editOldRow: Row | undefined = undefined;
-        for (const prevValue of prevValues) {
-          // Rows are ultimately referred to by the union key (in #streamNodes())
-          // so an update is represented as an `edit` if and only if the
-          // unionKey-based row keys are the same in prevValue and nextValue.
-          if (
-            nextValue &&
-            deepEqual(
-              getRowKey(tableSpec.unionKey, prevValue as Row) as JSONValue,
-              getRowKey(tableSpec.unionKey, nextValue as Row) as JSONValue,
-            )
-          ) {
-            editOldRow = prevValue;
-          } else {
-            if (nextValue) {
-              this.#conflictRowsDeleted.add(1);
+        const start = performance.now();
+        let type;
+        try {
+          const tableSource = this.#tables.get(table);
+          if (!tableSource) {
+            // no pipelines read from this table, so no need to process the change
+            continue;
+          }
+          const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+          let editOldRow: Row | undefined = undefined;
+          for (const prevValue of prevValues) {
+            if (
+              nextValue &&
+              deepEqual(
+                getRowKey(primaryKey, prevValue as Row) as JSONValue,
+                getRowKey(primaryKey, nextValue as Row) as JSONValue,
+              )
+            ) {
+              editOldRow = prevValue;
+            } else {
+              if (nextValue) {
+                this.#conflictRowsDeleted.add(1);
+              }
+              yield* this.#push(tableSource, {
+                type: 'remove',
+                row: prevValue,
+              });
             }
-            yield* this.#push(tableSource, {
-              type: 'remove',
-              row: prevValue,
-            });
           }
-        }
-        if (nextValue) {
-          if (editOldRow) {
-            yield* this.#push(tableSource, {
-              type: 'edit',
-              row: nextValue,
-              oldRow: editOldRow,
-            });
-          } else {
-            yield* this.#push(tableSource, {
-              type: 'add',
-              row: nextValue,
-            });
+          if (nextValue) {
+            if (editOldRow) {
+              yield* this.#push(tableSource, {
+                type: 'edit',
+                row: nextValue,
+                oldRow: editOldRow,
+              });
+            } else {
+              yield* this.#push(tableSource, {
+                type: 'add',
+                row: nextValue,
+              });
+            }
           }
+        } finally {
+          this.#advanceContext.pos++;
         }
-      } finally {
-        onChange(++pos);
+
+        const elapsed = performance.now() - start;
+        this.#advanceTime.record(elapsed / 1000, {
+          table,
+          type,
+        });
       }
 
-      const elapsed = performance.now() - start;
-      this.#advanceTime.record(elapsed / 1000, {
-        table,
-        type,
-      });
+      // Set the new snapshot on all TableSources.
+      const {curr} = diff;
+      for (const table of this.#tables.values()) {
+        table.setDB(curr.db.db);
+      }
+      this.#ensureCostModelExistsIfEnabled(curr.db.db);
+      this.#lc.debug?.(`Advanced to ${curr.version}`);
+    } finally {
+      this.#advanceContext = null;
     }
-
-    // Set the new snapshot on all TableSources.
-    const {curr} = diff;
-    for (const table of this.#tables.values()) {
-      table.setDB(curr.db.db);
-    }
-    this.#ensureCostModelExistsIfEnabled(curr.db.db);
-    this.#lc.debug?.(`Advanced to ${curr.version}`);
   }
 
   /** Implements `BuilderDelegate.getSource()` */
@@ -570,7 +594,7 @@ export class PipelineDriver {
     }
 
     const tableSpec = mustGetTableSpec(this.#tableSpecs, tableName);
-    const {primaryKey} = tableSpec.tableSpec;
+    const primaryKey = mustGetPrimaryKey(this.#primaryKeys, tableName);
 
     const {db} = this.#snapshotter.current();
     source = new TableSource(
@@ -580,10 +604,56 @@ export class PipelineDriver {
       tableName,
       tableSpec.zqlSpec,
       primaryKey,
+      () => this.#shouldYield(),
     );
     this.#tables.set(tableName, source);
     this.#lc.debug?.(`created TableSource for ${tableName}`);
     return source;
+  }
+
+  #shouldYield(): boolean {
+    if (this.#hydrateContext) {
+      return this.#hydrateContext.timer.elapsedLap() > this.#yieldThresholdMs();
+    }
+    if (this.#advanceContext) {
+      return this.#shouldAdvanceYieldMaybeAbortAdvance();
+    }
+    throw new Error('shouldYield called outside of hydration or advancement');
+  }
+
+  /**
+   * Cancel the advancement processing, by throwing a ResetPipelinesSignal, if
+   * it has taken longer than half the total hydration time to make it through
+   * half of the advancement, or if processing time exceeds total hydration
+   * time.  This serves as both a circuit breaker for very large transactions,
+   * as well as a bound on the amount of time the previous connection locks
+   * the inactive WAL file (as the lock prevents WAL2 from switching to the
+   * free WAL when the current one is over the size limit, which can make
+   * the WAL grow continuously and compound slowness).
+   * This is checked:
+   * 1. before starting to process each change in an advancement is processed
+   * 2. whenever a row is fetched from a TableSource during push processing
+   */
+  #shouldAdvanceYieldMaybeAbortAdvance(): boolean {
+    const {
+      pos,
+      numChanges,
+      timer: advanceTimer,
+      totalHydrationTimeMs,
+    } = must(this.#advanceContext);
+    const elapsed = advanceTimer.totalElapsed();
+    if (
+      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+      (elapsed > totalHydrationTimeMs ||
+        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
+    ) {
+      throw new ResetPipelinesSignal(
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
+          `after ${elapsed} ms. Advancement time limited based on total ` +
+          `hydration time of ${totalHydrationTimeMs} ms.`,
+      );
+    }
+    return advanceTimer.elapsedLap() > this.#yieldThresholdMs();
   }
 
   /** Implements `BuilderDelegate.createStorage()` */
@@ -591,51 +661,64 @@ export class PipelineDriver {
     return this.#storage.createStorage();
   }
 
-  *#push(source: TableSource, change: SourceChange): Iterable<RowChange> {
+  *#push(
+    source: TableSource,
+    change: SourceChange,
+  ): Iterable<RowChange | 'yield'> {
     this.#startAccumulating();
-    for (const _ of source.genPush(change)) {
-      yield* this.#stopAccumulating().stream();
-      this.#startAccumulating();
+    try {
+      for (const val of source.genPush(change)) {
+        if (val === 'yield') {
+          yield 'yield';
+        }
+        for (const changeOrYield of this.#stopAccumulating().stream()) {
+          yield changeOrYield;
+        }
+        this.#startAccumulating();
+      }
+    } finally {
+      if (this.#streamer !== null) {
+        this.#stopAccumulating();
+      }
     }
-    this.#stopAccumulating();
   }
 
   #startAccumulating() {
-    assert(this.#streamer === null);
-    this.#streamer = new Streamer(this.#tableSpecs);
+    assert(this.#streamer === null, 'Streamer already started');
+    this.#streamer = new Streamer(must(this.#primaryKeys));
   }
 
   #stopAccumulating(): Streamer {
     const streamer = this.#streamer;
-    assert(streamer);
+    assert(streamer, 'Streamer not started');
     this.#streamer = null;
     return streamer;
   }
 }
 
 class Streamer {
-  #tableSpecs: Map<string, LiteAndZqlSpec>;
+  readonly #primaryKeys: Map<string, PrimaryKey>;
 
-  constructor(tableSpecs: Map<string, LiteAndZqlSpec>) {
-    this.#tableSpecs = tableSpecs;
+  constructor(primaryKeys: Map<string, PrimaryKey>) {
+    this.#primaryKeys = primaryKeys;
   }
 
   readonly #changes: [
     hash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
+    changes: Iterable<Change | 'yield'>,
   ][] = [];
 
   accumulate(
     hash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
+    changes: Iterable<Change | 'yield'>,
   ): this {
     this.#changes.push([hash, schema, changes]);
     return this;
   }
 
-  *stream(): Iterable<RowChange> {
+  *stream(): Iterable<RowChange | 'yield'> {
     for (const [hash, schema, changes] of this.#changes) {
       yield* this.#streamChanges(hash, schema, changes);
     }
@@ -644,8 +727,8 @@ class Streamer {
   *#streamChanges(
     queryHash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
-  ): Iterable<RowChange> {
+    changes: Iterable<Change | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
     // We do not sync rows gathered by the permissions
     // system to the client.
     if (schema.system === 'permissions') {
@@ -653,6 +736,10 @@ class Streamer {
     }
 
     for (const change of changes) {
+      if (change === 'yield') {
+        yield change;
+        continue;
+      }
       const {type} = change;
 
       switch (type) {
@@ -687,15 +774,11 @@ class Streamer {
     queryHash: string,
     schema: SourceSchema,
     op: 'add' | 'remove' | 'edit',
-    nodes: () => Iterable<Node>,
-  ): Iterable<RowChange> {
+    nodes: () => Iterable<Node | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
     const {tableName: table, system} = schema;
 
-    // The primaryKey here is used for referencing rows in CVR and del-row
-    // patches sent in pokes. This is the "unionKey", i.e. the union of all
-    // columns in unique indexes. This allows clients to migrate from, e.g.
-    // pk1 to pk2, as del-patches will be keyed by [...pk1, ...pk2].
-    const primaryKey = must(this.#tableSpecs.get(table)).tableSpec.unionKey;
+    const primaryKey = must(this.#primaryKeys.get(table));
 
     // We do not sync rows gathered by the permissions
     // system to the client.
@@ -704,6 +787,10 @@ class Streamer {
     }
 
     for (const node of nodes()) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
       const {relationships, row} = node;
       const rowKey = getRowKey(primaryKey, row);
 
@@ -723,8 +810,12 @@ class Streamer {
   }
 }
 
-function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
+function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
   for (const node of nodes) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
     yield {type: 'add', node};
   }
 }
@@ -741,13 +832,50 @@ function getRowKey(cols: PrimaryKey, row: Row): RowKey {
 export function* hydrate(
   input: Input,
   hash: string,
-  tableSpecs: Map<string, LiteAndZqlSpec>,
-) {
+  clientSchema: ClientSchema,
+): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
-  const streamer = new Streamer(tableSpecs).accumulate(
+  const streamer = new Streamer(buildPrimaryKeys(clientSchema)).accumulate(
     hash,
     input.getSchema(),
     toAdds(res),
   );
   yield* streamer.stream();
+}
+
+export function* hydrateInternal(
+  input: Input,
+  hash: string,
+  primaryKeys: Map<string, PrimaryKey>,
+): Iterable<RowChange | 'yield'> {
+  const res = input.fetch({});
+  const streamer = new Streamer(primaryKeys).accumulate(
+    hash,
+    input.getSchema(),
+    toAdds(res),
+  );
+  yield* streamer.stream();
+}
+
+function buildPrimaryKeys(
+  clientSchema: ClientSchema,
+  primaryKeys: Map<string, PrimaryKey> = new Map<string, PrimaryKey>(),
+) {
+  for (const [tableName, {primaryKey}] of Object.entries(clientSchema.tables)) {
+    primaryKeys.set(tableName, primaryKey as unknown as PrimaryKey);
+  }
+  return primaryKeys;
+}
+
+function mustGetPrimaryKey(
+  primaryKeys: Map<string, PrimaryKey> | null,
+  table: string,
+): PrimaryKey {
+  const pKeys = must(primaryKeys, 'primaryKey map must be non-null');
+
+  return must(
+    pKeys.get(table),
+    `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
+      `Check the spelling and ensure that the table has a primary key.`,
+  );
 }

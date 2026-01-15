@@ -6,7 +6,7 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../query/named.ts';
+import {createBuilder} from '../../query/create-builder.ts';
 
 // Minimal test schema for planner tests
 const users = table('users')

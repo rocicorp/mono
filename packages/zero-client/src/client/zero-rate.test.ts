@@ -1,6 +1,7 @@
 import {beforeEach, expect, test, vi} from 'vitest';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import type {Mutation} from '../../../zero-protocol/src/push.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -8,9 +9,10 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const startTime = 1678829450000;
 
@@ -59,24 +61,36 @@ test('connection stays alive on rate limit error', async () => {
 });
 
 test('a mutation after a rate limit error causes limited mutations to be resent', async () => {
+  const schema = createSchema({
+    tables: [
+      table('issue')
+        .columns({
+          id: string(),
+          value: number(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    issue: {
+      insert: defineMutatorWithType<typeof schema>()<{
+        id: string;
+        value: number;
+      }>(async ({tx, args}) => {
+        await tx.mutate.issue.insert(args);
+      }),
+    },
+  });
   const z = zeroForTest({
-    schema: createSchema({
-      tables: [
-        table('issue')
-          .columns({
-            id: string(),
-            value: number(),
-          })
-          .primaryKey('id'),
-      ],
-    }),
+    schema,
+    mutators,
   });
   await z.triggerConnected();
   const mockSocket = await z.socket;
   // reset mock socket messages to clear `initConnection` message
   mockSocket.messages.length = 0;
 
-  await z.mutate.issue.insert({id: 'a', value: 1});
+  await z.mutate(mutators.issue.insert({id: 'a', value: 1})).client;
   await z.triggerError({
     kind: ErrorKind.MutationRateLimited,
     message: 'Rate limit exceeded',
@@ -92,7 +106,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   mockSocket.messages.length = 0;
 
   // now send another mutation
-  await z.mutate.issue.insert({id: 'b', value: 2});
+  await z.mutate(mutators.issue.insert({id: 'b', value: 2})).client;
   await z.triggerError({
     kind: ErrorKind.MutationRateLimited,
     message: 'Rate limit exceeded',
@@ -110,30 +124,41 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
 });
 
 test('previously confirmed mutations are not resent after a rate limit error', async () => {
+  const schema = createSchema({
+    tables: [
+      table('issue')
+        .columns({
+          id: string(),
+          value: number(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+  const mutators = defineMutatorsWithType<typeof schema>()({
+    issue: {
+      insert: defineMutatorWithType<typeof schema>()<{
+        id: string;
+        value: number;
+      }>(async ({tx, args}) => {
+        await tx.mutate.issue.insert(args);
+      }),
+    },
+  });
   const z = zeroForTest({
-    schema: createSchema({
-      tables: [
-        table('issue')
-          .columns({
-            id: string(),
-            value: number(),
-          })
-          .primaryKey('id'),
-      ],
-    }),
+    schema,
+    mutators,
   });
   await z.triggerConnected();
   const mockSocket = await z.socket;
   // reset mock socket messages to clear `initConnection` message
   mockSocket.messages.length = 0;
 
-  await z.mutate.issue.insert({id: 'a', value: 1});
+  await z.mutate(mutators.issue.insert({id: 'a', value: 1})).client;
   await tickAFewTimes(vi);
   // confirm the mutation
   await z.triggerPokeStart({
     pokeID: '1',
     baseCookie: null,
-    schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   await z.triggerPokePart({
     pokeID: '1',
@@ -146,7 +171,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   mockSocket.messages.length = 0;
 
   // now send another mutation but rate limit it
-  await z.mutate.issue.insert({id: 'b', value: 2});
+  await z.mutate(mutators.issue.insert({id: 'b', value: 2})).client;
   await z.triggerError({
     kind: ErrorKind.MutationRateLimited,
     message: 'Rate limit exceeded',
@@ -163,7 +188,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   mockSocket.messages.length = 0;
 
   // Send another mutation. This and the last rate limited mutation should be sent
-  await z.mutate.issue.insert({id: 'c', value: 3});
+  await z.mutate(mutators.issue.insert({id: 'c', value: 3})).client;
   await z.triggerError({
     kind: ErrorKind.MutationRateLimited,
     message: 'Rate limit exceeded',

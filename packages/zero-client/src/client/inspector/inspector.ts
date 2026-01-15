@@ -1,5 +1,9 @@
-import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
+import type {
+  AnalyzeQueryResult,
+  PlanDebugEventJSON,
+} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
+import {formatPlannerEvents} from '../../../../zql/src/planner/planner-debug.ts';
 import type {QueryDelegate} from '../../../../zql/src/query/query-delegate.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import type {ClientGroup} from './client-group.ts';
@@ -13,6 +17,7 @@ import type {
 
 export type {InspectorDelegate};
 
+// oxlint-disable-next-line consistent-type-imports
 export type Lazy = typeof import('./lazy-inspector.ts');
 
 export class Inspector {
@@ -23,7 +28,7 @@ export class Inspector {
   constructor(
     rep: Rep,
     inspectorDelegate: InspectorDelegate,
-    queryDelegate: QueryDelegate<unknown>,
+    queryDelegate: QueryDelegate,
     getSocket: () => Promise<WebSocket>,
   ) {
     this.#delegate = {
@@ -72,5 +77,12 @@ export class Inspector {
       query,
       options,
     );
+  }
+
+  /**
+   * Format planner debug events as a human-readable string.
+   */
+  formatPlannerEvents(events: PlanDebugEventJSON[]): string {
+    return formatPlannerEvents(events);
   }
 }

@@ -12,13 +12,12 @@ import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
-import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {InsertValue} from '../../../zql/src/mutate/crud.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
-import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import {bindingsForZero} from './bindings.ts';
+import {legacySchema} from '../../../zql/src/query/test/test-schemas.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {
@@ -28,13 +27,12 @@ import {
 } from './custom.ts';
 import {ClientError} from './error.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
-import {QueryManager} from './query-manager.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import {MockSocket, zeroForTest} from './test-utils.ts';
+import {asCustomQuery, MockSocket, queryID, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
 
-type Schema = typeof schema;
+type Schema = typeof legacySchema;
 type MutatorTx = Transaction<Schema>;
 
 afterEach(() => vi.restoreAllMocks());
@@ -94,14 +92,62 @@ test('argument types are preserved on the generated mutator interface', () => {
   }>();
 });
 
+test('argument types are preserved with arbitrary depth nesting', () => {
+  const mutators = {
+    level1: {
+      level2: {
+        level3: {
+          deepMutator: (
+            tx: MutatorTx,
+            {id, value}: {id: string; value: number},
+          ) => tx.mutate.issue.update({id, closed: value > 0}),
+        },
+        intermediateMutator: (tx: MutatorTx, id: string) =>
+          tx.mutate.issue.delete({id}),
+      },
+      topMutator: (
+        _tx: MutatorTx,
+        _args: {a: boolean; b: string; c?: number | undefined},
+      ) => Promise.resolve(),
+    },
+    flatMutator: (_tx: MutatorTx) => Promise.resolve(),
+  } as const;
+
+  type MutatorsInterface = MakeCustomMutatorInterfaces<
+    Schema,
+    typeof mutators,
+    unknown
+  >;
+
+  expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
+    readonly level1: {
+      readonly level2: {
+        readonly level3: {
+          readonly deepMutator: (args: {
+            id: string;
+            value: number;
+          }) => MutatorResult;
+        };
+        readonly intermediateMutator: (id: string) => MutatorResult;
+      };
+      readonly topMutator: (args: {
+        a: boolean;
+        b: string;
+        c?: number | undefined;
+      }) => MutatorResult;
+    };
+    readonly flatMutator: () => MutatorResult;
+  }>();
+});
+
 test('supports mutators without a namespace', async () => {
   const z = zeroForTest({
     logLevel: 'debug',
-    schema,
+    schema: legacySchema,
     mutators: {
       createIssue: async (
         tx: Transaction<Schema>,
-        args: InsertValue<typeof schema.tables.issue>,
+        args: InsertValue<typeof legacySchema.tables.issue>,
       ) => {
         await tx.mutate.issue.insert(args);
       },
@@ -117,41 +163,128 @@ test('supports mutators without a namespace', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  const issues = await z.run(z.query.issue);
+  const zql = createBuilder(legacySchema);
+  const issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('no-namespace');
+});
+
+test('supports arbitrary depth nesting of mutators', async () => {
+  const z = zeroForTest({
+    logLevel: 'debug',
+    schema: legacySchema,
+    mutators: {
+      level1: {
+        level2: {
+          level3: {
+            createIssue: async (
+              tx: Transaction<Schema>,
+              args: InsertValue<typeof legacySchema.tables.issue>,
+            ) => {
+              await tx.mutate.issue.insert(args);
+            },
+            updateTitle: async (
+              tx: Transaction<Schema>,
+              {id, title}: {id: string; title: string},
+            ) => {
+              await tx.mutate.issue.update({id, title});
+            },
+          },
+          anotherMutator: async (
+            tx: Transaction<Schema>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+        directMutator: async (tx: Transaction<Schema>, id: string) => {
+          await tx.mutate.issue.update({id, closed: true});
+        },
+      },
+      topLevel: async (tx: Transaction<Schema>, id: string) => {
+        await tx.mutate.issue.update({id, title: 'top-level'});
+      },
+    },
+  });
+
+  // Test deeply nested mutator
+  await z.mutate.level1.level2.level3.createIssue({
+    id: '1',
+    title: 'deeply-nested',
+    closed: false,
+    ownerId: '',
+    description: '',
+    createdAt: 1743018138477,
+  }).client;
+
+  const zql = createBuilder(legacySchema);
+
+  await z.markQueryAsGot(zql.issue);
+  let issues = await z.run(zql.issue);
+  expect(issues[0].title).toEqual('deeply-nested');
+
+  // Test deeply nested update
+  await z.mutate.level1.level2.level3.updateTitle({
+    id: '1',
+    title: 'updated-deep',
+  }).client;
+  issues = await z.run(zql.issue);
+  expect(issues[0].title).toEqual('updated-deep');
+
+  // Test intermediate level mutator
+  await z.mutate.level1.level2.anotherMutator({
+    id: '2',
+    title: 'intermediate',
+    closed: false,
+    ownerId: '',
+    description: '',
+    createdAt: 1743018138477,
+  }).client;
+  issues = await z.run(zql.issue);
+  expect(issues.length).toEqual(2);
+  expect(issues[1].title).toEqual('intermediate');
+
+  // Test level1 direct mutator
+  await z.mutate.level1.directMutator('2').client;
+  issues = await z.run(zql.issue);
+  expect(issues[1].closed).toEqual(true);
+
+  // Test top level mutator
+  await z.mutate.topLevel('1').client;
+  issues = await z.run(zql.issue);
+  expect(issues[0].title).toEqual('top-level');
 });
 
 test('detects collisions in mutator names', () => {
   expect(() =>
     zeroForTest({
       logLevel: 'debug',
-      schema,
+      schema: legacySchema,
       mutators: {
         'issue': {
           create: async (
             tx: Transaction<Schema>,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
           },
         },
         'issue|create': async (
           tx: Transaction<Schema>,
-          args: InsertValue<typeof schema.tables.issue>,
+          args: InsertValue<typeof legacySchema.tables.issue>,
         ) => {
           await tx.mutate.issue.insert(args);
         },
       },
     }),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: A mutator, or mutator namespace, has already been defined for issue|create]`,
+    `[Error: mutator names/namespaces must not include a |]`,
   );
 });
 
 test('custom mutators write to the local store', async () => {
   const z = zeroForTest({
     logLevel: 'debug',
-    schema,
+    schema: legacySchema,
     mutators: {
       issue: {
         setTitle: async (
@@ -171,7 +304,7 @@ test('custom mutators write to the local store', async () => {
         },
         create: async (
           tx: MutatorTx,
-          args: InsertValue<typeof schema.tables.issue>,
+          args: InsertValue<typeof legacySchema.tables.issue>,
         ) => {
           await tx.mutate.issue.insert(args);
         },
@@ -193,16 +326,18 @@ test('custom mutators write to the local store', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  await z.markQueryAsGot(z.query.issue);
-  let issues = await z.run(z.query.issue);
+  const zql = createBuilder(legacySchema);
+
+  await z.markQueryAsGot(zql.issue);
+  let issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('foo');
 
   await z.mutate.issue.setTitle({id: '1', title: 'bar'}).client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('bar');
 
   await z.mutate.customNamespace.clown('1').client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('🤡');
 
   await z.mutate.issue.create({
@@ -213,67 +348,117 @@ test('custom mutators write to the local store', async () => {
     description: '',
     createdAt: 1743018138477,
   }).client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues.length).toEqual(2);
 
   await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id})
     .client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues.length).toEqual(0);
 });
 
-test('custom mutators can query the local store during an optimistic mutation', async () => {
-  const z = zeroForTest({
-    schema,
-    mutators: {
-      issue: {
-        create: async (
-          tx: MutatorTx,
-          args: InsertValue<typeof schema.tables.issue>,
-        ) => {
-          await tx.mutate.issue.insert(args);
+describe('custom mutators can query the local store during an optimistic mutation', () => {
+  test.each([
+    ['tx.run(tx.query.issue)', (tx: MutatorTx) => tx.run(tx.query.issue)],
+    ['tx.query.issue.run()', (tx: MutatorTx) => tx.query.issue.run()],
+  ] as const)('%s can read data', async (_, runQuery) => {
+    let queryResult:
+      | readonly Row<typeof legacySchema.tables.issue>[]
+      | undefined;
+
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          createAndQuery: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof legacySchema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+            queryResult = await runQuery(tx);
+          },
         },
-        closeAll: async (tx: MutatorTx) => {
-          const issues = await tx.run(tx.query.issue);
-          await Promise.all(
-            issues.map(issue =>
-              tx.mutate.issue.update({id: issue.id, closed: true}),
-            ),
-          );
-        },
-      },
-    } as const,
+      } as const,
+    });
+
+    await z.mutate.issue.createAndQuery({
+      id: '1',
+      title: 'test issue',
+      closed: false,
+      description: '',
+      ownerId: '',
+      createdAt: 1743018138477,
+    }).client;
+
+    expect(queryResult).toEqual([
+      expect.objectContaining({id: '1', title: 'test issue'}),
+    ]);
   });
 
-  await Promise.all(
-    Array.from({length: 10}, async (_, i) => {
-      await z.mutate.issue.create({
-        id: i.toString().padStart(3, '0'),
-        title: `issue ${i}`,
-        closed: false,
-        description: '',
-        ownerId: '',
-        createdAt: 1743018138477,
-      }).client;
-    }),
-  );
+  test('closeAll using tx.run', async () => {
+    const zql = createBuilder(legacySchema);
 
-  const q = z.query.issue.where('closed', false);
-  await z.markQueryAsGot(q);
-  let issues = await z.run(q);
-  expect(issues.length).toEqual(10);
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          create: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof legacySchema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
 
-  await z.mutate.issue.closeAll().client;
+            // test if the issue was created
+            const createdIssue = await tx.run(
+              zql.issue.where('id', args.id).one(),
+            );
 
-  issues = await z.run(q);
-  expect(issues.length).toEqual(0);
+            expect(createdIssue).toEqual(
+              expect.objectContaining({id: args.id}),
+            );
+          },
+          closeAll: async (tx: MutatorTx) => {
+            const issues = await tx.run(zql.issue);
+            await Promise.all(
+              issues.map(issue =>
+                tx.mutate.issue.update({id: issue.id, closed: true}),
+              ),
+            );
+          },
+        },
+      } as const,
+    });
+
+    await Promise.all(
+      Array.from({length: 10}, async (_, i) => {
+        await z.mutate.issue.create({
+          id: i.toString().padStart(3, '0'),
+          title: `issue ${i}`,
+          closed: false,
+          description: '',
+          ownerId: '',
+          createdAt: 1743018138477,
+        }).client;
+      }),
+    );
+
+    const q = zql.issue.where('closed', false);
+    await z.markQueryAsGot(q);
+    let issues = await z.run(q);
+    expect(issues.length).toEqual(10);
+
+    await z.mutate.issue.closeAll().client;
+
+    issues = await z.run(q);
+    expect(issues.length).toEqual(0);
+  });
 });
 
 describe('rebasing custom mutators', () => {
   let branch: IVMSourceBranch;
   beforeEach(async () => {
     const {syncHash} = await createDb([], 42);
-    branch = new IVMSourceBranch(schema.tables);
+    branch = new IVMSourceBranch(legacySchema.tables);
     await branch.advance(undefined, syncHash, []);
   });
 
@@ -288,7 +473,7 @@ describe('rebasing custom mutators', () => {
           ivmSources: branch,
         },
       } as unknown as WriteTransaction,
-      schema,
+      legacySchema,
     ) as unknown as Transaction<Schema>;
 
     await tx1.mutate.issue.insert({
@@ -323,12 +508,12 @@ describe('rebasing custom mutators', () => {
 
   test('mutations can read their own writes', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           createAndReadCreated: async (
             tx: MutatorTx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
             const readIssue = must(
@@ -352,7 +537,9 @@ describe('rebasing custom mutators', () => {
       createdAt: 1743018138477,
     }).client;
 
-    const q = z.query.issue.where('id', '1').one();
+    const zql = createBuilder(legacySchema);
+
+    const q = asCustomQuery(zql.issue.where('id', '1').one(), 'a', '1');
     const issue = await z.run(q, {type: 'unknown'});
     expect(issue?.title).toEqual('foo updated');
     expect(issue?.description).toEqual('updated');
@@ -372,9 +559,7 @@ describe('rebasing custom mutators', () => {
     await vi.waitFor(async () => {
       const rep = getInternalReplicacheImplForTesting(z);
 
-      expect(
-        await rep.query(tx => tx.has(`g/${bindingsForZero(z).hash(q)}`)),
-      ).toEqual(true);
+      expect(await rep.query(tx => tx.has(`g/${queryID(q)}`))).toEqual(true);
     });
 
     expect(completed).toEqual(true);
@@ -388,12 +573,12 @@ describe('rebasing custom mutators', () => {
 
   test('the writes of a mutation are immediately available after awaiting the client promise', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             tx: MutatorTx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
           },
@@ -410,7 +595,9 @@ describe('rebasing custom mutators', () => {
         createdAt: 1743018138477,
       }).client;
 
-      const result = await z.run(z.query.issue.where('id', String(i)).one());
+      const zql = createBuilder(legacySchema);
+
+      const result = await z.run(zql.issue.where('id', String(i)).one());
       expect(result?.title).toEqual('foo ' + i);
       expect(result?.id).toEqual(String(i));
     }
@@ -418,17 +605,20 @@ describe('rebasing custom mutators', () => {
 
   test('mutations on main do not change main until they are committed', async () => {
     let mutationRun = false;
+
+    const zql = createBuilder(legacySchema);
+
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             tx: MutatorTx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
-            expect(await z.run(z.query.issue)).toHaveLength(0);
+            expect(await z.run(zql.issue)).toHaveLength(0);
             // but it is in this tx
             expect(await tx.run(tx.query.issue)).toHaveLength(1);
 
@@ -453,9 +643,8 @@ describe('rebasing custom mutators', () => {
 
 describe('error handling', () => {
   test('client-side errors surface as application errors on the client/server promises', async () => {
-    const onError = vi.fn();
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           // oxlint-disable-next-line require-await
@@ -464,7 +653,6 @@ describe('error handling', () => {
           },
         },
       } as const,
-      onError,
     });
 
     await z.triggerConnected();
@@ -475,6 +663,7 @@ describe('error handling', () => {
     const clientResult = await result.client;
     assert(clientResult.type === 'error');
     expect(clientResult.error.type).toBe('app');
+    assert(clientResult.error.type === 'app');
     expect(clientResult.error.details).toBeUndefined();
     expect(clientResult.error.message).toBe('client boom');
 
@@ -485,27 +674,18 @@ describe('error handling', () => {
     assert(serverResult.error.type === 'app');
     expect(serverResult.error.details).toBeUndefined();
 
-    await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalled();
-    });
-    expect(onError.mock.calls[0][0]).toMatchObject({
-      message: 'client boom',
-    });
-
     await z.close();
   });
 
   test('rejects outstanding custom mutation server promises when connection goes offline', async () => {
     const noop = vi.fn(async (_tx: MutatorTx) => {});
-    const onError = vi.fn();
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           noop,
         },
       } as const,
-      onError,
     });
 
     await z.triggerConnected();
@@ -524,21 +704,12 @@ describe('error handling', () => {
     const serverResult = await result.server;
     assert(serverResult.type === 'error');
     expect(serverResult.error.type).toBe('zero');
-    assert(serverResult.error.type === 'zero');
-    expect(serverResult.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
+    expect(serverResult.error.message).toBe('offline');
     expect(noop).toHaveBeenCalledTimes(1);
 
     // client promise was already resolved
     const clientResult = await result.client;
     assert(clientResult.type === 'success');
-
-    await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalledOnce();
-    });
-    expect(onError.mock.calls[0][0]).toBe(offlineError);
 
     await z.close();
   });
@@ -546,17 +717,15 @@ describe('error handling', () => {
   test('custom mutators short-circuit while offline and resume after reconnect', async () => {
     const topLevel = vi.fn(async (_tx: MutatorTx) => {});
     const namespaced = vi.fn(async (_tx: MutatorTx, _args: {id: string}) => {});
-    const onError = vi.fn();
 
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         topLevel,
         issue: {
           namespaced,
         },
       } as const,
-      onError,
     });
 
     await z.triggerConnected();
@@ -575,42 +744,23 @@ describe('error handling', () => {
     const offlineTopClient = await offlineTop.client;
     assert(offlineTopClient.type === 'error');
     expect(offlineTopClient.error.type).toBe('zero');
-    expect(offlineTopClient.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
+    expect(offlineTopClient.error.message).toBe('offline');
 
     const offlineTopServer = await offlineTop.server;
     assert(offlineTopServer.type === 'error');
     expect(offlineTopServer.error.type).toBe('zero');
-    expect(offlineTopServer.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
+    expect(offlineTopServer.error.message).toBe('offline');
 
     const offlineNamespacedClient = await offlineNamespaced.client;
     assert(offlineNamespacedClient.type === 'error');
     expect(offlineNamespacedClient.error.type).toBe('zero');
-    expect(offlineNamespacedClient.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
 
     const offlineNamespacedServer = await offlineNamespaced.server;
     assert(offlineNamespacedServer.type === 'error');
     expect(offlineNamespacedServer.error.type).toBe('zero');
-    expect(offlineNamespacedServer.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
 
     expect(topLevel).not.toHaveBeenCalled();
     expect(namespaced).not.toHaveBeenCalled();
-
-    await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalled();
-    });
-    expect(onError.mock.calls[0][0]).toBe(offlineError);
 
     z.connectionManager.connected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
@@ -642,16 +792,12 @@ describe('error handling', () => {
       ],
     });
 
-    expect(onError).toHaveBeenCalledTimes(1);
-
     await z.close();
   });
 
   test('run waiting for complete results throws in custom mutations', async () => {
-    const onErrorSpy = vi.fn();
-
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (tx: MutatorTx) => {
@@ -659,7 +805,6 @@ describe('error handling', () => {
           },
         },
       } as const,
-      onError: onErrorSpy,
     });
 
     await z.triggerConnected();
@@ -673,50 +818,12 @@ describe('error handling', () => {
       'Cannot wait for complete results in custom mutations',
     );
 
-    expect(onErrorSpy).toBeCalledTimes(1);
-    const error = onErrorSpy.mock.calls[0][0];
-    expect(error).toBeInstanceOf(ApplicationError);
-    expect(error.message).toBe(
-      'Cannot wait for complete results in custom mutations',
-    );
-
-    await z.close();
-  });
-
-  test('not awaiting the client promise still triggers onError', async () => {
-    const onErrorSpy = vi.fn();
-    const z = zeroForTest({
-      schema,
-      mutators: {
-        issue: {
-          // oxlint-disable-next-line require-await
-          create: async (_tx: MutatorTx) => {
-            throw new Error('test error');
-          },
-        },
-      } as const,
-      onError: onErrorSpy,
-    });
-
-    await z.triggerConnected();
-    await z.waitForConnectionStatus(ConnectionStatus.Connected);
-
-    // do not await the client promise
-    z.mutate.issue.create();
-
-    await vi.waitFor(() => {
-      expect(onErrorSpy).toBeCalledTimes(1);
-    });
-    const error = onErrorSpy.mock.calls[0][0];
-    expect(error).toBeInstanceOf(ApplicationError);
-    expect(error.message).toBe('test error');
-
     await z.close();
   });
 
   test('cannot await the promise directly', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       logLevel: 'warn',
       mutators: {
         issue: {
@@ -750,12 +857,12 @@ describe('server results and keeping read queries', () => {
 
   test('waiting for server results', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             _tx: MutatorTx,
-            _args: InsertValue<typeof schema.tables.issue>,
+            _args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {},
 
           close: async (_tx: MutatorTx, _args: object) => {},
@@ -817,6 +924,7 @@ describe('server results and keeping read queries', () => {
     assert(closeServerResult.type === 'error');
     expect(closeServerResult.error.type).toBe('app');
     expect(closeServerResult.error.message).toBe('application error');
+    assert(closeServerResult.error.type === 'app');
     expect(closeServerResult.error.details).toEqual({
       code: 'APP_ERROR',
       other: 'some other detail',
@@ -829,12 +937,12 @@ describe('server results and keeping read queries', () => {
     }
 
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             tx: MutatorTx,
-            _args: InsertValue<typeof schema.tables.issue>,
+            _args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.query.issue;
           },
@@ -855,7 +963,10 @@ describe('server results and keeping read queries', () => {
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-    const q = z.materialize(z.query.issue.limit(1));
+    const zql = createBuilder(legacySchema);
+
+    const q = asCustomQuery(zql.issue.limit(1), 'a', undefined);
+    const view = z.materialize(q);
     const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
@@ -866,14 +977,14 @@ describe('server results and keeping read queries', () => {
     });
     await create.client;
 
-    q.destroy();
+    view.destroy();
 
     z.queryDelegate.flushQueryChanges();
 
     // query is not removed, only put.
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"37augjshwgayh","name":"a","args":[],"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -891,7 +1002,6 @@ describe('server results and keeping read queries', () => {
     await z.triggerPokeStart({
       pokeID: '1',
       baseCookie: null,
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     await z.triggerPokePart({
       pokeID: '1',
@@ -907,23 +1017,24 @@ describe('server results and keeping read queries', () => {
     // mutation is no longer outstanding, query is removed.
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"37augjshwgayh"}]}]`,
       ]);
     });
 
     messages.length = 0;
 
     // check the error case
-    const q2 = z.materialize(z.query.issue);
+    const q2 = asCustomQuery(zql.issue, 'b', undefined);
+    const view2 = z.materialize(q2);
     const close = z.mutate.issue.close({});
     await close.client;
-    q2.destroy();
+    view2.destroy();
 
     z.queryDelegate.flushQueryChanges();
 
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1pmg07l6czqjy","name":"b","args":[],"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -946,7 +1057,6 @@ describe('server results and keeping read queries', () => {
     await z.triggerPokeStart({
       pokeID: '2',
       baseCookie: '1',
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     await z.triggerPokePart({
       pokeID: '2',
@@ -960,13 +1070,14 @@ describe('server results and keeping read queries', () => {
     assert(closeServerResult.type === 'error');
     expect(closeServerResult.error.type).toBe('app');
     expect(closeServerResult.error.message).toBe('womp womp');
+    assert(closeServerResult.error.type === 'app');
     expect(closeServerResult.error.details).toEqual({
       issue: 'not found',
     });
 
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1pmg07l6czqjy"}]}]`,
       ]);
     });
 
@@ -977,12 +1088,12 @@ describe('server results and keeping read queries', () => {
 
   test('after the server promise resolves (via poke), reads from the store return the data from the server', async () => {
     const z = zeroForTest({
-      schema,
+      schema: legacySchema,
       mutators: {
         issue: {
           create: async (
             _tx: MutatorTx,
-            _args: InsertValue<typeof schema.tables.issue>,
+            _args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {},
         },
       } as const,
@@ -1007,16 +1118,17 @@ describe('server results and keeping read queries', () => {
     });
     await create.client;
 
-    let foundIssue: Row<typeof schema.tables.issue> | undefined;
+    const zql = createBuilder(legacySchema);
+
+    let foundIssue: Row<typeof legacySchema.tables.issue> | undefined;
     void create.server.then(async () => {
-      foundIssue = await z.run(z.query.issue.where('id', '1').one());
+      foundIssue = await z.run(zql.issue.where('id', '1').one());
     });
 
     // confirm the mutation
     await z.triggerPokeStart({
       pokeID: '1',
       baseCookie: null,
-      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     await z.triggerPokePart({
       pokeID: '1',
@@ -1064,32 +1176,22 @@ describe('server results and keeping read queries', () => {
   });
 });
 
-test('trying to use crud mutators throws if `enableLegacyMutators` is set to false', async () => {
+test('crud mutators are not available if `enableLegacyMutators` is set to false', async () => {
   const z = zeroForTest({
     schema: {
-      ...schema,
+      ...legacySchema,
       enableLegacyMutators: false,
     },
   });
 
-  await expect(
-    // @ts-expect-error - Testing runtime behavior when legacy mutators are disabled
-    z.mutate.issue.insert({
-      id: '1',
-      title: 'foo',
-      closed: false,
-      description: '',
-      ownerId: '',
-      createdAt: 1743018138477,
-    }),
-  ).rejects.toThrow(ClientError);
+  expect('issue' in z.mutate).toBe(false);
 
   await z.close();
 });
 
 test('crud mutators work if `enableLegacyMutators` is set to true (or not set)', async () => {
   const z = zeroForTest({
-    schema,
+    schema: {...legacySchema, enableLegacyMutators: true},
   });
 
   await z.mutate.issue.insert({
@@ -1100,8 +1202,11 @@ test('crud mutators work if `enableLegacyMutators` is set to true (or not set)',
     ownerId: '',
     createdAt: 1743018138477,
   });
+
+  const zql = createBuilder(legacySchema);
+
   // read a row
-  await expect(z.run(z.query.issue.where('id', '1').one())).resolves.toEqual({
+  await expect(z.run(zql.issue.where('id', '1').one())).resolves.toEqual({
     id: '1',
     title: 'foo',
     closed: false,
@@ -1114,39 +1219,60 @@ test('crud mutators work if `enableLegacyMutators` is set to true (or not set)',
   await z.close();
 });
 
-test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
-  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
-  const z = zeroForTest({
-    schema: {
-      ...schema,
-      enableLegacyQueries: false,
-    },
+describe('enableLegacyQueries', () => {
+  beforeEach(() => {
+    vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
+
+    return () => {
+      vi.unstubAllGlobals();
+    };
   });
 
-  // mock the QueryManager class
-  // and spy on addLegacy
+  test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
+    const zql = createBuilder(legacySchema);
+    const z = zeroForTest({
+      schema: {
+        ...legacySchema,
+        enableLegacyQueries: false,
+      },
+    });
 
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await z.run(z.query.issue.where('id', '1').one());
+    const mockSocket = await z.socket;
 
-  expect(addLegacySpy).not.toHaveBeenCalled();
-  await z.close();
-});
+    // @ts-expect-error - this is testing the legacy query property when it's disabled
+    await z.run(zql.issue.where('id', '1').one());
+    z.queryDelegate.flushQueryChanges();
 
-test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
-  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
-
-  const z = zeroForTest({
-    schema,
+    // No changeDesiredQueries message should be sent
+    const changeDesiredQueriesMessages = mockSocket.jsonMessages.filter(
+      m => Array.isArray(m) && m[0] === 'changeDesiredQueries',
+    );
+    expect(changeDesiredQueriesMessages).toHaveLength(0);
+    await z.close();
   });
 
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+  test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
+    const zql = createBuilder(legacySchema);
+    const z = zeroForTest({
+      schema: {...legacySchema, enableLegacyQueries: true},
+    });
 
-  await z.run(z.query.issue.where('id', '1').one());
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  expect(addLegacySpy).toHaveBeenCalled();
-  await z.close();
+    const mockSocket = await z.socket;
+
+    await z.run(zql.issue.where('id', '1').one());
+    z.queryDelegate.flushQueryChanges();
+
+    // A changeDesiredQueries message should be sent
+    const changeDesiredQueriesMessages = mockSocket.jsonMessages.filter(
+      m => Array.isArray(m) && m[0] === 'changeDesiredQueries',
+    );
+    expect(changeDesiredQueriesMessages.length).toBeGreaterThan(0);
+    await z.close();
+  });
 });

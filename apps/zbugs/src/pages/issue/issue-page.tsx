@@ -1,5 +1,7 @@
-import {useQuery} from '@rocicorp/zero/react';
-import {useWindowVirtualizer, Virtualizer} from '@tanstack/react-virtual';
+import type {Row} from '@rocicorp/zero';
+import {useQuery, useZero} from '@rocicorp/zero/react';
+import type {Virtualizer} from '@tanstack/react-virtual';
+import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {
   memo,
@@ -22,13 +24,8 @@ import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
-import type {NotificationType} from '../../../shared/mutators.ts';
+import {mutators, type NotificationType} from '../../../shared/mutators.ts';
 import {queries, type ListContextParams} from '../../../shared/queries.ts';
-import {
-  type CommentRow,
-  type IssueRow,
-  type UserRow,
-} from '../../../shared/schema.ts';
 import circle from '../../assets/icons/circle.svg';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -56,7 +53,6 @@ import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
@@ -69,8 +65,6 @@ import {preload} from '../../zero-preload.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-
-const {emojiChange, issueDetail, issueListV2} = queries;
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -100,7 +94,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [listContext]);
 
   const [issue, issueResult] = useQuery(
-    issueDetail({idField, id, userID: z.userID}),
+    queries.issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -133,10 +127,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     ) {
       // only set to viewed if the user has looked at it for > 1 second
       const handle = setTimeout(() => {
-        z.mutate.viewState.set({
-          issueID: displayed.id,
-          viewed: Date.now(),
-        });
+        z.mutate(
+          mutators.viewState.set({
+            issueID: displayed.id,
+            viewed: Date.now(),
+          }),
+        );
       }, 1000);
       return () => clearTimeout(handle);
     }
@@ -172,7 +168,9 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     if (!editing) {
       return;
     }
-    z.mutate.issue.update({id: editing.id, ...edits, modified: Date.now()});
+    z.mutate(
+      mutators.issue.update({id: editing.id, ...edits, modified: Date.now()}),
+    );
     setEditing(null);
     setEdits({});
   };
@@ -217,7 +215,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   };
 
   const [[next]] = useQuery(
-    issueListV2({
+    queries.issueListV2({
       listContext: listContextParams,
       userID: z.userID,
       limit: 1,
@@ -236,7 +234,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [[prev]] = useQuery(
-    issueListV2({
+    queries.issueListV2({
       listContext: listContextParams,
       userID: z.userID,
       limit: 1,
@@ -262,8 +260,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [displayAllComments, setDisplayAllComments] = useState(false);
 
   const [allComments, allCommentsResult] = useQuery(
-    commentQuery(z, displayed),
-    {enabled: displayAllComments && displayed !== undefined, ...CACHE_NAV},
+    commentQuery(displayed?.id),
+    {
+      enabled: displayAllComments && displayed !== undefined,
+      ...CACHE_NAV,
+    },
   );
 
   const [comments, hasOlderComments] = useMemo(() => {
@@ -280,7 +281,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [displayed?.comments, allCommentsResult.type, allComments]);
 
   const issueDescriptionRef = useRef<HTMLDivElement | null>(null);
-  const restoreScrollRef = useRef<() => void>();
+  const restoreScrollRef = useRef<() => void>(undefined);
   const {listRef, virtualizer} = useVirtualComments(comments ?? []);
 
   // Restore scroll on changes to comments.
@@ -383,7 +384,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const remove = async () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    const result = z.mutate.issue.delete(displayed.id);
+    const result = z.mutate(mutators.issue.delete(displayed.id));
 
     // we wait for the client result to redirect to the list page
     const clientResult = await result.client;
@@ -429,7 +430,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               {!editing ? (
                 <>
                   <Button
-                    disabled={isOffline}
                     className="edit-button"
                     eventName="Edit issue"
                     onAction={() => setEditing(displayed)}
@@ -437,7 +437,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                     Edit
                   </Button>
                   <Button
-                    disabled={isOffline}
                     className="delete-button"
                     eventName="Delete issue"
                     onAction={() => setDeleteConfirmationShown(true)}
@@ -547,11 +546,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               ]}
               selectedValue={displayed.open}
               onChange={value =>
-                z.mutate.issue.update({
-                  id: displayed.id,
-                  open: value,
-                  modified: Date.now(),
-                })
+                z.mutate(
+                  mutators.issue.update({
+                    id: displayed.id,
+                    open: value,
+                    modified: Date.now(),
+                  }),
+                )
               }
             />
           </div>
@@ -566,11 +567,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               unselectedLabel="Nobody"
               filter="crew"
               onSelect={user => {
-                z.mutate.issue.update({
-                  id: displayed.id,
-                  assigneeID: user?.id ?? null,
-                  modified: Date.now(),
-                });
+                z.mutate(
+                  mutators.issue.update({
+                    id: displayed.id,
+                    assigneeID: user?.id ?? null,
+                    modified: Date.now(),
+                  }),
+                );
               }}
             />
           </div>
@@ -595,11 +598,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 ]}
                 selectedValue={displayed.visibility}
                 onChange={value =>
-                  z.mutate.issue.update({
-                    id: displayed.id,
-                    visibility: value,
-                    modified: Date.now(),
-                  })
+                  z.mutate(
+                    mutators.issue.update({
+                      id: displayed.id,
+                      visibility: value,
+                      modified: Date.now(),
+                    }),
+                  )
                 }
               />
             </div>
@@ -623,11 +628,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               ]}
               selectedValue={currentState}
               onChange={value =>
-                z.mutate.notification.update({
-                  issueID: displayed.id,
-                  subscribed: value,
-                  created: Date.now(),
-                })
+                z.mutate(
+                  mutators.notification.update({
+                    issueID: displayed.id,
+                    subscribed: value,
+                    created: Date.now(),
+                  }),
+                )
               }
             />
           </div>
@@ -654,28 +661,33 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             </div>
             <CanEdit ownerID={displayed.creatorID}>
               <LabelPicker
-                disabled={isOffline}
                 selected={labelSet}
                 projectName={projectName}
                 onAssociateLabel={labelID =>
-                  z.mutate.issue.addLabel({
-                    issueID: displayed.id,
-                    labelID,
-                  })
+                  z.mutate(
+                    mutators.issue.addLabel({
+                      issueID: displayed.id,
+                      labelID,
+                    }),
+                  )
                 }
                 onDisassociateLabel={labelID =>
-                  z.mutate.issue.removeLabel({
-                    issueID: displayed.id,
-                    labelID,
-                  })
+                  z.mutate(
+                    mutators.issue.removeLabel({
+                      issueID: displayed.id,
+                      labelID,
+                    }),
+                  )
                 }
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
-                  z.mutate.label.createAndAddToIssue({
-                    labelID,
-                    labelName,
-                    issueID: displayed.id,
-                  });
+                  z.mutate(
+                    mutators.label.createAndAddToIssue({
+                      labelID,
+                      labelName,
+                      issueID: displayed.id,
+                    }),
+                  );
                 }}
               />
             </CanEdit>
@@ -790,7 +802,9 @@ function getId(params: DefaultParams) {
 
 function maybeShowToastForEmoji(
   emoji: Emoji,
-  issue: IssueRow & {readonly comments: readonly CommentRow[]},
+  issue: Row['issue'] & {
+    readonly comments: readonly Row['comment'][];
+  },
   virtualizer: Virtualizer<Window, HTMLElement>,
   emojiElement: HTMLDivElement | null,
   setRecentEmojis: Dispatch<SetStateAction<Emoji[]>>,
@@ -998,21 +1012,21 @@ function noop() {
   // no op
 }
 
-type Issue = IssueRow & {
-  readonly comments: readonly CommentRow[];
+type Issue = Row['issue'] & {
+  readonly comments: readonly Row['comment'][];
 };
 
 function useEmojiChangeListener(
   issue: Issue | undefined,
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
-  const enabled = issue !== undefined;
   const issueID = issue?.id;
-  const [emojis, result] = useQuery(emojiChange(issueID ?? ''), {enabled});
+  const [emojis, result] = useQuery(issueID && queries.emojiChange(issueID));
 
-  const lastEmojis = useRef<Map<string, Emoji> | undefined>();
+  const lastEmojis = useRef<Map<string, Emoji>>(undefined);
 
   useEffect(() => {
+    if (!emojis) return;
     const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
 
     // First time we see the complete emojis for this issue.
@@ -1049,14 +1063,16 @@ function useEmojiChangeListener(
 
 function useShowToastForNewComment(
   comments:
-    | ReadonlyArray<CommentRow & {readonly creator: UserRow | undefined}>
+    | ReadonlyArray<
+        Row['comment'] & {readonly creator: Row['user'] | undefined}
+      >
     | undefined,
   virtualizer: Virtualizer<Window, HTMLElement>,
   highlightComment: (id: string) => void,
 ) {
   // Keep track of the last comment IDs so we can compare them to the current
   // comment IDs and show a toast for new comments.
-  const lastCommentIDs = useRef<Set<string> | undefined>();
+  const lastCommentIDs = useRef<Set<string>>(undefined);
   const {userID} = useZero();
 
   useEffect(() => {
@@ -1127,14 +1143,14 @@ function useShowToastForNewComment(
   }, [comments, virtualizer, userID, highlightComment]);
 }
 
-export function IssueRedirect() {
+export function IssueRedirect({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
 
   const {idField, id} = getId(params);
 
   const [issue, issueResult] = useQuery(
-    issueDetail({idField, id, userID: z.userID}),
+    queries.issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
   );
 
@@ -1150,8 +1166,9 @@ export function IssueRedirect() {
     }
   }, [issue]);
 
-  if ((!issue || issue.project) && issueResult.type === 'complete') {
+  if (!issue && issueResult.type === 'complete') {
+    onReady();
     return <NotFound></NotFound>;
   }
-  return undefined;
+  return null;
 }

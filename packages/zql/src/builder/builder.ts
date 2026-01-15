@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -36,6 +37,8 @@ import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
 import {planQuery} from '../planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../planner/planner-connection.ts';
+import {completeOrdering} from '../query/complete-ordering.ts';
+import type {PlanDebugger} from '../planner/planner-debug.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
@@ -124,10 +127,16 @@ export function buildPipeline(
   delegate: BuilderDelegate,
   queryID: string,
   costModel?: ConnectionCostModel,
+  lc?: LogContext,
+  planDebugger?: PlanDebugger,
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
+  ast = completeOrdering(
+    ast,
+    tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
+  );
   if (costModel) {
-    ast = planQuery(ast, costModel);
+    ast = planQuery(ast, costModel, planDebugger, lc);
   }
   return buildPipelineInternal(ast, delegate, queryID, '');
 }
@@ -618,7 +627,6 @@ function applyCorrelatedSubQuery(
   const join = new Join({
     parent: end,
     child,
-    storage: delegate.createStorage(joinName),
     parentKey: sq.correlation.parentField,
     childKey: sq.correlation.childField,
     relationshipName: sq.subquery.alias,
@@ -650,7 +658,6 @@ function applyCorrelatedSubqueryCondition(
   const existsName = `${name}:exists(${condition.related.subquery.alias})`;
   const exists = new Exists(
     input,
-    delegate.createStorage(existsName),
     must(condition.related.subquery.alias),
     condition.related.correlation.parentField,
     condition.op,

@@ -1,6 +1,6 @@
 import {beforeEach, describe, expect, vi} from 'vitest';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {Queue} from '../../../../shared/src/queue.ts';
+import type {Queue} from '../../../../shared/src/queue.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -11,12 +11,12 @@ import type {
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
-import {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
-import {DbFile} from '../../test/lite.ts';
+import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
-import {Subscription} from '../../types/subscription.ts';
+import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {
@@ -30,7 +30,8 @@ import {
   setup,
   TEST_ADMIN_PASSWORD,
 } from './view-syncer-test-util.ts';
-import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import type {ViewSyncerService} from './view-syncer.ts';
+import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
   let replicaDbFile: DbFile;
@@ -53,10 +54,10 @@ describe('view-syncer/service', () => {
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
+    profileID: 'p0000g00000003203',
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    schemaVersion: 2,
     tokenData: undefined,
     httpCookie: undefined,
   };

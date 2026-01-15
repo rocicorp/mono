@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {WebSocket} from 'ws';
 import {assert, unreachable} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
@@ -108,7 +108,10 @@ class CustomChangeSource implements ChangeSource {
       url.searchParams.append('publications', pub);
     }
     if (clientWatermark) {
-      assert(replicaVersion.length);
+      assert(
+        replicaVersion.length,
+        'replicaVersion is required when clientWatermark is set',
+      );
       url.searchParams.set('lastWatermark', clientWatermark);
       url.searchParams.set('replicaVersion', replicaVersion);
     }
@@ -244,10 +247,6 @@ function getRequiredTables({
     [`${appID}.permissions`]: {
       permissions: {type: 'json'},
       hash: {type: 'string'},
-    },
-    [`${appID}.schemaVersions`]: {
-      minSupportedVersion: {type: 'number'},
-      maxSupportedVersion: {type: 'number'},
     },
   };
 }

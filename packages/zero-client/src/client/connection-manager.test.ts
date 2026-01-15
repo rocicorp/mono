@@ -4,15 +4,15 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
-import type {ConnectionState} from './connection-manager.ts';
 import {
   ConnectionManager,
   throwIfConnectionError,
+  type ConnectionManagerState,
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientError, type AuthError} from './error.ts';
 
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 60 * 1000;
 
 const sharedDisconnectError = new ClientError({
   kind: ClientErrorKind.Offline,
@@ -30,7 +30,7 @@ describe('ConnectionManager', () => {
   });
 
   const subscribe = (manager: ConnectionManager) => {
-    const listener = vi.fn<(state: ConnectionState) => void>();
+    const listener = vi.fn<(state: ConnectionManagerState) => void>();
     manager.subscribe(listener);
     return listener;
   };
@@ -895,7 +895,7 @@ describe('ConnectionManager', () => {
 
   describe('throwIfConnectionError', () => {
     test('does nothing when state is connecting without reason', () => {
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.Connecting,
         attempt: 1,
         disconnectAt: 1_000,
@@ -909,7 +909,7 @@ describe('ConnectionManager', () => {
         kind: ClientErrorKind.ClientClosed,
         message: 'internal failure',
       });
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.Closed,
         reason,
       };
@@ -922,7 +922,7 @@ describe('ConnectionManager', () => {
         kind: ClientErrorKind.ConnectTimeout,
         message: 'connect timeout',
       });
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.Connecting,
         attempt: 2,
         disconnectAt: 2_000,
@@ -937,7 +937,7 @@ describe('ConnectionManager', () => {
         kind: ClientErrorKind.CleanClose,
         message: 'clean close',
       });
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.Error,
         reason,
       };
@@ -950,7 +950,7 @@ describe('ConnectionManager', () => {
         kind: ClientErrorKind.Internal,
         message: 'disconnect internal',
       });
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.Error,
         reason,
       };
@@ -964,7 +964,7 @@ describe('ConnectionManager', () => {
         message: 'unauthorized',
         origin: ErrorOrigin.ZeroCache,
       }) as AuthError;
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.NeedsAuth,
         reason,
       };

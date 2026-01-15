@@ -15,6 +15,8 @@ export {
 } from '../../replicache/src/persist/collect-idb-databases.ts';
 export type {ClientGroupID, ClientID} from '../../replicache/src/sync/ids.ts';
 export {TransactionClosedError} from '../../replicache/src/transaction-closed-error.ts';
+export type {Expand} from '../../shared/src/expand.ts';
+export type {Falsy} from '../../shared/src/falsy.ts';
 export type {
   JSONObject,
   JSONValue,
@@ -22,6 +24,10 @@ export type {
   ReadonlyJSONValue,
 } from '../../shared/src/json.ts';
 export type {MaybePromise} from '../../shared/src/types.ts';
+export type {
+  AnalyzeQueryResult,
+  PlanDebugEventJSON,
+} from '../../zero-protocol/src/analyze-query-result.ts';
 export {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 export type {ApplicationErrorOptions} from '../../zero-protocol/src/application-error.ts';
 export type {
@@ -51,14 +57,13 @@ export type {
 export {
   transformRequestMessageSchema,
   transformResponseMessageSchema,
+  type ErroredQuery,
   type TransformRequestBody,
   type TransformRequestMessage,
   type TransformResponseBody,
   type TransformResponseMessage,
 } from '../../zero-protocol/src/custom-queries.ts';
-export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
-export {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
-export {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
+export type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 export {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 export {
@@ -94,61 +99,102 @@ export type {
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+export type {
+  DefaultContext,
+  DefaultSchema,
+  DefaultTypes,
+  DefaultWrappedTransaction,
+} from '../../zero-types/src/default-types.ts';
 export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
 export type {Input, Output} from '../../zql/src/ivm/operator.ts';
 export type {Stream} from '../../zql/src/ivm/stream.ts';
-export {
-  applyChange,
-  type ViewChange,
-} from '../../zql/src/ivm/view-apply-change.ts';
 export type {
   AnyViewFactory,
   Entry,
+  EntryList,
   Format,
   View,
   ViewFactory,
 } from '../../zql/src/ivm/view.ts';
 export type {
+  CRUDMutator,
   DeleteID,
   InsertValue,
-  SchemaQuery,
-  ServerTransaction,
-  Transaction,
+  TableMutator,
   UpdateValue,
   UpsertValue,
+} from '../../zql/src/mutate/crud.ts';
+export type {
+  AnyTransaction,
+  Location,
+  ServerTransaction,
+  Transaction,
+  TransactionReason,
 } from '../../zql/src/mutate/custom.ts';
 export {
-  defineQuery,
-  defineQueryWithContextType,
-} from '../../zql/src/query/define-query.ts';
-export type {
-  AnyNamedQueryFunction,
-  DefineQueryFunc,
-  DefineQueryOptions,
-  NamedQueryFunction,
-} from '../../zql/src/query/define-query.ts';
+  defineMutators,
+  defineMutatorsWithType,
+  getMutator,
+  isMutatorRegistry,
+  mustGetMutator,
+  type AnyMutatorRegistry,
+  type AssertMutatorDefinitions,
+  type EnsureMutatorDefinitions,
+  type MutatorDefinitions,
+  type MutatorRegistry,
+  type ToMutatorTree,
+} from '../../zql/src/mutate/mutator-registry.ts';
+export {
+  defineMutator,
+  defineMutatorWithType,
+  isMutator,
+  isMutatorDefinition,
+  type MutateRequest,
+  type Mutator,
+  type MutatorDefinition,
+} from '../../zql/src/mutate/mutator.ts';
+export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
 export {
-  createBuilder,
   syncedQuery,
   syncedQueryWithContext,
   withValidation,
-} from '../../zql/src/query/named.ts';
-export type {
-  CustomQueryID,
-  HasParseFn,
-  ParseFn,
-  Parser,
-  QueryFn,
-  SyncedQuery,
+  type CustomQueryID,
+  type HasParseFn,
+  type ParseFn,
+  type Parser,
+  type QueryFn,
+  type SyncedQuery,
 } from '../../zql/src/query/named.ts';
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
+export {
+  defineQueries,
+  defineQueriesWithType,
+  defineQuery,
+  defineQueryWithType,
+  getQuery,
+  isQuery,
+  isQueryDefinition,
+  isQueryRegistry,
+  mustGetQuery,
+  type AnyCustomQuery,
+  type AnyQueryDefinition,
+  type AnyQueryRegistry,
+  type CustomQuery,
+  type FromQueryTree,
+  type QueryDefinition,
+  type QueryDefinitions,
+  type QueryOrQueryRequest,
+  type QueryRegistry,
+  type QueryRequest,
+} from '../../zql/src/query/query-registry.ts';
+export {type MaterializeOptions} from '../../zql/src/query/query.ts';
 export type {
   AnyQuery,
   HumanReadable,
@@ -160,54 +206,37 @@ export type {
   RunOptions,
   ZeRow,
 } from '../../zql/src/query/query.ts';
-export {RootNamedQuery} from '../../zql/src/query/root-named-query.ts';
+export type {
+  ConditionalSchemaQuery,
+  SchemaQuery,
+} from '../../zql/src/query/schema-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
-export {
-  bindingsForZero,
-  registerZeroDelegate,
-  type BindingsForZero,
-} from './client/bindings.ts';
-export {ClientErrorKind} from './client/client-error-kind.ts';
-export type {ConnectionState} from './client/connection-manager.ts';
 export {ConnectionStatus} from './client/connection-status.ts';
 export type {
   Connection,
   ConnectionSource,
+  ConnectionState,
   Source,
 } from './client/connection.ts';
-export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';
+export type {BatchMutator, DBMutator} from './client/crud.ts';
 export type {
   CustomMutatorDefs,
   CustomMutatorImpl,
   MakeCustomMutatorInterface,
   MakeCustomMutatorInterfaces,
-  MutationResultErrorDetails,
-  MutationResultSuccessDetails,
   MutatorResultDetails,
+  MutatorResultErrorDetails,
+  MutatorResultSuccessDetails,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
-export {isClientError, isServerError, isZeroError} from './client/error.ts';
-export type {
-  AuthError,
-  ClientError,
-  ClientErrorBody,
-  ClosedError,
-  NeedsAuthReason,
-  OfflineError,
-  ServerError,
-  ZeroError,
-  ZeroErrorBody,
-  ZeroErrorDetails,
-  ZeroErrorKind,
-} from './client/error.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
-export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';
+export {Zero, type ZeroMutate} from './client/zero.ts';
 export type {
   QueryErrorDetails,
   QueryResultDetails,

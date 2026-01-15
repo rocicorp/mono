@@ -228,10 +228,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
                ARRAY['2019-01-12T00:30:35.654321'::timestamp, '2019-01-12T00:30:35.123456'::timestamp],
                123456789012
                )`;
-      // schemaVersions
-      await tx`
-      UPDATE ${tx(APP_ID)}."schemaVersions" SET "maxSupportedVersion" = 2;
-      `;
     });
 
     const begin1 = (await downstream.dequeue()) as Begin;
@@ -273,13 +269,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
           times: [1547253035654.321, 1547253035123.456],
           num: 123456789012,
         },
-      },
-    ]);
-    expect(await downstream.dequeue()).toMatchObject([
-      'data',
-      {
-        tag: 'update',
-        new: {minSupportedVersion: 1, maxSupportedVersion: 2},
       },
     ]);
     const commit1 = (await downstream.dequeue()) as Commit;
@@ -569,18 +558,18 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
   test.each([
     [
-      'UnsupportedTableSchemaError: Table "invalid/character\\$" has invalid characters.',
+      'UnsupportedTableSchemaError: Table "invalid/character$" has invalid characters.',
       `
         ALTER TABLE foo RENAME TO "invalid/character$";
         INSERT INTO "invalid/character$"(id) VALUES('world');
       `,
     ],
     [
-      'UnsupportedSchemaChangeError: Replication halted',
+      'UnsupportedColumnDefaultError: Cannot ADD a column with CURRENT_TIME, CURRENT_DATE, or CURRENT_TIMESTAMP',
       `ALTER TABLE foo ADD bar TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP`,
     ],
     [
-      'UnsupportedSchemaChangeError: Replication halted',
+      'UnsupportedColumnDefaultError: Unsupported default value for foo.pubid: random()',
       `ALTER TABLE foo ADD pubid INT DEFAULT random()`,
     ],
     [
@@ -637,13 +626,27 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       ]);
       expect(await downstream.dequeue()).toMatchObject([
         'control',
-        {tag: 'reset-required'},
+        {
+          tag: 'reset-required',
+          message: expect.stringContaining(
+            'Unable to continue replication from LSN',
+          ),
+          errorDetails: {
+            error: expect.stringContaining(
+              'Unable to continue replication from LSN',
+            ),
+            reason: errMsg,
+            context: {
+              query: expect.stringContaining(stmt),
+            },
+          },
+        },
       ]);
 
       expect(logSink.messages[0]).toMatchObject([
         'error',
         {component: 'change-source'},
-        [expect.stringMatching(errMsg), {tag: 'message'}],
+        [expect.stringContaining(errMsg), {query: stmt}],
       ]);
     } finally {
       changes.cancel();
@@ -744,7 +747,18 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         ]);
         expect(await downstream.dequeue()).toMatchObject([
           'control',
-          {tag: 'reset-required'},
+          {
+            tag: 'reset-required',
+            message: expect.stringContaining(
+              'Unable to continue replication from LSN',
+            ),
+            errorDetails: {
+              error: expect.stringContaining(
+                'Unable to continue replication from LSN',
+              ),
+              reason: expect.stringContaining('MissingEventTriggerSupport'),
+            },
+          },
         ]);
 
         expect(logSink.messages[0]).toMatchObject([
@@ -752,7 +766,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
           {component: 'change-source'},
           [
             expect.stringMatching(
-              'UnsupportedSchemaChangeError: Replication halted. Resync the replica to recover',
+              /Unable to continue replication from LSN .* MissingEventTriggerSupport/,
             ),
             {tag: 'relation'},
           ],

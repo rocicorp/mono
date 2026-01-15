@@ -2,8 +2,9 @@ import type {Query, Transaction} from '@rocicorp/zero';
 import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import type {MutatorTx} from './mutators.ts';
 import {builder, type schema} from './schema.ts';
+
+// TDOO(arv): Use zod-mini here too
 
 /** The contents of the zbugs JWT */
 export const jwtDataSchema = v.object({
@@ -36,22 +37,27 @@ export function isAdmin(token: AuthData | undefined) {
 }
 
 export async function assertIsCreatorOrAdmin(
-  tx: MutatorTx,
+  tx: Transaction,
   authData: AuthData | undefined,
-  query: Query<typeof schema, 'comment' | 'issue' | 'emoji'>,
+  query: Query<'comment' | 'issue' | 'emoji'>,
   id: string,
 ) {
   assertIsLoggedIn(authData);
   if (isAdmin(authData)) {
     return;
   }
-  const creatorID = must(
-    await tx.run(query.where('id', id).one()),
-    `entity ${id} does not exist`,
-  ).creatorID;
-  if (authData.sub !== creatorID) {
+  const entity = await tx.run(query.where('id', id).one());
+  // Security: Use generic error message to avoid leaking entity existence
+  if (!entity) {
     throw new MutationError(
-      `User ${authData.sub} is not an admin or the creator of the target entity`,
+      `Not authorized to access this resource`,
+      MutationErrorCode.NOT_AUTHORIZED,
+      id,
+    );
+  }
+  if (authData.sub !== entity.creatorID) {
+    throw new MutationError(
+      `Not authorized to access this resource`,
       MutationErrorCode.NOT_AUTHORIZED,
       id,
     );
@@ -89,4 +95,10 @@ export async function assertUserCanSeeComment(
   );
 
   await assertUserCanSeeIssue(tx, userID, comment.issueID);
+}
+
+declare module '@rocicorp/zero' {
+  interface DefaultTypes {
+    context: AuthData | undefined;
+  }
 }

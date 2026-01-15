@@ -1,12 +1,14 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {AST, System} from '../../../zero-protocol/src/ast.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import type {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
-import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {
   ZeroContext,
@@ -48,20 +50,8 @@ function mockEndToEndTiming(
 }
 
 // Helper function to create a standard query
-function createTestQuery() {
-  const ast = {
-    table: 'users',
-    orderBy: [['id', 'asc'] as [string, 'asc' | 'desc']],
-  } as const;
-
-  return new QueryImpl(
-    schema,
-    ast.table,
-    ast,
-    {singular: false, relationships: {}},
-    'test' as System,
-    undefined,
-  ) as AnyQuery;
+function createTestQuery(): AnyQuery {
+  return newQuery(schema, 'users');
 }
 
 const schema = createSchema({
@@ -83,7 +73,7 @@ interface MockView {
 
 describe('query materialization metrics', () => {
   let addMetricSpy: ReturnType<typeof vi.fn>;
-  let queryDelegate: ZeroContext<unknown>;
+  let queryDelegate: ZeroContext;
   let gotCallback: ((got: boolean) => void) | undefined;
   let addServerQuerySpy: ReturnType<typeof vi.fn>;
   let addCustomQuerySpy: ReturnType<typeof vi.fn>;
@@ -126,14 +116,13 @@ describe('query materialization metrics', () => {
     queryDelegate = new ZeroContext(
       new LogContext('info'),
       new IVMSourceBranch(schema.tables),
-      'context',
       addServerQuerySpy as unknown as AddQuery,
       addCustomQuerySpy as unknown as AddCustomQuery,
       (() => {}) as unknown as UpdateQuery,
       (() => {}) as unknown as UpdateCustomQuery,
       (() => {}) as unknown as FlushQueryChanges,
       testBatchViewUpdates,
-      addMetricSpy,
+      addMetricSpy as ZeroContext['addMetric'],
       assertValidRunOptions,
     );
   });
@@ -154,7 +143,7 @@ describe('query materialization metrics', () => {
         expectedDelta: 35,
         setup: () => {
           const query = createTestQuery();
-          return queryDelegate.withContext(query).nameAndArgs('getUsers', []);
+          return asQueryInternals(query).nameAndArgs('getUsers', []);
         },
         additionalChecks: () => {
           expect(addCustomQuerySpy).toHaveBeenCalledOnce();
@@ -297,7 +286,7 @@ describe('query materialization metrics', () => {
         expectedDelta: 150,
         setup: () => {
           const query = createTestQuery();
-          return queryDelegate.withContext(query).nameAndArgs('getUsers', []);
+          return asQueryInternals(query).nameAndArgs('getUsers', []);
         },
         additionalChecks: () => {
           expect(addCustomQuerySpy).toHaveBeenCalledOnce();
@@ -330,7 +319,6 @@ describe('query materialization metrics', () => {
           expect.any(String),
           expect.objectContaining({
             table: 'users',
-            orderBy: [['id', 'asc']],
           }),
         );
 
@@ -420,7 +408,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       ]);
 
@@ -430,7 +417,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       ]);
 
@@ -476,7 +462,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       );
 
@@ -508,7 +493,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       );
 
@@ -521,8 +505,8 @@ describe('query materialization metrics', () => {
 
       // Add some test data to the source
       const source = queryDelegate.getSource('users') as MemorySource;
-      source.push({type: 'add', row: {id: 'user1', name: 'John'}});
-      source.push({type: 'add', row: {id: 'user2', name: 'Jane'}});
+      consume(source.push({type: 'add', row: {id: 'user1', name: 'John'}}));
+      consume(source.push({type: 'add', row: {id: 'user2', name: 'Jane'}}));
 
       const query = createTestQuery();
 
@@ -554,7 +538,6 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: [['id', 'asc']],
         }),
       );
 
@@ -564,7 +547,7 @@ describe('query materialization metrics', () => {
 
   describe('edge cases and error scenarios', () => {
     let addMetricSpy: ReturnType<typeof vi.fn>;
-    let context: ZeroContext<unknown>;
+    let context: ZeroContext;
 
     beforeEach(() => {
       vi.useFakeTimers();
@@ -574,14 +557,13 @@ describe('query materialization metrics', () => {
       context = new ZeroContext(
         new LogContext('info'),
         new IVMSourceBranch(schema.tables),
-        'context',
         (() => () => {}) as unknown as AddQuery,
         (() => () => {}) as unknown as AddCustomQuery,
         (() => {}) as unknown as UpdateQuery,
         (() => {}) as unknown as UpdateCustomQuery,
         (() => {}) as unknown as FlushQueryChanges,
         testBatchViewUpdates,
-        addMetricSpy,
+        addMetricSpy as ZeroContext['addMetric'],
         assertValidRunOptions,
       );
     });

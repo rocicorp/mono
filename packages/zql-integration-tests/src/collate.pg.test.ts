@@ -17,15 +17,16 @@ import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import {queryWithContext} from '../../zql/src/query/query-internals.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
-import {Database} from '../../zqlite/src/db.ts';
+import type {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
 import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 import './helpers/comparePg.ts';
 import {fillPgAndSync} from './helpers/setup.ts';
 
@@ -36,8 +37,8 @@ const DB_NAME = 'collate-test';
 let pg: PostgresDB;
 let nodePostgres: Client;
 let sqlite: Database;
-let queryDelegate: QueryDelegate<unknown>;
-let memoryQueryDelegate: QueryDelegate<unknown>;
+let queryDelegate: QueryDelegate;
+let memoryQueryDelegate: QueryDelegate;
 
 const createTableSQL = /*sql*/ `
 CREATE TYPE size AS ENUM('s', 'm', 'l', 'xl'); 
@@ -136,10 +137,12 @@ beforeAll(async () => {
 
   // Initialize memory sources with test data
   for (const row of testData.item) {
-    memorySources.item.push({
-      type: 'add',
-      row,
-    });
+    consume(
+      memorySources.item.push({
+        type: 'add',
+        row,
+      }),
+    );
   }
 
   // Check that PG, SQLite, and test data are in sync
@@ -208,9 +211,9 @@ describe('collation behavior', () => {
       expect(memoryResult).toEqualPg(pgResult);
 
       function makeQuery(
-        query: Query<Schema, 'item'>,
+        query: Query<'item', Schema>,
         i: number,
-      ): Query<Schema, 'item'> {
+      ): Query<'item', Schema> {
         return query
           .where(col, '>', memoryResult[i].name)
           .limit(1)
@@ -347,10 +350,10 @@ describe('collation behavior', () => {
 });
 
 async function runAsSQL(
-  q: Query<Schema, 'item'>,
+  q: Query<'item', Schema>,
   runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
-  const c = compile(serverSchema, schema, queryWithContext(q, undefined).ast);
+  const c = compile(serverSchema, schema, asQueryInternals(q).ast);
   const sqlQuery = formatPgInternalConvert(c);
   return extractZqlResult(
     await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),

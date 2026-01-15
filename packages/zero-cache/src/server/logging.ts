@@ -1,9 +1,5 @@
-import {
-  LogContext,
-  type Context,
-  type LogLevel,
-  type LogSink,
-} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
+import {type Context, type LogLevel, type LogSink} from '@rocicorp/logger';
 import {otelLogsEnabled} from '../../../otel/src/enabled.ts';
 import {
   createLogContext as createLogContextShared,

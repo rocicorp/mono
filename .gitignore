@@ -5,6 +5,9 @@
 
 # sqlite dbs
 *.db
+*.db-shm
+*.db-wal
+*.db-wal2
 
 # turbo
 .turbo
@@ -87,6 +90,7 @@ packages/zero/docs
 packages/zero-client/docs
 
 Chinook_PostgreSql.sql
+Pagila_PostgreSql.sql
 WARP.md
 *.db-shm
 *.db-wal

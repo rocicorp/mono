@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
 import {
@@ -21,8 +21,8 @@ const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 10,
-  schemaVersion: 10,
+  dataVersion: 11,
+  schemaVersion: 11,
   minSafeVersion: 1,
   lock: 'v',
 } as const;
@@ -69,9 +69,6 @@ describe('change-streamer/pg/schema/init', () => {
         ],
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        [`${APP_ID}.schemaVersions`]: [
-          {minSupportedVersion: 1, maxSupportedVersion: 1},
-        ],
       },
     },
     {
@@ -99,9 +96,6 @@ describe('change-streamer/pg/schema/init', () => {
         ],
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        [`${APP_ID}.schemaVersions`]: [
-          {minSupportedVersion: 1, maxSupportedVersion: 1},
-        ],
       },
     },
     {
@@ -124,9 +118,6 @@ describe('change-streamer/pg/schema/init', () => {
         [`${APP_ID}_${SHARD_NUM}.replicas`]: [],
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        [`${APP_ID}.schemaVersions`]: [
-          {minSupportedVersion: 2, maxSupportedVersion: 3},
-        ],
       },
     },
     {
@@ -149,11 +140,11 @@ describe('change-streamer/pg/schema/init', () => {
             true,
             '{"tables":[],"indexes":[]}'
           );
-        CREATE TABLE ${APP_ID}_${SHARD_NUM}."schemaVersions" 
-            ("lock" BOOL PRIMARY KEY, "minSupportedVersion" INT4, "maxSupportedVersion" INT4);
+        CREATE TABLE ${APP_ID}_${SHARD_NUM}."clients" 
+            ("clientGroupID" TEXT PRIMARY KEY, "clientID" TEXT, "lastMutationID" INT8);
 
         CREATE PUBLICATION ${id(metadataPublicationName(APP_ID, SHARD_NUM))}
-            FOR TABLE ${APP_ID}_${SHARD_NUM}."schemaVersions";
+            FOR TABLE ${APP_ID}_${SHARD_NUM}."clients";
   `,
       existingVersionHistory: {
         schemaVersion: 5,

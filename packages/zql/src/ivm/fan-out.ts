@@ -47,24 +47,34 @@ export class FanOut implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  filter(node: Node, cleanup: boolean): boolean {
+  beginFilter(): void {
+    for (const output of this.#outputs) {
+      output.beginFilter();
+    }
+  }
+
+  endFilter(): void {
+    for (const output of this.#outputs) {
+      output.endFilter();
+    }
+  }
+
+  *filter(node: Node): Generator<'yield', boolean> {
     let result = false;
     for (const output of this.#outputs) {
-      result = output.filter(node, cleanup) || result;
-      // Cleanup needs to be forwarded to all outputs, don't short circuit
-      // cleanup.  For non-cleanup we can short-circuit on first true.
-      if (!cleanup && result) {
+      result = (yield* output.filter(node)) || result;
+      if (result) {
         return true;
       }
     }
     return result;
   }
 
-  push(change: Change) {
+  *push(change: Change) {
     for (const out of this.#outputs) {
-      out.push(change, this);
+      yield* out.push(change, this);
     }
-    must(
+    yield* must(
       this.#fanIn,
       'fan-out must have a corresponding fan-in set!',
     ).fanOutDonePushingToAllBranches(change.type);

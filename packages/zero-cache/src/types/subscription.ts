@@ -157,7 +157,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       this.#messages[this.#messages.length - 1] !== 'terminus'
     ) {
       const prev = this.#messages[this.#messages.length - 1];
-      assert(prev !== 'terminus');
+      assert(prev !== 'terminus', 'prev should not be terminus after check');
       this.#messages[this.#messages.length - 1] = {
         value: this.#coalesce(entry, prev),
         resolve,

@@ -2,7 +2,6 @@ import classNames from 'classnames';
 import type {ReactNode} from 'react';
 import {useCallback, useState} from 'react';
 import {useDropzone, type FileRejection} from 'react-dropzone';
-import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {useLogin} from '../hooks/use-login.tsx';
 import {Button} from './button.tsx';
 import styles from './image-upload-area.module.css';
@@ -19,7 +18,7 @@ export type TextAreaPatch = {
 type ImageUploadAreaProps = {
   children: ReactNode;
   className?: string;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
+  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
   onInsert: (patch: TextAreaPatch) => void;
 };
 
@@ -69,7 +68,6 @@ export function ImageUploadArea({
 }: ImageUploadAreaProps) {
   const [isUploading, setIsUploading] = useState(false);
   const {loginState} = useLogin();
-  const isOffline = useIsOffline();
 
   const getSelection = useCallback((): TextAreaSelection | null => {
     const ta = textAreaRef.current;
@@ -277,7 +275,7 @@ export function ImageUploadArea({
           )}
           eventName="Upload image"
           onAction={open}
-          disabled={isUploading || isOffline}
+          disabled={isUploading}
           style={{
             top: textAreaRect.top + 16,
             left: textAreaRect.left + 16,

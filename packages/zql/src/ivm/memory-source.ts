@@ -10,13 +10,13 @@ import type {
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
-import {assertOrderingIncludesPK} from '../builder/builder.ts';
 import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import {
   createPredicate,
   transformFilters,
   type NoSubqueryCondition,
 } from '../builder/filter.ts';
+import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';
 import type {Change} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
@@ -33,6 +33,7 @@ import {
 } from './data.ts';
 import {filterPush} from './filter-push.ts';
 import {
+  skipYields,
   type FetchRequest,
   type Input,
   type Output,
@@ -50,7 +51,7 @@ import type {
 import type {Stream} from './stream.ts';
 
 export type Overlay = {
-  outputIndex: number;
+  epoch: number;
   change: SourceChange;
 };
 
@@ -78,6 +79,7 @@ export type Connection = {
       }
     | undefined;
   readonly debug?: DebugDelegate | undefined;
+  lastPushedEpoch: number;
 };
 
 /**
@@ -96,6 +98,7 @@ export class MemorySource implements Source {
   readonly #connections: Connection[] = [];
 
   #overlay: Overlay | undefined;
+  #pushEpoch = 0;
 
   constructor(
     tableName: string,
@@ -113,13 +116,11 @@ export class MemorySource implements Source {
       data: primaryIndexData ?? new BTreeSet<Row>(comparator),
       usedBy: new Set(),
     });
-    assertOrderingIncludesPK(this.#primaryIndexSort, this.#primaryKey);
   }
 
-  // Mainly for tests.
-  getSchemaInfo() {
+  get tableSchema() {
     return {
-      tableName: this.#tableName,
+      name: this.#tableName,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
     };
@@ -162,7 +163,6 @@ export class MemorySource implements Source {
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
-      cleanup: req => this.#cleanup(req, connection),
       setOutput: output => {
         connection.output = output;
       },
@@ -184,6 +184,7 @@ export class MemorySource implements Source {
             predicate: createPredicate(transformedFilters.filters),
           }
         : undefined,
+      lastPushedEpoch: 0,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -248,10 +249,7 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  *#fetch(req: FetchRequest, from: Connection): Stream<Node> {
-    const callingConnectionIndex = this.#connections.indexOf(from);
-    assert(callingConnectionIndex !== -1, 'Output not found');
-    const conn = this.#connections[callingConnectionIndex];
+  *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
     const {sort: requestedSort, compareRows} = conn;
     const connectionComparator = (r1: Row, r2: Row) =>
       compareRows(r1, r2) * (req.reverse ? -1 : 1);
@@ -283,7 +281,7 @@ export class MemorySource implements Source {
       indexSort.push(...requestedSort);
     }
 
-    const index = this.#getOrCreateIndex(indexSort, from);
+    const index = this.#getOrCreateIndex(indexSort, conn);
     const {data, comparator: compare} = index;
     const indexComparator = (r1: Row, r2: Row) =>
       compare(r1, r2) * (req.reverse ? -1 : 1);
@@ -328,7 +326,7 @@ export class MemorySource implements Source {
       // rather than as the fetch constraint.
       req.constraint,
       this.#overlay,
-      callingConnectionIndex,
+      conn.lastPushedEpoch,
       // Use indexComparator, generateWithOverlayInner has a subtle dependency
       // on this.  Since generateWithConstraint is done after
       // generateWithOverlay, the generator consumed by generateWithOverlayInner
@@ -343,7 +341,9 @@ export class MemorySource implements Source {
     );
 
     const withConstraint = generateWithConstraint(
-      generateWithStart(withOverlay, req.start, connectionComparator),
+      skipYields(
+        generateWithStart(withOverlay, req.start, connectionComparator),
+      ),
       // we use `req.constraint` and not `fetchOrPkConstraint` here because we need to
       // AND the constraint with what could have been the primary key constraint
       req.constraint,
@@ -354,13 +354,11 @@ export class MemorySource implements Source {
       : withConstraint;
   }
 
-  #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
-    return this.#fetch(req, connection);
-  }
-
-  push(change: SourceChange): void {
-    for (const _ of this.genPush(change)) {
-      // Nothing to do.
+  *push(change: SourceChange): Stream<'yield'> {
+    for (const result of this.genPush(change)) {
+      if (result === 'yield') {
+        yield result;
+      }
     }
   }
 
@@ -376,6 +374,7 @@ export class MemorySource implements Source {
       exists,
       setOverlay,
       writeChange,
+      () => ++this.#pushEpoch,
     );
   }
 
@@ -385,13 +384,19 @@ export class MemorySource implements Source {
         case 'add': {
           const added = data.add(change.row);
           // must succeed since we checked has() above.
-          assert(added);
+          assert(
+            added,
+            'MemorySource: add must succeed since row existence was already checked',
+          );
           break;
         }
         case 'remove': {
           const removed = data.delete(change.row);
           // must succeed since we checked has() above.
-          assert(removed);
+          assert(
+            removed,
+            'MemorySource: remove must succeed since row existence was already checked',
+          );
           break;
         }
         case 'edit': {
@@ -401,7 +406,10 @@ export class MemorySource implements Source {
           // not map to the same entry as the new `row` in the index btree.
           const removed = data.delete(change.oldRow);
           // must succeed since we checked has() above.
-          assert(removed);
+          assert(
+            removed,
+            'MemorySource: edit remove must succeed since row existence was already checked',
+          );
           data.add(change.row);
           break;
         }
@@ -438,6 +446,7 @@ export function* genPushAndWriteWithSplitEdit(
   exists: (row: Row) => boolean,
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
+  getNextEpoch: () => number,
 ) {
   let shouldSplitEdit = false;
   if (change.type === 'edit') {
@@ -463,6 +472,7 @@ export function* genPushAndWriteWithSplitEdit(
       exists,
       setOverlay,
       writeChange,
+      getNextEpoch(),
     );
     yield* genPushAndWrite(
       connections,
@@ -473,6 +483,7 @@ export function* genPushAndWriteWithSplitEdit(
       exists,
       setOverlay,
       writeChange,
+      getNextEpoch(),
     );
   } else {
     yield* genPushAndWrite(
@@ -481,6 +492,7 @@ export function* genPushAndWriteWithSplitEdit(
       exists,
       setOverlay,
       writeChange,
+      getNextEpoch(),
     );
   }
 }
@@ -491,8 +503,9 @@ function* genPushAndWrite(
   exists: (row: Row) => boolean,
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
+  pushEpoch: number,
 ) {
-  for (const x of genPush(connections, change, exists, setOverlay)) {
+  for (const x of genPush(connections, change, exists, setOverlay, pushEpoch)) {
     yield x;
   }
   writeChange(change);
@@ -503,6 +516,7 @@ function* genPush(
   change: SourceChange,
   exists: (row: Row) => boolean,
   setOverlay: (o: Overlay | undefined) => void,
+  pushEpoch: number,
 ) {
   switch (change.type) {
     case 'add':
@@ -521,9 +535,11 @@ function* genPush(
       unreachable(change);
   }
 
-  for (const [outputIndex, {output, filters, input}] of connections.entries()) {
+  for (const conn of connections) {
+    const {output, filters, input} = conn;
     if (output) {
-      setOverlay({outputIndex, change});
+      conn.lastPushedEpoch = pushEpoch;
+      setOverlay({epoch: pushEpoch, change});
       const outputChange: Change =
         change.type === 'edit'
           ? {
@@ -544,8 +560,8 @@ function* genPush(
                 relationships: {},
               },
             };
-      filterPush(outputChange, output, input, filters?.predicate);
-      yield;
+      yield* filterPush(outputChange, output, input, filters?.predicate);
+      yield undefined;
     }
   }
 
@@ -553,16 +569,20 @@ function* genPush(
 }
 
 export function* generateWithStart(
-  nodes: Iterable<Node>,
+  nodes: Iterable<Node | 'yield'>,
   start: Start | undefined,
   compare: (r1: Row, r2: Row) => number,
-): Stream<Node> {
+): Stream<Node | 'yield'> {
   if (!start) {
     yield* nodes;
     return;
   }
   let started = false;
   for (const node of nodes) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
     if (!started) {
       if (start.basis === 'at') {
         if (compare(node.row, start.row) >= 0) {
@@ -597,12 +617,12 @@ export function* generateWithOverlay(
   rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
-  connectionIndex: number,
+  lastPushedEpoch: number,
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
 ) {
   let overlayToApply: Overlay | undefined = undefined;
-  if (overlay && connectionIndex <= overlay.outputIndex) {
+  if (overlay && lastPushedEpoch >= overlay.epoch) {
     overlayToApply = overlay;
   }
   const overlays = computeOverlays(

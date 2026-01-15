@@ -1,11 +1,11 @@
-import * as v from '../../../../../shared/src/valita.ts';
-import type {Database} from '../../../../../zqlite/src/db.ts';
-import {StatementRunner} from '../../../db/statements.ts';
 import {
   jsonObjectSchema,
   parse,
   stringify,
 } from '../../../../../shared/src/bigint-json.ts';
+import * as v from '../../../../../shared/src/valita.ts';
+import type {Database} from '../../../../../zqlite/src/db.ts';
+import type {StatementRunner} from '../../../db/statements.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
 import type {LiteRowKey} from '../../../types/lite.ts';
 import {normalizedKeyOrder} from '../../../types/row-key.ts';
@@ -48,25 +48,30 @@ export const RESET_OP = 'r';
 
 const CREATE_CHANGELOG_SCHEMA =
   // stateVersion : a.k.a. row version
+  // pos          : order in which to process the change (within the version)
   // table        : The table associated with the change
-  // rowKey       : JSON row key for a row change. For table-wide changes,
-  //                this is set to '', which guarantees that they sort before
-  //                any (subsequent) row-level changes. Note that because
-  //                RESET and TRUNCATE use the same rowKey, only the last
-  //                one will persist. This is fine because they are both
-  //                handled in the same way, i.e. by resetting the pipelines,
-  //                as they cannot be processed via change log entries.
-  // op           : 't' for table truncation
+  // rowKey       : JSON row key for a row change. For table-wide changes RESET
+  //                and TRUNCATE, there is no associated row; instead, `pos` is
+  //                set to -1 and the rowKey is set to the stateVersion,
+  //                guaranteeing when attempting to process the transaction,
+  //                the pipeline is reset (and the change log traversal
+  //                aborted).
+  // op           : 's' for set (insert/update)
+  //              : 'd' for delete
   //              : 'r' for table reset (schema change)
-  //                's' for set (insert/update)
-  //                'd' for delete
+  //              : 't' for table truncation (which also resets the pipeline)
+  //
+  // Naming note: To maintain compatibility between a new replication-manager
+  // and old view-syncers, the previous _zero.changeLog table is preserved
+  // and its replacement given a new name "changeLog2".
   `
-  CREATE TABLE "_zero.changeLog" (
+  CREATE TABLE "_zero.changeLog2" (
     "stateVersion" TEXT NOT NULL,
+    "pos"          INT  NOT NULL,
     "table"        TEXT NOT NULL,
-    "rowKey"       TEXT,
+    "rowKey"       TEXT NOT NULL,
     "op"           TEXT NOT NULL,
-    PRIMARY KEY("stateVersion", "table", "rowKey"),
+    PRIMARY KEY("stateVersion", "pos"),
     UNIQUE("table", "rowKey")
   )
   `;
@@ -74,14 +79,18 @@ const CREATE_CHANGELOG_SCHEMA =
 export const changeLogEntrySchema = v
   .object({
     stateVersion: v.string(),
+    pos: v.number(),
     table: v.string(),
-    rowKey: v.string().nullable(),
+    rowKey: v.string(),
     op: v.literalUnion(SET_OP, DEL_OP, TRUNCATE_OP, RESET_OP),
   })
   .map(val => ({
     ...val,
-    // Note: the empty string "" (for table-wide ops) will result in `null`
-    rowKey: val.rowKey ? v.parse(parse(val.rowKey), jsonObjectSchema) : null,
+    // Note: sets the rowKey to `null` for table-wide ops / resets
+    rowKey:
+      val.op === 't' || val.op === 'r'
+        ? null
+        : v.parse(parse(val.rowKey), jsonObjectSchema),
   }));
 
 export type ChangeLogEntry = v.Infer<typeof changeLogEntrySchema>;
@@ -93,24 +102,27 @@ export function initChangeLog(db: Database) {
 export function logSetOp(
   db: StatementRunner,
   version: LexiVersion,
+  pos: number,
   table: string,
   row: LiteRowKey,
 ): string {
-  return logRowOp(db, version, table, row, SET_OP);
+  return logRowOp(db, version, pos, table, row, SET_OP);
 }
 
 export function logDeleteOp(
   db: StatementRunner,
   version: LexiVersion,
+  pos: number,
   table: string,
   row: LiteRowKey,
 ): string {
-  return logRowOp(db, version, table, row, DEL_OP);
+  return logRowOp(db, version, pos, table, row, DEL_OP);
 }
 
 function logRowOp(
   db: StatementRunner,
   version: LexiVersion,
+  pos: number,
   table: string,
   row: LiteRowKey,
   op: string,
@@ -118,11 +130,11 @@ function logRowOp(
   const rowKey = stringify(normalizedKeyOrder(row));
   db.run(
     `
-    INSERT OR REPLACE INTO "_zero.changeLog" 
-      (stateVersion, "table", rowKey, op)
-      VALUES (@version, @table, JSON(@rowKey), @op)
+    INSERT OR REPLACE INTO "_zero.changeLog2" 
+      (stateVersion, pos, "table", rowKey, op)
+      VALUES (@version, @pos, @table, JSON(@rowKey), @op)
     `,
-    {version, table, rowKey, op},
+    {version, pos, table, rowKey, op},
   );
   return rowKey;
 }
@@ -152,7 +164,7 @@ function logTableWideOp(
   // table wide op invalidates them.
   db.run(
     `
-    DELETE FROM "_zero.changeLog" WHERE stateVersion = ? AND "table" = ?
+    DELETE FROM "_zero.changeLog2" WHERE stateVersion = ? AND "table" = ?
     `,
     version,
     table,
@@ -160,10 +172,9 @@ function logTableWideOp(
 
   db.run(
     `
-    INSERT OR REPLACE INTO "_zero.changeLog" (stateVersion, "table", rowKey, op) 
-      VALUES (@version, @table, @rowKey, @op)
+    INSERT OR REPLACE INTO "_zero.changeLog2" (stateVersion, pos, "table", rowKey, op) 
+      VALUES (@version, -1, @table, @version, @op)
     `,
-    // See file JSDoc for explanation of the rowKey w.r.t. ordering of table-wide ops.
-    {version, table, rowKey: '', op},
+    {version, table, op},
   );
 }

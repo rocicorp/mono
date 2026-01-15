@@ -1,5 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {bench, describe, expect} from 'vitest';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {getInternalReplicacheImplForTesting, Zero} from './zero.ts';
 
@@ -25,6 +26,7 @@ const schema = {
     user,
   },
   relationships: {},
+  enableLegacyMutators: true,
 } as const;
 type UserRow = Row<typeof user>;
 
@@ -34,10 +36,13 @@ const N = 1_000;
 
 const z = new Zero({
   schema,
-  server: null,
+  cacheURL: null,
   userID,
   kvStore: 'idb',
 });
+
+const zql = createBuilder(schema);
+
 await z.mutateBatch(async m => {
   for (let i = 0; i < N; i++) {
     await m.user.insert({
@@ -61,7 +66,7 @@ describe('basics', () => {
     `All ${N} rows x 10 columns (numbers)`,
     async () => {
       const {promise, resolve} = resolver<readonly UserRow[]>();
-      const m = z.materialize(z.query.user);
+      const m = z.materialize(zql.user);
       m.addListener(data => {
         if (data.length === N) {
           resolve(data as readonly UserRow[]);
@@ -83,7 +88,7 @@ describe('pk compare', () => {
     async () => {
       const {promise, resolve} = resolver<readonly UserRow[]>();
       const value = N - 1;
-      const m = z.materialize(z.query.user.where('a', value));
+      const m = z.materialize(zql.user.where('a', value));
       m.addListener(data => {
         if (data.length === 1) {
           resolve(data as readonly UserRow[]);
@@ -104,7 +109,7 @@ describe('with filter', () => {
     `Lower rows ${N / 2} x 10 columns (numbers)`,
     async () => {
       const {promise, resolve} = resolver<readonly UserRow[]>();
-      const m = z.materialize(z.query.user.where('a', '<', N / 2));
+      const m = z.materialize(zql.user.where('a', '<', N / 2));
       m.addListener(data => {
         if (data.length === N / 2) {
           resolve(data as readonly UserRow[]);

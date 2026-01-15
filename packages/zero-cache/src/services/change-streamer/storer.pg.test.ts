@@ -2,9 +2,10 @@ import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import {DEFAULT_BACK_PRESSURE_THRESHOLD} from '../../config/zero-config.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
-import {Subscription} from '../../types/subscription.ts';
+import type {Subscription} from '../../types/subscription.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
 import type {StatusMessage} from '../change-source/protocol/current/status.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
@@ -96,6 +97,7 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
+        DEFAULT_BACK_PRESSURE_THRESHOLD,
       );
       await storer.assumeOwnership();
       done = storer.run();
@@ -891,6 +893,7 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
+        DEFAULT_BACK_PRESSURE_THRESHOLD,
       );
       await storer.assumeOwnership();
       done = storer.run();

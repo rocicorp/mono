@@ -3,7 +3,8 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {fork} from 'node:child_process';
 import {WebSocketServer} from 'ws';
 import {randInt} from '../../../packages/shared/src/rand.ts';
-import {Database, Statement} from '../../../packages/zqlite/src/db.ts';
+import type {Statement} from '../../../packages/zqlite/src/db.ts';
+import {Database} from '../../../packages/zqlite/src/db.ts';
 
 const lc = new LogContext('info', {}, consoleLogSink);
 

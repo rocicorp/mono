@@ -7,6 +7,7 @@ import {getServerVersion, getZeroConfig} from '../../config/zero-config.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
 import {createLogContext} from '../logging.ts';
+import {MAIN_URL} from '../worker-urls.ts';
 import {getTaskID} from './runtime.ts';
 import {ZeroDispatcher} from './zero-dispatcher.ts';
 
@@ -44,7 +45,7 @@ export async function runWorker(
       lc.info?.('starting zero-cache');
 
       const r = (zeroCache = resolver<Worker>());
-      const w = childWorker('./server/main.ts', env)
+      const w = childWorker(MAIN_URL, env)
         .once('message', () => {
           r.resolve(w);
           lc.info?.(`zero-cache ready (${performance.now() - startMs} ms)`);

@@ -10,22 +10,27 @@ import {
   type Accessor,
   type JSX,
 } from 'solid-js';
-import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
-import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
-import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
+import {
+  Zero,
+  type CustomMutatorDefs,
+  type DefaultContext,
+  type DefaultSchema,
+  type Schema,
+  type ZeroOptions,
+} from './zero.ts';
 
-// oxlint-disable-next-line no-explicit-any
-const ZeroContext = createContext<Accessor<Zero<any, any, any>> | undefined>(
-  undefined,
-);
+const ZeroContext = createContext<
+  // oxlint-disable-next-line no-explicit-any
+  Accessor<Zero<any, any, any>> | undefined
+>(undefined);
 
-const NO_AUTH_SET = Symbol();
-
+/**
+ * @deprecated Use {@linkcode ZeroProvider} instead of managing your own Zero instance.
+ */
 export function createZero<
-  S extends Schema,
-  MD extends CustomMutatorDefs,
-  Context,
+  S extends Schema = DefaultSchema,
+  MD extends CustomMutatorDefs | undefined = undefined,
+  Context = DefaultContext,
 >(options: ZeroOptions<S, MD, Context>): Zero<S, MD, Context> {
   const opts = {
     ...options,
@@ -35,9 +40,9 @@ export function createZero<
 }
 
 export function useZero<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  Context = DefaultContext,
 >(): () => Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
 
@@ -47,20 +52,36 @@ export function useZero<
   return zero;
 }
 
+/**
+ * @deprecated Use {@linkcode useZero} instead, alongside default types defined with:
+ *
+ * ```ts
+ * declare module '@rocicorp/zero' {
+ *   interface DefaultTypes {
+ *     schema: typeof schema;
+ *     context: Context;
+ *   }
+ * }
+ */
 export function createUseZero<
-  S extends Schema,
+  S extends Schema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  Context = DefaultContext,
 >() {
   return () => useZero<S, MD, Context>();
 }
 
+const NO_AUTH_SET = Symbol();
+
 export function ZeroProvider<
-  S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  Context,
+  S extends Schema = DefaultSchema,
+  MD extends CustomMutatorDefs | undefined = undefined,
+  Context = DefaultContext,
 >(
-  props: {children: JSX.Element; init?: (zero: Zero<S, MD>) => void} & (
+  props: {
+    children: JSX.Element;
+    init?: (zero: Zero<S, MD, Context>) => void;
+  } & (
     | {
         zero: Zero<S, MD, Context>;
       }
@@ -85,15 +106,16 @@ export function ZeroProvider<
     return createdZero;
   });
 
-  const auth = createMemo<typeof NO_AUTH_SET | ZeroOptions<S, MD>['auth']>(
-    () => ('auth' in props ? props.auth : NO_AUTH_SET),
-  );
+  const auth = createMemo<
+    typeof NO_AUTH_SET | ZeroOptions<S, MD, Context>['auth']
+  >(() => ('auth' in props ? props.auth : NO_AUTH_SET));
 
-  let prevAuth: typeof NO_AUTH_SET | ZeroOptions<S, MD>['auth'] = NO_AUTH_SET;
+  let prevAuth: typeof NO_AUTH_SET | ZeroOptions<S, MD, Context>['auth'] =
+    NO_AUTH_SET;
 
   createEffect(() => {
     const currentZero = zero();
-    if (!currentZero) {
+    if (!currentZero || 'zero' in props) {
       return;
     }
 

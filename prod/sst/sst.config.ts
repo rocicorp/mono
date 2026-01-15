@@ -3,7 +3,6 @@
 // Load .env file
 require('@dotenvx/dotenvx').config();
 import {createDefu} from 'defu';
-import {join} from 'node:path';
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
   if (typeof obj[key] === 'function' || typeof value === 'function') {
@@ -55,12 +54,14 @@ export default $config({
       ZERO_APP_PUBLICATIONS: process.env.ZERO_APP_PUBLICATIONS!,
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
       ZERO_ADMIN_PASSWORD: process.env.ZERO_ADMIN_PASSWORD!,
-      ZERO_PUSH_URL: process.env.ZERO_PUSH_URL!,
-      ZERO_GET_QUERIES_URL: process.env.ZERO_GET_QUERIES_URL!,
+      ZERO_MUTATE_URL: process.env.ZERO_MUTATE_URL!,
+      ZERO_QUERY_URL: process.env.ZERO_QUERY_URL!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
       ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,
       ZERO_LOG_FORMAT: 'json',
+      ZERO_ENABLE_QUERY_PLANNER:
+        process.env.ZERO_ENABLE_QUERY_PLANNER || 'true',
       ZERO_REPLICA_FILE: IS_EBS_STAGE
         ? '/data/sync-replica.db'
         : 'sync-replica.db',
@@ -72,6 +73,8 @@ export default $config({
       OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
+      OTEL_NODE_ENABLED_INSTRUMENTATIONS:
+        '@opentelemetry/instrumentation-runtime-node',
       OTEL_NODE_RESOURCE_DETECTORS: 'env,host,os',
       OTEL_LOG_LEVEL: 'warn',
     };
@@ -270,51 +273,5 @@ export default $config({
       // take a lot longer and is only necessary if there is an AST format change.
       wait: false,
     });
-
-    if ($app.stage === 'sandbox-disabled') {
-      // In sandbox, deploy permissions in a Lambda.
-      const permissionsDeployer = new sst.aws.Function(
-        'zero-permissions-deployer',
-        {
-          handler: '../functions/src/permissions.deploy',
-          vpc,
-          environment: {
-            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
-            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
-          },
-          copyFiles: [
-            {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
-          ],
-          nodejs: {install: ['@rocicorp/zero']},
-        },
-      );
-      new aws.lambda.Invocation(
-        'invoke-zero-permissions-deployer',
-        {
-          // Invoke the Lambda on every deploy.
-          input: Date.now().toString(),
-          functionName: permissionsDeployer.name,
-        },
-        {dependsOn: viewSyncer},
-      );
-    } else {
-      // In prod, deploy permissions via a local Command, to exercise both approaches.
-      new command.local.Command(
-        'zero-deploy-permissions',
-        {
-          // Pulumi operates with cwd at the package root.
-          dir: join(process.cwd(), '../../packages/zero/'),
-          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
-          environment: {
-            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
-            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
-          },
-          // Run the Command on every deploy.
-          triggers: [Date.now()],
-        },
-        // after the view-syncer is deployed.
-        {dependsOn: viewSyncer},
-      );
-    }
   },
 });

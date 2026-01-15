@@ -1,14 +1,14 @@
 import {beforeEach, describe, expect, vi} from 'vitest';
 import {h128} from '../../../../shared/src/hash.ts';
-import {Queue} from '../../../../shared/src/queue.ts';
+import type {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
 import {type PgTest, test} from '../../test/db.ts';
-import {DbFile} from '../../test/lite.ts';
+import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
-import {Subscription} from '../../types/subscription.ts';
+import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {
@@ -19,7 +19,8 @@ import {
   permissions,
   setup,
 } from './view-syncer-test-util.ts';
-import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import type {ViewSyncerService} from './view-syncer.ts';
+import {type SyncContext} from './view-syncer.ts';
 
 describe('permissions', () => {
   let stateChanges: Subscription<ReplicaState>;
@@ -36,10 +37,10 @@ describe('permissions', () => {
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
+    profileID: 'p0000g00000003203',
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    schemaVersion: 2,
     tokenData: {
       raw: '',
       decoded: {sub: 'foo', role: 'user', iat: 0},
@@ -83,10 +84,6 @@ describe('permissions', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -135,10 +132,6 @@ describe('permissions', () => {
           {
             "baseCookie": null,
             "pokeID": "01:02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -245,10 +238,6 @@ describe('permissions', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -315,10 +304,6 @@ describe('permissions', () => {
           {
             "baseCookie": "01",
             "pokeID": "05",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -402,10 +387,6 @@ describe('permissions', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
@@ -457,10 +438,6 @@ describe('permissions', () => {
           {
             "baseCookie": "00:01",
             "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [

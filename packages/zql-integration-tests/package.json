@@ -24,7 +24,7 @@
     "@types/tmp": "^0.2.6",
     "otel": "0.0.0",
     "shared": "0.0.0",
-    "typescript": "~5.8.2",
+    "typescript": "~5.9.3",
     "z2s": "0.0.0",
     "zero-cache": "0.0.0",
     "zero-protocol": "0.0.0",
