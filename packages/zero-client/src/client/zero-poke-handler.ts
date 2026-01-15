@@ -15,7 +15,10 @@ import type {
   PokePartBody,
   PokeStartBody,
 } from '../../../zero-protocol/src/poke.ts';
-import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {
+  GotQueriesPatchOp,
+  DesiredQueriesPatchOp,
+} from '../../../zero-protocol/src/queries-patch.ts';
 import type {RowPatchOp} from '../../../zero-protocol/src/row-patch.ts';
 import {
   serverToClient,
@@ -305,7 +308,7 @@ export function mergePokes(
 }
 
 function queryPatchOpToReplicachePatchOp(
-  op: QueriesPatchOp,
+  op: GotQueriesPatchOp | DesiredQueriesPatchOp,
   toKey: (hash: string) => string,
 ): PatchOperation {
   switch (op.op) {
@@ -320,7 +323,7 @@ function queryPatchOpToReplicachePatchOp(
       return {
         op: 'put',
         key: toKey(op.hash),
-        value: null,
+        value: op,
       };
     default:
       unreachable(op);

@@ -159,6 +159,8 @@ describe('view-syncer/cvr-purger', () => {
               patchVersion: null,
               internal: null,
               deleted: null,
+              errorMessage: null,
+              errorVersion: null,
             },
           ],
           desires: [
@@ -170,6 +172,7 @@ describe('view-syncer/cvr-purger', () => {
               deleted: null,
               inactivatedAt: null,
               ttl: DEFAULT_TTL_MS,
+              retryErrorVersion: null,
             },
           ],
           rows: [

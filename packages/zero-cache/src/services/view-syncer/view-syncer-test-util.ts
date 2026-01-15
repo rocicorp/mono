@@ -7,7 +7,7 @@ import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {PokePartBody} from '../../../../zero-protocol/src/poke.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {DesiredQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {
   clientSchemaFrom,
@@ -498,7 +498,7 @@ export function removeQuery(
 function changeDesiredQueries(
   vs: ViewSyncerService,
   ctx: SyncContext,
-  desiredQueriesPatch: UpQueriesPatch,
+  desiredQueriesPatch: DesiredQueriesPatch,
 ): Promise<void> {
   return vs.changeDesiredQueries(ctx, [
     'changeDesiredQueries',
@@ -755,7 +755,7 @@ export async function setup(
 
   function connectWithQueueAndSource(
     ctx: SyncContext,
-    desiredQueriesPatch: UpQueriesPatch,
+    desiredQueriesPatch: DesiredQueriesPatch,
     clientSchema: ClientSchema | null = defaultClientSchema,
     activeClients?: string[],
   ): {queue: Queue<Downstream>; source: Source<Downstream>} {
@@ -784,7 +784,7 @@ export async function setup(
 
   function connect(
     ctx: SyncContext,
-    desiredQueriesPatch: UpQueriesPatch,
+    desiredQueriesPatch: DesiredQueriesPatch,
     clientSchema?: ClientSchema | null,
   ) {
     return connectWithQueueAndSource(ctx, desiredQueriesPatch, clientSchema)

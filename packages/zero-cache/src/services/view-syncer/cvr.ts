@@ -31,6 +31,8 @@ import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
 import {
   cmpVersions,
   maxVersion,
+  maybeVersionFromString,
+  maybeVersionString,
   oneAfter,
   type ClientQueryRecord,
   type ClientRecord,
@@ -312,6 +314,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       name?: string | undefined;
       args?: readonly ReadonlyJSONValue[] | undefined;
       ttl?: number | undefined;
+      retryErrorVersion?: string | undefined;
     }>[],
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
@@ -352,6 +355,19 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         continue;
       }
 
+      // Update if retryErrorVersion is greater than the old one (undefined
+      // is never greater than anything).
+      if (
+        q.retryErrorVersion !== undefined &&
+        (oldClientState.retryErrorVersion === undefined ||
+          q.retryErrorVersion >
+            maybeVersionString(oldClientState.retryErrorVersion))
+      ) {
+        // Retried query - record for telemetry
+        recordQueryForTelemetry(q);
+        needed.add(hash);
+      }
+
       if (compareTTL(ttl, oldClientState.ttl) > 0) {
         // TTL update only - don't record for telemetry
         needed.add(hash);
@@ -379,6 +395,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         inactivatedAt,
         ttl,
         version: newVersion,
+        retryErrorVersion: maybeVersionFromString(q.retryErrorVersion),
       };
       this._cvr.queries[id] = query;
       patches.push({
@@ -394,6 +411,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         false,
         inactivatedAt,
         ttl,
+        maybeVersionFromString(q.retryErrorVersion),
       );
     }
     return patches;
