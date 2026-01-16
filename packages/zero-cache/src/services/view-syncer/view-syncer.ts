@@ -1132,8 +1132,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.userQueryURL,
           );
 
-        // only process queries that successfully transformed and transformed to
-        // the same transformationHash as in the CVR here
+        // Only process queries that successfully transformed and transformed to
+        // the same transformationHash as in the CVR here.
+        // Queries that failed to transform will be retransformed by
+        // #syncQueryPipelineSet, if they fail again errors will be sent to
+        // the client.
         if (Array.isArray(transformedCustomQueries)) {
           for (const q of transformedCustomQueries) {
             if (
