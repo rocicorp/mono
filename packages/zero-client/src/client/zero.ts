@@ -1484,7 +1484,9 @@ export class Zero<
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
           userPushURL: this.#options.mutateURL,
+          userPushHeaders: this.#options.mutateHeaders,
           userQueryURL: this.#options.queryURL ?? this.#options.getQueriesURL,
+          userQueryHeaders: this.#options.queryHeaders,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1593,7 +1595,9 @@ export class Zero<
       this.#options.logLevel === 'debug',
       lc,
       this.#options.mutateURL,
+      this.#options.mutateHeaders,
       this.#options.queryURL ?? this.#options.getQueriesURL,
+      this.#options.queryHeaders,
       additionalConnectParams,
       await this.#activeClientsManager,
       this.#options.maxHeaderLength,
@@ -2365,7 +2369,9 @@ export async function createSocket(
   debugPerf: boolean,
   lc: LogContext,
   userPushURL: string | undefined,
+  userPushHeaders: Record<string, string> | undefined,
   userQueryURL: string | undefined,
+  userQueryHeaders: Record<string, string> | undefined,
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
   maxHeaderLength = 1024 * 8,
@@ -2414,7 +2420,9 @@ export async function createSocket(
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
         userPushURL,
+        userPushHeaders,
         userQueryURL,
+        userQueryHeaders,
         activeClients: [...activeClients],
       },
     ],

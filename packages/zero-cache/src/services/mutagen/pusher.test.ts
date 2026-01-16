@@ -334,7 +334,7 @@ describe('pusher service', () => {
       'cgid',
     );
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined);
+    pusher.initConnection(clientID, wsID, undefined, undefined);
 
     pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
 
@@ -343,6 +343,43 @@ describe('pusher service', () => {
     expect(fetch.mock.calls[0][1]?.headers).toEqual({
       'Content-Type': 'application/json',
       'X-Api-Key': 'api-key',
+      'Authorization': 'Bearer jwt',
+    });
+
+    fetch.mockReset();
+  });
+
+  test('the service sends custom headers from initConnection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    pusher.initConnection(clientID, wsID, undefined, {
+      'x-vercel-automation-bypass-secret': 'my-secret',
+      'x-custom-header': 'custom-value',
+    });
+
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
+
+    await pusher.stop();
+
+    expect(fetch.mock.calls[0][1]?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Api-Key': 'api-key',
+      'x-vercel-automation-bypass-secret': 'my-secret',
+      'x-custom-header': 'custom-value',
       'Authorization': 'Bearer jwt',
     });
 
@@ -367,7 +404,7 @@ describe('pusher service', () => {
       'cgid',
     );
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined);
+    pusher.initConnection(clientID, wsID, undefined, undefined);
 
     pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
 
@@ -400,7 +437,7 @@ describe('pusher service', () => {
     );
 
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined);
+    pusher.initConnection(clientID, wsID, undefined, undefined);
     pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     // release control of the loop so the push can be sent
     await Promise.resolve();
@@ -450,7 +487,7 @@ describe('pusher service', () => {
       'cgid',
     );
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined);
+    pusher.initConnection(clientID, wsID, undefined, undefined);
 
     pusher.enqueuePush(clientID, makePush(1), 'jwt', 'my-cookie');
 
@@ -477,7 +514,7 @@ describe('pusher service', () => {
       'cgid',
     );
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined);
+    pusher.initConnection(clientID, wsID, undefined, undefined);
 
     pusher.enqueuePush(clientID, makePush(1), 'jwt', 'my-cookie');
 
@@ -551,7 +588,7 @@ describe('initConnection', () => {
     );
     void pusher.run();
 
-    // const result = pusher.initConnection(clientID, wsID, undefined);
+    // const result = pusher.initConnection(clientID, wsID, undefined, undefined);
     // expect(result.type).toBe('stream');
   });
 
@@ -568,10 +605,10 @@ describe('initConnection', () => {
       'cgid',
     );
     void pusher.run();
-    pusher.initConnection('c1', 'ws1', undefined);
-    expect(() => pusher.initConnection('c1', 'ws1', undefined)).toThrow(
-      'Connection was already initialized',
-    );
+    pusher.initConnection('c1', 'ws1', undefined, undefined);
+    expect(() =>
+      pusher.initConnection('c1', 'ws1', undefined, undefined),
+    ).toThrow('Connection was already initialized');
   });
 
   test('initConnection destroys prior stream for same client when wsID changes', async () => {
@@ -587,8 +624,8 @@ describe('initConnection', () => {
       'cgid',
     );
     void pusher.run();
-    const stream1 = pusher.initConnection('c1', 'ws1', undefined);
-    pusher.initConnection('c1', 'ws2', undefined);
+    const stream1 = pusher.initConnection('c1', 'ws1', undefined, undefined);
+    pusher.initConnection('c1', 'ws2', undefined, undefined);
     const iterator = stream1[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
       done: true,
@@ -618,7 +655,7 @@ describe('initConnection', () => {
 
     const userPushURL = 'http://custom.com/push';
 
-    pusher.initConnection(clientID, wsID, userPushURL);
+    pusher.initConnection(clientID, wsID, userPushURL, undefined);
     pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
 
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -651,7 +688,7 @@ describe('initConnection', () => {
     );
     void pusher.run();
 
-    pusher.initConnection(clientID, wsID, undefined);
+    pusher.initConnection(clientID, wsID, undefined, undefined);
     pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
 
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -684,7 +721,7 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    pusher.initConnection(clientID, wsID, undefined);
+    pusher.initConnection(clientID, wsID, undefined, undefined);
     pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     const result = pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     expect(result.type).toBe('ok');
@@ -704,7 +741,12 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const stream1 = pusher.initConnection(clientID, 'ws1', undefined);
+    const stream1 = pusher.initConnection(
+      clientID,
+      'ws1',
+      undefined,
+      undefined,
+    );
 
     pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
@@ -712,7 +754,7 @@ describe('pusher streaming', () => {
 
     // After cleanup, should get a new stream (even if same wsid)
     expect(() =>
-      pusher.initConnection(clientID, 'ws1', undefined),
+      pusher.initConnection(clientID, 'ws1', undefined, undefined),
     ).not.toThrow();
   });
 
@@ -730,8 +772,13 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const stream1 = pusher.initConnection(clientID, 'ws1', undefined);
-    pusher.initConnection(clientID, 'ws2', undefined);
+    const stream1 = pusher.initConnection(
+      clientID,
+      'ws1',
+      undefined,
+      undefined,
+    );
+    pusher.initConnection(clientID, 'ws2', undefined, undefined);
 
     // should not be iterable anymore as it is closed by the arrival of ws2
     const iterator = stream1[Symbol.asyncIterator]();
@@ -766,7 +813,7 @@ describe('pusher errors', () => {
     );
     void pusher.run();
 
-    const stream = pusher.initConnection(clientID, 'ws1', undefined);
+    const stream = pusher.initConnection(clientID, 'ws1', undefined, undefined);
     pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
     const iterator = stream[Symbol.asyncIterator]();
@@ -910,7 +957,7 @@ describe('pusher errors', () => {
       'cgid',
     );
     void pusher.run();
-    const stream = pusher.initConnection(clientID, wsID, undefined);
+    const stream = pusher.initConnection(clientID, wsID, undefined, undefined);
 
     pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
@@ -972,7 +1019,7 @@ describe('pusher errors', () => {
     );
     void pusher.run();
 
-    const stream = pusher.initConnection(clientID, 'ws1', undefined);
+    const stream = pusher.initConnection(clientID, 'ws1', undefined, undefined);
     pusher.enqueuePush(clientID, makePush(3, clientID), 'jwt', undefined);
 
     const iterator = stream[Symbol.asyncIterator]();
@@ -1028,8 +1075,18 @@ describe('pusher errors', () => {
       'cgid',
     );
     void pusher.run();
-    const stream1 = pusher.initConnection('client1', 'ws1', undefined);
-    const stream2 = pusher.initConnection('client2', 'ws2', undefined);
+    const stream1 = pusher.initConnection(
+      'client1',
+      'ws1',
+      undefined,
+      undefined,
+    );
+    const stream2 = pusher.initConnection(
+      'client2',
+      'ws2',
+      undefined,
+      undefined,
+    );
 
     pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt', undefined);
     pusher.enqueuePush('client2', makePush(1, 'client2'), 'jwt', undefined);
@@ -1094,7 +1151,7 @@ describe('pusher errors', () => {
       'cgid',
     );
     void pusher.run();
-    const stream = pusher.initConnection(clientID, wsID, undefined);
+    const stream = pusher.initConnection(clientID, wsID, undefined, undefined);
 
     pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
@@ -1136,6 +1193,7 @@ describe('pusher errors', () => {
       clientID,
       wsID,
       'http://malicious.com/endpoint',
+      undefined,
     );
 
     pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
