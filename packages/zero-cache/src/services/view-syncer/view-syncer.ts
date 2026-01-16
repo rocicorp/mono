@@ -176,6 +176,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #queryConfig: ZeroConfig['query'];
 
   userQueryURL?: string | undefined;
+  userQueryHeaders?: Record<string, string> | undefined;
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -340,6 +341,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #getHeaderOptions(forwardCookie: boolean): HeaderOptions {
     return {
       apiKey: this.#queryConfig.apiKey,
+      customHeaders: this.userQueryHeaders,
       token: this.#authData?.raw,
       cookie: forwardCookie ? this.#httpCookie : undefined,
     };
@@ -619,11 +621,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       this.#httpCookie = httpCookie;
 
-      // Handle custom query URL
-      const [, {userQueryURL}] = initConnectionMessage;
+      // Handle custom query URL and headers
+      const [, {userQueryURL, userQueryHeaders}] = initConnectionMessage;
       if (this.userQueryURL === undefined) {
         // First client in the group - store its parameters
         this.userQueryURL = userQueryURL;
+        this.userQueryHeaders = userQueryHeaders;
       } else {
         // Validate that subsequent clients have compatible parameters
         if (this.userQueryURL !== userQueryURL) {

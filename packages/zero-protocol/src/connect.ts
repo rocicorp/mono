@@ -31,8 +31,10 @@ const initConnectionBodySchema = v.object({
   deleted: deleteClientsBodySchema.optional(),
   // parameters to configure the mutate endpoint
   userPushURL: v.string().optional(),
+  userPushHeaders: v.record(v.string()).optional(),
   // parameters to configure the query endpoint
   userQueryURL: v.string().optional(),
+  userQueryHeaders: v.record(v.string()).optional(),
 
   /**
    * `activeClients` is an optional array of client IDs that are currently active

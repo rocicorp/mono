@@ -34,6 +34,7 @@ export function compileUrlPattern(pattern: string): URLPattern {
 
 export type HeaderOptions = {
   apiKey?: string | undefined;
+  customHeaders?: Record<string, string> | undefined;
   token?: string | undefined;
   cookie?: string | undefined;
 };
@@ -99,6 +100,9 @@ export async function fetchFromAPIServer<TValidator extends Type>(
 
   if (headerOptions.apiKey) {
     headers['X-Api-Key'] = headerOptions.apiKey;
+  }
+  if (headerOptions.customHeaders) {
+    Object.assign(headers, headerOptions.customHeaders);
   }
   if (headerOptions.token) {
     headers['Authorization'] = `Bearer ${headerOptions.token}`;
