@@ -3456,7 +3456,7 @@ describe('view-syncer/cvr', () => {
     const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [],
-      [{id: 'oneHash', transformationHash: 'oneHash'}],
+      [{id: 'oneHash'}],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
