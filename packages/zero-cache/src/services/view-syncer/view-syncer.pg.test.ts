@@ -50,8 +50,6 @@ import {
   app2Messages,
   COMMENTS_QUERY,
   EXPECTED_LMIDS_AST,
-  expectGotDel,
-  expectGotPut,
   expectNoPokes,
   inactivateQuery,
   ISSUES_QUERY,
