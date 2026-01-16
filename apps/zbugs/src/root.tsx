@@ -68,7 +68,13 @@ function OGImageUpdater() {
   return null;
 }
 
-function DemoLoadedPill({loadTimeMs}: {loadTimeMs: number}) {
+function DemoLoadedPill({
+  loadTimeMs,
+  compact = false,
+}: {
+  loadTimeMs: number;
+  compact?: boolean | undefined;
+}) {
   const [visible, setVisible] = useState(true);
   const [fading, setFading] = useState(false);
 
@@ -90,12 +96,14 @@ function DemoLoadedPill({loadTimeMs}: {loadTimeMs: number}) {
   return (
     <div className={`demo-loaded-pill ${fading ? 'fading' : ''}`}>
       <div className="demo-loaded-pill-header">
-        Ta da! Loaded in {seconds} seconds.
+        {compact ? `Loaded in ${seconds} seconds.` : `Tada! Loaded in ${seconds} seconds.`}
       </div>
-      <p className="demo-loaded-pill-body">
-        Zero syncs millions of rows to IndexedDB in seconds, enabling instant
-        queries and offline support.
-      </p>
+      {!compact && (
+        <p className="demo-loaded-pill-body">
+          Zero syncs millions of rows to IndexedDB in seconds, enabling instant
+          queries and offline support.
+        </p>
+      )}
     </div>
   );
 }
@@ -118,17 +126,23 @@ export function Root() {
 
   const qs = new URLSearchParams(window.location.search);
   const isDemoMode = qs.has('demo');
+  const isDemoVideo = qs.has('demovideo');
   const spinnerStay = isDemoMode && qs.has('spinnerstay');
 
   // Capture demo load time when content becomes ready
   useEffect(() => {
-    if (contentReady && isDemoMode && !spinnerStay && demoLoadTime === null) {
+    if (
+      contentReady &&
+      (isDemoMode || isDemoVideo) &&
+      !spinnerStay &&
+      demoLoadTime === null
+    ) {
       const loadTime = getDemoLoadTime();
       if (loadTime !== null) {
         setDemoLoadTime(loadTime);
       }
     }
-  }, [contentReady, isDemoMode, spinnerStay, demoLoadTime]);
+  }, [contentReady, isDemoMode, isDemoVideo, spinnerStay, demoLoadTime]);
 
   return (
     <ListContextProvider>
@@ -136,7 +150,7 @@ export function Root() {
         <LoadingSpinner forceShow={spinnerStay} />
       )}
       {demoLoadTime !== null && !spinnerStay && (
-        <DemoLoadedPill loadTimeMs={demoLoadTime} />
+        <DemoLoadedPill loadTimeMs={demoLoadTime} compact={isDemoVideo} />
       )}
       <div
         className="app-container flex p-8"
