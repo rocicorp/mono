@@ -18,6 +18,7 @@ export function handleHeapzRequest(
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="Heapz Protected Area"')
       .send('Unauthorized');
+    return;
   }
 
   const filename = v8.writeHeapSnapshot();
