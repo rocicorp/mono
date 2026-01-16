@@ -13,10 +13,12 @@ export function getDemoLoadTime(): number | null {
 
 export function LoadingSpinner({forceShow}: {forceShow?: boolean | undefined}) {
   const [show, setShow] = useState(false);
-  const isDemoMode = new URLSearchParams(window.location.search).has('demo');
+  const qs = new URLSearchParams(window.location.search);
+  const isDemoMode = qs.has('demo');
+  const isDemoVideo = qs.has('demovideo');
 
   // Set the start time immediately when mounted in demo mode
-  if (isDemoMode && demoStartTime === null) {
+  if ((isDemoMode || isDemoVideo) && demoStartTime === null) {
     demoStartTime = Date.now();
   }
 
