@@ -74,7 +74,6 @@ export type RowChange = RowAdd | RowRemove | RowEdit;
 type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
-  readonly originalHash: string;
   readonly transformedAst: AST; // Optional, only set after hydration
   readonly transformationHash: string; // The hash of the transformed AST
 };
@@ -106,9 +105,6 @@ const MIN_ADVANCEMENT_TIME_LIMIT_MS = 50;
  */
 export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
-  // We probs need the original query hash
-  // so we can decide not to re-transform a custom query
-  // that is already hydrated.
   readonly #pipelines = new Map<string, Pipeline>();
 
   readonly #lc: LogContext;
@@ -283,33 +279,9 @@ export class PipelineDriver {
     this.#snapshotter.destroy();
   }
 
-  /** @return The Set of query hashes for all added queries. */
-  addedQueries(): [
-    transformationHashes: Set<string>,
-    byOriginalHash: Map<
-      string,
-      {
-        transformationHash: string;
-        transformedAst: AST;
-      }[]
-    >,
-  ] {
-    const byOriginalHash = new Map<
-      string,
-      {transformationHash: string; transformedAst: AST}[]
-    >();
-    for (const pipeline of this.#pipelines.values()) {
-      const {originalHash, transformedAst, transformationHash} = pipeline;
-
-      if (!byOriginalHash.has(originalHash)) {
-        byOriginalHash.set(originalHash, []);
-      }
-      byOriginalHash.get(originalHash)!.push({
-        transformationHash,
-        transformedAst,
-      });
-    }
-    return [new Set(this.#pipelines.keys()), byOriginalHash];
+  /** @return The Set of transformation hashes for all added queries. */
+  transformationHashes(): Set<string> {
+    return new Set(this.#pipelines.keys());
   }
 
   totalHydrationTimeMs(): number {
@@ -434,7 +406,6 @@ export class PipelineDriver {
     this.#pipelines.set(transformationHash, {
       input,
       hydrationTimeMs,
-      originalHash: queryID,
       transformedAst: query,
       transformationHash,
     });
