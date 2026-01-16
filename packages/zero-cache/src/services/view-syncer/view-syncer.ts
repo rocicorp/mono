@@ -453,6 +453,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
             lc.info?.(`resetting pipelines: ${result.message}`);
             this.#pipelines.reset(clientSchema);
+            this.#pipelinesSynced = false;
           }
 
           // Advance the snapshot to the current version.
@@ -505,8 +506,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc = lc.withContext('method', '#removeExpiredQueries');
       lc.debug?.('Queries have expired');
       // #syncQueryPipelineSet() will remove the expired queries.
-      await this.#syncQueryPipelineSet(lc, cvr);
-      this.#pipelinesSynced = true;
+      if (this.#pipelinesSynced) {
+        await this.#syncQueryPipelineSet(lc, cvr);
+      }
     }
 
     // Even if we have expired queries, we still need to schedule next eviction
