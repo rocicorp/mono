@@ -37,6 +37,7 @@ export interface Pusher extends RefCountedService {
     clientID: string,
     wsID: string,
     userPushURL: string | undefined,
+    userPushHeaders: Record<string, string> | undefined,
   ): Source<Downstream>;
   enqueuePush(
     clientID: string,
@@ -103,8 +104,14 @@ export class PusherService implements Service, Pusher {
     clientID: string,
     wsID: string,
     userPushURL: string | undefined,
+    userPushHeaders: Record<string, string> | undefined,
   ) {
-    return this.#pusher.initConnection(clientID, wsID, userPushURL);
+    return this.#pusher.initConnection(
+      clientID,
+      wsID,
+      userPushURL,
+      userPushHeaders,
+    );
   }
 
   enqueuePush(
@@ -231,6 +238,7 @@ class PushWorker {
     }
   >;
   #userPushURL?: string | undefined;
+  #userPushHeaders?: Record<string, string> | undefined;
 
   readonly #customMutations = getOrCreateCounter(
     'mutation',
@@ -271,6 +279,7 @@ class PushWorker {
     clientID: string,
     wsID: string,
     userPushURL: string | undefined,
+    userPushHeaders: Record<string, string> | undefined,
   ) {
     const existing = this.#clients.get(clientID);
     if (existing && existing.wsID === wsID) {
@@ -285,8 +294,9 @@ class PushWorker {
 
     // Handle client group level URL parameters
     if (this.#userPushURL === undefined) {
-      // First client in the group - store its URL
+      // First client in the group - store its URL and headers
       this.#userPushURL = userPushURL;
+      this.#userPushHeaders = userPushHeaders;
     } else {
       // Validate that subsequent clients have compatible parameters
       if (this.#userPushURL !== userPushURL) {
@@ -493,6 +503,7 @@ class PushWorker {
         },
         {
           apiKey: this.#apiKey,
+          customHeaders: this.#userPushHeaders,
           token: entry.auth,
           cookie: entry.httpCookie,
         },
