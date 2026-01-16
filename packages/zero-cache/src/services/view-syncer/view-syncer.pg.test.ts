@@ -50,7 +50,10 @@ import {
   app2Messages,
   COMMENTS_QUERY,
   EXPECTED_LMIDS_AST,
+  expectGotDel,
+  expectGotPut,
   expectNoPokes,
+  inactivateQuery,
   ISSUES_QUERY,
   ISSUES_QUERY2,
   ISSUES_QUERY_WITH_EXISTS,
@@ -764,6 +767,270 @@ describe('view-syncer/service', () => {
             },
           ]
         `);
+    });
+
+    test('removing one of two queries with shared transformation hash does not remove pipeline', async () => {
+      mockFetchImpl([
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-1',
+          name: 'named-query-1',
+        },
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-2',
+          name: 'named-query-2',
+        },
+      ]);
+      const ttl = 100;
+      vi.setSystemTime(Date.now());
+
+      const client = connect(SYNC_CONTEXT, [
+        {
+          op: 'put',
+          hash: 'custom-1',
+          name: 'named-query-1',
+          args: ['thing'],
+          ttl,
+        },
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "00:01",
+              "pokeID": "00:01",
+            },
+          ],
+        ]
+      `);
+
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+
+      await inactivateQuery(vs, SYNC_CONTEXT, 'custom-1');
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01",
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "del",
+                  },
+                ],
+              },
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:01",
+              "pokeID": "01:01",
+            },
+          ],
+        ]
+      `);
+
+      // Expire custom-1
+      callNextSetTimeout(ttl);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01:01",
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+              ],
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:02",
+              "pokeID": "01:02",
+            },
+          ],
+        ]
+      `);
+
+      // Verify custom-2 is still alive by making a data change
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01:02",
+              "pokeID": "101",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "pokeID": "101",
+              "rowsPatch": [
+                {
+                  "id": {
+                    "id": "2",
+                  },
+                  "op": "del",
+                  "tableName": "issues",
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "101",
+              "pokeID": "101",
+            },
+          ],
+        ]
+      `);
     });
 
     test('different custom queries end up with the same query after transformation', async () => {

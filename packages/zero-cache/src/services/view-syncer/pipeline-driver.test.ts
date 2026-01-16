@@ -717,7 +717,7 @@ describe('view-syncer/pipeline-driver', () => {
     // Test that after reset hydration and advancement work.
     pipelines.reset(clientSchema);
 
-    expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
+    expect(pipelines.transformationHashes()).toEqual([new Set(), new Map()]);
 
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
@@ -765,7 +765,7 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ];
-    expect(pipelines.addedQueries()).toMatchInlineSnapshot(`
+    expect(pipelines.transformationHashes()).toMatchInlineSnapshot(`
       [
         Set {
           "hash1",
@@ -820,7 +820,7 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.advanceWithoutDiff();
     pipelines.reset(clientSchema);
 
-    expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
+    expect(pipelines.transformationHashes()).toEqual([new Set(), new Map()]);
 
     // The newColumn should be reflected after a reset.
     expect([
@@ -1650,7 +1650,7 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    expect([...pipelines.addedQueries()]).toMatchInlineSnapshot(`
+    expect([...pipelines.transformationHashes()]).toMatchInlineSnapshot(`
       [
         Set {
           "hash1",
@@ -1697,7 +1697,10 @@ describe('view-syncer/pipeline-driver', () => {
       ]
     `);
     pipelines.removeQuery('hash1');
-    expect([...pipelines.addedQueries()]).toEqual([new Set(), new Map()]);
+    expect([...pipelines.transformationHashes()]).toEqual([
+      new Set(),
+      new Map(),
+    ]);
 
     replicator.processTransaction(
       '134',
