@@ -108,13 +108,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const isDemoVideo = qs.has('demovideo');
 
   useEffect(() => {
-    if (
-      isGigabugs(projectName) &&
-      !Cookies.get('onboardingDismissed') &&
-      !isDemoMode &&
-      !isDemoVideo
-    ) {
-      setShowOnboarding(true);
+    if (isGigabugs(projectName) && !Cookies.get('onboardingDismissed')) {
+      if (isDemoMode || isDemoVideo) {
+        Cookies.set('onboardingDismissed', 'true', {expires: 365});
+      } else {
+        setShowOnboarding(true);
+      }
     }
   }, [projectName, isDemoMode, isDemoVideo]);
 
