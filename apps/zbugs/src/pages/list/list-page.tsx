@@ -105,16 +105,18 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const isDemoMode = qs.has('demo');
+  const isDemoVideo = qs.has('demovideo');
 
   useEffect(() => {
     if (
       isGigabugs(projectName) &&
       !Cookies.get('onboardingDismissed') &&
-      !isDemoMode
+      !isDemoMode &&
+      !isDemoVideo
     ) {
       setShowOnboarding(true);
     }
-  }, [projectName, isDemoMode]);
+  }, [projectName, isDemoMode, isDemoVideo]);
 
   const [projects] = useQuery(queries.allProjects());
   const project = projects.find(
