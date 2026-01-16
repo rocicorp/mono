@@ -1919,6 +1919,9 @@ emoji-picker {
 .demo-loaded-pill-header {
   font-size: 1.125rem;
   font-weight: 700;
+}
+
+.demo-loaded-pill-header:not(:last-child) {
   margin-bottom: 0.5rem;
 }
 
