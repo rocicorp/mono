@@ -1132,12 +1132,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.userQueryURL,
           );
 
-        this.#processTransformedCustomQueries(
-          lc,
-          transformedCustomQueries,
-          (q: TransformedAndHashed) => transformedQueries.push(q),
-          customQueries,
-        );
+        // only process queries that successfully transformed and transformed to
+        // the same transformationHash as in the CVR here
+        if (Array.isArray(transformedCustomQueries)) {
+          for (const q of transformedCustomQueries) {
+            if (
+              !('error' in q) &&
+              q.transformationHash ===
+                customQueries.get(q.id)?.transformationHash
+            ) {
+              transformedQueries.push(q);
+            }
+          }
+        }
       }
     });
 
@@ -1153,7 +1160,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         q.type === 'internal',
       );
       if (transformed.transformationHash === q.transformationHash) {
-        // only processing unchanged queries here
+        // only process queries that transformed to the same
+        // transformationHash as in the CVR here
         transformedQueries.push(transformed);
       }
     }
