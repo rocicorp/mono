@@ -1759,6 +1759,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         current,
       );
 
+      // The configPatches Promise will be awaited, and exceptions propagated,
+      // after the rowPatches are processed. However, a catch handler must be
+      // installed on the Promise in the meantime in order to avoid Node
+      // crashing with an unhandled rejection error.
+      configPatches.catch(() => {});
+
       // await the rowPatches first so that the AsyncGenerator kicks off.
       let rowPatchCount = 0;
       for await (const rows of rowPatches) {
