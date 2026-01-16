@@ -211,6 +211,14 @@ type(scope): description
 - `fix(zero-cache): resolve memory leak in connection pool`
 - `chore(deps): update vitest to 3.2.4`
 
+### Cherry-picking
+
+Always use the `-x` flag when cherry-picking to record the source commit hash:
+
+```bash
+git cherry-pick -x <commit>
+```
+
 ## Debugging and Development
 
 ### Zero Cache Debugging
@@ -254,3 +262,54 @@ npm run db-down  # Stop PostgreSQL
 - `vitest.config.ts`: Multi-project test discovery and configuration
 - `apps/zbugs/shared/schema.ts`: Reference Zero schema implementation
 - `packages/zero-client/src/mod.ts`: Main Zero client API surface
+
+## Running zbugs Locally
+
+zbugs is the reference Zero application. To run it locally:
+
+### Prerequisites
+
+1. **Docker must be running** - Start Docker Desktop before running `db-up`
+
+2. If you've made changes to any Zero packages (`zero-client`, `zero-cache`, `zero-protocol`, etc.), you must first rebuild:
+
+```bash
+npm --workspace=@rocicorp/zero run build
+```
+
+### Starting the Services
+
+From `apps/zbugs`, start these three services (in background for AI, separate tabs for humans):
+
+```bash
+cd apps/zbugs
+
+# 1. Start PostgreSQL (Docker) - must complete before others
+npm run db-up
+
+# 2. Start zero-cache with hot-reload
+npm run zero-cache-dev
+
+# 3. Start the Vite dev server
+npm run dev
+```
+
+**For AI assistants**: Run `db-up` in background, wait for PostgreSQL to be ready, then run `zero-cache-dev` and `dev` in background. Use `run_in_background` parameter or `&` suffix. Check logs with `tail` on the output files.
+
+### First-Time Setup
+
+If the database is empty or schema has changed:
+
+```bash
+cd apps/zbugs
+npm run db-migrate  # Apply schema migrations
+npm run db-seed     # Seed with test data
+```
+
+### Troubleshooting
+
+- **Port conflicts**: If `zero-cache-dev` fails with port in use, find and kill the process: `lsof -i :4848 | grep LISTEN` then `kill <PID>`
+- **Schema changes**: If you modify `apps/zbugs/shared/schema.ts`, restart `zero-cache-dev`
+- **Client changes**: Vite hot-reloads automatically, but for Zero client changes you may need to refresh the browser
+
+See `apps/zbugs/README.md` for additional setup details and configuration options.

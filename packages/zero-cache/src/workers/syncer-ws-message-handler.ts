@@ -194,6 +194,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
               this.#syncContext.clientID,
               this.#syncContext.wsID,
               msg[1].userPushURL,
+              msg[1].userPushHeaders,
             ),
           });
         }
