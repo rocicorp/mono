@@ -1314,10 +1314,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'pipelines must be initialized (syncQueryPipelineSet)',
       );
 
-      const [hydratedQueries, byOriginalHash] = this.#pipelines.addedQueries();
-
-      // Convert queries to their transformed ast's and hashes
-      const hashToIDs = new Map<string, string[]>();
+      const pipelinesTransformationHashes =
+        this.#pipelines.transformationHashes();
 
       if (this.#ttlClock === undefined) {
         // Get it from the CVR or initialize it to now.
@@ -1435,9 +1433,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // The old pipelines will be automatically removed via unhydrateQueries,
         // and new pipelines will be added via addQueries.
         for (const [queryID, newTransform] of successfullyTransformed) {
-          const existingTransforms = byOriginalHash.get(queryID);
-          if (existingTransforms && existingTransforms.length > 0) {
-            const oldHash = existingTransforms[0].transformationHash;
+          const existingTransformHash =
+            cvr.queries[queryID]?.transformationHash;
+          if (existingTransformHash) {
+            const oldHash = existingTransformHash;
             const newHash = newTransform.transformationHash;
 
             if (oldHash !== newHash) {
@@ -1458,6 +1457,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
+      const hashToIDs = new Map<string, string[]>();
       const serverQueries = transformedQueries.map(
         ({id, origQuery, transformed}) => {
           const ids = hashToIDs.get(transformed.transformationHash);
@@ -1475,18 +1475,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         },
       );
 
+      const removeQueriesQueryIds: Set<string> = new Set(
+        serverQueries
+          .filter(q => q.remove)
+          .map(q => q.id)
+          .concat(erroredQueryIDs || []),
+      );
       const addQueries = serverQueries.filter(
-        q => !q.remove && !hydratedQueries.has(q.transformationHash),
+        q =>
+          !removeQueriesQueryIds.has(q.id) &&
+          !pipelinesTransformationHashes.has(q.transformationHash),
       );
-      const removeQueries: {
-        id: string;
-        transformationHash: string | undefined;
-      }[] = serverQueries.filter(q => q.remove);
-      const desiredQueries = new Set(
-        serverQueries.filter(q => !q.remove).map(q => q.transformationHash),
+      const neededPipelinesTransformationHashes = new Set(
+        serverQueries
+          .filter(q => !removeQueriesQueryIds.has(q.id))
+          .map(q => q.transformationHash),
       );
-      const unhydrateQueries = [...hydratedQueries].filter(
-        transformationHash => !desiredQueries.has(transformationHash),
+      const removePipelinesTransformationHashes = [
+        ...pipelinesTransformationHashes,
+      ].filter(
+        transformationHash =>
+          !neededPipelinesTransformationHashes.has(transformationHash),
       );
 
       for (const q of addQueries) {
@@ -1499,50 +1508,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
       }
 
-      // These are queries we need to remove from `desired`, not `got`, because they never transformed.
-      if (erroredQueryIDs) {
-        // Build a set of transformation hashes that succeeded
-        const successfulHashes = new Set(
-          transformedQueries.map(
-            ({transformed}) => transformed.transformationHash,
-          ),
-        );
-
-        for (const queryID of erroredQueryIDs) {
-          // Try to get the last known transformation hash for this query
-          let lastKnownHash: string | undefined;
-
-          // Check if the query exists in the CVR with a transformation hash
-          const cvrQuery = cvr.queries[queryID];
-          if (cvrQuery?.transformationHash) {
-            lastKnownHash = cvrQuery.transformationHash;
-          }
-
-          // If a successfully transformed query has the same hash, we can't remove it
-          // because that would remove the pipeline for the successful query
-          const transformationHash =
-            lastKnownHash && successfulHashes.has(lastKnownHash)
-              ? undefined
-              : lastKnownHash;
-
-          removeQueries.push({
-            id: queryID,
-            transformationHash,
-          });
-        }
-      }
-
       if (
         addQueries.length > 0 ||
-        removeQueries.length > 0 ||
-        unhydrateQueries.length > 0
+        removeQueriesQueryIds.size > 0 ||
+        removePipelinesTransformationHashes.length > 0
       ) {
         await this.#addAndRemoveQueries(
           lc,
           cvr,
           addQueries,
-          removeQueries,
-          unhydrateQueries,
+          [...removeQueriesQueryIds].map(id => ({id})),
+          removePipelinesTransformationHashes,
           hashToIDs,
         );
       } else {
@@ -1589,15 +1565,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
     addQueries: {id: string; ast: AST; transformationHash: string}[],
-    removeQueries: {id: string; transformationHash: string | undefined}[],
-    unhydrateQueries: string[],
+    removeQueries: {id: string}[],
+    removePipelinesTransformationHashes: string[],
     hashToIDs: Map<string, string[]>,
   ): Promise<void> {
     return startAsyncSpan(tracer, 'vs.#addAndRemoveQueries', async () => {
       assert(
         addQueries.length > 0 ||
           removeQueries.length > 0 ||
-          unhydrateQueries.length > 0,
+          removePipelinesTransformationHashes.length > 0,
         'Must have queries to add or remove',
       );
       const start = performance.now();
@@ -1629,17 +1605,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Removing queries is easy. The pipelines are dropped, and the CVR
       // updater handles the updates and pokes.
       for (const q of removeQueries) {
-        if (q.transformationHash) {
-          this.#pipelines.removeQuery(q.transformationHash);
-        }
-
         // Remove per-query server metrics when query is deleted
         this.#inspectorDelegate.removeQuery(q.id);
-
         // Clean up thrashing detection for removed queries
         this.#queryReplacements.delete(q.id);
       }
-      for (const hash of unhydrateQueries) {
+      for (const hash of removePipelinesTransformationHashes) {
         this.#pipelines.removeQuery(hash);
         // Remove per-query server metrics for unhydrated queries
         const ids = hashToIDs.get(hash);
