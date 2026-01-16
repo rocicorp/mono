@@ -717,7 +717,7 @@ describe('view-syncer/pipeline-driver', () => {
     // Test that after reset hydration and advancement work.
     pipelines.reset(clientSchema);
 
-    expect(pipelines.transformationHashes()).toEqual([new Set(), new Map()]);
+    expect(pipelines.transformationHashes()).toEqual(new Set());
 
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
@@ -766,50 +766,9 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
     expect(pipelines.transformationHashes()).toMatchInlineSnapshot(`
-      [
-        Set {
-          "hash1",
-        },
-        Map {
-          "queryID1" => [
-            {
-              "transformationHash": "hash1",
-              "transformedAst": {
-                "orderBy": [
-                  [
-                    "id",
-                    "desc",
-                  ],
-                ],
-                "related": [
-                  {
-                    "correlation": {
-                      "childField": [
-                        "issueID",
-                      ],
-                      "parentField": [
-                        "id",
-                      ],
-                    },
-                    "subquery": {
-                      "alias": "comments",
-                      "orderBy": [
-                        [
-                          "id",
-                          "desc",
-                        ],
-                      ],
-                      "table": "comments",
-                    },
-                    "system": "client",
-                  },
-                ],
-                "table": "issues",
-              },
-            },
-          ],
-        },
-      ]
+      Set {
+        "hash1",
+      }
     `);
 
     replicator.processTransaction(
@@ -820,7 +779,7 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.advanceWithoutDiff();
     pipelines.reset(clientSchema);
 
-    expect(pipelines.transformationHashes()).toEqual([new Set(), new Map()]);
+    expect(pipelines.transformationHashes()).toEqual(new Set());
 
     // The newColumn should be reflected after a reset.
     expect([
@@ -1650,57 +1609,13 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    expect([...pipelines.transformationHashes()]).toMatchInlineSnapshot(`
-      [
-        Set {
-          "hash1",
-        },
-        Map {
-          "queryID1" => [
-            {
-              "transformationHash": "hash1",
-              "transformedAst": {
-                "orderBy": [
-                  [
-                    "id",
-                    "desc",
-                  ],
-                ],
-                "related": [
-                  {
-                    "correlation": {
-                      "childField": [
-                        "issueID",
-                      ],
-                      "parentField": [
-                        "id",
-                      ],
-                    },
-                    "subquery": {
-                      "alias": "comments",
-                      "orderBy": [
-                        [
-                          "id",
-                          "desc",
-                        ],
-                      ],
-                      "table": "comments",
-                    },
-                    "system": "client",
-                  },
-                ],
-                "table": "issues",
-              },
-            },
-          ],
-        },
-      ]
+    expect(pipelines.transformationHashes()).toMatchInlineSnapshot(`
+      Set {
+        "hash1",
+      }
     `);
     pipelines.removeQuery('hash1');
-    expect([...pipelines.transformationHashes()]).toEqual([
-      new Set(),
-      new Map(),
-    ]);
+    expect(pipelines.transformationHashes()).toEqual(new Set());
 
     replicator.processTransaction(
       '134',
