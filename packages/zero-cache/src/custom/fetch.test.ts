@@ -133,6 +133,68 @@ describe('fetchFromAPIServer', () => {
     expect(init?.headers).toEqual({'Content-Type': 'application/json'});
   });
 
+  test('includes customHeaders in request', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+
+    await fetchFromAPIServer(
+      validator,
+      'push',
+      lc,
+      baseUrl,
+      true,
+      allowedPatterns,
+      shard,
+      {
+        customHeaders: {
+          'x-vercel-automation-bypass-secret': 'my-secret',
+          'x-custom-header': 'custom-value',
+        },
+      },
+      body,
+    );
+
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-vercel-automation-bypass-secret': 'my-secret',
+      'x-custom-header': 'custom-value',
+    });
+  });
+
+  test('customHeaders combined with other headers', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+
+    await fetchFromAPIServer(
+      validator,
+      'push',
+      lc,
+      baseUrl,
+      true,
+      allowedPatterns,
+      shard,
+      {
+        apiKey: 'api-key',
+        customHeaders: {
+          'x-vercel-automation-bypass-secret': 'my-secret',
+        },
+        token: 'jwt-token',
+      },
+      body,
+    );
+
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Api-Key': 'api-key',
+      'x-vercel-automation-bypass-secret': 'my-secret',
+      'Authorization': 'Bearer jwt-token',
+    });
+  });
+
   test('rejects URLs that are not allowed by configuration for push', async () => {
     await expect(
       fetchFromAPIServer(
