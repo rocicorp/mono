@@ -1,4 +1,15 @@
-import {defineMutator, defineMutators, type Transaction} from '@rocicorp/zero';
+import type {StandardSchemaV1} from '@standard-schema/spec';
+import {
+  defineMutator,
+  defineMutators,
+  type InsertValue,
+  type MutatorDefinition,
+  type ReadonlyJSONValue,
+  type Schema,
+  type SchemaValue,
+  type TableSchema,
+  type Transaction,
+} from '@rocicorp/zero';
 import {z} from 'zod/mini';
 import {
   assertIsCreatorOrAdmin,
@@ -9,7 +20,101 @@ import {
   type AuthData,
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import {builder, ZERO_PROJECT_ID} from './schema.ts';
+import {builder, ZERO_PROJECT_ID, schema} from './schema.ts';
+
+/**
+ * Maps a Zero schema value type to a zod/mini schema.
+ */
+function columnToZod(col: SchemaValue): z.ZodMiniType {
+  switch (col.type) {
+    case 'string':
+      return z.string();
+    case 'number':
+      return z.number();
+    case 'boolean':
+      return z.boolean();
+    case 'null':
+      return z.null();
+    case 'json':
+      return z.unknown();
+  }
+}
+
+/**
+ * Generates a zod/mini schema for InsertValue of a table.
+ * - Primary key columns are always required
+ * - Optional columns can be omitted or undefined
+ * - Required non-PK columns are required
+ */
+function tableToInsertZodSchema(
+  table: TableSchema,
+): z.ZodMiniObject<Record<string, z.ZodMiniType>> {
+  const shape: Record<string, z.ZodMiniType> = {};
+  const pkSet = new Set(table.primaryKey);
+
+  for (const [colName, col] of Object.entries(table.columns)) {
+    const baseType = columnToZod(col);
+    if (pkSet.has(colName)) {
+      // Primary key columns are always required
+      shape[colName] = baseType;
+    } else if (col.optional) {
+      // Optional columns can be omitted or undefined
+      shape[colName] = z.optional(baseType);
+    } else {
+      // Required non-PK columns
+      shape[colName] = baseType;
+    }
+  }
+
+  return z.object(shape);
+}
+
+/**
+ * Generates CRUD mutator definitions for all tables in a schema.
+ * Returns an object that can be spread into defineMutators():
+ *
+ * ```ts
+ * defineMutators({
+ *   crud: defineCRUDMutators(schema),
+ *   // ... custom mutators
+ * })
+ * ```
+ *
+ * This gives you typesafe access like:
+ *   mutators.crud.issue.insert({...})
+ *   mutators.crud.comment.insert({...})
+ */
+type CRUDMutatorDefinitions<S extends Schema> = {
+  [TableName in keyof S['tables'] & string]: {
+    insert: MutatorDefinition<
+      InsertValue<S['tables'][TableName]>,
+      InsertValue<S['tables'][TableName]>
+    >;
+  };
+};
+
+function defineCRUDMutators<S extends Schema>(s: S): CRUDMutatorDefinitions<S> {
+  const result: Record<string, {insert: unknown}> = {};
+  for (const tableName of Object.keys(s.tables)) {
+    const table = s.tables[tableName];
+    const insertSchema = tableToInsertZodSchema(table) as StandardSchemaV1<
+      ReadonlyJSONValue,
+      ReadonlyJSONValue
+    >;
+
+    result[tableName] = {
+      insert: defineMutator(insertSchema, async ({tx, args}) => {
+        await (
+          tx.mutate as Record<
+            string,
+            {insert: (value: unknown) => Promise<void>}
+          >
+        )[tableName].insert(args);
+      }),
+    };
+  }
+  return result as CRUDMutatorDefinitions<S>;
+}
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
@@ -68,6 +173,7 @@ const notificationUpdateSchema = z.object({
 });
 
 export const mutators = defineMutators({
+  crud: defineCRUDMutators(schema),
   issue: {
     create: defineMutator(
       createIssueArgsSchema,
