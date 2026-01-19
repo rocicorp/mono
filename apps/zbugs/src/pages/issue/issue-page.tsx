@@ -4,7 +4,6 @@ import type {Virtualizer} from '@tanstack/react-virtual';
 import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {
-  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -12,13 +11,12 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type ReactNode,
   type SetStateAction,
 } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import {toast, ToastContainer} from 'react-toastify';
+import {toast} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
-import {useParams, type DefaultParams} from 'wouter';
+import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
@@ -47,7 +45,6 @@ import {RelativeTime} from '../../components/relative-time.tsx';
 import {UserPicker} from '../../components/user-picker.tsx';
 import {type Emoji} from '../../emoji-utils.ts';
 import {useCanEdit} from '../../hooks/use-can-edit.ts';
-import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.ts';
 import {useEmojiDataSourcePreload} from '../../hooks/use-emoji-data-source-preload.ts';
 import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
@@ -64,7 +61,9 @@ import {links, useListContext, type ZbugsHistoryState} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
+import {getID} from './get-id.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {ToastContainer, ToastContent} from './toast-content.tsx';
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -73,13 +72,13 @@ function softNavigate(path: string, state?: ZbugsHistoryState) {
   });
 }
 
-const emojiToastShowDuration = 3_000;
+export const emojiToastShowDuration = 3_000;
 
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
 
-  const {idField, id} = getId(params);
+  const {idField, id} = getID(params);
   const projectName = must(params.projectName);
   const login = useLogin();
 
@@ -413,8 +412,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   return (
     <div className="issue-detail-container">
-      <MyToastContainer position="bottom" />
-      <MyToastContainer position="top" />
+      <ToastContainer position="bottom" />
+      <ToastContainer position="top" />
       {/* Center column of info */}
       <div className="issue-detail">
         <div className="issue-topbar">
@@ -768,21 +767,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   );
 }
 
-const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => (
-  <ToastContainer
-    hideProgressBar={true}
-    theme="dark"
-    containerId={position}
-    newestOnTop={position === 'bottom'}
-    closeButton={false}
-    position={`${position}-center`}
-    closeOnClick={true}
-    limit={3}
-    // Auto close is broken. So we will manage it ourselves.
-    autoClose={false}
-  />
-));
-
 // This cache is stored outside the state so that it can be used between renders.
 const commentSizeCache = new LRUCache<string, number>(2000);
 
@@ -795,13 +779,6 @@ function NotFound() {
       <div>zarro boogs found</div>
     </div>
   );
-}
-
-function getId(params: DefaultParams) {
-  const idStr = must(params.id);
-  const idField = /[^\d]/.test(idStr) ? 'id' : 'shortID';
-  const id = idField === 'shortID' ? parseInt(idStr) : idStr;
-  return {idField, id} as const;
 }
 
 function maybeShowToastForEmoji(
@@ -864,36 +841,6 @@ function maybeShowToastForEmoji(
         });
       },
     },
-  );
-}
-
-function ToastContent({
-  children,
-  toastID,
-}: {
-  children: ReactNode;
-  toastID: string;
-}) {
-  const docFocused = useDocumentHasFocus();
-  const [hover, setHover] = useState(false);
-
-  useEffect(() => {
-    if (docFocused && !hover) {
-      const id = setTimeout(() => {
-        toast.dismiss(toastID);
-      }, emojiToastShowDuration);
-      return () => clearTimeout(id);
-    }
-    return () => void 0;
-  }, [docFocused, hover, toastID]);
-
-  return (
-    <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
-      {children}
-    </div>
   );
 }
 
@@ -1151,7 +1098,7 @@ export function IssueRedirect({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
 
-  const {idField, id} = getId(params);
+  const {idField, id} = getID(params);
 
   const [issue, issueResult] = useQuery(
     queries.issueDetail({idField, id, userID: z.userID}),

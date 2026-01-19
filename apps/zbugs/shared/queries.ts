@@ -222,10 +222,11 @@ export const queries = defineQueries({
   issueByID: defineQuery(
     z.object({
       listContext: listContextParams,
-      id: z.string(),
+      idField: z.union([z.literal('shortID'), z.literal('id')]),
+      id: z.union([z.string(), z.number()]),
     }),
-    ({ctx: auth, args: {listContext, id}}) =>
-      buildListQuery({role: auth?.role, listContext}).where('id', id).one(),
+    ({ctx: auth, args: {listContext, idField, id}}) =>
+      buildListQuery({role: auth?.role, listContext}).where(idField, id).one(),
   ),
 
   emojiChange: defineQuery(idValidator, ({args: subjectID}) =>

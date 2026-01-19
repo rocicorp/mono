@@ -18,6 +18,7 @@ import React, {
   type CSSProperties,
   type KeyboardEvent,
 } from 'react';
+import {toast} from 'react-toastify';
 import {assert} from 'shared/src/asserts.ts';
 import {useDebouncedCallback} from 'use-debounce';
 import {useLocation, useParams, useSearch} from 'wouter';
@@ -54,6 +55,8 @@ import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
+import {getIDFromString} from '../issue/get-id.tsx';
+import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
 
 // Set to true to enable slow query simulation (half data → full data after 1s)
 const DEBUG_QUERY = import.meta.env.DEV && false;
@@ -432,6 +435,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [hasReachedStart, setHasReachedStart] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
@@ -443,13 +447,30 @@ export function ListPage({onReady}: {onReady: () => void}) {
     atStart,
     atEnd,
     firstIssueIndex,
+    permalinkNotFound,
   } = useIssues(
     listContextParams,
     z.userID,
     pageSize,
     anchor,
-    textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
+    !isScrolling && textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
+
+  useEffect(() => {
+    if (permalinkNotFound) {
+      navigate(removeParam(qs, 'id'), {replace: true});
+      const toastID = 'permalink-issue-not-found';
+      toast(
+        <ToastContent toastID={toastID}>
+          Permalink issue not found
+        </ToastContent>,
+        {
+          toastId: toastID,
+          containerId: 'bottom',
+        },
+      );
+    }
+  }, [permalinkNotFound]);
 
   useEffect(() => {
     if (atStart) {
@@ -694,7 +715,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
             login.loginState !== undefined
             ? 'unread'
             : null,
-          {permalink: issue.id === permalinkID},
+          {
+            // TODO(arv): Extract into something cleaner
+            permalink:
+              issue.id === permalinkID || String(issue.shortID) === permalinkID,
+          },
         )}
         style={{
           ...style,
@@ -750,6 +775,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return 0;
     },
   });
+
+  useEffect(() => {
+    setIsScrolling(virtualizer.isScrolling);
+  }, [virtualizer.isScrolling]);
 
   const virtualItems = virtualizer.getVirtualItems();
 
@@ -879,6 +908,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   return (
     <>
       <div className="list-view-header-container">
+        <ToastContainer position="bottom" />
         <h1
           className={classNames('list-view-header', {
             'search-mode': searchMode,
@@ -1044,14 +1074,11 @@ function formatIssueCountEstimate(count: number) {
 type Issue = Row<ReturnType<typeof queries.issueListV2>>;
 type Issues = Issue[];
 
-// TODO(arv): Use virtualizer.isScrolling to determine cache policy
-
 function useIssues(
   listContext: ListContextParams,
   userID: string,
   pageSize: number,
   anchor: Anchor,
-
   options: UseQueryOptions,
 ): {
   issueAt: (index: number) => Issue | undefined;
@@ -1061,11 +1088,14 @@ function useIssues(
   atStart: boolean;
   atEnd: boolean;
   firstIssueIndex: number;
+  permalinkNotFound: boolean;
 } {
   // Conditionally use useSlowQuery or useQuery based on USE_SLOW_QUERY flag
   const queryFn = DEBUG_QUERY ? useSlowQuery : useQuery;
 
   const {kind, index: anchorIndex} = anchor;
+
+  let permalinkNotFound = false;
 
   if (kind === 'permalink') {
     const {id} = anchor;
@@ -1074,7 +1104,10 @@ function useIssues(
 
     const halfPageSize = pageSize / 2;
 
-    const qItem = queries.issueByID({id, listContext});
+    // Allow short ID too.
+    const {idField, id: idValue} = getIDFromString(id);
+
+    const qItem = queries.issueByID({idField, id: idValue, listContext});
 
     const [issue, resultIssue] = queryFn(qItem, options);
     const completeIssue = resultIssue.type === 'complete';
@@ -1118,6 +1151,11 @@ function useIssues(
 
     const firstIssueIndex = anchorIndex - issuesBeforeSize;
 
+    if (completeIssue && issue === undefined) {
+      // Permalink issue not found
+      permalinkNotFound = true;
+    }
+
     return {
       issueAt: (index: number) => {
         if (index === anchorIndex) {
@@ -1151,6 +1189,7 @@ function useIssues(
       atStart: completeBefore && issuesBeforeLength <= halfPageSize,
       atEnd: completeAfter && issuesAfterLength <= halfPageSize - 1,
       firstIssueIndex,
+      permalinkNotFound,
     };
   }
 
@@ -1181,7 +1220,6 @@ function useIssues(
 
   if (kind === 'forward') {
     return {
-      // issues: slicedIssues,
       issueAt: (index: number) =>
         index - anchorIndex < issuesLength
           ? issues[index - anchorIndex]
@@ -1192,6 +1230,7 @@ function useIssues(
       atStart: start === null || anchorIndex === 0,
       atEnd: complete && !hasMoreIssues,
       firstIssueIndex: anchorIndex,
+      permalinkNotFound,
     };
   }
 
@@ -1199,7 +1238,6 @@ function useIssues(
   assert(start !== null);
 
   return {
-    // issues: slicedIssues,
     issueAt: (index: number) => {
       if (anchorIndex - index - 1 >= issuesLength) {
         return undefined;
@@ -1212,6 +1250,7 @@ function useIssues(
     atStart: complete && !hasMoreIssues,
     atEnd: false,
     firstIssueIndex: anchorIndex - issuesLength,
+    permalinkNotFound,
   };
 }
 
