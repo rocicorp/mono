@@ -164,6 +164,7 @@ export {
   type Mutator,
   type MutatorDefinition,
 } from '../../zql/src/mutate/mutator.ts';
+export {adhoc, ADHOC_QUERY_NAME} from '../../zql/src/query/adhoc.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {

@@ -1,4 +1,10 @@
 export {
+  executeAdhocQuery,
+  ADHOC_QUERY_NAME,
+  isAdhocQueryName,
+  type AdhocQueryOptions,
+} from './adhoc-queries.ts';
+export {
   ApplicationError,
   isApplicationError,
   type ApplicationErrorOptions,

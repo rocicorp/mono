@@ -1,4 +1,5 @@
 // TODO: Remove this file
+export * from './adhoc-queries.ts';
 export * from './change-desired-queries.ts';
 export * from './connect.ts';
 export * from './down.ts';
