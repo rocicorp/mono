@@ -4,7 +4,6 @@ import {ConnectionStatus} from './connection-status.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {decodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
 
 beforeEach(() => {
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
@@ -30,8 +29,6 @@ test('run-loop error->connect race', async () => {
 
   // Reconnect without providing auth opts - should keep existing auth
   await z.connection.connect();
-  await sleep(1000);
-  await Promise.resolve();
   const currentSocket = await z.socket;
   expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
     'initial-token',
