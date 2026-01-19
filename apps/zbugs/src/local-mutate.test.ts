@@ -34,8 +34,6 @@ test('local mutate', async () => {
     schema,
     mutators: mutatorsForTest,
     userID: 'user-1',
-    // can't make this work using the proper type. Context always throws an error
-    // no matter what we do.
     context: {sub: 'user-1', role: 'user'} as any,
   });
 
