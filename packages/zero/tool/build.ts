@@ -31,6 +31,11 @@ const define = {
   'process.env.DISABLE_MUTATION_RECOVERY': 'true',
 };
 
+const testingDefine = {
+  ...define,
+  TESTING: 'true',
+};
+
 // Vite config helper functions
 async function getPackageJSON() {
   const content = await readFile(resolve('package.json'), 'utf-8');
@@ -53,10 +58,14 @@ function extractOutPath(path: string): string | undefined {
 function extractEntries(
   entries: Record<string, unknown>,
   getEntryName: (key: string, outPath: string) => string,
+  excludeKeys: Set<string> = new Set(),
 ): Record<string, string> {
   const entryPoints: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(entries)) {
+    if (excludeKeys.has(key)) {
+      continue;
+    }
     const path =
       typeof value === 'string' ? value : (value as {default?: string}).default;
 
@@ -94,16 +103,35 @@ function getWorkerEntryPoints(): Record<string, string> {
   return entryPoints;
 }
 
+// Entry points that need TESTING=true
+const testingExports = new Set(['./testing']);
+
 async function getAllEntryPoints(): Promise<Record<string, string>> {
   const packageJSON = await getPackageJSON();
 
   return {
-    ...extractEntries(packageJSON.exports ?? {}, (key, outPath) =>
-      key === '.' ? 'zero/src/zero' : outPath,
+    ...extractEntries(
+      packageJSON.exports ?? {},
+      (key, outPath) => (key === '.' ? 'zero/src/zero' : outPath),
+      testingExports,
     ),
     ...extractEntries(packageJSON.bin ?? {}, (_, outPath) => outPath),
     ...getWorkerEntryPoints(),
   };
+}
+
+async function getTestingEntryPoints(): Promise<Record<string, string>> {
+  const packageJSON = await getPackageJSON();
+
+  return extractEntries(
+    packageJSON.exports ?? {},
+    (key, outPath) => (key === '.' ? 'zero/src/zero' : outPath),
+    new Set(
+      Object.keys(packageJSON.exports ?? {}).filter(
+        k => !testingExports.has(k),
+      ),
+    ),
+  );
 }
 
 const baseConfig: InlineConfig = {
@@ -137,6 +165,28 @@ async function getViteConfig(): Promise<InlineConfig> {
           entryFileNames: '[name].js',
           chunkFileNames: 'chunks/[name]-[hash].js',
           preserveModules: true,
+        },
+      },
+    },
+  };
+}
+
+async function getTestingViteConfig(): Promise<InlineConfig> {
+  return {
+    ...baseConfig,
+    define: testingDefine,
+    build: {
+      ...baseConfig.build,
+      rollupOptions: {
+        external,
+        input: await getTestingEntryPoints(),
+        output: {
+          format: 'es',
+          entryFileNames: '[name].js',
+          chunkFileNames: 'chunks/[name]-[hash].js',
+          // Don't preserve modules for testing - bundle dependencies so they
+          // get the TESTING=true define
+          preserveModules: false,
         },
       },
     },
@@ -233,8 +283,11 @@ async function build() {
     // Watch mode: run vite and tsc in watch mode
     const viteConfig = await getViteConfig();
     viteConfig.build = {...viteConfig.build, watch: {}};
+    const testingConfig = await getTestingViteConfig();
+    testingConfig.build = {...testingConfig.build, watch: {}};
     await Promise.all([
       runViteBuild(viteConfig, 'vite build (watch)'),
+      runViteBuild(testingConfig, 'vite build (testing watch)'),
       exec(
         'tsc -p tsconfig.client.json --watch --preserveWatchOutput',
         'client dts (watch)',
@@ -247,8 +300,10 @@ async function build() {
   } else {
     // Normal build: use inline vite config + type declarations
     const viteConfig = await getViteConfig();
+    const testingConfig = await getTestingViteConfig();
     await Promise.all([
       runViteBuild(viteConfig, 'vite build'),
+      runViteBuild(testingConfig, 'vite build (testing)'),
       exec('tsc -p tsconfig.client.json', 'client dts'),
       exec('tsc -p tsconfig.server.json', 'server dts'),
     ]);
