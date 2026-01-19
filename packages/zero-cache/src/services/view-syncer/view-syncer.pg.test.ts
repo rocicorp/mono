@@ -920,6 +920,8 @@ describe('view-syncer/service', () => {
         ]
       `);
 
+      console.log(1);
+
       await inactivateQuery(vs, SYNC_CONTEXT, 'custom-1');
 
       expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -955,8 +957,11 @@ describe('view-syncer/service', () => {
         ]
       `);
 
+      console.log(2);
       // Expire custom-1
       callNextSetTimeout(ttl);
+
+      console.log(3);
 
       expect(await nextPoke(client)).toMatchInlineSnapshot(`
         [
@@ -988,6 +993,8 @@ describe('view-syncer/service', () => {
           ],
         ]
       `);
+
+      console.log(4);
 
       // Verify custom-2 is still alive by making a data change
       replicator.processTransaction(
@@ -2581,7 +2588,7 @@ describe('view-syncer/service', () => {
       `);
   });
 
-  test('process advancements', async () => {
+  test.only('process advancements', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
@@ -2634,6 +2641,8 @@ describe('view-syncer/service', () => {
       ]
     `);
 
+    console.log(1);
+
     // Perform an unrelated transaction that does not affect any queries.
     // This should not result in a poke.
     replicator.processTransaction(
@@ -2645,6 +2654,8 @@ describe('view-syncer/service', () => {
     );
     stateChanges.push({state: 'version-ready'});
     await expectNoPokes(client);
+
+    console.log(2);
 
     // Then, a relevant change should bump the client from '01' directly to '123'.
     replicator.processTransaction(
@@ -2659,7 +2670,10 @@ describe('view-syncer/service', () => {
       messages.delete('issues', {id: '2'}),
     );
 
+    console.log(3);
+
     stateChanges.push({state: 'version-ready'});
+    console.log(4);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
       [
         [
@@ -2705,6 +2719,7 @@ describe('view-syncer/service', () => {
         ],
       ]
     `);
+    console.log(5);
 
     expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
       .toMatchInlineSnapshot(`
@@ -2792,9 +2807,12 @@ describe('view-syncer/service', () => {
         ]
       `);
 
+    console.log(6);
+
     replicator.processTransaction('124', messages.truncate('issues'));
 
     stateChanges.push({state: 'version-ready'});
+    console.log(7);
 
     // Then a poke that deletes issues rows in the CVR.
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -2851,6 +2869,8 @@ describe('view-syncer/service', () => {
         ],
       ]
     `);
+
+    console.log(8);
 
     expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
       .toMatchInlineSnapshot(`
