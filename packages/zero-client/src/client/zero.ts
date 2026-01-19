@@ -1986,9 +1986,10 @@ export class Zero<
                 break;
               }
 
-              case 'stateChange':
+              case 'stateChange': {
                 throwIfConnectionError(raceResult.result);
                 break;
+              }
 
               default:
                 unreachable(raceResult);
@@ -2003,8 +2004,13 @@ export class Zero<
               `Run loop paused in needs-auth state. Call zero.connection.connect({auth}) to resume.`,
               currentState.reason,
             );
-
-            await this.#connectionManager.waitForStateChange();
+            const resumeResult = await promiseRace({
+              connectRequest: this.#connectionManager.waitForConnectRequest(),
+              stateChange: this.#connectionManager.waitForStateChange(),
+            });
+            if (resumeResult.key === 'connectRequest') {
+              this.#connectionManager.resumeFromConnectRequest();
+            }
             break;
           }
 
@@ -2014,8 +2020,13 @@ export class Zero<
               `Run loop paused in error state. Call zero.connection.connect() to resume.`,
               currentState.reason,
             );
-
-            await this.#connectionManager.waitForStateChange();
+            const resumeResult = await promiseRace({
+              connectRequest: this.#connectionManager.waitForConnectRequest(),
+              stateChange: this.#connectionManager.waitForStateChange(),
+            });
+            if (resumeResult.key === 'connectRequest') {
+              this.#connectionManager.resumeFromConnectRequest();
+            }
             break;
           }
 

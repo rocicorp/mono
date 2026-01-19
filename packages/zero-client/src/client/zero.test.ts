@@ -275,7 +275,6 @@ describe('onOnlineChange callback', () => {
     expect(getOnlineCount()).toBe(1);
     expect(getOfflineCount()).toBe(1);
     // And followed by a reconnect.
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await z.connection.connect();
     await z.triggerConnected();
     expect(z.online).toBe(true);
@@ -562,12 +561,10 @@ test('transition to connecting state if ping fails', async () => {
   expect((await z.socket).messages).toEqual(['["ping",{}]']);
 
   await z.triggerPong();
-  await tickAFewTimes(vi);
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 
   await tickAFewTimes(vi, watchdogInterval);
   await z.triggerPong();
-  await tickAFewTimes(vi);
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 
   await tickAFewTimes(vi, watchdogInterval);
@@ -584,8 +581,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await tickAFewTimes(vi);
-
   const socket = await z.socket;
   socket.messages.length = 0;
 
@@ -594,7 +589,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
     requestID: 'req-1',
     lastMutationIDChanges: {},
   });
-  await tickAFewTimes(vi);
 
   const pingCountAfterAbort = socket.messages.filter(message =>
     message.startsWith('["ping"'),
@@ -609,7 +603,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   expect(pingMessages).toHaveLength(1);
 
   await z.triggerPong();
-  await tickAFewTimes(vi);
 });
 
 const mockProfileID = 'pProfID1';
@@ -2416,7 +2409,6 @@ test('connect() without opts preserves existing auth', async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
-  await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
 
   // Reconnect without providing auth opts - should keep existing auth
   await z.connection.connect();
@@ -2754,9 +2746,7 @@ test('socketOrigin', async () => {
   for (const c of cases) {
     const z = zeroForTest(c.socketEnabled ? {} : {cacheURL: null});
 
-    await tickAFewTimes(vi);
-
-    expect(z.connectionStatus, c.name).toBe(
+    await z.waitForConnectionStatus(
       c.socketEnabled
         ? ConnectionStatus.Connecting
         : ConnectionStatus.Disconnected,
@@ -2837,8 +2827,6 @@ async function testWaitsForConnection(
     () => log.push('resolved'),
     () => log.push('rejected'),
   );
-
-  await tickAFewTimes(vi);
 
   // Rejections that happened in previous connect should not reject pusher.
   expect(log).toEqual([]);
@@ -3286,9 +3274,7 @@ describe('Disconnect on hide', () => {
     visibilityState = 'visible';
     document.dispatchEvent(new Event('visibilitychange'));
 
-    const reconnectingSocket = z.socket;
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-    await reconnectingSocket;
+    await z.socket;
     await z.triggerConnected();
     expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
     expect(await onOnlineChangeP).toBe(true);
@@ -4512,7 +4498,6 @@ describe('Zero replicache refresh integration', () => {
       expect(z.enableRefresh()).toBe(true);
 
       // Reconnect
-      await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
       await z.connection.connect();
 
       // Status should transition to Connecting
