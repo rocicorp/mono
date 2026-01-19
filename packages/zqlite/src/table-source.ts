@@ -471,11 +471,12 @@ export class TableSource implements Source {
    */
   getRow(rowKey: Row): Row | undefined {
     const keyCols = Object.keys(rowKey);
-    const keyVals = Object.values(rowKey);
 
     const stmt = this.#getRowStmt(keyCols);
     const row = this.#stmts.cache.use(stmt, cached =>
-      cached.statement.safeIntegers(true).get<Row>(keyVals),
+      cached.statement
+        .safeIntegers(true)
+        .get<Row>(...toSQLiteTypes(keyCols, rowKey, this.#columns)),
     );
     if (row) {
       return fromSQLiteTypes(this.#columns, row, this.#table);
