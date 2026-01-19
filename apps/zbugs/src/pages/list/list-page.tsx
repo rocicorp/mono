@@ -367,8 +367,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
   });
 
   // oxlint-disable-next-line no-explicit-any
-  (globalThis as any).permalinkNavigate = (id: string) => {
-    navigate(setParam(qs, 'id', id));
+  (globalThis as any).permalinkNavigate = (id: string | number) => {
+    navigate(setParam(qs, 'id', String(id)));
   };
 
   const [pendingScrollAdjustment, setPendingScrollAdjustment] =
@@ -414,16 +414,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (isListContextCurrent) {
       return queryAnchor.anchor;
     }
-    // TODO(arv): DRY
-    return permalinkID
-      ? ({
-          index: NUM_ROWS_FOR_LOADING_SKELETON,
-          kind: 'permalink',
-          id: permalinkID,
-        } satisfies Anchor)
-      : TOP_ANCHOR;
 
-    // return TOP_ANCHOR;
+    // TODO(arv): DRY
+    if (permalinkID) {
+      return {
+        index: NUM_ROWS_FOR_LOADING_SKELETON,
+        kind: 'permalink',
+        id: permalinkID,
+      } satisfies Anchor;
+    }
+    return TOP_ANCHOR;
   }, [isListContextCurrent, queryAnchor.anchor]);
 
   const [estimatedTotal, setEstimatedTotal] = useState(
@@ -431,8 +431,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
   );
 
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
-  const skipPagingLogicRef = useRef<boolean>(false);
-
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [hasReachedStart, setHasReachedStart] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
@@ -458,7 +456,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   useEffect(() => {
     if (permalinkNotFound) {
-      navigate(removeParam(qs, 'id'), {replace: true});
       const toastID = 'permalink-issue-not-found';
       toast(
         <ToastContent toastID={toastID}>
@@ -469,8 +466,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
           containerId: 'bottom',
         },
       );
+      navigate(removeParam(qs, 'id'), {replace: true});
     }
-  }, [permalinkNotFound]);
+  }, [permalinkNotFound, permalinkID]);
 
   useEffect(() => {
     if (atStart) {
@@ -489,14 +487,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    if (
-      skipPagingLogicRef.current &&
-      skipPagingLogic &&
-      pendingScrollAdjustment === 0
-    ) {
-      // TODO(arv): See if we can remove the state and only use the ref
+    if (skipPagingLogic && pendingScrollAdjustment === 0) {
       setSkipPagingLogic(false);
-      skipPagingLogicRef.current = false;
       return;
     }
 
@@ -510,7 +502,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
       setPendingScrollAdjustment(0);
       setSkipPagingLogic(true);
-      skipPagingLogicRef.current = true;
 
       return;
     }
@@ -521,7 +512,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       const offset = -firstIssueIndex + placeholderRows;
 
       setSkipPagingLogic(true);
-      skipPagingLogicRef.current = true;
+      // skipPagingLogicRef.current = true;
       setPendingScrollAdjustment(offset);
       const newAnchor = {
         ...anchor,
@@ -571,7 +562,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
         if (listRef.current) {
           listRef.current.scrollTop = historyState.scrollTop;
         }
-        // virtualizer.scrollToOffset(historyState.scrollTop);
         setEstimatedTotal(historyState.estimatedTotal);
         setHasReachedStart(historyState.hasReachedStart);
         setHasReachedEnd(historyState.hasReachedEnd);
@@ -580,7 +570,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         if (listRef.current) {
           listRef.current.scrollTop = NUM_ROWS_FOR_LOADING_SKELETON * ITEM_SIZE;
         }
-        // setEstimatedTotal(NUM_ROWS_FOR_LOADING_SKELETON);
+        setEstimatedTotal(NUM_ROWS_FOR_LOADING_SKELETON);
         setHasReachedStart(false);
         setHasReachedEnd(false);
         updateAnchor({
@@ -599,7 +589,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
         updateAnchor(TOP_ANCHOR);
       }
       setSkipPagingLogic(true);
-      skipPagingLogicRef.current = true;
     }
   }, [isListContextCurrent]);
 
@@ -1026,7 +1015,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
               width: size.width,
               height: size.height,
               overflow: 'auto',
-              overflowAnchor: 'none',
             }}
             ref={listRef}
           >
