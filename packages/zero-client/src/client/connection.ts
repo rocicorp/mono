@@ -154,10 +154,12 @@ export class ConnectionImpl implements Connection {
       `Resuming connection from state: ${this.#connectionManager.state.name}`,
     );
 
-    // Transition to connecting, which will trigger the state change resolver
-    // and unblock the run loop. Wait for the next state change (connected, disconnected, etc.)
-    const {nextStatePromise} = this.#connectionManager.connecting();
-    await nextStatePromise;
+    this.#connectionManager.requestConnect();
+    if (this.#connectionManager.state.name === ConnectionStatus.Connecting) {
+      return;
+    }
+
+    await this.#connectionManager.waitForStateChange();
   }
 }
 

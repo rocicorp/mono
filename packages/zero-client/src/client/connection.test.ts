@@ -1,12 +1,17 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {ConnectionManager} from './connection-manager.ts';
+import type {
+  ConnectionManager,
+  ConnectionManagerState,
+} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import {
   type ConnectionState,
   ConnectionImpl,
   ConnectionSource,
 } from './connection.ts';
+import {ClientError} from './error.ts';
 
 describe('ConnectionImpl', () => {
   let manager: ConnectionManager;
@@ -15,24 +20,34 @@ describe('ConnectionImpl', () => {
     typeof vi.fn<(auth: string | null | undefined) => void>
   >;
   let isInTerminalStateMock: ReturnType<typeof vi.fn>;
-  let connectingMock: ReturnType<typeof vi.fn>;
+  let requestConnectMock: ReturnType<typeof vi.fn>;
+  let waitForStateChangeMock: ReturnType<typeof vi.fn>;
   let subscribeMock: ReturnType<typeof vi.fn>;
+  let state: ConnectionManagerState;
 
   beforeEach(() => {
     lc = new LogContext('debug', {});
     setAuthSpy = vi.fn();
     isInTerminalStateMock = vi.fn().mockReturnValue(false);
-    connectingMock = vi
-      .fn()
-      .mockReturnValue({nextStatePromise: Promise.resolve()});
+    requestConnectMock = vi.fn();
+    waitForStateChangeMock = vi.fn();
     const unsubscribe = vi.fn();
     subscribeMock = vi.fn().mockReturnValue(unsubscribe);
+    state = {
+      name: ConnectionStatus.Connecting,
+      attempt: 0,
+      disconnectAt: 0,
+    };
+    waitForStateChangeMock.mockResolvedValue(state);
 
     // Mock connection manager with minimal required behavior
     manager = {
-      state: {name: ConnectionStatus.Connecting},
+      get state() {
+        return state;
+      },
       isInTerminalState: isInTerminalStateMock,
-      connecting: connectingMock,
+      requestConnect: requestConnectMock,
+      waitForStateChange: waitForStateChangeMock,
       subscribe: subscribeMock,
     } as unknown as ConnectionManager;
   });
@@ -44,67 +59,92 @@ describe('ConnectionImpl', () => {
 
       await connection.connect();
 
-      expect(connectingMock).not.toHaveBeenCalled();
+      expect(requestConnectMock).not.toHaveBeenCalled();
+      expect(waitForStateChangeMock).not.toHaveBeenCalled();
       expect(setAuthSpy).not.toHaveBeenCalled();
     });
 
-    test('calls manager.connecting() and waits for state change', async () => {
+    test('requests connect and waits for state change', async () => {
       isInTerminalStateMock.mockReturnValue(true);
-      const nextStatePromise = Promise.resolve(manager.state);
-      connectingMock.mockReturnValue({
-        nextStatePromise,
-      } as ReturnType<ConnectionManager['connecting']>);
+      state = {
+        name: ConnectionStatus.Error,
+        reason: new ClientError({
+          kind: ClientErrorKind.Internal,
+          message: 'err',
+        }),
+      };
+      const nextStatePromise = Promise.resolve(state);
+      waitForStateChangeMock.mockReturnValue(nextStatePromise);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
 
       await connection.connect();
 
-      expect(connectingMock).toHaveBeenCalledTimes(1);
+      expect(requestConnectMock).toHaveBeenCalledTimes(1);
+      expect(waitForStateChangeMock).toHaveBeenCalledTimes(1);
       expect(setAuthSpy).not.toHaveBeenCalled();
     });
 
     test('updates auth when string token is provided', async () => {
       isInTerminalStateMock.mockReturnValue(true);
-      const nextStatePromise = Promise.resolve(manager.state);
-      connectingMock.mockReturnValue({
-        nextStatePromise,
-      } as ReturnType<ConnectionManager['connecting']>);
+      state = {
+        name: ConnectionStatus.Error,
+        reason: new ClientError({
+          kind: ClientErrorKind.Internal,
+          message: 'err',
+        }),
+      };
+      const nextStatePromise = Promise.resolve(state);
+      waitForStateChangeMock.mockReturnValue(nextStatePromise);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
 
       await connection.connect({auth: 'test-token-123'});
 
       expect(setAuthSpy).toHaveBeenCalledWith('test-token-123');
       expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(connectingMock).toHaveBeenCalledTimes(1);
+      expect(requestConnectMock).toHaveBeenCalledTimes(1);
+      expect(waitForStateChangeMock).toHaveBeenCalledTimes(1);
     });
 
     test('clears auth when null is provided', async () => {
       isInTerminalStateMock.mockReturnValue(true);
-      const nextStatePromise = Promise.resolve(manager.state);
-      connectingMock.mockReturnValue({
-        nextStatePromise,
-      } as ReturnType<ConnectionManager['connecting']>);
+      state = {
+        name: ConnectionStatus.Error,
+        reason: new ClientError({
+          kind: ClientErrorKind.Internal,
+          message: 'err',
+        }),
+      };
+      const nextStatePromise = Promise.resolve(state);
+      waitForStateChangeMock.mockReturnValue(nextStatePromise);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
 
       await connection.connect({auth: null});
 
       expect(setAuthSpy).toHaveBeenCalledWith(null);
       expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(connectingMock).toHaveBeenCalledTimes(1);
+      expect(requestConnectMock).toHaveBeenCalledTimes(1);
+      expect(waitForStateChangeMock).toHaveBeenCalledTimes(1);
     });
 
     test('clears auth when undefined is provided', async () => {
       isInTerminalStateMock.mockReturnValue(true);
-      const nextStatePromise = Promise.resolve(manager.state);
-      connectingMock.mockReturnValue({
-        nextStatePromise,
-      } as ReturnType<ConnectionManager['connecting']>);
+      state = {
+        name: ConnectionStatus.Error,
+        reason: new ClientError({
+          kind: ClientErrorKind.Internal,
+          message: 'err',
+        }),
+      };
+      const nextStatePromise = Promise.resolve(state);
+      waitForStateChangeMock.mockReturnValue(nextStatePromise);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
 
       await connection.connect({auth: undefined});
 
       expect(setAuthSpy).toHaveBeenCalledWith(undefined);
       expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(connectingMock).toHaveBeenCalledTimes(1);
+      expect(requestConnectMock).toHaveBeenCalledTimes(1);
+      expect(waitForStateChangeMock).toHaveBeenCalledTimes(1);
     });
 
     test('updates auth when called outside terminal state', async () => {
@@ -115,7 +155,8 @@ describe('ConnectionImpl', () => {
 
       expect(setAuthSpy).toHaveBeenCalledWith('new-token');
       expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(connectingMock).not.toHaveBeenCalled();
+      expect(requestConnectMock).not.toHaveBeenCalled();
+      expect(waitForStateChangeMock).not.toHaveBeenCalled();
     });
   });
 });

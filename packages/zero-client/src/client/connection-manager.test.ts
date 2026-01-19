@@ -62,6 +62,84 @@ describe('ConnectionManager', () => {
     });
   });
 
+  describe('connect request', () => {
+    test('waitForConnectRequest resolves after requestConnect', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+
+      let resolved = false;
+      const waitPromise = manager.waitForConnectRequest().then(() => {
+        resolved = true;
+      });
+
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      manager.requestConnect();
+      await waitPromise;
+      expect(resolved).toBe(true);
+    });
+
+    test('waitForConnectRequest resolves immediately while request is pending', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+      const error = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'boom',
+      });
+
+      manager.error(error);
+      manager.requestConnect();
+      await manager.waitForConnectRequest();
+
+      let resolved = false;
+      await manager.waitForConnectRequest().then(() => {
+        resolved = true;
+      });
+      expect(resolved).toBe(true);
+
+      expect(manager.resumeFromConnectRequest()).toBe(true);
+      expect(manager.state.name).toBe(ConnectionStatus.Connecting);
+
+      let pendingResolved = false;
+      const pendingPromise = manager.waitForConnectRequest().then(() => {
+        pendingResolved = true;
+      });
+      await Promise.resolve();
+      expect(pendingResolved).toBe(false);
+
+      manager.requestConnect();
+      await pendingPromise;
+      expect(pendingResolved).toBe(true);
+    });
+
+    test('resumeFromConnectRequest returns false when not in terminal state', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+
+      expect(manager.resumeFromConnectRequest()).toBe(false);
+    });
+
+    test('resumeFromConnectRequest restarts connecting when requested', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+      const error = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'boom',
+      });
+
+      manager.error(error);
+      manager.requestConnect();
+
+      expect(manager.resumeFromConnectRequest()).toBe(true);
+      expect(manager.state.name).toBe(ConnectionStatus.Connecting);
+    });
+  });
+
   describe('connecting', () => {
     test('increments attempt and keeps disconnect deadline while already connecting', () => {
       vi.setSystemTime(2_500);
