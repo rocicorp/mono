@@ -12,11 +12,10 @@ import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
 import {builder, ZERO_PROJECT_NAME} from './schema.ts';
 
-function applyIssuePermissions<
-  // TReturn must be any or the `.one()` case does not match
-  // oxlint-disable-next-line no-explicit-any
-  TQuery extends Query<'issue', DefaultSchema, any>,
->(q: TQuery, role: Role | undefined): TQuery {
+function applyIssuePermissions<TQuery extends IssueQuery>(
+  q: TQuery,
+  role: Role | undefined,
+): TQuery {
   return q.where(({or, cmp, cmpLit}) =>
     or(cmp('visibility', '=', 'public'), cmpLit(role, '=', 'crew')),
   ) as TQuery;
@@ -37,13 +36,15 @@ const listContextParams = z.object({
 });
 export type ListContextParams = z.infer<typeof listContextParams>;
 
-const issueRowSort = z.object({
-  id: z.string(),
-  created: z.number(),
-  modified: z.number(),
-});
+export const issueRowSortSchema = z.readonly(
+  z.object({
+    id: z.string(),
+    created: z.number(),
+    modified: z.number(),
+  }),
+);
 
-export type IssueRowSort = z.infer<typeof issueRowSort>;
+export type IssueRowSort = z.infer<typeof issueRowSortSchema>;
 
 function labelsOrderByName({
   args: {projectName, orderBy},
@@ -206,13 +207,25 @@ export const queries = defineQueries({
       listContext: listContextParams,
       userID: z.string(),
       limit: z.nullable(z.number()),
-      start: z.nullable(issueRowSort),
+      start: z.nullable(issueRowSortSchema),
       dir: z.union([z.literal('forward'), z.literal('backward')]),
       inclusive: z.optional(z.boolean()),
     }),
 
     ({ctx: auth, args: {listContext, userID, limit, start, dir, inclusive}}) =>
       issueListV2(listContext, limit, userID, auth, start, dir, inclusive),
+  ),
+
+  /**
+   * This is used to get a single issue so that we can get the order for start at.
+   */
+  issueByID: defineQuery(
+    z.object({
+      listContext: listContextParams,
+      id: z.string(),
+    }),
+    ({ctx: auth, args: {listContext, id}}) =>
+      buildListQuery({role: auth?.role, listContext}).where('id', id).one(),
   ),
 
   emojiChange: defineQuery(idValidator, ({args: subjectID}) =>
@@ -248,7 +261,7 @@ export const queries = defineQueries({
   prevNext: defineQuery(
     z.object({
       listContext: z.nullable(listContextParams),
-      issue: z.nullable(issueRowSort),
+      issue: z.nullable(issueRowSortSchema),
       dir: z.union([z.literal('next'), z.literal('prev')]),
     }),
     ({ctx: auth, args: {listContext, issue, dir}}) =>
@@ -338,6 +351,13 @@ export type ListQueryArgs = {
   inclusive?: boolean | undefined;
 };
 
+export type ListItemQueryArgs = {
+  issueQuery?: (typeof builder)['issue'] | undefined;
+  listContext?: ListContext['params'] | undefined;
+  project?: string | undefined;
+  role?: Role | undefined;
+};
+
 function alwaysFalse<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
@@ -346,47 +366,26 @@ function alwaysFalse<
   return q.where(({or}) => or());
 }
 
-export function buildListQuery(args: ListQueryArgs) {
-  const {
-    issueQuery = builder.issue,
-    limit,
-    listContext,
-    role,
-    dir = 'forward',
-    start,
-    inclusive = false,
-  } = args;
+type CommonFilterArgs<Q> = {
+  issueQuery: Q;
+  listContext: ListContext['params'];
+  role?: Role | undefined;
+};
 
-  let q = issueQuery
-    .related('viewState', q =>
-      (args.userID ? q.where('userID', args.userID) : alwaysFalse(q)).one(),
-    )
-    .related('labels');
+// TReturn must be any or the `.one()` case does not match
+// oxlint-disable-next-line no-explicit-any
+type IssueQuery = Query<'issue', DefaultSchema, any>;
 
-  if (!listContext) {
-    return alwaysFalse(q);
-  }
+function applyCommonFilters<TQuery extends IssueQuery>({
+  issueQuery,
+  listContext,
+  role,
+}: CommonFilterArgs<TQuery>): TQuery {
   const {projectName = ZERO_PROJECT_NAME} = listContext;
 
-  q = q.whereExists('project', q =>
+  let q = issueQuery.whereExists('project', q =>
     q.where('lowerCaseName', projectName.toLocaleLowerCase()),
   );
-
-  const {sortField, sortDirection} = listContext;
-  const orderByDir =
-    dir === 'forward'
-      ? sortDirection
-      : sortDirection === 'asc'
-        ? 'desc'
-        : 'asc';
-  q = q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
-
-  if (start) {
-    q = q.start(start, {inclusive});
-  }
-  if (limit) {
-    q = q.limit(limit);
-  }
 
   const {open, creator, assignee, labels, textFilter} = listContext;
   q = q.where(({and, cmp, exists, or}) =>
@@ -412,5 +411,58 @@ export function buildListQuery(args: ListQueryArgs) {
     ),
   );
 
-  return applyIssuePermissions(q, role);
+  return applyIssuePermissions(q, role) as TQuery;
+}
+
+export function buildListQuery(args: ListQueryArgs) {
+  const {
+    issueQuery = builder.issue,
+    limit,
+    listContext,
+    role,
+    dir = 'forward',
+    start,
+    inclusive = false,
+  } = args;
+
+  let q = issueQuery
+    .related('viewState', q =>
+      (args.userID ? q.where('userID', args.userID) : alwaysFalse(q)).one(),
+    )
+    .related('labels');
+
+  if (!listContext) {
+    return alwaysFalse(q);
+  }
+
+  q = applyCommonFilters({issueQuery: q, listContext, role});
+
+  const {sortField, sortDirection} = listContext;
+  const orderByDir =
+    dir === 'forward'
+      ? sortDirection
+      : sortDirection === 'asc'
+        ? 'desc'
+        : 'asc';
+  q = q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
+
+  if (start) {
+    q = q.start(start, {inclusive});
+  }
+  if (limit) {
+    q = q.limit(limit);
+  }
+
+  return q;
+}
+
+export function buildListItemQuery(args: ListItemQueryArgs) {
+  const {issueQuery = builder.issue, listContext, role} = args;
+
+  if (!listContext) {
+    return alwaysFalse(issueQuery).one();
+  }
+
+  const q = applyCommonFilters({issueQuery, listContext, role});
+  return q.one();
 }

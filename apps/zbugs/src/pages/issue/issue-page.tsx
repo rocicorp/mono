@@ -112,6 +112,10 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [issue, isScrolling, displayed]);
 
   useEffect(() => {
+    document.title = 'Zero Bugs → ' + (displayed?.title ?? 'Issue Page');
+  }, [displayed?.title]);
+
+  useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
       preload(z, projectName);

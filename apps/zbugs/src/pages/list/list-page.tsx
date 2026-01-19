@@ -21,10 +21,11 @@ import React, {
 import {assert} from 'shared/src/asserts.ts';
 import {useDebouncedCallback} from 'use-debounce';
 import {useLocation, useParams, useSearch} from 'wouter';
-import {navigate, useHistoryState} from 'wouter/use-browser-location';
+import {useHistoryState} from 'wouter/use-browser-location';
 import * as zod from 'zod/mini';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {
+  issueRowSortSchema,
   queries,
   type IssueRowSort,
   type ListContext,
@@ -41,6 +42,13 @@ import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
+import {
+  appendParam,
+  navigate,
+  removeParam,
+  replaceHistoryState,
+  setParam,
+} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
@@ -59,24 +67,7 @@ const ITEM_SIZE = 56;
 const MIN_PAGE_SIZE = 100;
 const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
-type StartRow = IssueRowSort;
-
-export type Anchor =
-  | {
-      readonly type: 'forward';
-      readonly index: number;
-      readonly startRow?: StartRow | undefined;
-    }
-  | {
-      readonly type: 'backward';
-      readonly index: number;
-      readonly startRow: StartRow;
-    }
-  | {
-      readonly type: 'permalink';
-      readonly index: number;
-      readonly startRow: StartRow;
-    };
+export type Anchor = zod.infer<typeof anchorSchema>;
 
 type QueryAnchor = {
   readonly anchor: Anchor;
@@ -103,130 +94,86 @@ type QueryAnchor = {
 
 const TOP_ANCHOR = Object.freeze({
   index: 0,
-  type: 'forward',
+  kind: 'forward',
   startRow: undefined,
 });
 
-const START_ANCHOR: Anchor = TOP_ANCHOR || {
-  index: NUM_ROWS_FOR_LOADING_SKELETON,
-  type: 'permalink',
+// First issue
+// index: 0
+//
+// id: 'HdpMkgbHpK3_OcOIiQOuW',
 
-  // // First issue
-  // // index: 0
-  // // subject: Leaking listeners on AbortSignal
-  // startRow: {
-  //   id: 'HdpMkgbHpK3_OcOIiQOuW',
-  //   modified: 1765697824305,
-  //   created: 1726473756000,
-  // },
+// Very early issue
+// index: 5
+// subject: Replicator dies...
+// id: 'HC7kWsm0qUYvf2BqjfiD_',
 
-  // // Very early issue
-  // // index: 5
-  // // subject: Replicator dies...
-  // startRow: {
-  //   id: 'HC7kWsm0qUYvf2BqjfiD_',
-  //   modified: 1726188938000,
-  //   created: 1726184763000,
-  // },
+// Early issue
+// index: 45
+// subject:RFE: enumerateCaches
+// id: 'X-TwNXBDwTeQB0Mav31bU',
 
-  // // Early issue
-  // // index: 45
-  // // subject:RFE: enumerateCaches
-  // startRow: {
-  //   id: 'X-TwNXBDwTeQB0Mav31bU',
-  //   modified: 1709537728000,
-  //   created: 1669918206000,
-  // },
+// Second page
+// index: 120
+// subject: app-publish function needs more Memory
+// id: 'Us_A9kc4ldfHuChlbKeU6',
 
-  // // Second page
-  // // index: 120
-  // // subject: app-publish function needs more Memory
-  startRow: {
-    id: 'Us_A9kc4ldfHuChlbKeU6',
-    modified: 1701202102000,
-    created: 1698518825000,
-  },
+// Middle issue
+// index: 260
+// title: Evaluate if we should return a ClientStateNotFoundResponse ...
+// id: '0zTrvA-6aVO8eNdHBoW7G',
 
-  // // Middle issue
-  // // index: 260
-  // // title: Evaluate if we should return a ClientStateNotFoundResponse ...
-  // startRow: {
-  //   id: '0zTrvA-6aVO8eNdHBoW7G',
-  //   modified: 1678220708000,
-  //   created: 1671231873000,
-  // },
+// Close to bottom
+// index: 500
+// Subject: Add DevTools
+// id: 'mrh64by3B9b6MRHbzkLQP',
 
-  // // Close to bottom
-  // // index: 500
-  // // Subject: Add DevTools
-  // startRow: {
-  //   id: 'mrh64by3B9b6MRHbzkLQP',
-  //   modified: 1677090672000,
-  //   created: 1666168138000,
-  // },
+// Even closer to bottom
+// title: Can we support...
+// index: 512
+// id: '8tyDj9FUJWQ5qd2JEP3KS',
 
-  // // Even closer to bottom
-  // // title: Can we support...
-  // // index: 512
-  // startRow: {
-  //   id: '8tyDj9FUJWQ5qd2JEP3KS',
-  //   modified: 1677090541000,
-  //   created: 1665587844000,
-  // },
+// Last issue
+// index: 515
+// subject: docs: Add something about offline ...
+// id: '4wBDlh9b774qfGD3pWe6d',
 
-  // // Last issue
-  // // index: 515
-  // // subject: docs: Add something about offline ...
-  // startRow: {
-  //   id: '4wBDlh9b774qfGD3pWe6d',
-  //   modified: 1677090538000,
-  //   created: 1667987251000,
-  // },
-};
-
-const startRowSchema = zod.readonly(
-  zod.object({
-    id: zod.string(),
-    modified: zod.number(),
-    created: zod.number(),
-  }),
-);
-
-const anchorSchema = zod.union([
+const anchorSchema = zod.discriminatedUnion('kind', [
   zod.readonly(
     zod.object({
       index: zod.number(),
-      type: zod.literal('forward'),
-      startRow: zod.optional(startRowSchema),
+      kind: zod.literal('forward'),
+      startRow: zod.optional(issueRowSortSchema),
     }),
   ),
   zod.readonly(
     zod.object({
       index: zod.number(),
-      type: zod.literal('backward'),
-      startRow: startRowSchema,
+      kind: zod.literal('backward'),
+      startRow: issueRowSortSchema,
     }),
   ),
   zod.readonly(
     zod.object({
       index: zod.number(),
-      type: zod.literal('permalink'),
-      startRow: startRowSchema,
+      kind: zod.literal('permalink'),
+      // startRow: issueRowSortSchema,
+      id: zod.string(),
     }),
   ),
 ]);
 
-const permalinkAnchorSchema = zod.readonly(
+const permalinkHistoryStateSchema = zod.readonly(
   zod.object({
-    anchor: zod.optional(anchorSchema),
-    scrollTop: zod.optional(zod.number()),
+    anchor: anchorSchema,
+    scrollTop: zod.number(),
+    estimatedTotal: zod.number(),
+    hasReachedStart: zod.boolean(),
+    hasReachedEnd: zod.boolean(),
   }),
 );
 
-type PermalinkHistoryState = {
-  readonly anchor?: Anchor | undefined;
-  readonly scrollTop?: number | undefined;
-};
+type PermalinkHistoryState = zod.infer<typeof permalinkHistoryStateSchema>;
 
 const getNearPageEdgeThreshold = (pageSize: number) => Math.ceil(pageSize / 10);
 
@@ -381,29 +328,46 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const {setListContext} = useListContext();
   useEffect(() => {
     setListContext(listContext);
+
+    document.title =
+      `Zero Bugs → ${listContext.title}` +
+      (permalinkID ? ` → Issue ${permalinkID}` : '');
   }, [listContext]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(tableWrapperRef);
 
+  // TODO:(arv): DRY
   const maybeHistoryState = useHistoryState<PermalinkHistoryState | null>();
-  const res = permalinkAnchorSchema.safeParse(maybeHistoryState);
+  const res = permalinkHistoryStateSchema.safeParse(maybeHistoryState);
   const historyState = res.success ? res.data : null;
 
   // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount issues
   const [queryAnchor, setQueryAnchor] = useState<QueryAnchor>(() => {
-    const state = history.state;
-    const parseResult = permalinkAnchorSchema.safeParse(state);
+    const {state} = history;
+    const parseResult = permalinkHistoryStateSchema.safeParse(state);
     const anchor =
       parseResult.success && parseResult.data.anchor
         ? parseResult.data.anchor
-        : START_ANCHOR;
+        : permalinkID
+          ? ({
+              index: NUM_ROWS_FOR_LOADING_SKELETON,
+              kind: 'permalink',
+              id: permalinkID,
+            } satisfies Anchor)
+          : TOP_ANCHOR;
     return {
       anchor,
       listContextParams,
     };
   });
+
+  // oxlint-disable-next-line no-explicit-any
+  (globalThis as any).permalinkNavigate = (id: string) => {
+    navigate(setParam(qs, 'id', id));
+  };
+
   const [pendingScrollAdjustment, setPendingScrollAdjustment] =
     useState<number>(0);
 
@@ -413,14 +377,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
       listContextParams,
     });
     if (!anchorEquals(historyState?.anchor, anchor)) {
-      navigate(window.location.href, {
-        replace: true,
-        state: {
-          anchor,
-          scrollTop: virtualizer.scrollOffset ?? 0,
-        },
+      replaceHistoryState<PermalinkHistoryState>({
+        anchor,
+        scrollTop: virtualizer.scrollOffset ?? 0,
+        estimatedTotal,
+        hasReachedStart,
+        hasReachedEnd,
       });
-      // history.replaceState({anchor}, '');
     }
   };
 
@@ -444,10 +407,21 @@ export function ListPage({onReady}: {onReady: () => void}) {
     [queryAnchor.listContextParams, listContextParams],
   );
 
-  const anchor = useMemo(
-    () => (isListContextCurrent ? queryAnchor.anchor : START_ANCHOR),
-    [isListContextCurrent, queryAnchor.anchor],
-  );
+  const anchor = useMemo(() => {
+    if (isListContextCurrent) {
+      return queryAnchor.anchor;
+    }
+    // TODO(arv): DRY
+    return permalinkID
+      ? ({
+          index: NUM_ROWS_FOR_LOADING_SKELETON,
+          kind: 'permalink',
+          id: permalinkID,
+        } satisfies Anchor)
+      : TOP_ANCHOR;
+
+    // return TOP_ANCHOR;
+  }, [isListContextCurrent, queryAnchor.anchor]);
 
   const [estimatedTotal, setEstimatedTotal] = useState(
     NUM_ROWS_FOR_LOADING_SKELETON,
@@ -458,8 +432,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [hasReachedStart, setHasReachedStart] = useState(false);
-
-  // const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
@@ -475,9 +447,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     listContextParams,
     z.userID,
     pageSize,
-    anchor.startRow ?? null,
-    anchor.type,
-    anchor.index,
+    anchor,
     textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
 
@@ -575,19 +545,42 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [issuesEmpty, complete, onReady]);
 
   useEffect(() => {
-    // TODO(arv): Deal with permalinks too
     if (!isListContextCurrent) {
-      if (listRef.current) {
-        listRef.current.scrollTop = 0;
+      if (historyState) {
+        if (listRef.current) {
+          listRef.current.scrollTop = historyState.scrollTop;
+        }
+        // virtualizer.scrollToOffset(historyState.scrollTop);
+        setEstimatedTotal(historyState.estimatedTotal);
+        setHasReachedStart(historyState.hasReachedStart);
+        setHasReachedEnd(historyState.hasReachedEnd);
+        updateAnchor(historyState.anchor);
+      } else if (permalinkID) {
+        if (listRef.current) {
+          listRef.current.scrollTop = NUM_ROWS_FOR_LOADING_SKELETON * ITEM_SIZE;
+        }
+        // setEstimatedTotal(NUM_ROWS_FOR_LOADING_SKELETON);
+        setHasReachedStart(false);
+        setHasReachedEnd(false);
+        updateAnchor({
+          id: permalinkID,
+          index: NUM_ROWS_FOR_LOADING_SKELETON,
+          kind: 'permalink',
+        });
+      } else {
+        if (listRef.current) {
+          listRef.current.scrollTop = 0;
+        }
+        // virtualizer.scrollToOffset(0);
+        setEstimatedTotal(0);
+        setHasReachedStart(true);
+        setHasReachedEnd(false);
+        updateAnchor(TOP_ANCHOR);
       }
-
-      setEstimatedTotal(0);
-      setHasReachedStart(true);
-      setHasReachedEnd(false);
-
-      updateAnchor(TOP_ANCHOR);
+      setSkipPagingLogic(true);
+      skipPagingLogicRef.current = true;
     }
-  }, [listContextParams, anchor, isListContextCurrent]);
+  }, [isListContextCurrent]);
 
   useEffect(() => {
     if (complete) {
@@ -601,18 +594,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
     const key = target.getAttribute('data-key');
     const value = target.getAttribute('data-value');
     if (key && value) {
-      navigate(removeParam(qs, key, value));
+      navigate(removeParam(removeParam(qs, key, value), 'id'));
     }
   };
 
   const onFilter = useCallback(
     (selection: Selection) => {
+      const qsWithoutID = removeParam(qs, 'id');
       if ('creator' in selection) {
-        navigate(addParam(qs, 'creator', selection.creator, 'exclusive'));
+        navigate(setParam(qsWithoutID, 'creator', selection.creator));
       } else if ('assignee' in selection) {
-        navigate(addParam(qs, 'assignee', selection.assignee, 'exclusive'));
+        navigate(setParam(qsWithoutID, 'assignee', selection.assignee));
       } else {
-        navigate(addParam(qs, 'label', selection.label));
+        navigate(appendParam(qsWithoutID, 'label', selection.label));
       }
     },
     [qs],
@@ -620,28 +614,26 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const toggleSortField = useCallback(() => {
     navigate(
-      addParam(
-        qs,
+      setParam(
+        removeParam(qs, 'id'),
         'sort',
         sortField === 'created' ? 'modified' : 'created',
-        'exclusive',
       ),
     );
   }, [qs, sortField]);
 
   const toggleSortDirection = useCallback(() => {
     navigate(
-      addParam(
-        qs,
+      setParam(
+        removeParam(qs, 'id'),
         'sortDir',
         sortDirection === 'asc' ? 'desc' : 'asc',
-        'exclusive',
       ),
     );
   }, [qs, sortDirection]);
 
   const updateTextFilterQueryString = useDebouncedCallback((text: string) => {
-    navigate(addParam(qs, 'q', text, 'exclusive'));
+    navigate(setParam(removeParam(qs, 'id'), 'q', text));
   }, 500);
 
   const onTextFilterChange = (text: string) => {
@@ -650,9 +642,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const clearAndHideSearch = () => {
-    setTextFilter(null);
-    setForceSearchMode(false);
-    navigate(removeParam(qs, 'q'), {state: history.state});
+    if (searchMode) {
+      setTextFilter(null);
+      setForceSearchMode(false);
+      navigate(removeParam(removeParam(qs, 'id'), 'q'));
+    }
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
@@ -661,7 +655,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       anchor: Anchor,
       firstIssueIndex: number,
     ) =>
-      anchor.type !== 'backward'
+      anchor.kind !== 'backward'
         ? index - firstIssueIndex
         : anchor.index - index;
 
@@ -700,7 +694,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
             login.loginState !== undefined
             ? 'unread'
             : null,
-          {permalink: issue.id === START_ANCHOR.startRow?.id},
+          {permalink: issue.id === permalinkID},
         )}
         style={{
           ...style,
@@ -750,7 +744,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       if (historyState?.scrollTop !== undefined) {
         return historyState.scrollTop;
       }
-      if (anchor.type === 'permalink') {
+      if (anchor.kind === 'permalink') {
         return anchor.index * ITEM_SIZE;
       }
       return 0;
@@ -759,15 +753,26 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const virtualItems = virtualizer.getVirtualItems();
 
-  useEffect(() => {
-    navigate(window.location.href, {
-      replace: true,
-      state: {
-        anchor,
-        scrollTop: virtualizer.scrollOffset ?? 0,
-      },
+  const updateHistoryState = useDebouncedCallback(() => {
+    replaceHistoryState<PermalinkHistoryState>({
+      anchor,
+      scrollTop: virtualizer.scrollOffset ?? 0,
+      estimatedTotal,
+      hasReachedStart,
+      hasReachedEnd,
     });
-  }, [virtualizer.scrollOffset]);
+  }, 100);
+
+  useEffect(() => {
+    updateHistoryState();
+  }, [
+    anchor,
+    virtualizer.scrollOffset,
+    estimatedTotal,
+    hasReachedStart,
+    hasReachedEnd,
+    updateHistoryState,
+  ]);
 
   useEffect(() => {
     if (
@@ -797,10 +802,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
       assert(startRow !== undefined || type === 'forward');
       updateAnchor({
         index: index + indexOffset,
-        type,
+        kind: type,
         startRow,
       } as Anchor);
-      return true;
     };
 
     const firstItem = virtualItems[0];
@@ -810,27 +814,21 @@ export function ListPage({onReady}: {onReady: () => void}) {
     const distanceFromStart = firstItem.index - firstIssueIndex;
     const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
 
-    if (
-      !atStart &&
-      distanceFromStart <= nearPageEdgeThreshold &&
+    if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
       updateAnchorForEdge(
         lastItem.index + 2 * nearPageEdgeThreshold,
         'backward',
         0,
-      )
-    ) {
+      );
       return;
     }
 
-    if (
-      !atEnd &&
-      distanceFromEnd <= nearPageEdgeThreshold &&
+    if (!atEnd && distanceFromEnd <= nearPageEdgeThreshold) {
       updateAnchorForEdge(
         firstItem.index - 2 * nearPageEdgeThreshold,
         'forward',
         1,
-      )
-    ) {
+      );
       return;
     }
   }, [
@@ -1030,27 +1028,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
   );
 }
 
-const addParam = (
-  qs: URLSearchParams,
-  key: string,
-  value: string,
-  mode?: 'exclusive',
-) => {
-  const newParams = new URLSearchParams(qs);
-  newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
-  return '?' + newParams.toString();
-};
-
 function roundEstimatedTotal(estimatedTotal: number) {
   return estimatedTotal < 50
     ? estimatedTotal
     : estimatedTotal - (estimatedTotal % 50);
-}
-
-function removeParam(qs: URLSearchParams, key: string, value?: string) {
-  const searchParams = new URLSearchParams(qs);
-  searchParams.delete(key, value);
-  return '?' + searchParams.toString();
 }
 
 function formatIssueCountEstimate(count: number) {
@@ -1063,13 +1044,14 @@ function formatIssueCountEstimate(count: number) {
 type Issue = Row<ReturnType<typeof queries.issueListV2>>;
 type Issues = Issue[];
 
+// TODO(arv): Use virtualizer.isScrolling to determine cache policy
+
 function useIssues(
   listContext: ListContextParams,
   userID: string,
   pageSize: number,
-  start: StartRow | null,
-  kind: 'forward' | 'backward' | 'permalink',
-  anchorIndex: number,
+  anchor: Anchor,
+
   options: UseQueryOptions,
 ): {
   issueAt: (index: number) => Issue | undefined;
@@ -1083,68 +1065,98 @@ function useIssues(
   // Conditionally use useSlowQuery or useQuery based on USE_SLOW_QUERY flag
   const queryFn = DEBUG_QUERY ? useSlowQuery : useQuery;
 
+  const {kind, index: anchorIndex} = anchor;
+
   if (kind === 'permalink') {
-    assert(start !== null);
+    const {id} = anchor;
+    assert(id);
     assert(pageSize % 2 === 0);
 
     const halfPageSize = pageSize / 2;
-    const qBefore = queries.issueListV2({
-      listContext,
-      userID,
-      limit: halfPageSize + 1,
-      start,
-      dir: 'backward',
-      inclusive: false,
-    });
-    const qAfter = queries.issueListV2({
-      listContext,
-      userID,
-      limit: halfPageSize + 1,
-      start,
-      dir: 'forward',
-      inclusive: true,
-    });
-    const [issuesBefore, resultBefore]: [Issues, {type: string}] = queryFn(
-      qBefore,
-      options,
-    ) as unknown as [Issues, {type: string}];
-    const [issuesAfter, resultAfter]: [Issues, {type: string}] = queryFn(
-      qAfter,
-      options,
-    ) as unknown as [Issues, {type: string}];
+
+    const qItem = queries.issueByID({id, listContext});
+
+    const [issue, resultIssue] = queryFn(qItem, options);
+    const completeIssue = resultIssue.type === 'complete';
+
+    const start = issue && {
+      id: issue.id,
+      modified: issue.modified,
+      created: issue.created,
+    };
+
+    const qBefore =
+      start &&
+      queries.issueListV2({
+        listContext,
+        userID,
+        limit: halfPageSize + 1,
+        start,
+        dir: 'backward',
+        inclusive: false,
+      });
+    const qAfter =
+      start &&
+      queries.issueListV2({
+        listContext,
+        userID,
+        limit: halfPageSize,
+        start,
+        dir: 'forward',
+        inclusive: false,
+      });
+
+    const [issuesBefore, resultBefore] = queryFn(qBefore, options);
+    const [issuesAfter, resultAfter] = queryFn(qAfter, options);
     const completeBefore = resultBefore.type === 'complete';
     const completeAfter = resultAfter.type === 'complete';
 
-    const issuesBeforeSize = Math.min(issuesBefore.length, halfPageSize);
-    const issuesAfterSize = Math.min(issuesAfter.length, halfPageSize);
+    const issuesBeforeLength = issuesBefore?.length ?? 0;
+    const issuesAfterLength = issuesAfter?.length ?? 0;
+    const issuesBeforeSize = Math.min(issuesBeforeLength, halfPageSize);
+    const issuesAfterSize = Math.min(issuesAfterLength, halfPageSize - 1);
 
     const firstIssueIndex = anchorIndex - issuesBeforeSize;
 
     return {
-      // issues,
       issueAt: (index: number) => {
-        if (index >= anchorIndex) {
-          if (index - anchorIndex >= issuesAfterSize) {
+        if (index === anchorIndex) {
+          return issue;
+        }
+        if (index > anchorIndex) {
+          if (issuesAfter === undefined) {
             return undefined;
           }
-          return issuesAfter[index - anchorIndex];
+          const i = index - anchorIndex - 1;
+          if (i >= issuesAfterSize) {
+            return undefined;
+          }
+          return issuesAfter[i];
         }
         assert(index < anchorIndex);
-        if (anchorIndex - index > issuesBeforeSize) {
+        if (issuesBefore === undefined) {
           return undefined;
         }
-        return issuesBefore[anchorIndex - index - 1];
+        const i = anchorIndex - index - 1;
+        if (i >= issuesBeforeSize) {
+          return undefined;
+        }
+        return issuesBefore[i];
       },
-      issuesLength: issuesBeforeSize + issuesAfterSize,
-      complete: completeBefore && completeAfter,
-      issuesEmpty: issuesBeforeSize === 0 && issuesAfterSize === 0,
-      atStart: completeBefore && issuesBefore.length <= halfPageSize,
-      atEnd: completeAfter && issuesAfter.length <= halfPageSize,
+      issuesLength: issuesBeforeSize + issuesAfterSize + (issue ? 1 : 0),
+      complete: completeIssue && completeBefore && completeAfter,
+      issuesEmpty:
+        issue === undefined ||
+        (issuesBeforeSize === 0 && issuesAfterSize === 0),
+      atStart: completeBefore && issuesBeforeLength <= halfPageSize,
+      atEnd: completeAfter && issuesAfterLength <= halfPageSize - 1,
       firstIssueIndex,
     };
   }
 
   kind satisfies 'forward' | 'backward';
+
+  const {startRow: start = null} = anchor;
 
   const q = queries.issueListV2({
     listContext,
@@ -1159,6 +1171,7 @@ function useIssues(
     options,
   ) as unknown as [Issues, {type: string}];
   // not used but needed to follow rules of hooks
+  void queryFn(null, options);
   void queryFn(null, options);
 
   const complete = result.type === 'complete';
@@ -1225,15 +1238,27 @@ function makeEven(n: number) {
 }
 
 function anchorEquals(anchor: Anchor | undefined, other: Anchor): boolean {
-  if (anchor === undefined) {
+  if (
+    anchor === undefined ||
+    anchor.index !== other.index ||
+    anchor.kind !== other.kind
+  ) {
     return false;
   }
 
+  if (anchor.kind === 'permalink') {
+    return anchor.id === (other as Extract<Anchor, {id: string}>).id;
+  }
+
+  const o = other as Extract<Anchor, {startRow?: IssueRowSort}>;
+  const {startRow} = anchor;
+  if (startRow === undefined) {
+    return startRow === o.startRow;
+  }
+
   return (
-    anchor.index === other.index &&
-    anchor.type === other.type &&
-    anchor.startRow?.id === other.startRow?.id &&
-    anchor.startRow?.modified === other.startRow?.modified &&
-    anchor.startRow?.created === other.startRow?.created
+    startRow?.id === o.startRow?.id &&
+    startRow?.modified === o.startRow?.modified &&
+    startRow?.created === o.startRow?.created
   );
 }
