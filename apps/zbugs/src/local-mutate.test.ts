@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi, beforeEach, afterEach} from 'vitest';
 import {zeroForTest} from '@rocicorp/zero/testing';
 import {builder, schema} from '../shared/schema.ts';
 import {mutators} from '../shared/mutators.ts';
@@ -25,6 +25,15 @@ const mutatorsForTest = defineMutators(mutators, {
       });
     }),
   },
+});
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2025-01-15T12:00:00Z'));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 test('local mutate', async () => {
@@ -64,11 +73,11 @@ test('local mutate', async () => {
     [
       {
         "assigneeID": null,
-        "created": 1768845460229,
+        "created": 1736942400000,
         "creatorID": "user-1",
         "description": "This is a test issue",
         "id": "issue-1",
-        "modified": 1768845460229,
+        "modified": 1736942400000,
         "open": true,
         "projectID": "project-1",
         "shortID": null,
