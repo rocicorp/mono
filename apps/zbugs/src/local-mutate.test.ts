@@ -1,4 +1,4 @@
-import {test} from 'vitest';
+import {expect, test} from 'vitest';
 import {zeroForTest} from '@rocicorp/zero/testing';
 import {builder, schema} from '../shared/schema.ts';
 import {mutators} from '../shared/mutators.ts';
@@ -34,6 +34,7 @@ test('local mutate', async () => {
     schema,
     mutators: mutatorsForTest,
     userID: 'user-1',
+    // oxlint-disable-next-line no-explicit-any
     context: {sub: 'user-1', role: 'user'} as any,
   });
 
@@ -46,7 +47,7 @@ test('local mutate', async () => {
     }),
   ).client;
 
-  const result = await zero.mutate(
+  await zero.mutate(
     mutatorsForTest.issue.create({
       id: 'issue-1',
       title: 'Test Issue',
@@ -57,9 +58,24 @@ test('local mutate', async () => {
     }),
   ).client;
 
-  console.log('Result:', result);
-
   const issues = await zero.run(builder.issue);
 
-  console.log('Issues:', issues);
+  expect(issues).toMatchInlineSnapshot(`
+    [
+      {
+        "assigneeID": null,
+        "created": 1768845460229,
+        "creatorID": "user-1",
+        "description": "This is a test issue",
+        "id": "issue-1",
+        "modified": 1768845460229,
+        "open": true,
+        "projectID": "project-1",
+        "shortID": null,
+        "title": "Test Issue",
+        "visibility": "public",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
