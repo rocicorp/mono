@@ -4,6 +4,14 @@ export {
   type ApplicationErrorOptions,
 } from '../../zero-protocol/src/application-error.ts';
 export type {
+  CRUDOp,
+  CRUDOpKind,
+  DeleteOp,
+  InsertOp,
+  UpdateOp,
+  UpsertOp,
+} from '../../zero-protocol/src/push.ts';
+export type {
   ServerColumnSchema,
   ServerSchema,
   ServerTableSchema,
@@ -21,6 +29,7 @@ export type {
   TransactionBase,
   TransactionReason,
 } from '../../zql/src/mutate/custom.ts';
+export {executeCrudOps} from './crud-ops.ts';
 export {
   CRUDMutatorFactory,
   makeSchemaCRUD,
