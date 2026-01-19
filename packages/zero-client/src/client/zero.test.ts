@@ -2410,7 +2410,6 @@ test('connect() without opts preserves existing auth', async () => {
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
 
-
   // Reconnect without providing auth opts - should keep existing auth
   await z.connection.connect();
   const currentSocket = await z.socket;
