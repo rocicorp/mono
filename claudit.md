@@ -17,8 +17,8 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 |------------|-------|-------------|
 | **CRITICAL** | 2 | Immediate action required |
 | **HIGH** | 6 | Should be addressed soon |
-| **MEDIUM** | 6 | Should be evaluated |
-| **LOW** | 2 | Acceptable risk |
+| **MEDIUM** | 8 | Should be evaluated |
+| **LOW** | 3 | Acceptable risk |
 
 ### Key Findings
 
@@ -26,7 +26,7 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 |----|---------|----------|--------|
 | ZSP-001 | Development Mode Admin Access | ✅ By Design | N/A |
 | ZSP-002 | Custom Endpoint JWT Verification Skip | ✅ By Design | N/A |
-| ZSP-003 | Weak SSRF Protection | **HIGH** | Open |
+| ZSP-003 | SSRF Risk with Permissive URL Patterns | **HIGH/LOW** | Open |
 | ZSP-004 | SQL Injection Protections | ✅ Secure | Verified |
 | ZSP-005 | `internalQuery` RLS Bypass | ✅ Secure | Verified |
 | ZSP-006 | Default Permission Model | ✅ Secure | Verified |
@@ -52,6 +52,9 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | ZSP-026 | No Mutation/Op Count Limits | **MEDIUM** | Open |
 | ZSP-027 | Unicode Identifier Confusion | **LOW** | Open |
 | ZSP-028 | Unhandled Token Error Path | **LOW** | Open |
+| ZSP-029 | No Fetch Timeout | **MEDIUM** | Open |
+| ZSP-030 | Custom Header Injection Risk | **LOW** | Open |
+| ZSP-031 | User URL Override | **MEDIUM** | Open |
 
 ---
 
@@ -91,6 +94,14 @@ Penetration testing was conducted to verify static analysis findings and discove
 | ZSP-027 | Unicode homoglyphs accepted in identifiers | Message Parsing |
 | ZSP-028 | Unhandled error when token sent without JWT config | Auth Edge Cases |
 
+### New Findings from Code Review (fetch.ts)
+
+| ID | Discovery | Source |
+|----|-----------|--------|
+| ZSP-029 | No fetch timeout (slowloris DoS risk) | Code Review |
+| ZSP-030 | Custom headers passed without CRLF validation | Code Review |
+| ZSP-031 | Client-provided URL can override server config | Code Review |
+
 ### Test Files
 
 ```
@@ -99,10 +110,12 @@ packages/zero-cache/src/pentest/
 ├── query-fuzzing.pentest.ts        # SQL injection, RLS bypass
 ├── state-machine.pentest.ts        # Race conditions, connection handling
 ├── message-parsing.pentest.ts      # Resource exhaustion, type confusion
+├── ssrf-custom-endpoints.pentest.ts # SSRF and URL validation testing
 └── helpers/
     ├── pentest-server.ts           # Test server setup
     ├── state-machine-helpers.ts    # Connection management
-    └── message-parsing-helpers.ts  # Attack payload generators
+    ├── message-parsing-helpers.ts  # Attack payload generators
+    └── ssrf-helpers.ts             # SSRF attack vectors and mock server
 
 packages/zero-server/src/pentest/
 └── zero-server.pentest.ts          # Mutation processing security
@@ -185,29 +198,103 @@ This design allows users to implement their own authentication logic in their AP
 
 ---
 
-### ZSP-003: Weak SSRF Protection
+### ZSP-003: SSRF Risk with Permissive URL Patterns
 
-**Severity:** HIGH
-**CVSS Score:** 7.5 (High)
+**Severity:** HIGH (with permissive patterns) / LOW (with strict patterns)
 **CWE:** CWE-918 (Server-Side Request Forgery)
 
 #### Description
 
-The URL validation for custom endpoints uses only `URLPattern` matching, which does not prevent requests to internal network resources, localhost, or cloud metadata services.
+The URL validation for custom endpoints uses `URLPattern` matching. Security depends entirely on pattern configuration. **With strict patterns, SSRF risk is minimal.** However, permissive patterns combined with client-provided URLs create attack vectors.
 
 #### Affected Components
 
 | File | Lines | Function |
 |------|-------|----------|
-| `packages/zero-cache/src/custom/fetch.ts` | 248-258 | `urlMatch()` |
+| `packages/zero-cache/src/custom/fetch.ts` | 252-261 | `urlMatch()` |
+| `packages/zero-cache/src/services/mutagen/pusher.ts` | 473-475 | Client URL override |
 
-#### Vulnerable Code
+#### Key Risk: Client-Provided URLs
+
+Clients can override the server-configured URL via `userPushURL`. If URL patterns are permissive (e.g., `https://*.example.com/*`), attackers can redirect requests to endpoints they control.
+
+#### Risk by Pattern Type
+
+| Pattern | Example | Risk Level |
+|---------|---------|------------|
+| Exact URL | `https://api.example.com/mutations` | ✅ Low |
+| Specific host | `https://api.example.com/*` | ✅ Low |
+| Subdomain wildcard | `https://*.example.com/*` | ❌ High |
+| Full wildcard | `https://*/*` | ❌ Critical |
+
+#### Impact (with permissive patterns)
+
+- Credential theft (auth headers sent to attacker-controlled endpoint)
+- Data exfiltration (mutation payloads sent to attacker)
+- Subdomain takeover exploitation
+
+#### Remediation
+
+1. **Documentation:** Warn users against permissive URL patterns
+2. **Runtime warnings:** Log warnings when wildcard patterns detected in production
+3. **Strict defaults:** Consider requiring exact URL match for client-provided URLs
+
+See **ZSP-003: Detailed Code Review** section below for full analysis.
+
+---
+
+### ZSP-003: Detailed Code Review (fetch.ts)
+
+**Severity:** HIGH (when combined with permissive URL patterns)
+**Severity:** LOW (with strict URL patterns)
+**CWE:** CWE-918 (Server-Side Request Forgery)
+**File:** `packages/zero-cache/src/custom/fetch.ts`
+
+#### Executive Summary
+
+Deep code review of `fetch.ts` reveals that SSRF risk depends heavily on URL pattern configuration. With strict patterns (e.g., exact URL match), the risk is minimal since server administrators control their own domains. However, **permissive patterns combined with client-provided URLs** create a significant SSRF attack surface.
+
+#### Threat Model Clarification
+
+**Low Risk Scenario (Strict Patterns):**
+- Server configures: `ZERO_MUTATE_URL=https://api.mycompany.com/mutations`
+- Pattern matches only that exact URL
+- Administrator controls `api.mycompany.com` and its DNS
+- SSRF risk is minimal - attacker cannot influence destination
+
+**High Risk Scenario (Permissive Patterns + Client URLs):**
+- Server configures permissive pattern: `https://*.example.com/*`
+- Client provides `userPushURL = https://attacker.example.com/steal`
+- Attacker controls subdomain (via subdomain takeover or as tenant)
+- Attacker receives mutations with auth headers
+
+#### Attack Surface Analysis
+
+The `fetchFromAPIServer()` function (lines 63-236) is the critical security boundary for all external requests:
+
+| Caller | File | Purpose |
+|--------|------|---------|
+| `PusherService` | `pusher.ts:164, 493` | Custom mutation forwarding |
+| `CustomQueryTransformer` | `transform-query.ts:111` | Custom query transformation |
+
+#### Vulnerable Code Path
+
+```
+Client → WebSocket → syncer-ws-message-handler.ts → PusherService → fetchFromAPIServer()
+                                                                          ↓
+                                                              urlMatch() → URL validation
+                                                                          ↓
+                                                              fetch() → Outbound request
+```
+
+#### Security Analysis
+
+**1. URL Pattern Matching (lines 252-261)**
 
 ```typescript
-// packages/zero-cache/src/custom/fetch.ts:248-258
 export function urlMatch(url: string, allowedUrlPatterns: URLPattern[]): boolean {
   for (const pattern of allowedUrlPatterns) {
-    if (pattern.test(url)) {  // URL pattern matching only
+    if (pattern.test(url)) {
       return true;
     }
   }
@@ -215,24 +302,225 @@ export function urlMatch(url: string, allowedUrlPatterns: URLPattern[]): boolean
 }
 ```
 
-#### Missing Protections
+**Security depends on pattern specificity.** Strict patterns provide good protection; permissive patterns do not.
 
-- No validation against localhost (`127.0.0.1`, `localhost`, `::1`)
-- No validation against private IP ranges (`10.x.x.x`, `172.16-31.x.x`, `192.168.x.x`)
-- No validation against cloud metadata endpoints (`169.254.169.254`)
-- No DNS rebinding protection
+**2. User-Controlled URL (PRIMARY RISK)**
 
-#### Impact
+```typescript
+// pusher.ts:473-475
+const url =
+  this.#userPushURL ??  // Client can provide this!
+  must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set');
+```
 
-- Access to internal services not exposed to internet
-- Cloud credential theft via metadata service
-- Internal network reconnaissance
+Clients can provide `userPushURL` via WebSocket connection parameters. This is the primary attack vector when combined with permissive patterns.
+
+**3. Pattern Permissiveness Risk Matrix**
+
+| Pattern Type | Example | Client URL Override Risk |
+|--------------|---------|--------------------------|
+| Exact URL | `https://api.example.com/mutations` | ✅ Safe - no override possible |
+| Specific path | `https://api.example.com/*` | ⚠️ Low - limited to same host |
+| Subdomain wildcard | `https://*.example.com/*` | ❌ High - attacker subdomain |
+| Full wildcard | `https://*/*` | ❌ Critical - any HTTPS URL |
+
+#### Secure Components
+
+| Component | Lines | Security Property |
+|-----------|-------|-------------------|
+| Reserved param blocking | 117-122 | Prevents `schema`/`appID` injection |
+| Response schema validation | 180 | Validates external API response format |
+| Error body truncation | 49 | Limits error response leakage to 512 chars |
+| Content-Type enforcement | 98 | Forces JSON request format |
+
+#### Attack Scenarios
+
+**Scenario 1: Subdomain Takeover + Credential Theft**
+```
+Server config: pattern allows https://*.company.com/*
+Attacker: takes over abandoned subdomain old-app.company.com
+Client: provides userPushURL = https://old-app.company.com/steal
+Result: mutations + auth headers sent to attacker
+```
+
+**Scenario 2: Permissive Pattern + Direct Internal Access**
+```
+Server config: pattern allows https://*/*  (misconfiguration)
+Client: provides userPushURL = https://169.254.169.254/latest/meta-data/
+Result: AWS metadata accessible, IAM credentials leaked
+```
+
+**Scenario 3: Tenant Isolation Bypass (Multi-tenant)**
+```
+Server config: pattern allows https://*.saas-platform.com/*
+Tenant A: legitimate user at tenant-a.saas-platform.com
+Tenant B (attacker): provides userPushURL = https://tenant-b.saas-platform.com/steal
+Result: Tenant A's mutations routed to Tenant B's endpoint
+```
+
+#### Dynamic Testing Coverage
+
+Existing pentest suite: `packages/zero-cache/src/pentest/ssrf-custom-endpoints.pentest.ts`
+
+| Test Category | Coverage | Findings |
+|---------------|----------|----------|
+| URL pattern matching | ✅ Complete | Strict patterns work, wildcards dangerous |
+| Client URL override | ⚠️ Partial | Documented but needs integration test |
+| Reserved param injection | ✅ Complete | Properly blocked |
 
 #### Remediation
 
-1. **IP Address Validation:** Resolve hostname and validate against blocklist
-2. **DNS Rebinding Protection:** Re-validate IP after DNS resolution
-3. **Allowlist-only mode:** Require explicit IP ranges for external endpoints
+**For Zero Platform (Code Changes):**
+1. Add prominent documentation warning against permissive URL patterns
+2. Log warnings when wildcard patterns are configured in production
+3. Consider requiring exact URL match for client-provided URLs
+4. Add fetch timeout (see ZSP-029)
+
+**For Zero Users (Configuration Guidance):**
+
+⚠️ **CRITICAL: Always use strict URL patterns in production**
+
+```typescript
+// ✅ SAFE: Exact URL match
+ZERO_MUTATE_URL=https://api.mycompany.com/mutations
+
+// ✅ SAFE: Specific host, any path
+ZERO_MUTATE_URL=https://api.mycompany.com/*
+
+// ❌ DANGEROUS: Subdomain wildcard (enables subdomain takeover attacks)
+ZERO_MUTATE_URL=https://*.mycompany.com/*
+
+// ❌ DANGEROUS: Full wildcard (enables any HTTPS URL)
+ZERO_MUTATE_URL=https://*/*
+```
+
+#### New Findings from Code Review
+
+| ID | Finding | Severity | Description |
+|----|---------|----------|-------------|
+| ZSP-029 | No Fetch Timeout | MEDIUM | `fetch()` call has no timeout, enabling slowloris attacks |
+| ZSP-030 | Custom Header Injection Risk | LOW | `customHeaders` passed without CRLF validation |
+| ZSP-031 | User URL Override | MEDIUM | Client-provided `userPushURL` can bypass server config if patterns permissive |
+
+---
+
+### ZSP-029: No Fetch Timeout
+
+**Severity:** MEDIUM
+**CWE:** CWE-400 (Uncontrolled Resource Consumption)
+
+#### Description
+
+**File:** `packages/zero-cache/src/custom/fetch.ts:136`
+
+```typescript
+const response = await fetch(finalUrl, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify(body),
+});
+```
+
+The `fetch()` call has no timeout configured. A malicious or slow external server could hold connections indefinitely.
+
+#### Impact
+
+- Resource exhaustion via slow response attacks
+- Connection pool exhaustion
+- Memory leak from pending promises
+
+#### Remediation
+
+Add AbortController with timeout:
+
+```typescript
+const controller = new AbortController();
+const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+const response = await fetch(finalUrl, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify(body),
+  signal: controller.signal,
+});
+
+clearTimeout(timeout);
+```
+
+---
+
+### ZSP-030: Custom Header Injection Risk
+
+**Severity:** LOW
+**CWE:** CWE-113 (Improper Neutralization of CRLF Sequences in HTTP Headers)
+
+#### Description
+
+**File:** `packages/zero-cache/src/custom/fetch.ts:104-106`
+
+```typescript
+if (headerOptions.customHeaders) {
+  Object.assign(headers, headerOptions.customHeaders);
+}
+```
+
+Custom headers from client connection parameters are passed directly to the outbound request without validation.
+
+#### Attack Vector
+
+If CRLF sequences (`\r\n`) are not stripped by the underlying `fetch` implementation, header injection may be possible.
+
+#### Mitigation
+
+Modern `fetch` implementations typically reject CRLF in headers. However, defense-in-depth recommends explicit validation.
+
+#### Impact
+
+- Likely mitigated by Node.js fetch implementation
+- Low risk in practice, but violates defense-in-depth
+
+---
+
+### ZSP-031: User URL Override
+
+**Severity:** MEDIUM
+**CWE:** CWE-601 (URL Redirection to Untrusted Site)
+
+#### Description
+
+**Files:**
+- `packages/zero-cache/src/services/mutagen/pusher.ts:473-475`
+- `packages/zero-cache/src/custom-queries/transform-query.ts:115-118`
+
+Clients can provide their own push/query URLs via connection parameters:
+
+```typescript
+// pusher.ts:473-475
+const url =
+  this.#userPushURL ??
+  must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set');
+```
+
+The `userPushURL` comes from the WebSocket connection's `initConnection()` call, which receives it from client-provided parameters.
+
+#### Attack Vector
+
+1. Server configures permissive URL pattern: `https://*.example.com/*`
+2. Attacker controls `attacker.example.com`
+3. Client provides `userPushURL = https://attacker.example.com/steal`
+4. Mutations are sent to attacker-controlled endpoint with authentication headers
+
+#### Impact
+
+- Credential theft (API keys, tokens forwarded to attacker)
+- Data exfiltration (mutation payloads sent to attacker)
+- Man-in-the-middle position on custom mutations
+
+#### Remediation
+
+1. Document that user-provided URLs require strict pattern matching
+2. Consider requiring exact URL match for user-provided URLs
+3. Log when user-provided URL differs from server config
 
 ---
 
@@ -1087,7 +1375,7 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 
 ### Short-term Actions (High)
 
-3. **Add SSRF protections** - IP validation, localhost blocking, metadata blocking for custom endpoint URLs
+3. **Document URL pattern security** - Warn users against permissive patterns (`https://*.example.com/*`, `https://*/*`) in production (ZSP-003)
 4. **Add WebSocket message size limits** - Configure `maxPayload` on WebSocket server (recommend 1MB)
 5. **Add connection rate limiting** - Per-IP and per-clientID throttling for WebSocket connections
 6. **Sanitize error messages** - Never include raw exception messages in client responses
@@ -1101,15 +1389,18 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 11. **Add mutation/op count limits** - Max 100 mutations, 1000 ops per mutation (ZSP-026)
 12. **Add Unicode normalization** - Apply NFC normalization to table/column identifiers (ZSP-027)
 13. **Handle token error gracefully** - Catch error in syncer.ts:157 and return proper error (ZSP-028)
+14. **Add fetch timeout** - Configure AbortController with 30s timeout in `fetch.ts:136` (ZSP-029)
+15. **Log wildcard pattern warnings** - Emit runtime warnings when permissive URL patterns are configured (ZSP-003)
+16. **Restrict user-provided URLs** - Consider requiring exact match for client-provided `userPushURL` (ZSP-031)
 
 ### Long-term Actions
 
-14. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
-15. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
-16. **Encrypt SQLite replica** - Use encryption at rest for replica files
-17. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
-18. **Security documentation** - Clear guidance on secure deployment with custom endpoints and zero-server
-19. **Audit logging** - Log all custom endpoint requests and responses
+17. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
+18. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
+19. **Encrypt SQLite replica** - Use encryption at rest for replica files
+20. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
+21. **Security documentation** - Clear guidance on secure deployment with custom endpoints and zero-server
+22. **Audit logging** - Log all custom endpoint requests and responses
 
 ---
 
@@ -1214,6 +1505,18 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 - [x] Type confusion attacks → properly rejected by schema
 - [x] Size boundary testing → handled gracefully
 - [x] Production JSON validation bypass → confirmed (finding: ZSP-023)
+
+### Phase 16: SSRF/Custom Endpoint Security ✅ COMPLETE (ssrf-custom-endpoints.pentest.ts)
+- [x] URL pattern matching security → strict patterns work, wildcards dangerous
+- [x] Private IP bypass attempts → URLPattern does not block private IPs
+- [x] IP encoding tricks (decimal/octal/hex) → not normalized or blocked
+- [x] DNS rebinding awareness → documented attack vector (requires external DNS)
+- [x] Cloud metadata endpoint access → 169.254.169.254 not blocked by URL validation
+- [x] Protocol handling → non-HTTP protocols rejected by URLPattern structure
+- [x] Unicode/punycode in URLs → handled by URL parser
+- [x] Reserved param injection → properly blocked (`schema`, `appID`)
+- [ ] Redirect chain following to internal IPs → needs full integration test
+- [ ] User-provided URL credential theft → needs integration test with mock attacker server
 
 ---
 
