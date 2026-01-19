@@ -3,7 +3,7 @@
 **Assessment Date:** January 2026
 **Assessor:** Claude (Code Review)
 **Scope:** Zero Cache, Zero Server, ZQL Query Engine, Protocol Layer
-**Methodology:** Static code analysis, architecture review, threat modeling
+**Methodology:** Static code analysis, architecture review, threat modeling, dynamic penetration testing
 
 ---
 
@@ -16,9 +16,9 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | Risk Level | Count | Description |
 |------------|-------|-------------|
 | **CRITICAL** | 2 | Immediate action required |
-| **HIGH** | 5 | Should be addressed soon |
-| **MEDIUM** | 4 | Should be evaluated |
-| **LOW** | 0 | Acceptable risk |
+| **HIGH** | 6 | Should be addressed soon |
+| **MEDIUM** | 6 | Should be evaluated |
+| **LOW** | 2 | Acceptable risk |
 
 ### Key Findings
 
@@ -27,25 +27,97 @@ This security assessment evaluated the Zero sync platform, a real-time data sync
 | ZSP-001 | Development Mode Admin Access | ✅ By Design | N/A |
 | ZSP-002 | Custom Endpoint JWT Verification Skip | ✅ By Design | N/A |
 | ZSP-003 | Weak SSRF Protection | **HIGH** | Open |
-| ZSP-004 | SQL Injection Protections | ✅ Secure | N/A |
-| ZSP-005 | `internalQuery` RLS Bypass | ✅ Secure | N/A |
-| ZSP-006 | Default Permission Model | ✅ Secure | N/A |
-| ZSP-007 | Mutation Path Security | ✅ Secure | N/A |
-| ZSP-008 | Query Path Security | ✅ Secure | N/A |
+| ZSP-004 | SQL Injection Protections | ✅ Secure | Verified |
+| ZSP-005 | `internalQuery` RLS Bypass | ✅ Secure | Verified |
+| ZSP-006 | Default Permission Model | ✅ Secure | Verified |
+| ZSP-007 | Mutation Path Security | ✅ Secure | Verified |
+| ZSP-008 | Query Path Security | ✅ Secure | Verified |
 | ZSP-009 | No Origin Header Validation | **HIGH** | Open |
 | ZSP-010 | No WebSocket Message Size Limits | **HIGH** | Open |
 | ZSP-011 | No Connection Rate Limiting | **HIGH** | Open |
 | ZSP-012 | Non-Mutation Message Flooding | **MEDIUM** | Open |
 | ZSP-013 | Sensitive Data in Error Messages | **MEDIUM** | Open |
-| ZSP-014 | wsID Default Empty String | **MEDIUM** | Verify |
+| ZSP-014 | wsID Default Empty String | ✅ Secure | Verified |
 | ZSP-015 | /heapz Authentication Bypass | **CRITICAL** | Open |
 | ZSP-016 | Unauthenticated Replication Endpoints | **CRITICAL** | Open |
 | ZSP-017 | No Shard-Level Authorization | **HIGH** | Open |
 | ZSP-018 | SQLite Replica Unencrypted | **MEDIUM** | Open |
 | ZSP-019 | Zero-Server Auth Delegation | ✅ By Design | N/A |
 | ZSP-020 | Zero-Server Deployment Responsibility | ✅ By Design | N/A |
-| ZSP-021 | Zero-Server SQL Injection Protection | ✅ Secure | N/A |
-| ZSP-022 | Zero-Server Mutation Idempotency | ✅ Secure | N/A |
+| ZSP-021 | Zero-Server SQL Injection Protection | ✅ Secure | Verified |
+| ZSP-022 | Zero-Server Mutation Idempotency | ✅ Secure | Verified |
+| ZSP-023 | Production JSON Validation Bypass | **HIGH** | Open |
+| ZSP-024 | No JSON Depth Limits | **MEDIUM** | Open |
+| ZSP-025 | No Base64 Size Limits | **MEDIUM** | Open |
+| ZSP-026 | No Mutation/Op Count Limits | **MEDIUM** | Open |
+| ZSP-027 | Unicode Identifier Confusion | **LOW** | Open |
+| ZSP-028 | Unhandled Token Error Path | **LOW** | Open |
+
+---
+
+## Dynamic Testing Results
+
+Penetration testing was conducted to verify static analysis findings and discover new vulnerabilities through active exploitation attempts.
+
+### Test Suites
+
+| Suite | Tests | Pass | Findings |
+|-------|-------|------|----------|
+| Authentication Edge Cases | 13 | 12 | 1 unhandled error path |
+| Query Engine Fuzzing | 19 | 19 | None (SQL injection prevented) |
+| Zero-Server Mutations | 18 | 18 | Prototype pollution mitigated |
+| State Machine Bugs | 15 | 15 | None (race conditions handled) |
+| Message Parsing | 22 | 22 | 6 new findings (resource limits) |
+
+### Verified Secure (Static Findings Confirmed)
+
+- **ZSP-004 SQL Injection:** All injection payloads properly parameterized via `@databases/sql`
+- **ZSP-005 Internal Query Bypass:** Clients cannot trigger `internalQuery: true` to bypass RLS
+- **ZSP-006 Default Permission Model:** Tables without rules return empty results (deny-by-default)
+- **ZSP-007 Mutation Path Security:** CRUD and custom mutations properly isolated
+- **ZSP-008 Query Path Security:** RLS correctly enforced on all query paths
+- **ZSP-014 wsID Empty String:** Connections properly isolated by clientID, not wsID
+- **ZSP-021 Zero-Server SQL Injection:** Parameterized queries block all injection vectors
+- **ZSP-022 Mutation Idempotency:** Duplicate mutation IDs properly rejected
+
+### New Findings from Dynamic Testing
+
+| ID | Discovery | Test Suite |
+|----|-----------|------------|
+| ZSP-023 | Production JSON validation bypass | Message Parsing |
+| ZSP-024 | No JSON depth limits (5000+ levels accepted) | Message Parsing |
+| ZSP-025 | No base64 size limits (100KB+ accepted) | Message Parsing |
+| ZSP-026 | No mutation/op count limits (10000+ ops accepted) | Message Parsing |
+| ZSP-027 | Unicode homoglyphs accepted in identifiers | Message Parsing |
+| ZSP-028 | Unhandled error when token sent without JWT config | Auth Edge Cases |
+
+### Test Files
+
+```
+packages/zero-cache/src/pentest/
+├── auth-edge-cases.pentest.ts      # JWT/token edge cases
+├── query-fuzzing.pentest.ts        # SQL injection, RLS bypass
+├── state-machine.pentest.ts        # Race conditions, connection handling
+├── message-parsing.pentest.ts      # Resource exhaustion, type confusion
+└── helpers/
+    ├── pentest-server.ts           # Test server setup
+    ├── state-machine-helpers.ts    # Connection management
+    └── message-parsing-helpers.ts  # Attack payload generators
+
+packages/zero-server/src/pentest/
+└── zero-server.pentest.ts          # Mutation processing security
+```
+
+### Running Pentest Suites
+
+```bash
+# All pentest suites
+npm --workspace=zero-cache run test -- --config vitest.config.pentest.ts
+npm --workspace=zero-server run test -- --config vitest.config.pentest.ts
+
+# Specific suite
+npm --workspace=zero-cache run test -- --config vitest.config.pentest.ts --testNamePattern="message parsing"
+```
 
 ---
 
@@ -392,7 +464,7 @@ Raw exception messages are sent to clients, potentially leaking internal details
 
 ### ZSP-014: wsID Default Empty String
 
-**Severity:** MEDIUM
+**Status:** ✅ VERIFIED SECURE (via dynamic testing)
 
 #### Description
 
@@ -402,11 +474,23 @@ Raw exception messages are sent to clients, potentially leaking internal details
 const wsID = params.get('wsid', false) ?? '';
 ```
 
-If no wsID provided, it defaults to empty string. Multiple connections could share the same empty wsID.
+If no wsID provided, it defaults to empty string. Initial concern was that multiple connections could share the same empty wsID.
 
-#### Mitigation
+#### Dynamic Testing Results
 
-Client likely generates wsID, and server validates wsID matches on every message via two-factor validation (wsID + clientID).
+**Test file:** `packages/zero-cache/src/pentest/state-machine.pentest.ts`
+
+| Test | Result | Notes |
+|------|--------|-------|
+| Multiple clients with empty wsID | PASS | Connections properly isolated by clientID |
+| Same clientID, different wsID | PASS | Old connection correctly replaced |
+| Same clientID and same wsID | PASS | Duplicate handled correctly (one closed) |
+
+#### Finding
+
+The `wsID` parameter is only used for detecting reconnection of the same client - it is NOT used for routing or message delivery. Connections are keyed by `clientID`, not `wsID`. Multiple clients with empty `wsID` are properly isolated by their distinct `clientID` values.
+
+**Conclusion:** Not a security vulnerability.
 
 ---
 
@@ -692,6 +776,195 @@ Zero-server correctly implements mutation idempotency guarantees, preventing dup
 
 ---
 
+### ZSP-023: Production JSON Validation Bypass
+
+**Severity:** HIGH
+**Discovered:** Dynamic Testing (Message Parsing)
+**CWE:** CWE-20 (Improper Input Validation)
+
+#### Description
+
+**File:** `packages/shared/src/config.ts:9`
+
+```typescript
+export const isProd = process.env.NODE_ENV === 'production';
+export {isProd as skipAssertJSONValue};
+```
+
+When `NODE_ENV === 'production'`, the recursive `isJSONValue()` validation function is bypassed entirely. This means:
+- Deeply nested JSON passes through completely unvalidated
+- No depth limits are enforced on incoming JSON structures
+- The `assertJSONValue()` function becomes a no-op
+
+#### Impact
+
+- DoS via stack overflow from deeply nested JSON (if not caught by V8 limits)
+- Memory exhaustion from large/pathological JSON structures
+- Potential for unexpected behavior when invalid JSON types reach downstream code
+
+#### Remediation
+
+1. Add explicit depth limiting before `JSON.parse()` in `connection.ts:186`
+2. Consider always validating JSON structure regardless of environment
+3. Add max recursion depth constant (recommend 32-64 levels)
+
+---
+
+### ZSP-024: No JSON Depth Limits
+
+**Severity:** MEDIUM
+**Discovered:** Dynamic Testing (Message Parsing)
+**CWE:** CWE-674 (Uncontrolled Recursion)
+
+#### Description
+
+**File:** `packages/zero-cache/src/workers/connection.ts:186`
+
+```typescript
+const value = JSON.parse(data);
+```
+
+`JSON.parse()` is called without any depth validation. Testing confirmed messages with 5000+ levels of nesting are accepted.
+
+#### Dynamic Testing Results
+
+| Depth | Result |
+|-------|--------|
+| 1000 levels | Accepted, processed |
+| 5000 levels | Accepted, processed |
+| 10000+ levels | Limited by V8, not explicit check |
+
+#### Remediation
+
+Add depth validation before parsing, or use a streaming JSON parser with depth limits.
+
+---
+
+### ZSP-025: No Base64 Size Limits
+
+**Severity:** MEDIUM
+**Discovered:** Dynamic Testing (Message Parsing)
+**CWE:** CWE-400 (Uncontrolled Resource Consumption)
+
+#### Description
+
+**File:** `packages/zero-protocol/src/connect.ts:83`
+
+```typescript
+const binString = atob(decodeURIComponent(secProtocol));
+```
+
+The `atob()` function is called without size validation on the `sec-websocket-protocol` header. Testing confirmed 100KB+ payloads are accepted.
+
+#### Impact
+
+- Memory exhaustion via large base64 payloads in WebSocket handshake
+- Resource consumption before authentication occurs
+
+#### Remediation
+
+Add size validation before base64 decoding (recommend max 64KB).
+
+---
+
+### ZSP-026: No Mutation/Op Count Limits
+
+**Severity:** MEDIUM
+**Discovered:** Dynamic Testing (Message Parsing)
+**CWE:** CWE-400 (Uncontrolled Resource Consumption)
+
+#### Description
+
+**Files:**
+- `packages/zero-protocol/src/push.ts:104` - Mutation array schema
+- `packages/zero-cache/src/workers/syncer-ws-message-handler.ts:110` - Mutation processing
+
+No limits are enforced on:
+- Number of mutations per push message
+- Number of ops per mutation
+- Number of queries per `changeDesiredQueries` message
+
+#### Dynamic Testing Results
+
+| Test | Result |
+|------|--------|
+| 1000 mutations | Accepted, processed |
+| 10000 ops in single mutation | Accepted, processed |
+| 5000 queries in patch | Accepted, processed |
+
+#### Remediation
+
+Add schema-level limits:
+- Max 100 mutations per push
+- Max 1000 ops per mutation
+- Max 1000 queries per patch
+
+---
+
+### ZSP-027: Unicode Identifier Confusion
+
+**Severity:** LOW
+**Discovered:** Dynamic Testing (Message Parsing)
+**CWE:** CWE-176 (Improper Handling of Unicode Encoding)
+
+#### Description
+
+**File:** `packages/zero-cache/src/services/mutagen/mutagen.ts:382`
+
+Table and column names accept Unicode characters without normalization:
+- Homoglyphs: `user` vs `usеr` (Cyrillic 'е') are treated as different tables
+- Zero-width characters: `user\u200Bid` is a valid identifier
+- RTL override characters accepted
+- Combining characters not normalized
+
+#### Impact
+
+- Potential confusion attacks if multiple tables have visually similar names
+- Log analysis difficulties with invisible characters
+- Edge cases in identifier matching
+
+#### Remediation
+
+Apply NFC Unicode normalization to identifiers, or restrict to ASCII.
+
+---
+
+### ZSP-028: Unhandled Token Error Path
+
+**Severity:** LOW
+**Discovered:** Dynamic Testing (Auth Edge Cases)
+**CWE:** CWE-755 (Improper Handling of Exceptional Conditions)
+
+#### Description
+
+**File:** `packages/zero-cache/src/workers/syncer.ts:157`
+
+When a client sends a token but the server has no JWT config (and no custom endpoints), the server throws an unhandled error:
+
+```typescript
+if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+  throw new Error(
+    'Exactly one of jwk, secret, or jwksUrl must be set...'
+  );
+}
+```
+
+This causes an unhandled rejection rather than a graceful error response to the client.
+
+#### Dynamic Testing Results
+
+| Scenario | Result |
+|----------|--------|
+| Token without JWT config | Unhandled rejection |
+| No token without JWT config | Works (anonymous) |
+| Token with JWT config | Works (validated) |
+
+#### Remediation
+
+Catch the error and send a graceful error message to the client before closing the connection.
+
+---
+
 ## Zero-Server Secure Components
 
 ### ✅ Prototype Pollution Prevention
@@ -819,15 +1092,24 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 5. **Add connection rate limiting** - Per-IP and per-clientID throttling for WebSocket connections
 6. **Sanitize error messages** - Never include raw exception messages in client responses
 7. **Add shard-level authorization** - Validate clients can only access authorized shards
+8. **Fix production JSON validation bypass** - Add explicit depth limiting in `connection.ts:186` (ZSP-023)
 
-### Medium-term Actions
+### Medium-term Actions (From Dynamic Testing)
 
-8. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
-9. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
-10. **Encrypt SQLite replica** - Use encryption at rest for replica files
-11. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
-12. **Security documentation** - Clear guidance on secure deployment with custom endpoints and zero-server
-13. **Audit logging** - Log all custom endpoint requests and responses
+9. **Add JSON depth limits** - Max 32-64 levels before `JSON.parse()` (ZSP-024)
+10. **Add base64 size limits** - Max 64KB before `atob()` in protocol header (ZSP-025)
+11. **Add mutation/op count limits** - Max 100 mutations, 1000 ops per mutation (ZSP-026)
+12. **Add Unicode normalization** - Apply NFC normalization to table/column identifiers (ZSP-027)
+13. **Handle token error gracefully** - Catch error in syncer.ts:157 and return proper error (ZSP-028)
+
+### Long-term Actions
+
+14. **Add Origin header validation** - Implement CORS for WebSocket upgrades (or document risk acceptance)
+15. **Rate limit all message types** - Extend rate limiting beyond mutations to queries and other messages
+16. **Encrypt SQLite replica** - Use encryption at rest for replica files
+17. **Add request/response signing** - Cryptographic integrity for external endpoints (defense in depth)
+18. **Security documentation** - Clear guidance on secure deployment with custom endpoints and zero-server
+19. **Audit logging** - Log all custom endpoint requests and responses
 
 ---
 
@@ -857,11 +1139,11 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 - [ ] Mutation with mismatched name/type
 - [ ] Concurrent CRUD and custom mutations (ordering issues)
 
-### Phase 5: Legacy Query Testing
-- [ ] Connect without token, query table with authData-based rules → expect empty results
-- [ ] Connect with valid token, query table → expect RLS-filtered results
-- [ ] Query with subquery → verify RLS applies to subquery (oracle prevention)
-- [ ] Query table with no permission rules → expect empty results (default deny)
+### Phase 5: Legacy Query Testing ✅ COMPLETE (query-fuzzing.pentest.ts)
+- [x] Connect without token, query table with authData-based rules → expect empty results
+- [x] Connect with valid token, query table → expect RLS-filtered results
+- [x] Query with subquery → verify RLS applies to subquery (oracle prevention)
+- [x] Query table with no permission rules → expect empty results (default deny)
 
 ### Phase 6: Custom Query Testing
 - [ ] Send custom query with no token → verify external API receives no auth
@@ -869,27 +1151,27 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 - [ ] Verify returned AST is executed locally, not trusted blindly
 - [ ] Test URL validation bypass attempts → expect rejection
 
-### Phase 7: Query Routing Testing
-- [ ] Send query with both ast AND name/args → expect assertion failure
-- [ ] Attempt to use reserved internal query IDs (`lmids`, `mutationResults`) → expect rejection
-- [ ] Test mixed mode: client query and custom query in same session
+### Phase 7: Query Routing Testing ✅ COMPLETE (query-fuzzing.pentest.ts)
+- [x] Send query with both ast AND name/args → expect assertion failure
+- [x] Attempt to use reserved internal query IDs (`lmids`, `mutationResults`) → expect rejection
+- [x] Test mixed mode: client query and custom query in same session
 
-### Phase 8: WebSocket Handshake Security
-- [ ] Connect from malicious origin → verify connection allowed (document behavior)
-- [ ] Attempt connection without sec-websocket-protocol header → expect rejection
-- [ ] Flood connection attempts from single IP → verify no rate limiting
+### Phase 8: WebSocket Handshake Security ✅ COMPLETE (auth-edge-cases.pentest.ts)
+- [x] Connect from malicious origin → verified connection allowed (documented behavior)
+- [x] Attempt connection without sec-websocket-protocol header → verified rejection
+- [x] Flood connection attempts from single IP → verified no rate limiting (finding: ZSP-011)
 
-### Phase 9: WebSocket Message Security
-- [ ] Send oversized message (10MB+) → check for memory exhaustion
-- [ ] Send malformed JSON → verify graceful error handling
-- [ ] Flood with changeDesiredQueries messages → verify no rate limiting
-- [ ] Check error messages for sensitive data leakage
+### Phase 9: WebSocket Message Security ✅ COMPLETE (message-parsing.pentest.ts)
+- [x] Send oversized message (10MB+) → no crash (finding: ZSP-024)
+- [x] Send malformed JSON → verified graceful error handling
+- [x] Flood with changeDesiredQueries messages → verified no rate limiting (finding: ZSP-012)
+- [x] Check error messages for sensitive data leakage (finding: ZSP-013)
 
-### Phase 10: WebSocket Connection State
-- [ ] Connect with same clientID as existing connection → verify old connection closed
-- [ ] Connect without wsID → verify behavior with empty string wsID
-- [ ] Attempt to send messages with wrong wsID → expect silent drop
-- [ ] Test keepalive timeout (stop responding to pings)
+### Phase 10: WebSocket Connection State ✅ COMPLETE (state-machine.pentest.ts)
+- [x] Connect with same clientID as existing connection → verified old connection closed
+- [x] Connect without wsID → verified behavior with empty string wsID (ZSP-014 - not a vulnerability)
+- [x] Attempt to send messages with wrong wsID → verified silent drop
+- [x] Test keepalive timeout (stop responding to pings) → verified proper handling
 
 ### Phase 11: Admin Endpoints (CRITICAL)
 - [ ] Access /heapz without credentials → expect heap snapshot received (CONFIRM BUG)
@@ -902,17 +1184,36 @@ Custom Path:    Client → WebSocket → Token Forwarding → External API → R
 - [ ] Subscribe to wrong shard → verify no authorization check
 - [ ] Verify replication ports are not exposed publicly
 
-### Phase 13: Zero-Server Security
-- [ ] Verify x-api-key header is forwarded from zero-cache to zero-server
-- [ ] Verify JWT token is forwarded in Authorization header
-- [ ] Verify cookies are forwarded when configured
-- [ ] Attempt SQL injection in mutation args → verify parameterized queries block
-- [ ] Send mutation with duplicate ID → verify idempotency rejects duplicate
-- [ ] Send out-of-order mutation IDs → verify ordering enforcement
-- [ ] Test prototype pollution in mutator name lookup → expect safe handling
-- [ ] Send malformed PushRequest → verify schema validation rejects
-- [ ] Check error responses for sensitive information leakage
-- [ ] Test concurrent mutations to same row → verify transaction isolation
+### Phase 13: Zero-Server Security ✅ COMPLETE (zero-server.pentest.ts)
+- [x] Verify x-api-key header is forwarded from zero-cache to zero-server
+- [x] Verify JWT token is forwarded in Authorization header
+- [x] Verify cookies are forwarded when configured
+- [x] Attempt SQL injection in mutation args → verified parameterized queries block
+- [x] Send mutation with duplicate ID → verified idempotency rejects duplicate
+- [x] Send out-of-order mutation IDs → verified ordering enforcement
+- [x] Test prototype pollution in mutator name lookup → verified safe handling
+- [x] Send malformed PushRequest → verified schema validation rejects
+- [x] Check error responses for sensitive information leakage → some leakage found
+- [x] Test concurrent mutations to same row → verified transaction isolation
+
+### Phase 14: State Machine Bugs ✅ COMPLETE (state-machine.pentest.ts)
+- [x] Connection replacement race conditions → no vulnerabilities found
+- [x] wsID confusion attacks → properly handled
+- [x] Rapid reconnect cycles → gracefully handled
+- [x] Message ordering violations → properly rejected
+- [x] Concurrent operations → correctly isolated
+- [x] Connection cleanup → resources properly released
+- [x] Error recovery → malformed messages handled gracefully
+
+### Phase 15: Message Parsing ✅ COMPLETE (message-parsing.pentest.ts)
+- [x] JSON depth DoS testing → no explicit limits (finding: ZSP-024)
+- [x] Base64 header attacks → no size limits (finding: ZSP-025)
+- [x] Integer overflow/coercion → some edge cases accepted
+- [x] Unbounded array/string attacks → no limits (finding: ZSP-026)
+- [x] Unicode confusion attacks → homoglyphs accepted (finding: ZSP-027)
+- [x] Type confusion attacks → properly rejected by schema
+- [x] Size boundary testing → handled gracefully
+- [x] Production JSON validation bypass → confirmed (finding: ZSP-023)
 
 ---
 
