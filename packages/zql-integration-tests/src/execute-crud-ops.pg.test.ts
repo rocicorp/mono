@@ -2,10 +2,10 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import type {CRUDOp} from '../../zero-protocol/src/push.ts';
-import {executeCrudOps} from './crud-ops.ts';
-import {CRUDMutatorFactory} from './custom.ts';
-import {schema, schemaSql} from './test/schema.ts';
-import {Transaction} from './test/util.ts';
+import {CRUDMutatorFactory} from '../../zero-server/src/custom.ts';
+import {schema, schemaSql} from '../../zero-server/src/test/schema.ts';
+import {Transaction} from '../../zero-server/src/test/util.ts';
+import {executeCrudOps} from '../../zql/src/mutate/execute-crud-ops.ts';
 
 describe('executeCrudOps', () => {
   let pg: PostgresDB;

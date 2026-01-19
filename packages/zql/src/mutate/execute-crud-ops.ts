@@ -1,25 +1,24 @@
-import {unreachable} from '../../shared/src/asserts.ts';
-import type {CRUDOp} from '../../zero-protocol/src/push.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import type {ServerTransaction} from '../../zql/src/mutate/custom.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import type {CRUDOp} from '../../../zero-protocol/src/push.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {TransactionBase} from './custom.ts';
 
 /**
- * Executes an array of CRUD operations against a server transaction.
+ * Executes an array of CRUD operations against a transaction.
  *
  * This function enables implementing CRUD mutators as custom mutators by
  * dynamically dispatching operations to the appropriate table mutator methods.
+ * Works with both ClientTransaction (optimistic) and ServerTransaction (authoritative).
  *
  * @example
  * ```typescript
- * import {defineMutator, defineMutators} from '@rocicorp/zero';
- * import {executeCrudOps, type CRUDOp} from '@rocicorp/zero/server';
+ * import {defineMutator, defineMutators, executeCrudOps} from '@rocicorp/zero';
+ * import type {CRUDOp} from '@rocicorp/zero';
  *
  * export const mutators = defineMutators({
  *   crud: defineMutator(
- *     async ({tx, args}) => {
- *       if (tx.location !== 'server') {
- *         return; // Client-side is handled by optimistic CRUD
- *       }
+ *     async ({tx, args}: {tx: Transaction<Schema>; args: {ops: CRUDOp[]}}) => {
+ *       // Works on both client (optimistic) and server (authoritative)
  *       await executeCrudOps(tx, args.ops);
  *     },
  *   ),
@@ -27,7 +26,7 @@ import type {ServerTransaction} from '../../zql/src/mutate/custom.ts';
  * ```
  */
 export async function executeCrudOps<S extends Schema>(
-  tx: ServerTransaction<S, unknown>,
+  tx: TransactionBase<S>,
   ops: CRUDOp[],
 ): Promise<void> {
   for (const op of ops) {

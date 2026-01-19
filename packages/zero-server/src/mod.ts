@@ -29,7 +29,7 @@ export type {
   TransactionBase,
   TransactionReason,
 } from '../../zql/src/mutate/custom.ts';
-export {executeCrudOps} from './crud-ops.ts';
+export {executeCrudOps} from '../../zql/src/mutate/execute-crud-ops.ts';
 export {
   CRUDMutatorFactory,
   makeSchemaCRUD,

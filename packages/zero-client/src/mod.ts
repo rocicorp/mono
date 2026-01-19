@@ -133,6 +133,15 @@ export type {
   Transaction,
   TransactionReason,
 } from '../../zql/src/mutate/custom.ts';
+export {executeCrudOps} from '../../zql/src/mutate/execute-crud-ops.ts';
+export type {
+  CRUDOp,
+  CRUDOpKind,
+  DeleteOp,
+  InsertOp,
+  UpdateOp,
+  UpsertOp,
+} from '../../zero-protocol/src/push.ts';
 export {
   defineMutators,
   defineMutatorsWithType,
