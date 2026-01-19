@@ -131,12 +131,12 @@ interface IntrospectedTable {
 
 interface IntrospectedColumn {
   name: string;
-  dataType: string;       // e.g., 'varchar', 'integer', 'timestamp'
-  udtName: string;        // e.g., 'varchar', 'int4', 'user_role'
+  dataType: string; // e.g., 'varchar', 'integer', 'timestamp'
+  udtName: string; // e.g., 'varchar', 'int4', 'user_role'
   isNullable: boolean;
   maxLength: number | null;
   defaultValue: string | null;
-  pgTypeClass: 'b' | 'e' | 'c' | 'd' | 'p' | 'r' | 'm';  // base, enum, composite, etc.
+  pgTypeClass: 'b' | 'e' | 'c' | 'd' | 'p' | 'r' | 'm'; // base, enum, composite, etc.
   isArray: boolean;
   arrayElementTypeClass: string | null;
 }
@@ -237,7 +237,7 @@ Converts foreign keys to Zero relationships. The key challenge is determining ca
 
 ```typescript
 interface ZeroRelationship {
-  sourceName: string;       // Variable name in relationships definition
+  sourceName: string; // Variable name in relationships definition
   relationshipName: string; // Property name in relationships object
   cardinality: 'one' | 'many';
   sourceTable: string;
@@ -257,7 +257,7 @@ interface ZeroRelationship {
 
 function inferRelationships(
   tables: IntrospectedTable[],
-  foreignKeys: IntrospectedForeignKey[]
+  foreignKeys: IntrospectedForeignKey[],
 ): ZeroRelationship[] {
   const relationships: ZeroRelationship[] = [];
 
@@ -292,14 +292,14 @@ Generates TypeScript code using the Zero schema builder API.
 interface GeneratorOptions {
   includeRelationships: boolean;
   enumStyle: 'enumeration' | 'string-literal';
-  schemaName: string;        // For .from() mapping if different from 'public'
-  exportName: string;        // Name for exported schema constant
-  includeTypes: boolean;     // Generate TypeScript type exports
+  schemaName: string; // For .from() mapping if different from 'public'
+  exportName: string; // Name for exported schema constant
+  includeTypes: boolean; // Generate TypeScript type exports
 }
 
 function generateSchema(
   ir: IntrospectedSchema,
-  options: GeneratorOptions
+  options: GeneratorOptions,
 ): string {
   const imports = generateImports(ir, options);
   const enumTypes = generateEnumTypes(ir.enums, options);
@@ -394,8 +394,19 @@ const issueRelationships = relationships(issue, ({one}) => ({
 // ... more relationships
 
 export const schema = createSchema({
-  tables: [user, project, issue, comment, label, issueLabel, viewState, emoji, userPref, issueNotifications],
-  relationships: [issueRelationships, commentRelationships, /* ... */],
+  tables: [
+    user,
+    project,
+    issue,
+    comment,
+    label,
+    issueLabel,
+    viewState,
+    emoji,
+    userPref,
+    issueNotifications,
+  ],
+  relationships: [issueRelationships, commentRelationships /* ... */],
 });
 
 export const builder = createBuilder(schema);
@@ -416,18 +427,18 @@ npx sql-to-zqlschema \
 
 #### CLI Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--connection`, `-c` | PostgreSQL connection string | Required |
-| `--schema`, `-s` | Database schema to introspect | `public` |
-| `--output`, `-o` | Output file path | `stdout` |
-| `--relationships`, `-r` | Include relationship definitions | `true` |
-| `--enum-style` | How to handle enums: `enumeration` or `string` | `enumeration` |
-| `--export-name` | Name for exported schema constant | `schema` |
-| `--include-types` | Export TypeScript types for tables | `false` |
-| `--tables` | Comma-separated list of tables to include | All tables |
-| `--exclude` | Comma-separated list of tables to exclude | None |
-| `--dry-run` | Print output without writing file | `false` |
+| Option                  | Description                                    | Default       |
+| ----------------------- | ---------------------------------------------- | ------------- |
+| `--connection`, `-c`    | PostgreSQL connection string                   | Required      |
+| `--schema`, `-s`        | Database schema to introspect                  | `public`      |
+| `--output`, `-o`        | Output file path                               | `stdout`      |
+| `--relationships`, `-r` | Include relationship definitions               | `true`        |
+| `--enum-style`          | How to handle enums: `enumeration` or `string` | `enumeration` |
+| `--export-name`         | Name for exported schema constant              | `schema`      |
+| `--include-types`       | Export TypeScript types for tables             | `false`       |
+| `--tables`              | Comma-separated list of tables to include      | All tables    |
+| `--exclude`             | Comma-separated list of tables to exclude      | None          |
+| `--dry-run`             | Print output without writing file              | `false`       |
 
 ### 6. Programmatic API (`src/index.ts`)
 
@@ -525,6 +536,7 @@ packages/sql-to-zqlschema/
 ### Unsupported PostgreSQL Types
 
 The following types will emit a warning and default to `string()`:
+
 - `bytea` (binary data)
 - `interval`
 - `point`, `line`, `polygon`, `path`, `box`, `circle` (geometric)
