@@ -1,11 +1,4 @@
-import type {Row} from '@rocicorp/zero';
-import {
-  setupSlowQuery,
-  useQuery,
-  useSlowQuery,
-  useZero,
-  type UseQueryOptions,
-} from '@rocicorp/zero/react';
+import {useQuery, useZero} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
@@ -26,9 +19,7 @@ import {useHistoryState} from 'wouter/use-browser-location';
 import * as zod from 'zod/mini';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {
-  issueRowSortSchema,
   queries,
-  type IssueRowSort,
   type ListContext,
   type ListContextParams,
 } from '../../../shared/queries.ts';
@@ -55,22 +46,19 @@ import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
-import {getIDFromString} from '../issue/get-id.tsx';
 import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
-
-// Set to true to enable slow query simulation (half data → full data after 1s)
-const DEBUG_QUERY = import.meta.env.DEV && false;
-if (DEBUG_QUERY) {
-  setupSlowQuery({delayMs: 1_000, unknownDataPercentage: 50});
-}
+import {
+  anchorSchema,
+  TOP_ANCHOR,
+  useIssues,
+  type Anchor,
+} from './use-issues.tsx';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
 // Make sure this is even since we half it for permalink loading
 const MIN_PAGE_SIZE = 100;
 const NUM_ROWS_FOR_LOADING_SKELETON = 1;
-
-export type Anchor = zod.infer<typeof anchorSchema>;
 
 type QueryAnchor = {
   readonly anchor: Anchor;
@@ -95,79 +83,8 @@ type QueryAnchor = {
   readonly listContextParams: ListContextParams;
 };
 
-const TOP_ANCHOR = Object.freeze({
-  index: 0,
-  kind: 'forward',
-  startRow: undefined,
-});
-
-// First issue
-// index: 0
-//
-// id: 'HdpMkgbHpK3_OcOIiQOuW',
-
-// Very early issue
-// index: 5
-// subject: Replicator dies...
-// id: 'HC7kWsm0qUYvf2BqjfiD_',
-
-// Early issue
-// index: 45
-// subject:RFE: enumerateCaches
-// id: 'X-TwNXBDwTeQB0Mav31bU',
-
-// Second page
-// index: 120
-// subject: app-publish function needs more Memory
-// id: 'Us_A9kc4ldfHuChlbKeU6',
-
-// Middle issue
-// index: 260
-// title: Evaluate if we should return a ClientStateNotFoundResponse ...
-// id: '0zTrvA-6aVO8eNdHBoW7G',
-
-// Close to bottom
-// index: 500
-// Subject: Add DevTools
-// id: 'mrh64by3B9b6MRHbzkLQP',
-
-// Even closer to bottom
-// title: Can we support...
-// index: 512
-// id: '8tyDj9FUJWQ5qd2JEP3KS',
-
-// Last issue
-// index: 515
-// subject: docs: Add something about offline ...
-// id: '4wBDlh9b774qfGD3pWe6d',
-
-const anchorSchema = zod.discriminatedUnion('kind', [
-  zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('forward'),
-      startRow: zod.optional(issueRowSortSchema),
-    }),
-  ),
-  zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('backward'),
-      startRow: issueRowSortSchema,
-    }),
-  ),
-  zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('permalink'),
-      // startRow: issueRowSortSchema,
-      id: zod.string(),
-    }),
-  ),
-]);
-
 const permalinkHistoryStateSchema = zod.readonly(
-  zod.object({
+  zod.looseObject({
     anchor: anchorSchema,
     scrollTop: zod.number(),
     estimatedTotal: zod.number(),
@@ -179,62 +96,6 @@ const permalinkHistoryStateSchema = zod.readonly(
 type PermalinkHistoryState = zod.infer<typeof permalinkHistoryStateSchema>;
 
 const getNearPageEdgeThreshold = (pageSize: number) => Math.ceil(pageSize / 10);
-
-function RowDebugInfo({
-  index,
-  issueArrayIndex,
-  issue,
-  anchor,
-  scrollTop,
-}: {
-  index: number;
-  issueArrayIndex: number;
-  issue?: Row['issue'] | undefined;
-  anchor: Anchor;
-  scrollTop: number;
-}) {
-  if (!DEBUG_QUERY) {
-    return null;
-  }
-
-  const handleMouseDown = async (e: React.MouseEvent) => {
-    if (!issue) {
-      return;
-    }
-    e.stopPropagation();
-    const permalinkAnchor = {
-      index: 1,
-      type: 'permalink' as const,
-      startRow: {
-        id: issue.id,
-        modified: issue.modified,
-        created: issue.created,
-      },
-    };
-    await navigator.clipboard.writeText(
-      JSON.stringify(permalinkAnchor, null, 2),
-    );
-  };
-
-  return (
-    <span
-      style={{
-        fontSize: '0.8em',
-        marginRight: '0.5em',
-        color: '#888',
-        cursor: 'pointer',
-      }}
-      onMouseDownCapture={handleMouseDown}
-      title={`Click to copy permalink anchor
-anchor: ${JSON.stringify(anchor, null, 2)}
-scrollTop: ${scrollTop}`}
-    >
-      <span>{index}</span>,
-      <span title="issueArrayIndex">{issueArrayIndex}</span>,
-      {issue && <span title="issue.id">{issue.id.slice(0, 5)}</span>}
-    </span>
-  );
-}
 
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
@@ -379,15 +240,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       anchor,
       listContextParams,
     });
-    if (!anchorEquals(historyState?.anchor, anchor)) {
-      replaceHistoryState<PermalinkHistoryState>({
-        anchor,
-        scrollTop: virtualizer.scrollOffset ?? 0,
-        estimatedTotal,
-        hasReachedStart,
-        hasReachedEnd,
-      });
-    }
   };
 
   const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
@@ -512,7 +364,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       const offset = -firstIssueIndex + placeholderRows;
 
       setSkipPagingLogic(true);
-      // skipPagingLogicRef.current = true;
       setPendingScrollAdjustment(offset);
       const newAnchor = {
         ...anchor,
@@ -660,17 +511,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const toIssueArrayIndex = (
-      index: number,
-      anchor: Anchor,
-      firstIssueIndex: number,
-    ) =>
-      anchor.kind !== 'backward'
-        ? index - firstIssueIndex
-        : anchor.index - index;
-
     const issue = issueAt(index); //issues[issueArrayIndex];
-    const issueArrayIndex = toIssueArrayIndex(index, anchor, firstIssueIndex);
     if (issue === undefined) {
       return (
         <div
@@ -678,14 +519,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
           style={{
             ...style,
           }}
-        >
-          <RowDebugInfo
-            index={index}
-            issueArrayIndex={issueArrayIndex}
-            anchor={anchor}
-            scrollTop={virtualizer.scrollOffset ?? 0}
-          />
-        </div>
+        ></div>
       );
     }
 
@@ -720,13 +554,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
           title={issue.title}
           listContext={listContext}
         >
-          <RowDebugInfo
-            index={index}
-            issueArrayIndex={issueArrayIndex}
-            issue={issue}
-            anchor={anchor}
-            scrollTop={virtualizer.scrollOffset ?? 0}
-          />
           {issue.title}
         </IssueLink>
         <div className="issue-taglist">
@@ -1059,189 +886,6 @@ function formatIssueCountEstimate(count: number) {
   return `~${Math.floor(count / 1000).toLocaleString()}k`;
 }
 
-type Issue = Row<ReturnType<typeof queries.issueListV2>>;
-type Issues = Issue[];
-
-function useIssues(
-  listContext: ListContextParams,
-  userID: string,
-  pageSize: number,
-  anchor: Anchor,
-  options: UseQueryOptions,
-): {
-  issueAt: (index: number) => Issue | undefined;
-  issuesLength: number;
-  complete: boolean;
-  issuesEmpty: boolean;
-  atStart: boolean;
-  atEnd: boolean;
-  firstIssueIndex: number;
-  permalinkNotFound: boolean;
-} {
-  // Conditionally use useSlowQuery or useQuery based on USE_SLOW_QUERY flag
-  const queryFn = DEBUG_QUERY ? useSlowQuery : useQuery;
-
-  const {kind, index: anchorIndex} = anchor;
-
-  let permalinkNotFound = false;
-
-  if (kind === 'permalink') {
-    const {id} = anchor;
-    assert(id);
-    assert(pageSize % 2 === 0);
-
-    const halfPageSize = pageSize / 2;
-
-    // Allow short ID too.
-    const {idField, id: idValue} = getIDFromString(id);
-
-    const qItem = queries.issueByID({idField, id: idValue, listContext});
-
-    const [issue, resultIssue] = queryFn(qItem, options);
-    const completeIssue = resultIssue.type === 'complete';
-
-    const start = issue && {
-      id: issue.id,
-      modified: issue.modified,
-      created: issue.created,
-    };
-
-    const qBefore =
-      start &&
-      queries.issueListV2({
-        listContext,
-        userID,
-        limit: halfPageSize + 1,
-        start,
-        dir: 'backward',
-        inclusive: false,
-      });
-    const qAfter =
-      start &&
-      queries.issueListV2({
-        listContext,
-        userID,
-        limit: halfPageSize,
-        start,
-        dir: 'forward',
-        inclusive: false,
-      });
-
-    const [issuesBefore, resultBefore] = queryFn(qBefore, options);
-    const [issuesAfter, resultAfter] = queryFn(qAfter, options);
-    const completeBefore = resultBefore.type === 'complete';
-    const completeAfter = resultAfter.type === 'complete';
-
-    const issuesBeforeLength = issuesBefore?.length ?? 0;
-    const issuesAfterLength = issuesAfter?.length ?? 0;
-    const issuesBeforeSize = Math.min(issuesBeforeLength, halfPageSize);
-    const issuesAfterSize = Math.min(issuesAfterLength, halfPageSize - 1);
-
-    const firstIssueIndex = anchorIndex - issuesBeforeSize;
-
-    if (completeIssue && issue === undefined) {
-      // Permalink issue not found
-      permalinkNotFound = true;
-    }
-
-    return {
-      issueAt: (index: number) => {
-        if (index === anchorIndex) {
-          return issue;
-        }
-        if (index > anchorIndex) {
-          if (issuesAfter === undefined) {
-            return undefined;
-          }
-          const i = index - anchorIndex - 1;
-          if (i >= issuesAfterSize) {
-            return undefined;
-          }
-          return issuesAfter[i];
-        }
-        assert(index < anchorIndex);
-        if (issuesBefore === undefined) {
-          return undefined;
-        }
-        const i = anchorIndex - index - 1;
-        if (i >= issuesBeforeSize) {
-          return undefined;
-        }
-        return issuesBefore[i];
-      },
-      issuesLength: issuesBeforeSize + issuesAfterSize + (issue ? 1 : 0),
-      complete: completeIssue && completeBefore && completeAfter,
-      issuesEmpty:
-        issue === undefined ||
-        (issuesBeforeSize === 0 && issuesAfterSize === 0),
-      atStart: completeBefore && issuesBeforeLength <= halfPageSize,
-      atEnd: completeAfter && issuesAfterLength <= halfPageSize - 1,
-      firstIssueIndex,
-      permalinkNotFound,
-    };
-  }
-
-  kind satisfies 'forward' | 'backward';
-
-  const {startRow: start = null} = anchor;
-
-  const q = queries.issueListV2({
-    listContext,
-    userID,
-    limit: pageSize + 1,
-    start,
-    dir: kind,
-    inclusive: start === null,
-  });
-  const [issues, result]: [Issues, {type: string}] = queryFn(
-    q,
-    options,
-  ) as unknown as [Issues, {type: string}];
-  // not used but needed to follow rules of hooks
-  void queryFn(null, options);
-  void queryFn(null, options);
-
-  const complete = result.type === 'complete';
-  const hasMoreIssues = issues.length > pageSize;
-  const issuesLength = hasMoreIssues ? pageSize : issues.length;
-  const issuesEmpty = issues.length === 0;
-
-  if (kind === 'forward') {
-    return {
-      issueAt: (index: number) =>
-        index - anchorIndex < issuesLength
-          ? issues[index - anchorIndex]
-          : undefined,
-      issuesLength,
-      complete,
-      issuesEmpty,
-      atStart: start === null || anchorIndex === 0,
-      atEnd: complete && !hasMoreIssues,
-      firstIssueIndex: anchorIndex,
-      permalinkNotFound,
-    };
-  }
-
-  kind satisfies 'backward';
-  assert(start !== null);
-
-  return {
-    issueAt: (index: number) => {
-      if (anchorIndex - index - 1 >= issuesLength) {
-        return undefined;
-      }
-      return issues[anchorIndex - index - 1];
-    },
-    issuesLength,
-    complete,
-    issuesEmpty,
-    atStart: complete && !hasMoreIssues,
-    atEnd: false,
-    firstIssueIndex: anchorIndex - issuesLength,
-    permalinkNotFound,
-  };
-}
-
 /**
  * Clamps an index to be within the valid range of issues.
  * @param targetIndex - The desired index to clamp
@@ -1262,30 +906,4 @@ function toBoundIndex(
 
 function makeEven(n: number) {
   return n % 2 === 0 ? n : n + 1;
-}
-
-function anchorEquals(anchor: Anchor | undefined, other: Anchor): boolean {
-  if (
-    anchor === undefined ||
-    anchor.index !== other.index ||
-    anchor.kind !== other.kind
-  ) {
-    return false;
-  }
-
-  if (anchor.kind === 'permalink') {
-    return anchor.id === (other as Extract<Anchor, {id: string}>).id;
-  }
-
-  const o = other as Extract<Anchor, {startRow?: IssueRowSort}>;
-  const {startRow} = anchor;
-  if (startRow === undefined) {
-    return startRow === o.startRow;
-  }
-
-  return (
-    startRow?.id === o.startRow?.id &&
-    startRow?.modified === o.startRow?.modified &&
-    startRow?.created === o.startRow?.created
-  );
 }
