@@ -1,25 +1,30 @@
 import {useQuery, type UseQueryOptions} from '@rocicorp/zero/react';
 import {assert} from 'shared/src/asserts.ts';
-import type {Issue, Issues} from '../../../shared/queries.ts';
-import {type ListContextParams, queries} from '../../../shared/queries.ts';
-import {getIDFromString} from '../issue/get-id.tsx';
+import type {
+  Issue,
+  IssueRowSort,
+  Issues,
+  queries,
+} from '../../../shared/queries.ts';
 import type {Anchor} from './use-zero-virtualizer.ts';
 
 export function useIssues({
-  listContext,
-  userID,
   pageSize,
   anchor,
   options,
+  getPageQuery,
+  getSingleQuery,
 }: {
-  listContext: ListContextParams;
-  userID: string;
   pageSize: number;
   anchor: Anchor;
-  // getPointQuery: (
-  //   id: string,
-  // ) => QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, Issue, TContext>,
-  options: UseQueryOptions;
+  options?: UseQueryOptions | undefined;
+
+  getPageQuery: (
+    limit: number,
+    start: IssueRowSort | null,
+    dir: 'forward' | 'backward',
+  ) => ReturnType<typeof queries.issueListV2>;
+  getSingleQuery: (id: string) => ReturnType<typeof queries.listIssueByID>;
 }): {
   issueAt: (index: number) => Issue | undefined;
   issuesLength: number;
@@ -40,10 +45,7 @@ export function useIssues({
 
     const halfPageSize = pageSize / 2;
 
-    // Allow short ID too.
-    const {idField, id: idValue} = getIDFromString(id);
-
-    const qItem = queries.listIssueByID({idField, id: idValue, listContext});
+    const qItem = getSingleQuery(id);
 
     const [issue, resultIssue] = useQuery(qItem, options);
     const completeIssue = resultIssue.type === 'complete';
@@ -54,26 +56,8 @@ export function useIssues({
       created: issue.created,
     };
 
-    const qBefore =
-      start &&
-      queries.issueListV2({
-        listContext,
-        userID,
-        limit: halfPageSize + 1,
-        start,
-        dir: 'backward',
-        inclusive: false,
-      });
-    const qAfter =
-      start &&
-      queries.issueListV2({
-        listContext,
-        userID,
-        limit: halfPageSize,
-        start,
-        dir: 'forward',
-        inclusive: false,
-      });
+    const qBefore = start && getPageQuery(halfPageSize + 1, start, 'backward');
+    const qAfter = start && getPageQuery(halfPageSize, start, 'forward');
 
     const [issuesBefore, resultBefore] = useQuery(qBefore, options);
     const [issuesAfter, resultAfter] = useQuery(qAfter, options);
@@ -133,14 +117,8 @@ export function useIssues({
 
   const {startRow: start = null} = anchor;
 
-  const q = queries.issueListV2({
-    listContext,
-    userID,
-    limit: pageSize + 1,
-    start,
-    dir: kind,
-    inclusive: start === null,
-  });
+  const q = getPageQuery(pageSize + 1, start, kind);
+
   const [issues, result]: [Issues, {type: string}] = useQuery(
     q,
     options,

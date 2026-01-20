@@ -1,3 +1,4 @@
+import type {UseQueryOptions} from '@rocicorp/zero/react';
 import type {VirtualItem, Virtualizer} from '@tanstack/react-virtual';
 import {useVirtualizer, type VirtualizerOptions} from '@tanstack/react-virtual';
 import {useEffect, useMemo, useState} from 'react';
@@ -5,13 +6,14 @@ import {useDebouncedCallback} from 'use-debounce';
 import {useHistoryState} from 'wouter/use-browser-location';
 import * as zod from 'zod/mini';
 import {assert} from '../../../../../packages/shared/src/asserts.ts';
+import type {queries} from '../../../shared/queries.ts';
 import {
   issueRowSortSchema,
   type Issue,
+  type IssueRowSort,
   type ListContextParams,
 } from '../../../shared/queries.ts';
 import {replaceHistoryState} from '../../navigate.ts';
-import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {ITEM_SIZE} from './list-page.tsx';
 import {useIssues} from './use-issues.tsx';
 
@@ -97,11 +99,14 @@ export function useZeroVirtualizer<
   getScrollElement,
 
   // Zero specific params
-  listContext,
-  userID,
-  textFilterQuery,
-  textFilter,
+  listContextParams,
+
   permalinkID,
+
+  getPageQuery,
+  getSingleQuery,
+
+  options,
 }: {
   // Tanstack Virtual params
   estimateSize: (index: number) => number;
@@ -112,11 +117,17 @@ export function useZeroVirtualizer<
   >['getScrollElement'];
 
   // Zero specific params
-  listContext: ListContextParams;
-  userID: string;
-  textFilterQuery: string | null;
-  textFilter: string | null;
+  listContextParams: ListContextParams;
+
   permalinkID: string | null;
+
+  getPageQuery: (
+    limit: number,
+    start: IssueRowSort | null,
+    dir: 'forward' | 'backward',
+  ) => ReturnType<typeof queries.issueListV2>;
+  getSingleQuery: (id: string) => ReturnType<typeof queries.listIssueByID>;
+  options?: UseQueryOptions | undefined;
 }): {
   virtualizer: Virtualizer<TScrollElement, TItemElement>;
   issueAt: (index: number) => Issue | undefined;
@@ -133,7 +144,6 @@ export function useZeroVirtualizer<
   const [hasReachedStart, setHasReachedStart] = useState(false);
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
 
   // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount issues
   const [queryAnchor, setQueryAnchor] = useState<QueryAnchor>(() => {
@@ -151,13 +161,13 @@ export function useZeroVirtualizer<
           : TOP_ANCHOR;
     return {
       anchor,
-      listContextParams: listContext,
+      listContextParams,
     };
   });
 
   const isListContextCurrent = useMemo(
-    () => queryAnchor.listContextParams === listContext,
-    [queryAnchor.listContextParams, listContext],
+    () => queryAnchor.listContextParams === listContextParams,
+    [queryAnchor.listContextParams, listContextParams],
   );
 
   const anchor = useMemo(() => {
@@ -188,12 +198,11 @@ export function useZeroVirtualizer<
     firstIssueIndex,
     permalinkNotFound,
   } = useIssues({
-    listContext,
-    userID,
     pageSize,
     anchor,
-    options:
-      !isScrolling && textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
+    options,
+    getPageQuery,
+    getSingleQuery,
   });
 
   const newEstimatedTotal = firstIssueIndex + issuesLength;
@@ -231,11 +240,6 @@ export function useZeroVirtualizer<
       setPageSize(newPageSize);
     }
   }, [pageSize, virtualizer.scrollRect]);
-
-  // TODO(arv): Do we need this state?
-  useEffect(() => {
-    setIsScrolling(virtualizer.isScrolling);
-  }, [virtualizer.isScrolling]);
 
   const updateHistoryState = useDebouncedCallback(() => {
     replaceHistoryState<PermalinkHistoryState>({
@@ -288,7 +292,7 @@ export function useZeroVirtualizer<
   const updateAnchor = (anchor: Anchor) => {
     setQueryAnchor({
       anchor,
-      listContextParams: listContext,
+      listContextParams,
     });
   };
 

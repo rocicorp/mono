@@ -224,10 +224,12 @@ export const queries = defineQueries({
     z.object({
       listContext: listContextParams,
       idField: z.union([z.literal('shortID'), z.literal('id')]),
-      id: z.union([z.string(), z.number()]),
+      idValue: z.union([z.string(), z.number()]),
     }),
-    ({ctx: auth, args: {listContext, idField, id}}) =>
-      buildListQuery({role: auth?.role, listContext}).where(idField, id).one(),
+    ({ctx: auth, args: {listContext, idField, idValue}}) =>
+      buildListQuery({role: auth?.role, listContext})
+        .where(idField, idValue)
+        .one(),
   ),
 
   emojiChange: defineQuery(idValidator, ({args: subjectID}) =>

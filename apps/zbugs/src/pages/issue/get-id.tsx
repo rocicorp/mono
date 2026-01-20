@@ -8,6 +8,6 @@ export function getID(params: DefaultParams) {
 
 export function getIDFromString(idStr: string) {
   const idField = /[^\d]/.test(idStr) ? 'id' : 'shortID';
-  const id = idField === 'shortID' ? parseInt(idStr) : idStr;
-  return {idField, id} as const;
+  const idValue = idField === 'shortID' ? parseInt(idStr) : idStr;
+  return {idField, idValue} as const;
 }

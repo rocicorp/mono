@@ -29,8 +29,10 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
+import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
+import {getIDFromString} from '../issue/get-id.tsx';
 import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
 import {useZeroVirtualizer} from './use-zero-virtualizer.ts';
 
@@ -132,7 +134,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const {setListContext} = useListContext();
   useEffect(() => {
     setListContext(listContext);
-
     document.title =
       `Zero Bugs → ${listContext.title}` +
       (permalinkID ? ` → Issue ${permalinkID}` : '');
@@ -160,12 +161,28 @@ export function ListPage({onReady}: {onReady: () => void}) {
     estimateSize: () => ITEM_SIZE,
     getScrollElement: () => listRef.current,
 
-    listContext: listContextParams,
-    userID: z.userID,
-    textFilterQuery,
-    textFilter,
-
+    listContextParams,
     permalinkID,
+
+    getPageQuery: (limit, start, dir) =>
+      queries.issueListV2({
+        listContext: listContextParams,
+        userID: z.userID,
+        limit,
+        start,
+        dir,
+        inclusive: start === null,
+      }),
+    getSingleQuery: (id: string) => {
+      // Allow short ID too.
+      const {idField, idValue} = getIDFromString(id);
+      return queries.listIssueByID({
+        idField,
+        idValue,
+        listContext: listContextParams,
+      });
+    },
+    options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   });
 
   useEffect(() => {

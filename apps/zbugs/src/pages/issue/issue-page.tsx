@@ -78,7 +78,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
 
-  const {idField, id} = getID(params);
+  const {idField, idValue} = getID(params);
   const projectName = must(params.projectName);
   const login = useLogin();
 
@@ -93,7 +93,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [listContext]);
 
   const [issue, issueResult] = useQuery(
-    queries.issueDetail({idField, id, userID: z.userID}),
+    queries.issueDetail({idField, id: idValue, userID: z.userID}),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -1098,10 +1098,10 @@ export function IssueRedirect({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
 
-  const {idField, id} = getID(params);
+  const {idField, idValue} = getID(params);
 
   const [issue, issueResult] = useQuery(
-    queries.issueDetail({idField, id, userID: z.userID}),
+    queries.issueDetail({idField, id: idValue, userID: z.userID}),
     CACHE_NAV,
   );
 
