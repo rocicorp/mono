@@ -2,7 +2,6 @@ import type {UseQueryOptions} from '@rocicorp/zero/react';
 import type {Virtualizer} from '@tanstack/react-virtual';
 import {useVirtualizer, type VirtualizerOptions} from '@tanstack/react-virtual';
 import {useEffect, useMemo, useState} from 'react';
-import {useDebouncedCallback} from 'use-debounce';
 import {useHistoryState} from 'wouter/use-browser-location';
 import * as zod from 'zod/mini';
 import type {SomeType} from 'zod/v4/core';
@@ -248,26 +247,24 @@ export function useZeroVirtualizer<
     }
   }, [pageSize, virtualizer.scrollRect]);
 
-  // TODO(arv): Remove useDebouncedCallback dependency.
-  const updateHistoryState = useDebouncedCallback(() => {
-    replaceHistoryState<PermalinkHistoryState<TIssueRowSort>>({
-      anchor,
-      scrollTop: virtualizer.scrollOffset ?? 0,
-      estimatedTotal,
-      hasReachedStart,
-      hasReachedEnd,
-    });
-  }, 100);
-
   useEffect(() => {
-    updateHistoryState();
+    const timeoutId = setTimeout(() => {
+      replaceHistoryState<PermalinkHistoryState<TIssueRowSort>>({
+        anchor,
+        scrollTop: virtualizer.scrollOffset ?? 0,
+        estimatedTotal,
+        hasReachedStart,
+        hasReachedEnd,
+      });
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
   }, [
     anchor,
     virtualizer.scrollOffset,
     estimatedTotal,
     hasReachedStart,
     hasReachedEnd,
-    updateHistoryState,
   ]);
 
   useEffect(() => {
