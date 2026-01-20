@@ -55,7 +55,9 @@ export const tableSpec = liteTableSpec.extend({
 
 export const publishedTableSpec = tableSpec.extend({
   oid: v.number(),
-  schemaOID: v.number(),
+  // Always present for new instances (e.g. from DDL triggers), but
+  // may from `initialSchema` object stored in the `replicas` table.
+  schemaOID: v.number().optional(),
   columns: v.record(publishedColumnSpec),
   replicaIdentity: pgReplicaIdentitySchema.optional(),
   publications: v.record(v.object({rowFilter: v.string().nullable()})),
