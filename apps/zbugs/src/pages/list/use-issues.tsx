@@ -1,32 +1,66 @@
+import type {
+  DefaultContext,
+  DefaultSchema,
+  QueryOrQueryRequest,
+} from '@rocicorp/zero';
 import {useQuery, type UseQueryOptions} from '@rocicorp/zero/react';
 import {assert} from 'shared/src/asserts.ts';
-import type {
-  Issue,
-  IssueRowSort,
-  Issues,
-  queries,
-} from '../../../shared/queries.ts';
-import type {Anchor} from './use-zero-virtualizer.ts';
 
-export function useIssues({
+export type Anchor<TIssueRowSort> =
+  | Readonly<{
+      index: number;
+      kind: 'forward';
+      startRow?: TIssueRowSort | undefined;
+    }>
+  | Readonly<{
+      index: number;
+      kind: 'backward';
+      startRow: TIssueRowSort;
+    }>
+  | Readonly<{
+      index: number;
+      kind: 'permalink';
+      id: string;
+    }>;
+
+export type GetPageQuery<TIssue, TIssueRowSort> = (
+  limit: number,
+  start: TIssueRowSort | null,
+  dir: 'forward' | 'backward',
+) => GetQueryReturnType<TIssue>;
+
+export type GetSingleQuery<TIssue> = (
+  id: string,
+) => GetQueryReturnType<TIssue | undefined>;
+
+export type GetQueryReturnType<TReturn> = QueryOrQueryRequest<
+  keyof DefaultSchema['tables'],
+  // oxlint-disable-next-line no-explicit-any
+  any, // input
+  // oxlint-disable-next-line no-explicit-any
+  any, // output
+  DefaultSchema,
+  TReturn,
+  DefaultContext
+>;
+
+export function useIssues<TIssue, TIssueRowSort>({
   pageSize,
   anchor,
   options,
   getPageQuery,
   getSingleQuery,
+  toStartRow,
 }: {
   pageSize: number;
-  anchor: Anchor;
+  anchor: Anchor<TIssueRowSort>;
   options?: UseQueryOptions | undefined;
 
-  getPageQuery: (
-    limit: number,
-    start: IssueRowSort | null,
-    dir: 'forward' | 'backward',
-  ) => ReturnType<typeof queries.issueListV2>;
-  getSingleQuery: (id: string) => ReturnType<typeof queries.listIssueByID>;
+  getPageQuery: GetPageQuery<TIssue, TIssueRowSort>;
+  getSingleQuery: GetSingleQuery<TIssue>;
+  toStartRow: (row: TIssue) => TIssueRowSort;
 }): {
-  issueAt: (index: number) => Issue | undefined;
+  issueAt: (index: number) => TIssue | undefined;
   issuesLength: number;
   complete: boolean;
   issuesEmpty: boolean;
@@ -50,11 +84,8 @@ export function useIssues({
     const [issue, resultIssue] = useQuery(qItem, options);
     const completeIssue = resultIssue.type === 'complete';
 
-    const start = issue && {
-      id: issue.id,
-      modified: issue.modified,
-      created: issue.created,
-    };
+    const typedIssue = issue as TIssue | undefined;
+    const start = typedIssue && toStartRow(typedIssue);
 
     const qBefore = start && getPageQuery(halfPageSize + 1, start, 'backward');
     const qAfter = start && getPageQuery(halfPageSize, start, 'forward');
@@ -64,14 +95,16 @@ export function useIssues({
     const completeBefore = resultBefore.type === 'complete';
     const completeAfter = resultAfter.type === 'complete';
 
-    const issuesBeforeLength = issuesBefore?.length ?? 0;
-    const issuesAfterLength = issuesAfter?.length ?? 0;
+    const typedIssuesBefore = issuesBefore as unknown as TIssue[] | undefined;
+    const typedIssuesAfter = issuesAfter as unknown as TIssue[] | undefined;
+    const issuesBeforeLength = typedIssuesBefore?.length ?? 0;
+    const issuesAfterLength = typedIssuesAfter?.length ?? 0;
     const issuesBeforeSize = Math.min(issuesBeforeLength, halfPageSize);
     const issuesAfterSize = Math.min(issuesAfterLength, halfPageSize - 1);
 
     const firstIssueIndex = anchorIndex - issuesBeforeSize;
 
-    if (completeIssue && issue === undefined) {
+    if (completeIssue && typedIssue === undefined) {
       // Permalink issue not found
       permalinkNotFound = true;
     }
@@ -79,32 +112,32 @@ export function useIssues({
     return {
       issueAt: (index: number) => {
         if (index === anchorIndex) {
-          return issue;
+          return typedIssue;
         }
         if (index > anchorIndex) {
-          if (issuesAfter === undefined) {
+          if (typedIssuesAfter === undefined) {
             return undefined;
           }
           const i = index - anchorIndex - 1;
           if (i >= issuesAfterSize) {
             return undefined;
           }
-          return issuesAfter[i];
+          return typedIssuesAfter[i];
         }
         assert(index < anchorIndex);
-        if (issuesBefore === undefined) {
+        if (typedIssuesBefore === undefined) {
           return undefined;
         }
         const i = anchorIndex - index - 1;
         if (i >= issuesBeforeSize) {
           return undefined;
         }
-        return issuesBefore[i];
+        return typedIssuesBefore[i];
       },
-      issuesLength: issuesBeforeSize + issuesAfterSize + (issue ? 1 : 0),
+      issuesLength: issuesBeforeSize + issuesAfterSize + (typedIssue ? 1 : 0),
       complete: completeIssue && completeBefore && completeAfter,
       issuesEmpty:
-        issue === undefined ||
+        typedIssue === undefined ||
         (issuesBeforeSize === 0 && issuesAfterSize === 0),
       atStart: completeBefore && issuesBeforeLength <= halfPageSize,
       atEnd: completeAfter && issuesAfterLength <= halfPageSize - 1,
@@ -119,24 +152,22 @@ export function useIssues({
 
   const q = getPageQuery(pageSize + 1, start, kind);
 
-  const [issues, result]: [Issues, {type: string}] = useQuery(
-    q,
-    options,
-  ) as unknown as [Issues, {type: string}];
+  const [issues, result] = useQuery(q, options);
   // not used but needed to follow rules of hooks
   void useQuery(null, options);
   void useQuery(null, options);
 
+  const typedIssues = issues as unknown as TIssue[];
   const complete = result.type === 'complete';
-  const hasMoreIssues = issues.length > pageSize;
-  const issuesLength = hasMoreIssues ? pageSize : issues.length;
-  const issuesEmpty = issues.length === 0;
+  const hasMoreIssues = typedIssues.length > pageSize;
+  const issuesLength = hasMoreIssues ? pageSize : typedIssues.length;
+  const issuesEmpty = typedIssues.length === 0;
 
   if (kind === 'forward') {
     return {
       issueAt: (index: number) =>
         index - anchorIndex < issuesLength
-          ? issues[index - anchorIndex]
+          ? typedIssues[index - anchorIndex]
           : undefined,
       issuesLength,
       complete,
@@ -156,7 +187,7 @@ export function useIssues({
       if (anchorIndex - index - 1 >= issuesLength) {
         return undefined;
       }
-      return issues[anchorIndex - index - 1];
+      return typedIssues[anchorIndex - index - 1];
     },
     issuesLength,
     complete,

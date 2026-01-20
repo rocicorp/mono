@@ -1,96 +1,105 @@
 import type {UseQueryOptions} from '@rocicorp/zero/react';
-import type {VirtualItem, Virtualizer} from '@tanstack/react-virtual';
+import type {Virtualizer} from '@tanstack/react-virtual';
 import {useVirtualizer, type VirtualizerOptions} from '@tanstack/react-virtual';
 import {useEffect, useMemo, useState} from 'react';
 import {useDebouncedCallback} from 'use-debounce';
 import {useHistoryState} from 'wouter/use-browser-location';
 import * as zod from 'zod/mini';
+import type {SomeType} from 'zod/v4/core';
 import {assert} from '../../../../../packages/shared/src/asserts.ts';
-import type {queries} from '../../../shared/queries.ts';
-import {
-  issueRowSortSchema,
-  type Issue,
-  type IssueRowSort,
-  type ListContextParams,
-} from '../../../shared/queries.ts';
+import {issueRowSortSchema} from '../../../shared/queries.ts';
 import {ITEM_SIZE} from './list-page.tsx';
-import {useIssues} from './use-issues.tsx';
+import {
+  useIssues,
+  type Anchor,
+  type GetPageQuery,
+  type GetSingleQuery,
+} from './use-issues.tsx';
 
 // Make sure this is even since we half it for permalink loading
 const MIN_PAGE_SIZE = 100;
 
 const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
-type QueryAnchor = {
-  readonly anchor: Anchor;
+type QueryAnchor<TListContextParams, TIssueRowSort> = {
+  readonly anchor: Anchor<TIssueRowSort>;
   /**
-   * Associates an anchor with list query params.  This is for managing the
-   * transition when query params change.  When this happens the list should
-   * scroll to 0, the anchor reset to top, and estimate/total counts reset.
-   * During this transition, some renders has a mix of new list query params and
-   * list results and old anchor (as anchor reset is async via setState), it is
-   * important to:
-   * 1. avoid creating a query with the new query params but the old anchor, as
-   *    that would be loading a query that is not the correct one to display,
-   *    accomplished by using TOP_ANCHOR when
-   *    listContextParams !== queryAnchor.listContextParams
-   * 2. avoid calculating counts based on a mix of new list results and old
-   *    anchor, avoided by not updating counts when
-   *    listContextParams !== queryAnchor.listContextParams
-   * 3. avoid updating anchor for paging based on a mix of new list results and
-   *    old anchor, avoided by not doing paging updates when
-   *    listContextParams !== queryAnchor.listContextParams
+   * Associates an anchor with list query params to coordinate state during
+   * navigation. When list context params change (e.g., filter/sort changes or
+   * browser back/forward navigation), the anchor and scroll position must be
+   * updated atomically with the new query results.
+   *
+   * When `listContextParams !== queryAnchor.listContextParams`:
+   * - Use history state to restore previous scroll position and anchor if
+   *   navigating back
+   * - Use permalink anchor if loading a specific item
+   * - Otherwise reset to top
+   *
+   * During the transition (while `!isListContextCurrent`), skip paging logic
+   * and count updates to avoid querying with mismatched anchor/params or
+   * calculating counts from inconsistent state.
    */
-  readonly listContextParams: ListContextParams;
+  readonly listContextParams: TListContextParams;
 };
 
-const anchorSchema = zod.discriminatedUnion('kind', [
+const anchorSchema = <T extends SomeType>(issueRowSortSchema: T) =>
+  zod.discriminatedUnion('kind', [
+    zod.readonly(
+      zod.object({
+        index: zod.number(),
+        kind: zod.literal('forward'),
+        startRow: zod.optional(issueRowSortSchema),
+      }),
+    ),
+    zod.readonly(
+      zod.object({
+        index: zod.number(),
+        kind: zod.literal('backward'),
+        startRow: issueRowSortSchema,
+      }),
+    ),
+    zod.readonly(
+      zod.object({
+        index: zod.number(),
+        kind: zod.literal('permalink'),
+        id: zod.string(),
+      }),
+    ),
+  ]);
+
+const permalinkHistoryStateSchema = <T extends SomeType>(
+  issueRowSortSchema: T,
+) =>
   zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('forward'),
-      startRow: zod.optional(issueRowSortSchema),
+    zod.looseObject({
+      anchor: anchorSchema(issueRowSortSchema),
+      scrollTop: zod.number(),
+      estimatedTotal: zod.number(),
+      hasReachedStart: zod.boolean(),
+      hasReachedEnd: zod.boolean(),
     }),
-  ),
-  zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('backward'),
-      startRow: issueRowSortSchema,
-    }),
-  ),
-  zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('permalink'),
-      id: zod.string(),
-    }),
-  ),
-]);
+  );
 
-export type Anchor = zod.infer<typeof anchorSchema>;
+type PermalinkHistoryState<TIssueRowSort> = Readonly<{
+  anchor: Anchor<TIssueRowSort>;
+  scrollTop: number;
+  estimatedTotal: number;
+  hasReachedStart: boolean;
+  hasReachedEnd: boolean;
+}>;
 
-const permalinkHistoryStateSchema = zod.readonly(
-  zod.looseObject({
-    anchor: anchorSchema,
-    scrollTop: zod.number(),
-    estimatedTotal: zod.number(),
-    hasReachedStart: zod.boolean(),
-    hasReachedEnd: zod.boolean(),
-  }),
-);
-
-type PermalinkHistoryState = zod.infer<typeof permalinkHistoryStateSchema>;
-
-export const TOP_ANCHOR = Object.freeze({
+const TOP_ANCHOR = Object.freeze({
   index: 0,
   kind: 'forward',
   startRow: undefined,
-});
+}) satisfies Anchor<unknown>;
 
 export function useZeroVirtualizer<
   TScrollElement extends Element,
   TItemElement extends Element,
+  TListContextParams,
+  TIssue,
+  TIssueRowSort,
 >({
   // Tanstack Virtual params
   estimateSize,
@@ -99,13 +108,12 @@ export function useZeroVirtualizer<
 
   // Zero specific params
   listContextParams,
-
   permalinkID,
-
   getPageQuery,
   getSingleQuery,
 
   options,
+  toStartRow,
 }: {
   // Tanstack Virtual params
   estimateSize: (index: number) => number;
@@ -116,26 +124,22 @@ export function useZeroVirtualizer<
   >['getScrollElement'];
 
   // Zero specific params
-  listContextParams: ListContextParams;
+  listContextParams: TListContextParams;
 
-  permalinkID: string | null;
+  permalinkID?: string | null | undefined;
 
-  getPageQuery: (
-    limit: number,
-    start: IssueRowSort | null,
-    dir: 'forward' | 'backward',
-  ) => ReturnType<typeof queries.issueListV2>;
-  getSingleQuery: (id: string) => ReturnType<typeof queries.listIssueByID>;
+  getPageQuery: GetPageQuery<TIssue, TIssueRowSort>;
+  getSingleQuery: GetSingleQuery<TIssue>;
   options?: UseQueryOptions | undefined;
+  toStartRow: (issue: TIssue) => TIssueRowSort;
 }): {
   virtualizer: Virtualizer<TScrollElement, TItemElement>;
-  issueAt: (index: number) => Issue | undefined;
+  issueAt: (index: number) => TIssue | undefined;
   complete: boolean;
   issuesEmpty: boolean;
   permalinkNotFound: boolean;
   estimatedTotal: number;
   total: number | undefined;
-  virtualItems: VirtualItem[];
 } {
   const [estimatedTotal, setEstimatedTotal] = useState(
     NUM_ROWS_FOR_LOADING_SKELETON,
@@ -145,29 +149,32 @@ export function useZeroVirtualizer<
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
 
   // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount issues
-  const [queryAnchor, setQueryAnchor] = useState<QueryAnchor>(() => {
+  const [queryAnchor, setQueryAnchor] = useState<
+    QueryAnchor<TListContextParams, TIssueRowSort>
+  >(() => {
     const {state} = history;
-    const parseResult = permalinkHistoryStateSchema.safeParse(state);
-    const anchor =
+    // TODO: TIssueRowSort is generic - need a way to pass schema for it
+    const parseResult =
+      permalinkHistoryStateSchema(issueRowSortSchema).safeParse(state);
+    const anchor = (
       parseResult.success && parseResult.data.anchor
         ? parseResult.data.anchor
         : permalinkID
-          ? ({
+          ? {
               index: NUM_ROWS_FOR_LOADING_SKELETON,
               kind: 'permalink',
               id: permalinkID,
-            } satisfies Anchor)
-          : TOP_ANCHOR;
+            }
+          : TOP_ANCHOR
+    ) as Anchor<TIssueRowSort>;
     return {
       anchor,
       listContextParams,
     };
   });
 
-  const isListContextCurrent = useMemo(
-    () => queryAnchor.listContextParams === listContextParams,
-    [queryAnchor.listContextParams, listContextParams],
-  );
+  const isListContextCurrent =
+    queryAnchor.listContextParams === listContextParams;
 
   const anchor = useMemo(() => {
     if (isListContextCurrent) {
@@ -180,7 +187,7 @@ export function useZeroVirtualizer<
         index: NUM_ROWS_FOR_LOADING_SKELETON,
         kind: 'permalink',
         id: permalinkID,
-      } satisfies Anchor;
+      } satisfies Anchor<TIssueRowSort>;
     }
     return TOP_ANCHOR;
   }, [isListContextCurrent, queryAnchor.anchor]);
@@ -202,6 +209,7 @@ export function useZeroVirtualizer<
     options,
     getPageQuery,
     getSingleQuery,
+    toStartRow,
   });
 
   const newEstimatedTotal = firstIssueIndex + issuesLength;
@@ -240,8 +248,9 @@ export function useZeroVirtualizer<
     }
   }, [pageSize, virtualizer.scrollRect]);
 
+  // TODO(arv): Remove useDebouncedCallback dependency.
   const updateHistoryState = useDebouncedCallback(() => {
-    replaceHistoryState<PermalinkHistoryState>({
+    replaceHistoryState<PermalinkHistoryState<TIssueRowSort>>({
       anchor,
       scrollTop: virtualizer.scrollOffset ?? 0,
       estimatedTotal,
@@ -280,15 +289,18 @@ export function useZeroVirtualizer<
   }, [estimatedTotal, complete, newEstimatedTotal]);
 
   // TODO:(arv): DRY
-  // TODO(arv): Do not depend on wouter!
-  const maybeHistoryState = useHistoryState<PermalinkHistoryState | null>();
-  const res = permalinkHistoryStateSchema.safeParse(maybeHistoryState);
+  const maybeHistoryState =
+    useHistoryState<PermalinkHistoryState<TIssueRowSort> | null>();
+  const res =
+    permalinkHistoryStateSchema(issueRowSortSchema).safeParse(
+      maybeHistoryState,
+    );
   const historyState = res.success ? res.data : null;
 
   const [pendingScrollAdjustment, setPendingScrollAdjustment] =
     useState<number>(0);
 
-  const updateAnchor = (anchor: Anchor) => {
+  const updateAnchor = (anchor: Anchor<TIssueRowSort>) => {
     setQueryAnchor({
       anchor,
       listContextParams,
@@ -361,7 +373,8 @@ export function useZeroVirtualizer<
         setEstimatedTotal(historyState.estimatedTotal);
         setHasReachedStart(historyState.hasReachedStart);
         setHasReachedEnd(historyState.hasReachedEnd);
-        updateAnchor(historyState.anchor);
+        // TODO: FIXME
+        updateAnchor(historyState.anchor as Anchor<TIssueRowSort>);
       } else if (permalinkID) {
         if (scrollElement) {
           scrollElement.scrollTop = NUM_ROWS_FOR_LOADING_SKELETON * ITEM_SIZE;
@@ -421,7 +434,7 @@ export function useZeroVirtualizer<
         index: index + indexOffset,
         kind: type,
         startRow,
-      } as Anchor);
+      } as Anchor<TIssueRowSort>);
     };
 
     const firstItem = virtualItems[0];
@@ -462,35 +475,15 @@ export function useZeroVirtualizer<
     issueAt,
   ]);
 
-  return useMemo(
-    () => ({
-      virtualizer,
-      issueAt,
-      issuesLength,
-      complete,
-      issuesEmpty,
-      permalinkNotFound,
-      hasReachedStart,
-      hasReachedEnd,
-      estimatedTotal,
-      total,
-      virtualItems,
-    }),
-    [
-      virtualizer,
-      issueAt,
-      issuesLength,
-      complete,
-      issuesEmpty,
-      atStart,
-      atEnd,
-      firstIssueIndex,
-      permalinkNotFound,
-      estimatedTotal,
-      total,
-      virtualItems,
-    ],
-  );
+  return {
+    virtualizer,
+    issueAt,
+    complete,
+    issuesEmpty,
+    permalinkNotFound,
+    estimatedTotal,
+    total,
+  };
 }
 
 /**

@@ -4,7 +4,7 @@ import {
   escapeLike,
   type DefaultSchema,
   type Query,
-  type Row,
+  type QueryResultType,
   type Schema,
 } from '@rocicorp/zero';
 import * as z from 'zod/mini';
@@ -437,6 +437,6 @@ export function buildListQuery(args: ListQueryArgs) {
   return applyIssuePermissions(q, role);
 }
 
-export type Issue = Row<ReturnType<typeof queries.issueListV2>>;
+export type Issues = QueryResultType<typeof queries.issueListV2>;
 
-export type Issues = Issue[];
+export type Issue = Issues[number];

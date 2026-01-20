@@ -14,7 +14,11 @@ import {toast} from 'react-toastify';
 import {useDebouncedCallback} from 'use-debounce';
 import {useLocation, useParams, useSearch} from 'wouter';
 import {must} from '../../../../../packages/shared/src/must.ts';
-import {queries, type ListContext} from '../../../shared/queries.ts';
+import {
+  queries,
+  type IssueRowSort,
+  type ListContext,
+} from '../../../shared/queries.ts';
 import InfoIcon from '../../assets/images/icon-info.svg?react';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
@@ -156,7 +160,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     permalinkNotFound,
     estimatedTotal,
     total,
-    virtualItems,
   } = useZeroVirtualizer({
     estimateSize: () => ITEM_SIZE,
     getScrollElement: () => listRef.current,
@@ -164,7 +167,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
     listContextParams,
     permalinkID,
 
-    getPageQuery: (limit, start, dir) =>
+    getPageQuery: (
+      limit: number,
+      start: IssueRowSort | null,
+      dir: 'forward' | 'backward',
+    ) =>
       queries.issueListV2({
         listContext: listContextParams,
         userID: z.userID,
@@ -173,6 +180,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         dir,
         inclusive: start === null,
       }),
+
     getSingleQuery: (id: string) => {
       // Allow short ID too.
       const {idField, idValue} = getIDFromString(id);
@@ -182,6 +190,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
         listContext: listContextParams,
       });
     },
+
+    toStartRow: row => ({
+      id: row.id,
+      modified: row.modified,
+      created: row.created,
+    }),
+
     options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   });
 
@@ -496,7 +511,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
               className="virtual-list"
               style={{height: virtualizer.getTotalSize()}}
             >
-              {virtualItems.map(virtualRow => (
+              {virtualizer.getVirtualItems().map(virtualRow => (
                 <Row
                   key={virtualRow.key + ''}
                   index={virtualRow.index}
