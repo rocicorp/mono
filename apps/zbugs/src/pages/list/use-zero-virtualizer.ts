@@ -13,7 +13,6 @@ import {
   type IssueRowSort,
   type ListContextParams,
 } from '../../../shared/queries.ts';
-import {replaceHistoryState} from '../../navigate.ts';
 import {ITEM_SIZE} from './list-page.tsx';
 import {useIssues} from './use-issues.tsx';
 
@@ -45,7 +44,7 @@ type QueryAnchor = {
   readonly listContextParams: ListContextParams;
 };
 
-export const anchorSchema = zod.discriminatedUnion('kind', [
+const anchorSchema = zod.discriminatedUnion('kind', [
   zod.readonly(
     zod.object({
       index: zod.number(),
@@ -518,4 +517,8 @@ function getNearPageEdgeThreshold(pageSize: number) {
 
 function makeEven(n: number) {
   return n % 2 === 0 ? n : n + 1;
+}
+
+function replaceHistoryState<T>(data: T) {
+  history.replaceState(data, '', document.location.href);
 }

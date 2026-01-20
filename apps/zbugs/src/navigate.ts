@@ -66,7 +66,3 @@ export function removeParam(
   searchParams.delete(key, value);
   return searchParams;
 }
-
-export function replaceHistoryState<T>(data: T) {
-  history.replaceState(data, '', document.location.href);
-}
