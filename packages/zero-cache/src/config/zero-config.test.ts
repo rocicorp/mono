@@ -89,6 +89,14 @@ test('zero-cache --help', () => {
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  
                                                                                                                                                                                          
+     --mutate-allowed-client-headers string[]                      optional                                                                                                              
+       ZERO_MUTATE_ALLOWED_CLIENT_HEADERS env                                                                                                                                            
+                                                                   A list of header names that clients are allowed to set via custom headers.                                            
+                                                                   If specified, only headers in this list will be forwarded to the push URL.                                            
+                                                                   Header names are case-insensitive.                                                                                    
+                                                                   If not specified, no client-provided headers are forwarded (secure by default).                                       
+                                                                   Example: ZERO_MUTATE_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id                                             
+                                                                                                                                                                                         
      --query-url string[]                                          optional                                                                                                              
        ZERO_QUERY_URL env                                                                                                                                                                
                                                                    The URL of the API server to which zero-cache will send synced queries.                                               
@@ -135,6 +143,14 @@ test('zero-cache --help', () => {
                                                                    If true, zero-cache will forward cookies from the request.                                                            
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  
+                                                                                                                                                                                         
+     --query-allowed-client-headers string[]                       optional                                                                                                              
+       ZERO_QUERY_ALLOWED_CLIENT_HEADERS env                                                                                                                                             
+                                                                   A list of header names that clients are allowed to set via custom headers.                                            
+                                                                   If specified, only headers in this list will be forwarded to the query URL.                                           
+                                                                   Header names are case-insensitive.                                                                                    
+                                                                   If not specified, no client-provided headers are forwarded (secure by default).                                       
+                                                                   Example: ZERO_QUERY_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id                                              
                                                                                                                                                                                          
      --cvr-db string                                               optional                                                                                                              
        ZERO_CVR_DB env                                                                                                                                                                   

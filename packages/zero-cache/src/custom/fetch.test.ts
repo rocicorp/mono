@@ -133,7 +133,7 @@ describe('fetchFromAPIServer', () => {
     expect(init?.headers).toEqual({'Content-Type': 'application/json'});
   });
 
-  test('includes customHeaders in request', async () => {
+  test('includes customHeaders in request when allowed', async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({success: true}), {status: 200}),
     );
@@ -151,6 +151,10 @@ describe('fetchFromAPIServer', () => {
           'x-vercel-automation-bypass-secret': 'my-secret',
           'x-custom-header': 'custom-value',
         },
+        allowedClientHeaders: [
+          'x-vercel-automation-bypass-secret',
+          'x-custom-header',
+        ],
       },
       body,
     );
@@ -163,7 +167,7 @@ describe('fetchFromAPIServer', () => {
     });
   });
 
-  test('customHeaders combined with other headers', async () => {
+  test('customHeaders combined with other headers when allowed', async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({success: true}), {status: 200}),
     );
@@ -181,6 +185,7 @@ describe('fetchFromAPIServer', () => {
         customHeaders: {
           'x-vercel-automation-bypass-secret': 'my-secret',
         },
+        allowedClientHeaders: ['x-vercel-automation-bypass-secret'],
         token: 'jwt-token',
       },
       body,
@@ -192,6 +197,127 @@ describe('fetchFromAPIServer', () => {
       'X-Api-Key': 'api-key',
       'x-vercel-automation-bypass-secret': 'my-secret',
       'Authorization': 'Bearer jwt-token',
+    });
+  });
+
+  test('filters out all client headers when allowedClientHeaders is not set', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+
+    await fetchFromAPIServer(
+      validator,
+      'push',
+      lc,
+      baseUrl,
+      true,
+      allowedPatterns,
+      shard,
+      {
+        customHeaders: {
+          'x-request-id': '123',
+          'x-custom': 'value',
+        },
+        // allowedClientHeaders not set
+      },
+      body,
+    );
+
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+    });
+  });
+
+  test('filters out all client headers when allowedClientHeaders is empty', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+
+    await fetchFromAPIServer(
+      validator,
+      'push',
+      lc,
+      baseUrl,
+      true,
+      allowedPatterns,
+      shard,
+      {
+        customHeaders: {
+          'x-request-id': '123',
+          'x-custom': 'value',
+        },
+        allowedClientHeaders: [],
+      },
+      body,
+    );
+
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+    });
+  });
+
+  test('only forwards headers in allowedClientHeaders list', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+
+    await fetchFromAPIServer(
+      validator,
+      'push',
+      lc,
+      baseUrl,
+      true,
+      allowedPatterns,
+      shard,
+      {
+        customHeaders: {
+          'x-request-id': '123',
+          'x-forbidden': 'bad',
+          'X-Correlation-ID': 'abc',
+        },
+        allowedClientHeaders: ['x-request-id', 'x-correlation-id'],
+      },
+      body,
+    );
+
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-request-id': '123',
+      'X-Correlation-ID': 'abc',
+    });
+  });
+
+  test('header filtering is case-insensitive', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+
+    await fetchFromAPIServer(
+      validator,
+      'push',
+      lc,
+      baseUrl,
+      true,
+      allowedPatterns,
+      shard,
+      {
+        customHeaders: {
+          'X-REQUEST-ID': 'uppercase',
+          'x-custom-header': 'lowercase',
+        },
+        allowedClientHeaders: ['x-request-id', 'X-CUSTOM-HEADER'],
+      },
+      body,
+    );
+
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-REQUEST-ID': 'uppercase',
+      'x-custom-header': 'lowercase',
     });
   });
 
