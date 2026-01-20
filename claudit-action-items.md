@@ -101,6 +101,40 @@ error info disclosure
 
 debug logging of mutation args
 
+# Token Expiration NOT Enforced Post-Connection  
+                                                                                       
+Status: VULNERABILITY (Medium Severity)                                                                                   
+                                                                                                                          
+Finding: JWT expiration (exp claim) is only validated at WebSocket connection time. Once connected, the token is stored   
+and used for authorization without re-validation.                                                                         
+                                                                                                                          
+Evidence:                                                                                                                 
+                                                                                                                          
+1. Token verified at connection (syncer.ts:166-168):                                                                      
+decodedToken = await verifyToken(this.#config.auth, auth, {                                                               
+  subject: userID,                                                                                                        
+});                                                                                                                       
+                                                                                                                          
+2. Token stored for connection lifetime (syncer.ts:211-214):                                                              
+auth ? {                                                                                                                  
+  raw: auth,                                                                                                              
+  decoded: decodedToken ?? {},                                                                                            
+} : undefined,                                                                                                            
+                                                                                                                          
+3. Stored token used for authorization without expiration check (view-syncer.ts:1167, view-syncer.ts:1363):               
+this.#authData?.decoded,  // Used directly for permission checks                                                          
+                                                                                                                          
+Impact: A user with an expired token maintains full access until they disconnect. Long-lived WebSocket connections        
+(potentially hours or days) can operate with stale authorization.                                                         
+                                                                                                                          
+Recommendation: Implement periodic token expiration checking during active connections.
+
+# Claim Validation
+
+Recommendation: Add issuer and audience configuration options to enable full claim validation.   
+
+
+
 ----
 
 
