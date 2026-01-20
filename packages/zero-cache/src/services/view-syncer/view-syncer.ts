@@ -1462,28 +1462,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
-      const serverQueries = transformedQueries.map(
-        ({id, origQuery, transformed}) => {
-          return {
-            id,
-            ast: transformed.transformedAst,
-            transformationHash: transformed.transformationHash,
-            remove: expired(ttlClock, origQuery),
-          };
-        },
-      );
       const removeQueriesQueryIds: Set<string> = new Set(
-        serverQueries
-          .filter(q => q.remove)
+        transformedQueries
+          .filter(({origQuery}) => expired(ttlClock, origQuery))
           .map(q => q.id)
           .concat(erroredQueryIDs || []),
       );
-      const addQueries = serverQueries.filter(
-        q =>
-          !removeQueriesQueryIds.has(q.id) &&
-          (!pipelinesQueryIDs.has(q.id) ||
-            cvr.queries[q.id]?.transformationHash !== q.transformationHash),
-      );
+      const addQueries = transformedQueries
+        .map(({id, transformed}) => ({
+          id,
+          ast: transformed.transformedAst,
+          transformationHash: transformed.transformationHash,
+        }))
+        .filter(
+          q =>
+            !removeQueriesQueryIds.has(q.id) &&
+            (!pipelinesQueryIDs.has(q.id) ||
+              cvr.queries[q.id]?.transformationHash !== q.transformationHash),
+        );
 
       for (const q of addQueries) {
         const orig = cvr.queries[q.id];

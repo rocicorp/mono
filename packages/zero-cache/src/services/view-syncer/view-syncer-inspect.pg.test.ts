@@ -193,7 +193,7 @@ describe('view-syncer/service', () => {
       r2?.metrics?.['query-update-server'],
     );
   });
-  g;
+
   test('inspect version', async () => {
     const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
 
