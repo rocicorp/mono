@@ -186,6 +186,26 @@ const authOptions = {
       `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
     ],
   },
+  issuer: {
+    type: v.string().optional(),
+    desc: [
+      `Expected issuer ({bold iss} claim) for JWT validation.`,
+      `If set, tokens with a different or missing issuer will be rejected.`,
+    ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
+  },
+  audience: {
+    type: v.string().optional(),
+    desc: [
+      `Expected audience ({bold aud} claim) for JWT validation.`,
+      `If set, tokens with a different or missing audience will be rejected.`,
+    ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
+  },
 };
 
 const makeDeprecationMessage = (flag: string) =>
