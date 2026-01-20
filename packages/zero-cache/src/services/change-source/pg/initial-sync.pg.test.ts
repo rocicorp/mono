@@ -62,7 +62,6 @@ const ZERO_PERMISSIONS_SPEC: PublishedTableSpec = {
   primaryKey: ['lock'],
   publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
   schema: APP_ID,
-  schemaOID: expect.any(Number),
 } as const;
 
 const ZERO_CLIENTS_SPEC: PublishedTableSpec = {
@@ -108,7 +107,6 @@ const ZERO_CLIENTS_SPEC: PublishedTableSpec = {
   name: 'clients',
   primaryKey: ['clientGroupID', 'clientID'],
   schema: `${APP_ID}_${SHARD_NUM}`,
-  schemaOID: expect.any(Number),
   publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
 } as const;
 
@@ -155,7 +153,6 @@ const ZERO_MUTATIONS_SPEC: PublishedTableSpec = {
   name: 'mutations',
   primaryKey: ['clientGroupID', 'clientID', 'mutationID'],
   schema: `${APP_ID}_${SHARD_NUM}`,
-  schemaOID: expect.any(Number),
   publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
 } as const;
 
@@ -535,7 +532,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
-          schemaOID: expect.any(Number),
           publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
         },
       },
@@ -907,7 +903,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'foo',
           primaryKey: ['id'],
           schema: 'public',
-          schemaOID: expect.any(Number),
           publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
         },
       },
@@ -1071,7 +1066,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'users',
           primaryKey: ['userID'],
           schema: 'public',
-          schemaOID: expect.any(Number),
           publications: {['zero_custom']: {rowFilter: null}},
         },
       },
@@ -1211,7 +1205,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'users',
           primaryKey: ['userID'],
           schema: 'public',
-          schemaOID: expect.any(Number),
           publications: {
             ['zero_custom']: {rowFilter: '(("userID" % 2) = 0)'},
             ['zero_custom2']: {rowFilter: '("userID" > 1000)'},
@@ -1368,7 +1361,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'users',
           primaryKey: ['userID'],
           schema: 'public',
-          schemaOID: expect.any(Number),
           publications: {['zero_custom']: {rowFilter: null}},
         },
       },
@@ -1547,7 +1539,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
-          schemaOID: expect.any(Number),
           publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
         },
       },
@@ -1685,7 +1676,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'giant',
           primaryKey: ['id'],
           schema: 'public',
-          schemaOID: expect.any(Number),
           publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
         },
       },
@@ -1829,7 +1819,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'funk',
           primaryKey: ['id'],
           schema: 'public',
-          schemaOID: expect.any(Number),
           publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
         },
       },

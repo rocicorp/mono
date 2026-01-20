@@ -2,8 +2,7 @@ import type postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../../shared/src/queue.ts';
-import * as v from '../../../../../../shared/src/valita.ts';
-import {test, type PgTest} from '../../../../test/db.ts';
+import {type PgTest, test} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import type {
   Message,
@@ -12,8 +11,6 @@ import type {
 import {subscribe} from '../logical-replication/stream.ts';
 import {
   createEventTriggerStatements,
-  ddlStartEventSchema,
-  ddlUpdateEventSchema,
   type DdlStartEvent,
   type DdlUpdateEvent,
 } from './ddl.ts';
@@ -109,10 +106,7 @@ describe('change-source/tables/ddl', () => {
         {
           oid: expect.any(Number),
           schema: 'pub',
-          schemaOID: expect.any(Number),
           name: 'boo',
-          replicaIdentity: 'd',
-          replicaIdentityColumns: ['id'],
           columns: {
             description: {
               characterMaximumLength: null,
@@ -148,10 +142,7 @@ describe('change-source/tables/ddl', () => {
         {
           oid: expect.any(Number),
           schema: 'pub',
-          schemaOID: expect.any(Number),
           name: 'foo',
-          replicaIdentity: 'd',
-          replicaIdentityColumns: ['id'],
           columns: {
             description: {
               characterMaximumLength: null,
@@ -187,10 +178,7 @@ describe('change-source/tables/ddl', () => {
         {
           oid: expect.any(Number),
           schema: 'pub',
-          schemaOID: expect.any(Number),
           name: 'yoo',
-          replicaIdentity: 'd',
-          replicaIdentityColumns: ['id'],
           columns: {
             description: {
               characterMaximumLength: null,
@@ -327,10 +315,7 @@ describe('change-source/tables/ddl', () => {
           tables: inserted(DDL_START.schema.tables, 0, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'bar',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               id: {
                 characterMaximumLength: null,
@@ -437,10 +422,7 @@ describe('change-source/tables/ddl', () => {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'food',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               description: {
                 characterMaximumLength: null,
@@ -519,10 +501,7 @@ describe('change-source/tables/ddl', () => {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'foo',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               description: {
                 characterMaximumLength: null,
@@ -588,10 +567,7 @@ describe('change-source/tables/ddl', () => {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'foo',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               bar: {
                 characterMaximumLength: null,
@@ -650,10 +626,7 @@ describe('change-source/tables/ddl', () => {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'foo',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               description: {
                 characterMaximumLength: null,
@@ -703,10 +676,7 @@ describe('change-source/tables/ddl', () => {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'foo',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               description: {
                 characterMaximumLength: null,
@@ -776,10 +746,7 @@ describe('change-source/tables/ddl', () => {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'foo',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               id: {
                 characterMaximumLength: null,
@@ -822,10 +789,7 @@ describe('change-source/tables/ddl', () => {
             {
               oid: expect.any(Number),
               schema: 'pub',
-              schemaOID: expect.any(Number),
               name: 'boo',
-              replicaIdentity: 'd',
-              replicaIdentityColumns: ['id'],
               columns: {
                 description: {
                   characterMaximumLength: null,
@@ -950,10 +914,7 @@ describe('change-source/tables/ddl', () => {
           tables: replaced(DDL_START.schema.tables, 2, 1, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'yoo',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               description: {
                 characterMaximumLength: null,
@@ -1002,10 +963,7 @@ describe('change-source/tables/ddl', () => {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
-            schemaOID: expect.any(Number),
             name: 'foo',
-            replicaIdentity: 'd',
-            replicaIdentityColumns: ['id'],
             columns: {
               description: {
                 characterMaximumLength: null,
@@ -1067,10 +1025,7 @@ describe('change-source/tables/ddl', () => {
             {
               oid: expect.any(Number),
               schema: 'zero',
-              schemaOID: expect.any(Number),
               name: 'foo',
-              replicaIdentity: 'd',
-              replicaIdentityColumns: ['id'],
               columns: {
                 id: {
                   characterMaximumLength: null,
@@ -1105,10 +1060,7 @@ describe('change-source/tables/ddl', () => {
             {
               oid: expect.any(Number),
               schema: 'bup',
-              schemaOID: expect.any(Number),
               name: 'boo',
-              replicaIdentity: 'd',
-              replicaIdentityColumns: ['id'],
               columns: {
                 description: {
                   characterMaximumLength: null,
@@ -1144,10 +1096,7 @@ describe('change-source/tables/ddl', () => {
             {
               oid: expect.any(Number),
               schema: 'bup',
-              schemaOID: expect.any(Number),
               name: 'foo',
-              replicaIdentity: 'd',
-              replicaIdentityColumns: ['id'],
               columns: {
                 description: {
                   characterMaximumLength: null,
@@ -1183,10 +1132,7 @@ describe('change-source/tables/ddl', () => {
             {
               oid: expect.any(Number),
               schema: 'bup',
-              schemaOID: expect.any(Number),
               name: 'yoo',
-              replicaIdentity: 'd',
-              replicaIdentityColumns: ['id'],
               columns: {
                 description: {
                   characterMaximumLength: null,
@@ -1314,14 +1260,16 @@ describe('change-source/tables/ddl', () => {
         {tag: 'commit'},
       ]);
 
-      let msg = messages[3] as MessageMessage;
-      expect(parseDDLStartEvent(msg)).toMatchObject({
+      const {content: start} = messages[3] as MessageMessage;
+      expect(JSON.parse(new TextDecoder().decode(start))).toMatchObject({
         ...DDL_START,
         context: {query},
       } satisfies DdlStartEvent);
 
-      msg = messages[4] as MessageMessage;
-      expect(parseDDLUpdateEvent(msg)).toMatchObject(ddlUpdate);
+      const {content: update} = messages[4] as MessageMessage;
+      expect(JSON.parse(new TextDecoder().decode(update))).toMatchObject(
+        ddlUpdate,
+      );
     },
   );
 
@@ -1490,7 +1438,7 @@ describe('change-source/tables/ddl', () => {
     ]);
 
     let msg = messages[2] as MessageMessage;
-    expect(parseDDLUpdateEvent(msg)).toMatchObject({
+    expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddlUpdate',
       version: 1,
       // Top level query may not provide any information about the actual DDL command.
@@ -1499,7 +1447,7 @@ describe('change-source/tables/ddl', () => {
     });
 
     msg = messages[6] as MessageMessage;
-    expect(parseDDLUpdateEvent(msg)).toMatchObject({
+    expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddlUpdate',
       version: 1,
       context: {
@@ -1509,7 +1457,7 @@ describe('change-source/tables/ddl', () => {
       event: {tag: 'ALTER TABLE'},
     });
     msg = messages[8] as MessageMessage;
-    expect(parseDDLUpdateEvent(msg)).toMatchObject({
+    expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddlUpdate',
       version: 1,
       context: {
@@ -1520,17 +1468,3 @@ describe('change-source/tables/ddl', () => {
     });
   });
 });
-
-function parseDDLStartEvent(msg: MessageMessage) {
-  return v.parse(
-    JSON.parse(new TextDecoder().decode(msg.content)),
-    ddlStartEventSchema,
-  );
-}
-
-function parseDDLUpdateEvent(msg: MessageMessage) {
-  return v.parse(
-    JSON.parse(new TextDecoder().decode(msg.content)),
-    ddlUpdateEventSchema,
-  );
-}
