@@ -3,10 +3,7 @@ import type {Virtualizer} from '@tanstack/react-virtual';
 import {useVirtualizer, type VirtualizerOptions} from '@tanstack/react-virtual';
 import {useEffect, useMemo, useState} from 'react';
 import {useHistoryState} from 'wouter/use-browser-location';
-import * as zod from 'zod/mini';
-import type {SomeType} from 'zod/v4/core';
 import {assert} from '../../../../../packages/shared/src/asserts.ts';
-import {issueRowSortSchema} from '../../../shared/queries.ts';
 import {ITEM_SIZE} from './list-page.tsx';
 import {
   useIssues,
@@ -40,44 +37,6 @@ type QueryAnchor<TListContextParams, TIssueRowSort> = {
    */
   readonly listContextParams: TListContextParams;
 };
-
-const anchorSchema = <T extends SomeType>(issueRowSortSchema: T) =>
-  zod.discriminatedUnion('kind', [
-    zod.readonly(
-      zod.object({
-        index: zod.number(),
-        kind: zod.literal('forward'),
-        startRow: zod.optional(issueRowSortSchema),
-      }),
-    ),
-    zod.readonly(
-      zod.object({
-        index: zod.number(),
-        kind: zod.literal('backward'),
-        startRow: issueRowSortSchema,
-      }),
-    ),
-    zod.readonly(
-      zod.object({
-        index: zod.number(),
-        kind: zod.literal('permalink'),
-        id: zod.string(),
-      }),
-    ),
-  ]);
-
-const permalinkHistoryStateSchema = <T extends SomeType>(
-  issueRowSortSchema: T,
-) =>
-  zod.readonly(
-    zod.looseObject({
-      anchor: anchorSchema(issueRowSortSchema),
-      scrollTop: zod.number(),
-      estimatedTotal: zod.number(),
-      hasReachedStart: zod.boolean(),
-      hasReachedEnd: zod.boolean(),
-    }),
-  );
 
 type PermalinkHistoryState<TIssueRowSort> = Readonly<{
   anchor: Anchor<TIssueRowSort>;
@@ -147,17 +106,16 @@ export function useZeroVirtualizer<
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
 
+  const historyState = usePermalinkHistoryState<TIssueRowSort>();
+
   // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount issues
   const [queryAnchor, setQueryAnchor] = useState<
     QueryAnchor<TListContextParams, TIssueRowSort>
   >(() => {
-    const {state} = history;
-    // TODO: TIssueRowSort is generic - need a way to pass schema for it
-    const parseResult =
-      permalinkHistoryStateSchema(issueRowSortSchema).safeParse(state);
+    // const historyState = maybeGetPermalinkHistoryState<TIssueRowSort>();
     const anchor = (
-      parseResult.success && parseResult.data.anchor
-        ? parseResult.data.anchor
+      historyState
+        ? historyState.anchor
         : permalinkID
           ? {
               index: NUM_ROWS_FOR_LOADING_SKELETON,
@@ -249,7 +207,7 @@ export function useZeroVirtualizer<
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      replaceHistoryState<PermalinkHistoryState<TIssueRowSort>>({
+      replaceHistoryState({
         anchor,
         scrollTop: virtualizer.scrollOffset ?? 0,
         estimatedTotal,
@@ -284,15 +242,6 @@ export function useZeroVirtualizer<
       setEstimatedTotal(newEstimatedTotal);
     }
   }, [estimatedTotal, complete, newEstimatedTotal]);
-
-  // TODO:(arv): DRY
-  const maybeHistoryState =
-    useHistoryState<PermalinkHistoryState<TIssueRowSort> | null>();
-  const res =
-    permalinkHistoryStateSchema(issueRowSortSchema).safeParse(
-      maybeHistoryState,
-    );
-  const historyState = res.success ? res.data : null;
 
   const [pendingScrollAdjustment, setPendingScrollAdjustment] =
     useState<number>(0);
@@ -509,6 +458,29 @@ function makeEven(n: number) {
   return n % 2 === 0 ? n : n + 1;
 }
 
-function replaceHistoryState<T>(data: T) {
-  history.replaceState(data, '', document.location.href);
+const zeroHistoryKey = '@rocicorp/zero/react/virtual/v0';
+
+function usePermalinkHistoryState<
+  TIssueRowSort,
+>(): PermalinkHistoryState<TIssueRowSort> | null {
+  const maybeHistoryState = useHistoryState<unknown>();
+  if (maybeHistoryState === null || typeof maybeHistoryState !== 'object') {
+    return null;
+  }
+
+  if (!(zeroHistoryKey in maybeHistoryState)) {
+    return null;
+  }
+
+  return maybeHistoryState[
+    zeroHistoryKey
+  ] as PermalinkHistoryState<TIssueRowSort>;
+}
+
+function replaceHistoryState<TIssueRowSort>(
+  data: PermalinkHistoryState<TIssueRowSort>,
+) {
+  const historyState = history.state || {};
+  historyState[zeroHistoryKey] = data;
+  history.replaceState(historyState, '', document.location.href);
 }
