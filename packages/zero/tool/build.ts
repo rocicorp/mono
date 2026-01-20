@@ -171,6 +171,10 @@ async function getViteConfig(): Promise<InlineConfig> {
   };
 }
 
+// Modules that should be kept external in the testing build to share
+// symbol instances with the main bundle
+const testingExternalModules = ['query-internals'];
+
 async function getTestingViteConfig(): Promise<InlineConfig> {
   return {
     ...baseConfig,
@@ -178,7 +182,15 @@ async function getTestingViteConfig(): Promise<InlineConfig> {
     build: {
       ...baseConfig.build,
       rollupOptions: {
-        external,
+        external: (id: string) => {
+          // Check standard externals
+          if (external.some(ext => id === ext || id.startsWith(ext + '/'))) {
+            return true;
+          }
+          // Keep certain modules external so testing bundle shares symbols
+          // with the main bundle (e.g., queryInternalsTag)
+          return testingExternalModules.some(mod => id.includes(mod));
+        },
         input: await getTestingEntryPoints(),
         output: {
           format: 'es',
@@ -187,6 +199,24 @@ async function getTestingViteConfig(): Promise<InlineConfig> {
           // Don't preserve modules for testing - bundle dependencies so they
           // get the TESTING=true define
           preserveModules: false,
+          // Rewrite external module paths to point to the built output
+          paths: (id: string) => {
+            for (const mod of testingExternalModules) {
+              if (id.includes(mod)) {
+                // Convert absolute path to relative path from testing.js output
+                // testing.js is at out/zero/src/testing.js
+                // query-internals.js is at out/zql/src/query/query-internals.js
+                // Correct relative path: ../../zql/src/query/query-internals.js
+                // Vite prepends ../../ for output at zero/src/, so we just return
+                // the package-relative path
+                const match = id.match(/packages\/([^/]+\/src\/.+)\.ts$/);
+                if (match) {
+                  return `${match[1]}.js`;
+                }
+              }
+            }
+            return id;
+          },
         },
       },
     },
