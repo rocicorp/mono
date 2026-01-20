@@ -632,3 +632,77 @@ describe('primary key validation', () => {
     expect(await authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
   });
 });
+
+describe('table name validation', () => {
+  test('rejects operations with invalid table name', () => {
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+      writeAuthzStorage,
+    );
+
+    expect(() =>
+      authorizer.validateTableNames([
+        {
+          op: 'insert',
+          primaryKey: ['id'],
+          tableName: 'nonexistent_table',
+          value: {id: '1'},
+        },
+      ]),
+    ).toThrow("Table 'nonexistent_table' is not a valid table.");
+  });
+
+  test('accepts operations with valid table name', () => {
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+      writeAuthzStorage,
+    );
+
+    expect(() =>
+      authorizer.validateTableNames([
+        {
+          op: 'insert',
+          primaryKey: ['id'],
+          tableName: 'foo',
+          value: {id: '1'},
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  test('validates all operations in a batch', () => {
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+      writeAuthzStorage,
+    );
+
+    expect(() =>
+      authorizer.validateTableNames([
+        {
+          op: 'insert',
+          primaryKey: ['id'],
+          tableName: 'foo',
+          value: {id: '1'},
+        },
+        {
+          op: 'update',
+          primaryKey: ['id'],
+          tableName: 'invalid_table',
+          value: {id: '1'},
+        },
+      ]),
+    ).toThrow("Table 'invalid_table' is not a valid table.");
+  });
+});
