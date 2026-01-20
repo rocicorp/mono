@@ -108,22 +108,22 @@ export function useZeroVirtualizer<
 
   const historyState = usePermalinkHistoryState<TIssueRowSort>();
 
+  const createPermalinkAnchor = (id: string) =>
+    ({
+      id,
+      index: NUM_ROWS_FOR_LOADING_SKELETON,
+      kind: 'permalink',
+    }) as const;
+
   // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount issues
   const [queryAnchor, setQueryAnchor] = useState<
     QueryAnchor<TListContextParams, TIssueRowSort>
   >(() => {
-    // const historyState = maybeGetPermalinkHistoryState<TIssueRowSort>();
-    const anchor = (
-      historyState
-        ? historyState.anchor
-        : permalinkID
-          ? {
-              index: NUM_ROWS_FOR_LOADING_SKELETON,
-              kind: 'permalink',
-              id: permalinkID,
-            }
-          : TOP_ANCHOR
-    ) as Anchor<TIssueRowSort>;
+    const anchor = historyState
+      ? historyState.anchor
+      : permalinkID
+        ? createPermalinkAnchor(permalinkID)
+        : TOP_ANCHOR;
     return {
       anchor,
       listContextParams,
@@ -137,17 +137,8 @@ export function useZeroVirtualizer<
     if (isListContextCurrent) {
       return queryAnchor.anchor;
     }
-
-    // TODO(arv): DRY
-    if (permalinkID) {
-      return {
-        index: NUM_ROWS_FOR_LOADING_SKELETON,
-        kind: 'permalink',
-        id: permalinkID,
-      } satisfies Anchor<TIssueRowSort>;
-    }
-    return TOP_ANCHOR;
-  }, [isListContextCurrent, queryAnchor.anchor]);
+    return permalinkID ? createPermalinkAnchor(permalinkID) : TOP_ANCHOR;
+  }, [isListContextCurrent, queryAnchor.anchor, permalinkID]);
 
   const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
 
@@ -270,7 +261,6 @@ export function useZeroVirtualizer<
       );
 
       setEstimatedTotal(estimatedTotal + pendingScrollAdjustment);
-
       setPendingScrollAdjustment(0);
       setSkipPagingLogic(true);
 
@@ -312,36 +302,43 @@ export function useZeroVirtualizer<
   useEffect(() => {
     if (!isListContextCurrent) {
       const scrollElement = getScrollElement();
+
+      const resetState = (
+        scrollTop: number,
+        estimatedTotal: number,
+        hasReachedStart: boolean,
+        hasReachedEnd: boolean,
+        anchor: Anchor<TIssueRowSort>,
+      ) => {
+        if (scrollElement) {
+          scrollElement.scrollTop = scrollTop;
+        }
+        setEstimatedTotal(estimatedTotal);
+        setHasReachedStart(hasReachedStart);
+        setHasReachedEnd(hasReachedEnd);
+        updateAnchor(anchor);
+      };
+
       if (historyState) {
-        if (scrollElement) {
-          scrollElement.scrollTop = historyState.scrollTop;
-        }
-        setEstimatedTotal(historyState.estimatedTotal);
-        setHasReachedStart(historyState.hasReachedStart);
-        setHasReachedEnd(historyState.hasReachedEnd);
-        // TODO: FIXME
-        updateAnchor(historyState.anchor as Anchor<TIssueRowSort>);
+        resetState(
+          historyState.scrollTop,
+          historyState.estimatedTotal,
+          historyState.hasReachedStart,
+          historyState.hasReachedEnd,
+          historyState.anchor,
+        );
       } else if (permalinkID) {
-        if (scrollElement) {
-          scrollElement.scrollTop = NUM_ROWS_FOR_LOADING_SKELETON * ITEM_SIZE;
-        }
-        setEstimatedTotal(NUM_ROWS_FOR_LOADING_SKELETON);
-        setHasReachedStart(false);
-        setHasReachedEnd(false);
-        updateAnchor({
-          id: permalinkID,
-          index: NUM_ROWS_FOR_LOADING_SKELETON,
-          kind: 'permalink',
-        });
+        resetState(
+          NUM_ROWS_FOR_LOADING_SKELETON * ITEM_SIZE,
+          NUM_ROWS_FOR_LOADING_SKELETON,
+          false,
+          false,
+          createPermalinkAnchor(permalinkID),
+        );
       } else {
-        if (scrollElement) {
-          scrollElement.scrollTop = 0;
-        }
-        setEstimatedTotal(0);
-        setHasReachedStart(true);
-        setHasReachedEnd(false);
-        updateAnchor(TOP_ANCHOR);
+        resetState(0, 0, true, false, TOP_ANCHOR);
       }
+
       setSkipPagingLogic(true);
     }
   }, [isListContextCurrent]);
