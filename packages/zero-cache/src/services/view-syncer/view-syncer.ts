@@ -1463,8 +1463,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       const removeQueriesQueryIds: Set<string> = new Set(
-        transformedQueries
-          .filter(({origQuery}) => expired(ttlClock, origQuery))
+        Object.values(cvr.queries)
+          .filter(q => expired(ttlClock, q))
           .map(q => q.id)
           .concat(erroredQueryIDs || []),
       );
