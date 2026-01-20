@@ -10,7 +10,7 @@ import {
   type Anchor,
   type GetPageQuery,
   type GetSingleQuery,
-} from './use-issues.tsx';
+} from './use-issues.ts';
 
 // Make sure this is even since we half it for permalink loading
 const MIN_PAGE_SIZE = 100;
