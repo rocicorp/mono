@@ -815,7 +815,7 @@ describe('view-syncer/pipeline-driver', () => {
     // Test that after reset hydration and advancement work.
     pipelines.reset(clientSchema);
 
-    expect(pipelines.queryIDs()).toEqual(new Set());
+    expect(pipelines.queries()).toEqual(new Map());
 
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
@@ -863,9 +863,45 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ];
-    expect(pipelines.queryIDs()).toMatchInlineSnapshot(`
-      Set {
-        "queryID1",
+    expect(pipelines.queries()).toMatchInlineSnapshot(`
+      Map {
+        "queryID1" => {
+          "hydrationTimeMs": 0.38845900000001166,
+          "input": Join {},
+          "transformationHash": "hash1",
+          "transformedAst": {
+            "orderBy": [
+              [
+                "id",
+                "desc",
+              ],
+            ],
+            "related": [
+              {
+                "correlation": {
+                  "childField": [
+                    "issueID",
+                  ],
+                  "parentField": [
+                    "id",
+                  ],
+                },
+                "subquery": {
+                  "alias": "comments",
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
+                    ],
+                  ],
+                  "table": "comments",
+                },
+                "system": "client",
+              },
+            ],
+            "table": "issues",
+          },
+        },
       }
     `);
 
@@ -877,7 +913,7 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.advanceWithoutDiff();
     pipelines.reset(clientSchema);
 
-    expect(pipelines.queryIDs()).toEqual(new Set());
+    expect(pipelines.queries()).toEqual(new Map());
 
     // The newColumn should be reflected after a reset.
     expect([
@@ -1707,13 +1743,49 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    expect(pipelines.queryIDs()).toMatchInlineSnapshot(`
-      Set {
-        "queryID1",
+    expect(pipelines.queries()).toMatchInlineSnapshot(`
+      Map {
+        "queryID1" => {
+          "hydrationTimeMs": 0.36791599999992286,
+          "input": Join {},
+          "transformationHash": "hash1",
+          "transformedAst": {
+            "orderBy": [
+              [
+                "id",
+                "desc",
+              ],
+            ],
+            "related": [
+              {
+                "correlation": {
+                  "childField": [
+                    "issueID",
+                  ],
+                  "parentField": [
+                    "id",
+                  ],
+                },
+                "subquery": {
+                  "alias": "comments",
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
+                    ],
+                  ],
+                  "table": "comments",
+                },
+                "system": "client",
+              },
+            ],
+            "table": "issues",
+          },
+        },
       }
     `);
     pipelines.removeQuery('queryID1');
-    expect(pipelines.queryIDs()).toEqual(new Set());
+    expect(pipelines.queries()).toEqual(new Map());
 
     replicator.processTransaction(
       '134',
