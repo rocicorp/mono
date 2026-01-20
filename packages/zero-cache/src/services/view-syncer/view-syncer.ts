@@ -1311,8 +1311,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'pipelines must be initialized (syncQueryPipelineSet)',
       );
 
-      const pipelinesQueryIDs = this.#pipelines.queryIDs();
-
       if (this.#ttlClock === undefined) {
         // Get it from the CVR or initialize it to now.
         this.#ttlClock = cvr.ttlClock;
@@ -1432,8 +1430,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
 
         // Check for queries whose transformation hash changed and log for debugging.
-        // The old pipelines will be automatically removed via unhydrateQueries,
-        // and new pipelines will be added via addQueries.
+        // The old pipelines will be removed and destroyed when
+        // PipelineManager.addQuery is called with an existing query id and
+        // different transformation hash.
         for (const [
           queryID,
           newTransform,
@@ -1477,8 +1476,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         .filter(
           q =>
             !removeQueriesQueryIds.has(q.id) &&
-            (!pipelinesQueryIDs.has(q.id) ||
-              cvr.queries[q.id]?.transformationHash !== q.transformationHash),
+            this.#pipelines.queries().get(q.id)?.transformationHash !==
+              q.transformationHash,
         );
 
       for (const q of addQueries) {

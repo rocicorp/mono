@@ -78,6 +78,11 @@ type Pipeline = {
   readonly transformationHash: string;
 };
 
+type QueryInfo = {
+  readonly transformedAst: AST;
+  readonly transformationHash: string;
+};
+
 type AdvanceContext = {
   readonly timer: Timer;
   readonly totalHydrationTimeMs: number;
@@ -280,9 +285,9 @@ export class PipelineDriver {
     this.#snapshotter.destroy();
   }
 
-  /** @return The Set of query IDs for all added queries. */
-  queryIDs(): Set<string> {
-    return new Set(this.#pipelines.keys());
+  /** @return Map from query ID to PipelineInfo for all added queries. */
+  queries(): ReadonlyMap<string, QueryInfo> {
+    return this.#pipelines;
   }
 
   totalHydrationTimeMs(): number {
