@@ -47,7 +47,7 @@ import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
 export type RowAdd = {
   readonly type: 'add';
-  readonly queryHash: string;
+  readonly queryID: string;
   readonly table: string;
   readonly rowKey: Row;
   readonly row: Row;
@@ -55,7 +55,7 @@ export type RowAdd = {
 
 export type RowRemove = {
   readonly type: 'remove';
-  readonly queryHash: string;
+  readonly queryID: string;
   readonly table: string;
   readonly rowKey: Row;
   readonly row: undefined;
@@ -63,7 +63,7 @@ export type RowRemove = {
 
 export type RowEdit = {
   readonly type: 'edit';
-  readonly queryHash: string;
+  readonly queryID: string;
   readonly table: string;
   readonly rowKey: Row;
   readonly row: Row;
@@ -74,8 +74,8 @@ export type RowChange = RowAdd | RowRemove | RowEdit;
 type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
-  readonly transformedAst: AST; // Optional, only set after hydration
-  readonly transformationHash: string; // The hash of the transformed AST
+  readonly transformedAst: AST;
+  readonly transformationHash: string;
 };
 
 type AdvanceContext = {
@@ -105,6 +105,7 @@ const MIN_ADVANCEMENT_TIME_LIMIT_MS = 50;
  */
 export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
+  // Query id to pipeline
   readonly #pipelines = new Map<string, Pipeline>();
 
   readonly #lc: LogContext;
@@ -279,8 +280,8 @@ export class PipelineDriver {
     this.#snapshotter.destroy();
   }
 
-  /** @return The Set of transformation hashes for all added queries. */
-  transformationHashes(): Set<string> {
+  /** @return The Set of query IDs for all added queries. */
+  queryIDs(): Set<string> {
     return new Set(this.#pipelines.keys());
   }
 
@@ -299,8 +300,8 @@ export class PipelineDriver {
    * {@link advance}d. The query and its pipeline can be removed with
    * {@link removeQuery()}.
    *
-   * If a query with an identical hash has already been added, this method is a
-   * no-op and no RowChanges are generated.
+   * If a query with the same queryID is already added, the existing pipeline
+   * will be removed and destroyed before adding the new pipeline.
    *
    * @param timer The caller-controlled {@link Timer} used to determine the
    *        final hydration time. (The caller may pause and resume the timer
@@ -317,11 +318,7 @@ export class PipelineDriver {
       this.initialized(),
       'Pipeline driver must be initialized before adding queries',
     );
-    this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
-    if (this.#pipelines.has(transformationHash)) {
-      this.#lc.info?.(`query ${transformationHash} already added`, query);
-      return;
-    }
+    this.removeQuery(queryID);
     const debugDelegate = runtimeDebugFlags.trackRowsVended
       ? new Debug()
       : undefined;
@@ -340,7 +337,7 @@ export class PipelineDriver {
         decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
           new MeasurePushOperator(
             input,
-            transformationHash,
+            queryID,
             this.#inspectorDelegate,
             'query-update-server',
           ),
@@ -356,7 +353,7 @@ export class PipelineDriver {
       push: change => {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
-        streamer.accumulate(transformationHash, schema, [change]);
+        streamer.accumulate(queryID, schema, [change]);
         return [];
       },
     });
@@ -369,11 +366,7 @@ export class PipelineDriver {
       timer,
     };
     try {
-      yield* hydrateInternal(
-        input,
-        transformationHash,
-        must(this.#primaryKeys),
-      );
+      yield* hydrateInternal(input, queryID, must(this.#primaryKeys));
     } finally {
       this.#hydrateContext = null;
     }
@@ -383,7 +376,7 @@ export class PipelineDriver {
       if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
         let totalRowsConsidered = 0;
         const lc = this.#lc
-          .withContext('hash', transformationHash)
+          .withContext('queryID', queryID)
           .withContext('hydrationTimeMs', hydrationTimeMs);
         for (const tableName of this.#tables.keys()) {
           const entries = Object.entries(
@@ -403,7 +396,7 @@ export class PipelineDriver {
     // Note: This hydrationTime is a wall-clock overestimate, as it does
     // not take time slicing into account. The view-syncer resets this
     // to a more precise processing-time measurement with setHydrationTime().
-    this.#pipelines.set(transformationHash, {
+    this.#pipelines.set(queryID, {
       input,
       hydrationTimeMs,
       transformedAst: query,
@@ -415,10 +408,10 @@ export class PipelineDriver {
    * Removes the pipeline for the query. This is a no-op if the query
    * was not added.
    */
-  removeQuery(hash: string) {
-    const pipeline = this.#pipelines.get(hash);
+  removeQuery(queryID: string) {
+    const pipeline = this.#pipelines.get(queryID);
     if (pipeline) {
-      this.#pipelines.delete(hash);
+      this.#pipelines.delete(queryID);
       pipeline.input.destroy();
     }
   }
@@ -675,28 +668,28 @@ class Streamer {
   }
 
   readonly #changes: [
-    hash: string,
+    queryID: string,
     schema: SourceSchema,
     changes: Iterable<Change | 'yield'>,
   ][] = [];
 
   accumulate(
-    hash: string,
+    queryID: string,
     schema: SourceSchema,
     changes: Iterable<Change | 'yield'>,
   ): this {
-    this.#changes.push([hash, schema, changes]);
+    this.#changes.push([queryID, schema, changes]);
     return this;
   }
 
   *stream(): Iterable<RowChange | 'yield'> {
-    for (const [hash, schema, changes] of this.#changes) {
-      yield* this.#streamChanges(hash, schema, changes);
+    for (const [queryID, schema, changes] of this.#changes) {
+      yield* this.#streamChanges(queryID, schema, changes);
     }
   }
 
   *#streamChanges(
-    queryHash: string,
+    queryID: string,
     schema: SourceSchema,
     changes: Iterable<Change | 'yield'>,
   ): Iterable<RowChange | 'yield'> {
@@ -716,9 +709,7 @@ class Streamer {
       switch (type) {
         case 'add':
         case 'remove': {
-          yield* this.#streamNodes(queryHash, schema, type, () => [
-            change.node,
-          ]);
+          yield* this.#streamNodes(queryID, schema, type, () => [change.node]);
           break;
         }
         case 'child': {
@@ -727,11 +718,11 @@ class Streamer {
             schema.relationships[child.relationshipName],
           );
 
-          yield* this.#streamChanges(queryHash, childSchema, [child.change]);
+          yield* this.#streamChanges(queryID, childSchema, [child.change]);
           break;
         }
         case 'edit':
-          yield* this.#streamNodes(queryHash, schema, type, () => [
+          yield* this.#streamNodes(queryID, schema, type, () => [
             {row: change.node.row, relationships: {}},
           ]);
           break;
@@ -742,7 +733,7 @@ class Streamer {
   }
 
   *#streamNodes(
-    queryHash: string,
+    queryID: string,
     schema: SourceSchema,
     op: 'add' | 'remove' | 'edit',
     nodes: () => Iterable<Node | 'yield'>,
@@ -767,7 +758,7 @@ class Streamer {
 
       yield {
         type: op,
-        queryHash,
+        queryID,
         table,
         rowKey,
         row: op === 'remove' ? undefined : row,
@@ -775,7 +766,7 @@ class Streamer {
 
       for (const [relationship, children] of Object.entries(relationships)) {
         const childSchema = must(schema.relationships[relationship]);
-        yield* this.#streamNodes(queryHash, childSchema, op, children);
+        yield* this.#streamNodes(queryID, childSchema, op, children);
       }
     }
   }

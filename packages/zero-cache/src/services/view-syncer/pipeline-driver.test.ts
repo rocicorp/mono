@@ -380,104 +380,104 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ]).toMatchInlineSnapshot(`
-        [
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "closed": false,
-              "id": "3",
-            },
-            "rowKey": {
-              "id": "3",
-            },
-            "table": "issues",
-            "type": "add",
+      [
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "3",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "closed": true,
-              "id": "2",
-            },
-            "rowKey": {
-              "id": "2",
-            },
-            "table": "issues",
-            "type": "add",
+          "rowKey": {
+            "id": "3",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "22",
-              "issueID": "2",
-              "upvotes": 20000,
-            },
-            "rowKey": {
-              "id": "22",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": true,
+            "id": "2",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "21",
-              "issueID": "2",
-              "upvotes": 10000,
-            },
-            "rowKey": {
-              "id": "21",
-            },
-            "table": "comments",
-            "type": "add",
+          "rowKey": {
+            "id": "2",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "20",
-              "issueID": "2",
-              "upvotes": 1,
-            },
-            "rowKey": {
-              "id": "20",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "22",
+            "issueID": "2",
+            "upvotes": 20000,
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "closed": false,
-              "id": "1",
-            },
-            "rowKey": {
-              "id": "1",
-            },
-            "table": "issues",
-            "type": "add",
+          "rowKey": {
+            "id": "22",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "10",
-              "issueID": "1",
-              "upvotes": 0,
-            },
-            "rowKey": {
-              "id": "10",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "21",
+            "issueID": "2",
+            "upvotes": 10000,
           },
-        ]
-      `);
+          "rowKey": {
+            "id": "21",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "20",
+            "issueID": "2",
+            "upvotes": 1,
+          },
+          "rowKey": {
+            "id": "20",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
 
     // Adding a query with the same hash should be a noop.
     expect([
@@ -487,7 +487,105 @@ describe('view-syncer/pipeline-driver', () => {
         ISSUES_AND_COMMENTS,
         startTimer(),
       ),
-    ]).toMatchInlineSnapshot(`[]`);
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "3",
+          },
+          "rowKey": {
+            "id": "3",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": true,
+            "id": "2",
+          },
+          "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "22",
+            "issueID": "2",
+            "upvotes": 20000,
+          },
+          "rowKey": {
+            "id": "22",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "21",
+            "issueID": "2",
+            "upvotes": 10000,
+          },
+          "rowKey": {
+            "id": "21",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "20",
+            "issueID": "2",
+            "upvotes": 1,
+          },
+          "rowKey": {
+            "id": "20",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
   });
 
   test('insert', () => {
@@ -515,7 +613,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "31",
@@ -529,7 +627,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "closed": false,
@@ -542,7 +640,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "41",
@@ -579,7 +677,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -588,7 +686,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "10",
@@ -597,7 +695,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "21",
@@ -644,7 +742,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "22",
@@ -653,7 +751,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "22",
@@ -677,7 +775,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "135",
             "id": "22",
@@ -717,7 +815,7 @@ describe('view-syncer/pipeline-driver', () => {
     // Test that after reset hydration and advancement work.
     pipelines.reset(clientSchema);
 
-    expect(pipelines.transformationHashes()).toEqual(new Set());
+    expect(pipelines.queryIDs()).toEqual(new Set());
 
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
@@ -765,9 +863,9 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ];
-    expect(pipelines.transformationHashes()).toMatchInlineSnapshot(`
+    expect(pipelines.queryIDs()).toMatchInlineSnapshot(`
       Set {
-        "hash1",
+        "queryID1",
       }
     `);
 
@@ -779,7 +877,7 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.advanceWithoutDiff();
     pipelines.reset(clientSchema);
 
-    expect(pipelines.transformationHashes()).toEqual(new Set());
+    expect(pipelines.queryIDs()).toEqual(new Set());
 
     // The newColumn should be reflected after a reset.
     expect([
@@ -790,107 +888,107 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ]).toMatchInlineSnapshot(`
-        [
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "134",
-              "closed": false,
-              "id": "3",
-              "newColumn": null,
-            },
-            "rowKey": {
-              "id": "3",
-            },
-            "table": "issues",
-            "type": "add",
+      [
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "134",
+            "closed": false,
+            "id": "3",
+            "newColumn": null,
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "134",
-              "closed": true,
-              "id": "2",
-              "newColumn": null,
-            },
-            "rowKey": {
-              "id": "2",
-            },
-            "table": "issues",
-            "type": "add",
+          "rowKey": {
+            "id": "3",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "22",
-              "issueID": "2",
-              "upvotes": 20000,
-            },
-            "rowKey": {
-              "id": "22",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "134",
+            "closed": true,
+            "id": "2",
+            "newColumn": null,
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "21",
-              "issueID": "2",
-              "upvotes": 10000,
-            },
-            "rowKey": {
-              "id": "21",
-            },
-            "table": "comments",
-            "type": "add",
+          "rowKey": {
+            "id": "2",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "20",
-              "issueID": "2",
-              "upvotes": 1,
-            },
-            "rowKey": {
-              "id": "20",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "22",
+            "issueID": "2",
+            "upvotes": 20000,
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "134",
-              "closed": false,
-              "id": "1",
-              "newColumn": null,
-            },
-            "rowKey": {
-              "id": "1",
-            },
-            "table": "issues",
-            "type": "add",
+          "rowKey": {
+            "id": "22",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "10",
-              "issueID": "1",
-              "upvotes": 0,
-            },
-            "rowKey": {
-              "id": "10",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "21",
+            "issueID": "2",
+            "upvotes": 10000,
           },
-        ]
-      `);
+          "rowKey": {
+            "id": "21",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "20",
+            "issueID": "2",
+            "upvotes": 1,
+          },
+          "rowKey": {
+            "id": "20",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "134",
+            "closed": false,
+            "id": "1",
+            "newColumn": null,
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
   });
 
   test('update unique non-primary key', () => {
@@ -900,7 +998,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "foo",
@@ -913,7 +1011,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "boo",
@@ -941,7 +1039,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "boo",
@@ -964,7 +1062,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "foo",
@@ -977,7 +1075,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "boo",
@@ -1002,7 +1100,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "foo",
@@ -1011,7 +1109,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "baz",
@@ -1024,7 +1122,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "foo",
@@ -1063,7 +1161,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -1072,7 +1170,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID",
           "row": undefined,
           "rowKey": {
             "issueID": "1",
@@ -1082,7 +1180,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -1106,7 +1204,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "closed": false,
@@ -1131,7 +1229,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash2",
+          "queryID": "queryID",
           "row": {
             "_0_version": "123",
             "closed": false,
@@ -1144,7 +1242,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash2",
+          "queryID": "queryID",
           "row": {
             "_0_version": "123",
             "issueID": "1",
@@ -1279,7 +1377,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "closed": true,
@@ -1292,7 +1390,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "issueID": "2",
@@ -1307,7 +1405,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "1",
@@ -1320,7 +1418,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "issueID": "2",
@@ -1335,7 +1433,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "1",
@@ -1362,7 +1460,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "2",
@@ -1371,7 +1469,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "issueID": "2",
@@ -1381,7 +1479,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -1390,7 +1488,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "issueID": "2",
@@ -1400,7 +1498,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -1533,7 +1631,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "closed": false,
@@ -1556,7 +1654,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "156",
             "id": "41",
@@ -1577,7 +1675,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "4",
@@ -1586,7 +1684,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "41",
@@ -1609,13 +1707,13 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    expect(pipelines.transformationHashes()).toMatchInlineSnapshot(`
+    expect(pipelines.queryIDs()).toMatchInlineSnapshot(`
       Set {
-        "hash1",
+        "queryID1",
       }
     `);
-    pipelines.removeQuery('hash1');
-    expect(pipelines.transformationHashes()).toEqual(new Set());
+    pipelines.removeQuery('queryID1');
+    expect(pipelines.queryIDs()).toEqual(new Set());
 
     replicator.processTransaction(
       '134',
