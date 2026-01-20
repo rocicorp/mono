@@ -179,14 +179,10 @@ function getIncrementalMigrations(
     // Fixes field ordering of compound indexes. This incremental migration
     // only fixes indexes resulting from new schema changes. A full resync is
     // required to fix existing indexes.
-    9: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(lc, sql, {...shard, publications});
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    //
+    // The migration has been subsumed by the identical logic for migrating
+    // to v12 (i.e. a trigger upgrade).
+    9: {},
 
     // Adds the `mutations` table used to track mutation results.
     10: {
@@ -203,6 +199,16 @@ function getIncrementalMigrations(
       migrateSchema: async (lc, sql) => {
         await sql`DROP TABLE IF EXISTS ${sql(appSchema(shard))}."schemaVersions"`;
         lc.info?.(`Dropped legacy schemaVersions table`);
+      },
+    },
+
+    // Upgrade DDL trigger to query schemaOID, needed information for auto-backfill.
+    12: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
       },
     },
   };
