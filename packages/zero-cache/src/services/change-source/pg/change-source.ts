@@ -664,7 +664,7 @@ class ChangeMaker {
 
       // Validate the new table schemas
       for (const table of nextTbl.values()) {
-        validate(this.#lc, table);
+        validate(this.#lc, table, update.schema.indexes);
       }
 
       const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
