@@ -266,14 +266,14 @@ export class PgoutputParser {
 
       switch (kind) {
         case 0x62: // 'b' binary
-          const bsize = reader.readInt32();
+          const bsize = reader.readUint32();
           const bval = reader.read(bsize);
           // dont need to .slice() because new buffer
           // is created for each replication chunk
           tuple[name] = bval;
           break;
         case 0x74: // 't' text
-          const valsize = reader.readInt32();
+          const valsize = reader.readUint32();
           const valbuf = reader.read(valsize);
           const valtext = reader.decodeText(valbuf);
           tuple[name] = parser(valtext);
@@ -293,7 +293,7 @@ export class PgoutputParser {
   }
 
   private msgTruncate(reader: BinaryReader): MessageTruncate {
-    const nrels = reader.readInt32();
+    const nrels = reader.readUint32();
     const flags = reader.readUint8();
 
     return {
@@ -316,7 +316,7 @@ export class PgoutputParser {
       transactional: Boolean(flags & 0b1),
       messageLsn: reader.readLsn(),
       prefix: reader.readString(),
-      content: reader.read(reader.readInt32()),
+      content: reader.read(reader.readUint32()),
     };
   }
 
