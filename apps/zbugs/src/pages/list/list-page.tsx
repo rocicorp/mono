@@ -1,5 +1,4 @@
 import {useQuery, useZero} from '@rocicorp/zero/react';
-import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
 import React, {
@@ -12,17 +11,10 @@ import React, {
   type KeyboardEvent,
 } from 'react';
 import {toast} from 'react-toastify';
-import {assert} from 'shared/src/asserts.ts';
 import {useDebouncedCallback} from 'use-debounce';
 import {useLocation, useParams, useSearch} from 'wouter';
-import {useHistoryState} from 'wouter/use-browser-location';
-import * as zod from 'zod/mini';
 import {must} from '../../../../../packages/shared/src/must.ts';
-import {
-  queries,
-  type ListContext,
-  type ListContextParams,
-} from '../../../shared/queries.ts';
+import {queries, type ListContext} from '../../../shared/queries.ts';
 import InfoIcon from '../../assets/images/icon-info.svg?react';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
@@ -34,68 +26,16 @@ import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {
-  appendParam,
-  navigate,
-  removeParam,
-  replaceHistoryState,
-  setParam,
-} from '../../navigate.ts';
+import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
-import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
-import {
-  anchorSchema,
-  TOP_ANCHOR,
-  useIssues,
-  type Anchor,
-} from './use-issues.tsx';
+import {useZeroVirtualizer} from './use-zero-virtualizer.ts';
 
 let firstRowRendered = false;
-const ITEM_SIZE = 56;
-// Make sure this is even since we half it for permalink loading
-const MIN_PAGE_SIZE = 100;
-const NUM_ROWS_FOR_LOADING_SKELETON = 1;
-
-type QueryAnchor = {
-  readonly anchor: Anchor;
-  /**
-   * Associates an anchor with list query params.  This is for managing the
-   * transition when query params change.  When this happens the list should
-   * scroll to 0, the anchor reset to top, and estimate/total counts reset.
-   * During this transition, some renders has a mix of new list query params and
-   * list results and old anchor (as anchor reset is async via setState), it is
-   * important to:
-   * 1. avoid creating a query with the new query params but the old anchor, as
-   *    that would be loading a query that is not the correct one to display,
-   *    accomplished by using TOP_ANCHOR when
-   *    listContextParams !== queryAnchor.listContextParams
-   * 2. avoid calculating counts based on a mix of new list results and old
-   *    anchor, avoided by not updating counts when
-   *    listContextParams !== queryAnchor.listContextParams
-   * 3. avoid updating anchor for paging based on a mix of new list results and
-   *    old anchor, avoided by not doing paging updates when
-   *    listContextParams !== queryAnchor.listContextParams
-   */
-  readonly listContextParams: ListContextParams;
-};
-
-const permalinkHistoryStateSchema = zod.readonly(
-  zod.looseObject({
-    anchor: anchorSchema,
-    scrollTop: zod.number(),
-    estimatedTotal: zod.number(),
-    hasReachedStart: zod.boolean(),
-    hasReachedEnd: zod.boolean(),
-  }),
-);
-
-type PermalinkHistoryState = zod.infer<typeof permalinkHistoryStateSchema>;
-
-const getNearPageEdgeThreshold = (pageSize: number) => Math.ceil(pageSize / 10);
+export const ITEM_SIZE = 56;
 
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
@@ -202,109 +142,31 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(tableWrapperRef);
 
-  // TODO:(arv): DRY
-  const maybeHistoryState = useHistoryState<PermalinkHistoryState | null>();
-  const res = permalinkHistoryStateSchema.safeParse(maybeHistoryState);
-  const historyState = res.success ? res.data : null;
-
-  // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount issues
-  const [queryAnchor, setQueryAnchor] = useState<QueryAnchor>(() => {
-    const {state} = history;
-    const parseResult = permalinkHistoryStateSchema.safeParse(state);
-    const anchor =
-      parseResult.success && parseResult.data.anchor
-        ? parseResult.data.anchor
-        : permalinkID
-          ? ({
-              index: NUM_ROWS_FOR_LOADING_SKELETON,
-              kind: 'permalink',
-              id: permalinkID,
-            } satisfies Anchor)
-          : TOP_ANCHOR;
-    return {
-      anchor,
-      listContextParams,
-    };
-  });
-
   // oxlint-disable-next-line no-explicit-any
   (globalThis as any).permalinkNavigate = (id: string | number) => {
     navigate(setParam(qs, 'id', String(id)));
   };
 
-  const [pendingScrollAdjustment, setPendingScrollAdjustment] =
-    useState<number>(0);
-
-  const updateAnchor = (anchor: Anchor) => {
-    setQueryAnchor({
-      anchor,
-      listContextParams,
-    });
-  };
-
-  const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
-  useEffect(() => {
-    // Make sure page size is enough to fill the scroll element at least
-    // 3 times.  Don't shrink page size.
-    const newPageSize = size
-      ? Math.max(
-          MIN_PAGE_SIZE,
-          makeEven(Math.ceil(size?.height / ITEM_SIZE) * 3),
-        )
-      : MIN_PAGE_SIZE;
-    if (newPageSize > pageSize) {
-      setPageSize(newPageSize);
-    }
-  }, [pageSize, size]);
-
-  const isListContextCurrent = useMemo(
-    () => queryAnchor.listContextParams === listContextParams,
-    [queryAnchor.listContextParams, listContextParams],
-  );
-
-  const anchor = useMemo(() => {
-    if (isListContextCurrent) {
-      return queryAnchor.anchor;
-    }
-
-    // TODO(arv): DRY
-    if (permalinkID) {
-      return {
-        index: NUM_ROWS_FOR_LOADING_SKELETON,
-        kind: 'permalink',
-        id: permalinkID,
-      } satisfies Anchor;
-    }
-    return TOP_ANCHOR;
-  }, [isListContextCurrent, queryAnchor.anchor]);
-
-  const [estimatedTotal, setEstimatedTotal] = useState(
-    NUM_ROWS_FOR_LOADING_SKELETON,
-  );
-
-  const [skipPagingLogic, setSkipPagingLogic] = useState(false);
-  const [hasReachedEnd, setHasReachedEnd] = useState(false);
-  const [hasReachedStart, setHasReachedStart] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
-
-  // We don't want to cache every single keystroke. We already debounce
-  // keystrokes for the URL, so we just reuse that.
   const {
+    virtualizer,
     issueAt,
-    issuesLength,
     complete,
     issuesEmpty,
-    atStart,
-    atEnd,
-    firstIssueIndex,
     permalinkNotFound,
-  } = useIssues(
-    listContextParams,
-    z.userID,
-    pageSize,
-    anchor,
-    !isScrolling && textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
-  );
+    estimatedTotal,
+    total,
+    virtualItems,
+  } = useZeroVirtualizer({
+    estimateSize: () => ITEM_SIZE,
+    getScrollElement: () => listRef.current,
+
+    listContext: listContextParams,
+    userID: z.userID,
+    textFilterQuery,
+    textFilter,
+
+    permalinkID,
+  });
 
   useEffect(() => {
     if (permalinkNotFound) {
@@ -323,132 +185,17 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [permalinkNotFound, permalinkID]);
 
   useEffect(() => {
-    if (atStart) {
-      setHasReachedStart(true);
-    }
-  }, [atStart]);
-
-  useEffect(() => {
-    if (atEnd) {
-      setHasReachedEnd(true);
-    }
-  }, [atEnd]);
-
-  useEffect(() => {
-    if (issuesEmpty || !isListContextCurrent) {
-      return;
-    }
-
-    if (skipPagingLogic && pendingScrollAdjustment === 0) {
-      setSkipPagingLogic(false);
-      return;
-    }
-
-    // There is a pending scroll adjustment from last anchor change.
-    if (pendingScrollAdjustment !== 0) {
-      virtualizer.scrollToOffset(
-        (virtualizer.scrollOffset ?? 0) + pendingScrollAdjustment * ITEM_SIZE,
-      );
-
-      setEstimatedTotal(estimatedTotal + pendingScrollAdjustment);
-
-      setPendingScrollAdjustment(0);
-      setSkipPagingLogic(true);
-
-      return;
-    }
-
-    // First issue is before start of list - need to shift down
-    if (firstIssueIndex < 0) {
-      const placeholderRows = !atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0;
-      const offset = -firstIssueIndex + placeholderRows;
-
-      setSkipPagingLogic(true);
-      setPendingScrollAdjustment(offset);
-      const newAnchor = {
-        ...anchor,
-        index: anchor.index + offset,
-      };
-      updateAnchor(newAnchor);
-      return;
-    }
-
-    if (atStart && firstIssueIndex > 0) {
-      setPendingScrollAdjustment(-firstIssueIndex);
-      updateAnchor(TOP_ANCHOR);
-      return;
-    }
-  }, [
-    firstIssueIndex,
-    anchor,
-    atStart,
-    pendingScrollAdjustment,
-    skipPagingLogic,
-    issuesEmpty,
-    listContextParams,
-    isListContextCurrent,
-    estimatedTotal,
-    // virtualizer, Do not depend on virtualizer. TDZ.
-  ]);
-
-  const newEstimatedTotal = firstIssueIndex + issuesLength;
-
-  useEffect(() => {
-    if (complete && newEstimatedTotal > estimatedTotal) {
-      setEstimatedTotal(newEstimatedTotal);
-    }
-  }, [estimatedTotal, complete, newEstimatedTotal]);
-
-  const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
-
-  useEffect(() => {
     if (!issuesEmpty || complete) {
       onReady();
     }
   }, [issuesEmpty, complete, onReady]);
 
   useEffect(() => {
-    if (!isListContextCurrent) {
-      if (historyState) {
-        if (listRef.current) {
-          listRef.current.scrollTop = historyState.scrollTop;
-        }
-        setEstimatedTotal(historyState.estimatedTotal);
-        setHasReachedStart(historyState.hasReachedStart);
-        setHasReachedEnd(historyState.hasReachedEnd);
-        updateAnchor(historyState.anchor);
-      } else if (permalinkID) {
-        if (listRef.current) {
-          listRef.current.scrollTop = NUM_ROWS_FOR_LOADING_SKELETON * ITEM_SIZE;
-        }
-        setEstimatedTotal(NUM_ROWS_FOR_LOADING_SKELETON);
-        setHasReachedStart(false);
-        setHasReachedEnd(false);
-        updateAnchor({
-          id: permalinkID,
-          index: NUM_ROWS_FOR_LOADING_SKELETON,
-          kind: 'permalink',
-        });
-      } else {
-        if (listRef.current) {
-          listRef.current.scrollTop = 0;
-        }
-        // virtualizer.scrollToOffset(0);
-        setEstimatedTotal(0);
-        setHasReachedStart(true);
-        setHasReachedEnd(false);
-        updateAnchor(TOP_ANCHOR);
-      }
-      setSkipPagingLogic(true);
-    }
-  }, [isListContextCurrent]);
-
-  useEffect(() => {
     if (complete) {
       recordPageLoad('list-page');
       preload(z, projectName);
     }
-  }, [login.loginState?.decoded, complete, z]);
+  }, [complete, z, projectName]);
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;
@@ -511,7 +258,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const issue = issueAt(index); //issues[issueArrayIndex];
+    const issue = issueAt(index);
     if (issue === undefined) {
       return (
         <div
@@ -573,123 +320,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       </div>
     );
   };
-
-  const virtualizer = useVirtualizer({
-    count:
-      Math.max(estimatedTotal, newEstimatedTotal) +
-      (!atEnd ? NUM_ROWS_FOR_LOADING_SKELETON : 0),
-    estimateSize: () => ITEM_SIZE,
-    overscan: 5,
-    getScrollElement: () => listRef.current,
-    initialOffset: () => {
-      if (historyState?.scrollTop !== undefined) {
-        return historyState.scrollTop;
-      }
-      if (anchor.kind === 'permalink') {
-        return anchor.index * ITEM_SIZE;
-      }
-      return 0;
-    },
-  });
-
-  useEffect(() => {
-    setIsScrolling(virtualizer.isScrolling);
-  }, [virtualizer.isScrolling]);
-
-  const virtualItems = virtualizer.getVirtualItems();
-
-  const updateHistoryState = useDebouncedCallback(() => {
-    replaceHistoryState<PermalinkHistoryState>({
-      anchor,
-      scrollTop: virtualizer.scrollOffset ?? 0,
-      estimatedTotal,
-      hasReachedStart,
-      hasReachedEnd,
-    });
-  }, 100);
-
-  useEffect(() => {
-    updateHistoryState();
-  }, [
-    anchor,
-    virtualizer.scrollOffset,
-    estimatedTotal,
-    hasReachedStart,
-    hasReachedEnd,
-    updateHistoryState,
-  ]);
-
-  useEffect(() => {
-    if (
-      !isListContextCurrent ||
-      virtualItems.length === 0 ||
-      !complete ||
-      skipPagingLogic ||
-      pendingScrollAdjustment !== 0
-    ) {
-      return;
-    }
-
-    if (atStart) {
-      if (firstIssueIndex !== 0) {
-        updateAnchor(TOP_ANCHOR);
-        return;
-      }
-    }
-
-    const updateAnchorForEdge = (
-      targetIndex: number,
-      type: 'forward' | 'backward',
-      indexOffset: number,
-    ) => {
-      const index = toBoundIndex(targetIndex, firstIssueIndex, issuesLength);
-      const startRow = issueAt(index);
-      assert(startRow !== undefined || type === 'forward');
-      updateAnchor({
-        index: index + indexOffset,
-        kind: type,
-        startRow,
-      } as Anchor);
-    };
-
-    const firstItem = virtualItems[0];
-    const lastItem = virtualItems[virtualItems.length - 1];
-    const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
-
-    const distanceFromStart = firstItem.index - firstIssueIndex;
-    const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
-
-    if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
-      updateAnchorForEdge(
-        lastItem.index + 2 * nearPageEdgeThreshold,
-        'backward',
-        0,
-      );
-      return;
-    }
-
-    if (!atEnd && distanceFromEnd <= nearPageEdgeThreshold) {
-      updateAnchorForEdge(
-        firstItem.index - 2 * nearPageEdgeThreshold,
-        'forward',
-        1,
-      );
-      return;
-    }
-  }, [
-    listContextParams,
-    isListContextCurrent,
-    virtualItems,
-    skipPagingLogic,
-    pendingScrollAdjustment,
-    complete,
-    pageSize,
-    firstIssueIndex,
-    issuesLength,
-    atStart,
-    atEnd,
-    issueAt,
-  ]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
@@ -884,26 +514,4 @@ function formatIssueCountEstimate(count: number) {
     return count;
   }
   return `~${Math.floor(count / 1000).toLocaleString()}k`;
-}
-
-/**
- * Clamps an index to be within the valid range of issues.
- * @param targetIndex - The desired index to clamp
- * @param firstIssueIndex - The first valid issue index
- * @param issuesLength - The number of issues available
- * @returns The clamped index within [firstIssueIndex, firstIssueIndex + issuesLength - 1]
- */
-function toBoundIndex(
-  targetIndex: number,
-  firstIssueIndex: number,
-  issuesLength: number,
-): number {
-  return Math.max(
-    firstIssueIndex,
-    Math.min(firstIssueIndex + issuesLength - 1, targetIndex),
-  );
-}
-
-function makeEven(n: number) {
-  return n % 2 === 0 ? n : n + 1;
 }

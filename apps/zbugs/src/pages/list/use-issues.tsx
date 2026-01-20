@@ -1,21 +1,26 @@
-import type {Row} from '@rocicorp/zero';
 import {useQuery, type UseQueryOptions} from '@rocicorp/zero/react';
 import {assert} from 'shared/src/asserts.ts';
-import * as zod from 'zod/mini';
-import {
-  issueRowSortSchema,
-  type ListContextParams,
-  queries,
-} from '../../../shared/queries.ts';
+import type {Issue, Issues} from '../../../shared/queries.ts';
+import {type ListContextParams, queries} from '../../../shared/queries.ts';
 import {getIDFromString} from '../issue/get-id.tsx';
+import type {Anchor} from './use-zero-virtualizer.ts';
 
-export function useIssues(
-  listContext: ListContextParams,
-  userID: string,
-  pageSize: number,
-  anchor: Anchor,
-  options: UseQueryOptions,
-): {
+export function useIssues({
+  listContext,
+  userID,
+  pageSize,
+  anchor,
+  options,
+}: {
+  listContext: ListContextParams;
+  userID: string;
+  pageSize: number;
+  anchor: Anchor;
+  // getPointQuery: (
+  //   id: string,
+  // ) => QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, Issue, TContext>,
+  options: UseQueryOptions;
+}): {
   issueAt: (index: number) => Issue | undefined;
   issuesLength: number;
   complete: boolean;
@@ -38,7 +43,7 @@ export function useIssues(
     // Allow short ID too.
     const {idField, id: idValue} = getIDFromString(id);
 
-    const qItem = queries.issueByID({idField, id: idValue, listContext});
+    const qItem = queries.listIssueByID({idField, id: idValue, listContext});
 
     const [issue, resultIssue] = useQuery(qItem, options);
     const completeIssue = resultIssue.type === 'complete';
@@ -184,38 +189,3 @@ export function useIssues(
     permalinkNotFound,
   };
 }
-
-export const anchorSchema = zod.discriminatedUnion('kind', [
-  zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('forward'),
-      startRow: zod.optional(issueRowSortSchema),
-    }),
-  ),
-  zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('backward'),
-      startRow: issueRowSortSchema,
-    }),
-  ),
-  zod.readonly(
-    zod.object({
-      index: zod.number(),
-      kind: zod.literal('permalink'),
-      id: zod.string(),
-    }),
-  ),
-]);
-
-export type Anchor = zod.infer<typeof anchorSchema>;
-
-export type Issue = Row<ReturnType<typeof queries.issueListV2>>;
-
-export type Issues = Issue[];
-export const TOP_ANCHOR = Object.freeze({
-  index: 0,
-  kind: 'forward',
-  startRow: undefined,
-});

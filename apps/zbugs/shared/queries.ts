@@ -4,6 +4,7 @@ import {
   escapeLike,
   type DefaultSchema,
   type Query,
+  type Row,
   type Schema,
 } from '@rocicorp/zero';
 import * as z from 'zod/mini';
@@ -219,7 +220,7 @@ export const queries = defineQueries({
   /**
    * This is used to get a single issue so that we can get the order for start at.
    */
-  issueByID: defineQuery(
+  listIssueByID: defineQuery(
     z.object({
       listContext: listContextParams,
       idField: z.union([z.literal('shortID'), z.literal('id')]),
@@ -352,12 +353,9 @@ export type ListQueryArgs = {
   inclusive?: boolean | undefined;
 };
 
-export type ListItemQueryArgs = {
-  issueQuery?: (typeof builder)['issue'] | undefined;
-  listContext?: ListContext['params'] | undefined;
-  project?: string | undefined;
-  role?: Role | undefined;
-};
+// TReturn must be any or the `.one()` case does not match
+// oxlint-disable-next-line no-explicit-any
+type IssueQuery = Query<'issue', DefaultSchema, any>;
 
 function alwaysFalse<
   TTable extends keyof TSchema['tables'] & string,
@@ -367,26 +365,48 @@ function alwaysFalse<
   return q.where(({or}) => or());
 }
 
-type CommonFilterArgs<Q> = {
-  issueQuery: Q;
-  listContext: ListContext['params'];
-  role?: Role | undefined;
-};
+export function buildListQuery(args: ListQueryArgs) {
+  const {
+    issueQuery = builder.issue,
+    limit,
+    listContext,
+    role,
+    dir = 'forward',
+    start,
+    inclusive = false,
+  } = args;
 
-// TReturn must be any or the `.one()` case does not match
-// oxlint-disable-next-line no-explicit-any
-type IssueQuery = Query<'issue', DefaultSchema, any>;
+  let q = issueQuery
+    .related('viewState', q =>
+      (args.userID ? q.where('userID', args.userID) : alwaysFalse(q)).one(),
+    )
+    .related('labels');
 
-function applyCommonFilters<TQuery extends IssueQuery>({
-  issueQuery,
-  listContext,
-  role,
-}: CommonFilterArgs<TQuery>): TQuery {
+  if (!listContext) {
+    return alwaysFalse(q);
+  }
+
   const {projectName = ZERO_PROJECT_NAME} = listContext;
 
-  let q = issueQuery.whereExists('project', q =>
+  q = q.whereExists('project', q =>
     q.where('lowerCaseName', projectName.toLocaleLowerCase()),
   );
+
+  const {sortField, sortDirection} = listContext;
+  const orderByDir =
+    dir === 'forward'
+      ? sortDirection
+      : sortDirection === 'asc'
+        ? 'desc'
+        : 'asc';
+  q = q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
+
+  if (start) {
+    q = q.start(start, {inclusive});
+  }
+  if (limit) {
+    q = q.limit(limit);
+  }
 
   const {open, creator, assignee, labels, textFilter} = listContext;
   q = q.where(({and, cmp, exists, or}) =>
@@ -412,58 +432,9 @@ function applyCommonFilters<TQuery extends IssueQuery>({
     ),
   );
 
-  return applyIssuePermissions(q, role) as TQuery;
+  return applyIssuePermissions(q, role);
 }
 
-export function buildListQuery(args: ListQueryArgs) {
-  const {
-    issueQuery = builder.issue,
-    limit,
-    listContext,
-    role,
-    dir = 'forward',
-    start,
-    inclusive = false,
-  } = args;
+export type Issue = Row<ReturnType<typeof queries.issueListV2>>;
 
-  let q = issueQuery
-    .related('viewState', q =>
-      (args.userID ? q.where('userID', args.userID) : alwaysFalse(q)).one(),
-    )
-    .related('labels');
-
-  if (!listContext) {
-    return alwaysFalse(q);
-  }
-
-  q = applyCommonFilters({issueQuery: q, listContext, role});
-
-  const {sortField, sortDirection} = listContext;
-  const orderByDir =
-    dir === 'forward'
-      ? sortDirection
-      : sortDirection === 'asc'
-        ? 'desc'
-        : 'asc';
-  q = q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
-
-  if (start) {
-    q = q.start(start, {inclusive});
-  }
-  if (limit) {
-    q = q.limit(limit);
-  }
-
-  return q;
-}
-
-export function buildListItemQuery(args: ListItemQueryArgs) {
-  const {issueQuery = builder.issue, listContext, role} = args;
-
-  if (!listContext) {
-    return alwaysFalse(issueQuery).one();
-  }
-
-  const q = applyCommonFilters({issueQuery, listContext, role});
-  return q.one();
-}
+export type Issues = Issue[];
