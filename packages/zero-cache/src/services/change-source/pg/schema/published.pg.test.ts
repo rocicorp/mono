@@ -77,8 +77,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'zero',
+              schemaOID: expect.any(Number),
               name: 'clients',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['clientID'],
               columns: {
                 clientID: {
                   pos: 1,
@@ -112,6 +114,7 @@ describe('tables/published', () => {
           "tableName": "clients",
           "name": "clients_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -160,8 +163,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'users',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['user_id'],
               columns: {
                 ['user_id']: {
                   pos: 1,
@@ -303,6 +308,7 @@ describe('tables/published', () => {
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -338,8 +344,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'users',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['user_id'],
               columns: {
                 ['user_id']: {
                   pos: 1,
@@ -382,6 +390,7 @@ describe('tables/published', () => {
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -425,8 +434,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'users',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['user_id'],
               columns: {
                 ['user_id']: {
                   pos: 1,
@@ -472,6 +483,7 @@ describe('tables/published', () => {
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -515,8 +527,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'users',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['user_id'],
               columns: {
                 ['user_id']: {
                   pos: 1,
@@ -562,6 +576,7 @@ describe('tables/published', () => {
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -618,8 +633,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'users',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['user_id'],
               columns: {
                 ['user_id']: {
                   pos: 1,
@@ -671,6 +688,7 @@ describe('tables/published', () => {
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -708,8 +726,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'issues',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['org_id', 'component_id', 'issue_id'],
               columns: {
                 ['issue_id']: {
                   pos: 1,
@@ -761,6 +781,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -771,6 +792,83 @@ describe('tables/published', () => {
         }
       ]"
     `);
+  });
+
+  test('missing primary key', async () => {
+    (
+      await runAndExpectIndexes(
+        `
+      CREATE SCHEMA test;
+      CREATE TABLE test.issues (
+        issue_id INTEGER NOT NULL,
+        description TEXT,
+        org_id INTEGER NOT NULL,
+        component_id INTEGER NOT NULL
+      );
+      CREATE PUBLICATION zero_keys FOR ALL TABLES;`,
+        {
+          publications: [
+            {
+              pubname: 'zero_keys',
+              pubinsert: true,
+              pubupdate: true,
+              pubdelete: true,
+              pubtruncate: true,
+            },
+          ],
+          tables: [
+            {
+              oid: expect.any(Number),
+              schema: 'test',
+              schemaOID: expect.any(Number),
+              name: 'issues',
+              replicaIdentity: 'd',
+              replicaIdentityColumns: [],
+              columns: {
+                ['issue_id']: {
+                  pos: 1,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+                ['description']: {
+                  pos: 2,
+                  dataType: 'text',
+                  typeOID: 25,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: false,
+                  dflt: null,
+                },
+                ['org_id']: {
+                  pos: 3,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+                ['component_id']: {
+                  pos: 4,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+              },
+              primaryKey: [],
+              publications: {['zero_keys']: {rowFilter: null}},
+            },
+          ],
+        },
+      )
+    ).toMatchInlineSnapshot(`"[]"`);
   });
 
   test('multiple schemas', async () => {
@@ -820,8 +918,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'issues',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['org_id', 'component_id', 'issue_id'],
               columns: {
                 ['issue_id']: {
                   pos: 1,
@@ -866,7 +966,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'users',
+              replicaIdentity: 'd',
+              replicaIdentityColumns: ['user_id'],
               columns: {
                 ['user_id']: {
                   pos: 1,
@@ -893,8 +996,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'zero',
+              schemaOID: expect.any(Number),
               name: 'clients',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['clientID'],
               columns: {
                 clientID: {
                   pos: 1,
@@ -928,6 +1033,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -941,6 +1047,7 @@ describe('tables/published', () => {
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -952,6 +1059,7 @@ describe('tables/published', () => {
           "tableName": "clients",
           "name": "clients_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1000,8 +1108,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'issues',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['issue_id'],
               columns: {
                 ['issue_id']: {
                   pos: 1,
@@ -1047,6 +1157,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_component_id",
           "unique": false,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1058,6 +1169,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_org_id",
           "unique": false,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1069,6 +1181,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1105,8 +1218,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'issues',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['issue_id'],
               columns: {
                 ['issue_id']: {
                   pos: 1,
@@ -1149,6 +1264,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_component_id",
           "unique": true,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1160,6 +1276,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_org_id_key",
           "unique": true,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1171,6 +1288,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1208,8 +1326,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'issues',
               replicaIdentity: 'i',
+              replicaIdentityColumns: ['org_id', 'issue_id'],
               columns: {
                 ['issue_id']: {
                   pos: 1,
@@ -1252,6 +1372,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_key_idx",
           "unique": true,
+          "isPrimaryKey": false,
           "isReplicaIdentity": true,
           "isImmediate": true,
           "columns": {
@@ -1261,6 +1382,159 @@ describe('tables/published', () => {
         }
       ]"
     `);
+  });
+
+  test('replica identity index without index', async () => {
+    (
+      await runAndExpectIndexes(
+        /*sql*/ `
+      CREATE SCHEMA test;
+      CREATE TABLE test.issues (
+        issue_id INTEGER NOT NULL,
+        org_id INTEGER NOT NULL,
+        component_id INTEGER
+      );
+      CREATE UNIQUE INDEX issues_key_idx ON test.issues (org_id, issue_id);
+      ALTER TABLE test.issues REPLICA IDENTITY USING INDEX issues_key_idx;
+      CREATE PUBLICATION zero_data FOR TABLE test.issues;
+      DROP INDEX issues_key_idx;`,
+        {
+          publications: [
+            {
+              pubname: 'zero_data',
+              pubinsert: true,
+              pubupdate: true,
+              pubdelete: true,
+              pubtruncate: true,
+            },
+          ],
+          tables: [
+            {
+              oid: expect.any(Number),
+              schema: 'test',
+              schemaOID: expect.any(Number),
+              name: 'issues',
+              replicaIdentity: 'i',
+              replicaIdentityColumns: [],
+              columns: {
+                ['issue_id']: {
+                  pos: 1,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+                ['org_id']: {
+                  pos: 2,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+                ['component_id']: {
+                  pos: 3,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: false,
+                  dflt: null,
+                },
+              },
+              primaryKey: [],
+              publications: {['zero_data']: {rowFilter: null}},
+            },
+          ],
+        },
+      )
+    ).toMatchInlineSnapshot(`"[]"`);
+  });
+
+  test('replica identity full', async () => {
+    (
+      await runAndExpectIndexes(
+        `
+      CREATE SCHEMA test;
+      CREATE TABLE test.issues (
+        issue_id INTEGER NOT NULL,
+        org_id INTEGER NOT NULL,
+        component_id INTEGER,
+        foo_bar TEXT
+      );
+      ALTER TABLE test.issues REPLICA IDENTITY FULL;
+      CREATE PUBLICATION zero_data FOR TABLE test.issues;`,
+        {
+          publications: [
+            {
+              pubname: 'zero_data',
+              pubinsert: true,
+              pubupdate: true,
+              pubdelete: true,
+              pubtruncate: true,
+            },
+          ],
+          tables: [
+            {
+              oid: expect.any(Number),
+              schema: 'test',
+              schemaOID: expect.any(Number),
+              name: 'issues',
+              replicaIdentity: 'f',
+              replicaIdentityColumns: [
+                'component_id',
+                'foo_bar',
+                'issue_id',
+                'org_id',
+              ],
+              columns: {
+                ['issue_id']: {
+                  pos: 1,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+                ['org_id']: {
+                  pos: 2,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: true,
+                  dflt: null,
+                },
+                ['component_id']: {
+                  pos: 3,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: false,
+                  dflt: null,
+                },
+                ['foo_bar']: {
+                  pos: 4,
+                  dataType: 'text',
+                  typeOID: 25,
+                  pgTypeClass: PostgresTypeClass.Base,
+                  characterMaximumLength: null,
+                  notNull: false,
+                  dflt: null,
+                },
+              },
+              primaryKey: [],
+              publications: {['zero_data']: {rowFilter: null}},
+            },
+          ],
+        },
+      )
+    ).toMatchInlineSnapshot(`"[]"`);
   });
 
   test('compound indexes', async () => {
@@ -1298,8 +1572,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'foo',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['id'],
               columns: {
                 ['id']: {
                   pos: 1,
@@ -1345,6 +1621,7 @@ describe('tables/published', () => {
           "tableName": "foo",
           "name": "foo_a_b",
           "unique": false,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1357,6 +1634,7 @@ describe('tables/published', () => {
           "tableName": "foo",
           "name": "foo_b_a",
           "unique": false,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1369,6 +1647,7 @@ describe('tables/published', () => {
           "tableName": "foo",
           "name": "foo_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1413,8 +1692,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'issues',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['issue_id'],
               columns: {
                 ['issue_id']: {
                   pos: 1,
@@ -1450,8 +1731,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'users',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['user_id'],
               columns: {
                 ['user_id']: {
                   pos: 1,
@@ -1476,6 +1759,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1487,6 +1771,7 @@ describe('tables/published', () => {
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1535,8 +1820,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'issues',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['issue_id'],
               columns: {
                 issue_id: {
                   pos: 1,
@@ -1581,8 +1868,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'users',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['user_id'],
               columns: {
                 ['user_id']: {
                   pos: 1,
@@ -1607,6 +1896,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "idx_with_gen",
           "unique": false,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1621,6 +1911,7 @@ describe('tables/published', () => {
           "tableName": "issues",
           "name": "issues_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1632,6 +1923,7 @@ describe('tables/published', () => {
           "tableName": "users",
           "name": "users_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1672,8 +1964,10 @@ describe('tables/published', () => {
             {
               oid: expect.any(Number),
               schema: 'test',
+              schemaOID: expect.any(Number),
               name: 'foo',
               replicaIdentity: 'd',
+              replicaIdentityColumns: ['id'],
               columns: {
                 ['id']: {
                   pos: 1,
@@ -1716,6 +2010,7 @@ describe('tables/published', () => {
           "tableName": "foo",
           "name": "foo_a_b",
           "unique": false,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1728,6 +2023,7 @@ describe('tables/published', () => {
           "tableName": "foo",
           "name": "foo_b_a",
           "unique": false,
+          "isPrimaryKey": false,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
@@ -1740,6 +2036,7 @@ describe('tables/published', () => {
           "tableName": "foo",
           "name": "foo_pkey",
           "unique": true,
+          "isPrimaryKey": true,
           "isReplicaIdentity": false,
           "isImmediate": true,
           "columns": {
