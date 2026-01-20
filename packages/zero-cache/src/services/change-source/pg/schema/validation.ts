@@ -8,8 +8,11 @@ import {
   Index,
   Nothing,
 } from '../../../../db/postgres-replica-identity-enum.ts';
+import type {
+  PublishedIndexSpec,
+  PublishedTableSpec,
+} from '../../../../db/specs.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/constants.ts';
-import type {PublishedSchema} from './published.ts';
 
 export const ALLOWED_APP_ID_CHARACTERS = /^[a-z0-9_]+$/;
 
@@ -21,7 +24,8 @@ const ALLOWED_COLUMN_CHARS = /^[A-Za-z_]+[.A-Za-z0-9_-]*$/;
 
 export function validate(
   lc: LogContext,
-  table: PublishedSchema['tables'][number],
+  table: PublishedTableSpec,
+  indexes: PublishedIndexSpec[],
 ) {
   if (ZERO_VERSION_COLUMN_NAME in table.columns) {
     throw new UnsupportedTableSchemaError(
@@ -43,7 +47,12 @@ export function validate(
   }
   if (
     table.replicaIdentity === Index &&
-    table.replicaIdentityColumns.length === 0
+    !indexes.some(
+      idx =>
+        idx.schema === table.schema &&
+        idx.tableName === table.name &&
+        idx.isReplicaIdentity,
+    )
   ) {
     throw new UnsupportedTableSchemaError(
       `Table "${table.name}" is missing its REPLICA IDENTITY INDEX`,

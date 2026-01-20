@@ -14,8 +14,7 @@ export function publishedTableQuery(publications: readonly string[]) {
   return /*sql*/ `
 WITH published_columns AS (SELECT 
   pc.oid::int8 AS "oid",
-  nspname AS "schema",
-  pc.relnamespace::int8 AS "schemaOID" ,
+  nspname AS "schema", 
   pc.relname AS "name", 
   pc.relreplident AS "replicaIdentity",
   attnum AS "pos", 
@@ -49,7 +48,6 @@ ORDER BY nspname, pc.relname),
 tables AS (SELECT json_build_object(
   'oid', "oid",
   'schema', "schema", 
-  'schemaOID', "schemaOID",
   'name', "name", 
   'replicaIdentity', "replicaIdentity",
   'columns', json_object_agg(
@@ -83,7 +81,7 @@ tables AS (SELECT json_build_object(
     "publication", 
     jsonb_build_object('rowFilter', "rowFilter")
   )
-) AS "table" FROM published_columns GROUP BY "schema", "schemaOID", "name", "oid", "replicaIdentity")
+) AS "table" FROM published_columns GROUP BY "schema", "name", "oid", "replicaIdentity")
 
 SELECT COALESCE(json_agg("table"), '[]'::json) as "tables" FROM tables
   `;
@@ -115,7 +113,6 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
       index_column.name as "col",
       CASE WHEN pg_index.indoption[index_column.pos-1] & 1 = 1 THEN 'DESC' ELSE 'ASC' END as "dir",
       pg_index.indisunique as "unique",
-      pg_index.indisprimary as "isPrimaryKey",
       pg_index.indisreplident as "isReplicaIdentity",
       pg_index.indimmediate as "isImmediate"
     FROM pg_indexes
@@ -156,57 +153,22 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
       'tableName', "tableName",
       'name', "name",
       'unique', "unique",
-      'isPrimaryKey', "isPrimaryKey",
       'isReplicaIdentity', "isReplicaIdentity",
       'isImmediate', "isImmediate",
       'columns', json_object_agg("col", "dir")
     ) AS index FROM indexed_columns 
-      GROUP BY "schema", "tableName", "name", "unique", 
-         "isPrimaryKey", "isReplicaIdentity", "isImmediate")
+      GROUP BY "schema", "tableName", "name", "unique", "isReplicaIdentity", "isImmediate")
 
     SELECT COALESCE(json_agg("index"), '[]'::json) as "indexes" FROM indexes
   `;
 }
 
-export const publishedSchema = v
-  .object({
-    tables: v.array(publishedTableSpec),
-    indexes: v.array(publishedIndexSpec),
-  })
-  .map(({tables, indexes}) => ({
-    indexes,
+const publishedTablesSchema = v.object({tables: v.array(publishedTableSpec)});
+const publishedIndexesSchema = v.object({indexes: v.array(publishedIndexSpec)});
 
-    // Denormalize the schema such that each `table` includes the
-    // `replicaIdentityColumns` corresponding to the table's
-    // replica identity and associated primary key or index.
-    tables: tables.map(table => {
-      const replicaIdentityColumns: string[] = [];
-      switch (table.replicaIdentity) {
-        case 'd':
-          replicaIdentityColumns.push(...(table.primaryKey ?? []));
-          break;
-        case 'i':
-          replicaIdentityColumns.push(
-            ...Object.keys(
-              indexes.find(
-                ind =>
-                  ind.schema === table.schema &&
-                  ind.tableName === table.name &&
-                  ind.isReplicaIdentity,
-              )?.columns ?? {},
-            ),
-          );
-          break;
-        case 'f':
-          replicaIdentityColumns.push(...Object.keys(table.columns));
-          break;
-      }
-      return {
-        ...table,
-        replicaIdentityColumns,
-      };
-    }),
-  }));
+export const publishedSchema = publishedTablesSchema.extend(
+  publishedIndexesSchema.shape,
+);
 
 export type PublishedSchema = v.Infer<typeof publishedSchema>;
 
@@ -220,9 +182,11 @@ const publicationSchema = v.object({
 
 const publicationsResultSchema = v.array(publicationSchema);
 
-export type PublicationInfo = PublishedSchema & {
-  publications: v.Infer<typeof publicationsResultSchema>;
-};
+const publicationInfoSchema = publishedSchema.extend({
+  publications: publicationsResultSchema,
+});
+
+export type PublicationInfo = v.Infer<typeof publicationInfoSchema>;
 
 /**
  * Retrieves published tables and columns.
@@ -276,12 +240,7 @@ export async function getPublicationInfo(
 
   return {
     publications: v.parse(result[1], publicationsResultSchema),
-    ...v.parse(
-      {
-        ...result[2][0], // tables
-        ...result[3][0], // indexes
-      },
-      publishedSchema,
-    ),
+    ...v.parse(result[2][0], publishedTablesSchema),
+    ...v.parse(result[3][0], publishedIndexesSchema),
   };
 }

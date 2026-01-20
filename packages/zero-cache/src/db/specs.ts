@@ -15,7 +15,7 @@ export const pgTypeClassSchema = v.literalUnion(
   PostgresTypeClass.Multirange,
 );
 
-const pgReplicaIdentitySchema = v.literalUnion(
+export const pgReplicaIdentitySchema = v.literalUnion(
   PostgresReplicaIdentity.Default,
   PostgresReplicaIdentity.Nothing,
   PostgresReplicaIdentity.Full,
@@ -55,7 +55,6 @@ export const tableSpec = liteTableSpec.extend({
 
 export const publishedTableSpec = tableSpec.extend({
   oid: v.number(),
-  schemaOID: v.number(),
   columns: v.record(publishedColumnSpec),
   replicaIdentity: pgReplicaIdentitySchema.optional(),
   publications: v.record(v.object({rowFilter: v.string().nullable()})),
@@ -116,7 +115,6 @@ export type IndexSpec = DeepReadonly<v.Infer<typeof indexSpec>>;
 
 export const publishedIndexSpec = indexSpec.extend({
   isReplicaIdentity: v.boolean().optional(),
-  isPrimaryKey: v.boolean().optional(),
   isImmediate: v.boolean().optional(),
 });
 

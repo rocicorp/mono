@@ -374,7 +374,7 @@ export function validatePublications(
     }
   });
 
-  published.tables.forEach(table => validate(lc, table));
+  published.tables.forEach(table => validate(lc, table, published.indexes));
 }
 
 type ReplicaIdentities = {
