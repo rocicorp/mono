@@ -173,42 +173,40 @@ export const publishedSchema = v
     tables: v.array(publishedTableSpec),
     indexes: v.array(publishedIndexSpec),
   })
-  .map(({tables, indexes}) => {
-    return {
-      indexes,
+  .map(({tables, indexes}) => ({
+    indexes,
 
-      // Denormalize the schema such that each `table` includes the
-      // `replicaIdentityColumns` corresponding to the table's
-      // replica identity and associated primary key or index.
-      tables: tables.map(table => {
-        const replicaIdentityColumns: string[] = [];
-        switch (table.replicaIdentity) {
-          case 'd':
-            replicaIdentityColumns.push(...(table.primaryKey ?? []));
-            break;
-          case 'i':
-            replicaIdentityColumns.push(
-              ...Object.keys(
-                indexes.find(
-                  ind =>
-                    ind.schema === table.schema &&
-                    ind.tableName === table.name &&
-                    ind.isReplicaIdentity,
-                )?.columns ?? {},
-              ),
-            );
-            break;
-          case 'f':
-            replicaIdentityColumns.push(...Object.keys(table.columns));
-            break;
-        }
-        return {
-          ...table,
-          replicaIdentityColumns,
-        };
-      }),
-    };
-  });
+    // Denormalize the schema such that each `table` includes the
+    // `replicaIdentityColumns` corresponding to the table's
+    // replica identity and associated primary key or index.
+    tables: tables.map(table => {
+      const replicaIdentityColumns: string[] = [];
+      switch (table.replicaIdentity) {
+        case 'd':
+          replicaIdentityColumns.push(...(table.primaryKey ?? []));
+          break;
+        case 'i':
+          replicaIdentityColumns.push(
+            ...Object.keys(
+              indexes.find(
+                ind =>
+                  ind.schema === table.schema &&
+                  ind.tableName === table.name &&
+                  ind.isReplicaIdentity,
+              )?.columns ?? {},
+            ),
+          );
+          break;
+        case 'f':
+          replicaIdentityColumns.push(...Object.keys(table.columns));
+          break;
+      }
+      return {
+        ...table,
+        replicaIdentityColumns,
+      };
+    }),
+  }));
 
 export type PublishedSchema = v.Infer<typeof publishedSchema>;
 

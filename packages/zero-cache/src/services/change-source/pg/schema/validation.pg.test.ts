@@ -80,7 +80,7 @@ describe('change-source/pg', () => {
       expect(pubs.tables.length).toBe(1);
       let result;
       try {
-        validate(lc, pubs.tables[0], pubs.indexes);
+        validate(lc, pubs.tables[0]);
       } catch (e) {
         result = e;
       }
