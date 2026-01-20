@@ -863,47 +863,14 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ];
-    expect(pipelines.queries()).toMatchInlineSnapshot(`
-      Map {
-        "queryID1" => {
-          "hydrationTimeMs": 0.38845900000001166,
-          "input": Join {},
-          "transformationHash": "hash1",
-          "transformedAst": {
-            "orderBy": [
-              [
-                "id",
-                "desc",
-              ],
-            ],
-            "related": [
-              {
-                "correlation": {
-                  "childField": [
-                    "issueID",
-                  ],
-                  "parentField": [
-                    "id",
-                  ],
-                },
-                "subquery": {
-                  "alias": "comments",
-                  "orderBy": [
-                    [
-                      "id",
-                      "desc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "system": "client",
-              },
-            ],
-            "table": "issues",
-          },
-        },
-      }
-    `);
+
+    expect(pipelines.queries().size).toEqual(1);
+    expect(pipelines.queries().get('queryID1')?.transformationHash).toEqual(
+      'hash1',
+    );
+    expect(pipelines.queries().get('queryID1')?.transformedAst).toEqual(
+      ISSUES_AND_COMMENTS,
+    );
 
     replicator.processTransaction(
       '134',
@@ -1743,47 +1710,14 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    expect(pipelines.queries()).toMatchInlineSnapshot(`
-      Map {
-        "queryID1" => {
-          "hydrationTimeMs": 0.36791599999992286,
-          "input": Join {},
-          "transformationHash": "hash1",
-          "transformedAst": {
-            "orderBy": [
-              [
-                "id",
-                "desc",
-              ],
-            ],
-            "related": [
-              {
-                "correlation": {
-                  "childField": [
-                    "issueID",
-                  ],
-                  "parentField": [
-                    "id",
-                  ],
-                },
-                "subquery": {
-                  "alias": "comments",
-                  "orderBy": [
-                    [
-                      "id",
-                      "desc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "system": "client",
-              },
-            ],
-            "table": "issues",
-          },
-        },
-      }
-    `);
+    expect(pipelines.queries().size).toEqual(1);
+    expect(pipelines.queries().get('queryID1')?.transformationHash).toEqual(
+      'hash1',
+    );
+    expect(pipelines.queries().get('queryID1')?.transformedAst).toEqual(
+      ISSUES_AND_COMMENTS,
+    );
+
     pipelines.removeQuery('queryID1');
     expect(pipelines.queries()).toEqual(new Map());
 
