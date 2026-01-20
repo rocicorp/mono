@@ -276,7 +276,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
     yield {
       type: 'add',
       table: 'users',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 1},
       row: {id: 1, name: 'Alice'},
     };
@@ -285,7 +285,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
     yield {
       type: 'add',
       table: 'users',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 2},
       row: {id: 2, name: 'Bob'},
     };
@@ -294,7 +294,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
     yield {
       type: 'add',
       table: 'users',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 1},
       row: {id: 1, name: 'Alice'},
     };
@@ -303,7 +303,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
     yield {
       type: 'add',
       table: 'posts',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 1},
       row: {id: 1, title: 'Post 1'},
     };
@@ -312,7 +312,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
     yield {
       type: 'add',
       table: 'posts',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 1},
       row: {id: 1, title: 'Post 1'},
     };
@@ -321,7 +321,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
     yield {
       type: 'add',
       table: 'users',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 3},
       row: {id: 3, name: 'Charlie'},
     };
@@ -374,7 +374,7 @@ test('runAst handles case where all synced rows are duplicates', async () => {
     yield {
       type: 'add',
       table: 'users',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 1},
       row: sameRow,
     };
@@ -382,7 +382,7 @@ test('runAst handles case where all synced rows are duplicates', async () => {
     yield {
       type: 'add',
       table: 'users',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 1},
       row: sameRow,
     };
@@ -390,7 +390,7 @@ test('runAst handles case where all synced rows are duplicates', async () => {
     yield {
       type: 'add',
       table: 'users',
-      queryHash: 'test-hash',
+      queryID: 'test-query-id',
       rowKey: {id: 1},
       row: sameRow,
     };

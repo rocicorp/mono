@@ -1250,6 +1250,370 @@ describe('view-syncer/service', () => {
         `);
     });
 
+    test('different custom queries in different put desired queries patches end up with the same query after transformation', async () => {
+      mockFetchImpl([
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-1',
+          name: 'named-query-1',
+        },
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-2',
+          name: 'named-query-2',
+        },
+      ]);
+      const client = connect(SYNC_CONTEXT, [
+        {
+          op: 'put',
+          hash: 'custom-1',
+          name: 'named-query-1',
+          args: ['thing'],
+        },
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "00:01",
+              "pokeID": "00:01",
+            },
+          ],
+        ]
+      `);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+          Result [
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+          ]
+        `);
+
+      await vs.changeDesiredQueries(SYNC_CONTEXT, [
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {
+              op: 'put',
+              hash: 'custom-2',
+              name: 'named-query-2',
+              args: ['thing'],
+            },
+          ],
+        },
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01",
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:01",
+              "pokeID": "01:01",
+            },
+          ],
+        ]
+      `);
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01:01",
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:02",
+              "pokeID": "01:02",
+            },
+          ],
+        ]
+      `);
+
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+          Result [
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+          ]
+        `);
+    });
+
     test('always transforms custom queries to validate authorization', async () => {
       // Spy on transformer's transform method instead of mocking fetch
       using transformSpy = vi

@@ -138,7 +138,7 @@ describe('view-syncer/service', () => {
     ]);
   });
 
-  test('inspect queries op fans out server metrics to queries sharing a transformationHash', async () => {
+  test('inspect queries sharing a transformationHash have metrics per query id', async () => {
     const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       // Different query hash, identical AST => same transformationHash

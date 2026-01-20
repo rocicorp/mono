@@ -1288,14 +1288,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  #addQueryMaterializationServerMetric(
-    transformationHash: string,
-    elapsed: number,
-  ) {
+  #addQueryMaterializationServerMetric(queryID: string, elapsed: number) {
     this.#inspectorDelegate.addMetric(
       'query-materialization-server',
       elapsed,
-      transformationHash,
+      queryID,
     );
   }
 
@@ -1313,9 +1310,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#pipelines.initialized(),
         'pipelines must be initialized (syncQueryPipelineSet)',
       );
-
-      const pipelinesTransformationHashes =
-        this.#pipelines.transformationHashes();
 
       if (this.#ttlClock === undefined) {
         // Get it from the CVR or initialize it to now.
@@ -1414,25 +1408,35 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
 
         // Process the transformed queries and track which ones succeeded.
-        const successfullyTransformed = new Map<string, TransformedAndHashed>();
+        const successfullyTransformedCustomQueries = new Map<
+          string,
+          TransformedAndHashed
+        >();
         erroredQueryIDs = this.#processTransformedCustomQueries(
           lc,
           transformedCustomQueries,
           (q: TransformedAndHashed) => {
-            successfullyTransformed.set(q.id, q);
-            transformedQueries.push({
-              id: q.id,
-              origQuery: must(customQueries.get(q.id)),
-              transformed: q,
-            });
+            const origQuery = customQueries.get(q.id);
+            if (origQuery) {
+              successfullyTransformedCustomQueries.set(q.id, q);
+              transformedQueries.push({
+                id: q.id,
+                origQuery,
+                transformed: q,
+              });
+            }
           },
           customQueries,
         );
 
         // Check for queries whose transformation hash changed and log for debugging.
-        // The old pipelines will be automatically removed via unhydrateQueries,
-        // and new pipelines will be added via addQueries.
-        for (const [queryID, newTransform] of successfullyTransformed) {
+        // The old pipelines will be removed and destroyed when
+        // PipelineManager.addQuery is called with an existing query id and
+        // different transformation hash.
+        for (const [
+          queryID,
+          newTransform,
+        ] of successfullyTransformedCustomQueries) {
           const existingTransformHash =
             cvr.queries[queryID]?.transformationHash;
           if (existingTransformHash) {
@@ -1449,7 +1453,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               this.#checkForThrashing(queryID);
               this.#queryTransformationHashChanges.add(1);
             } else {
-              // hash is the same, addQuery will no-op (no re-hydration needed)
+              // hash is the same (no re-hydration needed)
               this.#queryTransformationNoOps.add(1);
             }
           }
@@ -1457,46 +1461,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
-      const hashToIDs = new Map<string, string[]>();
-      const serverQueries = transformedQueries.map(
-        ({id, origQuery, transformed}) => {
-          const ids = hashToIDs.get(transformed.transformationHash);
-          if (ids) {
-            ids.push(id);
-          } else {
-            hashToIDs.set(transformed.transformationHash, [id]);
-          }
-          return {
-            id,
-            ast: transformed.transformedAst,
-            transformationHash: transformed.transformationHash,
-            remove: expired(ttlClock, origQuery),
-          };
-        },
-      );
-
       const removeQueriesQueryIds: Set<string> = new Set(
-        serverQueries
-          .filter(q => q.remove)
+        Object.values(cvr.queries)
+          .filter(q => expired(ttlClock, q))
           .map(q => q.id)
           .concat(erroredQueryIDs || []),
       );
-      const addQueries = serverQueries.filter(
-        q =>
-          !removeQueriesQueryIds.has(q.id) &&
-          !pipelinesTransformationHashes.has(q.transformationHash),
-      );
-      const neededPipelinesTransformationHashes = new Set(
-        serverQueries
-          .filter(q => !removeQueriesQueryIds.has(q.id))
-          .map(q => q.transformationHash),
-      );
-      const removePipelinesTransformationHashes = [
-        ...pipelinesTransformationHashes,
-      ].filter(
-        transformationHash =>
-          !neededPipelinesTransformationHashes.has(transformationHash),
-      );
+      const addQueries = transformedQueries
+        .map(({id, transformed}) => ({
+          id,
+          ast: transformed.transformedAst,
+          transformationHash: transformed.transformationHash,
+        }))
+        .filter(
+          q =>
+            !removeQueriesQueryIds.has(q.id) &&
+            this.#pipelines.queries().get(q.id)?.transformationHash !==
+              q.transformationHash,
+        );
 
       for (const q of addQueries) {
         const orig = cvr.queries[q.id];
@@ -1508,18 +1490,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
       }
 
-      if (
-        addQueries.length > 0 ||
-        removeQueriesQueryIds.size > 0 ||
-        removePipelinesTransformationHashes.length > 0
-      ) {
+      if (addQueries.length > 0 || removeQueriesQueryIds.size > 0) {
         await this.#addAndRemoveQueries(
           lc,
           cvr,
           addQueries,
           [...removeQueriesQueryIds].map(id => ({id})),
-          removePipelinesTransformationHashes,
-          hashToIDs,
         );
       } else {
         await this.#catchupClients(lc, cvr);
@@ -1566,14 +1542,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
     addQueries: {id: string; ast: AST; transformationHash: string}[],
     removeQueries: {id: string}[],
-    removePipelinesTransformationHashes: string[],
-    hashToIDs: Map<string, string[]>,
   ): Promise<void> {
     return startAsyncSpan(tracer, 'vs.#addAndRemoveQueries', async () => {
       assert(
-        addQueries.length > 0 ||
-          removeQueries.length > 0 ||
-          removePipelinesTransformationHashes.length > 0,
+        addQueries.length > 0 || removeQueries.length > 0,
         'Must have queries to add or remove',
       );
       const start = performance.now();
@@ -1605,22 +1577,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Removing queries is easy. The pipelines are dropped, and the CVR
       // updater handles the updates and pokes.
       for (const q of removeQueries) {
+        this.#pipelines.removeQuery(q.id);
         // Remove per-query server metrics when query is deleted
         this.#inspectorDelegate.removeQuery(q.id);
         // Clean up thrashing detection for removed queries
         this.#queryReplacements.delete(q.id);
-      }
-      for (const hash of removePipelinesTransformationHashes) {
-        this.#pipelines.removeQuery(hash);
-        // Remove per-query server metrics for unhydrated queries
-        const ids = hashToIDs.get(hash);
-        if (ids) {
-          for (const id of ids) {
-            this.#inspectorDelegate.removeQuery(id);
-            // Clean up thrashing detection for unhydrated queries
-            this.#queryReplacements.delete(id);
-          }
-        }
       }
 
       let totalProcessTime = 0;
@@ -1651,10 +1612,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
 
-          self.#addQueryMaterializationServerMetric(
-            q.transformationHash,
-            elapsed,
-          );
+          self.#addQueryMaterializationServerMetric(q.id, elapsed);
 
           if (elapsed > slowHydrateThreshold) {
             lc.warn?.('Slow query materialization', elapsed, q.ast);
@@ -1675,7 +1633,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         generateRowChanges(this.#slowHydrateThreshold),
         updater,
         pokers,
-        hashToIDs,
       );
 
       for (const patch of await updater.deleteUnreferencedRows(lc)) {
@@ -1812,7 +1769,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     changes: Iterable<RowChange | 'yield'>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler,
-    hashToIDs: Map<string, string[]>,
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
       const start = performance.now();
@@ -1841,17 +1797,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             await timer.yieldProcess('yield in processChanges');
             continue;
           }
-          const {
-            type,
-            queryHash: transformationHash,
-            table,
-            rowKey,
-            row,
-          } = change;
-          const queryIDs = must(
-            hashToIDs.get(transformationHash),
-            'could not find the original hash for the transformation hash',
-          );
+          const {type, queryID, table, rowKey, row} = change;
           const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
 
           let parsedRow = rows.get(rowID);
@@ -1859,7 +1805,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             parsedRow = {refCounts: {}};
             rows.set(rowID, parsedRow);
           }
-          queryIDs.forEach(hash => (parsedRow.refCounts[hash] ??= 0));
+          parsedRow.refCounts[queryID] ??= 0;
 
           const updateVersion = (row: Row) => {
             // IVM can output multiple versions of a row as it goes through its
@@ -1872,14 +1818,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           switch (type) {
             case 'add':
               updateVersion(row);
-              queryIDs.forEach(hash => parsedRow.refCounts[hash]++);
+              parsedRow.refCounts[queryID]++;
               break;
             case 'edit':
               updateVersion(row);
               // No update to refCounts.
               break;
             case 'remove':
-              queryIDs.forEach(hash => parsedRow.refCounts[hash]--);
+              parsedRow.refCounts[queryID]--;
               break;
             default:
               unreachable(type);
@@ -1935,7 +1881,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         updater.updatedVersion(),
       );
       lc.debug?.(`applying ${numChanges} to advance to ${version}`);
-      const hashToIDs = createHashToIDs(cvr);
 
       try {
         await this.#processChanges(
@@ -1944,7 +1889,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           changes,
           updater,
           pokers,
-          hashToIDs,
         );
       } catch (e) {
         if (e instanceof ResetPipelinesSignal) {
@@ -2029,21 +1973,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
 // Update CVR after every 10000 rows.
 const CURSOR_PAGE_SIZE = 10000;
-
-function createHashToIDs(cvr: CVRSnapshot) {
-  const hashToIDs = new Map<string, string[]>();
-  for (const {id, transformationHash} of Object.values(cvr.queries)) {
-    if (!transformationHash) {
-      continue;
-    }
-    if (hashToIDs.has(transformationHash)) {
-      must(hashToIDs.get(transformationHash)).push(id);
-    } else {
-      hashToIDs.set(transformationHash, [id]);
-    }
-  }
-  return hashToIDs;
-}
 
 // A global Lock acts as a queue to run a single IVM time slice per iteration
 // of the node event loop, thus bounding I/O delay to the duration of a single
