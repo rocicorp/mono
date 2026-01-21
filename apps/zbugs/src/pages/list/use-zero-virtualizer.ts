@@ -9,19 +9,19 @@ import {useHistoryState} from 'wouter/use-browser-location';
 import {assert} from '../../../../../packages/shared/src/asserts.ts';
 import {ITEM_SIZE} from './list-page.tsx';
 import {
-  useIssues,
+  useRows,
   type Anchor,
   type GetPageQuery,
   type GetSingleQuery,
-} from './use-issues.ts';
+} from './use-rows.ts';
 
 // Make sure this is even since we half it for permalink loading
 const MIN_PAGE_SIZE = 100;
 
 const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
-type QueryAnchor<TListContextParams, TIssueRowSort> = {
-  readonly anchor: Anchor<TIssueRowSort>;
+type QueryAnchor<TListContextParams, TStartRow> = {
+  readonly anchor: Anchor<TStartRow>;
   /**
    * Associates an anchor with list query params to coordinate state during
    * navigation. When list context params change (e.g., filter/sort changes or
@@ -41,8 +41,8 @@ type QueryAnchor<TListContextParams, TIssueRowSort> = {
   readonly listContextParams: TListContextParams;
 };
 
-type PermalinkHistoryState<TIssueRowSort> = Readonly<{
-  anchor: Anchor<TIssueRowSort>;
+type PermalinkHistoryState<TStartRow> = Readonly<{
+  anchor: Anchor<TStartRow>;
   scrollTop: number;
   estimatedTotal: number;
   hasReachedStart: boolean;
@@ -59,8 +59,8 @@ export function useZeroVirtualizer<
   TScrollElement extends Element,
   TItemElement extends Element,
   TListContextParams,
-  TIssue,
-  TIssueRowSort,
+  TRow,
+  TStartRow,
 >({
   // Tanstack Virtual params
   estimateSize,
@@ -89,15 +89,15 @@ export function useZeroVirtualizer<
 
   permalinkID?: string | null | undefined;
 
-  getPageQuery: GetPageQuery<TIssue, TIssueRowSort>;
-  getSingleQuery: GetSingleQuery<TIssue>;
+  getPageQuery: GetPageQuery<TRow, TStartRow>;
+  getSingleQuery: GetSingleQuery<TRow>;
   options?: UseQueryOptions | undefined;
-  toStartRow: (issue: TIssue) => TIssueRowSort;
+  toStartRow: (row: TRow) => TStartRow;
 }): {
   virtualizer: Virtualizer<TScrollElement, TItemElement>;
-  issueAt: (index: number) => TIssue | undefined;
+  rowAt: (index: number) => TRow | undefined;
   complete: boolean;
-  issuesEmpty: boolean;
+  rowsEmpty: boolean;
   permalinkNotFound: boolean;
   estimatedTotal: number;
   total: number | undefined;
@@ -109,7 +109,7 @@ export function useZeroVirtualizer<
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [skipPagingLogic, setSkipPagingLogic] = useState(false);
 
-  const historyState = usePermalinkHistoryState<TIssueRowSort>();
+  const historyState = usePermalinkHistoryState<TStartRow>();
 
   const createPermalinkAnchor = (id: string) =>
     ({
@@ -118,9 +118,9 @@ export function useZeroVirtualizer<
       kind: 'permalink',
     }) as const;
 
-  // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount issues
+  // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount rows
   const [queryAnchor, setQueryAnchor] = useState<
-    QueryAnchor<TListContextParams, TIssueRowSort>
+    QueryAnchor<TListContextParams, TStartRow>
   >(() => {
     const anchor = historyState
       ? historyState.anchor
@@ -146,15 +146,15 @@ export function useZeroVirtualizer<
   const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
 
   const {
-    issueAt,
-    issuesLength,
+    rowAt,
+    rowsLength,
     complete,
-    issuesEmpty,
+    rowsEmpty,
     atStart,
     atEnd,
-    firstIssueIndex,
+    firstRowIndex,
     permalinkNotFound,
-  } = useIssues({
+  } = useRows({
     pageSize,
     anchor,
     options,
@@ -163,7 +163,7 @@ export function useZeroVirtualizer<
     toStartRow,
   });
 
-  const newEstimatedTotal = firstIssueIndex + issuesLength;
+  const newEstimatedTotal = firstRowIndex + rowsLength;
 
   const virtualizer: Virtualizer<TScrollElement, TItemElement> = useVirtualizer(
     {
@@ -240,7 +240,7 @@ export function useZeroVirtualizer<
   const [pendingScrollAdjustment, setPendingScrollAdjustment] =
     useState<number>(0);
 
-  const updateAnchor = (anchor: Anchor<TIssueRowSort>) => {
+  const updateAnchor = (anchor: Anchor<TStartRow>) => {
     setQueryAnchor({
       anchor,
       listContextParams,
@@ -248,7 +248,7 @@ export function useZeroVirtualizer<
   };
 
   useEffect(() => {
-    if (issuesEmpty || !isListContextCurrent) {
+    if (rowsEmpty || !isListContextCurrent) {
       return;
     }
 
@@ -270,10 +270,10 @@ export function useZeroVirtualizer<
       return;
     }
 
-    // First issue is before start of list - need to shift down
-    if (firstIssueIndex < 0) {
+    // First row is before start of list - need to shift down
+    if (firstRowIndex < 0) {
       const placeholderRows = !atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0;
-      const offset = -firstIssueIndex + placeholderRows;
+      const offset = -firstRowIndex + placeholderRows;
 
       setSkipPagingLogic(true);
       setPendingScrollAdjustment(offset);
@@ -285,18 +285,18 @@ export function useZeroVirtualizer<
       return;
     }
 
-    if (atStart && firstIssueIndex > 0) {
-      setPendingScrollAdjustment(-firstIssueIndex);
+    if (atStart && firstRowIndex > 0) {
+      setPendingScrollAdjustment(-firstRowIndex);
       updateAnchor(TOP_ANCHOR);
       return;
     }
   }, [
-    firstIssueIndex,
+    firstRowIndex,
     anchor,
     atStart,
     pendingScrollAdjustment,
     skipPagingLogic,
-    issuesEmpty,
+    rowsEmpty,
     isListContextCurrent,
     estimatedTotal,
     // virtualizer, Do not depend on virtualizer. TDZ.
@@ -311,7 +311,7 @@ export function useZeroVirtualizer<
         estimatedTotal: number,
         hasReachedStart: boolean,
         hasReachedEnd: boolean,
-        anchor: Anchor<TIssueRowSort>,
+        anchor: Anchor<TStartRow>,
       ) => {
         if (scrollElement) {
           scrollElement.scrollTop = scrollTop;
@@ -362,7 +362,7 @@ export function useZeroVirtualizer<
     }
 
     if (atStart) {
-      if (firstIssueIndex !== 0) {
+      if (firstRowIndex !== 0) {
         updateAnchor(TOP_ANCHOR);
         return;
       }
@@ -373,22 +373,22 @@ export function useZeroVirtualizer<
       type: 'forward' | 'backward',
       indexOffset: number,
     ) => {
-      const index = toBoundIndex(targetIndex, firstIssueIndex, issuesLength);
-      const startRow = issueAt(index);
+      const index = toBoundIndex(targetIndex, firstRowIndex, rowsLength);
+      const startRow = rowAt(index);
       assert(startRow !== undefined || type === 'forward');
       updateAnchor({
         index: index + indexOffset,
         kind: type,
         startRow,
-      } as Anchor<TIssueRowSort>);
+      } as Anchor<TStartRow>);
     };
 
     const firstItem = virtualItems[0];
     const lastItem = virtualItems[virtualItems.length - 1];
     const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
 
-    const distanceFromStart = firstItem.index - firstIssueIndex;
-    const distanceFromEnd = firstIssueIndex + issuesLength - lastItem.index;
+    const distanceFromStart = firstItem.index - firstRowIndex;
+    const distanceFromEnd = firstRowIndex + rowsLength - lastItem.index;
 
     if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
       updateAnchorForEdge(
@@ -414,18 +414,18 @@ export function useZeroVirtualizer<
     pendingScrollAdjustment,
     complete,
     pageSize,
-    firstIssueIndex,
-    issuesLength,
+    firstRowIndex,
+    rowsLength,
     atStart,
     atEnd,
-    issueAt,
+    rowAt,
   ]);
 
   return {
     virtualizer,
-    issueAt,
+    rowAt: rowAt,
     complete,
-    issuesEmpty,
+    rowsEmpty,
     permalinkNotFound,
     estimatedTotal,
     total,
@@ -433,20 +433,20 @@ export function useZeroVirtualizer<
 }
 
 /**
- * Clamps an index to be within the valid range of issues.
+ * Clamps an index to be within the valid range of rows.
  * @param targetIndex - The desired index to clamp
- * @param firstIssueIndex - The first valid issue index
- * @param issuesLength - The number of issues available
- * @returns The clamped index within [firstIssueIndex, firstIssueIndex + issuesLength - 1]
+ * @param firstRowIndex - The first valid row index
+ * @param rowsLength - The number of rows available
+ * @returns The clamped index within [firstRowIndex, firstRowIndex + rowsLength - 1]
  */
 function toBoundIndex(
   targetIndex: number,
-  firstIssueIndex: number,
-  issuesLength: number,
+  firstRowIndex: number,
+  rowsLength: number,
 ): number {
   return Math.max(
-    firstIssueIndex,
-    Math.min(firstIssueIndex + issuesLength - 1, targetIndex),
+    firstRowIndex,
+    Math.min(firstRowIndex + rowsLength - 1, targetIndex),
   );
 }
 
@@ -461,8 +461,8 @@ function makeEven(n: number) {
 const zeroHistoryKey = '@rocicorp/zero/react/virtual/v0';
 
 function usePermalinkHistoryState<
-  TIssueRowSort,
->(): PermalinkHistoryState<TIssueRowSort> | null {
+  TStartRow,
+>(): PermalinkHistoryState<TStartRow> | null {
   const maybeHistoryState = useHistoryState<unknown>();
   if (maybeHistoryState === null || typeof maybeHistoryState !== 'object') {
     return null;
@@ -472,13 +472,11 @@ function usePermalinkHistoryState<
     return null;
   }
 
-  return maybeHistoryState[
-    zeroHistoryKey
-  ] as PermalinkHistoryState<TIssueRowSort>;
+  return maybeHistoryState[zeroHistoryKey] as PermalinkHistoryState<TStartRow>;
 }
 
-function replaceHistoryState<TIssueRowSort>(
-  data: PermalinkHistoryState<TIssueRowSort>,
+function replaceHistoryState<TStartRow>(
+  data: PermalinkHistoryState<TStartRow>,
 ) {
   const historyState = history.state || {};
   historyState[zeroHistoryKey] = data;

@@ -154,9 +154,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const {
     virtualizer,
-    issueAt,
+    rowAt: issueAt,
     complete,
-    issuesEmpty,
+    rowsEmpty: issuesEmpty,
     permalinkNotFound,
     estimatedTotal,
     total,
