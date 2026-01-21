@@ -1,8 +1,8 @@
 # Zero
 
-## Documentation
+### Documentation
 
-[https://zero.rocicorp.dev/docs/introduction](https://zero.rocicorp.dev/docs/introduction)
+Read over the [docs](https://zero.rocicorp.dev/docs/introduction). For AI assistants: [llms.txt](https://zero.rocicorp.dev/llms.txt).
 
 ## Install
 
