@@ -810,12 +810,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #updateTTLClockInCVRWithoutLock(lc: LogContext): void {
-    lc.debug?.('Syncing ttlClock');
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
-    this.#cvrStore.updateTTLClock(ttlClock, now).catch(e => {
-      lc.error?.('failed to update TTL clock', e);
-    });
+    const rid = randomID();
+    lc.debug?.('Syncing ttlClock', rid);
+    const start = Date.now();
+    const ttlClock = this.#getTTLClock(start);
+    this.#cvrStore
+      .updateTTLClock(ttlClock, start)
+      .then(() => {
+        lc.debug?.('Synced ttlClock', rid, `in ${Date.now() - start} ms`);
+      })
+      .catch(e => {
+        lc.error?.(
+          'failed to update TTL clock',
+          rid,
+          `after ${Date.now() - start} ms`,
+          e,
+        );
+      });
   }
 
   async #updateCVRConfig(
