@@ -167,7 +167,7 @@ export class Syncer implements SingletonService {
             subject: userID,
           });
           this.#lc.debug?.(
-            `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
+            `Received auth token [redacted...${auth.slice(-8)}] for clientID ${clientID}`,
           );
         } catch (e) {
           sendError(
