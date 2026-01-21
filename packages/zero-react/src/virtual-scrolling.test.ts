@@ -3,9 +3,9 @@ import {describe, expect, test} from 'vitest';
 /**
  * Virtual Scrolling Tests
  *
- * These tests simulate the virtual scrolling behavior used in the list-page component.
- * The component uses @tanstack/react-virtual to efficiently render large lists by only
- * rendering items that are currently visible in the viewport.
+ * These tests simulate the virtual scrolling behavior used in list components.
+ * Virtual scrolling efficiently renders large lists by only rendering items
+ * that are currently visible in the viewport.
  */
 
 describe('Virtual Scrolling', () => {
@@ -30,7 +30,7 @@ describe('Virtual Scrolling', () => {
   }
 
   test('scrolling down updates visible items correctly', () => {
-    // Configuration matching list-page.tsx
+    // Configuration matching typical list component usage
     const ITEM_SIZE = 56;
     const VIEWPORT_HEIGHT = 600;
     const TOTAL_ITEMS = 200;
