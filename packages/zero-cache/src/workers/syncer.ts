@@ -40,6 +40,7 @@ export type SyncerWorkerData = {
 function getWebSocketServerOptions(config: ZeroConfig): ServerOptions {
   const options: ServerOptions = {
     noServer: true,
+    maxPayload: config.websocketMaxPayloadBytes,
   };
 
   if (config.websocketCompression) {
