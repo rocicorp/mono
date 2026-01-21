@@ -620,9 +620,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         protocolVersion,
       } = ctx;
       this.#authData = pickToken(this.#lc, this.#authData, tokenData);
-      this.#lc.debug?.(
-        `Picked auth token: ${JSON.stringify(this.#authData?.decoded)}`,
-      );
+      this.#lc.debug?.(`Picked auth token for clientGroupID`);
       this.#httpCookie = httpCookie;
 
       // Handle custom query URL and headers
