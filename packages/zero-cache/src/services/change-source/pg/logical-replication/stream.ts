@@ -190,7 +190,6 @@ function parseStreamMessage(
   }
   if (buffer.readInt8(17)) {
     // Primary keepalive message: shouldRespond
-    lc.debug?.(`pg keepalive (shouldRespond: true) ${lsn}`);
     return [lsn, {tag: 'keepalive'}];
   }
   return null;
