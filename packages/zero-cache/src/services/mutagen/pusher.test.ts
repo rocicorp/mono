@@ -345,7 +345,7 @@ describe('pusher service', () => {
     fetch.mockReset();
   });
 
-  test('the service sends custom headers from initConnection', async () => {
+  test('the service sends custom headers from initConnection when allowed', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockResolvedValue({
       ok: true,
@@ -357,6 +357,10 @@ describe('pusher service', () => {
         url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
+        allowedClientHeaders: [
+          'x-vercel-automation-bypass-secret',
+          'x-custom-header',
+        ],
       },
       lc,
       'cgid',
@@ -376,6 +380,42 @@ describe('pusher service', () => {
       'X-Api-Key': 'api-key',
       'x-vercel-automation-bypass-secret': 'my-secret',
       'x-custom-header': 'custom-value',
+      'Authorization': 'Bearer jwt',
+    });
+
+    fetch.mockReset();
+  });
+
+  test('the service filters custom headers when not in allowedClientHeaders', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+        // allowedClientHeaders not set - secure by default
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    pusher.initConnection(clientID, wsID, undefined, {
+      'x-vercel-automation-bypass-secret': 'my-secret',
+      'x-custom-header': 'custom-value',
+    });
+
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
+
+    await pusher.stop();
+
+    expect(fetch.mock.calls[0][1]?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Api-Key': 'api-key',
       'Authorization': 'Bearer jwt',
     });
 
