@@ -277,7 +277,6 @@ export async function handleMutateRequest<
       assert(m.type === 'custom', 'Expected custom mutation');
       lc.debug?.(
         `Processing mutation '${m.name}' (id=${m.id}, clientID=${m.clientID})`,
-        m.args,
       );
 
       let mutationPhase: MutationPhase = 'preTransaction';
