@@ -116,6 +116,7 @@ export type SyncContext = {
   readonly protocolVersion: number;
   readonly tokenData: TokenData | undefined;
   readonly httpCookie: string | undefined;
+  readonly origin: string | undefined;
 };
 
 const tracer = trace.getTracer('view-syncer', version);
@@ -228,6 +229,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #authData: TokenData | undefined;
 
   #httpCookie: string | undefined;
+  #origin: string | undefined;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
   readonly #setTimeout: SetTimeout;
@@ -346,6 +348,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       allowedClientHeaders: this.#queryConfig.allowedClientHeaders,
       token: this.#authData?.raw,
       cookie: forwardCookie ? this.#httpCookie : undefined,
+      origin: this.#origin,
     };
   }
 
@@ -618,11 +621,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         baseCookie,
         tokenData,
         httpCookie,
+        origin,
         protocolVersion,
       } = ctx;
       this.#authData = pickToken(this.#lc, this.#authData, tokenData);
       this.#lc.debug?.(`Picked auth token for clientGroupID`);
       this.#httpCookie = httpCookie;
+      this.#origin = origin;
 
       // Handle custom query URL and headers
       const [, {userQueryURL, userQueryHeaders}] = initConnectionMessage;

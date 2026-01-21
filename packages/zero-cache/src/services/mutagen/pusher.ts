@@ -44,6 +44,7 @@ export interface Pusher extends RefCountedService {
     push: PushBody,
     auth: string | undefined,
     httpCookie: string | undefined,
+    origin: string | undefined,
   ): HandlerResult;
   ackMutationResponses(upToID: MutationID): Promise<void>;
 }
@@ -120,11 +121,12 @@ export class PusherService implements Service, Pusher {
     push: PushBody,
     auth: string | undefined,
     httpCookie: string | undefined,
+    origin: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
     if (!this.#pushConfig.forwardCookies) {
       httpCookie = undefined; // remove cookies if not forwarded
     }
-    this.#queue.enqueue({push, auth, clientID, httpCookie});
+    this.#queue.enqueue({push, auth, clientID, httpCookie, origin});
 
     return {
       type: 'ok',
@@ -216,6 +218,7 @@ type PusherEntry = {
   push: PushBody;
   auth: string | undefined;
   httpCookie: string | undefined;
+  origin: string | undefined;
   clientID: string;
 };
 type PusherEntryOrStop = PusherEntry | 'stop';
@@ -511,6 +514,7 @@ class PushWorker {
           allowedClientHeaders: this.#allowedClientHeaders,
           token: entry.auth,
           cookie: entry.httpCookie,
+          origin: entry.origin,
         },
         entry.push,
       );
@@ -610,5 +614,9 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
   assert(
     left.httpCookie === right.httpCookie,
     'httpCookie must be the same for all pushes with the same clientID',
+  );
+  assert(
+    left.origin === right.origin,
+    'origin must be the same for all pushes with the same clientID',
   );
 }

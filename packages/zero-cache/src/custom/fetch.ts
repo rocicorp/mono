@@ -38,6 +38,7 @@ export type HeaderOptions = {
   allowedClientHeaders?: readonly string[] | undefined;
   token?: string | undefined;
   cookie?: string | undefined;
+  origin?: string | undefined;
 };
 
 /**
@@ -140,6 +141,9 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   }
   if (headerOptions.cookie) {
     headers['Cookie'] = headerOptions.cookie;
+  }
+  if (headerOptions.origin) {
+    headers['Origin'] = headerOptions.origin;
   }
 
   const urlObj = new URL(url);
