@@ -752,7 +752,7 @@ export class CVRStore {
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
     >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
-        FOR UPDATE NOWAIT`.execute(); // Note: execute() immediately to send the query before others.
+        FOR UPDATE`.execute(); // Note: execute() immediately to send the query before others.
     const {version, owner, grantedAt} =
       result.length > 0
         ? result[0]
