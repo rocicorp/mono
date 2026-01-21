@@ -2,6 +2,7 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
+import {timingSafeEqual} from 'node:crypto';
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
@@ -953,7 +954,19 @@ export function isAdminPasswordValid(
     return false;
   }
 
-  if (password !== config.adminPassword) {
+  // Use constant-time comparison to prevent timing attacks
+  const passwordBuffer = Buffer.from(password ?? '');
+  const configBuffer = Buffer.from(config.adminPassword);
+
+  // Handle length mismatch in constant time
+  if (passwordBuffer.length !== configBuffer.length) {
+    // Perform dummy comparison to maintain constant timing
+    timingSafeEqual(configBuffer, configBuffer);
+    lc.warn?.('Invalid admin password');
+    return false;
+  }
+
+  if (!timingSafeEqual(passwordBuffer, configBuffer)) {
     lc.warn?.('Invalid admin password');
     return false;
   }
