@@ -163,6 +163,8 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
+type CustomQueryTransformMode = 'all' | 'missing';
+
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #shard: ShardID;
@@ -469,7 +471,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
 
           await this.#hydrateUnchangedQueries(lc, cvr);
-          await this.#syncQueryPipelineSet(lc, cvr);
+          // hydrateUnchangedQueries just transformed
+          // all the custom queries, this #syncQueryPipelineSet call
+          // should retransform those that are missing from #pipelines, which
+          // are those which errored or changed transform hash
+          await this.#syncQueryPipelineSet(lc, cvr, 'missing');
           this.#pipelinesSynced = true;
         });
       }
@@ -507,7 +513,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.debug?.('Queries have expired');
       // #syncQueryPipelineSet() will remove the expired queries.
       if (this.#pipelinesSynced) {
-        await this.#syncQueryPipelineSet(lc, cvr);
+        await this.#syncQueryPipelineSet(lc, cvr, 'missing');
       }
     }
 
@@ -706,6 +712,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             clientID,
             msg,
             cvr,
+            'all', // re transform all on new connections
             // Until the profileID is required in the URL, default it to
             // `cg${clientGroupID}`, as is done in the schema migration.
             // As clients update to the zero version with the profileID logic,
@@ -727,7 +734,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void> {
-    await this.#runInLockForClient(ctx, msg, this.#handleConfigUpdate);
+    await this.#runInLockForClient(
+      ctx,
+      msg,
+      async (lc, clientID, msg: InitConnectionBody, cvr) =>
+        this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
+    );
   }
 
   async deleteClients(
@@ -737,7 +749,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#runInLockForClient(
       ctx,
       [msg[0], {deleted: msg[1]}],
-      this.#handleConfigUpdate,
+      async (lc, clientID, msg: InitConnectionBody, cvr) =>
+        this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
     );
   }
 
@@ -803,6 +816,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
     clientID: string,
+    customQueryTransformMode: CustomQueryTransformMode,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
   ): Promise<CVRSnapshot> {
     const updater = new CVRConfigDrivenUpdater(
@@ -828,7 +842,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     if (this.#pipelinesSynced) {
-      await this.#syncQueryPipelineSet(lc, this.#cvr);
+      await this.#syncQueryPipelineSet(lc, this.#cvr, customQueryTransformMode);
     }
 
     return this.#cvr;
@@ -930,81 +944,88 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       activeClients,
     }: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
+    customQueryTransformMode: CustomQueryTransformMode,
     profileID?: string,
   ) =>
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
       const deletedClientIDs: string[] = [];
       const deletedClientGroupIDs: string[] = [];
 
-      cvr = await this.#updateCVRConfig(lc, cvr, clientID, updater => {
-        const {ttlClock} = cvr;
-        const patches: PatchToVersion[] = [];
+      cvr = await this.#updateCVRConfig(
+        lc,
+        cvr,
+        clientID,
+        customQueryTransformMode,
+        updater => {
+          const {ttlClock} = cvr;
+          const patches: PatchToVersion[] = [];
 
-        if (clientSchema) {
-          updater.setClientSchema(lc, clientSchema);
-        }
-        if (profileID) {
-          updater.setProfileID(lc, profileID);
-        }
+          if (clientSchema) {
+            updater.setClientSchema(lc, clientSchema);
+          }
+          if (profileID) {
+            updater.setProfileID(lc, profileID);
+          }
 
-        // Apply requested patches.
-        lc.debug?.(`applying ${desiredQueriesPatch?.length} query patches`);
-        if (desiredQueriesPatch?.length) {
-          for (const patch of desiredQueriesPatch) {
-            switch (patch.op) {
-              case 'put':
-                patches.push(...updater.putDesiredQueries(clientID, [patch]));
-                break;
-              case 'del':
-                patches.push(
-                  ...updater.markDesiredQueriesAsInactive(
-                    clientID,
-                    [patch.hash],
-                    ttlClock,
-                  ),
-                );
-                break;
-              case 'clear':
-                patches.push(...updater.clearDesiredQueries(clientID));
-                break;
+          // Apply requested patches.
+          lc.debug?.(`applying ${desiredQueriesPatch?.length} query patches`);
+          if (desiredQueriesPatch?.length) {
+            for (const patch of desiredQueriesPatch) {
+              switch (patch.op) {
+                case 'put':
+                  patches.push(...updater.putDesiredQueries(clientID, [patch]));
+                  break;
+                case 'del':
+                  patches.push(
+                    ...updater.markDesiredQueriesAsInactive(
+                      clientID,
+                      [patch.hash],
+                      ttlClock,
+                    ),
+                  );
+                  break;
+                case 'clear':
+                  patches.push(...updater.clearDesiredQueries(clientID));
+                  break;
+              }
             }
           }
-        }
 
-        const clientIDsToDelete: Set<string> = new Set();
+          const clientIDsToDelete: Set<string> = new Set();
 
-        if (activeClients) {
-          // We find all the clients in this client group that are not active.
-          const allClientIDs = Object.keys(cvr.clients);
-          const activeClientsSet = new Set(activeClients);
-          for (const id of allClientIDs) {
-            if (!activeClientsSet.has(id)) {
-              clientIDsToDelete.add(id);
+          if (activeClients) {
+            // We find all the clients in this client group that are not active.
+            const allClientIDs = Object.keys(cvr.clients);
+            const activeClientsSet = new Set(activeClients);
+            for (const id of allClientIDs) {
+              if (!activeClientsSet.has(id)) {
+                clientIDsToDelete.add(id);
+              }
             }
           }
-        }
 
-        if (deleted?.clientIDs?.length) {
-          for (const cid of deleted.clientIDs) {
-            assert(cid !== clientID, 'cannot delete self');
-            clientIDsToDelete.add(cid);
+          if (deleted?.clientIDs?.length) {
+            for (const cid of deleted.clientIDs) {
+              assert(cid !== clientID, 'cannot delete self');
+              clientIDsToDelete.add(cid);
+            }
           }
-        }
 
-        for (const cid of clientIDsToDelete) {
-          const patchesDueToClient = updater.deleteClient(cid, ttlClock);
-          patches.push(...patchesDueToClient);
-          deletedClientIDs.push(cid);
-        }
+          for (const cid of clientIDsToDelete) {
+            const patchesDueToClient = updater.deleteClient(cid, ttlClock);
+            patches.push(...patchesDueToClient);
+            deletedClientIDs.push(cid);
+          }
 
-        if (deleted?.clientGroupIDs?.length) {
-          lc.debug?.(
-            `ignoring ${deleted.clientGroupIDs.length} deprecated client group deletes`,
-          );
-        }
+          if (deleted?.clientGroupIDs?.length) {
+            lc.debug?.(
+              `ignoring ${deleted.clientGroupIDs.length} deprecated client group deletes`,
+            );
+          }
 
-        return patches;
-      });
+          return patches;
+        },
+      );
 
       // Send 'deleteClients' ack to the clients.
       if (
@@ -1302,7 +1323,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * This must be called from within the #lock.
    */
-  #syncQueryPipelineSet(lc: LogContext, cvr: CVRSnapshot) {
+  #syncQueryPipelineSet(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+    customQueryTransformMode: CustomQueryTransformMode,
+  ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async () => {
       assert(
         this.#pipelines.initialized(),
@@ -1369,7 +1394,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let erroredQueryIDs: string[] | undefined;
-      if (this.#customQueryTransformer && customQueries.size > 0) {
+      const customQueriesToTransform =
+        customQueryTransformMode === 'all'
+          ? [...customQueries.values()]
+          : (customQueryTransformMode satisfies 'missing') &&
+            [...customQueries.values()].filter(
+              q => !this.#pipelines.queries().has(q.id),
+            );
+      if (this.#customQueryTransformer && customQueriesToTransform.length > 0) {
         // Always re-transform custom queries on client connection for security.
         // This ensures the user's API server validates authorization with the
         // current auth context.
@@ -1379,7 +1411,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           transformedCustomQueries =
             await this.#customQueryTransformer.transform(
               this.#getHeaderOptions(true),
-              customQueries.values(),
+              customQueriesToTransform,
               this.userQueryURL,
             );
           this.#queryTransformations.add(1, {result: 'success'});
