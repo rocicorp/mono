@@ -332,6 +332,10 @@ export async function processMutationWithTx(
 
   if (!errorMode) {
     const {ops} = mutation.args[0];
+
+    // Validate all table names before processing
+    authorizer.validateTableNames(ops);
+
     const normalizedOps = authorizer.normalizeOps(ops);
     const [canPre, canPost] = await Promise.all([
       authorizer.canPreMutation(authData, normalizedOps),
