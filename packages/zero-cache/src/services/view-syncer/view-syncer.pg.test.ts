@@ -121,6 +121,7 @@ describe('view-syncer/service', () => {
     protocolVersion: PROTOCOL_VERSION,
     tokenData: undefined,
     httpCookie: undefined,
+    origin: undefined,
   };
 
   beforeEach<PgTest>(async ({testDBs}) => {
@@ -3474,6 +3475,7 @@ describe('view-syncer/service', () => {
         protocolVersion: PROTOCOL_VERSION,
         tokenData: undefined,
         httpCookie: undefined,
+        origin: undefined,
       },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );

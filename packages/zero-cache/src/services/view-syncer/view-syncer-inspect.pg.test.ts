@@ -60,6 +60,7 @@ describe('view-syncer/service', () => {
     protocolVersion: PROTOCOL_VERSION,
     tokenData: undefined,
     httpCookie: undefined,
+    origin: undefined,
   };
 
   let delegate: InspectorDelegate;
