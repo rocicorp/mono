@@ -1,9 +1,5 @@
 import type {UseQueryOptions} from '@rocicorp/zero/react';
-import {
-  useVirtualizer,
-  type Virtualizer,
-  type VirtualizerOptions,
-} from '@tanstack/react-virtual';
+import {useVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
 import {useEffect, useMemo, useState} from 'react';
 import {useHistoryState} from 'wouter/use-browser-location';
 import {assert} from '../../../../../packages/shared/src/asserts.ts';
@@ -55,6 +51,32 @@ const TOP_ANCHOR = Object.freeze({
   startRow: undefined,
 }) satisfies Anchor<unknown>;
 
+type TanstackUseVirtualizerOptions<
+  TScrollElement extends Element,
+  TItemElement extends Element,
+> = Parameters<typeof useVirtualizer<TScrollElement, TItemElement>>[0];
+
+export type UseZeroVirtualizerOptions<
+  TScrollElement extends Element,
+  TItemElement extends Element,
+  TListContextParams,
+  TRow,
+  TStartRow,
+> = Omit<
+  TanstackUseVirtualizerOptions<TScrollElement, TItemElement>,
+  'count' | 'initialOffset'
+> & {
+  // Zero specific params
+  listContextParams: TListContextParams;
+
+  permalinkID?: string | null | undefined;
+
+  getPageQuery: GetPageQuery<TRow, TStartRow>;
+  getSingleQuery: GetSingleQuery<TRow>;
+  options?: UseQueryOptions | undefined;
+  toStartRow: (row: TRow) => TStartRow;
+};
+
 export function useZeroVirtualizer<
   TScrollElement extends Element,
   TItemElement extends Element,
@@ -72,28 +94,15 @@ export function useZeroVirtualizer<
   permalinkID,
   getPageQuery,
   getSingleQuery,
-
   options,
   toStartRow,
-}: {
-  // Tanstack Virtual params
-  estimateSize: (index: number) => number;
-  overscan?: number;
-  getScrollElement: VirtualizerOptions<
-    TScrollElement,
-    TItemElement
-  >['getScrollElement'];
-
-  // Zero specific params
-  listContextParams: TListContextParams;
-
-  permalinkID?: string | null | undefined;
-
-  getPageQuery: GetPageQuery<TRow, TStartRow>;
-  getSingleQuery: GetSingleQuery<TRow>;
-  options?: UseQueryOptions | undefined;
-  toStartRow: (row: TRow) => TStartRow;
-}): {
+}: UseZeroVirtualizerOptions<
+  TScrollElement,
+  TItemElement,
+  TListContextParams,
+  TRow,
+  TStartRow
+>): {
   virtualizer: Virtualizer<TScrollElement, TItemElement>;
   rowAt: (index: number) => TRow | undefined;
   complete: boolean;
@@ -344,7 +353,12 @@ export function useZeroVirtualizer<
 
       setSkipPagingLogic(true);
     }
-  }, [isListContextCurrent]);
+  }, [
+    isListContextCurrent,
+    historyState,
+    permalinkID,
+    // getScrollElement - ignore
+  ]);
 
   const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
 
