@@ -34,6 +34,9 @@ class MockWriteAuthorizer implements WriteAuthorizer {
   normalizeOps(ops: CRUDOp[]) {
     return ops as Exclude<CRUDOp, UpsertOp>[];
   }
+  validateTableNames(_ops: CRUDOp[]): void {
+    // Mock accepts all tables
+  }
 }
 const mockWriteAuthorizer = new MockWriteAuthorizer();
 
