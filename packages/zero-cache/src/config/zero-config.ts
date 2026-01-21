@@ -618,6 +618,16 @@ export const zeroOptions = {
     ],
   },
 
+  websocketMaxPayloadBytes: {
+    type: v.number().default(10 * 1024 * 1024),
+    desc: [
+      'Maximum size of incoming WebSocket messages in bytes.',
+      '',
+      'Messages exceeding this limit are rejected before parsing.',
+      'Default: 10MB (10 * 1024 * 1024 = 10485760)',
+    ],
+  },
+
   litestream: {
     executable: {
       type: v.string().optional(),

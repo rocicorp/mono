@@ -386,6 +386,13 @@ test('zero-cache --help', () => {
                                                                                                                                                                                          
                                                                    See https://github.com/websockets/ws/blob/master/doc/ws.md#new-websocketserveroptions-callback for available options. 
                                                                                                                                                                                          
+     --websocket-max-payload-bytes number                          default: 10485760                                                                                                     
+       ZERO_WEBSOCKET_MAX_PAYLOAD_BYTES env                                                                                                                                              
+                                                                   Maximum size of incoming WebSocket messages in bytes.                                                                 
+                                                                                                                                                                                         
+                                                                   Messages exceeding this limit are rejected before parsing.                                                            
+                                                                   Default: 10MB (10 * 1024 * 1024 = 10485760)                                                                           
+                                                                                                                                                                                         
      --litestream-executable string                                optional                                                                                                              
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                                                    
                                                                    Path to the litestream executable.                                                                                    
