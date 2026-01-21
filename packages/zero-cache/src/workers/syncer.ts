@@ -166,6 +166,12 @@ export class Syncer implements SingletonService {
         try {
           decodedToken = await verifyToken(this.#config.auth, auth, {
             subject: userID,
+            ...(this.#config.auth.issuer && {
+              issuer: this.#config.auth.issuer,
+            }),
+            ...(this.#config.auth.audience && {
+              audience: this.#config.auth.audience,
+            }),
           });
           this.#lc.debug?.(
             `Received auth token [redacted...${auth.slice(-8)}] for clientID ${clientID}`,
