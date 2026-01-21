@@ -54,6 +54,7 @@ describe('view-syncer/yield-during-advance', () => {
     protocolVersion: PROTOCOL_VERSION,
     tokenData: undefined,
     httpCookie: undefined,
+    origin: undefined,
   };
 
   afterEach(() => {
