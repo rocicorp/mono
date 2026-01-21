@@ -1,4 +1,4 @@
-import {useQuery, useZero} from '@rocicorp/zero/react';
+import {useQuery, useZero, useZeroVirtualizer} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
 import React, {
@@ -38,7 +38,6 @@ import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 import {getIDFromString} from '../issue/get-id.tsx';
 import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
-import {useZeroVirtualizer} from './use-zero-virtualizer.ts';
 
 let firstRowRendered = false;
 export const ITEM_SIZE = 56;

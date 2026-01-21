@@ -1,9 +1,8 @@
-import type {UseQueryOptions} from '@rocicorp/zero/react';
 import {useVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
 import {useEffect, useMemo, useState} from 'react';
 import {useHistoryState} from 'wouter/use-browser-location';
-import {assert} from '../../../../../packages/shared/src/asserts.ts';
-import {ITEM_SIZE} from './list-page.tsx';
+import {assert} from '../../shared/src/asserts.ts';
+import type {UseQueryOptions} from './use-query.tsx';
 import {
   useRows,
   type Anchor,
@@ -64,7 +63,12 @@ export type UseZeroVirtualizerOptions<
   TStartRow,
 > = Omit<
   TanstackUseVirtualizerOptions<TScrollElement, TItemElement>,
-  'count' | 'initialOffset'
+  // count is managed by useZeroVirtualizer
+  | 'count'
+  // initialOffset is managed by useZeroVirtualizer
+  | 'initialOffset'
+  // Only support vertical lists for now
+  | 'horizontal'
 > & {
   // Zero specific params
   listContextParams: TListContextParams;
@@ -187,7 +191,8 @@ export function useZeroVirtualizer<
           return historyState.scrollTop;
         }
         if (anchor.kind === 'permalink') {
-          return anchor.index * ITEM_SIZE;
+          // TODO: Support dynamic item sizes
+          return anchor.index * estimateSize(0);
         }
         return 0;
       },
@@ -200,7 +205,13 @@ export function useZeroVirtualizer<
     const newPageSize = virtualizer.scrollRect
       ? Math.max(
           MIN_PAGE_SIZE,
-          makeEven(Math.ceil(virtualizer.scrollRect?.height / ITEM_SIZE) * 3),
+          makeEven(
+            Math.ceil(
+              virtualizer.scrollRect?.height /
+                // TODO: Support dynamic item sizes
+                estimateSize(0),
+            ) * 3,
+          ),
         )
       : MIN_PAGE_SIZE;
     if (newPageSize > pageSize) {
@@ -269,7 +280,10 @@ export function useZeroVirtualizer<
     // There is a pending scroll adjustment from last anchor change.
     if (pendingScrollAdjustment !== 0) {
       virtualizer.scrollToOffset(
-        (virtualizer.scrollOffset ?? 0) + pendingScrollAdjustment * ITEM_SIZE,
+        (virtualizer.scrollOffset ?? 0) +
+          pendingScrollAdjustment *
+            // TODO: Support dynamic item sizes
+            estimateSize(0),
       );
 
       setEstimatedTotal(estimatedTotal + pendingScrollAdjustment);
@@ -341,7 +355,9 @@ export function useZeroVirtualizer<
         );
       } else if (permalinkID) {
         resetState(
-          NUM_ROWS_FOR_LOADING_SKELETON * ITEM_SIZE,
+          NUM_ROWS_FOR_LOADING_SKELETON *
+            // TODO: Support dynamic item sizes
+            estimateSize(0),
           NUM_ROWS_FOR_LOADING_SKELETON,
           false,
           false,

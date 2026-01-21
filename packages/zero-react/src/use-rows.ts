@@ -1,10 +1,10 @@
+import {assert} from 'shared/src/asserts.ts';
 import type {
   DefaultContext,
   DefaultSchema,
-  QueryOrQueryRequest,
-} from '@rocicorp/zero';
-import {useQuery, type UseQueryOptions} from '@rocicorp/zero/react';
-import {assert} from 'shared/src/asserts.ts';
+} from '../../zero-types/src/default-types.ts';
+import type {QueryOrQueryRequest} from '../../zql/src/query/query-registry.ts';
+import {useQuery, type UseQueryOptions} from './use-query.tsx';
 
 export type Anchor<TStartRow> =
   | Readonly<{
@@ -34,7 +34,7 @@ export type GetSingleQuery<TRow> = (
 ) => GetQueryReturnType<TRow | undefined>;
 
 export type GetQueryReturnType<TReturn> = QueryOrQueryRequest<
-  keyof DefaultSchema['tables'],
+  keyof DefaultSchema['tables'] & string,
   // oxlint-disable-next-line no-explicit-any
   any, // input
   // oxlint-disable-next-line no-explicit-any

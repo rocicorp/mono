@@ -14,7 +14,9 @@
     "lint": "oxlint --type-aware src/"
   },
   "peerDependencies": {
-    "react": "^18.3.1"
+    "@tanstack/react-virtual": "^3.10.9",
+    "react": "^18.3.1",
+    "wouter": "^3.7.1"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
