@@ -100,6 +100,8 @@ export function useZeroVirtualizer<
   getSingleQuery,
   options,
   toStartRow,
+
+  ...restVirtualizerOptions
 }: UseZeroVirtualizerOptions<
   TScrollElement,
   TItemElement,
@@ -180,6 +182,7 @@ export function useZeroVirtualizer<
 
   const virtualizer: Virtualizer<TScrollElement, TItemElement> = useVirtualizer(
     {
+      ...restVirtualizerOptions,
       count:
         Math.max(estimatedTotal, newEstimatedTotal) +
         (!atEnd ? NUM_ROWS_FOR_LOADING_SKELETON : 0),
@@ -196,6 +199,7 @@ export function useZeroVirtualizer<
         }
         return 0;
       },
+      horizontal: false,
     },
   );
 
