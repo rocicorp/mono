@@ -90,25 +90,28 @@ export class ExpressionBuilder<
   ): Condition;
   cmp(
     field: string,
-    opOrValue: SimpleOperator | ParameterReference | LiteralValue,
-    value?: ParameterReference | LiteralValue,
+    opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
+    value?: ParameterReference | LiteralValue | undefined,
   ): Condition {
+    if (arguments.length === 2) {
+      return cmp(field, opOrValue);
+    }
     return cmp(field, opOrValue, value);
   }
 
   cmpLit(
-    left: ParameterReference | LiteralValue,
+    left: ParameterReference | LiteralValue | undefined,
     op: SimpleOperator,
-    right: ParameterReference | LiteralValue,
+    right: ParameterReference | LiteralValue | undefined,
   ): Condition {
     return {
       type: 'simple',
       left: isParameterReference(left)
         ? left[toStaticParam]()
-        : {type: 'literal', value: left},
+        : {type: 'literal', value: left ?? null},
       right: isParameterReference(right)
         ? right[toStaticParam]()
-        : {type: 'literal', value: right},
+        : {type: 'literal', value: right ?? null},
       op,
     };
   }
@@ -184,32 +187,40 @@ export function not(expression: Condition): Condition {
 
 export function cmp(
   field: string,
-  opOrValue: SimpleOperator | ParameterReference | LiteralValue,
-  value?: ParameterReference | LiteralValue,
+  opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
+  value?: ParameterReference | LiteralValue | undefined,
 ): Condition {
   let op: SimpleOperator;
-  if (value === undefined) {
-    value = opOrValue;
+  let actualValue: ParameterReference | LiteralValue | undefined;
+
+  if (arguments.length === 2) {
+    // 2-arg form: cmp(field, value) - defaults to '=' operator
+    actualValue = opOrValue as ParameterReference | LiteralValue | undefined;
     op = '=';
   } else {
+    // 3-arg form: cmp(field, op, value)
     op = opOrValue as SimpleOperator;
+    actualValue = value;
   }
 
   return {
     type: 'simple',
     left: {type: 'column', name: field},
-    right: isParameterReference(value)
-      ? value[toStaticParam]()
-      : {type: 'literal', value},
+    right: isParameterReference(actualValue)
+      ? actualValue[toStaticParam]()
+      : {type: 'literal', value: actualValue ?? null},
     op,
   };
 }
 
 function isParameterReference(
-  value: ParameterReference | LiteralValue | null,
+  value: ParameterReference | LiteralValue | null | undefined,
 ): value is ParameterReference {
   return (
-    value !== null && typeof value === 'object' && (value as any)[toStaticParam]
+    value !== null &&
+    value !== undefined &&
+    typeof value === 'object' &&
+    (value as any)[toStaticParam]
   );
 }
 
