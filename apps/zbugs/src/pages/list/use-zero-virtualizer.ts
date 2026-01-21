@@ -1,6 +1,9 @@
 import type {UseQueryOptions} from '@rocicorp/zero/react';
-import type {Virtualizer} from '@tanstack/react-virtual';
-import {useVirtualizer, type VirtualizerOptions} from '@tanstack/react-virtual';
+import {
+  useVirtualizer,
+  type Virtualizer,
+  type VirtualizerOptions,
+} from '@tanstack/react-virtual';
 import {useEffect, useMemo, useState} from 'react';
 import {useHistoryState} from 'wouter/use-browser-location';
 import {assert} from '../../../../../packages/shared/src/asserts.ts';
