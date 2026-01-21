@@ -232,34 +232,36 @@ export class CVRStore {
     };
 
     const [instance, clientsRows, queryRows, desiresRows] =
-      await this.#db.begin(Mode.READONLY, tx => [
-        tx<
-          (Omit<InstancesRow, 'clientGroupID'> & {
-            profileID: string | null;
-            deleted: boolean;
-            rowsVersion: string | null;
-          })[]
-        >`SELECT cvr."version", 
+      await this.#db.begin(Mode.READONLY, tx => {
+        lc.debug?.(`CVR tx started after ${Date.now() - start} ms`);
+        return [
+          tx<
+            (Omit<InstancesRow, 'clientGroupID'> & {
+              profileID: string | null;
+              deleted: boolean;
+              rowsVersion: string | null;
+            })[]
+          >`SELECT cvr."version",
                  "lastActive",
                  "ttlClock",
-                 "replicaVersion", 
-                 "owner", 
+                 "replicaVersion",
+                 "owner",
                  "grantedAt",
-                 "clientSchema", 
+                 "clientSchema",
                  "profileID",
                  "deleted",
                  rows."version" as "rowsVersion"
             FROM ${this.#cvr('instances')} AS cvr
-            LEFT JOIN ${this.#cvr('rowsVersion')} AS rows 
+            LEFT JOIN ${this.#cvr('rowsVersion')} AS rows
             ON cvr."clientGroupID" = rows."clientGroupID"
             WHERE cvr."clientGroupID" = ${id}`,
-        tx<Pick<ClientsRow, 'clientID'>[]>`SELECT "clientID" FROM ${this.#cvr(
-          'clients',
-        )}
+          tx<Pick<ClientsRow, 'clientID'>[]>`SELECT "clientID" FROM ${this.#cvr(
+            'clients',
+          )}
            WHERE "clientGroupID" = ${id}`,
-        tx<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')} 
+          tx<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')}
           WHERE "clientGroupID" = ${id} AND deleted IS DISTINCT FROM true`,
-        tx<DesiresRow[]>`SELECT 
+          tx<DesiresRow[]>`SELECT
           "clientGroupID",
           "clientID",
           "queryHash",
@@ -269,7 +271,12 @@ export class CVRStore {
           "inactivatedAtMs" AS "inactivatedAt"
           FROM ${this.#cvr('desires')}
           WHERE "clientGroupID" = ${id}`,
-      ]);
+        ];
+      });
+    lc.debug?.(
+      `CVR tx completed after ${Date.now() - start} ms ` +
+        `(${clientsRows.length} clients, ${queryRows.length} queries, ${desiresRows.length} desires)`,
+    );
 
     if (instance.length === 0) {
       // This is the first time we see this CVR.
@@ -745,7 +752,7 @@ export class CVRStore {
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
     >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
-        FOR UPDATE`.execute(); // Note: execute() immediately to send the query before others.
+        FOR UPDATE NOWAIT`.execute(); // Note: execute() immediately to send the query before others.
     const {version, owner, grantedAt} =
       result.length > 0
         ? result[0]
