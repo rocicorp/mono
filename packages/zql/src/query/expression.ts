@@ -78,7 +78,8 @@ export class ExpressionBuilder<
     op: TOperator,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
-      | ParameterReference,
+      | ParameterReference
+      | undefined,
   ): Condition;
   cmp<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,

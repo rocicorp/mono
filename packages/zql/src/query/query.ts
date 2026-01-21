@@ -247,7 +247,8 @@ export interface Query<
     op: TOperator,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
-      | ParameterReference,
+      | ParameterReference
+      | undefined,
   ): Query<TTable, TSchema, TReturn>;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
