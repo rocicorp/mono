@@ -282,6 +282,23 @@ const makeMutatorQueryOptions = (
       ? {deprecated: [makeDeprecationMessage(`${replacement}-forward-cookies`)]}
       : {}),
   },
+  allowedClientHeaders: {
+    type: v.array(v.string()).optional(),
+    desc: [
+      `A list of header names that clients are allowed to set via custom headers.`,
+      `If specified, only headers in this list will be forwarded to the ${suffix === 'push mutations' ? 'push' : 'query'} URL.`,
+      `Header names are case-insensitive.`,
+      `If not specified, no client-provided headers are forwarded (secure by default).`,
+      `Example: ZERO_${replacement ? replacement.toUpperCase() : suffix === 'push mutations' ? 'MUTATE' : 'QUERY'}_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id`,
+    ],
+    ...(replacement
+      ? {
+          deprecated: [
+            makeDeprecationMessage(`${replacement}-allowed-client-headers`),
+          ],
+        }
+      : {}),
+  },
 });
 
 const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');

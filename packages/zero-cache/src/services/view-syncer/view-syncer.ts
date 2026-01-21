@@ -343,6 +343,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return {
       apiKey: this.#queryConfig.apiKey,
       customHeaders: this.userQueryHeaders,
+      allowedClientHeaders: this.#queryConfig.allowedClientHeaders,
       token: this.#authData?.raw,
       cookie: forwardCookie ? this.#httpCookie : undefined,
     };

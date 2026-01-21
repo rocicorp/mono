@@ -35,9 +35,36 @@ export function compileUrlPattern(pattern: string): URLPattern {
 export type HeaderOptions = {
   apiKey?: string | undefined;
   customHeaders?: Record<string, string> | undefined;
+  allowedClientHeaders?: readonly string[] | undefined;
   token?: string | undefined;
   cookie?: string | undefined;
 };
+
+/**
+ * Filters custom headers based on the allowed headers list.
+ * If no allowedHeaders list is specified, no custom headers are forwarded (secure by default).
+ * Header names are compared case-insensitively.
+ */
+function filterCustomHeaders(
+  headers: Record<string, string> | undefined,
+  allowedHeaders: readonly string[] | undefined,
+): Record<string, string> {
+  if (!headers) {
+    return {};
+  }
+  if (!allowedHeaders || allowedHeaders.length === 0) {
+    return {};
+  }
+
+  const allowed = new Set(allowedHeaders.map(h => h.toLowerCase()));
+  const filtered: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (allowed.has(key.toLowerCase())) {
+      filtered[key] = value;
+    }
+  }
+  return filtered;
+}
 
 export const getBodyPreview = async (
   res: Response,
@@ -101,9 +128,13 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   if (headerOptions.apiKey) {
     headers['X-Api-Key'] = headerOptions.apiKey;
   }
-  if (headerOptions.customHeaders) {
-    Object.assign(headers, headerOptions.customHeaders);
-  }
+  Object.assign(
+    headers,
+    filterCustomHeaders(
+      headerOptions.customHeaders,
+      headerOptions.allowedClientHeaders,
+    ),
+  );
   if (headerOptions.token) {
     headers['Authorization'] = `Bearer ${headerOptions.token}`;
   }

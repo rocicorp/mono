@@ -90,6 +90,7 @@ export class PusherService implements Service, Pusher {
       lc,
       pushConfig.url,
       pushConfig.apiKey,
+      pushConfig.allowedClientHeaders,
       this.#queue,
     );
     this.id = clientGroupID;
@@ -227,6 +228,7 @@ class PushWorker {
   readonly #pushURLs: string[];
   readonly #pushURLPatterns: URLPattern[];
   readonly #apiKey: string | undefined;
+  readonly #allowedClientHeaders: readonly string[] | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
   readonly #config: Config;
@@ -256,12 +258,14 @@ class PushWorker {
     lc: LogContext,
     pushURL: string[],
     apiKey: string | undefined,
+    allowedClientHeaders: readonly string[] | undefined,
     queue: Queue<PusherEntryOrStop>,
   ) {
     this.#pushURLs = pushURL;
     this.#lc = lc.withContext('component', 'pusher');
     this.#pushURLPatterns = pushURL.map(compileUrlPattern);
     this.#apiKey = apiKey;
+    this.#allowedClientHeaders = allowedClientHeaders;
     this.#queue = queue;
     this.#config = config;
     this.#clients = new Map();
@@ -504,6 +508,7 @@ class PushWorker {
         {
           apiKey: this.#apiKey,
           customHeaders: this.#userPushHeaders,
+          allowedClientHeaders: this.#allowedClientHeaders,
           token: entry.auth,
           cookie: entry.httpCookie,
         },
