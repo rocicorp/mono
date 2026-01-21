@@ -256,7 +256,8 @@ export interface Query<
     field: TSelector,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
-      | ParameterReference,
+      | ParameterReference
+      | undefined,
   ): Query<TTable, TSchema, TReturn>;
   where(
     expressionFactory: ExpressionFactory<TTable, TSchema>,

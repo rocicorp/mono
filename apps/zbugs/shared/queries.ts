@@ -17,7 +17,7 @@ function applyIssuePermissions<
   TQuery extends Query<'issue', DefaultSchema, any>,
 >(q: TQuery, role: Role | undefined): TQuery {
   return q.where(({or, cmp, cmpLit}) =>
-    or(cmp('visibility', '=', 'public'), cmpLit(role ?? null, '=', 'crew')),
+    or(cmp('visibility', '=', 'public'), cmpLit(role, '=', 'crew')),
   ) as TQuery;
 }
 
@@ -123,10 +123,7 @@ export const queries = defineQueries({
   ),
 
   userPref: defineQuery(keyValidator, ({ctx: auth, args: key}) =>
-    builder.userPref
-      .where('key', key)
-      .where('userID', auth?.sub ?? '')
-      .one(),
+    builder.userPref.where('key', key).where('userID', auth?.sub).one(),
   ),
   usersForProject: defineQuery(
     z.object({
@@ -218,7 +215,7 @@ export const queries = defineQueries({
 
   emojiChange: defineQuery(idValidator, ({args: subjectID}) =>
     builder.emoji
-      .where('subjectID', subjectID ?? '')
+      .where('subjectID', subjectID)
       .related('creator', creator => creator.one()),
   ),
 

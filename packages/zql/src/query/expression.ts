@@ -87,7 +87,8 @@ export class ExpressionBuilder<
     field: TSelector,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
-      | ParameterReference,
+      | ParameterReference
+      | undefined,
   ): Condition;
   cmp(
     field: string,
