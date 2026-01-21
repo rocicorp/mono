@@ -737,7 +737,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#runInLockForClient(
       ctx,
       msg,
-      async (lc, clientID, msg: InitConnectionBody, cvr) =>
+      async (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
         this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
     );
   }
@@ -749,7 +749,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#runInLockForClient(
       ctx,
       [msg[0], {deleted: msg[1]}],
-      async (lc, clientID, msg: InitConnectionBody, cvr) =>
+      async (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
         this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
     );
   }
