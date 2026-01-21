@@ -40,6 +40,7 @@ import type {
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
+import {desiredQueriesPrefixForClient, toGotQueriesKey} from './keys.ts';
 import type {LogOptions} from './log-options.ts';
 import type {ZeroOptions} from './options.ts';
 import {
@@ -295,6 +296,11 @@ export class TestZero<
     return this[exposedToTestingSymbol].queryDelegate();
   }
 
+  get queryManager() {
+    assert(TESTING);
+    return this[exposedToTestingSymbol].queryManager();
+  }
+
   persist(): Promise<void> {
     return getInternalReplicacheImplForTesting(this).persist();
   }
@@ -314,6 +320,66 @@ export class TestZero<
         },
       ],
     });
+  }
+
+  /**
+   * Marks all currently registered queries as "got" by scanning the desired
+   * queries in the dag store and marking each one. This is useful for testing
+   * scenarios where you want to simulate that all queries have been fully
+   * synced from the server.
+   */
+  async markAllQueriesAsGotInDagStore(): Promise<void> {
+    const rep = getInternalReplicacheImplForTesting(this);
+    const clientID = rep.clientID;
+    const prefix = desiredQueriesPrefixForClient(clientID);
+
+    // Scan desired queries and build patch operations
+    const patch = await rep.query(async tx => {
+      const patch: Array<{op: 'put'; key: string; value: null}> = [];
+      for await (const key of tx.scan({prefix}).keys()) {
+        // Extract hash from key: 'd/clientID/hash' -> 'hash'
+        const hash = key.substring(prefix.length);
+        patch.push({
+          op: 'put',
+          key: toGotQueriesKey(hash),
+          value: null,
+        });
+      }
+      return patch;
+    });
+
+    // Apply all patches in a single poke
+    if (patch.length > 0) {
+      await rep.poke({
+        baseCookie: null,
+        pullResponse: {
+          lastMutationIDChanges: {},
+          patch,
+          cookie: '1',
+        },
+      });
+    }
+  }
+
+  /**
+   * Marks all currently registered queries as "got" by triggering a poke
+   * with gotQueriesPatch. This is useful for testing scenarios where you
+   * want to simulate that all queries have been fully synced from the server.
+   */
+  async markAllQueriesAsGot(): Promise<void> {
+    const gotQueriesPatch = Array.from(
+      this.queryManager.getAllQueryHashes(),
+      hash => ({
+        op: 'put' as const,
+        hash,
+      }),
+    );
+
+    if (gotQueriesPatch.length === 0) {
+      return;
+    }
+
+    await this.triggerPoke(null, '1', {gotQueriesPatch});
   }
 }
 

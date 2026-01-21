@@ -135,7 +135,9 @@ export function useRows<TRow, TStartRow>({
         return typedRowsBefore[i];
       },
       rowsLength: rowsBeforeSize + rowsAfterSize + (typedRow ? 1 : 0),
-      complete: completeRow && completeBefore && completeAfter,
+      complete:
+        completeRow &&
+        (typedRow === undefined || (completeBefore && completeAfter)),
       rowsEmpty:
         typedRow === undefined || (rowsBeforeSize === 0 && rowsAfterSize === 0),
       atStart: completeBefore && rowsBeforeLength <= halfPageSize,

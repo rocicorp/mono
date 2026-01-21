@@ -500,6 +500,13 @@ export class QueryManager implements InspectorDelegate {
   getQueryMetrics(queryID: string): ClientMetric | undefined {
     return this.#queryMetrics.get(queryID);
   }
+
+  /**
+   * For testing only: returns all query hashes currently registered.
+   */
+  getAllQueryHashes(): Iterable<string> {
+    return this.#queries.keys();
+  }
 }
 
 function newMetrics(): ClientMetric {
