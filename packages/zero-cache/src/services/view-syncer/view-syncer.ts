@@ -297,7 +297,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: NormalizedZeroConfig;
-  #runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>;
+  #runPriorityOp: <T>(
+    lc: LogContext,
+    description: string,
+    op: () => Promise<T>,
+  ) => Promise<T>;
 
   constructor(
     config: NormalizedZeroConfig,
@@ -342,7 +346,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.#setTimeout = setTimeoutFn;
-    this.#runPriorityOp = runPriorityOp;
+    this.#runPriorityOp = (lc, description, op) => {
+      const start = Date.now();
+      lc.debug?.(`running priority op ${description}`);
+      return runPriorityOp(op);
+      lc.debug?.(
+        `finished priority op ${description} after ${Date.now() - start} ms`,
+      );
+    };
     // Wait for the first connection to init.
     this.keepalive();
   }
@@ -387,7 +398,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       if (!this.#cvr) {
         this.#lc.debug?.('loading CVR');
-        this.#cvr = await this.#runPriorityOp(() =>
+        this.#cvr = await this.#runPriorityOp(lc, 'loading CVR', () =>
           this.#cvrStore.load(lc, this.#lastConnectTime),
         );
         this.#ttlClock = this.#cvr.ttlClock;
@@ -781,7 +792,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
-    return this.#runPriorityOp(async () => {
+    return this.#runPriorityOp(lc, 'flushing cvr', async () => {
       const now = Date.now();
       const ttlClock = this.#getTTLClock(now);
       const {cvr, flushed} = await updater.flush(
@@ -1166,16 +1177,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    await this.#runPriorityOp(async () => {
-      if (this.#customQueryTransformer && customQueries.size > 0) {
+    await this.#runPriorityOp(lc, 'hydrating unchanged queries', async () => {
+      const customQueryTransformer = this.#customQueryTransformer;
+      if (customQueryTransformer && customQueries.size > 0) {
         // Always transform custom queries, even during initialization,
         // to ensure authorization validation with current auth context.
-        const transformedCustomQueries =
-          await this.#customQueryTransformer.transform(
-            this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-            customQueries.values(),
-            this.userQueryURL,
-          );
+        const transformedCustomQueries = await this.#runPriorityOp(
+          lc,
+          '#hydrateUnchangedQueries transforming custom queries',
+          () =>
+            customQueryTransformer.transform(
+              this.#getHeaderOptions(this.#queryConfig.forwardCookies),
+              customQueries.values(),
+              this.userQueryURL,
+            ),
+        );
 
         // Only process queries that successfully transformed and transformed to
         // the same transformationHash as in the CVR here.
@@ -1422,19 +1438,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             [...customQueries.values()].filter(
               q => !this.#pipelines.queries().has(q.id),
             );
-      if (this.#customQueryTransformer && customQueriesToTransform.length > 0) {
+      const customQueryTransformer = this.#customQueryTransformer;
+      if (customQueryTransformer && customQueriesToTransform.length > 0) {
         // Always re-transform custom queries on client connection for security.
         // This ensures the user's API server validates authorization with the
         // current auth context.
         const transformStart = performance.now();
         let transformedCustomQueries;
         try {
-          transformedCustomQueries =
-            await this.#customQueryTransformer.transform(
-              this.#getHeaderOptions(true),
-              customQueriesToTransform,
-              this.userQueryURL,
-            );
+          transformedCustomQueries = await this.#runPriorityOp(
+            lc,
+            '#syncQueryPipelineSet transforming custom queries',
+            () =>
+              customQueryTransformer.transform(
+                this.#getHeaderOptions(true),
+                customQueriesToTransform,
+                this.userQueryURL,
+              ),
+          );
           this.#queryTransformations.add(1, {result: 'success'});
         } catch (e) {
           this.#queryTransformations.add(1, {result: 'error'});
