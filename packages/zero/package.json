@@ -46,7 +46,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.14",
+    "@rocicorp/zero-sqlite3": "^1.0.15",
     "@standard-schema/spec": "^1.0.0",
     "@types/basic-auth": "^1.1.8",
     "basic-auth": "^2.0.1",
