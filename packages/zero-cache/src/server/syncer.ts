@@ -34,6 +34,7 @@ import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
+import {isPriorityOpRunning, runPriorityOp} from './priority-op.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -214,23 +215,4 @@ if (!singleProcessMode()) {
   void exitAfter(() =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
-}
-
-let priorityOpCounter = 0;
-
-/**
- * Run an operation with priority, indicating that IVM should use smaller time
- * slices to allow this operation to proceed more quickly
- */
-async function runPriorityOp<T>(op: () => Promise<T>) {
-  priorityOpCounter++;
-  try {
-    return await op();
-  } finally {
-    priorityOpCounter--;
-  }
-}
-
-export function isPriorityOpRunning() {
-  return priorityOpCounter > 0;
 }

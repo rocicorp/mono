@@ -43,7 +43,7 @@ export async function analyzeQuery(
   const costModel = joinPlans
     ? createSQLiteCostModel(db, tableSpecs)
     : undefined;
-  const timer = await new TimeSliceTimer().start();
+  const timer = await new TimeSliceTimer(lc).start();
   const shouldYield = () => timer.elapsedLap() > TIME_SLICE_LAP_THRESHOLD_MS;
   const yieldProcess = () => timer.yieldProcess();
   const result = await runAst(

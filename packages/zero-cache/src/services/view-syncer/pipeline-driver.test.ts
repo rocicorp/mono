@@ -370,7 +370,7 @@ describe('view-syncer/pipeline-driver', () => {
   );
 
   function startTimer() {
-    return new TimeSliceTimer().startWithoutYielding();
+    return new TimeSliceTimer(lc).startWithoutYielding();
   }
 
   function changes(timer: Timer = NO_TIME_ADVANCEMENT_TIMER) {
