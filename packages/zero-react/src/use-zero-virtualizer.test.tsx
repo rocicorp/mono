@@ -926,4 +926,177 @@ describe('useZeroVirtualizer', () => {
       document.body.removeChild(container);
     }
   });
+
+  test('ReactDOM rendering with bidirectional scrolling', async () => {
+    const estimateSize = 50;
+
+    const getPageQuerySpy = vi.fn(getPageQuery);
+
+    // Create a real DOM container and render with ReactDOM directly
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    let virtualizerInstance!: Virtualizer<HTMLElement, Element>;
+
+    function VirtualListWithRef() {
+      const result = useZeroVirtualizer({
+        estimateSize: () => estimateSize,
+        getScrollElement: () => document.getElementById('scroll-container'),
+        listContextParams: 'default',
+        getPageQuery: getPageQuerySpy,
+        getSingleQuery,
+        toStartRow,
+        overscan: 0,
+      });
+
+      virtualizerInstance = result.virtualizer;
+      const virtualItems = result.virtualizer.getVirtualItems();
+
+      return (
+        <>
+          <div
+            id="scroll-container"
+            style={{
+              height: '800px',
+              overflow: 'auto',
+              position: 'relative',
+            }}
+          >
+            <div
+              style={{
+                height: `${result.virtualizer.getTotalSize()}px`,
+                position: 'relative',
+              }}
+            >
+              {virtualItems.map(item => (
+                <div
+                  key={item.key}
+                  data-index={item.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${item.size}px`,
+                    transform: `translateY(${item.start}px)`,
+                  }}
+                >
+                  {result.rowAt(item.index)?.name ?? 'Loading...'}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div id="zero-virtualizer-total">{result.total}</div>
+          <div id="zero-virtualizer-estimated-total">
+            {result.estimatedTotal}
+          </div>
+        </>
+      );
+    }
+
+    try {
+      root.render(
+        <ZeroProvider zero={z}>
+          <VirtualListWithRef />
+        </ZeroProvider>,
+      );
+
+      await waitFor(() => {
+        expect(virtualizerInstance).toBeTruthy();
+      });
+
+      await z.markAllQueriesAsGot();
+
+      // Wait for initial items to render
+      await waitFor(() => {
+        const items = container.querySelectorAll('[data-index]');
+        expect(items.length).toBeGreaterThan(0);
+      });
+
+      // Verify first item rendered correctly at the start
+      await waitFor(() => {
+        const firstItem = container.querySelector('[data-index="0"]');
+        expect(firstItem?.textContent).toBe('Item 0001');
+      });
+
+      // Scroll down to bottom - need to scroll all the way to load all data
+      const scrollStepDown = 1000;
+      const maxScrollDown = 55; // Scroll 55,000px to past the bottom (50,000px total height)
+
+      for (let attempt = 0; attempt < maxScrollDown; attempt++) {
+        const scrollOffset = (attempt + 1) * scrollStepDown;
+
+        act(() => {
+          virtualizerInstance.scrollToOffset(scrollOffset);
+        });
+
+        await z.markAllQueriesAsGot();
+
+        await waitFor(() => {
+          virtualizerInstance.measure();
+          const visibleItems = container.querySelectorAll('[data-index]');
+          expect(visibleItems.length).toBeGreaterThan(0);
+        });
+      }
+
+      // Verify we reached the end - wait for total to be set
+      await waitFor(() => {
+        const totalElAfterDown = document.getElementById(
+          'zero-virtualizer-total',
+        );
+        expect(totalElAfterDown?.textContent).toBe('1000');
+      });
+
+      const estimatedTotalElAfterDown = document.getElementById(
+        'zero-virtualizer-estimated-total',
+      );
+      expect(estimatedTotalElAfterDown?.textContent).toBe('1000');
+
+      // Now scroll back to the top gradually to exercise backward anchors
+      const scrollStepUp = 1000;
+      const startScrollOffset = 55000;
+
+      for (let attempt = 0; attempt < 55; attempt++) {
+        const scrollOffset = Math.max(
+          0,
+          startScrollOffset - (attempt + 1) * scrollStepUp,
+        );
+
+        act(() => {
+          virtualizerInstance.scrollToOffset(scrollOffset);
+        });
+
+        await z.markAllQueriesAsGot();
+
+        await waitFor(() => {
+          virtualizerInstance.measure();
+          const visibleItems = container.querySelectorAll('[data-index]');
+          expect(visibleItems.length).toBeGreaterThan(0);
+        });
+
+        // If we've reached offset 0, verify the first item
+        if (scrollOffset === 0) {
+          await waitFor(() => {
+            const firstItem = container.querySelector('[data-index="0"]');
+            expect(firstItem?.textContent).toBe('Item 0001');
+          });
+          break;
+        }
+      }
+
+      // After scrolling back to top, total should still be 1000
+      const totalElAfterUp = document.getElementById('zero-virtualizer-total');
+      expect(totalElAfterUp?.textContent).toBe('1000');
+
+      const estimatedTotalElAfterUp = document.getElementById(
+        'zero-virtualizer-estimated-total',
+      );
+      expect(estimatedTotalElAfterUp?.textContent).toBe('1000');
+    } finally {
+      root.unmount();
+      document.body.removeChild(container);
+    }
+  });
 });
