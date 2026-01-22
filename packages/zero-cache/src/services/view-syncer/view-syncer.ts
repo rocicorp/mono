@@ -101,7 +101,10 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
-import {noPriorityOpRunningPromise} from '../../server/priority-op.ts';
+import {
+  isPriorityOpRunning,
+  noPriorityOpRunningPromise,
+} from '../../server/priority-op.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -2038,11 +2041,13 @@ const CURSOR_PAGE_SIZE = 10000;
 const timeSliceQueue = new Lock();
 
 async function yieldProcess() {
-  const noPriorityOp = noPriorityOpRunningPromise();
-  if (noPriorityOp) {
-    await noPriorityOp;
+  if (isPriorityOpRunning()) {
+    await noPriorityOpRunningPromise();
   }
-  return timeSliceQueue.withLock(() => new Promise(setImmediate));
+  await timeSliceQueue.withLock(() => new Promise(setImmediate));
+  if (isPriorityOpRunning()) {
+    return yieldProcess();
+  }
 }
 
 function contentsAndVersion(row: Row) {
