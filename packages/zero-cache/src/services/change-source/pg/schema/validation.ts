@@ -9,7 +9,7 @@ import {
   Nothing,
 } from '../../../../db/postgres-replica-identity-enum.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/constants.ts';
-import type {PublishedSchema} from './published.ts';
+import type {PublishedTableWithReplicaIdentity} from './published.ts';
 
 export const ALLOWED_APP_ID_CHARACTERS = /^[a-z0-9_]+$/;
 
@@ -21,7 +21,7 @@ const ALLOWED_COLUMN_CHARS = /^[A-Za-z_]+[.A-Za-z0-9_-]*$/;
 
 export function validate(
   lc: LogContext,
-  table: PublishedSchema['tables'][number],
+  table: PublishedTableWithReplicaIdentity,
 ) {
   if (ZERO_VERSION_COLUMN_NAME in table.columns) {
     throw new UnsupportedTableSchemaError(
