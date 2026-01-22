@@ -346,13 +346,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.#setTimeout = setTimeoutFn;
-    this.#runPriorityOp = (lc, description, op) => {
+    this.#runPriorityOp = async (lc, description, op) => {
       const start = Date.now();
       lc.debug?.(`running priority op ${description}`);
-      return runPriorityOp(op);
+      const result = await runPriorityOp(op);
       lc.debug?.(
         `finished priority op ${description} after ${Date.now() - start} ms`,
       );
+      return result;
     };
     // Wait for the first connection to init.
     this.keepalive();
@@ -1177,40 +1178,37 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    await this.#runPriorityOp(lc, 'hydrating unchanged queries', async () => {
-      const customQueryTransformer = this.#customQueryTransformer;
-      if (customQueryTransformer && customQueries.size > 0) {
-        // Always transform custom queries, even during initialization,
-        // to ensure authorization validation with current auth context.
-        const transformedCustomQueries = await this.#runPriorityOp(
-          lc,
-          '#hydrateUnchangedQueries transforming custom queries',
-          () =>
-            customQueryTransformer.transform(
-              this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-              customQueries.values(),
-              this.userQueryURL,
-            ),
-        );
+    const customQueryTransformer = this.#customQueryTransformer;
+    if (customQueryTransformer && customQueries.size > 0) {
+      // Always transform custom queries, even during initialization,
+      // to ensure authorization validation with current auth context.
+      const transformedCustomQueries = await this.#runPriorityOp(
+        lc,
+        '#hydrateUnchangedQueries transforming custom queries',
+        () =>
+          customQueryTransformer.transform(
+            this.#getHeaderOptions(this.#queryConfig.forwardCookies),
+            customQueries.values(),
+            this.userQueryURL,
+          ),
+      );
 
-        // Only process queries that successfully transformed and transformed to
-        // the same transformationHash as in the CVR here.
-        // Queries that failed to transform will be retransformed by
-        // #syncQueryPipelineSet, if they fail again errors will be sent to
-        // the client.
-        if (Array.isArray(transformedCustomQueries)) {
-          for (const q of transformedCustomQueries) {
-            if (
-              !('error' in q) &&
-              q.transformationHash ===
-                customQueries.get(q.id)?.transformationHash
-            ) {
-              transformedQueries.push(q);
-            }
+      // Only process queries that successfully transformed and transformed to
+      // the same transformationHash as in the CVR here.
+      // Queries that failed to transform will be retransformed by
+      // #syncQueryPipelineSet, if they fail again errors will be sent to
+      // the client.
+      if (Array.isArray(transformedCustomQueries)) {
+        for (const q of transformedCustomQueries) {
+          if (
+            !('error' in q) &&
+            q.transformationHash === customQueries.get(q.id)?.transformationHash
+          ) {
+            transformedQueries.push(q);
           }
         }
       }
-    });
+    }
 
     for (const q of otherQueries) {
       const transformed = transformAndHashQuery(
