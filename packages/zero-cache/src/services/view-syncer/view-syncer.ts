@@ -1219,7 +1219,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       let count = 0;
       await startAsyncSpan(
         tracer,
@@ -1636,7 +1636,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let totalProcessTime = 0;
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
@@ -1645,7 +1645,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // yield at the very beginning so that the first time slice
       // is properly processed by the time-slice queue.
-      await yieldProcess();
+      await yieldProcess(lc);
 
       function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
@@ -1913,7 +1913,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       const start = performance.now();
 
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       const {version, numChanges, changes} = this.#pipelines.advance(timer);
       lc = lc.withContext('newVersion', version);
 
@@ -2040,14 +2040,23 @@ const CURSOR_PAGE_SIZE = 10000;
 // This effectively achieves the desired one-per-event-loop-iteration behavior.
 const timeSliceQueue = new Lock();
 
-async function yieldProcess() {
-  if (isPriorityOpRunning()) {
-    await noPriorityOpRunningPromise();
+async function yieldProcess(lc: LogContext) {
+  async function wait() {
+    if (isPriorityOpRunning()) {
+      const start = Date.now();
+      lc.debug?.('yieldProcess waiting for priority op');
+      await noPriorityOpRunningPromise();
+      lc.debug?.(
+        `yieldProcess waited for priority op ${Date.now() - start} ms`,
+      );
+    }
+    await new Promise(setImmediate);
+    if (isPriorityOpRunning()) {
+      lc.debug?.('yieldProcess recursing because priority op is running');
+      await wait();
+    }
   }
-  await timeSliceQueue.withLock(() => new Promise(setImmediate));
-  if (isPriorityOpRunning()) {
-    return yieldProcess();
-  }
+  await timeSliceQueue.withLock(wait);
 }
 
 function contentsAndVersion(row: Row) {
@@ -2179,11 +2188,16 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
 export class TimeSliceTimer {
   #total = 0;
   #start = 0;
+  #lc: LogContext;
+
+  constructor(lc: LogContext) {
+    this.#lc = lc;
+  }
 
   async start() {
     // yield at the very beginning so that the first time slice
     // is properly processed by the time-slice queue.
-    await yieldProcess();
+    await yieldProcess(this.#lc);
     return this.startWithoutYielding();
   }
 
@@ -2195,7 +2209,7 @@ export class TimeSliceTimer {
 
   async yieldProcess(_msgForTesting?: string) {
     this.#stopLap();
-    await yieldProcess();
+    await yieldProcess(this.#lc);
     this.#startLap();
   }
 
