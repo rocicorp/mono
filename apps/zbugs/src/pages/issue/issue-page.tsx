@@ -94,7 +94,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [listContext]);
 
   const [issue, issueResult] = useQuery(
-    queries.issueDetail({idField, id, userID: z.userID}),
+    queries.issueDetail({idField, id}),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -217,7 +217,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [[next]] = useQuery(
     queries.issueListV2({
       listContext: listContextParams,
-      userID: z.userID,
       limit: 1,
       start,
       dir: 'forward',
@@ -236,7 +235,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [[prev]] = useQuery(
     queries.issueListV2({
       listContext: listContextParams,
-      userID: z.userID,
       limit: 1,
       start,
       dir: 'backward',
@@ -1144,13 +1142,12 @@ function useShowToastForNewComment(
 }
 
 export function IssueRedirect({onReady}: {onReady: () => void}) {
-  const z = useZero();
   const params = useParams();
 
   const {idField, id} = getId(params);
 
   const [issue, issueResult] = useQuery(
-    queries.issueDetail({idField, id, userID: z.userID}),
+    queries.issueDetail({idField, id}),
     CACHE_NAV,
   );
 
