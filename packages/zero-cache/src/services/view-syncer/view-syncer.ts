@@ -101,6 +101,10 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
+import {
+  isPriorityOpRunning,
+  noPriorityOpRunningPromise,
+} from '../../server/priority-op.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -290,7 +294,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: NormalizedZeroConfig;
-  #runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>;
+  #runPriorityOp: <T>(
+    lc: LogContext,
+    description: string,
+    op: () => Promise<T>,
+  ) => Promise<T>;
 
   constructor(
     config: NormalizedZeroConfig,
@@ -335,7 +343,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.#setTimeout = setTimeoutFn;
-    this.#runPriorityOp = runPriorityOp;
+    this.#runPriorityOp = async (lc, description, op) => {
+      const start = Date.now();
+      lc.debug?.(`running priority op ${description}`);
+      const result = await runPriorityOp(op);
+      lc.debug?.(
+        `finished priority op ${description} after ${Date.now() - start} ms`,
+      );
+      return result;
+    };
     // Wait for the first connection to init.
     this.keepalive();
   }
@@ -377,8 +393,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return;
       }
       if (!this.#cvr) {
-        this.#lc.debug?.('loading CVR');
-        this.#cvr = await this.#runPriorityOp(() =>
+        this.#lc.debug?.('loading cvr');
+        this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
           this.#cvrStore.load(lc, this.#lastConnectTime),
         );
         this.#ttlClock = this.#cvr.ttlClock;
@@ -761,7 +777,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
-    return this.#runPriorityOp(async () => {
+    return this.#runPriorityOp(lc, 'flushing cvr', async () => {
       const now = Date.now();
       const ttlClock = this.#getTTLClock(now);
       const {cvr, flushed} = await updater.flush(
@@ -1127,16 +1143,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    await this.#runPriorityOp(async () => {
-      if (this.#customQueryTransformer && customQueries.size > 0) {
+    await this.#runPriorityOp(lc, 'hydrating unchanged queries', async () => {
+      const customQueryTransformer = this.#customQueryTransformer;
+      if (customQueryTransformer && customQueries.size > 0) {
         // Always transform custom queries, even during initialization,
         // to ensure authorization validation with current auth context.
-        const transformedCustomQueries =
-          await this.#customQueryTransformer.transform(
-            this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-            customQueries.values(),
-            this.userQueryURL,
-          );
+        const transformedCustomQueries = await this.#runPriorityOp(
+          lc,
+          '#hydrateUnchangedQueries transforming custom queries',
+          () =>
+            customQueryTransformer.transform(
+              this.#getHeaderOptions(this.#queryConfig.forwardCookies),
+              customQueries.values(),
+              this.userQueryURL,
+            ),
+        );
 
         this.#processTransformedCustomQueries(
           lc,
@@ -1169,7 +1190,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       let count = 0;
       await startAsyncSpan(
         tracer,
@@ -1369,19 +1390,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let erroredQueryIDs: string[] | undefined;
-      if (this.#customQueryTransformer && customQueries.size > 0) {
+      const customQueryTransformer = this.#customQueryTransformer;
+      if (customQueryTransformer && customQueries.size > 0) {
         // Always re-transform custom queries on client connection for security.
         // This ensures the user's API server validates authorization with the
         // current auth context.
         const transformStart = performance.now();
         let transformedCustomQueries;
         try {
-          transformedCustomQueries =
-            await this.#customQueryTransformer.transform(
-              this.#getHeaderOptions(true),
-              customQueries.values(),
-              this.userQueryURL,
-            );
+          transformedCustomQueries = await this.#runPriorityOp(
+            lc,
+            '#syncQueryPipelineSet transforming custom queries',
+            () =>
+              customQueryTransformer.transform(
+                this.#getHeaderOptions(true),
+                customQueries.values(),
+                this.userQueryURL,
+              ),
+          );
           this.#queryTransformations.add(1, {result: 'success'});
         } catch (e) {
           this.#queryTransformations.add(1, {result: 'error'});
@@ -1647,7 +1673,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let totalProcessTime = 0;
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
@@ -1656,7 +1682,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // yield at the very beginning so that the first time slice
       // is properly processed by the time-slice queue.
-      await yieldProcess();
+      await yieldProcess(lc);
 
       function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
@@ -1945,7 +1971,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       const start = performance.now();
 
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       const {version, numChanges, changes} = this.#pipelines.advance(timer);
       lc = lc.withContext('newVersion', version);
 
@@ -2090,8 +2116,23 @@ function createHashToIDs(cvr: CVRSnapshot) {
 // This effectively achieves the desired one-per-event-loop-iteration behavior.
 const timeSliceQueue = new Lock();
 
-function yieldProcess() {
-  return timeSliceQueue.withLock(() => new Promise(setImmediate));
+async function yieldProcess(lc: LogContext) {
+  async function wait() {
+    if (isPriorityOpRunning()) {
+      const start = Date.now();
+      lc.debug?.('yieldProcess waiting for priority op');
+      await noPriorityOpRunningPromise();
+      lc.debug?.(
+        `yieldProcess waited for priority op ${Date.now() - start} ms`,
+      );
+    }
+    await new Promise(setImmediate);
+    if (isPriorityOpRunning()) {
+      lc.debug?.('yieldProcess recursing because priority op is running');
+      await wait();
+    }
+  }
+  await timeSliceQueue.withLock(wait);
 }
 
 function contentsAndVersion(row: Row) {
@@ -2223,11 +2264,16 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
 export class TimeSliceTimer {
   #total = 0;
   #start = 0;
+  #lc: LogContext;
+
+  constructor(lc: LogContext) {
+    this.#lc = lc;
+  }
 
   async start() {
     // yield at the very beginning so that the first time slice
     // is properly processed by the time-slice queue.
-    await yieldProcess();
+    await yieldProcess(this.#lc);
     return this.startWithoutYielding();
   }
 
@@ -2239,7 +2285,7 @@ export class TimeSliceTimer {
 
   async yieldProcess(_msgForTesting?: string) {
     this.#stopLap();
-    await yieldProcess();
+    await yieldProcess(this.#lc);
     this.#startLap();
   }
 
