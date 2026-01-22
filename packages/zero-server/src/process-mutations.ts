@@ -607,7 +607,7 @@ async function processCleanupResultsMutation<
   // Note: legacy format without type field is treated as single
   const clientID =
     'type' in args && args.type === 'bulk'
-      ? (args.clientIDs[0] ?? '')
+      ? args.clientIDs[0]
       : args.clientID;
 
   // Run in a transaction, using the hook for DB-specific operation

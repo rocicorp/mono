@@ -35,7 +35,7 @@ export const cleanupResultsArgSchema = v.union(
   v.object({
     type: v.literal('bulk'),
     clientGroupID: v.string(),
-    clientIDs: v.array(v.string()),
+    clientIDs: v.tuple([v.string()]).concat(v.array(v.string())),
   }),
 );
 
