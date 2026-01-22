@@ -9,7 +9,7 @@ let priorityOpResolver: Resolver<void> | undefined = undefined;
  * Run an operation with priority, indicating that IVM should use smaller time
  * slices to allow this operation to proceed more quickly
  */
-async function runPriorityOp<T>(op: () => Promise<T>) {
+export async function runPriorityOp<T>(op: () => Promise<T>) {
   priorityOpCounter++;
   if (priorityOpResolver === undefined) {
     priorityOpResolver = resolver();

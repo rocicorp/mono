@@ -34,7 +34,7 @@ import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
-import {isPriorityOpRunning} from './priority-op.ts';
+import {isPriorityOpRunning, runPriorityOp} from './priority-op.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -209,8 +209,4 @@ if (!singleProcessMode()) {
   void exitAfter(() =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
-}
-
-function runPriorityOp<T>(op: () => Promise<T>): Promise<T> {
-  throw new Error('Function not implemented.');
 }
