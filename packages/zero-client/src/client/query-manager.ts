@@ -4,6 +4,7 @@ import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import {difference} from '../../../shared/src/set-utils.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
 import {
   mapAST,
@@ -504,8 +505,8 @@ export class QueryManager implements InspectorDelegate {
   /**
    * For testing only: returns all query hashes currently registered.
    */
-  getAllQueryHashes(): Iterable<string> {
-    return this.#queries.keys();
+  getAllNonGotQueryHashes(): Iterable<string> {
+    return difference(this.#queries, this.#gotQueries);
   }
 }
 

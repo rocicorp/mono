@@ -1,5 +1,5 @@
-import { renderHook, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import {act, renderHook, waitFor} from '@testing-library/react';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {
   MockSocket,
   zeroForTest,
@@ -12,8 +12,8 @@ import {
   toStartRow,
   type Item,
 } from './test-helpers.ts';
-import { useZeroVirtualizer } from './use-zero-virtualizer.ts';
-import { ZeroProvider } from './zero-provider.tsx';
+import {useZeroVirtualizer} from './use-zero-virtualizer.ts';
+import {ZeroProvider} from './zero-provider.tsx';
 
 // Mock wouter's useHistoryState since it needs browser history API
 vi.mock('wouter/use-browser-location', () => ({
@@ -26,6 +26,7 @@ describe('useZeroVirtualizer', () => {
       kvStore: 'mem',
       schema,
       mutators,
+      logLevel: 'debug',
     });
   let z: ReturnType<typeof createTestZero>;
 
@@ -450,15 +451,10 @@ describe('useZeroVirtualizer', () => {
     expect(observeElementRectCalled).toBe(true);
   });
 
-  /* TODO: Fix complex scrolling test - custom callbacks interfere with paging logic
   test('scrolling down updates visible items correctly', async () => {
-    const estimateSize = 50;
+    const estimateSize = 25;
     const toItemName = (index: number) =>
       `Item ${String(index + 1).padStart(4, '0')}`;
-
-    const z = createTestZero();
-    void z.triggerConnected();
-    await z.mutate(mutators.populateItems({count: 250})).client;
 
     const scrollElement = {
       scrollTop: 0,
@@ -516,17 +512,11 @@ describe('useZeroVirtualizer', () => {
     expect(getPageQuerySpy).toHaveBeenCalledWith(101, null, 'forward');
 
     const updateScrollHeight = () => {
-      const estimatedHeight =
-        result.current.virtualizer.options.count * estimateSize;
+      const totalSize = result.current.virtualizer.getTotalSize();
       (scrollElement as {scrollHeight: number}).scrollHeight = Math.max(
         scrollElement.clientHeight,
-        estimatedHeight,
+        totalSize,
       );
-    };
-
-    result.current.virtualizer.scrollRect = {
-      height: 800,
-      width: 400,
     };
 
     await waitFor(() => {
@@ -537,21 +527,17 @@ describe('useZeroVirtualizer', () => {
       ).toBeGreaterThan(0);
     });
 
-    const initialQueryCount = getPageQuerySpy.mock.calls.length;
-
     // Incrementally scroll down to trigger paging and test that visible items match scroll position
-    const scrollStep = 1000;
-    const maxScrollAttempts = 10; // Reduced - we just need to trigger some paging
+    const scrollStep = 700;
+    const maxScrollAttempts = 100;
 
     // Test Y position in viewport (e.g., 100px from top of viewport)
     const testYPosition = 100;
 
     for (let attempt = 0; attempt < maxScrollAttempts; attempt++) {
       updateScrollHeight();
-
       const currentScrollTop = scrollElement.scrollTop;
-      const currentScrollHeight = (scrollElement as {scrollHeight: number})
-        .scrollHeight;
+      const currentScrollHeight = scrollElement.scrollHeight;
       const maxScrollTop = Math.max(
         0,
         currentScrollHeight - scrollElement.clientHeight,
@@ -561,14 +547,19 @@ describe('useZeroVirtualizer', () => {
         maxScrollTop,
       );
 
-      // Use the scrollToFn which properly updates scrollTop and calls offsetCallback
-      result.current.virtualizer.scrollToOffset(newScrollTop);
-      result.current.virtualizer.measure();
+      act(() => {
+        result.current.virtualizer.scrollToOffset(newScrollTop);
+        result.current.virtualizer.measure();
+      });
 
       // Force virtualizer to compute range with new scroll position
       result.current.virtualizer.getVirtualItems();
 
+      // Mark all queries repeatedly until complete
       await z.markAllQueriesAsGot();
+      await waitFor(() => {
+        expect(result.current.complete).toBe(true);
+      });
 
       // Verify that item at Y position matches expected row
       // Expected row index = floor((scrollTop + Y) / estimateSize)
@@ -578,9 +569,7 @@ describe('useZeroVirtualizer', () => {
       const expectedItem = result.current.rowAt(expectedRowIndex);
 
       // Verify the item exists and has the expected name
-      if (expectedItem) {
-        expect(expectedItem.name).toBe(toItemName(expectedRowIndex));
-      }
+      expect(expectedItem?.name).toBe(toItemName(expectedRowIndex));
 
       // If we can't scroll further, we're done
       if (newScrollTop >= maxScrollTop && newScrollTop === currentScrollTop) {
@@ -588,12 +577,7 @@ describe('useZeroVirtualizer', () => {
       }
     }
 
-    // Verify that paging was triggered
-    await waitFor(() => {
-      expect(getPageQuerySpy.mock.calls.length).toBeGreaterThan(
-        initialQueryCount,
-      );
-    });
+    expect(result.current.total).toBe(1000);
 
     await waitFor(() => {
       expect(result.current.complete).toBe(true);
@@ -632,10 +616,8 @@ describe('useZeroVirtualizer', () => {
     for (let i = 1; i < startIndices.length; i++) {
       expect(startIndices[i]).toBeGreaterThanOrEqual(startIndices[i - 1]);
     }
-
-    await z.close();
   });
-  */
+
   /* TODO: Fix ReactDOM rendering test
   test('basic ReactDOM rendering', async () => {
     const estimateSize = 50;

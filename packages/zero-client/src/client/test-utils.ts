@@ -40,7 +40,6 @@ import type {
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import {desiredQueriesPrefixForClient, toGotQueriesKey} from './keys.ts';
 import type {LogOptions} from './log-options.ts';
 import type {ZeroOptions} from './options.ts';
 import {
@@ -112,6 +111,7 @@ export class TestZero<
     state: ConnectionStatus;
     resolve: (state: ConnectionStatus) => void;
   }> = new Set();
+  #cookie: number | null = null;
 
   get perdag(): Store {
     return getInternalReplicacheImplForTesting(this).perdag;
@@ -218,22 +218,30 @@ export class TestZero<
   }
 
   async triggerPoke(
-    cookieStart: string | null,
-    cookieEnd: string,
+    _cookieStart: string | null,
+    _cookieEnd: string,
     pokePart: Omit<PokePartBody, 'pokeID'>,
   ): Promise<void> {
     const id = `${this.pokeIDCounter++}`;
+    const baseCookieStr =
+      this.#cookie === null ? null : String(this.#cookie).padStart(10, '0');
     await this.triggerPokeStart({
       pokeID: id,
-      baseCookie: cookieStart,
+      baseCookie: baseCookieStr,
     });
     await this.triggerPokePart({
       ...pokePart,
       pokeID: id,
     });
+    if (this.#cookie === null) {
+      this.#cookie = 1;
+    } else {
+      this.#cookie++;
+    }
+    const cookieStr = String(this.#cookie).padStart(10, '0');
     await this.triggerPokeEnd({
       pokeID: id,
-      cookie: cookieEnd,
+      cookie: cookieStr,
     });
   }
 
@@ -323,52 +331,13 @@ export class TestZero<
   }
 
   /**
-   * Marks all currently registered queries as "got" by scanning the desired
-   * queries in the dag store and marking each one. This is useful for testing
-   * scenarios where you want to simulate that all queries have been fully
-   * synced from the server.
-   */
-  async markAllQueriesAsGotInDagStore(): Promise<void> {
-    const rep = getInternalReplicacheImplForTesting(this);
-    const clientID = rep.clientID;
-    const prefix = desiredQueriesPrefixForClient(clientID);
-
-    // Scan desired queries and build patch operations
-    const patch = await rep.query(async tx => {
-      const patch: Array<{op: 'put'; key: string; value: null}> = [];
-      for await (const key of tx.scan({prefix}).keys()) {
-        // Extract hash from key: 'd/clientID/hash' -> 'hash'
-        const hash = key.substring(prefix.length);
-        patch.push({
-          op: 'put',
-          key: toGotQueriesKey(hash),
-          value: null,
-        });
-      }
-      return patch;
-    });
-
-    // Apply all patches in a single poke
-    if (patch.length > 0) {
-      await rep.poke({
-        baseCookie: null,
-        pullResponse: {
-          lastMutationIDChanges: {},
-          patch,
-          cookie: '1',
-        },
-      });
-    }
-  }
-
-  /**
    * Marks all currently registered queries as "got" by triggering a poke
    * with gotQueriesPatch. This is useful for testing scenarios where you
    * want to simulate that all queries have been fully synced from the server.
    */
   async markAllQueriesAsGot(): Promise<void> {
     const gotQueriesPatch = Array.from(
-      this.queryManager.getAllQueryHashes(),
+      this.queryManager.getAllNonGotQueryHashes(),
       hash => ({
         op: 'put' as const,
         hash,
@@ -379,7 +348,8 @@ export class TestZero<
       return;
     }
 
-    await this.triggerPoke(null, '1', {gotQueriesPatch});
+    // triggerPoke will automatically advance this.#cookie internally
+    await this.triggerPoke(null, 'ignored', {gotQueriesPatch});
   }
 }
 
