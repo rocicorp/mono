@@ -397,8 +397,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return;
       }
       if (!this.#cvr) {
-        this.#lc.debug?.('loading CVR');
-        this.#cvr = await this.#runPriorityOp(lc, 'loading CVR', () =>
+        this.#lc.debug?.('loading cvr');
+        this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
           this.#cvrStore.load(lc, this.#lastConnectTime),
         );
         this.#ttlClock = this.#cvr.ttlClock;
