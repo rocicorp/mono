@@ -610,7 +610,9 @@ async function processCleanupResultsMutation<
       ? args.clientIDs[0]
       : args.clientID;
 
-  // Run in a transaction, using the hook for DB-specific operation
+  // Run in a transaction, using the hook for DB-specific operation.
+  // Note: only upstreamSchema is used by deleteMutationResults; the other
+  // fields are required by the interface but ignored for this operation.
   await dbProvider.transaction(
     async (_, hooks) => {
       await hooks.deleteMutationResults(args);
