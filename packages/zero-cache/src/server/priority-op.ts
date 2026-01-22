@@ -1,5 +1,6 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {must} from '../../../shared/src/must.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 
 let priorityOpCounter = 0;
 
@@ -12,6 +13,7 @@ let priorityOpResolver: Resolver<void> | undefined = undefined;
 export async function runPriorityOp<T>(op: () => Promise<T>) {
   priorityOpCounter++;
   if (priorityOpResolver === undefined) {
+    assert(priorityOpResolver === undefined);
     priorityOpResolver = resolver();
   }
   try {
@@ -27,11 +29,11 @@ export async function runPriorityOp<T>(op: () => Promise<T>) {
 }
 
 /**
- * Temporary mechanism for debugging, allows IVM to wait until no
- * priorty ops are running before processing IVM time slices.
+ * If a priority op is running, returns a promise that resolves when it is
+ * complete, otherwise returns a promise that resolves immediately.
  */
-export function noPriorityOpRunningPromise(): Promise<void> | undefined {
-  return priorityOpResolver?.promise;
+export function noPriorityOpRunningPromise(): Promise<void> {
+  return priorityOpResolver?.promise ?? Promise.resolve();
 }
 
 export function isPriorityOpRunning() {
