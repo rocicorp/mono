@@ -8,6 +8,7 @@ import {getPublicationInfo} from './published.ts';
 import {
   addReplica,
   setupTablesAndReplication,
+  validatePublicationName,
   validatePublications,
 } from './shard.ts';
 
@@ -442,4 +443,87 @@ describe('change-source/pg', () => {
       expect(() => validatePublications(lc, published)).toThrowError(c.error);
     });
   }
+
+  test('invalid publication name with special characters', async () => {
+    let err;
+    try {
+      await db.begin(tx =>
+        setupTablesAndReplication(lc, tx, {
+          appID: APP_ID,
+          shardNum: 0,
+          publications: ["pub'injection"],
+        }),
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchInlineSnapshot(
+      `[Error: Invalid publication name "pub'injection". Publication names must start with a letter or underscore and contain only letters, digits, and underscores.]`,
+    );
+
+    expect(await publications()).toEqual([]);
+  });
+
+  test('invalid publication name starting with number', async () => {
+    let err;
+    try {
+      await db.begin(tx =>
+        setupTablesAndReplication(lc, tx, {
+          appID: APP_ID,
+          shardNum: 0,
+          publications: ['123pub'],
+        }),
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchInlineSnapshot(
+      `[Error: Invalid publication name "123pub". Publication names must start with a letter or underscore and contain only letters, digits, and underscores.]`,
+    );
+
+    expect(await publications()).toEqual([]);
+  });
+
+  test('invalid publication name too long', async () => {
+    const longName = 'a'.repeat(64);
+    let err;
+    try {
+      await db.begin(tx =>
+        setupTablesAndReplication(lc, tx, {
+          appID: APP_ID,
+          shardNum: 0,
+          publications: [longName],
+        }),
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(String(err)).toContain('exceeds PostgreSQL');
+    expect(String(err)).toContain('63-character identifier limit');
+
+    expect(await publications()).toEqual([]);
+  });
+});
+
+describe('validatePublicationName', () => {
+  test('valid names', () => {
+    expect(() => validatePublicationName('my_pub')).not.toThrow();
+    expect(() => validatePublicationName('Publication1')).not.toThrow();
+    expect(() => validatePublicationName('_internal')).not.toThrow();
+    expect(() => validatePublicationName('zero_foo')).not.toThrow();
+    expect(() => validatePublicationName('a'.repeat(63))).not.toThrow();
+  });
+
+  test('invalid names', () => {
+    expect(() => validatePublicationName("pub'lic")).toThrow(/Invalid/);
+    expect(() => validatePublicationName('pub,list')).toThrow(/Invalid/);
+    expect(() => validatePublicationName('123pub')).toThrow(/Invalid/);
+    expect(() => validatePublicationName('pub-name')).toThrow(/Invalid/);
+    expect(() => validatePublicationName('pub name')).toThrow(/Invalid/);
+    expect(() => validatePublicationName('')).toThrow(/Invalid/);
+  });
+
+  test('name too long', () => {
+    expect(() => validatePublicationName('a'.repeat(64))).toThrow(/exceeds/);
+  });
 });
