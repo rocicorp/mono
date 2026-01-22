@@ -9,6 +9,7 @@ import postgres, {type Options, type PostgresType} from 'postgres';
 import {sleep} from '../../../../../../shared/src/sleep.ts';
 import {getTypeParsers} from '../../../../db/pg-type-parser.ts';
 import {type PostgresDB} from '../../../../types/pg.ts';
+import {id, lit} from '../../../../types/sql.ts';
 import {pipe, type Sink, type Source} from '../../../../types/streams.ts';
 import {Subscription} from '../../../../types/subscription.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
@@ -124,6 +125,17 @@ export async function subscribe(
   };
 }
 
+/**
+ * Formats publication names for the START_REPLICATION command.
+ * The replication protocol expects format: publication_names 'pub1,pub2'
+ * Each name is escaped to handle any quotes that may have passed validation.
+ */
+function formatPublicationNames(publications: string[]): string {
+  // lit() returns 'escaped_name' with surrounding quotes
+  // We strip the quotes since the outer quotes are in the template
+  return publications.map(p => lit(p).slice(1, -1)).join(',');
+}
+
 async function startReplicationStream(
   lc: LogContext,
   session: postgres.Sql,
@@ -136,9 +148,9 @@ async function startReplicationStream(
     try {
       const stream = session
         .unsafe(
-          `START_REPLICATION SLOT "${slot}" LOGICAL ${fromBigInt(lsn)} (
-        proto_version '1', 
-        publication_names '${publications}',
+          `START_REPLICATION SLOT ${id(slot)} LOGICAL ${fromBigInt(lsn)} (
+        proto_version '1',
+        publication_names '${formatPublicationNames(publications)}',
         messages 'true'
       )`,
         )

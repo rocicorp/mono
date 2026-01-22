@@ -18,6 +18,31 @@ import {
 } from './published.ts';
 import {validate} from './validation.ts';
 
+/**
+ * PostgreSQL unquoted identifiers must start with a letter or underscore
+ * and contain only letters, digits, and underscores.
+ */
+const VALID_PUBLICATION_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Validates that a publication name is a valid PostgreSQL identifier.
+ * This provides defense-in-depth against SQL injection when publication
+ * names are used in replication commands.
+ */
+export function validatePublicationName(name: string): void {
+  if (!VALID_PUBLICATION_NAME.test(name)) {
+    throw new Error(
+      `Invalid publication name "${name}". Publication names must start with a letter or underscore ` +
+        `and contain only letters, digits, and underscores.`,
+    );
+  }
+  if (name.length > 63) {
+    throw new Error(
+      `Publication name "${name}" exceeds PostgreSQL's 63-character identifier limit.`,
+    );
+  }
+}
+
 export function internalPublicationPrefix({appID}: AppID) {
   return `_${appID}_`;
 }
@@ -276,6 +301,7 @@ export async function setupTablesAndReplication(
   const {publications} = requested;
   // Validate requested publications.
   for (const pub of publications) {
+    validatePublicationName(pub);
     if (pub.startsWith('_')) {
       throw new Error(
         `Publication names starting with "_" are reserved for internal use.\n` +
