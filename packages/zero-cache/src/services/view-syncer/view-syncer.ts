@@ -1143,30 +1143,28 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    await this.#runPriorityOp(lc, 'hydrating unchanged queries', async () => {
-      const customQueryTransformer = this.#customQueryTransformer;
-      if (customQueryTransformer && customQueries.size > 0) {
-        // Always transform custom queries, even during initialization,
-        // to ensure authorization validation with current auth context.
-        const transformedCustomQueries = await this.#runPriorityOp(
-          lc,
-          '#hydrateUnchangedQueries transforming custom queries',
-          () =>
-            customQueryTransformer.transform(
-              this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-              customQueries.values(),
-              this.userQueryURL,
-            ),
-        );
+    const customQueryTransformer = this.#customQueryTransformer;
+    if (customQueryTransformer && customQueries.size > 0) {
+      // Always transform custom queries, even during initialization,
+      // to ensure authorization validation with current auth context.
+      const transformedCustomQueries = await this.#runPriorityOp(
+        lc,
+        '#hydrateUnchangedQueries transforming custom queries',
+        () =>
+          customQueryTransformer.transform(
+            this.#getHeaderOptions(this.#queryConfig.forwardCookies),
+            customQueries.values(),
+            this.userQueryURL,
+          ),
+      );
 
-        this.#processTransformedCustomQueries(
-          lc,
-          transformedCustomQueries,
-          (q: TransformedAndHashed) => transformedQueries.push(q),
-          customQueries,
-        );
-      }
-    });
+      this.#processTransformedCustomQueries(
+        lc,
+        transformedCustomQueries,
+        (q: TransformedAndHashed) => transformedQueries.push(q),
+        customQueries,
+      );
+    }
 
     for (const q of otherQueries) {
       const transformed = transformAndHashQuery(
