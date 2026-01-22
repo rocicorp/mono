@@ -35,6 +35,7 @@ import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import {isPriorityOpRunning} from './priority-op.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -211,39 +212,6 @@ if (!singleProcessMode()) {
   );
 }
 
-let priorityOpCounter = 0;
-
-let priorityOpResolver: Resolver<void> | undefined = undefined;
-
-/**
- * Run an operation with priority, indicating that IVM should use smaller time
- * slices to allow this operation to proceed more quickly
- */
-async function runPriorityOp<T>(op: () => Promise<T>) {
-  priorityOpCounter++;
-  if (priorityOpResolver === undefined) {
-    priorityOpResolver = resolver();
-  }
-  try {
-    return await op();
-  } finally {
-    priorityOpCounter--;
-    if (priorityOpCounter === 0) {
-      const priorityOpResolve = must(priorityOpResolver).resolve;
-      priorityOpResolver = undefined;
-      priorityOpResolve();
-    }
-  }
-}
-
-/**
- * Temporary mechanism for debugging, allows IVM to wait until no
- * priorty ops are running before processing IVM time slices.
- */
-export function noPriorityOpRunningPromise(): Promise<void> | undefined {
-  return priorityOpResolver?.promise;
-}
-
-export function isPriorityOpRunning() {
-  return priorityOpCounter > 0;
+function runPriorityOp<T>(op: () => Promise<T>): Promise<T> {
+  throw new Error('Function not implemented.');
 }

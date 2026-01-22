@@ -101,7 +101,7 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
-import {noPriorityOpRunningPromise} from '../../server/syncer.ts';
+import {noPriorityOpRunningPromise} from '../../server/priority-op.ts';
 
 export type TokenData = {
   readonly raw: string;
