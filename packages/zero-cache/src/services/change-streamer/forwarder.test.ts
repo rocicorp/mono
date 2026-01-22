@@ -56,11 +56,13 @@ describe('change-streamer/forwarder', () => {
           {
             "relations": [
               {
-                "keyColumns": [
-                  "id",
-                ],
                 "name": "issues",
-                "replicaIdentity": "default",
+                "rowKey": {
+                  "columns": [
+                    "id",
+                  ],
+                  "type": "default",
+                },
                 "schema": "public",
                 "tag": "relation",
               },
@@ -193,11 +195,13 @@ describe('change-streamer/forwarder', () => {
           {
             "relations": [
               {
-                "keyColumns": [
-                  "id",
-                ],
                 "name": "issues",
-                "replicaIdentity": "default",
+                "rowKey": {
+                  "columns": [
+                    "id",
+                  ],
+                  "type": "default",
+                },
                 "schema": "public",
                 "tag": "relation",
               },

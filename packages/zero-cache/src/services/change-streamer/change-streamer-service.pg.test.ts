@@ -895,7 +895,13 @@ describe('change-streamer/service', () => {
         {
           tag: 'insert',
           new: {id: i, val: bigString},
-          relation: {schema: 'public', name: 'foo', keyColumns: ['id']},
+          relation: {
+            schema: 'public',
+            name: 'foo',
+            rowKey: {
+              columns: ['id'],
+            },
+          },
         },
       ]).result;
     }
