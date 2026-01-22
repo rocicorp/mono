@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1767980031318,
+  "lastUpdate": 1769104490439,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54993,6 +54993,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/d24bf2c37abc92d2326fe5284ffbb424b7f3ed10"
         },
         "date": 1767980019275,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 304211,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54849,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111722,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31957,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e83893283b1666ce2f492d9abd283388c3ee048",
+          "message": "chore(zero-client): update dependencies (#5457)\n\nCannot update op-sqlite due to this issue:\nhttps://github.com/OP-Engineering/op-sqlite/issues/382\n\nUpdating `expo-sqlite` to latest, to test API contract with latest 16.x.",
+          "timestamp": "2026-01-22T17:44:27Z",
+          "tree_id": "33ac890bda1c8199c077b34161b0cf079fc8aced",
+          "url": "https://github.com/rocicorp/mono/commit/5e83893283b1666ce2f492d9abd283388c3ee048"
+        },
+        "date": 1769104477604,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
