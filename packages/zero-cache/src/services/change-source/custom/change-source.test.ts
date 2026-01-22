@@ -72,6 +72,11 @@ describe('change-source/custom', () => {
               bar: {pos: 1, dataType: 'text'},
             },
           },
+          metadata: {
+            rowKey: {
+              columns: ['id'],
+            },
+          },
         },
       ],
       [
@@ -95,6 +100,9 @@ describe('change-source/custom', () => {
             schema: 'public',
             name: 'foo',
             keyColumns: ['id'],
+            rowKey: {
+              columns: ['id'],
+            },
           },
           new: {id: 'abcde', bar: 'baz'},
         },
@@ -112,6 +120,11 @@ describe('change-source/custom', () => {
               clientID: {pos: 1, dataType: 'text', notNull: true},
               lastMutationID: {pos: 2, dataType: 'bigint'},
               userID: {pos: 3, dataType: 'text'},
+            },
+          },
+          metadata: {
+            rowKey: {
+              columns: ['clientGroupID', 'clientID'],
             },
           },
         },
@@ -147,6 +160,11 @@ describe('change-source/custom', () => {
               mutation: {pos: 3, dataType: 'json'},
             },
           },
+          metadata: {
+            rowKey: {
+              columns: ['clientGroupID', 'clientID', 'mutationID'],
+            },
+          },
         },
       ],
       [
@@ -178,6 +196,11 @@ describe('change-source/custom', () => {
               lock: {pos: 0, dataType: 'bool', notNull: true},
               permissions: {pos: 1, dataType: 'json'},
               hash: {pos: 2, dataType: 'text'},
+            },
+          },
+          metadata: {
+            rowKey: {
+              columns: ['lock'],
             },
           },
         },

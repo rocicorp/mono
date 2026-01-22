@@ -210,6 +210,9 @@ export const publishedSchema = v
 
 export type PublishedSchema = v.Infer<typeof publishedSchema>;
 
+export type PublishedTableWithReplicaIdentity =
+  PublishedSchema['tables'][number];
+
 const publicationSchema = v.object({
   pubname: v.string(),
   pubinsert: v.boolean(),
