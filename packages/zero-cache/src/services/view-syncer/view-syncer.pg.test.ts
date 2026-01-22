@@ -1246,9 +1246,11 @@ describe('view-syncer/service', () => {
       expect(transformSpy.mock.calls[0]).toMatchInlineSnapshot(`
         [
           {
+            "allowedClientHeaders": undefined,
             "apiKey": undefined,
             "cookie": undefined,
             "customHeaders": undefined,
+            "origin": undefined,
             "token": undefined,
           },
           [
@@ -1502,9 +1504,11 @@ describe('view-syncer/service', () => {
       expect(transformSpy.mock.calls[1]).toMatchInlineSnapshot(`
         [
           {
+            "allowedClientHeaders": undefined,
             "apiKey": undefined,
             "cookie": undefined,
             "customHeaders": undefined,
+            "origin": undefined,
             "token": undefined,
           },
           [
@@ -2146,9 +2150,11 @@ describe('view-syncer/service', () => {
       expect(transformSpy.mock.calls[0]).toMatchInlineSnapshot(`
         [
           {
+            "allowedClientHeaders": undefined,
             "apiKey": undefined,
             "cookie": undefined,
             "customHeaders": undefined,
+            "origin": undefined,
             "token": undefined,
           },
           [
@@ -2323,9 +2329,11 @@ describe('view-syncer/service', () => {
       expect(transformSpy.mock.calls[1]).toMatchInlineSnapshot(`
         [
           {
+            "allowedClientHeaders": undefined,
             "apiKey": undefined,
             "cookie": undefined,
             "customHeaders": undefined,
+            "origin": undefined,
             "token": undefined,
           },
           [
