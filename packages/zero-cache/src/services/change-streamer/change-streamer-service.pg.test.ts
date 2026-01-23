@@ -108,6 +108,14 @@ describe('change-streamer/service', () => {
     return down[1];
   }
 
+  async function verifyNoMoreChanges(sub: Queue<Downstream>) {
+    const down = await sub.dequeue(
+      ['error', {type: 0, message: 'timed-out'}],
+      50,
+    );
+    expect(down).toEqual(['error', {type: 0, message: 'timed-out'}]);
+  }
+
   async function expectAcks(...watermarks: string[]) {
     for (const watermark of watermarks) {
       expect((await acks.dequeue())[2].watermark).toBe(watermark);
@@ -887,7 +895,13 @@ describe('change-streamer/service', () => {
         {
           tag: 'insert',
           new: {id: i, val: bigString},
-          relation: {schema: 'public', name: 'foo', keyColumns: ['id']},
+          relation: {
+            schema: 'public',
+            name: 'foo',
+            rowKey: {
+              columns: ['id'],
+            },
+          },
         },
       ]).result;
     }
@@ -1141,5 +1155,60 @@ describe('change-streamer/service', () => {
     expect(
       await sql`SELECT watermark, pos FROM "zoro_3/cdc"."changeLog"`,
     ).toEqual([{watermark: '05', pos: 3n}]);
+  });
+
+  test('transaction aborted on unexpected termination', async () => {
+    const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    const msgs = drainToQueue(sub);
+
+    changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.end();
+
+    expect(await nextChange(msgs)).toMatchObject({tag: 'status'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'insert'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'rollback'});
+
+    // No more messages should have been sent
+    // No more messages should have been sent
+    await verifyNoMoreChanges(msgs);
+  });
+
+  test('transaction aborted only once', async () => {
+    const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    const msgs = drainToQueue(sub);
+
+    changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    // An explicit abort from change-source
+    changes.push(['rollback', {tag: 'rollback'}]);
+    changes.end();
+
+    expect(await nextChange(msgs)).toMatchObject({tag: 'status'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'insert'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'rollback'});
+
+    // No more messages should have been sent
+    await verifyNoMoreChanges(msgs);
   });
 });

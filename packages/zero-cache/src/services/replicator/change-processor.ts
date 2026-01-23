@@ -216,7 +216,7 @@ export class ChangeProcessor {
       // Undef this.#currentTx to allow the assembly of the next transaction.
       this.#currentTx = null;
 
-      assert(watermark);
+      assert(watermark, 'watermark is required for commit messages');
       const schemaUpdated = tx.processCommit(msg, watermark);
       return {watermark, schemaUpdated};
     }
@@ -245,6 +245,10 @@ export class ChangeProcessor {
         break;
       case 'rename-table':
         tx.processRenameTable(msg);
+        break;
+      case 'update-table-metadata':
+        // TODO: Process this appropriately when backfill logic is added
+        lc.info?.(`Received table metadata update`, msg);
         break;
       case 'add-column':
         tx.processAddColumn(msg);
@@ -378,8 +382,8 @@ class TransactionProcessor {
     {relation}: {relation: MessageRelation},
   ): LiteRowKey {
     const keyColumns =
-      relation.replicaIdentity !== 'full'
-        ? relation.keyColumns // already a suitable key
+      relation.rowKey.type !== 'full'
+        ? relation.rowKey.columns // already a suitable key
         : this.#tableSpec(liteTableName(relation)).primaryKey;
     if (!keyColumns?.length) {
       throw new Error(
@@ -411,7 +415,7 @@ class TransactionProcessor {
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     });
 
-    if (insert.relation.keyColumns.length === 0) {
+    if (insert.relation.rowKey.columns.length === 0) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
       // UNIQUE INDEX. These are written to the replica but not recorded
       // in the changeLog, because these rows cannot participate in IVM.

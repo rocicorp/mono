@@ -16,8 +16,11 @@ import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import type {PushFailedBody} from '../../zero-protocol/src/error.ts';
 import {
+  CLEANUP_RESULTS_MUTATION_NAME,
+  cleanupResultsArgSchema,
   pushBodySchema,
   pushParamsSchema,
+  type CleanupResultsArg,
   type CustomMutation,
   type Mutation,
   type MutationID,
@@ -33,6 +36,11 @@ import {createLogContext} from './logging.ts';
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
   writeMutationResult: (result: MutationResponse) => Promise<void>;
+  deleteMutationResults: (
+    clientGroupID: string,
+    clientID: string,
+    upToMutationID: number,
+  ) => Promise<void>;
 }
 
 export interface TransactionProviderInput {
@@ -246,10 +254,29 @@ export async function handleMutateRequest<
     //   3. Post-commit: any logic that runs after `transact` resolves. Failures
     //      here are logged but the mutation remains committed.
     for (const m of pushBody.mutations) {
+      // Handle internal mutations (like cleanup) directly without user dispatch
+      if (m.type === 'custom' && m.name === CLEANUP_RESULTS_MUTATION_NAME) {
+        lc.debug?.(
+          `Processing internal mutation '${m.name}' (clientID=${m.clientID})`,
+        );
+        try {
+          await processCleanupResultsMutation(dbProvider, m, queryParams, lc);
+          // No response added - this is fire-and-forget
+          processedCount++;
+        } catch (error) {
+          lc.warn?.(
+            `Failed to process cleanup mutation for client ${m.clientID}`,
+            error,
+          );
+          // Don't fail the whole push for cleanup errors
+          processedCount++;
+        }
+        continue;
+      }
+
       assert(m.type === 'custom', 'Expected custom mutation');
       lc.debug?.(
         `Processing mutation '${m.name}' (id=${m.id}, clientID=${m.clientID})`,
-        m.args,
       );
 
       let mutationPhase: MutationPhase = 'preTransaction';
@@ -558,6 +585,44 @@ function getObjectAtPath(
     current = (current as Record<string, unknown>)[part];
   }
   return current;
+}
+
+/**
+ * Processes internal cleanup mutation that deletes acknowledged mutation results
+ * from the upstream database. This runs without LMID tracking since it's an
+ * internal operation.
+ */
+async function processCleanupResultsMutation<
+  D extends Database<ExtractTransactionType<D>>,
+>(
+  dbProvider: D,
+  mutation: CustomMutation,
+  queryParams: Params,
+  lc: LogContext,
+): Promise<void> {
+  const parseResult = v.test(mutation.args[0], cleanupResultsArgSchema);
+  if (!parseResult.ok) {
+    lc.warn?.('Cleanup mutation has invalid args', parseResult.error);
+    return;
+  }
+  const args: CleanupResultsArg = parseResult.value;
+
+  // Run in a transaction, using the hook for DB-specific operation
+  await dbProvider.transaction(
+    async (_, hooks) => {
+      await hooks.deleteMutationResults(
+        args.clientGroupID,
+        args.clientID,
+        args.upToMutationID,
+      );
+    },
+    {
+      upstreamSchema: queryParams.schema,
+      clientGroupID: args.clientGroupID,
+      clientID: args.clientID,
+      mutationID: 0,
+    },
+  );
 }
 
 type DatabaseTransactionPhase = 'open' | 'execute';

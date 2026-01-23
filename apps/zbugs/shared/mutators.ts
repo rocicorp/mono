@@ -99,19 +99,25 @@ export const mutators = defineMutators({
     update: defineMutator(
       updateIssueArgsSchema,
       async ({tx, args: change, ctx: authData}) => {
+        // Security: Auth check MUST come before existence check to prevent
+        // information disclosure about private issue existence
+        await assertIsCreatorOrAdmin(tx, authData, builder.issue, change.id);
+
+        // Safe to read now since user is authorized
         const oldIssue = await tx.run(
           builder.issue.where('id', change.id).one(),
         );
 
+        // For admins, assertIsCreatorOrAdmin doesn't verify existence
+        // Use generic error to avoid leaking existence info
         if (!oldIssue) {
           throw new MutationError(
-            `Issue not found`,
-            MutationErrorCode.ENTITY_NOT_FOUND,
+            `Issue not found or not authorized`,
+            MutationErrorCode.NOT_AUTHORIZED,
             change.id,
           );
         }
 
-        await assertIsCreatorOrAdmin(tx, authData, builder.issue, change.id);
         await tx.mutate.issue.update(change);
 
         const isAssigneeChange =
@@ -392,10 +398,12 @@ async function updateIssueNotification(
 ) {
   await assertUserCanSeeIssue(tx, userID, issueID);
 
-  const existingNotification = builder.issueNotifications
-    .where('userID', userID)
-    .where('issueID', issueID)
-    .one();
+  const existingNotification = await tx.run(
+    builder.issueNotifications
+      .where('userID', userID)
+      .where('issueID', issueID)
+      .one(),
+  );
 
   // if the user is subscribing to the issue, and they don't already have a preference
   // or the forceUpdate flag is set, we upsert the notification.

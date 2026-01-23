@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {id, idList} from './sql.ts';
+import {id, idList, lit} from './sql.ts';
 
 describe('types/sql', () => {
   type Case = {
@@ -47,6 +47,36 @@ describe('types/sql', () => {
   for (const c of listCases) {
     test(c.ids.join(','), () => {
       expect(idList(c.ids)).toBe(c.escaped);
+    });
+  }
+
+  type LitCase = {
+    value: string;
+    escaped: string;
+  };
+
+  const litCases: LitCase[] = [
+    {
+      value: 'simple',
+      escaped: "'simple'",
+    },
+    {
+      value: "containing'quotes",
+      escaped: "'containing''quotes'",
+    },
+    {
+      value: "multiple'quotes'here",
+      escaped: "'multiple''quotes''here'",
+    },
+    {
+      value: '',
+      escaped: "''",
+    },
+  ];
+
+  for (const c of litCases) {
+    test(`lit: ${c.value || '(empty)'}`, () => {
+      expect(lit(c.value)).toBe(c.escaped);
     });
   }
 });

@@ -159,6 +159,7 @@ export class RowRecordCache {
     if (this.#cache) {
       return this.#cache;
     }
+    const start = Date.now();
     const r = resolver<CustomKeyMap<RowID, RowRecord>>();
     // Set this.#cache immediately (before await) so that only one db
     // query is made even if there are multiple callers.
@@ -166,7 +167,7 @@ export class RowRecordCache {
 
     const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDString);
     for await (const rows of this.#db<RowsRow[]>`
-      SELECT * FROM ${this.#cvr(`rows`)} 
+      SELECT * FROM ${this.#cvr(`rows`)}
         WHERE "clientGroupID" = ${this.#cvrID} AND "refCounts" IS NOT NULL`
       // TODO(arv): Arbitrary page size
       .cursor(5000)) {
@@ -175,6 +176,9 @@ export class RowRecordCache {
         cache.set(rowRecord.id, rowRecord);
       }
     }
+    this.#lc.debug?.(
+      `Loaded ${cache.size} row records in ${Date.now() - start} ms`,
+    );
     r.resolve(cache);
     return this.#cache;
   }
@@ -354,6 +358,7 @@ export class RowRecordCache {
     version: CVRVersion,
     rowUpdates: Map<RowID, RowRecord | null>,
     mode: 'allow-defer' | 'force',
+    lc = this.#lc,
   ): PendingQuery<Row[]>[] {
     if (
       mode === 'allow-defer' &&
@@ -411,7 +416,7 @@ export class RowRecordCache {
       "refCounts" = excluded."refCounts"
     `.execute(),
       );
-      this.#lc.debug?.(
+      lc.debug?.(
         `flushing ${rowUpdates.size} rows (${rowRecordRows.length} inserts, ${
           rowUpdates.size - rowRecordRows.length
         } deletes)`,

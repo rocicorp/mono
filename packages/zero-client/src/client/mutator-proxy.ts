@@ -22,6 +22,17 @@ const successResultDetails = {
 } as const satisfies MutatorResultSuccessDetails;
 const successResult = () => successResultDetails;
 
+function getStateDescription(error: ZeroError): string {
+  switch (error.kind) {
+    case ClientErrorKind.Offline:
+      return 'offline';
+    case ClientErrorKind.ClientClosed:
+      return 'closed';
+    default:
+      return 'in error state';
+  }
+}
+
 type CachedMutationRejection = {
   readonly error: ZeroError;
   readonly promise: Promise<MutatorResultErrorDetails>;
@@ -100,6 +111,10 @@ export class MutatorProxy {
   >(name: string, f: F): (...args: Parameters<F>) => MutatorResult {
     return (...args) => {
       if (this.#mutationRejection) {
+        const error = this.#mutationRejection.error;
+        this.#lc.warn?.(
+          `Mutation "${name}" rejected because Zero is ${getStateDescription(error)}. Details: ${error.message}. See also: https://zero.rocicorp.dev/docs/connection.`,
+        );
         return {
           client: this.#mutationRejection.promise,
           server: this.#mutationRejection.promise,

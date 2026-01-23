@@ -176,6 +176,7 @@ class FakeDatabase implements Database<FakeTransaction> {
         return Promise.resolve({lastMutationID: this.#lastMutationID});
       },
       writeMutationResult: () => Promise.resolve(),
+      deleteMutationResults: () => Promise.resolve(),
     };
 
     return Promise.resolve(callback(this.#tx, hooks));

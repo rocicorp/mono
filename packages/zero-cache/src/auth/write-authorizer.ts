@@ -64,6 +64,12 @@ export interface WriteAuthorizer {
   ): Promise<boolean>;
   reloadPermissions(): void;
   normalizeOps(ops: CRUDOp[]): Exclude<CRUDOp, UpsertOp>[];
+
+  /**
+   * Validates that all table names in the operations exist in the schema.
+   * @throws Error if any table name is invalid
+   */
+  validateTableNames(ops: CRUDOp[]): void;
 }
 
 export class WriteAuthorizerImpl implements WriteAuthorizer {
@@ -77,6 +83,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #appID: string;
   readonly #logConfig: LogConfig;
   readonly #cgStorage: ClientGroupStorage;
+  readonly #config: ZeroConfig;
 
   #loadedPermissions: LoadedPermissions | null = null;
 
@@ -89,6 +96,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     writeAuthzStorage: DatabaseStorage,
   ) {
     this.#appID = appID;
+    this.#config = config;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
     this.#schema = getSchema(this.#lc, replica);
@@ -113,6 +121,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       this.#statementRunner,
       this.#appID,
       this.#loadedPermissions,
+      this.#config,
     ).permissions;
   }
 
@@ -236,6 +245,14 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     });
   }
 
+  validateTableNames(ops: CRUDOp[]): void {
+    for (const op of ops) {
+      if (!this.#tableSpecs.has(op.tableName)) {
+        throw new Error(`Table '${op.tableName}' is not a valid table.`);
+      }
+    }
+  }
+
   #canInsert(phase: Phase, authData: JWTPayload | undefined, op: InsertOp) {
     return this.#timedCanDo(phase, 'insert', authData, op);
   }
@@ -289,7 +306,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       throw new Error(`Table ${tableName} not found`);
     }
     const {columns, primaryKey} = tableSpec.tableSpec;
-    assert(primaryKey.length);
+    assert(
+      primaryKey.length,
+      () => `Table ${tableName} must have a primary key`,
+    );
     source = new TableSource(
       this.#lc,
       this.#logConfig,
@@ -557,7 +577,7 @@ function updateWhere(where: Condition | undefined, policy: Policy) {
       {
         type: 'or',
         conditions: policy.map(([action, rule]) => {
-          assert(action);
+          assert(action, 'action must be defined in policy');
           return rule;
         }),
       },

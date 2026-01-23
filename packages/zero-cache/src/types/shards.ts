@@ -52,7 +52,7 @@ export function check(shard: ShardID): {appID: string; shardNum: number} {
   if (!ALLOWED_APP_ID_CHARACTERS.test(appID)) {
     throw new Error(INVALID_APP_ID_MESSAGE);
   }
-  assert(typeof shardNum === 'number');
+  assert(typeof shardNum === 'number', 'shardNum must be a number');
   return {appID, shardNum};
 }
 

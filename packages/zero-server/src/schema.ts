@@ -100,7 +100,10 @@ export async function getServerSchema<S extends Schema>(
     const isEnum = (row.elemTyptype ?? row.typtype) === PostgresTypeClass.Enum;
     let type = row.dataType.toLowerCase();
     if (isArray) {
-      type = must(row.elemTypname);
+      type = must(
+        row.elemTypname,
+        `Array column "${row.column}" in table "${tableName}" is missing element type name`,
+      );
     } else if (isEnum) {
       type = row.typename;
     }

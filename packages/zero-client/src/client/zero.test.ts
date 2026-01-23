@@ -98,6 +98,7 @@ import {
   createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   DEFAULT_PING_TIMEOUT_MS,
+  getInternalReplicacheImplForTesting,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
   type Zero,
@@ -274,7 +275,6 @@ describe('onOnlineChange callback', () => {
     expect(getOnlineCount()).toBe(1);
     expect(getOfflineCount()).toBe(1);
     // And followed by a reconnect.
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await z.connection.connect();
     await z.triggerConnected();
     expect(z.online).toBe(true);
@@ -561,12 +561,10 @@ test('transition to connecting state if ping fails', async () => {
   expect((await z.socket).messages).toEqual(['["ping",{}]']);
 
   await z.triggerPong();
-  await tickAFewTimes(vi);
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 
   await tickAFewTimes(vi, watchdogInterval);
   await z.triggerPong();
-  await tickAFewTimes(vi);
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 
   await tickAFewTimes(vi, watchdogInterval);
@@ -583,8 +581,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await tickAFewTimes(vi);
-
   const socket = await z.socket;
   socket.messages.length = 0;
 
@@ -593,7 +589,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
     requestID: 'req-1',
     lastMutationIDChanges: {},
   });
-  await tickAFewTimes(vi);
 
   const pingCountAfterAbort = socket.messages.filter(message =>
     message.startsWith('["ping"'),
@@ -608,7 +603,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   expect(pingMessages).toHaveLength(1);
 
   await z.triggerPong();
-  await tickAFewTimes(vi);
 });
 
 const mockProfileID = 'pProfID1';
@@ -821,6 +815,8 @@ describe('createSocket', () => {
         new LogContext('error', undefined, new TestLogSink()),
         undefined,
         undefined,
+        undefined,
+        undefined,
         additionalConnectParams,
         {activeClients},
         1048 * 8,
@@ -858,6 +854,8 @@ describe('createSocket', () => {
         'wsidx',
         debugPerf,
         new LogContext('error', undefined, new TestLogSink()),
+        undefined,
+        undefined,
         undefined,
         undefined,
         additionalConnectParams,
@@ -2411,7 +2409,6 @@ test('connect() without opts preserves existing auth', async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
-  await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
 
   // Reconnect without providing auth opts - should keep existing auth
   await z.connection.connect();
@@ -2749,9 +2746,7 @@ test('socketOrigin', async () => {
   for (const c of cases) {
     const z = zeroForTest(c.socketEnabled ? {} : {cacheURL: null});
 
-    await tickAFewTimes(vi);
-
-    expect(z.connectionStatus, c.name).toBe(
+    await z.waitForConnectionStatus(
       c.socketEnabled
         ? ConnectionStatus.Connecting
         : ConnectionStatus.Disconnected,
@@ -2832,8 +2827,6 @@ async function testWaitsForConnection(
     () => log.push('resolved'),
     () => log.push('rejected'),
   );
-
-  await tickAFewTimes(vi);
 
   // Rejections that happened in previous connect should not reject pusher.
   expect(log).toEqual([]);
@@ -3281,9 +3274,7 @@ describe('Disconnect on hide', () => {
     visibilityState = 'visible';
     document.dispatchEvent(new Event('visibilitychange'));
 
-    const reconnectingSocket = z.socket;
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-    await reconnectingSocket;
+    await z.socket;
     await z.triggerConnected();
     expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
     expect(await onOnlineChangeP).toBe(true);
@@ -4478,4 +4469,164 @@ test('We should send a deleteClient when a Zero instance is closed', async () =>
   });
 
   await z2.close();
+});
+
+describe('Zero replicache refresh integration', () => {
+  describe('enableRefresh', () => {
+    test('enableRefresh is false when Connecting or Connected, true when Error', async () => {
+      const z = zeroForTest();
+
+      // Initial state: Connecting
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+      // enableRefresh should be false during connecting
+      expect(z.enableRefresh()).toBe(false);
+
+      // Connected
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+      // enableRefresh should be false when connected
+      expect(z.enableRefresh()).toBe(false);
+
+      // Trigger error to transition to Error state
+      await z.triggerError({
+        kind: ErrorKind.Internal,
+        message: 'test error',
+        origin: ErrorOrigin.ZeroCache,
+      });
+
+      await z.waitForConnectionStatus(ConnectionStatus.Error);
+      expect(z.enableRefresh()).toBe(true);
+
+      // Reconnect
+      await z.connection.connect();
+
+      // Status should transition to Connecting
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+      // enableRefresh should be false during connecting
+      expect(z.enableRefresh()).toBe(false);
+
+      // Connected again
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+      // enableRefresh should be false when connected
+      expect(z.enableRefresh()).toBe(false);
+    });
+
+    test('enableRefresh is true when Disconnected', async () => {
+      const z = zeroForTest();
+
+      // Ensure connected first
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+      expect(z.enableRefresh()).toBe(false);
+
+      // Trigger Offline error to transition to Disconnected
+      z.connectionManager.disconnected(
+        new ClientError({
+          kind: ClientErrorKind.Offline,
+          message: 'offline',
+        }),
+      );
+
+      await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+
+      // enableRefresh should be true
+      expect(z.enableRefresh()).toBe(true);
+    });
+
+    test('enableRefresh is true when NeedsAuth', async () => {
+      const z = zeroForTest();
+
+      // Ensure connected first
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+      expect(z.enableRefresh()).toBe(false);
+
+      // Trigger AuthInvalidated error to transition to NeedsAuth
+      await z.triggerError({
+        kind: ErrorKind.AuthInvalidated,
+        message: 'session expired',
+        origin: ErrorOrigin.Server,
+      });
+
+      await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+
+      // enableRefresh should be true
+      expect(z.enableRefresh()).toBe(true);
+    });
+  });
+
+  describe('runRefresh', () => {
+    test('calls runRefresh on status transition disconnect', async () => {
+      const z = zeroForTest();
+      const rep = getInternalReplicacheImplForTesting(z);
+
+      // Spy on runRefresh
+      const runRefreshSpy = vi
+        .spyOn(rep, 'runRefresh')
+        .mockImplementation(() => {
+          expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+          expect(z.enableRefresh()).toBe(true);
+          return Promise.resolve();
+        });
+
+      // Ensure connected first
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+      // Check initial state
+      expect(runRefreshSpy).not.toHaveBeenCalled();
+
+      // Trigger disconnect via error
+      await z.triggerError({
+        kind: ErrorKind.Internal,
+        message: 'test error',
+        origin: ErrorOrigin.ZeroCache,
+      });
+
+      await z.waitForConnectionStatus(ConnectionStatus.Error);
+
+      // verify called
+      await vi.waitFor(() => expect(runRefreshSpy).toHaveBeenCalled());
+    });
+
+    test('calls runRefresh on NO_STATUS_TRANSITION disconnects', async () => {
+      const z = zeroForTest();
+      const rep = getInternalReplicacheImplForTesting(z);
+
+      // Spy on runRefresh
+      const runRefreshSpy = vi
+        .spyOn(rep, 'runRefresh')
+        .mockImplementation(() => {
+          // Despite connection status being Connecting, enableRefresh should
+          // still be true because of #forceEnableRefresh
+          expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+          expect(z.enableRefresh()).toBe(true);
+          return Promise.resolve();
+        });
+
+      // Ensure connected first
+      await z.triggerConnected();
+      expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+      // Check initial state
+      expect(runRefreshSpy).not.toHaveBeenCalled();
+
+      // Trigger disconnect via error that causes NO_STATUS_TRANSITION
+      // ErrorKind.ServerOverloaded returns NO_STATUS_TRANSITION
+      await z.triggerError({
+        kind: ErrorKind.ServerOverloaded,
+        message: 'slow down',
+        origin: ErrorOrigin.ZeroCache,
+      });
+
+      // Status should transition to Connecting because NO_STATUS_TRANSITION
+      // calls connecting()
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+
+      // verify called
+      await vi.waitFor(() => expect(runRefreshSpy).toHaveBeenCalled());
+    });
+  });
 });

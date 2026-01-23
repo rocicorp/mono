@@ -2,6 +2,7 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
+import {timingSafeEqual} from 'node:crypto';
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
@@ -136,19 +137,6 @@ const replicaOptions = {
       `operations are not performed.`,
     ],
   },
-
-  pageCacheSizeKib: {
-    type: v.number().optional(),
-    desc: [
-      `The SQLite page cache size in kibibytes (KiB) for view-syncer connections.`,
-      `The page cache stores recently accessed database pages in memory to reduce disk I/O.`,
-      `Larger cache sizes improve performance for workloads that fit in cache.`,
-      `If unspecified, SQLite's default (~2 MB) is used.`,
-      `Note that the effective memory use of this setting will be:`,
-      `2 * cache_size * num_cores as each connection to the replica gets its own cache`,
-      `and each core maintains 2 connections.`,
-    ],
-  },
 };
 
 export type ReplicaOptions = Config<typeof replicaOptions>;
@@ -194,6 +182,26 @@ const authOptions = {
     type: v.string().optional(),
     desc: [
       `A symmetric key used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
+    ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
+  },
+  issuer: {
+    type: v.string().optional(),
+    desc: [
+      `Expected issuer ({bold iss} claim) for JWT validation.`,
+      `If set, tokens with a different or missing issuer will be rejected.`,
+    ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
+  },
+  audience: {
+    type: v.string().optional(),
+    desc: [
+      `Expected audience ({bold aud} claim) for JWT validation.`,
+      `If set, tokens with a different or missing audience will be rejected.`,
     ],
     deprecated: [
       `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
@@ -273,6 +281,23 @@ const makeMutatorQueryOptions = (
     ],
     ...(replacement
       ? {deprecated: [makeDeprecationMessage(`${replacement}-forward-cookies`)]}
+      : {}),
+  },
+  allowedClientHeaders: {
+    type: v.array(v.string()).optional(),
+    desc: [
+      `A list of header names that clients are allowed to set via custom headers.`,
+      `If specified, only headers in this list will be forwarded to the ${suffix === 'push mutations' ? 'push' : 'query'} URL.`,
+      `Header names are case-insensitive.`,
+      `If not specified, no client-provided headers are forwarded (secure by default).`,
+      `Example: ZERO_${replacement ? replacement.toUpperCase() : suffix === 'push mutations' ? 'MUTATE' : 'QUERY'}_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id`,
+    ],
+    ...(replacement
+      ? {
+          deprecated: [
+            makeDeprecationMessage(`${replacement}-allowed-client-headers`),
+          ],
+        }
       : {}),
   },
 });
@@ -631,6 +656,16 @@ export const zeroOptions = {
     ],
   },
 
+  websocketMaxPayloadBytes: {
+    type: v.number().default(10 * 1024 * 1024),
+    desc: [
+      'Maximum size of incoming WebSocket messages in bytes.',
+      '',
+      'Messages exceeding this limit are rejected before parsing.',
+      'Default: 10MB (10 * 1024 * 1024 = 10485760)',
+    ],
+  },
+
   litestream: {
     executable: {
       type: v.string().optional(),
@@ -919,7 +954,19 @@ export function isAdminPasswordValid(
     return false;
   }
 
-  if (password !== config.adminPassword) {
+  // Use constant-time comparison to prevent timing attacks
+  const passwordBuffer = Buffer.from(password ?? '');
+  const configBuffer = Buffer.from(config.adminPassword);
+
+  // Handle length mismatch in constant time
+  if (passwordBuffer.length !== configBuffer.length) {
+    // Perform dummy comparison to maintain constant timing
+    timingSafeEqual(configBuffer, configBuffer);
+    lc.warn?.('Invalid admin password');
+    return false;
+  }
+
+  if (!timingSafeEqual(passwordBuffer, configBuffer)) {
     lc.warn?.('Invalid admin password');
     return false;
   }

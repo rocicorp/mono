@@ -1,4 +1,3 @@
-import {sql, type SQL} from 'drizzle-orm';
 import type {
   PgDatabase,
   PgQueryResultHKT,
@@ -95,32 +94,15 @@ class DrizzleInternalTransaction<
   }
 
   async query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
-    const stmt = fromDollarParams(sql, params);
-    const result = await this.wrappedTransaction.execute(stmt);
+    const prepared = this.wrappedTransaction._.session.prepareQuery(
+      {sql, params},
+      undefined,
+      undefined,
+      false,
+    );
+    const result = await prepared.execute();
     return toIterableRows(result);
   }
-}
-
-/**
- * Turn `$1, $2...` placeholders into a Drizzle SQL object with bound params.
- */
-export function fromDollarParams(text: string, params: unknown[]): SQL {
-  const re = /\$(\d+)/g;
-  const s = sql.empty();
-  let last = 0;
-  let m: RegExpExecArray | null;
-
-  while ((m = re.exec(text)) !== null) {
-    const idx = Number(m[1]) - 1;
-    if (idx < 0 || idx >= params.length) {
-      throw new Error(`Missing param for $${m[1]}`);
-    }
-    if (m.index > last) s.append(sql.raw(text.slice(last, m.index)));
-    s.append(sql`${params[idx]}`); // parameterized value
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) s.append(sql.raw(text.slice(last)));
-  return s;
 }
 
 function isIterable(value: unknown): value is Iterable<unknown> {
@@ -169,24 +151,29 @@ export function toIterableRows(result: unknown): Iterable<Row> {
  * ```ts
  * import {Pool} from 'pg';
  * import {drizzle} from 'drizzle-orm/node-postgres';
- * import type {ServerTransaction} from '@rocicorp/zero';
+ * import {defineMutator, defineMutators} from '@rocicorp/zero';
+ * import {zeroDrizzle} from '@rocicorp/zero/server/adapters/drizzle';
+ * import {z} from 'zod/mini';
  *
  * const pool = new Pool({connectionString: process.env.ZERO_UPSTREAM_DB!});
  * const drizzleDb = drizzle(pool, {schema: drizzleSchema});
- *
  * const zql = zeroDrizzle(schema, drizzleDb);
  *
- * // Define the server mutator transaction type using the helper
- * type ServerTx = ServerTransaction<Schema, DrizzleTransaction<typeof drizzleDb>>;
- *
- * async function createUser(
- *   tx: ServerTx,
- *   {id, name}: {id: string; name: string},
- * ) {
- *   await tx.dbTransaction.wrappedTransaction
- *     .insert(drizzleSchema.user)
- *     .values({id, name})
- * }
+ * export const serverMutators = defineMutators({
+ *   user: {
+ *     create: defineMutator(
+ *       z.object({id: z.string(), name: z.string()}),
+ *       async ({tx, args}) => {
+ *         if (tx.location !== 'server') {
+ *           throw new Error('Server-only mutator');
+ *         }
+ *         await tx.dbTransaction.wrappedTransaction
+ *           .insert(drizzleSchema.user)
+ *           .values({id: args.id, name: args.name, status: 'active'});
+ *       },
+ *     ),
+ *   },
+ * });
  * ```
  */
 export function zeroDrizzle<

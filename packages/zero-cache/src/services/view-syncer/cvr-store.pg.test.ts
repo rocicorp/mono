@@ -203,26 +203,12 @@ describe('view-syncer/cvr-store', () => {
 
   test('put various json types for named queries', async () => {});
 
-  // This is failing with:
-  //
-  //   ⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
-  // Error: {"kind":"ClientNotFound","message":"max attempts exceeded waiting for CVR@04 to catch up from 03"}
-  //  ❯ packages/zero-cache/src/services/view-syncer/cvr-store.ts:206:13
-  //  ❯ processTicksAndRejections node:internal/process/task_queues:105:5
-  //  ❯ packages/otel/src/span.ts:29:14
-
-  // ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
-  // Serialized Error: { logLevel: 'warn', errorBody: { kind: 'ClientNotFound', message: 'max attempts exceeded waiting for CVR@04 to catch up from 03' } }
-  // This error originated in "packages/zero-cache/src/services/view-syncer/cvr-store.pg.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
-  // The latest test that might've caused the error is "wait for row catchup". It might mean one of the following:
-  // - The error was thrown, while Vitest was running this test.
-  // - If the error occurred after the test had been completed, this was the last documented test before it was thrown.
-  test.skip('wait for row catchup', async () => {
+  test('wait for row catchup', async () => {
     // Simulate the CVR being ahead of the rows.
     await db`UPDATE "roze_1/cvr".instances SET version = '04'`;
 
     // start a CVR load.
-    const loading = store.load(lc, CONNECT_TIME);
+    const loading = store.load(lc, CONNECT_TIME).catch(e => e);
 
     await sleep(10);
 

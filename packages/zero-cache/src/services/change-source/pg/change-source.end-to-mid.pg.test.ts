@@ -143,7 +143,18 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         id INT8 CONSTRAINT baz_pkey PRIMARY KEY,
         gen INT8 GENERATED ALWAYS AS (id + 1) STORED  -- Should be excluded
        );`,
-      [{tag: 'create-table'}, {tag: 'create-index'}],
+      [
+        {
+          tag: 'create-table',
+          metadata: {
+            rowKey: {
+              columns: ['id'],
+              type: 'default',
+            },
+          },
+        },
+        {tag: 'create-index'},
+      ],
       {['my.baz']: []},
       [
         {
@@ -215,7 +226,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'add column',
       'ALTER TABLE my.bar ADD name INT8;',
-      [{tag: 'add-column'}],
+      [
+        {
+          tag: 'add-column',
+          tableMetadata: {
+            rowKey: {
+              columns: ['id'],
+              type: 'default',
+            },
+          },
+        },
+      ],
       {['my.bar']: []},
       [
         {
@@ -332,6 +353,38 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [
         {tag: 'drop-index'},
         {
+          tag: 'update-table-metadata',
+          table: {schema: 'my', name: 'bar'},
+          old: {
+            rowKey: {
+              columns: ['id'],
+              type: 'default',
+            },
+          },
+          new: {
+            rowKey: {
+              columns: [],
+              type: 'default',
+            },
+          },
+        },
+        {
+          tag: 'update-table-metadata',
+          table: {schema: 'my', name: 'bar'},
+          old: {
+            rowKey: {
+              columns: [],
+              type: 'default',
+            },
+          },
+          new: {
+            rowKey: {
+              columns: ['handle'],
+              type: 'default',
+            },
+          },
+        },
+        {
           tag: 'update-column',
           old: {
             name: 'handle',
@@ -387,7 +440,18 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'add unique column to automatically generate index',
       'ALTER TABLE my.bar ADD username TEXT UNIQUE;',
-      [{tag: 'add-column'}, {tag: 'create-index'}],
+      [
+        {
+          tag: 'add-column',
+          tableMetadata: {
+            rowKey: {
+              columns: ['handle'],
+              type: 'default',
+            },
+          },
+        },
+        {tag: 'create-index'},
+      ],
       {['my.bar']: []},
       [
         {
@@ -634,7 +698,26 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'add multiple columns',
       'ALTER TABLE my.bar ADD foo TEXT, ADD bar TEXT;',
-      [{tag: 'add-column'}, {tag: 'add-column'}],
+      [
+        {
+          tag: 'add-column',
+          tableMetadata: {
+            rowKey: {
+              columns: ['handle'],
+              type: 'default',
+            },
+          },
+        },
+        {
+          tag: 'add-column',
+          tableMetadata: {
+            rowKey: {
+              columns: ['handle'],
+              type: 'default',
+            },
+          },
+        },
+      ],
       {['my.bar']: []},
       [
         {
@@ -687,7 +770,19 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'alter, add, and drop columns',
       'ALTER TABLE my.bar ALTER foo SET NOT NULL, ADD boo TEXT, DROP bar;',
-      [{tag: 'drop-column'}, {tag: 'update-column'}, {tag: 'add-column'}],
+      [
+        {tag: 'drop-column'},
+        {tag: 'update-column'},
+        {
+          tag: 'add-column',
+          tableMetadata: {
+            rowKey: {
+              columns: ['handle'],
+              type: 'default',
+            },
+          },
+        },
+      ],
       {['my.bar']: []},
       [
         {
@@ -849,6 +944,12 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
+          tableMetadata: {
+            rowKey: {
+              columns: ['id'],
+              type: 'index',
+            },
+          },
         },
       ],
       {foo: []},
@@ -891,10 +992,22 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
+          tableMetadata: {
+            rowKey: {
+              columns: ['id'],
+              type: 'index',
+            },
+          },
         },
         {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
+          tableMetadata: {
+            rowKey: {
+              columns: ['id'],
+              type: 'index',
+            },
+          },
         },
       ],
       {foo: []},
@@ -960,7 +1073,15 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [
         {tag: 'drop-column'},
         {tag: 'drop-column'},
-        {tag: 'create-table'},
+        {
+          tag: 'create-table',
+          metadata: {
+            rowKey: {
+              columns: ['id'],
+              type: 'default',
+            },
+          },
+        },
         {tag: 'create-index'},
         {tag: 'create-index'},
       ],
@@ -1287,7 +1408,15 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       INSERT INTO nopk (a, b) VALUES ('foo', 'bar');
       `,
       [
-        {tag: 'create-table'},
+        {
+          tag: 'create-table',
+          metadata: {
+            rowKey: {
+              columns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
+              type: 'default',
+            },
+          },
+        },
         {
           tag: 'insert',
           relation: {
@@ -1295,6 +1424,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             name: 'nopk',
             replicaIdentity: 'default',
             keyColumns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
+            rowKey: {
+              columns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
+              type: 'default',
+            },
           },
         },
       ],
@@ -1349,9 +1482,25 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       UPDATE existing_full SET a = a;
       `,
       [
-        {tag: 'create-table'},
+        {
+          tag: 'create-table',
+          metadata: {
+            rowKey: {
+              columns: ['a'],
+              type: 'default',
+            },
+          },
+        },
         {tag: 'create-index'},
-        {tag: 'create-table'},
+        {
+          tag: 'create-table',
+          metadata: {
+            rowKey: {
+              columns: ['a', 'b'],
+              type: 'full',
+            },
+          },
+        },
         {tag: 'create-index'},
         {tag: 'update'},
         {tag: 'update'},
@@ -1440,6 +1589,33 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           unique: true,
         },
       ],
+    ],
+    [
+      'change replica identity',
+      `
+      ALTER TABLE existing REPLICA IDENTITY FULL;
+      `,
+      [
+        {
+          tag: 'update-table-metadata',
+          table: {schema: 'public', name: 'existing'},
+          old: {
+            rowKey: {
+              columns: ['a'],
+              type: 'default',
+            },
+          },
+          new: {
+            rowKey: {
+              columns: ['a', 'b'],
+              type: 'full',
+            },
+          },
+        },
+      ],
+      {},
+      [],
+      [],
     ],
   ] satisfies [
     name: string,

@@ -559,7 +559,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       (cvr.replicaVersion ?? replicaVersion) <= replicaVersion,
       `Cannot sync from an older replicaVersion: CVR=${cvr.replicaVersion}, DB=${replicaVersion}`,
     );
-    assert(stateVersion >= cvr.version.stateVersion);
+    assert(
+      stateVersion >= cvr.version.stateVersion,
+      () =>
+        `stateVersion (${stateVersion}) must be >= cvr.version.stateVersion (${cvr.version.stateVersion})`,
+    );
     if (stateVersion > cvr.version.stateVersion) {
       this._setVersion({stateVersion});
     }
@@ -581,7 +585,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   trackQueries(
     lc: LogContext,
     executed: {id: string; transformationHash: string}[],
-    removed: {id: string; transformationHash: string | undefined}[],
+    removed: {id: string}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
@@ -616,7 +620,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     let total = 0;
     for (const existing of allRowRecords) {
       total++;
-      assert(existing.refCounts !== null); // allRowRecords does not include null.
+      assert(
+        existing.refCounts !== null,
+        'allRowRecords should not include null refCounts',
+      );
       for (const id of Object.keys(existing.refCounts)) {
         if (this.#removedOrExecutedQueryIDs.has(id)) {
           results.set(existing.id, existing);
@@ -642,7 +649,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This must be called for all executed queries.
    */
   #trackExecuted(queryID: string, transformationHash: string): Patch[] {
-    assert(!this.#removedOrExecutedQueryIDs.has(queryID));
+    assert(
+      !this.#removedOrExecutedQueryIDs.has(queryID),
+      () => `Query ${queryID} already tracked as executed or removed`,
+    );
     this.#removedOrExecutedQueryIDs.add(queryID);
 
     let gotQueryPatch: Patch | undefined;
@@ -681,7 +691,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const query = this._cvr.queries[queryID];
     assertNotInternal(query);
 
-    assert(!this.#removedOrExecutedQueryIDs.has(queryID));
+    assert(
+      !this.#removedOrExecutedQueryIDs.has(queryID),
+      () => `Query ${queryID} already tracked as executed or removed`,
+    );
     this.#removedOrExecutedQueryIDs.add(queryID);
     delete this._cvr.queries[queryID];
 
@@ -792,7 +805,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           }
         }
       } else if (contents) {
-        assert(rowVersion);
+        assert(rowVersion, 'rowVersion is required when contents is present');
         // dedupe
         if (!lastPatch?.rowVersion || lastPatch.rowVersion < rowVersion) {
           patches.push({
@@ -826,7 +839,11 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   async deleteUnreferencedRows(lc?: LogContext): Promise<PatchToVersion[]> {
     if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config-only changes.
-      assert(this.#receivedRows.size === 0);
+      assert(
+        this.#receivedRows.size === 0,
+        () =>
+          `Expected no received rows for query-less update, got ${this.#receivedRows.size}`,
+      );
       return [];
     }
 

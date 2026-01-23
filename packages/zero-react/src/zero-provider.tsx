@@ -111,7 +111,7 @@ export function ZeroProvider<
   }, [init, ...keysWithoutAuth]);
 
   useEffect(() => {
-    if (!zero) return;
+    if (!zero || isExternalZero) return;
 
     const authChanged = auth !== prevAuthRef.current;
 

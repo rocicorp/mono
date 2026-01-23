@@ -419,7 +419,7 @@ class Diff implements SnapshotDiff {
             }
             const {tableSpec, zqlSpec} = must(this.tables.get(table));
 
-            assert(rowKey !== null);
+            assert(rowKey !== null, 'rowKey must be present for row changes');
             const nextValue =
               op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
             let prevValues;

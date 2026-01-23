@@ -18,6 +18,7 @@ import {useZero} from './use-zero.ts';
 import {
   type DefaultContext,
   type DefaultSchema,
+  type Falsy,
   type HumanReadable,
   type PullRow,
   type QueryOrQueryRequest,
@@ -29,6 +30,15 @@ import {
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,
+  Accessor<QueryResultDetails & {}>,
+];
+
+/**
+ * Result type for "maybe queries" - queries that may be falsy.
+ * The data value can be undefined when the query is falsy/disabled.
+ */
+export type MaybeQueryResult<TReturn> = readonly [
+  Accessor<HumanReadable<TReturn> | undefined>,
   Accessor<QueryResultDetails & {}>,
 ];
 
@@ -64,6 +74,7 @@ export function createQuery<
   return useQuery(querySignal, options);
 }
 
+// Overload 1: Query - returns QueryResult<TReturn>
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -76,7 +87,39 @@ export function useQuery<
     QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
   >,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
-): QueryResult<TReturn> {
+): QueryResult<TReturn>;
+
+// Overload 2: Maybe query
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  querySignal: Accessor<
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy
+  >,
+  options?: UseQueryOptions | Accessor<UseQueryOptions>,
+): MaybeQueryResult<TReturn>;
+
+// Implementation
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+>(
+  querySignal: Accessor<
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy
+  >,
+  options?: UseQueryOptions | Accessor<UseQueryOptions>,
+): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
   const [state, setState] = createStore<State>([
     {
       '': undefined,
@@ -91,9 +134,21 @@ export function useQuery<
   };
 
   const zero = useZero<TSchema, undefined, TContext>();
-  const q = createMemo(() => addContextToQuery(querySignal(), zero().context));
-  const qi = createMemo(() => asQueryInternals(q()));
-  const hash = createMemo(() => qi().hash());
+
+  // Handle possibly falsy queries
+  const q = createMemo(() => {
+    const query = querySignal();
+    if (!query) return undefined;
+    return addContextToQuery(query, zero().context);
+  });
+
+  const qi = createMemo(() => {
+    const query = q();
+    if (!query) return undefined;
+    return asQueryInternals(query);
+  });
+
+  const hash = createMemo(() => qi()?.hash());
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
 
   const initialTTL = ttl();
@@ -101,9 +156,20 @@ export function useQuery<
   const view = createMemo(() => {
     // Depend on hash instead of query to avoid recreating the view when the
     // query object changes but the hash is the same.
-    hash();
+    const currentHash = hash();
     refetchKey();
+
+    // If query is falsy, don't create a view and reset state to undefined
+    if (currentHash === undefined) {
+      setState([{'': undefined}, UNKNOWN]);
+      return undefined;
+    }
+
     const untrackedQuery = untrack(q);
+    if (!untrackedQuery) {
+      setState([{'': undefined}, UNKNOWN]);
+      return undefined;
+    }
 
     const v = zero().materialize(
       untrackedQuery,
@@ -123,7 +189,7 @@ export function useQuery<
     on(
       ttl,
       currentTTL => {
-        view().updateTTL(currentTTL);
+        view()?.updateTTL(currentTTL);
       },
       {defer: true},
     ),

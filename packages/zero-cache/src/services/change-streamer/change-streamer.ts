@@ -49,17 +49,23 @@ export interface ChangeStreamer {
 }
 
 // v1: Client-side support for JSON_FORMAT. Introduced in 0.18.
-// v2: Adds the "status" message which is initially used to signal that the
+// v2: v0.19
+//   - Adds the "status" message which is initially used to signal that the
 //     subscription is valid (i.e. starting at the requested watermark).
-//     Introduced in 0.19.
 // v3: Adds the "taskID" to the subscription context, and support for
 //     the BackupMonitor-mediated "/snapshot" request.
 // v4: Adds the "replicaVersion" and "minWatermark" fields to the "/snapshot"
 //     status request so that a subscriber can verify whether its replica,
 //     whether it be restored or existing in a permanent volume, is compatible
 //     with the change-streamer.
+// v5: v0.26
+//   - Moves relation.keyColumns and relation.replicaIdentity to
+//     relation.rowKey: { columns, type }.
+//   - Adds `metadata` to `create-table` message
+//   - Adds `tableMetadata` to `add-column` message
+//   - Adds `table-update-metadata` message
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 export type SubscriberContext = {
   /**

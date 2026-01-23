@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {Enum} from '../../../shared/src/enum.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
 import type {LazyStore} from '../dag/lazy-store.ts';
 import type {Store} from '../dag/store.ts';
 import type {Commit} from '../db/commit.ts';
@@ -41,7 +40,6 @@ import {
 type FormatVersion = Enum<typeof FormatVersion>;
 
 const GATHER_SIZE_LIMIT = 5 * 2 ** 20; // 5 MB
-const DELAY_MS = 300;
 
 type RefreshResult =
   | {
@@ -174,19 +172,6 @@ export async function refresh(
         return {
           type: 'aborted',
         } as const;
-      }
-      // pull/poke and refresh are racing to see who gets to update
-      // the memdag (the one with the newer base snapshot cookie wins)
-      // pull/poke updates are preferable so delay refresh slightly to
-      // make pull/poke the winner except when pull/pokes are slow.
-      // This is especially important for pokes, as refresh winning
-      // will result in the next poke's cookie not matching necessitating
-      // a disconnect/reconnect.
-      await sleep(DELAY_MS);
-      if (closed()) {
-        return {
-          type: 'aborted',
-        };
       }
 
       const [

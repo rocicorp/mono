@@ -79,7 +79,7 @@ export class PushProcessor<
       (transact, mutation) =>
         this.#processMutation(mutators, transact, mutation),
       queryOrQueryString,
-      must(body),
+      must(body, 'body is required when using query params directly'),
       this.#logLevel,
     );
   }

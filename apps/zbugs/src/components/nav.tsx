@@ -28,7 +28,9 @@ export const Nav = memo(() => {
   const isOffline = useIsOffline();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
-  const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
+  const [user] = useQuery(
+    login.loginState?.decoded.sub && queries.user(login.loginState.decoded.sub),
+  );
 
   const [projects] = useQuery(queries.allProjects());
   const project = projects.find(
