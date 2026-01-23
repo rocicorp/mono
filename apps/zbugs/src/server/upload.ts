@@ -30,12 +30,26 @@ const s3 =
 
 const BUCKET_NAME = 'zbugs-image-uploads';
 
+const ALLOWED_CONTENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+];
+
 export async function getPresignedUrl(
   contentType: string,
 ): Promise<{url: string; key: string}> {
   if (!s3) {
     throw new Error(
       'S3 client is not initialized due to missing environment variables',
+    );
+  }
+
+  if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
+    throw new Error(
+      `Invalid content type: ${contentType}. Allowed types: ${ALLOWED_CONTENT_TYPES.join(', ')}`,
     );
   }
 

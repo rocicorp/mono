@@ -188,7 +188,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const q = queries.issueListV2({
     listContext: listContextParams,
-    userID: z.userID,
     limit: pageSize,
     start: anchor.startRow
       ? {
