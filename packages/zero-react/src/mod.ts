@@ -11,13 +11,6 @@ export type {
   GetQueryReturnType,
   GetSingleQuery,
 } from './use-rows.ts';
-export {
-  resetSlowQuery,
-  setupSlowQuery,
-  TESTING_SLOW_COMPLETE_DELAY_MS,
-  useSlowQuery,
-  type SlowQueryConfig,
-} from './use-slow-query.ts';
 export {useZeroOnline} from './use-zero-online.tsx';
 export {
   useZeroVirtualizer,

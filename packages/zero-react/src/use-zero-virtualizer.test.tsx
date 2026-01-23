@@ -1,5 +1,6 @@
 import type {Virtualizer} from '@tanstack/react-virtual';
 import {act, renderHook, waitFor} from '@testing-library/react';
+import type {ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {
@@ -74,7 +75,7 @@ describe('useZeroVirtualizer', () => {
           toStartRow,
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -114,7 +115,7 @@ describe('useZeroVirtualizer', () => {
           toStartRow,
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -160,7 +161,7 @@ describe('useZeroVirtualizer', () => {
           toStartRow,
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -196,7 +197,7 @@ describe('useZeroVirtualizer', () => {
           toStartRow,
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z2}>{children}</ZeroProvider>
         ),
       },
@@ -230,7 +231,7 @@ describe('useZeroVirtualizer', () => {
         }),
       {
         initialProps: {listContextParams: 'filter1'},
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -281,7 +282,7 @@ describe('useZeroVirtualizer', () => {
           toStartRow,
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -317,7 +318,7 @@ describe('useZeroVirtualizer', () => {
           toStartRow,
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -349,7 +350,7 @@ describe('useZeroVirtualizer', () => {
           toStartRow,
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -387,7 +388,7 @@ describe('useZeroVirtualizer', () => {
           toStartRow,
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -437,7 +438,7 @@ describe('useZeroVirtualizer', () => {
           },
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
@@ -499,7 +500,7 @@ describe('useZeroVirtualizer', () => {
           },
         }),
       {
-        wrapper: ({children}) => (
+        wrapper: ({children}: {children: ReactNode}) => (
           <ZeroProvider zero={z}>{children}</ZeroProvider>
         ),
       },
