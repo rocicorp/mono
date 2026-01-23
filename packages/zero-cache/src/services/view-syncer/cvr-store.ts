@@ -68,6 +68,8 @@ export type CVRFlushStats = {
   statements: number;
 };
 
+let flushCounter = 0;
+
 const tracer = trace.getTracer('cvr-store', version);
 
 function asQuery(row: QueriesRow): QueryRecord {
@@ -752,10 +754,13 @@ export class CVRStore {
   }
 
   async #checkVersionAndOwnership(
+    lc: LogContext,
     tx: PostgresTransaction,
     expectedCurrentVersion: CVRVersion,
     lastConnectTime: number,
   ): Promise<void> {
+    const start = Date.now();
+    lc.debug?.('checking cvr version and ownership');
     const expected = versionString(expectedCurrentVersion);
     const result = await tx<
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
@@ -770,6 +775,9 @@ export class CVRStore {
             owner: null,
             grantedAt: null,
           };
+    lc.debug?.(
+      'checked cvr version and ownership in ' + (Date.now() - start) + ' ms',
+    );
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
       throw new OwnershipError(owner, grantedAt, lastConnectTime);
     }
@@ -779,6 +787,7 @@ export class CVRStore {
   }
 
   async #flush(
+    lc: LogContext,
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
@@ -819,8 +828,10 @@ export class CVRStore {
     // Note: The CVR instance itself is only updated if there are material
     // changes (i.e. changes to the CVR contents) to flush.
     this.putInstance(cvr);
-
+    const start = Date.now();
+    lc.debug?.('flush tx beginning');
     const rowsFlushed = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
+      lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
       const pipelined: Promise<unknown>[] = [
         // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
         // query to acquire a row-level lock so that version-updating
@@ -830,12 +841,14 @@ export class CVRStore {
         // to this lock and can thus commit / be-committed independently of
         // cvr.instances.
         this.#checkVersionAndOwnership(
+          lc,
           tx,
           expectedCurrentVersion,
           lastConnectTime,
         ),
       ];
 
+      let i = 0;
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;
         stats.queries += write.stats.queries ?? 0;
@@ -843,7 +856,18 @@ export class CVRStore {
         stats.clients += write.stats.clients ?? 0;
         stats.rows += write.stats.rows ?? 0;
 
-        pipelined.push(write.write(tx, lastConnectTime).execute());
+        const writeIndex = i++;
+        const writeStart = Date.now();
+        pipelined.push(
+          write
+            .write(tx, lastConnectTime)
+            .execute()
+            .then(() => {
+              lc.debug?.(
+                `write ${writeIndex}/${this.#writes.size} completed in ${Date.now() - writeStart} ms`,
+              );
+            }),
+        );
         stats.statements++;
       }
 
@@ -852,6 +876,7 @@ export class CVRStore {
         cvr.version,
         this.#pendingRowRecordUpdates,
         'allow-defer',
+        lc,
       );
       pipelined.push(...rowUpdates);
       stats.statements += rowUpdates.length;
@@ -859,12 +884,13 @@ export class CVRStore {
       // Make sure Errors thrown by pipelined statements
       // are propagated up the stack.
       await Promise.all(pipelined);
-
+      lc.debug?.(`flush tx returning after ${Date.now() - start} ms`);
       if (rowUpdates.length === 0) {
         stats.rowsDeferred = this.#pendingRowRecordUpdates.size;
         return false;
       }
       stats.rows += this.#pendingRowRecordUpdates.size;
+
       return true;
     });
 
@@ -876,11 +902,13 @@ export class CVRStore {
     recordRowsSynced(this.#rowCount);
 
     if (this.#upstreamDb) {
+      const start = Date.now();
+      lc.debug?.('flushing upstream writes');
       await this.#upstreamDb.begin(Mode.READ_COMMITTED, async tx => {
         await Promise.all(this.#upstreamWrites.map(write => write(tx)));
       });
+      lc.debug?.(`flushed upstream writes in ${Date.now() - start} ms`);
     }
-
     return stats;
   }
 
@@ -895,8 +923,10 @@ export class CVRStore {
     lastConnectTime: number,
   ): Promise<CVRFlushStats | null> {
     const start = performance.now();
+    lc = lc.withContext('cvrFlushID', flushCounter++);
     try {
       const stats = await this.#flush(
+        lc,
         expectedCurrentVersion,
         cvr,
         lastConnectTime,
