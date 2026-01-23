@@ -1546,21 +1546,9 @@ test('edit trigger reactivity at the column level', () => {
   ];
   expect(data()).toEqual(data2);
   expect(row0Log).toEqual([]);
-  // BEHAVIOR NOTE: When the primary key changes (a: 2 -> 3), the idSymbol
-  // changes too (from '2' to '3').
-  //
-  // PREVIOUS BEHAVIOR (with `produce`): Row object reference was preserved
-  // because `produce` mutates in place. The same object would have its 'a'
-  // property updated from 2 to 3.
-  //
-  // CURRENT BEHAVIOR (with `reconcile`): Row object reference changes because
-  // reconcile matches by key (idSymbol). Since '2' != '3', it treats this as
-  // removing the old row and adding a new one. This is semantically correct:
-  // a row with a different primary key IS a different entity.
-  //
-  // Impact: Components using row identity (e.g., animations keyed by row)
-  // will see this as a new item. This matches React behavior and is the
-  // expected semantic for primary key changes.
+  // PK change (a: 2→3) means idSymbol changes ('2'→'3').
+  // reconcile treats different keys as remove+add (correct: different PK = different entity).
+  // row1Log sees the "new" row because the old row object was replaced.
   expect(row1Log).toEqual([
     {a: 3, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '3'},
   ]);
