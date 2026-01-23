@@ -1,6 +1,7 @@
 import type {Virtualizer} from '@tanstack/react-virtual';
 import {act, renderHook, waitFor} from '@testing-library/react';
 import type {ReactNode} from 'react';
+import type {Root} from 'react-dom/client';
 import {createRoot} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {
@@ -15,6 +16,7 @@ import {
   toStartRow,
   type Item,
 } from './test-helpers.ts';
+import type {UseZeroVirtualizerOptions} from './use-zero-virtualizer.ts';
 import {useZeroVirtualizer} from './use-zero-virtualizer.ts';
 import {ZeroProvider} from './zero-provider.tsx';
 
@@ -22,6 +24,73 @@ import {ZeroProvider} from './zero-provider.tsx';
 vi.mock('wouter/use-browser-location', () => ({
   useHistoryState: () => null,
 }));
+
+// Helper components and utilities
+function VirtualScrollContainer({
+  result,
+  virtualItems,
+}: {
+  result: {
+    virtualizer: Virtualizer<HTMLElement, Element>;
+    rowAt: (index: number) => Item | undefined;
+    total: number | undefined;
+    estimatedTotal: number;
+  };
+  virtualItems: ReturnType<
+    Virtualizer<HTMLElement, Element>['getVirtualItems']
+  >;
+}) {
+  return (
+    <>
+      <div
+        id="scroll-container"
+        style={{
+          height: '800px',
+          overflow: 'auto',
+          position: 'relative',
+        }}
+      >
+        <div
+          style={{
+            height: `${result.virtualizer.getTotalSize()}px`,
+            position: 'relative',
+          }}
+        >
+          {virtualItems.map(item => (
+            <div
+              key={item.key}
+              data-index={item.index}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: `${item.size}px`,
+                transform: `translateY(${item.start}px)`,
+              }}
+            >
+              {result.rowAt(item.index)?.name ?? 'Loading...'}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div id="zero-virtualizer-total">{result.total}</div>
+      <div id="zero-virtualizer-estimated-total">{result.estimatedTotal}</div>
+    </>
+  );
+}
+
+function createTestContainer() {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  return container;
+}
+
+function cleanupTestContainer(root: Root, container: HTMLElement) {
+  root.unmount();
+  document.body.removeChild(container);
+}
 
 describe('useZeroVirtualizer', () => {
   const createTestZero = () =>
@@ -33,8 +102,36 @@ describe('useZeroVirtualizer', () => {
     });
   let z: ReturnType<typeof createTestZero>;
 
+  function createWrapper(zero: ReturnType<typeof createTestZero>) {
+    return ({children}: {children: ReactNode}) => (
+      <ZeroProvider zero={zero}>{children}</ZeroProvider>
+    );
+  }
+
   // Mock scroll element
   let mockScrollElement: HTMLDivElement;
+
+  function createBaseHookOptions(
+    overrides: Partial<
+      UseZeroVirtualizerOptions<
+        HTMLElement,
+        Element,
+        string,
+        Item,
+        typeof toStartRow extends (row: Item) => infer R ? R : never
+      >
+    > = {},
+  ) {
+    return {
+      estimateSize: () => 50,
+      getScrollElement: () => mockScrollElement,
+      listContextParams: 'default',
+      getPageQuery,
+      getSingleQuery,
+      toStartRow,
+      ...overrides,
+    };
+  }
 
   beforeEach(async () => {
     vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
@@ -65,20 +162,8 @@ describe('useZeroVirtualizer', () => {
 
   test('basic initialization', async () => {
     const {result} = renderHook(
-      () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
-        ),
-      },
+      () => useZeroVirtualizer(createBaseHookOptions()),
+      {wrapper: createWrapper(z)},
     );
 
     // Wait for initial data to load
@@ -104,21 +189,8 @@ describe('useZeroVirtualizer', () => {
 
   test('permalink loading', async () => {
     const {result} = renderHook(
-      () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          permalinkID: '500',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
-        ),
-      },
+      () => useZeroVirtualizer(createBaseHookOptions({permalinkID: '500'})),
+      {wrapper: createWrapper(z)},
     );
 
     // Wait for data to load
@@ -150,21 +222,8 @@ describe('useZeroVirtualizer', () => {
 
   test('permalink not found', async () => {
     const {result} = renderHook(
-      () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          permalinkID: '9999',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
-        ),
-      },
+      () => useZeroVirtualizer(createBaseHookOptions({permalinkID: '9999'})),
+      {wrapper: createWrapper(z)},
     );
 
     await z.markAllQueriesAsGot();
@@ -187,20 +246,8 @@ describe('useZeroVirtualizer', () => {
     void z2.triggerConnected();
 
     const {result} = renderHook(
-      () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z2}>{children}</ZeroProvider>
-        ),
-      },
+      () => useZeroVirtualizer(createBaseHookOptions()),
+      {wrapper: createWrapper(z2)},
     );
 
     await z2.markAllQueriesAsGot();
@@ -221,19 +268,10 @@ describe('useZeroVirtualizer', () => {
   test('list context change resets state', async () => {
     const {result, rerender} = renderHook(
       ({listContextParams}: {listContextParams: string}) =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams,
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
+        useZeroVirtualizer(createBaseHookOptions({listContextParams})),
       {
         initialProps: {listContextParams: 'filter1'},
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
-        ),
+        wrapper: createWrapper(z),
       },
     );
 
@@ -272,20 +310,8 @@ describe('useZeroVirtualizer', () => {
 
   test('virtualizer count includes loading skeleton', async () => {
     const {result} = renderHook(
-      () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
-        ),
-      },
+      () => useZeroVirtualizer(createBaseHookOptions()),
+      {wrapper: createWrapper(z)},
     );
 
     await waitFor(() => {
@@ -308,20 +334,8 @@ describe('useZeroVirtualizer', () => {
 
   test('total is undefined until both ends reached', async () => {
     const {result} = renderHook(
-      () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
-        ),
-      },
+      () => useZeroVirtualizer(createBaseHookOptions()),
+      {wrapper: createWrapper(z)},
     );
 
     await waitFor(() => {
@@ -340,20 +354,8 @@ describe('useZeroVirtualizer', () => {
 
   test('estimated total increases as data loads', async () => {
     const {result} = renderHook(
-      () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
-        ),
-      },
+      () => useZeroVirtualizer(createBaseHookOptions()),
+      {wrapper: createWrapper(z)},
     );
 
     // Initial estimated total should be small (loading skeleton)
@@ -378,20 +380,8 @@ describe('useZeroVirtualizer', () => {
 
   test('rowAt returns correct items', async () => {
     const {result} = renderHook(
-      () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
-        ),
-      },
+      () => useZeroVirtualizer(createBaseHookOptions()),
+      {wrapper: createWrapper(z)},
     );
 
     await waitFor(() => {
@@ -419,29 +409,21 @@ describe('useZeroVirtualizer', () => {
 
     const {result} = renderHook(
       () =>
-        useZeroVirtualizer({
-          estimateSize: () => 50,
-          getScrollElement: () => mockScrollElement,
-          listContextParams: 'default',
-          getPageQuery,
-          getSingleQuery,
-          toStartRow,
-          observeElementOffset: (_instance, cb) => {
-            observeElementOffsetCalled = true;
-            cb(0, false);
-            return () => undefined;
-          },
-          observeElementRect: (_instance, cb) => {
-            observeElementRectCalled = true;
-            cb({height: 800, width: 400});
-            return () => undefined;
-          },
-        }),
-      {
-        wrapper: ({children}: {children: ReactNode}) => (
-          <ZeroProvider zero={z}>{children}</ZeroProvider>
+        useZeroVirtualizer(
+          createBaseHookOptions({
+            observeElementOffset: (_instance, cb) => {
+              observeElementOffsetCalled = true;
+              cb(0, false);
+              return () => undefined;
+            },
+            observeElementRect: (_instance, cb) => {
+              observeElementRectCalled = true;
+              cb({height: 800, width: 400});
+              return () => undefined;
+            },
+          }),
         ),
-      },
+      {wrapper: createWrapper(z)},
     );
 
     // Wait for hook to initialize
@@ -741,59 +723,19 @@ describe('useZeroVirtualizer', () => {
       let virtualizerInstance!: Virtualizer<HTMLElement, Element>;
 
       function VirtualListWithRef() {
-        const result = useZeroVirtualizer({
-          estimateSize: () => estimateSize,
-          getScrollElement: () => document.getElementById('scroll-container'),
-          listContextParams: 'default',
-          getPageQuery: getPageQuerySpy,
-          getSingleQuery,
-          toStartRow,
-          overscan: 0,
-        });
+        const result = useZeroVirtualizer(
+          createBaseHookOptions({
+            getScrollElement: () => document.getElementById('scroll-container'),
+            getPageQuery: getPageQuerySpy,
+            overscan: 0,
+          }),
+        );
 
         virtualizerInstance = result.virtualizer;
         const virtualItems = result.virtualizer.getVirtualItems();
 
         return (
-          <>
-            <div
-              id="scroll-container"
-              style={{
-                height: '800px',
-                overflow: 'auto',
-                position: 'relative',
-              }}
-            >
-              <div
-                style={{
-                  height: `${result.virtualizer.getTotalSize()}px`,
-                  position: 'relative',
-                }}
-              >
-                {virtualItems.map(item => (
-                  <div
-                    key={item.key}
-                    data-index={item.index}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: `${item.size}px`,
-                      transform: `translateY(${item.start}px)`,
-                    }}
-                  >
-                    {result.rowAt(item.index)?.name ?? 'Loading...'}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div id="zero-virtualizer-total">{result.total}</div>
-            <div id="zero-virtualizer-estimated-total">
-              {result.estimatedTotal}
-            </div>
-          </>
+          <VirtualScrollContainer result={result} virtualItems={virtualItems} />
         );
       }
 
@@ -923,77 +865,33 @@ describe('useZeroVirtualizer', () => {
       const finalEstimatedTotal = Number(finalEstimatedTotalEl?.textContent);
       expect(finalEstimatedTotal).toBe(1000);
     } finally {
-      root.unmount();
-      document.body.removeChild(container);
+      cleanupTestContainer(root, container);
     }
   });
 
   test('ReactDOM rendering with bidirectional scrolling', async () => {
-    const estimateSize = 50;
-
     const getPageQuerySpy = vi.fn(getPageQuery);
 
     // Create a real DOM container and render with ReactDOM directly
-    const container = document.createElement('div');
-    document.body.appendChild(container);
+    const container = createTestContainer();
     const root = createRoot(container);
 
     let virtualizerInstance!: Virtualizer<HTMLElement, Element>;
 
     function VirtualListWithRef() {
-      const result = useZeroVirtualizer({
-        estimateSize: () => estimateSize,
-        getScrollElement: () => document.getElementById('scroll-container'),
-        listContextParams: 'default',
-        getPageQuery: getPageQuerySpy,
-        getSingleQuery,
-        toStartRow,
-        overscan: 0,
-      });
+      const result = useZeroVirtualizer(
+        createBaseHookOptions({
+          getScrollElement: () => document.getElementById('scroll-container'),
+          getPageQuery: getPageQuerySpy,
+          overscan: 0,
+        }),
+      );
 
       virtualizerInstance = result.virtualizer;
       const virtualItems = result.virtualizer.getVirtualItems();
 
       return (
-        <>
-          <div
-            id="scroll-container"
-            style={{
-              height: '800px',
-              overflow: 'auto',
-              position: 'relative',
-            }}
-          >
-            <div
-              style={{
-                height: `${result.virtualizer.getTotalSize()}px`,
-                position: 'relative',
-              }}
-            >
-              {virtualItems.map(item => (
-                <div
-                  key={item.key}
-                  data-index={item.index}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: `${item.size}px`,
-                    transform: `translateY(${item.start}px)`,
-                  }}
-                >
-                  {result.rowAt(item.index)?.name ?? 'Loading...'}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div id="zero-virtualizer-total">{result.total}</div>
-          <div id="zero-virtualizer-estimated-total">
-            {result.estimatedTotal}
-          </div>
-        </>
+        <VirtualScrollContainer result={result} virtualItems={virtualItems} />
       );
     }
 
@@ -1096,20 +994,16 @@ describe('useZeroVirtualizer', () => {
       );
       expect(estimatedTotalElAfterUp?.textContent).toBe('1000');
     } finally {
-      root.unmount();
-      document.body.removeChild(container);
+      cleanupTestContainer(root, container);
     }
   });
 
   test('ReactDOM rendering with permalink in middle, scroll to bottom, then back to top', async () => {
-    const estimateSize = 50;
-
     const getPageQuerySpy = vi.fn(getPageQuery);
     const getSingleQuerySpy = vi.fn(getSingleQuery);
 
     // Create a real DOM container and render with ReactDOM directly
-    const container = document.createElement('div');
-    document.body.appendChild(container);
+    const container = createTestContainer();
     const root = createRoot(container);
 
     let virtualizerInstance!: Virtualizer<HTMLElement, Element>;
@@ -1118,60 +1012,21 @@ describe('useZeroVirtualizer', () => {
     const permalinkID = '500';
 
     function VirtualListWithRef() {
-      const result = useZeroVirtualizer({
-        estimateSize: () => estimateSize,
-        getScrollElement: () => document.getElementById('scroll-container'),
-        listContextParams: 'default',
-        permalinkID,
-        getPageQuery: getPageQuerySpy,
-        getSingleQuery: getSingleQuerySpy,
-        toStartRow,
-        overscan: 0,
-      });
+      const result = useZeroVirtualizer(
+        createBaseHookOptions({
+          permalinkID,
+          getScrollElement: () => document.getElementById('scroll-container'),
+          getPageQuery: getPageQuerySpy,
+          getSingleQuery: getSingleQuerySpy,
+          overscan: 0,
+        }),
+      );
 
       virtualizerInstance = result.virtualizer;
       const virtualItems = result.virtualizer.getVirtualItems();
 
       return (
-        <>
-          <div
-            id="scroll-container"
-            style={{
-              height: '800px',
-              overflow: 'auto',
-              position: 'relative',
-            }}
-          >
-            <div
-              style={{
-                height: `${result.virtualizer.getTotalSize()}px`,
-                position: 'relative',
-              }}
-            >
-              {virtualItems.map(item => (
-                <div
-                  key={item.key}
-                  data-index={item.index}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: `${item.size}px`,
-                    transform: `translateY(${item.start}px)`,
-                  }}
-                >
-                  {result.rowAt(item.index)?.name ?? 'Loading...'}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div id="zero-virtualizer-total">{result.total}</div>
-          <div id="zero-virtualizer-estimated-total">
-            {result.estimatedTotal}
-          </div>
-        </>
+        <VirtualScrollContainer result={result} virtualItems={virtualItems} />
       );
     }
 
@@ -1321,8 +1176,7 @@ describe('useZeroVirtualizer', () => {
       const estimatedTotal = Number(estimatedTotalElAfterUp?.textContent);
       expect(estimatedTotal).toBeGreaterThan(500);
     } finally {
-      root.unmount();
-      document.body.removeChild(container);
+      cleanupTestContainer(root, container);
     }
   });
 });
