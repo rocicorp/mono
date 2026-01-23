@@ -26,11 +26,6 @@ type MetaEntry = Writable<Entry> & {
 };
 type MetaEntryList = MetaEntry[];
 
-/*
- * Runtime assertions via getSingularEntry/getChildEntryList catch bugs early
- * (clear error at violation point vs mysterious NaN refCounts later).
- */
-
 /**
  * `applyChange` does not consume the `relationships` of `ChildChange#node`,
  * `EditChange#node` and `EditChange#oldNode`.  The `ViewChange` type
@@ -317,7 +312,11 @@ export function applyChange(
             change.node.row,
             schema.compareRows,
           );
-          // rc=1 and same/adjacent pos: edit in place, no move needed
+          // A special case:
+          // when refCount is 1 (so the row is being moved without leaving a
+          // placeholder behind), and the new pos is the same as the old, or
+          // directly after the old (so after the remove of the old it would be
+          // in the same pos): the row does not need to be moved, just edited.
           if (
             oldEntry[refCountSymbol] === 1 &&
             (pos === oldPos || pos - 1 === oldPos)
@@ -328,7 +327,10 @@ export function applyChange(
               [relationship]: view.with(oldPos, newEntry),
             };
           } else {
-            // Row moves: leave ghost at old pos if rc>1
+            // Move the row. If rc > 1, an edit will be received for each ref.
+            // On first edit: move row, apply edit, set rc=1. Leave a copy at
+            // old pos with decremented rc. As each edit arrives, old copy's rc
+            // decrements and new pos rc increments. When copy rc hits 0, remove.
             const newRefCount = oldEntry[refCountSymbol] - 1;
             let newView: MetaEntry[];
             let adjustedPos = pos;
