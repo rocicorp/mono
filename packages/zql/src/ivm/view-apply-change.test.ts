@@ -8,6 +8,10 @@ import {
 } from './view-apply-change.ts';
 import type {Entry, Format} from './view.ts';
 
+// Test helpers for cleaner entry access (casts are safe in tests)
+const entries = (e: Entry, key: string): Entry[] => e[key] as Entry[];
+const at = (e: Entry, key: string, i: number): Entry => entries(e, key)[i];
+
 describe('applyChange', () => {
   const relationship = '';
   const schema: SourceSchema = {
@@ -1462,7 +1466,7 @@ describe('applyChange', () => {
         true,
       );
 
-      const firstRowRef = (root[''] as Entry[])[0];
+      const firstRowRef = at(root, '', 0);
 
       // Add second row
       root = applyChange(
@@ -1478,8 +1482,8 @@ describe('applyChange', () => {
       );
 
       // First row should keep same reference (toBe checks reference equality)
-      expect((root[''] as Entry[])[0]).toBe(firstRowRef);
-      expect((root[''] as Entry[])).toHaveLength(2);
+      expect(at(root, '', 0)).toBe(firstRowRef);
+      expect(entries(root, '')).toHaveLength(2);
     });
 
     test('unchanged rows keep their reference when removing another row', () => {
@@ -1509,7 +1513,7 @@ describe('applyChange', () => {
         true,
       );
 
-      const firstRowRef = (root[''] as Entry[])[0];
+      const firstRowRef = at(root, '', 0);
 
       // Remove second row
       root = applyChange(
@@ -1525,8 +1529,8 @@ describe('applyChange', () => {
       );
 
       // First row should keep same reference
-      expect((root[''] as Entry[])[0]).toBe(firstRowRef);
-      expect((root[''] as Entry[])).toHaveLength(1);
+      expect(at(root, '', 0)).toBe(firstRowRef);
+      expect(entries(root, '')).toHaveLength(1);
     });
 
     test('unchanged rows keep their reference when editing another row', () => {
@@ -1556,7 +1560,7 @@ describe('applyChange', () => {
         true,
       );
 
-      const firstRowRef = (root[''] as Entry[])[0];
+      const firstRowRef = at(root, '', 0);
 
       // Edit second row
       root = applyChange(
@@ -1573,10 +1577,10 @@ describe('applyChange', () => {
       );
 
       // First row should keep same reference
-      expect((root[''] as Entry[])[0]).toBe(firstRowRef);
+      expect(at(root, '', 0)).toBe(firstRowRef);
       // Second row should have new reference with updated data
-      expect((root[''] as Entry[])[1]).not.toBe(firstRowRef);
-      expect((root[''] as Entry[])[1]).toEqual(
+      expect(at(root, '', 1)).not.toBe(firstRowRef);
+      expect(at(root, '', 1)).toEqual(
         expect.objectContaining({id: '2', name: 'Bobby'}),
       );
     });
@@ -1596,7 +1600,7 @@ describe('applyChange', () => {
         true,
       );
 
-      const originalRef = (root[''] as Entry[])[0];
+      const originalRef = at(root, '', 0);
 
       root = applyChange(
         root,
@@ -1612,8 +1616,8 @@ describe('applyChange', () => {
       );
 
       // Edited row should have a new reference
-      expect((root[''] as Entry[])[0]).not.toBe(originalRef);
-      expect((root[''] as Entry[])[0]).toEqual(
+      expect(at(root, '', 0)).not.toBe(originalRef);
+      expect(at(root, '', 0)).toEqual(
         expect.objectContaining({id: '1', name: 'Alicia'}),
       );
     });
@@ -1634,7 +1638,7 @@ describe('applyChange', () => {
       );
 
       const rootRef = root;
-      const listRef = root[''] as Entry[];
+      const listRef = entries(root, '');
 
       root = applyChange(
         root,
@@ -1709,9 +1713,9 @@ describe('applyChange', () => {
         true,
       );
 
-      const parent1 = (root[''] as Entry[])[0];
-      const child1Ref = (parent1['children'] as Entry[])[0];
-      const child2Ref = (parent1['children'] as Entry[])[1];
+      const parent1 = at(root, '', 0);
+      const child1Ref = at(parent1, 'children', 0);
+      const child2Ref = at(parent1, 'children', 1);
 
       // Add a new child to the parent
       root = applyChange(
@@ -1733,14 +1737,14 @@ describe('applyChange', () => {
         true,
       );
 
-      const newParent1 = (root[''] as Entry[])[0];
+      const newParent1 = at(root, '', 0);
       // Parent should have new reference (its children changed)
       expect(newParent1).not.toBe(parent1);
       // But existing children should keep their references
-      expect((newParent1['children'] as Entry[])[0]).toBe(child1Ref);
-      expect((newParent1['children'] as Entry[])[1]).toBe(child2Ref);
+      expect(at(newParent1, 'children', 0)).toBe(child1Ref);
+      expect(at(newParent1, 'children', 1)).toBe(child2Ref);
       // New child is added
-      expect((newParent1['children'] as Entry[])).toHaveLength(3);
+      expect(entries(newParent1, 'children')).toHaveLength(3);
     });
 
     test('refCount increment creates new reference but preserves data', () => {
@@ -1758,7 +1762,7 @@ describe('applyChange', () => {
         true,
       );
 
-      const originalRef = (root[''] as Entry[])[0];
+      const originalRef = at(root, '', 0);
       const originalRefCount = (originalRef as {[refCountSymbol]: number})[
         refCountSymbol
       ];
@@ -1776,7 +1780,7 @@ describe('applyChange', () => {
         true,
       );
 
-      const newRef = (root[''] as Entry[])[0];
+      const newRef = at(root, '', 0);
 
       // Reference should change (immutability)
       expect(newRef).not.toBe(originalRef);
@@ -1862,9 +1866,9 @@ describe('applyChange', () => {
         true,
       );
 
-      const parent1Ref = (root[''] as Entry[])[0];
-      const parent2Ref = (root[''] as Entry[])[1];
-      const parent2ChildrenRef = parent2Ref['children'] as Entry[];
+      const parent1Ref = at(root, '', 0);
+      const parent2Ref = at(root, '', 1);
+      const parent2ChildrenRef = entries(parent2Ref, 'children');
 
       // Add a child to parent1 only
       root = applyChange(
@@ -1887,11 +1891,11 @@ describe('applyChange', () => {
       );
 
       // Parent1 should have new reference
-      expect((root[''] as Entry[])[0]).not.toBe(parent1Ref);
+      expect(at(root, '', 0)).not.toBe(parent1Ref);
       // Parent2 should keep same reference (unchanged)
-      expect((root[''] as Entry[])[1]).toBe(parent2Ref);
+      expect(at(root, '', 1)).toBe(parent2Ref);
       // Parent2's children should keep same reference
-      expect((root[''] as Entry[])[1]['children']).toBe(parent2ChildrenRef);
+      expect(at(root, '', 1)['children']).toBe(parent2ChildrenRef);
     });
   });
 });
