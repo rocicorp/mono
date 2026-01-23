@@ -102,7 +102,6 @@ describe('view-syncer/cvr-store', () => {
     store = new CVRStore(
       lc,
       db,
-      upstreamDb,
       SHARD,
       TASK_ID,
       CVR_ID,
