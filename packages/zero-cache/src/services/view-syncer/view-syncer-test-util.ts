@@ -741,7 +741,7 @@ export async function setup(
     100,
     inspectorDelegate,
     customQueryTransformer,
-    op => op(),
+    (_lc, _description, op) => op(),
     undefined,
     setTimeoutFn,
   );
