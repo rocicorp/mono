@@ -690,10 +690,6 @@ textarea.autoResize {
   animation: placeHolderShimmer 1s ease-in-out infinite;
 }
 
-.row.target {
-  background-color: rgba(252, 33, 138, 0.2);
-}
-
 @keyframes placeHolderShimmer {
   0% {
     background-position: 150% 0;
