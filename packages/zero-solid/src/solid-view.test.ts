@@ -1546,7 +1546,13 @@ test('edit trigger reactivity at the column level', () => {
   ];
   expect(data()).toEqual(data2);
   expect(row0Log).toEqual([]);
-  expect(row1Log).toEqual([]);
+  // When the primary key changes (a: 2 -> 3), the idSymbol changes too.
+  // Solid's reconcile with key-based matching treats this as a new item,
+  // so the row object reference changes. This is semantically correct:
+  // a row with a different primary key is a different entity.
+  expect(row1Log).toEqual([
+    {a: 3, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '3'},
+  ]);
   expect(row0ALog).toEqual([]);
   expect(row0BLog).toEqual([]);
   expect(row1ALog).toEqual([3]);

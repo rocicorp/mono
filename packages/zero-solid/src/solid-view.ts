@@ -1,4 +1,4 @@
-import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
+import {reconcile, type SetStoreFunction} from 'solid-js/store';
 import {emptyArray} from '../../shared/src/sentinels.ts';
 import {
   applyChange,
@@ -67,11 +67,11 @@ export class SolidView implements Output {
 
     input.setOutput(this);
 
-    const initialRoot = this.#createEmptyRoot();
-    this.#applyChangesToRoot(
+    const emptyRoot = this.#createEmptyRoot();
+    const initialRoot = this.#applyChangesToRoot(
       skipYields(input.fetch({})),
       node => ({type: 'add', node}),
-      initialRoot,
+      emptyRoot,
     );
 
     this.#setState = setState;
@@ -156,20 +156,60 @@ export class SolidView implements Output {
     // using produce at the end of the transaction but read the relationships
     // now as they are only valid to read when the push is received.
     if (this.#builderRoot) {
-      this.#applyChangeToRoot(change, this.#builderRoot);
+      this.#builderRoot = this.#applyChangeToRoot(change, this.#builderRoot);
     } else {
       this.#pendingChanges.push(materializeRelationships(change));
     }
     return emptyArray;
   }
 
+  #currentRoot: Entry | undefined;
+
   #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => ViewChange): void {
+    // Apply changes immutably, then use reconcile for fine-grained reactivity.
+    // We read the current root, apply all changes to get new immutable state,
+    // then use reconcile to update only the changed properties in the store.
+    //
+    // We need to read the current state first. Since Solid stores don't have
+    // a direct getter, we use a function setter that reads the current state
+    // and stores it temporarily, then use reconcile to apply the new state.
+    this.#setState((prev: State): State => {
+      this.#currentRoot = prev[0];
+      return prev;
+    });
+
+    if (this.#currentRoot === undefined) {
+      return;
+    }
+
+    const newRoot = this.#applyChangesToRoot<T>(
+      changes,
+      mapper,
+      this.#currentRoot,
+    );
+    this.#currentRoot = undefined;
+
+    if (isEmptyRoot(newRoot)) {
+      this.#builderRoot = this.#createEmptyRoot();
+    }
+
+    // Use reconcile to update only changed properties, enabling fine-grained
+    // reactivity at the property level (e.g., only re-render components that
+    // depend on changed fields).
+    //
+    // We use key: idSymbol for proper array item matching, and merge: true
+    // to ensure properties are merged rather than replaced. This enables
+    // fine-grained reactivity for most edits.
+    //
+    // Note: When an edit changes the primary key (and thus idSymbol), reconcile
+    // will treat it as a new item, causing the row object reference to change.
+    // This is acceptable because primary key changes are rare in practice.
     this.#setState(
-      produce((draftState: State) => {
-        this.#applyChangesToRoot<T>(changes, mapper, draftState[0]);
-        if (isEmptyRoot(draftState[0])) {
-          this.#builderRoot = this.#createEmptyRoot();
-        }
+      0,
+      reconcile(newRoot, {
+        // solidjs's types want a string, but a symbol works
+        key: idSymbol as unknown as string,
+        merge: true,
       }),
     );
   }
@@ -178,14 +218,16 @@ export class SolidView implements Output {
     changes: Iterable<T>,
     mapper: (v: T) => ViewChange,
     root: Entry,
-  ) {
+  ): Entry {
+    let currentRoot = root;
     for (const change of changes) {
-      this.#applyChangeToRoot(mapper(change), root);
+      currentRoot = this.#applyChangeToRoot(mapper(change), currentRoot);
     }
+    return currentRoot;
   }
 
-  #applyChangeToRoot(change: ViewChange, root: Entry) {
-    applyChange(
+  #applyChangeToRoot(change: ViewChange, root: Entry): Entry {
+    return applyChange(
       root,
       change,
       this.#input.getSchema(),

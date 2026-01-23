@@ -111,12 +111,13 @@ test('basics', () => {
   view.flush();
   expect(callCount).toBe(3);
   expect(view.data).toEqual([]);
-  // The data remains but the rc gets updated.
+  // With immutability, old captured data reference is unchanged.
+  // The listener was unsubscribed, so no new data was captured.
   expect(data).toEqual([
     {
       a: 3,
       b: 'c',
-      [refCountSymbol]: 0,
+      [refCountSymbol]: 1,
     },
   ]);
 });
