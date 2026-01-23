@@ -61,6 +61,13 @@ export type UseZeroVirtualizerOptions<
   toStartRow: (row: TRow) => TStartRow;
 };
 
+const createPermalinkAnchor = (id: string) =>
+  ({
+    id,
+    index: NUM_ROWS_FOR_LOADING_SKELETON,
+    kind: 'permalink',
+  }) as const;
+
 export function useZeroVirtualizer<
   TScrollElement extends Element,
   TItemElement extends Element,
@@ -98,13 +105,6 @@ export function useZeroVirtualizer<
   total: number | undefined;
 } {
   const historyState = usePermalinkHistoryState<TStartRow>();
-
-  const createPermalinkAnchor = (id: string) =>
-    ({
-      id,
-      index: NUM_ROWS_FOR_LOADING_SKELETON,
-      kind: 'permalink',
-    }) as const;
 
   // Initialize paging state from history.state directly to avoid Strict Mode double-mount rows
   const [
@@ -359,7 +359,6 @@ export function useZeroVirtualizer<
     permalinkID,
     virtualizer,
     estimateSize,
-    createPermalinkAnchor,
     listContextParams,
   ]);
 
