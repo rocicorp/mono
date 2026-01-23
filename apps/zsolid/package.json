@@ -1,0 +1,25 @@
+{
+  "name": "zsolid",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "check-types": "tsc -p tsconfig.json",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@rocicorp/zero": "0.26.0",
+    "nanoid": "^5.1.2",
+    "solid-js": "^1.9.4",
+    "zero-solid": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "~5.9.3",
+    "vite": "7.2.7",
+    "vite-plugin-solid": "^2.11.7",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}
