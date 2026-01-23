@@ -116,6 +116,7 @@ export type SyncContext = {
   readonly protocolVersion: number;
   readonly tokenData: TokenData | undefined;
   readonly httpCookie: string | undefined;
+  readonly origin: string | undefined;
 };
 
 const tracer = trace.getTracer('view-syncer', version);
@@ -162,6 +163,8 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  * next tick of the timer.
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
+
+type CustomQueryTransformMode = 'all' | 'missing';
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -228,6 +231,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #authData: TokenData | undefined;
 
   #httpCookie: string | undefined;
+  #origin: string | undefined;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
   readonly #setTimeout: SetTimeout;
@@ -289,7 +293,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: NormalizedZeroConfig;
-  #runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>;
+  #runPriorityOp: <T>(
+    lc: LogContext,
+    description: string,
+    op: () => Promise<T>,
+  ) => Promise<T>;
 
   constructor(
     config: NormalizedZeroConfig,
@@ -305,7 +313,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     slowHydrateThreshold: number,
     inspectorDelegate: InspectorDelegate,
     customQueryTransformer: CustomQueryTransformer | undefined,
-    runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>,
+    runPriorityOp: <T>(
+      lc: LogContext,
+      description: string,
+      op: () => Promise<T>,
+    ) => Promise<T>,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
@@ -346,6 +358,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       allowedClientHeaders: this.#queryConfig.allowedClientHeaders,
       token: this.#authData?.raw,
       cookie: forwardCookie ? this.#httpCookie : undefined,
+      origin: this.#origin,
     };
   }
 
@@ -377,8 +390,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return;
       }
       if (!this.#cvr) {
-        this.#lc.debug?.('loading CVR');
-        this.#cvr = await this.#runPriorityOp(() =>
+        this.#lc.debug?.('loading cvr');
+        this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
           this.#cvrStore.load(lc, this.#lastConnectTime),
         );
         this.#ttlClock = this.#cvr.ttlClock;
@@ -470,7 +483,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
 
           await this.#hydrateUnchangedQueries(lc, cvr);
-          await this.#syncQueryPipelineSet(lc, cvr);
+          // hydrateUnchangedQueries just transformed
+          // all the custom queries, this #syncQueryPipelineSet call
+          // should retransform those that are missing from #pipelines, which
+          // are those which errored or changed transform hash
+          await this.#syncQueryPipelineSet(lc, cvr, 'missing');
           this.#pipelinesSynced = true;
         });
       }
@@ -508,7 +525,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.debug?.('Queries have expired');
       // #syncQueryPipelineSet() will remove the expired queries.
       if (this.#pipelinesSynced) {
-        await this.#syncQueryPipelineSet(lc, cvr);
+        await this.#syncQueryPipelineSet(lc, cvr, 'missing');
       }
     }
 
@@ -618,11 +635,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         baseCookie,
         tokenData,
         httpCookie,
+        origin,
         protocolVersion,
       } = ctx;
       this.#authData = pickToken(this.#lc, this.#authData, tokenData);
       this.#lc.debug?.(`Picked auth token for clientGroupID`);
       this.#httpCookie = httpCookie;
+      this.#origin = origin;
 
       // Handle custom query URL and headers
       const [, {userQueryURL, userQueryHeaders}] = initConnectionMessage;
@@ -707,6 +726,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             clientID,
             msg,
             cvr,
+            'all', // re transform all on new connections
             // Until the profileID is required in the URL, default it to
             // `cg${clientGroupID}`, as is done in the schema migration.
             // As clients update to the zero version with the profileID logic,
@@ -728,7 +748,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void> {
-    await this.#runInLockForClient(ctx, msg, this.#handleConfigUpdate);
+    await this.#runInLockForClient(
+      ctx,
+      msg,
+      (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
+        this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
+    );
   }
 
   async deleteClients(
@@ -738,7 +763,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#runInLockForClient(
       ctx,
       [msg[0], {deleted: msg[1]}],
-      this.#handleConfigUpdate,
+      (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
+        this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
     );
   }
 
@@ -759,7 +785,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
-    return this.#runPriorityOp(async () => {
+    return this.#runPriorityOp(lc, 'flushing cvr', async () => {
       const now = Date.now();
       const ttlClock = this.#getTTLClock(now);
       const {cvr, flushed} = await updater.flush(
@@ -792,18 +818,30 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #updateTTLClockInCVRWithoutLock(lc: LogContext): void {
-    lc.debug?.('Syncing ttlClock');
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
-    this.#cvrStore.updateTTLClock(ttlClock, now).catch(e => {
-      lc.error?.('failed to update TTL clock', e);
-    });
+    const rid = randomID();
+    lc.debug?.('Syncing ttlClock', rid);
+    const start = Date.now();
+    const ttlClock = this.#getTTLClock(start);
+    this.#cvrStore
+      .updateTTLClock(ttlClock, start)
+      .then(() => {
+        lc.debug?.('Synced ttlClock', rid, `in ${Date.now() - start} ms`);
+      })
+      .catch(e => {
+        lc.error?.(
+          'failed to update TTL clock',
+          rid,
+          `after ${Date.now() - start} ms`,
+          e,
+        );
+      });
   }
 
   async #updateCVRConfig(
     lc: LogContext,
     cvr: CVRSnapshot,
     clientID: string,
+    customQueryTransformMode: CustomQueryTransformMode,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
   ): Promise<CVRSnapshot> {
     const updater = new CVRConfigDrivenUpdater(
@@ -829,7 +867,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     if (this.#pipelinesSynced) {
-      await this.#syncQueryPipelineSet(lc, this.#cvr);
+      await this.#syncQueryPipelineSet(lc, this.#cvr, customQueryTransformMode);
     }
 
     return this.#cvr;
@@ -931,81 +969,88 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       activeClients,
     }: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
+    customQueryTransformMode: CustomQueryTransformMode,
     profileID?: string,
   ) =>
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
       const deletedClientIDs: string[] = [];
       const deletedClientGroupIDs: string[] = [];
 
-      cvr = await this.#updateCVRConfig(lc, cvr, clientID, updater => {
-        const {ttlClock} = cvr;
-        const patches: PatchToVersion[] = [];
+      cvr = await this.#updateCVRConfig(
+        lc,
+        cvr,
+        clientID,
+        customQueryTransformMode,
+        updater => {
+          const {ttlClock} = cvr;
+          const patches: PatchToVersion[] = [];
 
-        if (clientSchema) {
-          updater.setClientSchema(lc, clientSchema);
-        }
-        if (profileID) {
-          updater.setProfileID(lc, profileID);
-        }
+          if (clientSchema) {
+            updater.setClientSchema(lc, clientSchema);
+          }
+          if (profileID) {
+            updater.setProfileID(lc, profileID);
+          }
 
-        // Apply requested patches.
-        lc.debug?.(`applying ${desiredQueriesPatch?.length} query patches`);
-        if (desiredQueriesPatch?.length) {
-          for (const patch of desiredQueriesPatch) {
-            switch (patch.op) {
-              case 'put':
-                patches.push(...updater.putDesiredQueries(clientID, [patch]));
-                break;
-              case 'del':
-                patches.push(
-                  ...updater.markDesiredQueriesAsInactive(
-                    clientID,
-                    [patch.hash],
-                    ttlClock,
-                  ),
-                );
-                break;
-              case 'clear':
-                patches.push(...updater.clearDesiredQueries(clientID));
-                break;
+          // Apply requested patches.
+          lc.debug?.(`applying ${desiredQueriesPatch?.length} query patches`);
+          if (desiredQueriesPatch?.length) {
+            for (const patch of desiredQueriesPatch) {
+              switch (patch.op) {
+                case 'put':
+                  patches.push(...updater.putDesiredQueries(clientID, [patch]));
+                  break;
+                case 'del':
+                  patches.push(
+                    ...updater.markDesiredQueriesAsInactive(
+                      clientID,
+                      [patch.hash],
+                      ttlClock,
+                    ),
+                  );
+                  break;
+                case 'clear':
+                  patches.push(...updater.clearDesiredQueries(clientID));
+                  break;
+              }
             }
           }
-        }
 
-        const clientIDsToDelete: Set<string> = new Set();
+          const clientIDsToDelete: Set<string> = new Set();
 
-        if (activeClients) {
-          // We find all the clients in this client group that are not active.
-          const allClientIDs = Object.keys(cvr.clients);
-          const activeClientsSet = new Set(activeClients);
-          for (const id of allClientIDs) {
-            if (!activeClientsSet.has(id)) {
-              clientIDsToDelete.add(id);
+          if (activeClients) {
+            // We find all the clients in this client group that are not active.
+            const allClientIDs = Object.keys(cvr.clients);
+            const activeClientsSet = new Set(activeClients);
+            for (const id of allClientIDs) {
+              if (!activeClientsSet.has(id)) {
+                clientIDsToDelete.add(id);
+              }
             }
           }
-        }
 
-        if (deleted?.clientIDs?.length) {
-          for (const cid of deleted.clientIDs) {
-            assert(cid !== clientID, 'cannot delete self');
-            clientIDsToDelete.add(cid);
+          if (deleted?.clientIDs?.length) {
+            for (const cid of deleted.clientIDs) {
+              assert(cid !== clientID, 'cannot delete self');
+              clientIDsToDelete.add(cid);
+            }
           }
-        }
 
-        for (const cid of clientIDsToDelete) {
-          const patchesDueToClient = updater.deleteClient(cid, ttlClock);
-          patches.push(...patchesDueToClient);
-          deletedClientIDs.push(cid);
-        }
+          for (const cid of clientIDsToDelete) {
+            const patchesDueToClient = updater.deleteClient(cid, ttlClock);
+            patches.push(...patchesDueToClient);
+            deletedClientIDs.push(cid);
+          }
 
-        if (deleted?.clientGroupIDs?.length) {
-          lc.debug?.(
-            `ignoring ${deleted.clientGroupIDs.length} deprecated client group deletes`,
-          );
-        }
+          if (deleted?.clientGroupIDs?.length) {
+            lc.debug?.(
+              `ignoring ${deleted.clientGroupIDs.length} deprecated client group deletes`,
+            );
+          }
 
-        return patches;
-      });
+          return patches;
+        },
+      );
 
       // Send 'deleteClients' ack to the clients.
       if (
@@ -1125,35 +1170,37 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    await this.#runPriorityOp(async () => {
-      if (this.#customQueryTransformer && customQueries.size > 0) {
-        // Always transform custom queries, even during initialization,
-        // to ensure authorization validation with current auth context.
-        const transformedCustomQueries =
-          await this.#customQueryTransformer.transform(
+    const customQueryTransformer = this.#customQueryTransformer;
+    if (customQueryTransformer && customQueries.size > 0) {
+      // Always transform custom queries, even during initialization,
+      // to ensure authorization validation with current auth context.
+      const transformedCustomQueries = await this.#runPriorityOp(
+        lc,
+        '#hydrateUnchangedQueries transforming custom queries',
+        () =>
+          customQueryTransformer.transform(
             this.#getHeaderOptions(this.#queryConfig.forwardCookies),
             customQueries.values(),
             this.userQueryURL,
-          );
+          ),
+      );
 
-        // Only process queries that successfully transformed and transformed to
-        // the same transformationHash as in the CVR here.
-        // Queries that failed to transform will be retransformed by
-        // #syncQueryPipelineSet, if they fail again errors will be sent to
-        // the client.
-        if (Array.isArray(transformedCustomQueries)) {
-          for (const q of transformedCustomQueries) {
-            if (
-              !('error' in q) &&
-              q.transformationHash ===
-                customQueries.get(q.id)?.transformationHash
-            ) {
-              transformedQueries.push(q);
-            }
+      // Only process queries that successfully transformed and transformed to
+      // the same transformationHash as in the CVR here.
+      // Queries that failed to transform will be retransformed by
+      // #syncQueryPipelineSet, if they fail again errors will be sent to
+      // the client.
+      if (Array.isArray(transformedCustomQueries)) {
+        for (const q of transformedCustomQueries) {
+          if (
+            !('error' in q) &&
+            q.transformationHash === customQueries.get(q.id)?.transformationHash
+          ) {
+            transformedQueries.push(q);
           }
         }
       }
-    });
+    }
 
     for (const q of otherQueries) {
       const transformed = transformAndHashQuery(
@@ -1178,7 +1225,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       let count = 0;
       await startAsyncSpan(
         tracer,
@@ -1303,7 +1350,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * This must be called from within the #lock.
    */
-  #syncQueryPipelineSet(lc: LogContext, cvr: CVRSnapshot) {
+  #syncQueryPipelineSet(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+    customQueryTransformMode: CustomQueryTransformMode,
+  ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async () => {
       assert(
         this.#pipelines.initialized(),
@@ -1370,19 +1421,31 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let erroredQueryIDs: string[] | undefined;
-      if (this.#customQueryTransformer && customQueries.size > 0) {
+      const customQueriesToTransform =
+        customQueryTransformMode === 'all'
+          ? [...customQueries.values()]
+          : (customQueryTransformMode satisfies 'missing') &&
+            [...customQueries.values()].filter(
+              q => !this.#pipelines.queries().has(q.id),
+            );
+      const customQueryTransformer = this.#customQueryTransformer;
+      if (customQueryTransformer && customQueriesToTransform.length > 0) {
         // Always re-transform custom queries on client connection for security.
         // This ensures the user's API server validates authorization with the
         // current auth context.
         const transformStart = performance.now();
         let transformedCustomQueries;
         try {
-          transformedCustomQueries =
-            await this.#customQueryTransformer.transform(
-              this.#getHeaderOptions(true),
-              customQueries.values(),
-              this.userQueryURL,
-            );
+          transformedCustomQueries = await this.#runPriorityOp(
+            lc,
+            '#syncQueryPipelineSet transforming custom queries',
+            () =>
+              customQueryTransformer.transform(
+                this.#getHeaderOptions(true),
+                customQueriesToTransform,
+                this.userQueryURL,
+              ),
+          );
           this.#queryTransformations.add(1, {result: 'success'});
         } catch (e) {
           this.#queryTransformations.add(1, {result: 'error'});
@@ -1584,7 +1647,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let totalProcessTime = 0;
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
@@ -1593,7 +1656,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // yield at the very beginning so that the first time slice
       // is properly processed by the time-slice queue.
-      await yieldProcess();
+      await yieldProcess(lc);
 
       function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
@@ -1861,7 +1924,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       const start = performance.now();
 
-      const timer = new TimeSliceTimer();
+      const timer = new TimeSliceTimer(lc);
       const {version, numChanges, changes} = this.#pipelines.advance(timer);
       lc = lc.withContext('newVersion', version);
 
@@ -1988,7 +2051,7 @@ const CURSOR_PAGE_SIZE = 10000;
 // This effectively achieves the desired one-per-event-loop-iteration behavior.
 const timeSliceQueue = new Lock();
 
-function yieldProcess() {
+function yieldProcess(_lc: LogContext) {
   return timeSliceQueue.withLock(() => new Promise(setImmediate));
 }
 
@@ -2121,11 +2184,16 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
 export class TimeSliceTimer {
   #total = 0;
   #start = 0;
+  #lc: LogContext;
+
+  constructor(lc: LogContext) {
+    this.#lc = lc;
+  }
 
   async start() {
     // yield at the very beginning so that the first time slice
     // is properly processed by the time-slice queue.
-    await yieldProcess();
+    await yieldProcess(this.#lc);
     return this.startWithoutYielding();
   }
 
@@ -2137,7 +2205,7 @@ export class TimeSliceTimer {
 
   async yieldProcess(_msgForTesting?: string) {
     this.#stopLap();
-    await yieldProcess();
+    await yieldProcess(this.#lc);
     this.#startLap();
   }
 

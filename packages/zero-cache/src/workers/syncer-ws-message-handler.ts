@@ -51,6 +51,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       baseCookie,
       protocolVersion,
       httpCookie,
+      origin,
     } = connectParams;
     this.#viewSyncer = viewSyncer;
     this.#mutagen = mutagen;
@@ -72,6 +73,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       protocolVersion,
       tokenData,
       httpCookie,
+      origin,
     };
   }
 
@@ -129,6 +131,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   msg[1],
                   this.#token,
                   this.#syncContext.httpCookie,
+                  this.#syncContext.origin,
                 ),
               ];
             }

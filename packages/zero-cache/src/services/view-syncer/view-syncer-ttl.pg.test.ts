@@ -84,6 +84,7 @@ const SYNC_CONTEXT: SyncContext = {
   protocolVersion: PROTOCOL_VERSION,
   tokenData: undefined,
   httpCookie: undefined,
+  origin: undefined,
 };
 
 beforeEach<PgTest>(async ({testDBs}) => {

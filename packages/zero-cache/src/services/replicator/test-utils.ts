@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import type {ColumnSpec, IndexSpec, TableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
@@ -75,8 +76,10 @@ export class ReplicationMessages<
         tag: 'relation',
         schema,
         name: table,
-        replicaIdentity,
-        keyColumns: keys,
+        rowKey: {
+          type: replicaIdentity,
+          columns: keys,
+        },
       } as const;
       this.#tables.set(table, relation);
     }
@@ -135,7 +138,16 @@ export class ReplicationMessages<
   }
 
   createTable(spec: TableSpec): TableCreate {
-    return {tag: 'create-table', spec};
+    return {
+      tag: 'create-table',
+      spec,
+      metadata: {
+        rowKey: {
+          columns: must(spec.primaryKey),
+          type: 'default',
+        },
+      },
+    };
   }
 
   renameTable<TableName extends string & keyof TablesAndKeys>(
@@ -158,6 +170,11 @@ export class ReplicationMessages<
       tag: 'add-column',
       table: {schema: 'public', name: table},
       column: {name: column, spec},
+      tableMetadata: {
+        rowKey: {
+          columns: ['not-mocked-for-the-test'],
+        },
+      },
     };
   }
 
