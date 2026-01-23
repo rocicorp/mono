@@ -2379,6 +2379,7 @@ describe('BTreeWrite.putMany', () => {
       const testGetEntrySize = () => 1;
       const testMinSize = 2;
       const testMaxSize = 4;
+      const testChunkHeaderSize = 0;
 
       const h = await withWrite(dagStore, async dagWrite => {
         const tree = new BTreeWrite(
@@ -2388,7 +2389,7 @@ describe('BTreeWrite.putMany', () => {
           testMinSize,
           testMaxSize,
           testGetEntrySize,
-          chunkHeaderSize,
+          testChunkHeaderSize,
         );
         // First batch creates initial multi-level structure
         // With maxSize=4 and entrySize=1, each node can hold max 4 entries
@@ -2413,7 +2414,7 @@ describe('BTreeWrite.putMany', () => {
           formatVersion,
           h,
           testGetEntrySize,
-          chunkHeaderSize,
+          testChunkHeaderSize,
         );
 
         // Verify data is accessible
@@ -2439,6 +2440,7 @@ describe('BTreeWrite.putMany', () => {
       const testGetEntrySize = () => 1;
       const testMinSize = 3;
       const testMaxSize = 5;
+      const testChunkHeaderSize = 0;
 
       const h = await withWrite(dagStore, async dagWrite => {
         const tree = new BTreeWrite(
@@ -2448,7 +2450,7 @@ describe('BTreeWrite.putMany', () => {
           testMinSize,
           testMaxSize,
           testGetEntrySize,
-          chunkHeaderSize,
+          testChunkHeaderSize,
         );
         // Create initial structure
         await tree.putMany(
@@ -2469,7 +2471,7 @@ describe('BTreeWrite.putMany', () => {
           formatVersion,
           h,
           testGetEntrySize,
-          chunkHeaderSize,
+          testChunkHeaderSize,
         );
         expect(await tree.get('a0')).toBe(0);
         expect(await tree.get('b0')).toBe(0);
@@ -2492,6 +2494,7 @@ describe('BTreeWrite.putMany', () => {
       const testGetEntrySize = () => 1;
       const testMinSize = 2;
       const testMaxSize = 4;
+      const testChunkHeaderSize = 0;
 
       const h = await withWrite(dagStore, async dagWrite => {
         const tree = new BTreeWrite(
@@ -2501,7 +2504,7 @@ describe('BTreeWrite.putMany', () => {
           testMinSize,
           testMaxSize,
           testGetEntrySize,
-          chunkHeaderSize,
+          testChunkHeaderSize,
         );
         // Build a tree with multiple levels - 20 entries will create multiple nodes
         await tree.putMany(
@@ -2530,7 +2533,7 @@ describe('BTreeWrite.putMany', () => {
           formatVersion,
           h,
           testGetEntrySize,
-          chunkHeaderSize,
+          testChunkHeaderSize,
         );
         expect(await tree.get('k00')).toBe(0);
         expect(await tree.get('k00x')).toBe(0);
