@@ -564,7 +564,17 @@ describe('applyChange', () => {
     });
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SIMPLE CRUD TESTS
+  // Basic add/remove/edit operations with refCount tracking.
+  //
+  // RefCount lifecycle:
+  //   add(A)     add(A)     remove(A)  remove(A)
+  //     ↓          ↓           ↓          ↓
+  //   [A:1]  →  [A:2]   →   [A:1]   →   []
+  // ═══════════════════════════════════════════════════════════════════════════
   describe('Simple', () => {
+    // Plural relationship: rows stored in sorted array
     test('singular: false', () => {
       const schema = {
         tableName: 'event',
@@ -1000,6 +1010,13 @@ describe('applyChange', () => {
       `);
     });
 
+    // Edit that changes sort key (id): row moves to new position
+    //
+    //   [id:1]  ──edit id:1→2──►  [id:2]
+    //
+    // With refCount > 1, ghost remains at old position:
+    //   [1:rc=2, 2:rc=2]  ──edit 1→2──►  [1:rc=1, 2:rc=3]
+    //                                     ghost    merged
     test('edit primary key, singular: false', () => {
       const schema = {
         tableName: 'event',
@@ -1417,12 +1434,17 @@ describe('applyChange', () => {
     });
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ADD WITH CHILDREN TESTS
+  // Verify entries with child relationships are correctly positioned.
+  // Tests the indexOf optimization: add() returns pos, avoiding O(n) scan.
+  //
+  //   []  ──add B+kids──►  [B]  ──add A+kids──►  [A, B]
+  //                         │                     ↑
+  //                         │         binary search finds pos=0
+  //                         └──────────────────────┘
+  // ═══════════════════════════════════════════════════════════════════════════
   describe('add with initialized relationships', () => {
-    // This test verifies that when adding an entry with child relationships,
-    // the initialized entry is correctly placed in the view array. This
-    // exercises the code path where initializeRelationships returns a new
-    // entry (with children), and we use the pos returned from add() to
-    // update the array directly (avoiding an O(n) indexOf scan).
 
     const schemaWithChildren: SourceSchema = {
       tableName: 'parent',
@@ -1600,6 +1622,18 @@ describe('applyChange', () => {
     });
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IMMUTABILITY TESTS
+  // Verify unchanged rows keep their object reference (enables React.memo etc.)
+  //
+  //   root ─┬─ [A, B, C]     edit B      root' ─┬─ [A, B', C]
+  //         │                  ────►            │
+  //         └─ users:[X,Y]                      └─ users:[X,Y]  ← same ref
+  //
+  //   A, C: same ref (unchanged)
+  //   B': new ref (edited)
+  //   users: same ref (sibling relationship untouched)
+  // ═══════════════════════════════════════════════════════════════════════════
   describe('Object identity preservation (immutability)', () => {
     const simpleSchema = {
       tableName: 'item',
@@ -1618,6 +1652,9 @@ describe('applyChange', () => {
     const apply = (root: Entry, change: ViewChange) =>
       applyChange(root, change, simpleSchema, '', format, true);
 
+    //   [A]  ──add B──►  [A, B]
+    //    ↑                 ↑
+    //    └─── same ref ────┘
     test('unchanged rows keep their reference when adding a new row', () => {
       let root: Entry = {'': []};
 
@@ -1691,6 +1728,9 @@ describe('applyChange', () => {
       );
     });
 
+    //   [A]  ──edit A──►  [A']
+    //    │                  │
+    //    └── different ref ─┘
     test('edited row gets new reference', () => {
       let root: Entry = {'': []};
 
@@ -1735,6 +1775,11 @@ describe('applyChange', () => {
       expect(root['']).not.toBe(listRef);
     });
 
+    // Parent changes but untouched children keep their references:
+    //
+    //   P1 ─┬─ [C1, C2]    add C3     P1' ─┬─ [C1, C2, C3]
+    //       │               ────►          │    ↑   ↑
+    //       └─ ...                         └─   same refs
     test('unchanged nested relationships keep their reference', () => {
       const schemaWithRelationship: SourceSchema = {
         tableName: 'parent',
@@ -1814,6 +1859,9 @@ describe('applyChange', () => {
       expect(entries(newParent1, 'children')).toHaveLength(3);
     });
 
+    //   [A:rc=1]  ──add A──►  [A:rc=2]
+    //       │                     │
+    //       └─── different ref ───┘  (but same data)
     test('refCount increment creates new reference but preserves data', () => {
       let root: Entry = {'': []};
 
@@ -1845,6 +1893,11 @@ describe('applyChange', () => {
       expect(newRef).toEqual(expect.objectContaining({id: '1', name: 'Alice'}));
     });
 
+    // Sibling parents are independent. Changing P1's children doesn't touch P2:
+    //
+    //   [P1─[C1], P2─[C2]]    add C3 to P1    [P1'─[C1,C3], P2─[C2]]
+    //              ↑            ────►                       ↑
+    //              └────────────── same ref ────────────────┘
     test('child change on one parent does not affect other parents', () => {
       const schemaWithRelationship: SourceSchema = {
         tableName: 'parent',
