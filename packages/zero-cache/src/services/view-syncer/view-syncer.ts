@@ -101,10 +101,6 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
-import {
-  isPriorityOpRunning,
-  noPriorityOpRunningPromise,
-} from '../../server/priority-op.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -314,7 +310,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     slowHydrateThreshold: number,
     inspectorDelegate: InspectorDelegate,
     customQueryTransformer: CustomQueryTransformer | undefined,
-    runPriorityOp: <T>(op: () => Promise<T>) => Promise<T>,
+    runPriorityOp: <T>(
+      lc: LogContext,
+      description: string,
+      op: () => Promise<T>,
+    ) => Promise<T>,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
@@ -343,15 +343,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.#setTimeout = setTimeoutFn;
-    this.#runPriorityOp = async (lc, description, op) => {
-      const start = Date.now();
-      lc.debug?.(`running priority op ${description}`);
-      const result = await runPriorityOp(op);
-      lc.debug?.(
-        `finished priority op ${description} after ${Date.now() - start} ms`,
-      );
-      return result;
-    };
+    this.#runPriorityOp = runPriorityOp;
     // Wait for the first connection to init.
     this.keepalive();
   }
@@ -2116,23 +2108,8 @@ function createHashToIDs(cvr: CVRSnapshot) {
 // This effectively achieves the desired one-per-event-loop-iteration behavior.
 const timeSliceQueue = new Lock();
 
-async function yieldProcess(lc: LogContext) {
-  async function wait() {
-    if (isPriorityOpRunning()) {
-      const start = Date.now();
-      lc.debug?.('yieldProcess waiting for priority op');
-      await noPriorityOpRunningPromise();
-      lc.debug?.(
-        `yieldProcess waited for priority op ${Date.now() - start} ms`,
-      );
-    }
-    await new Promise(setImmediate);
-    if (isPriorityOpRunning()) {
-      lc.debug?.('yieldProcess recursing because priority op is running');
-      await wait();
-    }
-  }
-  await timeSliceQueue.withLock(wait);
+function yieldProcess(_lc: LogContext) {
+  return timeSliceQueue.withLock(() => new Promise(setImmediate));
 }
 
 function contentsAndVersion(row: Row) {
