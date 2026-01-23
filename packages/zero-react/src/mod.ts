@@ -21,7 +21,9 @@ export {
 export {useZeroOnline} from './use-zero-online.tsx';
 export {
   useZeroVirtualizer,
+  type PermalinkHistoryState,
   type UseZeroVirtualizerOptions,
+  type ZeroVirtualizerResult,
 } from './use-zero-virtualizer.ts';
 export {
   createUseZero,

@@ -30,6 +30,7 @@ import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
+import {useWouterPermalinkState} from '../../hooks/use-wouter-permalink-state.ts';
 import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
@@ -151,6 +152,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
     navigate(setParam(qs, 'id', String(id)));
   };
 
+  const [permalinkState, setPermalinkState] =
+    useWouterPermalinkState<IssueRowSort>();
+
   const {
     virtualizer,
     rowAt: issueAt,
@@ -197,6 +201,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }),
 
     options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
+
+    permalinkState,
+    onPermalinkStateChange: setPermalinkState,
   });
 
   useEffect(() => {

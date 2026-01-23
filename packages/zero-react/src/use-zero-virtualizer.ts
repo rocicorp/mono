@@ -1,6 +1,5 @@
 import {useVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
 import {useEffect, useLayoutEffect, useMemo, useReducer, useState} from 'react';
-import {useHistoryState} from 'wouter/use-browser-location';
 import {assert} from '../../shared/src/asserts.ts';
 import {pagingReducer, type PagingState} from './paging-reducer.ts';
 import type {UseQueryOptions} from './use-query.tsx';
@@ -16,11 +15,22 @@ const MIN_PAGE_SIZE = 100;
 
 const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
-type PermalinkHistoryState<TStartRow> = Readonly<{
+/**
+ * State object that captures the virtualizer's scroll position and pagination state.
+ * Used for persisting and restoring the virtualizer state across navigation or page reloads.
+ *
+ * @typeParam TStartRow - The type of the start row data used for pagination anchoring
+ */
+export type PermalinkHistoryState<TStartRow> = Readonly<{
+  /** The anchor point for pagination (includes position, direction, and start row data) */
   anchor: Anchor<TStartRow>;
+  /** The scroll position in pixels from the top of the scrollable container */
   scrollTop: number;
+  /** The estimated total number of rows in the list */
   estimatedTotal: number;
+  /** Whether the virtualizer has reached the start of the list */
   hasReachedStart: boolean;
+  /** Whether the virtualizer has reached the end of the list */
   hasReachedEnd: boolean;
 }>;
 
@@ -35,6 +45,16 @@ type TanstackUseVirtualizerOptions<
   TItemElement extends Element,
 > = Parameters<typeof useVirtualizer<TScrollElement, TItemElement>>[0];
 
+/**
+ * Options for configuring the Zero virtualizer.
+ * Extends Tanstack Virtual's options with Zero-specific pagination and state management.
+ *
+ * @typeParam TScrollElement - The type of the scrollable container element
+ * @typeParam TItemElement - The type of the individual item elements
+ * @typeParam TListContextParams - The type of parameters that define the list's query context
+ * @typeParam TRow - The type of row data returned from queries
+ * @typeParam TStartRow - The type of data needed to anchor pagination (typically a subset of TRow)
+ */
 export type UseZeroVirtualizerOptions<
   TScrollElement extends Element,
   TItemElement extends Element,
@@ -50,15 +70,33 @@ export type UseZeroVirtualizerOptions<
   // Only support vertical lists for now
   | 'horizontal'
 > & {
-  // Zero specific params
+  /** Parameters that define the list's query context (filters, sort order, etc.) */
   listContextParams: TListContextParams;
 
+  /** Optional ID to highlight/scroll to a specific row (permalink functionality) */
   permalinkID?: string | null | undefined;
 
+  /** Function that returns a query for fetching a page of rows */
   getPageQuery: GetPageQuery<TRow, TStartRow>;
+  /** Function that returns a query for fetching a single row by ID */
   getSingleQuery: GetSingleQuery<TRow>;
+  /** Optional query options */
   options?: UseQueryOptions | undefined;
+  /** Function to extract the start row data from a full row (for pagination anchoring) */
   toStartRow: (row: TRow) => TStartRow;
+
+  /**
+   * Optional current permalink state for restoring virtualizer position.
+   * If provided along with `onPermalinkStateChange`, enables state persistence.
+   * If not provided, virtualizer operates in uncontrolled mode.
+   */
+  permalinkState?: PermalinkHistoryState<TStartRow> | null | undefined;
+  /**
+   * Optional callback invoked when the virtualizer state changes.
+   * Use this to persist state (e.g., to browser history, local storage, etc.).
+   * Called with the new state approximately 100ms after scroll/pagination changes.
+   */
+  onPermalinkStateChange?: (state: PermalinkHistoryState<TStartRow>) => void;
 };
 
 const createPermalinkAnchor = (id: string) =>
@@ -68,6 +106,65 @@ const createPermalinkAnchor = (id: string) =>
     kind: 'permalink',
   }) as const;
 
+/**
+ * Result object returned by the useZeroVirtualizer hook.
+ *
+ * @typeParam TScrollElement - The type of the scrollable container element
+ * @typeParam TItemElement - The type of the individual item elements
+ * @typeParam TRow - The type of row data returned from queries
+ */
+export type ZeroVirtualizerResult<
+  TScrollElement extends Element,
+  TItemElement extends Element,
+  TRow,
+> = {
+  /** The Tanstack Virtual virtualizer instance for rendering virtual items */
+  virtualizer: Virtualizer<TScrollElement, TItemElement>;
+  /** Function to get the row data at a specific index, or undefined if not loaded */
+  rowAt: (index: number) => TRow | undefined;
+  /** Whether all initially requested data has finished loading */
+  complete: boolean;
+  /** Whether the list is empty (no rows exist matching the query) */
+  rowsEmpty: boolean;
+  /** Whether the specified permalinkID was not found in the query results */
+  permalinkNotFound: boolean;
+  /** Estimated total number of rows (may be inexact until both ends are reached) */
+  estimatedTotal: number;
+  /** Exact total number of rows, or undefined if not yet known (requires reaching both ends) */
+  total: number | undefined;
+};
+
+/**
+ * Hook that creates a virtualized list with bidirectional pagination and state persistence.
+ *
+ * This hook combines Tanstack Virtual's efficient virtualization with Zero's reactive queries
+ * to create infinitely scrolling lists that load data on demand. It supports:
+ * - Bidirectional scrolling (load more items at top or bottom)
+ * - Permalink functionality (jump to and highlight specific items)
+ * - State persistence (restore scroll position across navigation)
+ * - Dynamic page sizing based on viewport
+ *
+ * @typeParam TScrollElement - The type of the scrollable container element
+ * @typeParam TItemElement - The type of the individual item elements
+ * @typeParam TListContextParams - The type of parameters that define the list's query context
+ * @typeParam TRow - The type of row data returned from queries
+ * @typeParam TStartRow - The type of data needed to anchor pagination
+ *
+ * @param options - Configuration options including query functions, sizing, and state management
+ * @returns An object containing the virtualizer instance, row accessor, and state flags
+ *
+ * @example
+ * ```tsx
+ * const {virtualizer, rowAt, complete} = useZeroVirtualizer({
+ *   estimateSize: () => 50,
+ *   getScrollElement: () => scrollRef.current,
+ *   listContextParams: {projectId: 'abc'},
+ *   getPageQuery: (limit, start, dir) => z.query.issues.where(...).limit(limit),
+ *   getSingleQuery: (id) => z.query.issues.where('id', id),
+ *   toStartRow: (row) => ({id: row.id, created: row.created}),
+ * });
+ * ```
+ */
 export function useZeroVirtualizer<
   TScrollElement extends Element,
   TItemElement extends Element,
@@ -88,6 +185,10 @@ export function useZeroVirtualizer<
   options,
   toStartRow,
 
+  // Permalink state persistence
+  permalinkState,
+  onPermalinkStateChange,
+
   ...restVirtualizerOptions
 }: UseZeroVirtualizerOptions<
   TScrollElement,
@@ -95,18 +196,8 @@ export function useZeroVirtualizer<
   TListContextParams,
   TRow,
   TStartRow
->): {
-  virtualizer: Virtualizer<TScrollElement, TItemElement>;
-  rowAt: (index: number) => TRow | undefined;
-  complete: boolean;
-  rowsEmpty: boolean;
-  permalinkNotFound: boolean;
-  estimatedTotal: number;
-  total: number | undefined;
-} {
-  const historyState = usePermalinkHistoryState<TStartRow>();
-
-  // Initialize paging state from history.state directly to avoid Strict Mode double-mount rows
+>): ZeroVirtualizerResult<TScrollElement, TItemElement, TRow> {
+  // Initialize paging state from permalinkState directly to avoid Strict Mode double-mount rows
   const [
     {
       estimatedTotal,
@@ -121,16 +212,16 @@ export function useZeroVirtualizer<
     pagingReducer<TListContextParams, TStartRow>,
     undefined,
     (): PagingState<TListContextParams, TStartRow> => {
-      const anchor = historyState
-        ? historyState.anchor
+      const anchor = permalinkState
+        ? permalinkState.anchor
         : permalinkID
           ? createPermalinkAnchor(permalinkID)
           : TOP_ANCHOR;
       return {
         estimatedTotal:
-          historyState?.estimatedTotal ?? NUM_ROWS_FOR_LOADING_SKELETON,
-        hasReachedStart: historyState?.hasReachedStart ?? false,
-        hasReachedEnd: historyState?.hasReachedEnd ?? false,
+          permalinkState?.estimatedTotal ?? NUM_ROWS_FOR_LOADING_SKELETON,
+        hasReachedStart: permalinkState?.hasReachedStart ?? false,
+        hasReachedEnd: permalinkState?.hasReachedEnd ?? false,
         queryAnchor: {
           anchor,
           listContextParams,
@@ -183,8 +274,8 @@ export function useZeroVirtualizer<
       overscan,
       getScrollElement,
       initialOffset: () => {
-        if (historyState?.scrollTop !== undefined) {
-          return historyState.scrollTop;
+        if (permalinkState?.scrollTop !== undefined) {
+          return permalinkState.scrollTop;
         }
         if (anchor.kind === 'permalink') {
           // TODO: Support dynamic item sizes
@@ -217,11 +308,11 @@ export function useZeroVirtualizer<
   }, [pageSize, virtualizer.scrollRect, estimateSize]);
 
   useEffect(() => {
-    if (!isListContextCurrent) {
+    if (!isListContextCurrent || !onPermalinkStateChange) {
       return;
     }
     const timeoutId = setTimeout(() => {
-      replaceHistoryState({
+      onPermalinkStateChange({
         anchor,
         scrollTop: virtualizer.scrollOffset ?? 0,
         estimatedTotal,
@@ -238,6 +329,7 @@ export function useZeroVirtualizer<
     hasReachedStart,
     hasReachedEnd,
     isListContextCurrent,
+    onPermalinkStateChange,
   ]);
 
   useEffect(() => {
@@ -317,14 +409,14 @@ export function useZeroVirtualizer<
   // Use layoutEffect to restore scroll position synchronously to avoid visual jumps
   useLayoutEffect(() => {
     if (!isListContextCurrent) {
-      if (historyState) {
-        virtualizer.scrollToOffset(historyState.scrollTop);
+      if (permalinkState) {
+        virtualizer.scrollToOffset(permalinkState.scrollTop);
         dispatch({
           type: 'RESET_STATE',
-          estimatedTotal: historyState.estimatedTotal,
-          hasReachedStart: historyState.hasReachedStart,
-          hasReachedEnd: historyState.hasReachedEnd,
-          anchor: historyState.anchor,
+          estimatedTotal: permalinkState.estimatedTotal,
+          hasReachedStart: permalinkState.hasReachedStart,
+          hasReachedEnd: permalinkState.hasReachedEnd,
+          anchor: permalinkState.anchor,
           listContextParams,
         });
       } else if (permalinkID) {
@@ -355,7 +447,7 @@ export function useZeroVirtualizer<
     }
   }, [
     isListContextCurrent,
-    historyState,
+    permalinkState,
     permalinkID,
     virtualizer,
     estimateSize,
@@ -478,29 +570,4 @@ function getNearPageEdgeThreshold(pageSize: number) {
 
 function makeEven(n: number) {
   return n % 2 === 0 ? n : n + 1;
-}
-
-const zeroHistoryKey = '@rocicorp/zero/react/virtual/v0';
-
-function usePermalinkHistoryState<
-  TStartRow,
->(): PermalinkHistoryState<TStartRow> | null {
-  const maybeHistoryState = useHistoryState<unknown>();
-  if (maybeHistoryState === null || typeof maybeHistoryState !== 'object') {
-    return null;
-  }
-
-  if (!(zeroHistoryKey in maybeHistoryState)) {
-    return null;
-  }
-
-  return maybeHistoryState[zeroHistoryKey] as PermalinkHistoryState<TStartRow>;
-}
-
-function replaceHistoryState<TStartRow>(
-  data: PermalinkHistoryState<TStartRow>,
-) {
-  const historyState = history.state || {};
-  historyState[zeroHistoryKey] = data;
-  history.replaceState(historyState, '', document.location.href);
 }
