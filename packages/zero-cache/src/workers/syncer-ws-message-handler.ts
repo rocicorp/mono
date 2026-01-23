@@ -169,11 +169,17 @@ export class SyncerWsMessageHandler implements MessageHandler {
           viewSyncer.changeDesiredQueries(this.#syncContext, msg),
         );
         break;
-      case 'deleteClients':
-        await startAsyncSpan(tracer, 'connection.deleteClients', () =>
-          viewSyncer.deleteClients(this.#syncContext, msg),
+      case 'deleteClients': {
+        const deletedClientIDs = await startAsyncSpan(
+          tracer,
+          'connection.deleteClients',
+          () => viewSyncer.deleteClients(this.#syncContext, msg),
         );
+        if (this.#pusher && deletedClientIDs.length > 0) {
+          await this.#pusher.deleteClientMutations(deletedClientIDs);
+        }
         break;
+      }
       case 'initConnection': {
         const ret: HandlerResult[] = [
           {
