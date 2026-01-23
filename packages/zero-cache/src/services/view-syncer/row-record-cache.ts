@@ -358,6 +358,7 @@ export class RowRecordCache {
     version: CVRVersion,
     rowUpdates: Map<RowID, RowRecord | null>,
     mode: 'allow-defer' | 'force',
+    lc = this.#lc,
   ): PendingQuery<Row[]>[] {
     if (
       mode === 'allow-defer' &&
@@ -415,7 +416,7 @@ export class RowRecordCache {
       "refCounts" = excluded."refCounts"
     `.execute(),
       );
-      this.#lc.debug?.(
+      lc.debug?.(
         `flushing ${rowUpdates.size} rows (${rowRecordRows.length} inserts, ${
           rowUpdates.size - rowRecordRows.length
         } deletes)`,

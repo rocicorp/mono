@@ -1,41 +1,37 @@
-import {resolver, type Resolver} from '@rocicorp/resolver';
-import {must} from '../../../shared/src/must.ts';
-import {assert} from '../../../shared/src/asserts.ts';
+import type {LogContext} from '@rocicorp/logger';
 
 let priorityOpCounter = 0;
-
-let priorityOpResolver: Resolver<void> | undefined = undefined;
+let runningPriorityOpCounter = 0;
 
 /**
  * Run an operation with priority, indicating that IVM should use smaller time
  * slices to allow this operation to proceed more quickly
  */
-export async function runPriorityOp<T>(op: () => Promise<T>) {
-  priorityOpCounter++;
-  if (priorityOpResolver === undefined) {
-    assert(priorityOpResolver === undefined);
-    priorityOpResolver = resolver();
-  }
+export async function runPriorityOp<T>(
+  lc: LogContext,
+  description: string,
+  op: () => Promise<T>,
+) {
+  const id = priorityOpCounter++;
+  runningPriorityOpCounter++;
+  const start = Date.now();
   try {
-    return await op();
+    lc.debug?.(`running priority op ${id} ${description}`);
+    const result = await op();
+    lc.debug?.(
+      `finished priority op ${id} ${description} in ${Date.now() - start} ms`,
+    );
+    return result;
+  } catch (e) {
+    lc.debug?.(
+      `failed priority op ${id} ${description} in ${Date.now() - start} ms`,
+    );
+    throw e;
   } finally {
-    priorityOpCounter--;
-    if (priorityOpCounter === 0) {
-      const priorityOpResolve = must(priorityOpResolver).resolve;
-      priorityOpResolver = undefined;
-      priorityOpResolve();
-    }
+    runningPriorityOpCounter--;
   }
-}
-
-/**
- * If a priority op is running, returns a promise that resolves when it is
- * complete, otherwise returns a promise that resolves immediately.
- */
-export function noPriorityOpRunningPromise(): Promise<void> {
-  return priorityOpResolver?.promise ?? Promise.resolve();
 }
 
 export function isPriorityOpRunning() {
-  return priorityOpCounter > 0;
+  return runningPriorityOpCounter > 0;
 }
