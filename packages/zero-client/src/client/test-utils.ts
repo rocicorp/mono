@@ -217,11 +217,7 @@ export class TestZero<
     return this.triggerMessage(msg);
   }
 
-  async triggerPoke(
-    _cookieStart: string | null,
-    _cookieEnd: string,
-    pokePart: Omit<PokePartBody, 'pokeID'>,
-  ): Promise<void> {
+  async triggerPoke(pokePart: Omit<PokePartBody, 'pokeID'>): Promise<void> {
     const id = `${this.pokeIDCounter++}`;
     const baseCookieStr =
       this.#cookie === null ? null : String(this.#cookie).padStart(10, '0');
@@ -272,7 +268,7 @@ export class TestZero<
     const hash = qi.customQueryID
       ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
       : qi.hash();
-    await this.triggerPoke(null, '1', {
+    await this.triggerPoke({
       gotQueriesPatch: [
         {
           op: 'put',
@@ -320,7 +316,7 @@ export class TestZero<
     const hash = qi.customQueryID
       ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
       : qi.hash();
-    return this.triggerPoke(null, '1', {
+    return this.triggerPoke({
       gotQueriesPatch: [
         {
           op: 'put',
@@ -336,8 +332,10 @@ export class TestZero<
    * want to simulate that all queries have been fully synced from the server.
    */
   async markAllQueriesAsGot(): Promise<void> {
+    assert(TESTING);
+    const queryManager = this[exposedToTestingSymbol].queryManager();
     const gotQueriesPatch = Array.from(
-      this.queryManager.getAllNonGotQueryHashes(),
+      queryManager.getAllNonGotQueryHashes(),
       hash => ({
         op: 'put' as const,
         hash,
@@ -349,7 +347,7 @@ export class TestZero<
     }
 
     // triggerPoke will automatically advance this.#cookie internally
-    await this.triggerPoke(null, 'ignored', {gotQueriesPatch});
+    await this.triggerPoke({gotQueriesPatch});
   }
 }
 

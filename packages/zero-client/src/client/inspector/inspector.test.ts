@@ -521,7 +521,7 @@ describe('query metrics', () => {
     expect(initialMetrics['query-update-client'].count()).toBe(0);
 
     // Trigger row updates to generate query-update metrics
-    await z.triggerPoke(null, '2', {
+    await z.triggerPoke({
       rowsPatch: [
         {
           op: 'put',
@@ -578,7 +578,7 @@ describe('query metrics', () => {
     await z.triggerGotQueriesPatch(customQuery);
 
     // Trigger row updates to generate query-update metrics for this specific query
-    await z.triggerPoke(null, '2', {
+    await z.triggerPoke({
       rowsPatch: [
         {
           op: 'put',
