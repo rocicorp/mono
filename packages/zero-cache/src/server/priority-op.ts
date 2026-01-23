@@ -15,17 +15,16 @@ export async function runPriorityOp<T>(
   const id = priorityOpCounter++;
   runningPriorityOpCounter++;
   const start = Date.now();
+  lc = lc.withContext('priorityOpID', id);
   try {
-    lc.debug?.(`running priority op ${id} ${description}`);
+    lc.debug?.(`running priority op ${description}`);
     const result = await op();
     lc.debug?.(
-      `finished priority op ${id} ${description} in ${Date.now() - start} ms`,
+      `finished priority op ${description} in ${Date.now() - start} ms`,
     );
     return result;
   } catch (e) {
-    lc.debug?.(
-      `failed priority op ${id} ${description} in ${Date.now() - start} ms`,
-    );
+    lc.debug?.(`failed priority op ${description} in ${Date.now() - start} ms`);
     throw e;
   } finally {
     runningPriorityOpCounter--;
