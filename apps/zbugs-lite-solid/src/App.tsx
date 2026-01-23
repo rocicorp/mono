@@ -1,8 +1,7 @@
 import {useQuery, useZero} from '@rocicorp/zero/solid';
 import {createEffect, createSignal, For, Show} from 'solid-js';
-import {mutators, queries} from '../shared/schema.ts';
+import {mutators, queries, ZERO_PROJECT_ID} from './zero.ts';
 import {IssueRow} from './IssueRow.tsx';
-import {ZERO_PROJECT_ID} from '../../zbugs/shared/schema.ts';
 
 export function App() {
   const z = useZero();

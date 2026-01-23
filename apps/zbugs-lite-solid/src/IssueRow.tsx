@@ -1,7 +1,7 @@
 import type {Row} from '@rocicorp/zero';
 import {useZero} from '@rocicorp/zero/solid';
 import {createEffect, createSignal, on, Show} from 'solid-js';
-import {mutators, type schema} from '../shared/schema.ts';
+import {mutators, type schema} from './zero.ts';
 
 type Issue = Row<typeof schema.tables.issue>;
 

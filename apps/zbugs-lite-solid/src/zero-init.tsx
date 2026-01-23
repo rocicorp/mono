@@ -1,6 +1,6 @@
 import {ZeroProvider} from '@rocicorp/zero/solid';
 import type {JSX} from 'solid-js';
-import {mutators, schema} from '../shared/schema.ts';
+import {mutators, schema} from './zero.ts';
 
 export function ZeroInit(props: {children: JSX.Element}) {
   const cacheURL = import.meta.env.VITE_PUBLIC_SERVER;
