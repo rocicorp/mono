@@ -300,11 +300,6 @@ export class TestZero<
     return this[exposedToTestingSymbol].queryDelegate();
   }
 
-  get queryManager() {
-    assert(TESTING);
-    return this[exposedToTestingSymbol].queryManager();
-  }
-
   persist(): Promise<void> {
     return getInternalReplicacheImplForTesting(this).persist();
   }
