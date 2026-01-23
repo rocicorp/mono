@@ -1,7 +1,8 @@
 import {useVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useLayoutEffect, useMemo, useReducer, useState} from 'react';
 import {useHistoryState} from 'wouter/use-browser-location';
 import {assert} from '../../shared/src/asserts.ts';
+import {pagingReducer, type PagingState} from './paging-reducer.ts';
 import type {UseQueryOptions} from './use-query.tsx';
 import {
   useRows,
@@ -14,27 +15,6 @@ import {
 const MIN_PAGE_SIZE = 100;
 
 const NUM_ROWS_FOR_LOADING_SKELETON = 1;
-
-type QueryAnchor<TListContextParams, TStartRow> = {
-  readonly anchor: Anchor<TStartRow>;
-  /**
-   * Associates an anchor with list query params to coordinate state during
-   * navigation. When list context params change (e.g., filter/sort changes or
-   * browser back/forward navigation), the anchor and scroll position must be
-   * updated atomically with the new query results.
-   *
-   * When `listContextParams !== queryAnchor.listContextParams`:
-   * - Use history state to restore previous scroll position and anchor if
-   *   navigating back
-   * - Use permalink anchor if loading a specific item
-   * - Otherwise reset to top
-   *
-   * During the transition (while `!isListContextCurrent`), skip paging logic
-   * and count updates to avoid querying with mismatched anchor/params or
-   * calculating counts from inconsistent state.
-   */
-  readonly listContextParams: TListContextParams;
-};
 
 type PermalinkHistoryState<TStartRow> = Readonly<{
   anchor: Anchor<TStartRow>;
@@ -117,13 +97,6 @@ export function useZeroVirtualizer<
   estimatedTotal: number;
   total: number | undefined;
 } {
-  const [estimatedTotal, setEstimatedTotal] = useState(
-    NUM_ROWS_FOR_LOADING_SKELETON,
-  );
-  const [hasReachedStart, setHasReachedStart] = useState(false);
-  const [hasReachedEnd, setHasReachedEnd] = useState(false);
-  const [skipPagingLogic, setSkipPagingLogic] = useState(false);
-
   const historyState = usePermalinkHistoryState<TStartRow>();
 
   const createPermalinkAnchor = (id: string) =>
@@ -133,20 +106,40 @@ export function useZeroVirtualizer<
       kind: 'permalink',
     }) as const;
 
-  // Initialize queryAnchor from history.state directly to avoid Strict Mode double-mount rows
-  const [queryAnchor, setQueryAnchor] = useState<
-    QueryAnchor<TListContextParams, TStartRow>
-  >(() => {
-    const anchor = historyState
-      ? historyState.anchor
-      : permalinkID
-        ? createPermalinkAnchor(permalinkID)
-        : TOP_ANCHOR;
-    return {
-      anchor,
-      listContextParams,
-    };
-  });
+  // Initialize paging state from history.state directly to avoid Strict Mode double-mount rows
+  const [
+    {
+      estimatedTotal,
+      hasReachedStart,
+      hasReachedEnd,
+      queryAnchor,
+      pagingPhase,
+      pendingScrollAdjustment,
+    },
+    dispatch,
+  ] = useReducer(
+    pagingReducer<TListContextParams, TStartRow>,
+    undefined,
+    (): PagingState<TListContextParams, TStartRow> => {
+      const anchor = historyState
+        ? historyState.anchor
+        : permalinkID
+          ? createPermalinkAnchor(permalinkID)
+          : TOP_ANCHOR;
+      return {
+        estimatedTotal:
+          historyState?.estimatedTotal ?? NUM_ROWS_FOR_LOADING_SKELETON,
+        hasReachedStart: historyState?.hasReachedStart ?? false,
+        hasReachedEnd: historyState?.hasReachedEnd ?? false,
+        queryAnchor: {
+          anchor,
+          listContextParams,
+        },
+        pagingPhase: 'idle',
+        pendingScrollAdjustment: 0,
+      };
+    },
+  );
 
   const isListContextCurrent =
     queryAnchor.listContextParams === listContextParams;
@@ -221,9 +214,12 @@ export function useZeroVirtualizer<
     if (newPageSize > pageSize) {
       setPageSize(newPageSize);
     }
-  }, [pageSize, virtualizer.scrollRect]);
+  }, [pageSize, virtualizer.scrollRect, estimateSize]);
 
   useEffect(() => {
+    if (!isListContextCurrent) {
+      return;
+    }
     const timeoutId = setTimeout(() => {
       replaceHistoryState({
         anchor,
@@ -241,47 +237,29 @@ export function useZeroVirtualizer<
     estimatedTotal,
     hasReachedStart,
     hasReachedEnd,
+    isListContextCurrent,
   ]);
 
   useEffect(() => {
     if (atStart) {
-      setHasReachedStart(true);
+      dispatch({type: 'REACHED_START'});
     }
   }, [atStart]);
 
   useEffect(() => {
     if (atEnd) {
-      setHasReachedEnd(true);
+      dispatch({type: 'REACHED_END'});
     }
   }, [atEnd]);
 
   useEffect(() => {
     if (complete && newEstimatedTotal > estimatedTotal) {
-      setEstimatedTotal(newEstimatedTotal);
+      dispatch({type: 'UPDATE_ESTIMATED_TOTAL', newTotal: newEstimatedTotal});
     }
   }, [estimatedTotal, complete, newEstimatedTotal]);
 
-  const [pendingScrollAdjustment, setPendingScrollAdjustment] =
-    useState<number>(0);
-
-  const updateAnchor = (anchor: Anchor<TStartRow>) => {
-    setQueryAnchor({
-      anchor,
-      listContextParams,
-    });
-  };
-
-  useEffect(() => {
-    if (rowsEmpty || !isListContextCurrent) {
-      return;
-    }
-
-    if (skipPagingLogic && pendingScrollAdjustment === 0) {
-      setSkipPagingLogic(false);
-      return;
-    }
-
-    // There is a pending scroll adjustment from last anchor change.
+  // Apply scroll adjustments synchronously with layout to prevent visual jumps
+  useLayoutEffect(() => {
     if (pendingScrollAdjustment !== 0) {
       virtualizer.scrollToOffset(
         (virtualizer.scrollOffset ?? 0) +
@@ -290,10 +268,22 @@ export function useZeroVirtualizer<
             estimateSize(0),
       );
 
-      setEstimatedTotal(estimatedTotal + pendingScrollAdjustment);
-      setPendingScrollAdjustment(0);
-      setSkipPagingLogic(true);
+      dispatch({type: 'SCROLL_ADJUSTED'});
+    }
+  }, [pendingScrollAdjustment, virtualizer, estimateSize]);
 
+  useEffect(() => {
+    if (rowsEmpty || !isListContextCurrent) {
+      return;
+    }
+
+    if (pagingPhase === 'skipping' && pendingScrollAdjustment === 0) {
+      dispatch({type: 'PAGING_COMPLETE'});
+      return;
+    }
+
+    // Skip if there's a pending scroll adjustment - let useLayoutEffect handle it
+    if (pendingScrollAdjustment !== 0) {
       return;
     }
 
@@ -301,20 +291,16 @@ export function useZeroVirtualizer<
     if (firstRowIndex < 0) {
       const placeholderRows = !atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0;
       const offset = -firstRowIndex + placeholderRows;
-
-      setSkipPagingLogic(true);
-      setPendingScrollAdjustment(offset);
       const newAnchor = {
         ...anchor,
         index: anchor.index + offset,
       };
-      updateAnchor(newAnchor);
+      dispatch({type: 'SHIFT_ANCHOR_DOWN', offset, newAnchor});
       return;
     }
 
     if (atStart && firstRowIndex > 0) {
-      setPendingScrollAdjustment(-firstRowIndex);
-      updateAnchor(TOP_ANCHOR);
+      dispatch({type: 'RESET_TO_TOP', offset: -firstRowIndex});
       return;
     }
   }, [
@@ -322,62 +308,59 @@ export function useZeroVirtualizer<
     anchor,
     atStart,
     pendingScrollAdjustment,
-    skipPagingLogic,
+    pagingPhase,
     rowsEmpty,
     isListContextCurrent,
-    estimatedTotal,
-    // virtualizer, Do not depend on virtualizer. TDZ.
+    // virtualizer - omitted to avoid infinite render loops from scroll events
   ]);
 
-  useEffect(() => {
+  // Use layoutEffect to restore scroll position synchronously to avoid visual jumps
+  useLayoutEffect(() => {
     if (!isListContextCurrent) {
-      const scrollElement = getScrollElement();
-
-      const resetState = (
-        scrollTop: number,
-        estimatedTotal: number,
-        hasReachedStart: boolean,
-        hasReachedEnd: boolean,
-        anchor: Anchor<TStartRow>,
-      ) => {
-        if (scrollElement) {
-          scrollElement.scrollTop = scrollTop;
-        }
-        setEstimatedTotal(estimatedTotal);
-        setHasReachedStart(hasReachedStart);
-        setHasReachedEnd(hasReachedEnd);
-        updateAnchor(anchor);
-      };
-
       if (historyState) {
-        resetState(
-          historyState.scrollTop,
-          historyState.estimatedTotal,
-          historyState.hasReachedStart,
-          historyState.hasReachedEnd,
-          historyState.anchor,
-        );
+        virtualizer.scrollToOffset(historyState.scrollTop);
+        dispatch({
+          type: 'RESET_STATE',
+          estimatedTotal: historyState.estimatedTotal,
+          hasReachedStart: historyState.hasReachedStart,
+          hasReachedEnd: historyState.hasReachedEnd,
+          anchor: historyState.anchor,
+          listContextParams,
+        });
       } else if (permalinkID) {
-        resetState(
+        virtualizer.scrollToOffset(
           NUM_ROWS_FOR_LOADING_SKELETON *
             // TODO: Support dynamic item sizes
             estimateSize(0),
-          NUM_ROWS_FOR_LOADING_SKELETON,
-          false,
-          false,
-          createPermalinkAnchor(permalinkID),
         );
+        dispatch({
+          type: 'RESET_STATE',
+          estimatedTotal: NUM_ROWS_FOR_LOADING_SKELETON,
+          hasReachedStart: false,
+          hasReachedEnd: false,
+          anchor: createPermalinkAnchor(permalinkID),
+          listContextParams,
+        });
       } else {
-        resetState(0, 0, true, false, TOP_ANCHOR);
+        virtualizer.scrollToOffset(0);
+        dispatch({
+          type: 'RESET_STATE',
+          estimatedTotal: 0,
+          hasReachedStart: true,
+          hasReachedEnd: false,
+          anchor: TOP_ANCHOR,
+          listContextParams,
+        });
       }
-
-      setSkipPagingLogic(true);
     }
   }, [
     isListContextCurrent,
     historyState,
     permalinkID,
-    // getScrollElement - ignore
+    virtualizer,
+    estimateSize,
+    createPermalinkAnchor,
+    listContextParams,
   ]);
 
   const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
@@ -389,7 +372,7 @@ export function useZeroVirtualizer<
       !isListContextCurrent ||
       virtualItems.length === 0 ||
       !complete ||
-      skipPagingLogic ||
+      pagingPhase !== 'idle' ||
       pendingScrollAdjustment !== 0
     ) {
       return;
@@ -397,7 +380,7 @@ export function useZeroVirtualizer<
 
     if (atStart) {
       if (firstRowIndex !== 0) {
-        updateAnchor(TOP_ANCHOR);
+        dispatch({type: 'UPDATE_ANCHOR', anchor: TOP_ANCHOR});
         return;
       }
     }
@@ -410,11 +393,14 @@ export function useZeroVirtualizer<
       const index = toBoundIndex(targetIndex, firstRowIndex, rowsLength);
       const startRow = rowAt(index);
       assert(startRow !== undefined || type === 'forward');
-      updateAnchor({
-        index: index + indexOffset,
-        kind: type,
-        startRow,
-      } as Anchor<TStartRow>);
+      dispatch({
+        type: 'UPDATE_ANCHOR',
+        anchor: {
+          index: index + indexOffset,
+          kind: type,
+          startRow,
+        } as Anchor<TStartRow>,
+      });
     };
 
     const firstItem = virtualItems[0];
@@ -444,7 +430,7 @@ export function useZeroVirtualizer<
   }, [
     isListContextCurrent,
     virtualItems,
-    skipPagingLogic,
+    pagingPhase,
     pendingScrollAdjustment,
     complete,
     pageSize,
@@ -457,7 +443,7 @@ export function useZeroVirtualizer<
 
   return {
     virtualizer,
-    rowAt: rowAt,
+    rowAt,
     complete,
     rowsEmpty,
     permalinkNotFound,
@@ -478,6 +464,9 @@ function toBoundIndex(
   firstRowIndex: number,
   rowsLength: number,
 ): number {
+  if (rowsLength === 0) {
+    return firstRowIndex;
+  }
   return Math.max(
     firstRowIndex,
     Math.min(firstRowIndex + rowsLength - 1, targetIndex),

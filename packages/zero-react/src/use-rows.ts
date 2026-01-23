@@ -85,6 +85,25 @@ export function useRows<TRow, TStartRow>({
     const completeRow = resultRow.type === 'complete';
 
     const typedRow = row as TRow | undefined;
+
+    // Early return if permalink not found to skip unnecessary queries
+    if (completeRow && typedRow === undefined) {
+      // Call dummy useQuery to maintain hooks call order
+      void useQuery(null, options);
+      void useQuery(null, options);
+
+      return {
+        rowAt: () => undefined,
+        rowsLength: 0,
+        complete: true,
+        rowsEmpty: true,
+        atStart: true,
+        atEnd: true,
+        firstRowIndex: anchorIndex,
+        permalinkNotFound: true,
+      };
+    }
+
     const start = typedRow && toStartRow(typedRow);
 
     const qBefore = start && getPageQuery(halfPageSize + 1, start, 'backward');
@@ -103,11 +122,6 @@ export function useRows<TRow, TStartRow>({
     const rowsAfterSize = Math.min(rowsAfterLength, halfPageSize - 1);
 
     const firstRowIndex = anchorIndex - rowsBeforeSize;
-
-    if (completeRow && typedRow === undefined) {
-      // Permalink row not found
-      permalinkNotFound = true;
-    }
 
     return {
       rowAt: (index: number) => {
@@ -185,10 +199,14 @@ export function useRows<TRow, TStartRow>({
 
   return {
     rowAt: (index: number) => {
-      if (anchorIndex - index - 1 >= rowsLength) {
+      if (index >= anchorIndex) {
         return undefined;
       }
-      return typedRows[anchorIndex - index - 1];
+      const i = anchorIndex - index - 1;
+      if (i < 0 || i >= rowsLength) {
+        return undefined;
+      }
+      return typedRows[i];
     },
     rowsLength: rowsLength,
     complete,

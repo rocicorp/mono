@@ -1,7 +1,7 @@
-import type { Virtualizer } from '@tanstack/react-virtual';
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { createRoot } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type {Virtualizer} from '@tanstack/react-virtual';
+import {act, renderHook, waitFor} from '@testing-library/react';
+import {createRoot} from 'react-dom/client';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {
   MockSocket,
   zeroForTest,
@@ -14,8 +14,8 @@ import {
   toStartRow,
   type Item,
 } from './test-helpers.ts';
-import { useZeroVirtualizer } from './use-zero-virtualizer.ts';
-import { ZeroProvider } from './zero-provider.tsx';
+import {useZeroVirtualizer} from './use-zero-virtualizer.ts';
+import {ZeroProvider} from './zero-provider.tsx';
 
 // Mock wouter's useHistoryState since it needs browser history API
 vi.mock('wouter/use-browser-location', () => ({
