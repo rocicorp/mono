@@ -166,21 +166,9 @@ export class SolidView implements Output {
   #currentRoot: Entry | undefined;
 
   #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => ViewChange): void {
-    // BEHAVIOR CHANGE: Previously used `produce` (immer-style mutations) to apply
-    // changes directly to the Solid store. Now we apply changes immutably first,
-    // then use `reconcile` to diff the new state into the store.
-    //
-    // Why the change: `applyChange` now returns new immutable Entry objects
-    // (using spread, toSpliced, with) instead of mutating in place. This enables
-    // React.memo optimization since unchanged rows keep their object identity.
-    //
-    // How it works now:
-    // 1. Read current state from the store
-    // 2. Apply all changes immutably to produce a new root Entry
-    // 3. Use `reconcile` to diff the new state into the store
-    //
-    // `reconcile` compares new vs old by key (idSymbol) and only updates changed
-    // properties, preserving fine-grained reactivity at the property level.
+    // Apply changes immutably, then reconcile into Solid store.
+    // Unchanged rows keep identity (enables React.memo); reconcile diffs by
+    // idSymbol and updates only changed properties for fine-grained reactivity.
     this.#setState((prev: State): State => {
       this.#currentRoot = prev[0];
       return prev;
@@ -201,23 +189,10 @@ export class SolidView implements Output {
       this.#builderRoot = this.#createEmptyRoot();
     }
 
-    // Use `reconcile` to diff the new immutable state into the Solid store.
-    //
-    // Options:
-    // - key: idSymbol - Match array items by their stable ID (derived from primary key)
-    // - merge: true - Update individual properties rather than replacing objects,
-    //   enabling fine-grained reactivity (only re-render components that depend
-    //   on changed fields)
-    //
-    // PREVIOUS BEHAVIOR: `produce` applied mutations directly, so row object
-    // identity was always preserved (same object, properties mutated in place).
-    //
-    // CURRENT BEHAVIOR: `reconcile` with merge:true preserves row identity when
-    // the idSymbol matches. The row object reference stays the same, and only
-    // changed properties trigger reactivity. EXCEPTION: When a primary key changes,
-    // the idSymbol changes, so reconcile treats it as a remove+add (new row object).
-    // This is semantically correct: a row with a different primary key IS a
-    // different entity.
+    // reconcile with key=idSymbol matches rows by primary key.
+    // merge=true updates properties in place for fine-grained reactivity:
+    //   old: {id:1, name:"A"}  +  new: {id:1, name:"B"}  →  same object, name updated
+    // If idSymbol changes (PK edit), it's a remove+add (correct: different entity).
     this.#setState(
       0,
       reconcile(newRoot, {
