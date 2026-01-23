@@ -606,9 +606,7 @@ async function processCleanupResultsMutation<
   // Determine clientID for transaction input based on cleanup type
   // Note: legacy format without type field is treated as single
   const clientID =
-    'type' in args && args.type === 'bulk'
-      ? args.clientIDs[0]
-      : args.clientID;
+    'type' in args && args.type === 'bulk' ? args.clientIDs[0] : args.clientID;
 
   // Run in a transaction, using the hook for DB-specific operation.
   // Note: only upstreamSchema is used by deleteMutationResults; the other
