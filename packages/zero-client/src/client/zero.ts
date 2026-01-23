@@ -194,6 +194,7 @@ export type TestingContext = {
   socketResolver: () => Resolver<WebSocket>;
   connectionManager: () => ConnectionManager;
   queryDelegate: () => QueryDelegate;
+  queryManager: () => QueryManager;
   enableRefresh: () => boolean;
 };
 
@@ -800,6 +801,7 @@ export class Zero<
         socketResolver: () => this.#socketResolver,
         connectionManager: () => this.#connectionManager,
         queryDelegate: () => this.#zeroContext,
+        queryManager: () => this.#queryManager,
         enableRefresh: () => this.#enableRefresh(),
       };
     }

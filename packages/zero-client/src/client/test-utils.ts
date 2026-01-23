@@ -111,6 +111,7 @@ export class TestZero<
     state: ConnectionStatus;
     resolve: (state: ConnectionStatus) => void;
   }> = new Set();
+  #cookie: number | null = null;
 
   get perdag(): Store {
     return getInternalReplicacheImplForTesting(this).perdag;
@@ -216,23 +217,27 @@ export class TestZero<
     return this.triggerMessage(msg);
   }
 
-  async triggerPoke(
-    cookieStart: string | null,
-    cookieEnd: string,
-    pokePart: Omit<PokePartBody, 'pokeID'>,
-  ): Promise<void> {
+  async triggerPoke(pokePart: Omit<PokePartBody, 'pokeID'>): Promise<void> {
     const id = `${this.pokeIDCounter++}`;
+    const baseCookieStr =
+      this.#cookie === null ? null : String(this.#cookie).padStart(10, '0');
     await this.triggerPokeStart({
       pokeID: id,
-      baseCookie: cookieStart,
+      baseCookie: baseCookieStr,
     });
     await this.triggerPokePart({
       ...pokePart,
       pokeID: id,
     });
+    if (this.#cookie === null) {
+      this.#cookie = 1;
+    } else {
+      this.#cookie++;
+    }
+    const cookieStr = String(this.#cookie).padStart(10, '0');
     await this.triggerPokeEnd({
       pokeID: id,
-      cookie: cookieEnd,
+      cookie: cookieStr,
     });
   }
 
@@ -263,7 +268,7 @@ export class TestZero<
     const hash = qi.customQueryID
       ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
       : qi.hash();
-    await this.triggerPoke(null, '1', {
+    await this.triggerPoke({
       gotQueriesPatch: [
         {
           op: 'put',
@@ -306,7 +311,7 @@ export class TestZero<
     const hash = qi.customQueryID
       ? hashOfNameAndArgs(qi.customQueryID.name, qi.customQueryID.args)
       : qi.hash();
-    return this.triggerPoke(null, '1', {
+    return this.triggerPoke({
       gotQueriesPatch: [
         {
           op: 'put',
@@ -314,6 +319,30 @@ export class TestZero<
         },
       ],
     });
+  }
+
+  /**
+   * Marks all currently registered queries as "got" by triggering a poke
+   * with gotQueriesPatch. This is useful for testing scenarios where you
+   * want to simulate that all queries have been fully synced from the server.
+   */
+  async markAllQueriesAsGot(): Promise<void> {
+    assert(TESTING);
+    const queryManager = this[exposedToTestingSymbol].queryManager();
+    const gotQueriesPatch = Array.from(
+      queryManager.getAllNonGotQueryHashes(),
+      hash => ({
+        op: 'put' as const,
+        hash,
+      }),
+    );
+
+    if (gotQueriesPatch.length === 0) {
+      return;
+    }
+
+    // triggerPoke will automatically advance this.#cookie internally
+    await this.triggerPoke({gotQueriesPatch});
   }
 }
 
