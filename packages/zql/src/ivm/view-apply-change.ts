@@ -14,7 +14,7 @@ type MetaEntry = Writable<Entry> & {
   [refCountSymbol]: number;
   [idSymbol]?: string | undefined;
 };
-type MetaEntryList = readonly MetaEntry[];
+type MetaEntryList = MetaEntry[];
 
 /*
  * Type Cast Safety Notes:
@@ -28,11 +28,7 @@ type MetaEntryList = readonly MetaEntry[];
  * 2. MetaEntryList casts: Child relationship arrays contain MetaEntry instances.
  *    We cast Entry[] -> MetaEntryList for the same reason.
  *
- * 3. Mutable array casts: TypeScript's `with()` and `toSpliced()` return
- *    `readonly T[]` even on mutable arrays. We cast to mutable because we
- *    control array creation and know they're mutable.
- *
- * 4. Row casts in binarySearch: MetaEntry contains all Row properties plus
+ * 3. Row casts in binarySearch: MetaEntry contains all Row properties plus
  *    symbol keys. The comparator only accesses string-indexed properties,
  *    so casting MetaEntry -> Row is safe.
  */
@@ -282,7 +278,7 @@ export function applyChange(
             const idx = newView.indexOf(newEntry);
             return {
               ...parentEntry,
-              [relationship]: (newView as MetaEntry[]).with(idx, initializedEntry),
+              [relationship]: newView.with(idx, initializedEntry),
             };
           }
         }
@@ -388,7 +384,7 @@ export function applyChange(
         // applyChange preserves MetaEntry structure when input is MetaEntry
         return {
           ...parentEntry,
-          [relationship]: (view as MetaEntry[]).with(pos, newExisting as MetaEntry),
+          [relationship]: view.with(pos, newExisting as MetaEntry),
         };
       }
     }
@@ -448,7 +444,7 @@ export function applyChange(
             const newEntry = applyEdit(oldEntry, change, schema, withIDs);
             return {
               ...parentEntry,
-              [relationship]: (view as MetaEntry[]).with(oldPos, newEntry),
+              [relationship]: view.with(oldPos, newEntry),
             };
           } else {
             // Row must actually move. Handle refCount > 1 by leaving a "ghost"
@@ -459,7 +455,7 @@ export function applyChange(
 
             if (newRefCount === 0) {
               // Last reference at old position. Remove entirely.
-              newView = (view as MetaEntry[]).toSpliced(oldPos, 1);
+              newView = view.toSpliced(oldPos, 1);
               // Adjust target position since we removed an element before it.
               adjustedPos = oldPos < pos ? pos - 1 : pos;
             } else {
@@ -468,7 +464,7 @@ export function applyChange(
                 ...oldEntry,
                 [refCountSymbol]: newRefCount,
               };
-              newView = (view as MetaEntry[]).with(oldPos, oldEntryCopy);
+              newView = view.with(oldPos, oldEntryCopy);
             }
 
             if (found) {
@@ -487,7 +483,7 @@ export function applyChange(
               };
               return {
                 ...parentEntry,
-                [relationship]: (newView as MetaEntry[]).with(adjustedPos, updatedEntry),
+                [relationship]: newView.with(adjustedPos, updatedEntry),
               };
             } else {
               // No existing entry at new position. Insert fresh with refCount=1.
@@ -498,7 +494,7 @@ export function applyChange(
               };
               return {
                 ...parentEntry,
-                [relationship]: (newView as MetaEntry[]).toSpliced(adjustedPos, 0, movedEntry),
+                [relationship]: newView.toSpliced(adjustedPos, 0, movedEntry),
               };
             }
           }
@@ -511,7 +507,7 @@ export function applyChange(
           );
           assert(found, 'node does not exist');
           const newEntry = applyEdit(view[pos], change, schema, withIDs);
-          return {...parentEntry, [relationship]: (view as MetaEntry[]).with(pos, newEntry)};
+          return {...parentEntry, [relationship]: view.with(pos, newEntry)};
         }
       }
     }
@@ -593,16 +589,10 @@ function add(
       ...existing,
       [refCountSymbol]: existing[refCountSymbol] + 1,
     };
-    return {
-      newEntry: undefined,
-      newView: (view as MetaEntry[]).with(pos, updated),
-    };
+    return {newEntry: undefined, newView: view.with(pos, updated)};
   }
   const newEntry = makeNewMetaEntry(row, schema, withIDs, 1);
-  return {
-    newEntry,
-    newView: (view as MetaEntry[]).toSpliced(pos, 0, newEntry),
-  };
+  return {newEntry, newView: view.toSpliced(pos, 0, newEntry)};
 }
 
 function removeAndUpdateRefCount(
@@ -615,16 +605,15 @@ function removeAndUpdateRefCount(
   const oldEntry = view[pos];
   const rc = oldEntry[refCountSymbol];
   if (rc === 1) {
-    return (view as MetaEntry[]).toSpliced(pos, 1);
+    return view.toSpliced(pos, 1);
   }
   const newEntry: MetaEntry = {
     ...oldEntry,
     [refCountSymbol]: rc - 1,
   };
-  return (view as MetaEntry[]).with(pos, newEntry);
+  return view.with(pos, newEntry);
 }
 
-// TODO: Do not return an object. It puts unnecessary pressure on the GC.
 function binarySearch(
   view: MetaEntryList,
   target: Row,
@@ -636,9 +625,7 @@ function binarySearch(
     const mid = (low + high) >>> 1;
     // MetaEntry contains all Row properties (plus symbol keys for internal tracking).
     // The comparator only accesses string-indexed properties, so this is safe.
-    // We extract the Row portion to satisfy the Comparator type signature.
-    const midEntry = view[mid];
-    const comparison = comparator(midEntry as Row, target);
+    const comparison = comparator(view[mid] as Row, target);
     if (comparison < 0) {
       low = mid + 1;
     } else if (comparison > 0) {
