@@ -892,7 +892,7 @@ export class CVRStore {
     );
     recordRowsSynced(this.#rowCount);
 
-    if (this.#upstreamDb) {
+    if (this.#upstreamDb && this.#upstreamWrites.length) {
       const start = performance.now();
       lc.debug?.('flushing upstream writes');
       await this.#upstreamDb.begin(Mode.READ_COMMITTED, async tx => {
