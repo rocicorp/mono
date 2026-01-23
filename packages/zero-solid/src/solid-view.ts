@@ -28,6 +28,37 @@ export type State = [Entry, QueryResultDetails];
 export const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
 export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
 
+/**
+ * Update flow for Solid's fine-grained reactivity:
+ *
+ *   push(change)
+ *       │
+ *       ▼
+ *   ┌─────────────────────────────────┐
+ *   │ builderRoot defined?            │
+ *   │ (building from empty)           │
+ *   └─────────────────────────────────┘
+ *       │yes                │no
+ *       ▼                   ▼
+ *   Apply to plain     Queue change in
+ *   JS object          #pendingChanges
+ *   (fast path)        (for later)
+ *       │                   │
+ *       └───────┬───────────┘
+ *               ▼
+ *         onTransactionCommit()
+ *               │
+ *       ┌───────┴───────┐
+ *       ▼               ▼
+ *   reconcile()     #applyChanges()
+ *   builderRoot     with pendingChanges
+ *   (bulk insert)   (incremental update)
+ *       │               │
+ *       └───────┬───────┘
+ *               ▼
+ *   reconcile(newRoot, {key: idSymbol})
+ *   → Solid diffs by PK, updates only changed signals
+ */
 export class SolidView implements Output {
   readonly #input: Input;
   readonly #format: Format;
@@ -166,9 +197,8 @@ export class SolidView implements Output {
   #currentRoot: Entry | undefined;
 
   #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => ViewChange): void {
-    // Apply changes immutably, then reconcile into Solid store.
-    // Unchanged rows keep identity (enables React.memo); reconcile diffs by
-    // idSymbol and updates only changed properties for fine-grained reactivity.
+    // Build new tree immutably, then reconcile() diffs by idSymbol.
+    // Solid's fine-grained reactivity only triggers signals for changed properties.
     this.#setState((prev: State): State => {
       this.#currentRoot = prev[0];
       return prev;

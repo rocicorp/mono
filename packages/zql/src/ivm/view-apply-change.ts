@@ -81,13 +81,15 @@ export interface RefCountMap {
 
 /**
  * Immutable view update. Returns new Entry on change, same Entry if unchanged.
- * Unchanged rows keep identity (enables React.memo via shallow comparison).
+ * Unchanged entries keep identity, enabling shallow comparison optimizations
+ * in UI frameworks (React.memo, Solid's fine-grained reactivity, etc).
  *
- * Propagation: recurse DOWN to target, create new objects on the way UP.
- * Siblings keep original refs. Only the path from change to root is copied.
+ * Propagation: recurse DOWN to find target, copy objects on the way UP.
+ * Siblings keep original refs. Only the ancestor path is copied.
  *
- *   root {users:[A,B], items:[C,D,E]}  --edit C-->  root' {users:[A,B], items:[C',D,E]}
- *         ↑ same ref        ↑ new array, D/E same refs      ↑ C' new object
+ *   root {users:[A,B], items:[C,D,E]}    --edit C-->    root' {users:[A,B], items:[C',D,E]}
+ *         │ same ref        │                                  │              │
+ *         └─────────────────┴── unchanged ──────────────┘     new array     C' new, D/E same
  */
 export function applyChange(
   parentEntry: Entry,
@@ -145,8 +147,12 @@ export function applyChange(
 
   const {singular, relationships: childFormats} = format;
   switch (change.type) {
-    // ADD: Insert row or increment refCount if duplicate. RefCount tracks
-    // duplicate rows (same row via different query paths); remove when rc=0.
+    // ADD: Insert row (rc=1) or increment refCount if duplicate.
+    // RefCount tracks identical rows reached via different query paths.
+    //
+    //   add(A)      add(A)      remove(A)   remove(A)
+    //     ↓           ↓            ↓           ↓
+    //   [A:rc=1] → [A:rc=2] → [A:rc=1] → (deleted)
     case 'add': {
       if (singular) {
         const oldEntry = getOptionalSingularEntry(parentEntry, relationship);
@@ -245,7 +251,7 @@ export function applyChange(
           childFormat,
           withIDs,
         );
-        // Preserve identity if child didn't change (enables React.memo).
+        // Preserve identity if child didn't change (enables shallow-compare optimizations).
         if (newExisting === existing) {
           return parentEntry;
         }
@@ -281,8 +287,15 @@ export function applyChange(
       }
     }
     // EDIT: Update row fields. If sort key changes, row may move position.
-    // rc>1: leave ghost at old pos with rc-1, insert/merge at new pos.
-    //   [A, B(rc=2), C, D] --edit B--> [A, B(rc=1), C, B'(rc=1), D]
+    //
+    // Position change with rc>1 (two query paths reach same row):
+    //
+    //   Before: [A, B(rc=2), C, D]          After: [A, B(rc=1), C, B'(rc=1), D]
+    //                │                                  │            │
+    //           path1 + path2                      path1 ghost    path2 moved
+    //
+    // Why ghost stays: path1 still expects B at old position.
+    // B' appears where path2's sort order places it.
     case 'edit': {
       if (singular) {
         const existing = getSingularEntry(parentEntry, relationship);
