@@ -1417,6 +1417,189 @@ describe('applyChange', () => {
     });
   });
 
+  describe('add with initialized relationships', () => {
+    // This test verifies that when adding an entry with child relationships,
+    // the initialized entry is correctly placed in the view array. This
+    // exercises the code path where initializeRelationships returns a new
+    // entry (with children), and we use the pos returned from add() to
+    // update the array directly (avoiding an O(n) indexOf scan).
+
+    const schemaWithChildren: SourceSchema = {
+      tableName: 'parent',
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      primaryKey: ['id'],
+      sort: [['id', 'asc']],
+      system: 'client',
+      relationships: {
+        children: {
+          tableName: 'child',
+          columns: {id: {type: 'string'}, parentId: {type: 'string'}},
+          primaryKey: ['id'],
+          sort: [['id', 'asc']],
+          system: 'client',
+          relationships: {},
+          isHidden: false,
+          compareRows: makeComparator([['id', 'asc']]),
+        },
+      },
+      isHidden: false,
+      compareRows: makeComparator([['id', 'asc']]),
+    } as const;
+
+    const formatWithChildren: Format = {
+      singular: false,
+      relationships: {
+        children: {singular: false, relationships: {}},
+      },
+    };
+
+    const apply = (root: Entry, change: ViewChange) =>
+      applyChange(root, change, schemaWithChildren, '', formatWithChildren, true);
+
+    test('entry with children is placed at correct position', () => {
+      let root: Entry = {'': []};
+
+      // Add entries in non-alphabetical order to verify binary search positioning
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'b', name: 'Bob'},
+          relationships: {
+            children: () => [{row: {id: 'c1', parentId: 'b'}, relationships: {}}],
+          },
+        },
+      });
+
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'd', name: 'Dave'},
+          relationships: {
+            children: () => [{row: {id: 'c2', parentId: 'd'}, relationships: {}}],
+          },
+        },
+      });
+
+      // Add entry that should be inserted at position 0 (before 'b')
+      // This entry has children, so initializeRelationships will return a new entry
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'a', name: 'Alice'},
+          relationships: {
+            children: () => [{row: {id: 'c3', parentId: 'a'}, relationships: {}}],
+          },
+        },
+      });
+
+      // Verify entries are in correct sorted order with their children
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "children": [
+                {
+                  "id": "c3",
+                  "parentId": "a",
+                  Symbol(rc): 1,
+                  Symbol(id): ""c3"",
+                },
+              ],
+              "id": "a",
+              "name": "Alice",
+              Symbol(rc): 1,
+              Symbol(id): ""a"",
+            },
+            {
+              "children": [
+                {
+                  "id": "c1",
+                  "parentId": "b",
+                  Symbol(rc): 1,
+                  Symbol(id): ""c1"",
+                },
+              ],
+              "id": "b",
+              "name": "Bob",
+              Symbol(rc): 1,
+              Symbol(id): ""b"",
+            },
+            {
+              "children": [
+                {
+                  "id": "c2",
+                  "parentId": "d",
+                  Symbol(rc): 1,
+                  Symbol(id): ""c2"",
+                },
+              ],
+              "id": "d",
+              "name": "Dave",
+              Symbol(rc): 1,
+              Symbol(id): ""d"",
+            },
+          ],
+        }
+      `);
+    });
+
+    test('entry inserted in middle position with children', () => {
+      let root: Entry = {'': []};
+
+      // Add entries with gap for middle insertion
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'a', name: 'Alice'},
+          relationships: {children: () => []},
+        },
+      });
+
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'c', name: 'Charlie'},
+          relationships: {children: () => []},
+        },
+      });
+
+      // Insert entry in middle (at position 1) with multiple children
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'b', name: 'Bob'},
+          relationships: {
+            children: () => [
+              {row: {id: 'child1', parentId: 'b'}, relationships: {}},
+              {row: {id: 'child2', parentId: 'b'}, relationships: {}},
+            ],
+          },
+        },
+      });
+
+      // Verify middle entry has children and is at correct position
+      expect(at(root, '', 0)).toEqual(
+        expect.objectContaining({id: 'a', name: 'Alice'}),
+      );
+      expect(at(root, '', 1)).toEqual(
+        expect.objectContaining({id: 'b', name: 'Bob'}),
+      );
+      expect(at(root, '', 2)).toEqual(
+        expect.objectContaining({id: 'c', name: 'Charlie'}),
+      );
+
+      // Verify Bob's children are correctly initialized
+      const bobEntry = at(root, '', 1);
+      expect(entries(bobEntry, 'children')).toHaveLength(2);
+      expect(at(bobEntry, 'children', 0)).toEqual(
+        expect.objectContaining({id: 'child1', parentId: 'b'}),
+      );
+      expect(at(bobEntry, 'children', 1)).toEqual(
+        expect.objectContaining({id: 'child2', parentId: 'b'}),
+      );
+    });
+  });
+
   describe('Object identity preservation (immutability)', () => {
     const simpleSchema = {
       tableName: 'item',
