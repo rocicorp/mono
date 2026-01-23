@@ -72,8 +72,6 @@ function softNavigate(path: string, state?: ZbugsHistoryState) {
   });
 }
 
-export const emojiToastShowDuration = 3_000;
-
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();

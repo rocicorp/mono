@@ -1,7 +1,8 @@
 import {memo, type ReactNode, useEffect, useState} from 'react';
 import {ToastContainer as Container, toast} from 'react-toastify';
 import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.ts';
-import {emojiToastShowDuration} from './issue-page.tsx';
+
+const toastShowDuration = 3000;
 
 export function ToastContent({
   children,
@@ -17,7 +18,7 @@ export function ToastContent({
     if (docFocused && !hover) {
       const id = setTimeout(() => {
         toast.dismiss(toastID);
-      }, emojiToastShowDuration);
+      }, toastShowDuration);
       return () => clearTimeout(id);
     }
     return () => void 0;
