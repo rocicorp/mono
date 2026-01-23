@@ -2051,7 +2051,7 @@ const CURSOR_PAGE_SIZE = 10000;
 // This effectively achieves the desired one-per-event-loop-iteration behavior.
 const timeSliceQueue = new Lock();
 
-async function yieldProcess(_lc: LogContext) {
+function yieldProcess(_lc: LogContext) {
   return timeSliceQueue.withLock(() => new Promise(setImmediate));
 }
 
