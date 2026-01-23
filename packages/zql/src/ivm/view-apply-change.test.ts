@@ -77,17 +77,13 @@ describe('applyChange', () => {
 
   describe('Multiple entries', () => {
     test('singular: false', () => {
-      // This should really be a WeakMap but for testing purposes we use a Map.
-
       let root: Entry = {'': []};
       const format: Format = {
         singular: false,
-        relationships: {
-          athletes: {
-            relationships: {},
-            singular: false,
-          },
-        },
+        relationships: {athletes: {relationships: {}, singular: false}},
+      };
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, relationship, format, true);
       };
 
       {
@@ -176,9 +172,7 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          root = applyChange(root, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
         expect(root).toMatchInlineSnapshot(`
           {
@@ -242,9 +236,7 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          root = applyChange(root, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
         expect(root).toMatchInlineSnapshot(`
           {
@@ -308,9 +300,7 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          root = applyChange(root, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
         expect(root).toMatchInlineSnapshot(`
           {
@@ -340,6 +330,9 @@ describe('applyChange', () => {
             singular: true,
           },
         },
+      };
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, relationship, format, true);
       };
 
       {
@@ -428,9 +421,7 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          root = applyChange(root, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
         expect(root).toMatchInlineSnapshot(`
           {
@@ -492,9 +483,7 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          root = applyChange(root, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
         expect(root).toMatchInlineSnapshot(`
           {
@@ -556,9 +545,7 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          root = applyChange(root, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
         expect(root).toMatchInlineSnapshot(`
           {
@@ -1433,10 +1420,7 @@ describe('applyChange', () => {
   describe('Object identity preservation (immutability)', () => {
     const simpleSchema = {
       tableName: 'item',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-      },
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
       primaryKey: ['id'],
       sort: [['id', 'asc']],
       system: 'client',
@@ -1445,41 +1429,26 @@ describe('applyChange', () => {
       compareRows: makeComparator([['id', 'asc']]),
     } as const;
 
-    const format: Format = {
-      singular: false,
-      relationships: {},
-    };
+    const format: Format = {singular: false, relationships: {}};
+
+    // Helper to reduce boilerplate in tests
+    const apply = (root: Entry, change: ViewChange) =>
+      applyChange(root, change, simpleSchema, '', format, true);
 
     test('unchanged rows keep their reference when adding a new row', () => {
       let root: Entry = {'': []};
 
-      // Add first row
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '1', name: 'Alice'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
 
       const firstRowRef = at(root, '', 0);
 
-      // Add second row
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '2', name: 'Bob'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
 
       // First row should keep same reference (toBe checks reference equality)
       expect(at(root, '', 0)).toBe(firstRowRef);
@@ -1489,44 +1458,21 @@ describe('applyChange', () => {
     test('unchanged rows keep their reference when removing another row', () => {
       let root: Entry = {'': []};
 
-      // Add two rows
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '1', name: 'Alice'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '2', name: 'Bob'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
 
       const firstRowRef = at(root, '', 0);
 
-      // Remove second row
-      root = applyChange(
-        root,
-        {
-          type: 'remove',
-          node: {row: {id: '2', name: 'Bob'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'remove',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
 
       // First row should keep same reference
       expect(at(root, '', 0)).toBe(firstRowRef);
@@ -1536,45 +1482,22 @@ describe('applyChange', () => {
     test('unchanged rows keep their reference when editing another row', () => {
       let root: Entry = {'': []};
 
-      // Add two rows
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '1', name: 'Alice'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '2', name: 'Bob'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
 
       const firstRowRef = at(root, '', 0);
 
-      // Edit second row
-      root = applyChange(
-        root,
-        {
-          type: 'edit',
-          oldNode: {row: {id: '2', name: 'Bob'}},
-          node: {row: {id: '2', name: 'Bobby'}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: '2', name: 'Bob'}},
+        node: {row: {id: '2', name: 'Bobby'}},
+      });
 
       // First row should keep same reference
       expect(at(root, '', 0)).toBe(firstRowRef);
@@ -1588,32 +1511,18 @@ describe('applyChange', () => {
     test('edited row gets new reference', () => {
       let root: Entry = {'': []};
 
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '1', name: 'Alice'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
 
       const originalRef = at(root, '', 0);
 
-      root = applyChange(
-        root,
-        {
-          type: 'edit',
-          oldNode: {row: {id: '1', name: 'Alice'}},
-          node: {row: {id: '1', name: 'Alicia'}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: '1', name: 'Alice'}},
+        node: {row: {id: '1', name: 'Alicia'}},
+      });
 
       // Edited row should have a new reference
       expect(at(root, '', 0)).not.toBe(originalRef);
@@ -1625,32 +1534,18 @@ describe('applyChange', () => {
     test('root object changes when any modification occurs', () => {
       let root: Entry = {'': []};
 
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '1', name: 'Alice'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
 
       const rootRef = root;
       const listRef = entries(root, '');
 
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '2', name: 'Bob'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
 
       // Root and list should have new references
       expect(root).not.toBe(rootRef);
@@ -1739,17 +1634,10 @@ describe('applyChange', () => {
     test('refCount increment creates new reference but preserves data', () => {
       let root: Entry = {'': []};
 
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '1', name: 'Alice'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
 
       const originalRef = at(root, '', 0);
       const originalRefCount = (originalRef as {[refCountSymbol]: number})[
@@ -1757,17 +1645,10 @@ describe('applyChange', () => {
       ];
 
       // Add same row again (should increment refCount)
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {row: {id: '1', name: 'Alice'}, relationships: {}},
-        },
-        simpleSchema,
-        '',
-        format,
-        true,
-      );
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
 
       const newRef = at(root, '', 0);
 
