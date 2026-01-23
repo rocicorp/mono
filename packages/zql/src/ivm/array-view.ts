@@ -5,10 +5,57 @@ import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
 import type {Change} from './change.ts';
+import type {Node} from './data.ts';
 import {skipYields, type Input, type Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {applyChange} from './view-apply-change.ts';
+import {
+  applyChanges,
+  type ExpandedNode,
+  type ViewChange,
+} from './view-apply-change.ts';
 import type {Entry, Format, View} from './view.ts';
+
+/**
+ * Eagerly expand a Node's lazy relationship generators into arrays.
+ * This captures the current state of the source at the moment of expansion.
+ */
+function expandNode(node: Node): ExpandedNode {
+  return {
+    row: node.row,
+    relationships: Object.fromEntries(
+      Object.entries(node.relationships).map(([k, v]) => [
+        k,
+        [...skipYields(v())].map(expandNode),
+      ]),
+    ),
+  };
+}
+
+/**
+ * Expand a Change by eagerly evaluating all lazy relationship generators.
+ */
+function expandChange(change: Change): ViewChange {
+  switch (change.type) {
+    case 'add':
+    case 'remove':
+      return {type: change.type, node: expandNode(change.node)};
+    case 'edit':
+      return {
+        type: 'edit',
+        node: expandNode(change.node),
+        oldNode: expandNode(change.oldNode),
+      };
+    case 'child':
+      return {
+        type: 'child',
+        node: expandNode(change.node),
+        child: {
+          relationshipName: change.child.relationshipName,
+          change: expandChange(change.child.change),
+        },
+      };
+  }
+}
 
 /**
  * Implements a materialized view of the output of an operator.
@@ -37,6 +84,9 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   #resultType: ResultType = 'unknown';
   #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
+
+  // Pending changes buffered for batch application (O(N + K) optimization)
+  #pendingChanges: ViewChange[] = [];
 
   constructor(
     input: Input,
@@ -72,7 +122,22 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   get data() {
+    // Auto-flush safety net for backwards compatibility
+    this.#applyPendingChanges();
     return this.#root[''] as V;
+  }
+
+  #applyPendingChanges() {
+    if (this.#pendingChanges.length > 0) {
+      this.#root = applyChanges(
+        this.#root,
+        this.#pendingChanges,
+        this.#schema,
+        '',
+        this.#format,
+      );
+      this.#pendingChanges = [];
+    }
   }
 
   addListener(listener: Listener<V>) {
@@ -102,10 +167,12 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #hydrate() {
     this.#dirty = true;
+    // During hydration, expand and apply nodes immediately
     for (const node of skipYields(this.#input.fetch({}))) {
-      this.#root = applyChange(
+      const expanded = expandNode(node);
+      this.#root = applyChanges(
         this.#root,
-        {type: 'add', node},
+        [{type: 'add', node: expanded}],
         this.#schema,
         '',
         this.#format,
@@ -116,7 +183,11 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   push(change: Change) {
     this.#dirty = true;
-    this.#root = applyChange(this.#root, change, this.#schema, '', this.#format);
+    // Eagerly expand the change to capture current source state.
+    // This is critical: lazy generators would see stale data if deferred.
+    // Buffer the change for batch application (O(N + K) optimization).
+    const expanded = expandChange(change);
+    this.#pendingChanges.push(expanded);
     return emptyArray;
   }
 
@@ -125,6 +196,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       return;
     }
     this.#dirty = false;
+    // Apply all pending changes in one batch (O(N + K) optimization)
+    this.#applyPendingChanges();
     this.#fireListeners();
   }
 

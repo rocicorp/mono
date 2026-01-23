@@ -27,6 +27,22 @@ type MetaEntry = Writable<Entry> & {
 type MetaEntryList = MetaEntry[];
 
 /**
+ * Node with eagerly-expanded relationships (arrays instead of generators).
+ * Used when batching changes to capture source state at push time.
+ */
+export type ExpandedNode = {
+  row: Row;
+  relationships: Record<string, ExpandedNode[]>;
+};
+
+/**
+ * A node for view changes. Can be either:
+ * - A lazy Node with generator relationships (original behavior)
+ * - An ExpandedNode with pre-computed relationship arrays (for batching)
+ */
+export type ViewNode = Node | ExpandedNode;
+
+/**
  * `applyChange` does not consume the `relationships` of `ChildChange#node`,
  * `EditChange#node` and `EditChange#oldNode`.  The `ViewChange` type
  * documents and enforces this via the type system.
@@ -41,12 +57,12 @@ export type RowOnlyNode = {row: Row};
 
 export type AddViewChange = {
   type: 'add';
-  node: Node;
+  node: ViewNode;
 };
 
 export type RemoveViewChange = {
   type: 'remove';
-  node: Node;
+  node: ViewNode;
 };
 
 type ChildViewChange = {
@@ -75,6 +91,23 @@ export interface RefCountMap {
 }
 
 /**
+ * Get child nodes from a relationship, handling both lazy (Node) and expanded (ExpandedNode).
+ */
+function* getChildNodes(
+  node: ViewNode,
+  relationship: string,
+): Generator<ViewNode> {
+  const children = node.relationships[relationship];
+  if (Array.isArray(children)) {
+    // ExpandedNode: already an array
+    yield* children;
+  } else {
+    // Node: lazy generator function
+    yield* skipYields(children());
+  }
+}
+
+/**
  * Immutable view update. Returns new Entry on change, same Entry if unchanged.
  * Unchanged entries keep identity, enabling shallow comparison optimizations
  * in UI frameworks (React.memo, Solid's fine-grained reactivity, etc).
@@ -99,11 +132,9 @@ export function applyChange(
       case 'add':
       case 'remove': {
         let currentParent = parentEntry;
-        for (const [relationship, children] of Object.entries(
-          change.node.relationships,
-        )) {
+        for (const relationship of Object.keys(change.node.relationships)) {
           const childSchema = must(schema.relationships[relationship]);
-          for (const node of skipYields(children())) {
+          for (const node of getChildNodes(change.node, relationship)) {
             currentParent = applyChange(
               currentParent,
               {type: change.type, node},
@@ -394,6 +425,26 @@ export function applyChange(
   }
 }
 
+/**
+ * Batch apply multiple changes to an Entry tree.
+ * For small batches or complex cases, falls back to sequential applyChange.
+ * Future optimization: O(N + K) batch processing for large K.
+ */
+export function applyChanges(
+  parentEntry: Entry,
+  changes: ViewChange[],
+  schema: SourceSchema,
+  relationship: string,
+  format: Format,
+  withIDs = false,
+): Entry {
+  let result = parentEntry;
+  for (const change of changes) {
+    result = applyChange(result, change, schema, relationship, format, withIDs);
+  }
+  return result;
+}
+
 function applyEdit(
   existing: MetaEntry,
   change: EditViewChange,
@@ -414,13 +465,13 @@ function applyEdit(
  * to collapse the junction level; non-hidden build arrays in-place for efficiency. */
 function initializeRelationships(
   entry: MetaEntry,
-  node: Node,
+  node: ViewNode,
   schema: SourceSchema,
   childFormats: Record<string, Format>,
   withIDs: boolean,
 ): MetaEntry {
   let result = entry;
-  for (const [relationship, children] of Object.entries(node.relationships)) {
+  for (const relationship of Object.keys(node.relationships)) {
     const childSchema = must(schema.relationships[relationship]);
     const childFormat = childFormats[relationship];
     if (childFormat === undefined) {
@@ -436,7 +487,7 @@ function initializeRelationships(
         result[relationship] = newView;
       }
 
-      for (const childNode of skipYields(children())) {
+      for (const childNode of getChildNodes(node, relationship)) {
         const newResult = applyChange(
           result,
           {type: 'add', node: childNode},
@@ -452,7 +503,7 @@ function initializeRelationships(
       // Plural non-hidden: build array in-place for efficiency
       const childArray: MetaEntry[] = [];
 
-      for (const childNode of skipYields(children())) {
+      for (const childNode of getChildNodes(node, relationship)) {
         const newEntry = makeNewMetaEntry(childNode.row, childSchema, withIDs, 1);
         const {pos, found} = binarySearch(
           childArray,
