@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1769104490439,
+  "lastUpdate": 1769165482611,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55057,6 +55057,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31957,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "kevinkusch49@gmail.com",
+            "name": "kvnkusch",
+            "username": "kvnkusch"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a38ba3e81bc587aad0d50ce78d0ea1dac8f434e",
+          "message": "Use kvStoreProvider to create stores in collectIDBDatabases -> newDagStore (#5448)\n\nFixes an issue where IDBStore was being used when not in a browser\nenvironment despite a different kvStore being passed (e.g. with React\nNative + SQLite KV Store Provider).\n\nCo-authored-by: Erik Arvidsson <arv@roci.dev>",
+          "timestamp": "2026-01-23T10:37:00Z",
+          "tree_id": "39290b9445f7edc4c16c912566e4387f4d04b745",
+          "url": "https://github.com/rocicorp/mono/commit/4a38ba3e81bc587aad0d50ce78d0ea1dac8f434e"
+        },
+        "date": 1769165470818,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 304373,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54851,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111741,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31967,
             "unit": "bytes"
           }
         ]
