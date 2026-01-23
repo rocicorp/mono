@@ -893,12 +893,15 @@ export class CVRStore {
     recordRowsSynced(this.#rowCount);
 
     if (this.#upstreamDb) {
-      const start = Date.now();
+      const start = performance.now();
       lc.debug?.('flushing upstream writes');
       await this.#upstreamDb.begin(Mode.READ_COMMITTED, async tx => {
         await Promise.all(this.#upstreamWrites.map(write => write(tx)));
       });
-      lc.debug?.(`flushed upstream writes in ${Date.now() - start} ms`);
+      const elapsed = performance.now() - start;
+      lc.debug?.(
+        `flushed upstream writes (${this.#upstreamWrites.length} statements) in ${elapsed} ms`,
+      );
     }
     return stats;
   }
