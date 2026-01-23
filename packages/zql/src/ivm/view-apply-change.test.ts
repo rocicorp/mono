@@ -1690,52 +1690,41 @@ describe('applyChange', () => {
         },
       };
 
+      const apply = (entry: Entry, change: ViewChange) =>
+        applyChange(entry, change, schemaWithRelationship, '', formatWithRelationship, true);
+
       let root: Entry = {'': []};
 
       // Add parent with children
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {
-            row: {id: 'p1', name: 'Parent1'},
-            relationships: {
-              children: () => [
-                {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
-                {row: {id: 'c2', parentId: 'p1'}, relationships: {}},
-              ],
-            },
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p1', name: 'Parent1'},
+          relationships: {
+            children: () => [
+              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
+              {row: {id: 'c2', parentId: 'p1'}, relationships: {}},
+            ],
           },
         },
-        schemaWithRelationship,
-        '',
-        formatWithRelationship,
-        true,
-      );
+      });
 
       const parent1 = at(root, '', 0);
       const child1Ref = at(parent1, 'children', 0);
       const child2Ref = at(parent1, 'children', 1);
 
       // Add a new child to the parent
-      root = applyChange(
-        root,
-        {
-          type: 'child',
-          node: {row: {id: 'p1', name: 'Parent1'}},
-          child: {
-            relationshipName: 'children',
-            change: {
-              type: 'add',
-              node: {row: {id: 'c3', parentId: 'p1'}, relationships: {}},
-            },
+      root = apply(root, {
+        type: 'child',
+        node: {row: {id: 'p1', name: 'Parent1'}},
+        child: {
+          relationshipName: 'children',
+          change: {
+            type: 'add',
+            node: {row: {id: 'c3', parentId: 'p1'}, relationships: {}},
           },
         },
-        schemaWithRelationship,
-        '',
-        formatWithRelationship,
-        true,
-      );
+      });
 
       const newParent1 = at(root, '', 0);
       // Parent should have new reference (its children changed)
@@ -1825,70 +1814,48 @@ describe('applyChange', () => {
         },
       };
 
+      const apply = (entry: Entry, change: ViewChange) =>
+        applyChange(entry, change, schemaWithRelationship, '', formatWithRelationship, true);
+
       let root: Entry = {'': []};
 
       // Add two parents with children
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {
-            row: {id: 'p1', name: 'Parent1'},
-            relationships: {
-              children: () => [
-                {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
-              ],
-            },
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p1', name: 'Parent1'},
+          relationships: {
+            children: () => [{row: {id: 'c1', parentId: 'p1'}, relationships: {}}],
           },
         },
-        schemaWithRelationship,
-        '',
-        formatWithRelationship,
-        true,
-      );
+      });
 
-      root = applyChange(
-        root,
-        {
-          type: 'add',
-          node: {
-            row: {id: 'p2', name: 'Parent2'},
-            relationships: {
-              children: () => [
-                {row: {id: 'c2', parentId: 'p2'}, relationships: {}},
-              ],
-            },
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p2', name: 'Parent2'},
+          relationships: {
+            children: () => [{row: {id: 'c2', parentId: 'p2'}, relationships: {}}],
           },
         },
-        schemaWithRelationship,
-        '',
-        formatWithRelationship,
-        true,
-      );
+      });
 
       const parent1Ref = at(root, '', 0);
       const parent2Ref = at(root, '', 1);
       const parent2ChildrenRef = entries(parent2Ref, 'children');
 
       // Add a child to parent1 only
-      root = applyChange(
-        root,
-        {
-          type: 'child',
-          node: {row: {id: 'p1', name: 'Parent1'}},
-          child: {
-            relationshipName: 'children',
-            change: {
-              type: 'add',
-              node: {row: {id: 'c3', parentId: 'p1'}, relationships: {}},
-            },
+      root = apply(root, {
+        type: 'child',
+        node: {row: {id: 'p1', name: 'Parent1'}},
+        child: {
+          relationshipName: 'children',
+          change: {
+            type: 'add',
+            node: {row: {id: 'c3', parentId: 'p1'}, relationships: {}},
           },
         },
-        schemaWithRelationship,
-        '',
-        formatWithRelationship,
-        true,
-      );
+      });
 
       // Parent1 should have new reference
       expect(at(root, '', 0)).not.toBe(parent1Ref);
