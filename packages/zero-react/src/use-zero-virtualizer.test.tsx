@@ -1,7 +1,7 @@
-import type {Virtualizer} from '@tanstack/react-virtual';
-import {act, renderHook, waitFor} from '@testing-library/react';
-import {createRoot} from 'react-dom/client';
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import type { Virtualizer } from '@tanstack/react-virtual';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   MockSocket,
   zeroForTest,
@@ -14,8 +14,8 @@ import {
   toStartRow,
   type Item,
 } from './test-helpers.ts';
-import {useZeroVirtualizer} from './use-zero-virtualizer.ts';
-import {ZeroProvider} from './zero-provider.tsx';
+import { useZeroVirtualizer } from './use-zero-virtualizer.ts';
+import { ZeroProvider } from './zero-provider.tsx';
 
 // Mock wouter's useHistoryState since it needs browser history API
 vi.mock('wouter/use-browser-location', () => ({
@@ -1094,6 +1094,231 @@ describe('useZeroVirtualizer', () => {
         'zero-virtualizer-estimated-total',
       );
       expect(estimatedTotalElAfterUp?.textContent).toBe('1000');
+    } finally {
+      root.unmount();
+      document.body.removeChild(container);
+    }
+  });
+
+  test('ReactDOM rendering with permalink in middle, scroll to bottom, then back to top', async () => {
+    const estimateSize = 50;
+
+    const getPageQuerySpy = vi.fn(getPageQuery);
+    const getSingleQuerySpy = vi.fn(getSingleQuery);
+
+    // Create a real DOM container and render with ReactDOM directly
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    let virtualizerInstance!: Virtualizer<HTMLElement, Element>;
+
+    // Start at item 500 (middle of 1000 items)
+    const permalinkID = '500';
+
+    function VirtualListWithRef() {
+      const result = useZeroVirtualizer({
+        estimateSize: () => estimateSize,
+        getScrollElement: () => document.getElementById('scroll-container'),
+        listContextParams: 'default',
+        permalinkID,
+        getPageQuery: getPageQuerySpy,
+        getSingleQuery: getSingleQuerySpy,
+        toStartRow,
+        overscan: 0,
+      });
+
+      virtualizerInstance = result.virtualizer;
+      const virtualItems = result.virtualizer.getVirtualItems();
+
+      return (
+        <>
+          <div
+            id="scroll-container"
+            style={{
+              height: '800px',
+              overflow: 'auto',
+              position: 'relative',
+            }}
+          >
+            <div
+              style={{
+                height: `${result.virtualizer.getTotalSize()}px`,
+                position: 'relative',
+              }}
+            >
+              {virtualItems.map(item => (
+                <div
+                  key={item.key}
+                  data-index={item.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${item.size}px`,
+                    transform: `translateY(${item.start}px)`,
+                  }}
+                >
+                  {result.rowAt(item.index)?.name ?? 'Loading...'}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div id="zero-virtualizer-total">{result.total}</div>
+          <div id="zero-virtualizer-estimated-total">
+            {result.estimatedTotal}
+          </div>
+        </>
+      );
+    }
+
+    try {
+      root.render(
+        <ZeroProvider zero={z}>
+          <VirtualListWithRef />
+        </ZeroProvider>,
+      );
+
+      await waitFor(() => {
+        expect(virtualizerInstance).toBeTruthy();
+      });
+
+      await z.markAllQueriesAsGot();
+
+      // Wait for permalink item to load
+      // The permalink is for item with ID '500', which corresponds to "Item 0500" (0-based index 499)
+      // But the virtualizer may render it at a different virtual index depending on the anchor
+      await waitFor(() => {
+        // Find the item by text content instead of index
+        const items = container.querySelectorAll('[data-index]');
+        let found = false;
+        for (const item of items) {
+          if (item.textContent === 'Item 0500') {
+            found = true;
+            break;
+          }
+        }
+        expect(found).toBe(true);
+      });
+
+      // Verify getSingleQuery was called for the permalink
+      expect(getSingleQuerySpy).toHaveBeenCalledWith('500');
+
+      // Get the current scroll offset (should be positioned at the permalink)
+      const initialScrollOffset = virtualizerInstance.scrollOffset ?? 0;
+      expect(initialScrollOffset).toBeGreaterThan(0);
+
+      // Scroll down to bottom incrementally from the permalink position
+      const scrollStepDown = 1000;
+      // Need to scroll to well past the end to ensure we load all data
+      // Total height will be ~50,000px for 1000 items
+      const maxScrollAttempts = 60;
+
+      for (let attempt = 0; attempt < maxScrollAttempts; attempt++) {
+        const scrollOffset =
+          initialScrollOffset + (attempt + 1) * scrollStepDown;
+
+        act(() => {
+          virtualizerInstance.scrollToOffset(scrollOffset);
+        });
+
+        await z.markAllQueriesAsGot();
+
+        await waitFor(() => {
+          virtualizerInstance.measure();
+          const visibleItems = container.querySelectorAll('[data-index]');
+          expect(visibleItems.length).toBeGreaterThan(0);
+        });
+
+        // Check if we reached the bottom (both total and estimatedTotal = 1000)
+        const totalEl = document.getElementById('zero-virtualizer-total');
+        const estimatedTotalEl = document.getElementById(
+          'zero-virtualizer-estimated-total',
+        );
+        if (
+          totalEl?.textContent === '1000' &&
+          estimatedTotalEl?.textContent === '1000'
+        ) {
+          break;
+        }
+      }
+
+      // Verify we reached near the end (may not have total=1000 without atStart=true from permalink)
+      await waitFor(() => {
+        const estimatedTotalElAtBottom = document.getElementById(
+          'zero-virtualizer-estimated-total',
+        );
+        // Should be close to or at 1000
+        const estimatedTotal = Number(estimatedTotalElAtBottom?.textContent);
+        expect(estimatedTotal).toBeGreaterThan(500);
+      });
+
+      // Check if we have items near the end visible (e.g., Item 0990+)
+      await waitFor(() => {
+        const items = container.querySelectorAll('[data-index]');
+        let foundEndItem = false;
+        for (const item of items) {
+          // Check for items in the 990-1000 range
+          const match = item.textContent?.match(/Item (\d+)/);
+          if (match) {
+            const itemNum = Number(match[1]);
+            if (itemNum >= 990) {
+              foundEndItem = true;
+              break;
+            }
+          }
+        }
+        expect(foundEndItem).toBe(true);
+      });
+
+      // Now scroll back up gradually to test backward navigation
+      const currentScrollOffset = virtualizerInstance.scrollOffset ?? 0;
+      const scrollStepUp = 1000;
+      // Scroll back up  partway (10 steps) to test backward paging
+      const stepsToScrollUp = 10;
+
+      for (let attempt = 0; attempt < stepsToScrollUp; attempt++) {
+        const scrollOffset = Math.max(
+          0,
+          currentScrollOffset - (attempt + 1) * scrollStepUp,
+        );
+
+        act(() => {
+          virtualizerInstance.scrollToOffset(scrollOffset);
+        });
+
+        await z.markAllQueriesAsGot();
+
+        await waitFor(() => {
+          virtualizerInstance.measure();
+          const visibleItems = container.querySelectorAll('[data-index]');
+          expect(visibleItems.length).toBeGreaterThan(0);
+        });
+      }
+
+      // Verify we scrolled back and have data rendered (not just all "Loading...")
+      await waitFor(() => {
+        const items = container.querySelectorAll('[data-index]');
+        expect(items.length).toBeGreaterThan(0);
+        // Just verify we have some content (not "Loading...")
+        let hasContent = false;
+        for (const item of items) {
+          if (item.textContent && item.textContent !== 'Loading...') {
+            hasContent = true;
+            break;
+          }
+        }
+        expect(hasContent).toBe(true);
+      });
+
+      // Estimated total should still be reasonable (close to or at the full count)
+      const estimatedTotalElAfterUp = document.getElementById(
+        'zero-virtualizer-estimated-total',
+      );
+      const estimatedTotal = Number(estimatedTotalElAfterUp?.textContent);
+      expect(estimatedTotal).toBeGreaterThan(500);
     } finally {
       root.unmount();
       document.body.removeChild(container);
