@@ -2264,6 +2264,114 @@ describe('BTreeWrite.putMany', () => {
       });
     });
 
+    test(`putMany rebalancing with previous sibling produces correct diffs > v${formatVersion}`, async () => {
+      // Regression test for bug where putManyMergeAndPartition incorrectly
+      // spliced when merging with previous sibling, causing incorrect tree
+      // structure and wrong diffs.
+      const dagStore = new TestStore();
+
+      // Create initial tree with entries at even indices
+      const h1 = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          emptyHash,
+          200,
+          400,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        const entries: [string, number][] = [];
+        for (let i = 0; i < 512; i += 2) {
+          entries.push([`k${String(i).padStart(4, '0')}`, i]);
+        }
+        await tree.putMany(entries);
+        const hash = await tree.flush();
+        await dagWrite.setHead('test', hash);
+        return hash;
+      });
+
+      // Add entries at odd indices - this will cause rebalancing with
+      // previous sibling merges in the internal nodes
+      const h2 = await withWrite(dagStore, async dagWrite => {
+        const tree = new BTreeWrite(
+          dagWrite,
+          formatVersion,
+          h1,
+          200,
+          400,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        const entries: [string, number][] = [];
+        for (let i = 1; i < 1022; i += 2) {
+          entries.push([`k${String(i).padStart(4, '0')}`, i]);
+        }
+        await tree.putMany(entries);
+        const hash = await tree.flush();
+        await dagWrite.setHead('test2', hash);
+        return hash;
+      });
+
+      // Verify all data is accessible
+      await withRead(dagStore, async dagRead => {
+        const tree = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h2,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        expect(await tree.get('k0000')).toBe(0);
+        expect(await tree.get('k0001')).toBe(1);
+        expect(await tree.get('k0002')).toBe(2);
+        expect(await tree.get('k0511')).toBe(511);
+        expect(await tree.get('k1021')).toBe(1021);
+      });
+
+      // Most importantly: verify diffs are correct
+      // Before the fix, this would report incorrect number of diffs due to
+      // corrupted tree structure from incorrect splicing
+      await withRead(dagStore, async dagRead => {
+        const tree1 = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h1,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+        const tree2 = new BTreeRead(
+          dagRead,
+          formatVersion,
+          h2,
+          getEntrySize,
+          chunkHeaderSize,
+        );
+
+        const diffs: unknown[] = [];
+        for await (const diff of tree2.diff(tree1)) {
+          diffs.push(diff);
+        }
+
+        // Should have exactly 511 diffs (one for each odd-indexed key added)
+        expect(diffs.length).toBe(511);
+
+        // Verify all diffs are additions with correct keys
+        const addedKeys = new Set<string>();
+        for (const diff of diffs) {
+          expect(diff).toHaveProperty('op', 'add');
+          const key = (diff as {key: string}).key;
+          addedKeys.add(key);
+        }
+
+        // Verify we got all expected odd-indexed keys
+        for (let i = 1; i < 1022; i += 2) {
+          const key = `k${String(i).padStart(4, '0')}`;
+          expect(addedKeys.has(key)).toBe(true);
+        }
+      });
+    });
+
     test(`putMany triggers rebalancing with sibling merge > v${formatVersion}`, async () => {
       const dagStore = new TestStore();
 

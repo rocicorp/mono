@@ -450,6 +450,7 @@ function readonlySplice<T>(
 
 /**
  * Helper for putMany that merges and partitions a child node.
+ * Returns the new entries and the splice parameters (startIndex and removeCount).
  */
 async function putManyMergeAndPartition(
   tree: BTreeWrite,
@@ -457,12 +458,14 @@ async function putManyMergeAndPartition(
   i: number,
   childNode: DataNodeImpl | InternalNodeImpl,
   currentEntries: Entry<Hash>[],
-): Promise<Entry<Hash>[]> {
+): Promise<{entries: Entry<Hash>[]; startIndex: number; removeCount: number}> {
   const level = parentLevel - 1;
 
   type IterableHashEntries = Iterable<Entry<Hash>>;
 
   let values: IterableHashEntries;
+  let startIndex: number;
+  let removeCount: number;
   if (i > 0) {
     const hash = currentEntries[i - 1][1];
     const previousSibling = await tree.getNode(hash);
@@ -470,6 +473,8 @@ async function putManyMergeAndPartition(
       previousSibling.entries as IterableHashEntries,
       childNode.entries as IterableHashEntries,
     );
+    startIndex = i - 1;
+    removeCount = 2;
   } else if (i < currentEntries.length - 1) {
     const hash = currentEntries[i + 1][1];
     const nextSibling = await tree.getNode(hash);
@@ -477,8 +482,12 @@ async function putManyMergeAndPartition(
       childNode.entries as IterableHashEntries,
       nextSibling.entries as IterableHashEntries,
     );
+    startIndex = i;
+    removeCount = 2;
   } else {
     values = childNode.entries as IterableHashEntries;
+    startIndex = i;
+    removeCount = 1;
   }
 
   const partitions = partition(
@@ -495,7 +504,7 @@ async function putManyMergeAndPartition(
     newEntries.push(newHashEntry);
   }
 
-  return newEntries;
+  return {entries: newEntries, startIndex, removeCount};
 }
 
 export class InternalNodeImpl extends NodeImpl<Hash> {
@@ -600,14 +609,18 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       childrenToRebalance.sort((a, b) => b.index - a.index);
 
       for (const {index, node} of childrenToRebalance) {
-        const rebalanced = await putManyMergeAndPartition(
+        const {
+          entries: rebalanced,
+          startIndex,
+          removeCount,
+        } = await putManyMergeAndPartition(
           tree,
           this.level,
           index,
           node,
           newEntries,
         );
-        newEntries.splice(index, 1, ...rebalanced);
+        newEntries.splice(startIndex, removeCount, ...rebalanced);
       }
     }
 
