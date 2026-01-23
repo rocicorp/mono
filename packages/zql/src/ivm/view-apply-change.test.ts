@@ -564,17 +564,7 @@ describe('applyChange', () => {
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SIMPLE CRUD TESTS
-  // Basic add/remove/edit operations with refCount tracking.
-  //
-  // RefCount lifecycle:
-  //   add(A)     add(A)     remove(A)  remove(A)
-  //     ↓          ↓           ↓          ↓
-  //   [A:1]  →  [A:2]   →   [A:1]   →   []
-  // ═══════════════════════════════════════════════════════════════════════════
   describe('Simple', () => {
-    // Plural relationship: rows stored in sorted array
     test('singular: false', () => {
       const schema = {
         tableName: 'event',
@@ -1010,13 +1000,6 @@ describe('applyChange', () => {
       `);
     });
 
-    // Edit that changes sort key (id): row moves to new position
-    //
-    //   [id:1]  ──edit id:1→2──►  [id:2]
-    //
-    // With refCount > 1, ghost remains at old position:
-    //   [1:rc=2, 2:rc=2]  ──edit 1→2──►  [1:rc=1, 2:rc=3]
-    //                                     ghost    merged
     test('edit primary key, singular: false', () => {
       const schema = {
         tableName: 'event',
