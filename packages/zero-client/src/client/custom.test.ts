@@ -999,15 +999,9 @@ describe('server results and keeping read queries', () => {
     });
 
     // confirm the mutation
-    await z.triggerPokeStart({
-      pokeID: '1',
-      baseCookie: null,
-    });
-    await z.triggerPokePart({
-      pokeID: '1',
+    await z.triggerPoke({
       lastMutationIDChanges: {[z.clientID]: 1},
     });
-    await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
 
     z.queryDelegate.flushQueryChanges();
 
@@ -1054,15 +1048,9 @@ describe('server results and keeping read queries', () => {
       ],
     });
 
-    await z.triggerPokeStart({
-      pokeID: '2',
-      baseCookie: '1',
-    });
-    await z.triggerPokePart({
-      pokeID: '2',
+    await z.triggerPoke({
       lastMutationIDChanges: {[z.clientID]: 2},
     });
-    await z.triggerPokeEnd({pokeID: '2', cookie: '2'});
 
     z.queryDelegate.flushQueryChanges();
 
@@ -1126,12 +1114,7 @@ describe('server results and keeping read queries', () => {
     });
 
     // confirm the mutation
-    await z.triggerPokeStart({
-      pokeID: '1',
-      baseCookie: null,
-    });
-    await z.triggerPokePart({
-      pokeID: '1',
+    await z.triggerPoke({
       lastMutationIDChanges: {[z.clientID]: 1},
       rowsPatch: [
         {
@@ -1157,7 +1140,6 @@ describe('server results and keeping read queries', () => {
         },
       ],
     });
-    await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
     z.queryDelegate.flushQueryChanges();
 
     await vi.waitFor(() => {

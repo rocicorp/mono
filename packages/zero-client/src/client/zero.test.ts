@@ -3432,7 +3432,7 @@ describe('Mutation responses poked down', () => {
     await mutation.client;
     await mutation2.client;
 
-    await z.triggerPoke(null, '1', {
+    await z.triggerPoke({
       lastMutationIDChanges: {
         [z.clientID]: 5,
       },
