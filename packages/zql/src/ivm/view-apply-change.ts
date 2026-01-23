@@ -1,7 +1,6 @@
 import {
   assert,
   assertArray,
-  assertNumber,
   unreachable,
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -20,6 +19,16 @@ type MetaEntry = Writable<Entry> & {
   [idSymbol]?: string | undefined;
 };
 type MetaEntryList = readonly MetaEntry[];
+
+/**
+ * Helper to convert readonly arrays to mutable.
+ * TypeScript's `with` and `toSpliced` methods return `readonly T[]` even when
+ * called on mutable arrays. This is a TypeScript limitation, not a runtime issue.
+ * This helper provides a single, documented place for this conversion.
+ */
+function asMutableArray<T>(arr: readonly T[]): T[] {
+  return arr as T[];
+}
 
 /**
  * `applyChange` does not consume the `relationships` of `ChildChange#node`,
@@ -73,6 +82,75 @@ export interface RefCountMap {
  * Applies a change to the view immutably. Returns a new Entry if any changes
  * were made, or the same Entry if nothing changed. Unchanged row objects keep
  * their identity, enabling React.memo with shallow comparison to work effectively.
+ *
+ * ## Immutable Update Propagation (Leaf to Root)
+ *
+ * When a change occurs deep in the tree, new objects are created along the path
+ * from the change location back to the root. Sibling subtrees are not copied:
+ * they keep their original object references.
+ *
+ * Example: editing row C in the "items" relationship:
+ *
+ *   BEFORE                              AFTER
+ *   ------                              -----
+ *   root {                              root' {           <-- new object
+ *     users: [A, B],    ─────────────>    users: [A, B],  <-- SAME array ref
+ *     items: [C, D, E]                    items: [C', D, E]  <-- new array
+ *   }                                   }
+ *
+ *   Legend:
+ *     root  -> root'  : parent replaced (spread creates new object)
+ *     [A,B]           : unchanged, same reference (users === users)
+ *     [C,D,E] -> [C',D,E] : new array via .with(), but D and E are same refs
+ *     C -> C'         : the edited row, new object with updated fields
+ *
+ * This pattern enables React.memo optimization: unchanged subtrees keep their
+ * identity, so React skips re-rendering components whose props haven't changed.
+ *
+ * The recursion flows DOWN to find the target, then new objects are created
+ * on the way back UP:
+ *
+ *   applyChange(root, childChange)
+ *       │
+ *       ▼ recurse down to find target
+ *   applyChange(items[0], editChange)
+ *       │
+ *       ▼ create new entry C'
+ *   return C'
+ *       │
+ *       ▲ bubble up, creating new containers
+ *   return {...root, items: items.with(0, C')}
+ *       │
+ *       ▲
+ *   return root'  (new root with updated items)
+ *
+ * ## Object Identity Preservation (Reference Equality)
+ *
+ * The key insight for React.memo optimization is that unchanged objects keep
+ * their exact memory reference. Here's the same example with object addresses:
+ *
+ *   BEFORE (memory addresses)          AFTER (memory addresses)
+ *   -------------------------          ------------------------
+ *   root    @0x100 ─┬─ users @0x200    root'   @0x400 ─┬─ users @0x200  (SAME!)
+ *                   │    ├─ A @0x210                   │    ├─ A @0x210  (SAME!)
+ *                   │    └─ B @0x220                   │    └─ B @0x220  (SAME!)
+ *                   │                                  │
+ *                   └─ items @0x300    (changed)       └─ items @0x500  (NEW)
+ *                        ├─ C @0x310  ─────────────────────> C' @0x510  (NEW)
+ *                        ├─ D @0x320                        ├─ D @0x320  (SAME!)
+ *                        └─ E @0x330                        └─ E @0x330  (SAME!)
+ *
+ *   Reference equality checks:
+ *     root === root'           // false (new object)
+ *     root.users === root'.users   // TRUE  (same array, same address)
+ *     root.users[0] === root'.users[0]  // TRUE  (A unchanged)
+ *     root.items === root'.items   // false (new array)
+ *     root.items[1] === root'.items[1]  // TRUE  (D unchanged)
+ *     root.items[0] === root'.items[0]  // false (C was edited)
+ *
+ * This means React.memo components receiving unchanged subtrees (users, A, B,
+ * D, E) will skip re-rendering because props === prevProps is true.
+ *
  */
 export function applyChange(
   parentEntry: Entry,
@@ -130,21 +208,36 @@ export function applyChange(
 
   const {singular, relationships: childFormats} = format;
   switch (change.type) {
+    // ─────────────────────────────────────────────────────────────────────────
+    // ADD: Insert a new row into the view (or increment refCount if duplicate)
+    //
+    // Two paths based on relationship cardinality:
+    //   singular (one-to-one): parentEntry[relationship] = entry
+    //   plural (one-to-many):  parentEntry[relationship] = [..., entry, ...]
+    //
+    // RefCount tracks duplicates: the same row can appear multiple times via
+    // different query paths. Instead of storing duplicates, we increment
+    // refCount and only remove when refCount reaches 0.
+    // ─────────────────────────────────────────────────────────────────────────
     case 'add': {
       if (singular) {
-        const oldEntry = parentEntry[relationship] as MetaEntry | undefined;
+        const oldEntry = getOptionalSingularEntry(parentEntry, relationship);
         if (oldEntry !== undefined) {
+          // Row already exists. For singular relationships, this means a
+          // duplicate add (same row reached via different query paths).
+          // Increment refCount rather than storing duplicates.
           assert(
             schema.compareRows(oldEntry, change.node.row) === 0,
             `Singular relationship '${relationship}' should not have multiple rows. You may need to declare this relationship with the \`many\` helper instead of the \`one\` helper in your schema.`,
           );
-          // adding same again: create new entry with incremented refCount
           const newEntry: MetaEntry = {
             ...oldEntry,
             [refCountSymbol]: oldEntry[refCountSymbol] + 1,
           };
           return {...parentEntry, [relationship]: newEntry};
         } else {
+          // First time seeing this row. Create entry with refCount=1,
+          // then recursively initialize any nested relationships.
           let newEntry = makeNewMetaEntry(change.node.row, schema, withIDs, 1);
           newEntry = initializeRelationships(
             newEntry,
@@ -156,6 +249,8 @@ export function applyChange(
           return {...parentEntry, [relationship]: newEntry};
         }
       } else {
+        // Plural relationship: maintain a sorted array of entries.
+        // Binary search finds insert position (or existing entry if duplicate).
         const view = getChildEntryList(parentEntry, relationship);
         const {newEntry, newView} = add(
           change.node.row,
@@ -165,6 +260,8 @@ export function applyChange(
         );
 
         if (newEntry) {
+          // Newly inserted entry (not a duplicate). Initialize its child
+          // relationships, which may recursively add more entries.
           const initializedEntry = initializeRelationships(
             newEntry,
             change.node,
@@ -172,7 +269,8 @@ export function applyChange(
             childFormats,
             withIDs,
           );
-          // Replace the entry in the view if relationships were added
+          // Replace entry in view if initializeRelationships added children
+          // (it returns a new object when children are added).
           if (initializedEntry !== newEntry) {
             const idx = newView.indexOf(newEntry);
             return {
@@ -184,20 +282,31 @@ export function applyChange(
         return {...parentEntry, [relationship]: newView};
       }
     }
+    // ─────────────────────────────────────────────────────────────────────────
+    // REMOVE: Delete a row from the view (or decrement refCount if duplicated)
+    //
+    // Mirror of ADD: decrement refCount, and only physically remove the entry
+    // when refCount reaches 0. This ensures rows added multiple times via
+    // different query paths are only removed when all paths are gone.
+    // ─────────────────────────────────────────────────────────────────────────
     case 'remove': {
       if (singular) {
-        const oldEntry = parentEntry[relationship] as MetaEntry | undefined;
+        const oldEntry = getOptionalSingularEntry(parentEntry, relationship);
         assert(oldEntry !== undefined, 'node does not exist');
         const rc = oldEntry[refCountSymbol];
         if (rc === 1) {
+          // Last reference removed. Set relationship to undefined.
           return {...parentEntry, [relationship]: undefined};
         }
+        // Other references remain. Decrement refCount but keep entry.
         const newEntry: MetaEntry = {
           ...oldEntry,
           [refCountSymbol]: rc - 1,
         };
         return {...parentEntry, [relationship]: newEntry};
       } else {
+        // Plural relationship: find entry via binary search, then either
+        // remove it entirely (refCount=1) or decrement refCount.
         const view = getChildEntryList(parentEntry, relationship);
         const newView = removeAndUpdateRefCount(
           view,
@@ -207,12 +316,28 @@ export function applyChange(
         return {...parentEntry, [relationship]: newView};
       }
     }
+    // ─────────────────────────────────────────────────────────────────────────
+    // CHILD: Propagate a change from a nested relationship up to this level
+    //
+    // This is the recursive case that enables deep updates. A change in a
+    // grandchild bubbles up through each level, creating new parent objects
+    // along the path (the "leaf to root" propagation pattern).
+    //
+    // Example: editing a comment on a post
+    //   applyChange(root, {type:'child', child:{relationshipName:'posts', change:...}})
+    //     └─> applyChange(posts[i], {type:'child', child:{relationshipName:'comments', change:...}})
+    //           └─> applyChange(comments[j], {type:'edit', ...})
+    //                 └─> return comments[j]'  (new comment object)
+    //           └─> return posts[i]'  (new post with updated comments)
+    //     └─> return root'  (new root with updated posts)
+    // ─────────────────────────────────────────────────────────────────────────
     case 'child': {
       const childSchema = must(
         schema.relationships[change.child.relationshipName],
       );
       const childFormat = format.relationships[change.child.relationshipName];
       if (childFormat === undefined) {
+        // Child relationship not included in view format. Nothing to update.
         return parentEntry;
       }
 
@@ -226,11 +351,13 @@ export function applyChange(
           childFormat,
           withIDs,
         );
+        // Preserve identity if child didn't change (enables React.memo).
         if (newExisting === existing) {
           return parentEntry;
         }
         return {...parentEntry, [relationship]: newExisting};
       } else {
+        // Find the target row in the sorted array via binary search.
         const view = getChildEntryList(parentEntry, relationship);
         const {pos, found} = binarySearch(
           view,
@@ -247,25 +374,53 @@ export function applyChange(
           childFormat,
           withIDs,
         );
+        // Preserve identity if descendant didn't change.
         if (newExisting === existing) {
           return parentEntry;
         }
+        // applyChange preserves MetaEntry structure when input is MetaEntry.
+        // Assert to ensure type safety rather than blindly casting.
+        assertMetaEntry(newExisting);
         return {
           ...parentEntry,
-          [relationship]: view.with(pos, newExisting as MetaEntry),
+          [relationship]: view.with(pos, newExisting),
         };
       }
     }
+    // ─────────────────────────────────────────────────────────────────────────
+    // EDIT: Update row fields in place (or move if sort key changed)
+    //
+    // Most complex case because an edit can change sort keys, requiring the
+    // row to move to a new position in the sorted array. With refCount > 1,
+    // we must handle the case where multiple references exist:
+    //
+    //   refCount=1: Simple move (remove from old pos, insert at new pos)
+    //   refCount>1: Leave a "ghost" at old pos with decremented refCount,
+    //               then insert/merge at new position
+    //
+    // Visual example (refCount=2, row moves from pos 1 to pos 3):
+    //
+    //   BEFORE:  [A, B(rc=2), C, D]     B appears via 2 query paths
+    //                ↑
+    //   AFTER:   [A, B(rc=1), C, B'(rc=1), D]
+    //                ↑ ghost      ↑ moved+edited
+    //
+    // As more edits arrive for the duplicate, the ghost's refCount decrements
+    // until it reaches 0 and is removed.
+    // ─────────────────────────────────────────────────────────────────────────
     case 'edit': {
       if (singular) {
+        // Singular: just apply the edit, no position concerns.
         const existing = parentEntry[relationship];
         assertMetaEntry(existing);
         const newEntry = applyEdit(existing, change, schema, withIDs);
         return {...parentEntry, [relationship]: newEntry};
       } else {
         const view = getChildEntryList(parentEntry, relationship);
-        // The position of the row in the list may have changed due to the edit.
+        // Check if sort key changed by comparing old vs new row.
+        // If compareRows returns 0, position is unchanged.
         if (schema.compareRows(change.oldNode.row, change.node.row) !== 0) {
+          // Sort key changed. Row may need to move to maintain sorted order.
           const {pos: oldPos, found: oldFound} = binarySearch(
             view,
             change.oldNode.row,
@@ -278,12 +433,10 @@ export function applyChange(
             change.node.row,
             schema.compareRows,
           );
-          // A special case:
-          // when refCount is 1 (so the row is being moved
-          // without leaving a placeholder behind), and the new pos is
-          // the same as the old, or directly after the old (so after the remove
-          // of the old it would be in the same pos):
-          // the row does not need to be moved, it can just be edited in place.
+          // Optimization: if refCount=1 and the row would land at or adjacent
+          // to its current position, we can edit in place (no actual move).
+          // pos === oldPos: would insert at same spot
+          // pos - 1 === oldPos: after removing oldPos, new pos would be same
           if (
             oldEntry[refCountSymbol] === 1 &&
             (pos === oldPos || pos - 1 === oldPos)
@@ -294,34 +447,29 @@ export function applyChange(
               [relationship]: view.with(oldPos, newEntry),
             };
           } else {
-            // Move the row.  If the row has > 1 ref count, an edit should
-            // be received for each ref count.  On the first edit, the original
-            // row is moved, the edit is applied to it and its ref count is set
-            // to 1.  A shallow copy of the row is left at the old pos for
-            // processing of the remaining edit, and the copy's ref count
-            // is decremented.  As each edit is received the ref count of the
-            // copy is decrement, and the ref count of the row at the new
-            // position is incremented.  When the copy's ref count goes to 0,
-            // it is removed.
+            // Row must actually move. Handle refCount > 1 by leaving a "ghost"
+            // at the old position with decremented refCount.
             const newRefCount = oldEntry[refCountSymbol] - 1;
             let newView: MetaEntry[];
             let adjustedPos = pos;
 
             if (newRefCount === 0) {
-              // Remove the old entry
-              newView = view.toSpliced(oldPos, 1) as MetaEntry[];
+              // Last reference at old position. Remove entirely.
+              newView = asMutableArray(view.toSpliced(oldPos, 1));
+              // Adjust target position since we removed an element before it.
               adjustedPos = oldPos < pos ? pos - 1 : pos;
             } else {
-              // Leave a copy with decremented refCount at old position
+              // Other references remain. Leave ghost with decremented refCount.
               const oldEntryCopy: MetaEntry = {
                 ...oldEntry,
                 [refCountSymbol]: newRefCount,
               };
-              newView = view.with(oldPos, oldEntryCopy) as MetaEntry[];
+              newView = asMutableArray(view.with(oldPos, oldEntryCopy));
             }
 
             if (found) {
-              // Entry already exists at new position, increment its refCount
+              // Row already exists at new position (another duplicate).
+              // Merge by incrementing that entry's refCount.
               const existingEntry = newView[adjustedPos];
               const editedEntry = applyEdit(
                 existingEntry,
@@ -338,7 +486,7 @@ export function applyChange(
                 [relationship]: newView.with(adjustedPos, updatedEntry),
               };
             } else {
-              // Insert at new position with refCount 1
+              // No existing entry at new position. Insert fresh with refCount=1.
               const editedEntry = applyEdit(oldEntry, change, schema, withIDs);
               const movedEntry: MetaEntry = {
                 ...editedEntry,
@@ -351,7 +499,7 @@ export function applyChange(
             }
           }
         } else {
-          // Position could not have changed, so simply edit in place.
+          // Sort key unchanged. Edit in place without moving.
           const {pos, found} = binarySearch(
             view,
             change.oldNode.row,
@@ -412,14 +560,17 @@ function initializeRelationships(
     }
 
     for (const childNode of skipYields(children())) {
-      result = applyChange(
+      const updated = applyChange(
         result,
         {type: 'add', node: childNode},
         childSchema,
         relationship,
         childFormat,
         withIDs,
-      ) as MetaEntry;
+      );
+      // applyChange preserves MetaEntry structure when input is MetaEntry.
+      assertMetaEntry(updated);
+      result = updated;
     }
   }
   return result;
@@ -442,13 +593,13 @@ function add(
     };
     return {
       newEntry: undefined,
-      newView: view.with(pos, updated) as MetaEntry[],
+      newView: asMutableArray(view.with(pos, updated)),
     };
   }
   const newEntry = makeNewMetaEntry(row, schema, withIDs, 1);
   return {
     newEntry,
-    newView: view.toSpliced(pos, 0, newEntry) as MetaEntry[],
+    newView: asMutableArray(view.toSpliced(pos, 0, newEntry)),
   };
 }
 
@@ -462,13 +613,13 @@ function removeAndUpdateRefCount(
   const oldEntry = view[pos];
   const rc = oldEntry[refCountSymbol];
   if (rc === 1) {
-    return view.toSpliced(pos, 1) as MetaEntry[];
+    return asMutableArray(view.toSpliced(pos, 1));
   }
   const newEntry: MetaEntry = {
     ...oldEntry,
     [refCountSymbol]: rc - 1,
   };
-  return view.with(pos, newEntry) as MetaEntry[];
+  return asMutableArray(view.with(pos, newEntry));
 }
 
 // TODO: Do not return an object. It puts unnecessary pressure on the GC.
@@ -481,7 +632,11 @@ function binarySearch(
   let high = view.length - 1;
   while (low <= high) {
     const mid = (low + high) >>> 1;
-    const comparison = comparator(view[mid] as Row, target as Row);
+    // MetaEntry contains all Row properties (plus symbol keys for internal tracking).
+    // The comparator only accesses string-indexed properties, so this is safe.
+    // We extract the Row portion to satisfy the Comparator type signature.
+    const midEntry = view[mid];
+    const comparison = comparator(midEntry as Row, target);
     if (comparison < 0) {
       low = mid + 1;
     } else if (comparison > 0) {
@@ -493,23 +648,77 @@ function binarySearch(
   return {pos: low, found: false};
 }
 
+/**
+ * Gets a child relationship array from a parent entry.
+ * All entries in the view tree are MetaEntry instances (created by
+ * makeNewMetaEntry with refCountSymbol).
+ */
 function getChildEntryList(
   parentEntry: Entry,
   relationship: string,
 ): MetaEntryList {
   const view = parentEntry[relationship];
   assertArray(view);
-  return view as MetaEntryList;
+  assertMetaEntryList(view);
+  return view;
+}
+
+/**
+ * Type guard for MetaEntryList. Validates that the array contains MetaEntry instances.
+ * Empty arrays are valid (no entries to check). For non-empty arrays, we check the
+ * first element as a representative sample, since all entries are created through
+ * the same makeNewMetaEntry path.
+ */
+function assertMetaEntryList(
+  arr: readonly unknown[],
+): asserts arr is MetaEntryList {
+  if (arr.length > 0 && !isMetaEntry(arr[0])) {
+    throw new Error('Expected array of MetaEntry');
+  }
+}
+
+/**
+ * Type guard that checks if a value is a MetaEntry (has refCountSymbol).
+ * Uses `in` operator for safe property access.
+ */
+function isMetaEntry(v: unknown): v is MetaEntry {
+  if (typeof v !== 'object' || v === null) {
+    return false;
+  }
+  // After confirming it's a non-null object, check for the symbol property.
+  // The `in` check confirms the property exists; we then verify it's a number.
+  // The record access is safe because we've verified v is an object.
+  const record = v as Record<symbol, unknown>;
+  return refCountSymbol in record && typeof record[refCountSymbol] === 'number';
 }
 
 function assertMetaEntry(v: unknown): asserts v is MetaEntry {
-  assertNumber((v as Partial<MetaEntry>)[refCountSymbol]);
+  if (!isMetaEntry(v)) {
+    throw new Error('Expected MetaEntry with refCountSymbol');
+  }
 }
 
 function getSingularEntry(parentEntry: Entry, relationship: string): MetaEntry {
   const e = parentEntry[relationship];
-  assertNumber((e as Partial<MetaEntry>)[refCountSymbol]);
-  return e as MetaEntry;
+  assertMetaEntry(e);
+  return e;
+}
+
+/**
+ * Gets a singular relationship entry that may or may not exist.
+ * Returns undefined if the relationship is not set, or the MetaEntry if it exists.
+ * Throws if the value exists but is not a valid MetaEntry.
+ */
+function getOptionalSingularEntry(
+  parentEntry: Entry,
+  relationship: string,
+): MetaEntry | undefined {
+  const e = parentEntry[relationship];
+  if (e === undefined) {
+    return undefined;
+  }
+  assertMetaEntry(e);
+  return e;
 }
 
 function makeNewMetaEntry(
