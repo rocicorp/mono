@@ -884,15 +884,13 @@ export class CVRStore {
       // Make sure Errors thrown by pipelined statements
       // are propagated up the stack.
       await Promise.all(pipelined);
-      lc.debug?.(
-        `all pipelined writes including row updates completed after ${Date.now() - start} ms`,
-      );
-
+      lc.debug?.(`flush tx returning after ${Date.now() - start} ms`);
       if (rowUpdates.length === 0) {
         stats.rowsDeferred = this.#pendingRowRecordUpdates.size;
         return false;
       }
       stats.rows += this.#pendingRowRecordUpdates.size;
+
       return true;
     });
 
@@ -911,8 +909,6 @@ export class CVRStore {
       });
       lc.debug?.(`flushed upstream writes in ${Date.now() - start} ms`);
     }
-
-    lc.debug?.(`flush tx returning after ${Date.now() - start} ms`);
     return stats;
   }
 
