@@ -617,7 +617,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     );
     initCollectIDBDatabases(
       this.#idbDatabases,
-      this.#kvStoreProvider.drop,
+      this.#kvStoreProvider,
       COLLECT_IDB_INTERVAL,
       INITIAL_COLLECT_IDB_DELAY,
       2 * clientMaxAgeMs,

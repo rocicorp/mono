@@ -15,8 +15,7 @@ import {
 import * as FormatVersion from '../format-version-enum.ts';
 import {getKVStoreProvider} from '../get-kv-store-provider.ts';
 import {assertHash, newRandomHash} from '../hash.ts';
-import {IDBStore} from '../kv/idb-store.ts';
-import type {DropStore, StoreProvider} from '../kv/store.ts';
+import type {CreateStore, DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {
@@ -40,7 +39,7 @@ export const INITIAL_COLLECT_IDB_DELAY = 5 * 60 * 1000; // 5 minutes
 
 export function initCollectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
-  kvDropStore: DropStore,
+  kvStoreProvider: StoreProvider,
   collectInterval: number,
   initialCollectDelay: number,
   maxAge: number,
@@ -57,7 +56,7 @@ export function initCollectIDBDatabases(
         idbDatabasesStore,
         Date.now(),
         maxAge,
-        kvDropStore,
+        kvStoreProvider,
         enableMutationRecovery,
         onClientsDeleted,
       );
@@ -81,7 +80,7 @@ export async function collectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   now: number,
   maxAge: number,
-  kvDropStore: DropStore,
+  kvStoreProvider: StoreProvider,
   enableMutationRecovery: boolean,
   onClientsDeleted: OnClientsDeleted,
   newDagStore = defaultNewDagStore,
@@ -99,6 +98,7 @@ export async function collectIDBDatabases(
             now,
             maxAge,
             enableMutationRecovery,
+            kvStoreProvider.create,
             newDagStore,
           ),
         ] as const,
@@ -120,7 +120,7 @@ export async function collectIDBDatabases(
   const {errors} = await dropDatabases(
     idbDatabasesStore,
     dbNamesToRemove,
-    kvDropStore,
+    kvStoreProvider.drop,
   );
   if (errors.length) {
     throw errors[0];
@@ -130,17 +130,20 @@ export async function collectIDBDatabases(
     // Add the deleted clients to all the dbs that survived the collection.
     let allDeletedClients: DeletedClients = deletedClientsToRemove;
     for (const name of dbNamesToKeep) {
-      await withWrite(newDagStore(name), async dagWrite => {
-        const newDeletedClients = await addDeletedClients(
-          dagWrite,
-          deletedClientsToRemove,
-        );
+      await withWrite(
+        newDagStore(name, kvStoreProvider.create),
+        async dagWrite => {
+          const newDeletedClients = await addDeletedClients(
+            dagWrite,
+            deletedClientsToRemove,
+          );
 
-        allDeletedClients = mergeDeletedClients(
-          allDeletedClients,
-          newDeletedClients,
-        );
-      });
+          allDeletedClients = mergeDeletedClients(
+            allDeletedClients,
+            newDeletedClients,
+          );
+        },
+      );
     }
     // normalize and dedupe
     const normalizedDeletedClients = normalizeDeletedClients(allDeletedClients);
@@ -186,8 +189,8 @@ async function dropDatabases(
   return {dropped, errors};
 }
 
-function defaultNewDagStore(name: string): Store {
-  const perKvStore = new IDBStore(name);
+function defaultNewDagStore(name: string, kvCreateStore: CreateStore): Store {
+  const perKvStore = kvCreateStore(name);
   return new StoreImpl(perKvStore, newRandomHash, assertHash);
 }
 
@@ -201,6 +204,7 @@ function gatherDatabaseInfoForCollect(
   now: number,
   maxAge: number,
   enableMutationRecovery: boolean,
+  kvCreateStore: CreateStore,
   newDagStore: typeof defaultNewDagStore,
 ): MaybePromise<
   [canCollect: false] | [canCollect: true, deletedClients: DeletedClients]
@@ -226,7 +230,7 @@ function gatherDatabaseInfoForCollect(
   );
   return canDatabaseBeCollectedAndGetDeletedClientIDs(
     enableMutationRecovery,
-    newDagStore(db.name),
+    newDagStore(db.name, kvCreateStore),
   );
 }
 

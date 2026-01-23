@@ -9,6 +9,7 @@ import {getKVStoreProvider} from '../get-kv-store-provider.ts';
 import {fakeHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
 import {hasMemStore} from '../kv/mem-store.ts';
+import type {CreateStore} from '../kv/store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
@@ -83,7 +84,6 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   }) => {
     test(name + ' > time ' + now, async () => {
       const store = new IDBDatabasesStore(_ => new TestMemStore());
-      const dropStore = (name: string) => store.deleteDatabases([name]);
       const clientDagStores = new Map<IndexedDBName, Store>();
       for (const [
         db,
@@ -151,10 +151,15 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         }
       }
 
-      const newDagStore = (name: string) => {
+      const newDagStore = (name: string, _kvCreateStore: CreateStore) => {
         const dagStore = clientDagStores.get(name);
         assertNotUndefined(dagStore);
         return dagStore;
+      };
+
+      const kvStoreProvider = {
+        create: (_name: string) => new TestMemStore(),
+        drop: (name: string) => store.deleteDatabases([name]),
       };
 
       const maxAge = 1000;
@@ -165,7 +170,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         store,
         now,
         maxAge,
-        dropStore,
+        kvStoreProvider,
         enableMutationRecovery,
         onClientsDeleted,
         newDagStore,
@@ -187,7 +192,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       // Make sure that all remaining databases have correct deleted clients head.
       if (expectedDatabases.length > 0) {
         for (const name of expectedDatabases) {
-          const dagStore = newDagStore(name);
+          const dagStore = newDagStore(name, kvStoreProvider.create);
           expect(
             await withRead(dagStore, read => getDeletedClients(read)),
           ).toEqual(expectedDeletedClients);
