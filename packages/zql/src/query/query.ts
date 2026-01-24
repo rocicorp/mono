@@ -50,15 +50,13 @@ export type GetFilterType<
   ? // SchemaValueToTSType adds null if the type is optional, but we add null
     // no matter what for dx reasons. See:
     // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
-    SchemaValueToTSType<TSchema['columns'][TColumn]> | null | undefined
+    SchemaValueToTSType<TSchema['columns'][TColumn]> | null
   : TOperator extends 'IN' | 'NOT IN'
     ? // We don't want to compare to null in where clauses because it causes
       // confusing results:
       // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
       readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
-    :
-        | Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>
-        | undefined;
+    : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>;
 
 export type AvailableRelationships<
   TTable extends string,
@@ -247,8 +245,7 @@ export interface Query<
     op: TOperator,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
-      | ParameterReference
-      | undefined,
+      | ParameterReference,
   ): Query<TTable, TSchema, TReturn>;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
@@ -256,8 +253,7 @@ export interface Query<
     field: TSelector,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
-      | ParameterReference
-      | undefined,
+      | ParameterReference,
   ): Query<TTable, TSchema, TReturn>;
   where(
     expressionFactory: ExpressionFactory<TTable, TSchema>,
