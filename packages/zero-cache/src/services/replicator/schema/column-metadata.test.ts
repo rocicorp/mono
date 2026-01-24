@@ -1,13 +1,13 @@
 import {describe, expect, test} from 'vitest';
-import {Database} from '../../../../zqlite/src/db.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../../../zqlite/src/db.ts';
+import type {LiteTableSpec} from '../../../db/specs.ts';
 import {
   ColumnMetadataStore,
   CREATE_COLUMN_METADATA_TABLE,
   liteTypeStringToMetadata,
   metadataToLiteTypeString,
 } from './column-metadata.ts';
-import type {LiteTableSpec} from '../../db/specs.ts';
 
 function createTestDb(): Database {
   const db = new Database(createSilentLogContext(), ':memory:');
