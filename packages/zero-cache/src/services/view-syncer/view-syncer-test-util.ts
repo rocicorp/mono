@@ -42,7 +42,6 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
-import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
@@ -587,7 +586,6 @@ export async function setup(
 
   const replicaDbFile = new DbFile(testName);
   const replica = replicaDbFile.connect(lc);
-  initChangeLog(replica);
   initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
   replica.pragma('journal_mode = WAL2');

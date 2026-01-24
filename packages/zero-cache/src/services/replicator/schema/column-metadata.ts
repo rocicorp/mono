@@ -9,16 +9,16 @@
  * plain type names while preserving all necessary upstream type information.
  */
 
-import type {Database, Statement} from '../../../../zqlite/src/db.ts';
-import {isArrayColumn, isEnumColumn} from '../../db/pg-to-lite.ts';
-import type {ColumnSpec, LiteTableSpec} from '../../db/specs.ts';
+import type {Database, Statement} from '../../../../../zqlite/src/db.ts';
+import {isArrayColumn, isEnumColumn} from '../../../db/pg-to-lite.ts';
+import type {ColumnSpec, LiteTableSpec} from '../../../db/specs.ts';
 import {
-  upstreamDataType,
-  nullableUpstream,
-  isEnum as checkIsEnum,
   isArray as checkIsArray,
+  isEnum as checkIsEnum,
   liteTypeString,
-} from '../../types/lite.ts';
+  nullableUpstream,
+  upstreamDataType,
+} from '../../../types/lite.ts';
 
 /**
  * Structured column metadata, replacing the old pipe-delimited string format.
@@ -246,7 +246,7 @@ export class ColumnMetadataStore {
 
   /**
    * Populates metadata table from existing tables that use pipe notation.
-   * This is used during migration v6 to backfill the metadata table.
+   * This is used during migration v8 to backfill the metadata table.
    */
   populateFromExistingTables(tables: LiteTableSpec[]): void {
     for (const table of tables) {

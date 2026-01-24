@@ -4,7 +4,7 @@ import {Database} from '../../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {expectTableExact} from '../../../test/lite.ts';
 import {
-  initChangeLog,
+  CREATE_CHANGELOG_SCHEMA,
   logDeleteOp,
   logResetOp,
   logSetOp,
@@ -16,7 +16,7 @@ describe('replicator/schema/change-log', () => {
 
   beforeEach(() => {
     const conn = new Database(createSilentLogContext(), ':memory:');
-    initChangeLog(conn);
+    conn.exec(CREATE_CHANGELOG_SCHEMA);
     db = new StatementRunner(conn);
   });
 

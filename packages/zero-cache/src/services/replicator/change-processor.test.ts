@@ -8,13 +8,9 @@ import {listIndexes, listTables} from '../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
-import {
-  ColumnMetadataStore,
-  CREATE_COLUMN_METADATA_TABLE,
-} from '../change-source/column-metadata.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
-import {initChangeLog} from './schema/change-log.ts';
+import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   getSubscriptionState,
   initReplicationState,
@@ -2128,7 +2124,6 @@ describe('replicator/incremental-sync', () => {
       ] satisfies [Database, ChangeProcessor, boolean][]) {
         initDB(replica, c.setup);
         initReplicationState(replica, ['zero_data'], '02');
-        initChangeLog(replica);
 
         for (const change of c.downstream) {
           processor.processMessage(lc, change);
@@ -2174,7 +2169,6 @@ describe('replicator/change-processor-errors', () => {
     `);
 
     initReplicationState(replica, ['zero_data', 'zero_metadata'], '02');
-    initChangeLog(replica);
   });
 
   type Case = {
@@ -2287,11 +2281,6 @@ describe('replicator/column-metadata-integration', () => {
     lc = createSilentLogContext();
     replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data', 'zero_metadata'], '02');
-    initChangeLog(replica);
-
-    // Create the metadata table
-    replica.exec(CREATE_COLUMN_METADATA_TABLE);
-
     processor = createChangeProcessor(replica);
   });
 
