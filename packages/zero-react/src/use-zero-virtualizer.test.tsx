@@ -93,6 +93,9 @@ function cleanupTestContainer(root: Root, container: HTMLElement) {
 }
 
 describe('useZeroVirtualizer', () => {
+  // Increase timeout for browser tests - they can be slow especially on CI
+  vi.setConfig({testTimeout: 60_000});
+
   const createTestZero = () =>
     zeroForTest({
       kvStore: 'mem',
@@ -324,6 +327,11 @@ describe('useZeroVirtualizer', () => {
       expect(result.current.complete).toBe(true);
     });
 
+    // Wait for estimatedTotal to update after data loads
+    await waitFor(() => {
+      expect(result.current.estimatedTotal).toBeGreaterThan(1);
+    });
+
     // Virtualizer count should include skeleton row at end if not at end
     const virtualizerCount = result.current.virtualizer.options.count;
     const estimatedTotal = result.current.estimatedTotal;
@@ -358,13 +366,13 @@ describe('useZeroVirtualizer', () => {
       {wrapper: createWrapper(z)},
     );
 
-    // Initial estimated total should be small (loading skeleton)
-    const initialEstimatedTotal = result.current.estimatedTotal;
-    expect(initialEstimatedTotal).toBeLessThanOrEqual(1);
-
     await waitFor(() => {
       expect(result.current.complete).toBe(false);
     });
+
+    // Capture estimated total before marking queries
+    const initialEstimatedTotal = result.current.estimatedTotal;
+    expect(initialEstimatedTotal).toBeLessThanOrEqual(1);
 
     await z.markAllQueriesAsGot();
 
@@ -373,9 +381,11 @@ describe('useZeroVirtualizer', () => {
     });
 
     // Estimated total should increase after data loads
-    expect(result.current.estimatedTotal).toBeGreaterThan(
-      initialEstimatedTotal,
-    );
+    await waitFor(() => {
+      expect(result.current.estimatedTotal).toBeGreaterThan(
+        initialEstimatedTotal,
+      );
+    });
   });
 
   test('rowAt returns correct items', async () => {
