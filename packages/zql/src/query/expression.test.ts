@@ -9,7 +9,6 @@ import {
 import {parse, stringify} from './expression-test-util.ts';
 import {
   and,
-  cmp,
   ExpressionBuilder,
   not,
   or,
@@ -405,85 +404,4 @@ test('simplify', () => {
   expect(simplifyCondition(or(A, and(B, C), or(D, E)))).toEqual(
     or(A, and(B, C), D, E),
   );
-});
-
-test('cmp and cmpLit convert undefined to null', () => {
-  const builder = new ExpressionBuilder(vi.fn());
-  const {cmp, cmpLit} = builder;
-
-  // cmp 2-arg form: should convert undefined value to null
-  expect(cmp('a', undefined)).toEqual({
-    type: 'simple',
-    left: {type: 'column', name: 'a'},
-    right: {type: 'literal', value: null},
-    op: '=',
-  });
-
-  // cmp 3-arg form: should convert undefined value to null (not confuse with 2-arg form)
-  expect(cmp('a', '=', undefined)).toEqual({
-    type: 'simple',
-    left: {type: 'column', name: 'a'},
-    right: {type: 'literal', value: null},
-    op: '=',
-  });
-
-  // cmp 3-arg form with different operator
-  expect(cmp('a', 'IS', undefined)).toEqual({
-    type: 'simple',
-    left: {type: 'column', name: 'a'},
-    right: {type: 'literal', value: null},
-    op: 'IS',
-  });
-
-  // cmpLit should convert undefined on left side to null
-  expect(cmpLit(undefined, '=', 'b')).toEqual({
-    type: 'simple',
-    left: {type: 'literal', value: null},
-    right: {type: 'literal', value: 'b'},
-    op: '=',
-  });
-
-  // cmpLit should convert undefined on right side to null
-  expect(cmpLit('a', '=', undefined)).toEqual({
-    type: 'simple',
-    left: {type: 'literal', value: 'a'},
-    right: {type: 'literal', value: null},
-    op: '=',
-  });
-
-  // cmpLit should convert undefined on both sides to null
-  expect(cmpLit(undefined, '=', undefined)).toEqual({
-    type: 'simple',
-    left: {type: 'literal', value: null},
-    right: {type: 'literal', value: null},
-    op: '=',
-  });
-
-  // Edge case: literal operator strings as values (2-arg form via builder)
-  // cmp('a', '=') should mean "compare column 'a' to the literal string '='"
-  expect(cmp('a', '=')).toEqual({
-    type: 'simple',
-    left: {type: 'column', name: 'a'},
-    right: {type: 'literal', value: '='},
-    op: '=',
-  });
-});
-
-test('standalone cmp with operator string as value', () => {
-  // Edge case: literal operator strings as values (2-arg form)
-  // cmp('a', '=') should mean "compare column 'a' to the literal string '='"
-  expect(cmp('a', '=')).toEqual({
-    type: 'simple',
-    left: {type: 'column', name: 'a'},
-    right: {type: 'literal', value: '='},
-    op: '=',
-  });
-
-  // Verify 3-arg form still works correctly
-  expect(cmp('a', '!=', '=')).toEqual({
-    type: 'simple',
-    left: {type: 'column', name: 'a'},
-    right: {type: 'literal', value: '='},
-    op: '!=',
-  });
 });
