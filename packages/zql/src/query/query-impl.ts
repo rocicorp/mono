@@ -357,25 +357,18 @@ export class QueryImpl<
     throw new Error(`Invalid relationship ${relationship}`);
   };
 
-  where = function (
-    this: QueryImpl<TTable, TSchema, TReturn>,
+  where = (
     fieldOrExpressionFactory: string | ExpressionFactory<TTable, TSchema>,
     opOrValue?: SimpleOperator | GetFilterTypeAny | Parameter,
     value?: GetFilterTypeAny | Parameter,
-  ): Query<TTable, TSchema, TReturn> {
+  ): Query<TTable, TSchema, TReturn> => {
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
       cond = fieldOrExpressionFactory(this.expressionBuilder());
     } else {
       assert(opOrValue !== undefined, 'Invalid condition');
-      // Distinguish between 2-arg form (field, value) and 3-arg form (field, op, value)
-      // using arguments.length to allow explicit undefined in 3-arg form.
-      if (arguments.length === 2) {
-        cond = cmp(fieldOrExpressionFactory, opOrValue);
-      } else {
-        cond = cmp(fieldOrExpressionFactory, opOrValue, value);
-      }
+      cond = cmp(fieldOrExpressionFactory, opOrValue, value);
     }
 
     const existingWhere = this.#ast.where;
@@ -395,7 +388,7 @@ export class QueryImpl<
       this.customQueryID,
       this.#currentJunction,
     );
-  }.bind(this);
+  };
 
   start = (
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
