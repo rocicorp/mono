@@ -19,7 +19,6 @@ import {
 } from '../../change-streamer/schema/tables.ts';
 import {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
-import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {
   getSubscriptionState,
   initReplicationState,
@@ -179,7 +178,6 @@ export async function initialSync(
             5000,
           );
           initReplicationState(tx, [...publications].sort(), commitWatermark);
-          initChangeLog(tx);
           processor.processMessage(lc, change);
           break;
         }

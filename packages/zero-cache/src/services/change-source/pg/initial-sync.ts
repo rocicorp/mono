@@ -38,7 +38,6 @@ import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
-import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {toLexiVersion} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
@@ -130,7 +129,6 @@ export async function initialSync(
     const initialVersion = toLexiVersion(lsn);
 
     initReplicationState(tx, publications, initialVersion);
-    initChangeLog(tx);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();

@@ -7,7 +7,7 @@ import type {Database} from '../../../zqlite/src/db.ts';
 import {
   ColumnMetadataStore,
   metadataToLiteTypeString,
-} from '../services/change-source/column-metadata.ts';
+} from '../services/replicator/schema/column-metadata.ts';
 import {
   isArray,
   isEnum,

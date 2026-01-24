@@ -32,7 +32,6 @@ import {
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
 import {id} from '../../types/sql.ts';
-import {ColumnMetadataStore} from '../change-source/column-metadata.ts';
 import type {
   Change,
   ColumnAdd,
@@ -58,6 +57,7 @@ import {
   logSetOp,
   logTruncateOp,
 } from './schema/change-log.ts';
+import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
   updateReplicationWatermark,
@@ -305,6 +305,7 @@ class TransactionProcessor {
   readonly #version: LexiVersion;
   readonly #tableSpecs: Map<string, LiteTableSpec>;
   readonly #jsonFormat: JSONFormat;
+  readonly #columnMetadata: ColumnMetadataStore;
 
   #pos = 0;
   #schemaChanged = false;
@@ -350,6 +351,9 @@ class TransactionProcessor {
     this.#version = commitVersion;
     this.#lc = lc.withContext('version', commitVersion);
     this.#tableSpecs = tableSpecs;
+    // The column_metadata table is guaranteed to exist since the
+    // replica-schema.ts migration to v8.
+    this.#columnMetadata = must(ColumnMetadataStore.getInstance(db.db));
 
     if (this.#tableSpecs.size === 0) {
       this.#reloadTableSpecs();
@@ -535,11 +539,8 @@ class TransactionProcessor {
     this.#db.db.exec(createLiteTableStatement(table));
 
     // Write to metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      for (const [colName, colSpec] of Object.entries(create.spec.columns)) {
-        store.insert(table.name, colName, colSpec);
-      }
+    for (const [colName, colSpec] of Object.entries(create.spec.columns)) {
+      this.#columnMetadata.insert(table.name, colName, colSpec);
     }
 
     this.#logResetOp(table.name);
@@ -552,10 +553,7 @@ class TransactionProcessor {
     this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
 
     // Rename in metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.renameTable(oldName, newName);
-    }
+    this.#columnMetadata.renameTable(oldName, newName);
 
     this.#bumpVersions(newName);
     this.#logResetOp(oldName);
@@ -571,10 +569,7 @@ class TransactionProcessor {
     );
 
     // Write to metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.insert(table, name, msg.column.spec);
-    }
+    this.#columnMetadata.insert(table, name, msg.column.spec);
 
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, msg.column);
@@ -633,10 +628,12 @@ class TransactionProcessor {
     }
 
     // Update metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.update(table, msg.old.name, msg.new.name, msg.new.spec);
-    }
+    this.#columnMetadata.update(
+      table,
+      msg.old.name,
+      msg.new.name,
+      msg.new.spec,
+    );
 
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, msg.new);
@@ -648,10 +645,7 @@ class TransactionProcessor {
     this.#db.db.exec(`ALTER TABLE ${id(table)} DROP ${id(column)}`);
 
     // Delete from metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.deleteColumn(table, column);
-    }
+    this.#columnMetadata.deleteColumn(table, column);
 
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, column);
@@ -662,10 +656,7 @@ class TransactionProcessor {
     this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
 
     // Delete from metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.deleteTable(name);
-    }
+    this.#columnMetadata.deleteTable(name);
 
     this.#logResetOp(name);
     this.#lc.info?.(drop.tag, name);

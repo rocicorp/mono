@@ -4,7 +4,6 @@ import {
   stringify,
 } from '../../../../../shared/src/bigint-json.ts';
 import * as v from '../../../../../shared/src/valita.ts';
-import type {Database} from '../../../../../zqlite/src/db.ts';
 import type {StatementRunner} from '../../../db/statements.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
 import type {LiteRowKey} from '../../../types/lite.ts';
@@ -46,7 +45,8 @@ export const DEL_OP = 'd';
 export const TRUNCATE_OP = 't';
 export const RESET_OP = 'r';
 
-const CREATE_CHANGELOG_SCHEMA =
+// Exported for testing (and migrations)
+export const CREATE_CHANGELOG_SCHEMA =
   // stateVersion : a.k.a. row version
   // pos          : order in which to process the change (within the version)
   // table        : The table associated with the change
@@ -73,7 +73,7 @@ const CREATE_CHANGELOG_SCHEMA =
     "op"           TEXT NOT NULL,
     PRIMARY KEY("stateVersion", "pos"),
     UNIQUE("table", "rowKey")
-  )
+  );
   `;
 
 export const changeLogEntrySchema = v
@@ -94,10 +94,6 @@ export const changeLogEntrySchema = v
   }));
 
 export type ChangeLogEntry = v.Infer<typeof changeLogEntrySchema>;
-
-export function initChangeLog(db: Database) {
-  db.exec(CREATE_CHANGELOG_SCHEMA);
-}
 
 export function logSetOp(
   db: StatementRunner,
