@@ -118,7 +118,7 @@ export default async function runWorker(
   // impossible: upstream must have advanced in order for replication to be stuck.
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
-  const {backupURL, port: metricsPort} = litestream;
+  const {backupURL, port: metricsPort, snapshotReservationTimeoutMs} = litestream;
   const monitor = backupURL
     ? new BackupMonitor(
         lc,
@@ -133,6 +133,7 @@ export default async function runWorker(
         //
         // Consider: Also account for permanent volumes?
         Date.now() - parentStartMs,
+        snapshotReservationTimeoutMs,
       )
     : new ReplicaMonitor(lc, replica.file, changeStreamer);
 

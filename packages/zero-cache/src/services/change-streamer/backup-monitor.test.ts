@@ -46,6 +46,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
       'http://localhost:4850/metrics',
       changeStreamer as unknown as ChangeStreamerService,
       100_000, // 100 seconds
+      0,
     );
 
     nock('http://localhost:4850')
@@ -253,6 +254,42 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     expect(scheduled).toEqual([]);
 
     vi.setSystemTime(time + 150_000); // delay should still be 100 secs
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618p0bw8']);
+  });
+
+  test('expires reservations after timeout', async () => {
+    monitor = new BackupMonitor(
+      createSilentLogContext(),
+      's3://foo/bar',
+      'http://localhost:4850/metrics',
+      changeStreamer as unknown as ChangeStreamerService,
+      100_000, // 100 seconds
+      10_000,
+    );
+
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+    const nowSeconds = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618p0bw8', nowSeconds);
+
+    await monitor.checkWatermarksAndScheduleCleanup();
+
+    const sub = await monitor.startSnapshotReservation('foo-bar');
+    expect(await getFirstMessage(sub)).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: '123',
+        minWatermark: '1ab',
+      },
+    ]);
+
+    vi.advanceTimersByTime(10_000);
+    expect(sub.active).toBe(false);
+
+    vi.setSystemTime(time + 100_000);
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual(['618p0bw8']);
   });

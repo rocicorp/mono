@@ -13,6 +13,7 @@ const MIN_CLEANUP_DELAY_MS = 30 * 1000;
 type Reservation = {
   start: Date;
   sub: Subscription<SnapshotMessage>;
+  timeout: NodeJS.Timeout | undefined;
 };
 
 /**
@@ -59,6 +60,7 @@ export class BackupMonitor implements Service {
 
   #lastWatermark: string = '';
   #cleanupDelayMs: number;
+  readonly #snapshotReservationTimeoutMs: number;
   #checkMetricsTimer: NodeJS.Timeout | undefined;
 
   constructor(
@@ -67,6 +69,7 @@ export class BackupMonitor implements Service {
     metricsEndpoint: string,
     changeStreamer: ChangeStreamerService,
     initialCleanupDelayMs: number,
+    snapshotReservationTimeoutMs: number,
   ) {
     this.#lc = lc.withContext('component', this.id);
     this.#backupURL = backupURL;
@@ -76,6 +79,7 @@ export class BackupMonitor implements Service {
       initialCleanupDelayMs,
       MIN_CLEANUP_DELAY_MS, // purely for peace of mind
     );
+    this.#snapshotReservationTimeoutMs = snapshotReservationTimeoutMs;
 
     this.#lc.info?.(
       `backup monitor started ${initialCleanupDelayMs} ms after snapshot restore`,
@@ -107,7 +111,20 @@ export class BackupMonitor implements Service {
       // cleanup delay.
       cleanup: () => this.endReservation(taskID, false),
     });
-    this.#reservations.set(taskID, {start: new Date(), sub});
+    const timeout =
+      this.#snapshotReservationTimeoutMs > 0
+        ? setTimeout(() => {
+            if (this.#reservations.has(taskID)) {
+              this.#lc.warn?.(
+                `snapshot reservation for ${taskID} exceeded timeout ` +
+                  `(${this.#snapshotReservationTimeoutMs} ms). Ending reservation.`,
+              );
+            }
+            this.endReservation(taskID, false);
+          }, this.#snapshotReservationTimeoutMs)
+        : undefined;
+
+    this.#reservations.set(taskID, {start: new Date(), sub, timeout});
     const changeLogState = await this.#changeStreamer.getChangeLogState();
     sub.push([
       'status',
@@ -122,7 +139,9 @@ export class BackupMonitor implements Service {
       return;
     }
     this.#reservations.delete(taskID);
-    const {start, sub} = res;
+    const {start, sub, timeout} = res;
+
+    clearTimeout(timeout);
     sub.cancel(); // closes the connection if still open
 
     if (updateCleanupDelay) {
@@ -213,12 +232,12 @@ export class BackupMonitor implements Service {
 
   stop(): Promise<void> {
     clearInterval(this.#checkMetricsTimer);
-    for (const {sub} of this.#reservations.values()) {
+    for (const taskID of [...this.#reservations.keys()]) {
       // Close any pending reservations. This commonly happens when a new
       // replication-manager makes a `/snapshot` reservation on the existing
       // replication-manager, and then shuts it down when it takes over the
       // replication slot.
-      sub.cancel();
+      this.endReservation(taskID, false);
     }
     this.#state.stop(this.#lc);
     return promiseVoid;
