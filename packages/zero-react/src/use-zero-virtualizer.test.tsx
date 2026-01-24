@@ -795,18 +795,17 @@ describe('useZeroVirtualizer', () => {
 
         act(() => {
           virtualizerInstance.scrollToOffset(scrollOffset);
+          virtualizerInstance.measure();
         });
 
         await z.markAllQueriesAsGot();
 
         // Wait for React to update with new data
         await waitFor(() => {
-          virtualizerInstance.measure();
           const visibleItems = container.querySelectorAll('[data-index]');
           expect(visibleItems.length).toBeGreaterThan(0);
         });
 
-        virtualizerInstance.measure();
         const visibleItems = container.querySelectorAll('[data-index]');
         expect(visibleItems.length).toBeGreaterThan(0);
 
@@ -828,29 +827,31 @@ describe('useZeroVirtualizer', () => {
           });
         }
 
-        // Check total and estimatedTotal
-        const totalEl = document.getElementById('zero-virtualizer-total');
-        const estimatedTotalEl = document.getElementById(
-          'zero-virtualizer-estimated-total',
-        );
-
-        const estimatedTotal = Number(estimatedTotalEl?.textContent);
-
-        // total should be undefined initially, then become exactly 1000 once we reach the end
-        const totalText = totalEl?.textContent;
-        if (totalText) {
-          const total = Number(totalText);
-          expect(total).toBe(1000);
-          // Once we know the total, estimatedTotal should exactly match it
-          expect(estimatedTotal).toBe(1000);
-        } else {
-          // Verify exact estimatedTotal using formula
-          const expectedEstimatedTotal = Math.min(
-            computeExpectedEstimatedTotal(expectedFirstVisibleIndex),
-            1000,
+        // Check total and estimatedTotal - wait for them to update
+        await waitFor(() => {
+          const totalEl = document.getElementById('zero-virtualizer-total');
+          const estimatedTotalEl = document.getElementById(
+            'zero-virtualizer-estimated-total',
           );
-          expect(estimatedTotal).toBe(expectedEstimatedTotal);
-        }
+
+          const estimatedTotal = Number(estimatedTotalEl?.textContent);
+
+          // total should be undefined initially, then become exactly 1000 once we reach the end
+          const totalText = totalEl?.textContent;
+          if (totalText) {
+            const total = Number(totalText);
+            expect(total).toBe(1000);
+            // Once we know the total, estimatedTotal should exactly match it
+            expect(estimatedTotal).toBe(1000);
+          } else {
+            // Verify exact estimatedTotal using formula
+            const expectedEstimatedTotal = Math.min(
+              computeExpectedEstimatedTotal(expectedFirstVisibleIndex),
+              1000,
+            );
+            expect(estimatedTotal).toBe(expectedEstimatedTotal);
+          }
+        });
       }
 
       // After scrolling 40,000px (to item ~800), we should have reached the end
@@ -929,12 +930,12 @@ describe('useZeroVirtualizer', () => {
 
         act(() => {
           virtualizerInstance.scrollToOffset(scrollOffset);
+          virtualizerInstance.measure();
         });
 
         await z.markAllQueriesAsGot();
 
         await waitFor(() => {
-          virtualizerInstance.measure();
           const visibleItems = container.querySelectorAll('[data-index]');
           expect(visibleItems.length).toBeGreaterThan(0);
         });
@@ -965,12 +966,12 @@ describe('useZeroVirtualizer', () => {
 
         act(() => {
           virtualizerInstance.scrollToOffset(scrollOffset);
+          virtualizerInstance.measure();
         });
 
         await z.markAllQueriesAsGot();
 
         await waitFor(() => {
-          virtualizerInstance.measure();
           const visibleItems = container.querySelectorAll('[data-index]');
           expect(visibleItems.length).toBeGreaterThan(0);
         });
@@ -1078,12 +1079,12 @@ describe('useZeroVirtualizer', () => {
 
         act(() => {
           virtualizerInstance.scrollToOffset(scrollOffset);
+          virtualizerInstance.measure();
         });
 
         await z.markAllQueriesAsGot();
 
         await waitFor(() => {
-          virtualizerInstance.measure();
           const visibleItems = container.querySelectorAll('[data-index]');
           expect(visibleItems.length).toBeGreaterThan(0);
         });
@@ -1143,12 +1144,12 @@ describe('useZeroVirtualizer', () => {
 
         act(() => {
           virtualizerInstance.scrollToOffset(scrollOffset);
+          virtualizerInstance.measure();
         });
 
         await z.markAllQueriesAsGot();
 
         await waitFor(() => {
-          virtualizerInstance.measure();
           const visibleItems = container.querySelectorAll('[data-index]');
           expect(visibleItems.length).toBeGreaterThan(0);
         });
