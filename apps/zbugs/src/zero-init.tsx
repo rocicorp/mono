@@ -1,7 +1,7 @@
-import {ZeroProvider} from '@rocicorp/zero/react';
 import {type ReactNode} from 'react';
 import {mutators} from '../shared/mutators.ts';
 import {schema} from '../shared/schema.ts';
+import {ZeroProvider} from '../shared/zero-hooks.ts';
 import {useLogin} from './hooks/use-login.tsx';
 
 export function ZeroInit({children}: {children: ReactNode}) {

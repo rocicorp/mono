@@ -1,5 +1,4 @@
-import type {Zero} from '@rocicorp/zero';
-import {useQuery} from '@rocicorp/zero/react';
+import {useQuery, type ZbugsZero} from '../../shared/zero-hooks.ts';
 import {mutators} from '../../shared/mutators.ts';
 import {queries} from '../../shared/queries.ts';
 
@@ -9,7 +8,7 @@ export function useUserPref(key: string): string | undefined {
 }
 
 export async function setUserPref(
-  z: Zero,
+  z: ZbugsZero,
   key: string,
   value: string,
 ): Promise<void> {
@@ -22,7 +21,7 @@ export function useNumericPref(key: string, defaultValue: number): number {
 }
 
 export function setNumericPref(
-  z: Zero,
+  z: ZbugsZero,
   key: string,
   value: number,
 ): Promise<void> {

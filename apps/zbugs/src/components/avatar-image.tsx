@@ -1,9 +1,9 @@
-import type {Row} from '@rocicorp/zero';
+import type {ZbugsRow} from '../../shared/zero-hooks.ts';
 import {memo, type ImgHTMLAttributes} from 'react';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 
 interface AvatarImageProps extends ImgHTMLAttributes<HTMLImageElement> {
-  user: Row['user'];
+  user: ZbugsRow['user'];
 }
 
 export const AvatarImage = memo((props: AvatarImageProps) => {

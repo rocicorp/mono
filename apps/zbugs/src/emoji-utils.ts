@@ -1,8 +1,8 @@
-import type {Row} from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
+import type {ZbugsRow} from '../shared/zero-hooks.ts';
 
-export type Emoji = Row['emoji'] & {
-  readonly creator: Row['user'] | undefined;
+export type Emoji = ZbugsRow['emoji'] & {
+  readonly creator: ZbugsRow['user'] | undefined;
 };
 
 export function formatEmojiCreatorList(

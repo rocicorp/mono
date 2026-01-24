@@ -467,7 +467,7 @@ export function defineQueryWithType() {
  * The return type of defineQueryWithType. A function matching the
  * defineQuery overloads but with Schema and Context pre-bound.
  */
-type TypedDefineQuery<TSchema extends Schema, TContext> = {
+export type TypedDefineQuery<TSchema extends Schema, TContext> = {
   // Without validator
   <
     TArgs extends ReadonlyJSONValue | undefined,
@@ -707,7 +707,7 @@ export function defineQueriesWithType<
  * The return type of defineQueriesWithType. A function matching the
  * defineQueries overloads but with Schema pre-bound.
  */
-type TypedDefineQueries<S extends Schema> = {
+export type TypedDefineQueries<S extends Schema> = {
   // Single definitions
   <QD>(
     definitions: QD & AssertQueryDefinitions<QD>,
