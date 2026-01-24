@@ -2,12 +2,12 @@ import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {must} from '../../../../shared/src/must.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import {listTables} from '../../db/lite-tables.ts';
 import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
 } from '../../db/migration-lite.ts';
-import {listTables} from '../../db/lite-tables.ts';
 import {AutoResetSignal} from '../change-streamer/schema/tables.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
@@ -89,6 +89,10 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       db.exec(CREATE_COLUMN_METADATA_TABLE);
     },
     migrateData: (_, db) => {
+      // Clear the table before (re-)populating it to be resilient to
+      // roll-back and roll-forward.
+      db.exec(/*sql*/ `DELETE FROM "_zero.column_metadata"`);
+
       const store = ColumnMetadataStore.getInstance(db);
       const tables = listTables(db);
       must(store).populateFromExistingTables(tables);
