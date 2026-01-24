@@ -332,7 +332,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             handle: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -481,7 +481,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             username: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -533,7 +533,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             login: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -747,7 +747,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             bar: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -755,7 +755,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             foo: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -820,7 +820,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             boo: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -873,7 +873,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             boo: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1128,7 +1128,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             name: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1446,7 +1446,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             b: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1531,7 +1531,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             b: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1559,7 +1559,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             b: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,

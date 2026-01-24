@@ -9,15 +9,15 @@ import {
   type Migration,
 } from '../../db/migration-lite.ts';
 import {AutoResetSignal} from '../change-streamer/schema/tables.ts';
-import {initChangeLog} from '../replicator/schema/change-log.ts';
+import {CREATE_CHANGELOG_SCHEMA} from '../replicator/schema/change-log.ts';
+import {
+  ColumnMetadataStore,
+  CREATE_COLUMN_METADATA_TABLE,
+} from '../replicator/schema/column-metadata.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
   recordEvent,
 } from '../replicator/schema/replication-state.ts';
-import {
-  ColumnMetadataStore,
-  CREATE_COLUMN_METADATA_TABLE,
-} from './column-metadata.ts';
 
 export async function initReplica(
   log: LogContext,
@@ -85,16 +85,8 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
     },
   },
 
-  6: {
-    migrateSchema: (_, db) => {
-      db.exec(CREATE_COLUMN_METADATA_TABLE);
-    },
-    migrateData: (_, db) => {
-      const store = ColumnMetadataStore.getInstance(db);
-      const tables = listTables(db);
-      must(store).populateFromExistingTables(tables);
-    },
-  },
+  // Revised in the migration to v8 because the v6 code was incomplete.
+  6: {},
 
   7: {
     migrateSchema: (_, db) => {
@@ -102,7 +94,26 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       // is compatible with older zero-caches. However, it is truncated for
       // space savings (since historic changes were never read).
       db.exec(`DELETE FROM "_zero.changeLog"`);
-      initChangeLog(db); // Creates _zero.changeLog2
+      db.exec(CREATE_CHANGELOG_SCHEMA); // Creates _zero.changeLog2
+    },
+  },
+
+  8: {
+    migrateSchema: (_, db) => {
+      let store = ColumnMetadataStore.getInstance(db);
+      if (!store) {
+        db.exec(CREATE_COLUMN_METADATA_TABLE);
+      }
+    },
+    migrateData: (_, db) => {
+      // Re-populate the ColumnMetadataStore; the original migration
+      // at v6 was incomplete, as covered replicas migrated from earlier
+      // versions but did not initialize the table for new replicas.
+      db.exec(/*sql*/ `DELETE FROM "_zero.column_metadata"`);
+
+      const store = ColumnMetadataStore.getInstance(db);
+      const tables = listTables(db);
+      must(store).populateFromExistingTables(tables);
     },
   },
 };
