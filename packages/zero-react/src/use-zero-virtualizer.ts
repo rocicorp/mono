@@ -305,7 +305,7 @@ export function useZeroVirtualizer<
     if (newPageSize > pageSize) {
       setPageSize(newPageSize);
     }
-  }, [pageSize, virtualizer.scrollRect, estimateSize]);
+  }, [pageSize, virtualizer.scrollRect]);
 
   useEffect(() => {
     if (!isListContextCurrent || !onPermalinkStateChange) {
@@ -362,7 +362,7 @@ export function useZeroVirtualizer<
 
       dispatch({type: 'SCROLL_ADJUSTED'});
     }
-  }, [pendingScrollAdjustment, virtualizer, estimateSize]);
+  }, [pendingScrollAdjustment, virtualizer]);
 
   useEffect(() => {
     if (rowsEmpty || !isListContextCurrent) {
@@ -450,7 +450,6 @@ export function useZeroVirtualizer<
     permalinkState,
     permalinkID,
     virtualizer,
-    estimateSize,
     listContextParams,
   ]);
 

@@ -12,9 +12,9 @@ export function useWouterPermalinkState<TStartRow>(): [
   const permalinkState =
     useHistoryState<PermalinkHistoryState<TStartRow> | null>();
 
-  const setPermalinkState = (state: PermalinkHistoryState<TStartRow>) => {
-    window.history.replaceState(state, '', window.location.href);
-  };
-
   return [permalinkState, setPermalinkState];
+}
+
+function setPermalinkState<TStartRow>(state: PermalinkHistoryState<TStartRow>) {
+  window.history.replaceState(state, '', window.location.href);
 }
