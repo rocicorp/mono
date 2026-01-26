@@ -22,6 +22,7 @@
   --color-text-dimmed-label: rgba(255, 255, 255, 0.5);
   --color-primary-cta: rgba(252, 33, 138, 1);
   --color-primary-cta-dimmed: rgba(252, 33, 138, 0.2);
+  --color-primary-cta-hover: rgba(252, 33, 138, 0.35);
   --color-primary-cta-outline: rgba(255, 255, 255, 0.2);
   --color-light-outline: rgba(62, 62, 62, 0.39);
   --color-row-hover: rgba(62, 62, 62, 0.2);
@@ -642,6 +643,14 @@ textarea.autoResize {
   top: 50%;
   border-radius: 1rem;
   transform: translateY(-50%);
+}
+
+.primary-content .row.permalink {
+  background-color: var(--color-primary-cta-dimmed);
+}
+
+.primary-content .row.permalink:hover {
+  background-color: var(--color-primary-cta-hover);
 }
 
 .primary-content .row {

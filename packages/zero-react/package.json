@@ -14,14 +14,20 @@
     "lint": "oxlint --type-aware src/"
   },
   "peerDependencies": {
-    "react": "^18.3.1"
+    "@tanstack/react-virtual": "^3.10.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.18",
     "react": "^18.3.1",
     "shared": "0.0.0",
-    "zero-client": "0.0.0"
+    "zero-client": "0.0.0",
+    "zero-schema": "0.0.0",
+    "zero-types": "0.0.0",
+    "zql": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"
 }
