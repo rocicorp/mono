@@ -166,7 +166,7 @@ export class RowRecordCache {
     // be robust against situations in which the await is delayed,
     // set a rejection handler immediately to avoid an unhandled rejection
     // error in the meantime.
-    r.promise.then(e => this.#lc.warn?.(`row record load failed`, e));
+    void r.promise.then(e => this.#lc.warn?.(`row record load failed`, e));
 
     // Set this.#cache immediately (before await) so that only one db
     // query is made even if there are multiple callers.
