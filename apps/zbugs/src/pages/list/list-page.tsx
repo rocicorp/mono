@@ -12,7 +12,7 @@ import React, {
 } from 'react';
 import {toast} from 'react-toastify';
 import {useDebouncedCallback} from 'use-debounce';
-import {useLocation, useParams, useSearch} from 'wouter';
+import {useParams, useSearch} from 'wouter';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {
   queries,
@@ -36,7 +36,7 @@ import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
-import {isGigabugs, useListContext} from '../../routes.tsx';
+import {isGigabugs, links, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 import {getIDFromString} from '../issue/get-id.tsx';
 import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
@@ -130,14 +130,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
     shortTitle = statusCapitalized;
   }
 
-  const [location] = useLocation();
   const listContext: ListContext = useMemo(
     () => ({
-      href: `${location}?${search}`,
+      href: `${links.list({projectName})}?${search}`,
       title,
       params: listContextParams,
     }),
-    [location, search, title, listContextParams],
+    [projectName, search, title, listContextParams],
   );
 
   const {setListContext} = useListContext();
