@@ -28,6 +28,7 @@ import {OnboardingModal} from '../../components/onboarding-modal.tsx';
 import {RelativeTime} from '../../components/relative-time.tsx';
 import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
+import {useHash} from '../../hooks/use-hash.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useWouterPermalinkState} from '../../hooks/use-wouter-permalink-state.ts';
@@ -85,7 +86,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const open = status === 'open' ? true : status === 'closed' ? false : null;
 
-  const permalinkID = qs.get('id');
+  const hash = useHash();
+  const permalinkID = useMemo(
+    () => (hash.startsWith('issue-') ? hash.slice(6) : null),
+    [hash],
+  );
 
   const listContextParams = useMemo(
     () =>
@@ -149,7 +154,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   // oxlint-disable-next-line no-explicit-any
   (globalThis as any).permalinkNavigate = (id: string | number) => {
-    navigate(setParam(qs, 'id', String(id)));
+    navigate(`#issue-${id}`);
   };
 
   const [permalinkState, setPermalinkState] =
@@ -218,9 +223,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
           containerId: 'bottom',
         },
       );
-      navigate(removeParam(qs, 'id'), {replace: true});
+      navigate(`?${qs}`, {replace: true});
     }
-  }, [permalinkNotFound, permalinkID]);
+  }, [permalinkNotFound, permalinkID, qs]);
 
   useEffect(() => {
     if (!issuesEmpty || complete) {
@@ -240,19 +245,18 @@ export function ListPage({onReady}: {onReady: () => void}) {
     const key = target.getAttribute('data-key');
     const value = target.getAttribute('data-value');
     if (key && value) {
-      navigate(removeParam(removeParam(qs, key, value), 'id'));
+      navigate(removeParam(qs, key, value));
     }
   };
 
   const onFilter = useCallback(
     (selection: Selection) => {
-      const qsWithoutID = removeParam(qs, 'id');
       if ('creator' in selection) {
-        navigate(setParam(qsWithoutID, 'creator', selection.creator));
+        navigate(setParam(qs, 'creator', selection.creator));
       } else if ('assignee' in selection) {
-        navigate(setParam(qsWithoutID, 'assignee', selection.assignee));
+        navigate(setParam(qs, 'assignee', selection.assignee));
       } else {
-        navigate(appendParam(qsWithoutID, 'label', selection.label));
+        navigate(appendParam(qs, 'label', selection.label));
       }
     },
     [qs],
@@ -260,26 +264,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const toggleSortField = useCallback(() => {
     navigate(
-      setParam(
-        removeParam(qs, 'id'),
-        'sort',
-        sortField === 'created' ? 'modified' : 'created',
-      ),
+      setParam(qs, 'sort', sortField === 'created' ? 'modified' : 'created'),
     );
   }, [qs, sortField]);
 
   const toggleSortDirection = useCallback(() => {
-    navigate(
-      setParam(
-        removeParam(qs, 'id'),
-        'sortDir',
-        sortDirection === 'asc' ? 'desc' : 'asc',
-      ),
-    );
+    navigate(setParam(qs, 'sortDir', sortDirection === 'asc' ? 'desc' : 'asc'));
   }, [qs, sortDirection]);
 
   const updateTextFilterQueryString = useDebouncedCallback((text: string) => {
-    navigate(setParam(removeParam(qs, 'id'), 'q', text));
+    navigate(setParam(qs, 'q', text));
   }, 500);
 
   const onTextFilterChange = (text: string) => {
@@ -291,7 +285,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (searchMode) {
       setTextFilter(null);
       setForceSearchMode(false);
-      navigate(removeParam(removeParam(qs, 'id'), 'q'));
+      navigate(removeParam(qs, 'q'));
     }
   };
 
