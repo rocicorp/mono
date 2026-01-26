@@ -162,12 +162,6 @@ export class RowRecordCache {
     const start = Date.now();
     const r = resolver<CustomKeyMap<RowID, RowRecord>>();
 
-    // The returned promise will always awaited by the caller, but to
-    // be robust against situations in which the await is delayed,
-    // set a rejection handler immediately to avoid an unhandled rejection
-    // error in the meantime.
-    void r.promise.then(e => this.#lc.warn?.(`row record load failed`, e));
-
     // Set this.#cache immediately (before await) so that only one db
     // query is made even if there are multiple callers.
     this.#cache = r.promise;
@@ -190,7 +184,8 @@ export class RowRecordCache {
       );
       r.resolve(cache);
     } catch (e) {
-      r.reject(e);
+      r.reject(e); // Make sure the error is reflected in the cached promise
+      throw e;
     }
     return this.#cache;
   }
