@@ -161,25 +161,37 @@ export class RowRecordCache {
     }
     const start = Date.now();
     const r = resolver<CustomKeyMap<RowID, RowRecord>>();
+
+    // The returned promise will always awaited by the caller, but to
+    // be robust against situations in which the await is delayed,
+    // set a rejection handler immediately to avoid an unhandled rejection
+    // error in the meantime.
+    r.promise.then(e => this.#lc.warn?.(`row record load failed`, e));
+
     // Set this.#cache immediately (before await) so that only one db
     // query is made even if there are multiple callers.
     this.#cache = r.promise;
-
-    const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDString);
-    for await (const rows of this.#db<RowsRow[]>`
+    try {
+      const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(
+        rowIDString,
+      );
+      for await (const rows of this.#db<RowsRow[]>`
       SELECT * FROM ${this.#cvr(`rows`)}
         WHERE "clientGroupID" = ${this.#cvrID} AND "refCounts" IS NOT NULL`
-      // TODO(arv): Arbitrary page size
-      .cursor(5000)) {
-      for (const row of rows) {
-        const rowRecord = rowsRowToRowRecord(row);
-        cache.set(rowRecord.id, rowRecord);
+        // TODO(arv): Arbitrary page size
+        .cursor(5000)) {
+        for (const row of rows) {
+          const rowRecord = rowsRowToRowRecord(row);
+          cache.set(rowRecord.id, rowRecord);
+        }
       }
+      this.#lc.debug?.(
+        `Loaded ${cache.size} row records in ${Date.now() - start} ms`,
+      );
+      r.resolve(cache);
+    } catch (e) {
+      r.reject(e);
     }
-    this.#lc.debug?.(
-      `Loaded ${cache.size} row records in ${Date.now() - start} ms`,
-    );
-    r.resolve(cache);
     return this.#cache;
   }
 
