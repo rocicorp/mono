@@ -1,5 +1,26 @@
 import type {Anchor} from './use-rows.ts';
 
+type QueryAnchor<TListContextParams, TStartRow> = {
+  readonly anchor: Anchor<TStartRow>;
+  /**
+   * Associates an anchor with list query params to coordinate state during
+   * navigation. When list context params change (e.g., filter/sort changes or
+   * browser back/forward navigation), the anchor and scroll position must be
+   * updated atomically with the new query results.
+   *
+   * When `listContextParams !== queryAnchor.listContextParams`:
+   * - Use history state to restore previous scroll position and anchor if
+   *   navigating back
+   * - Use permalink anchor if loading a specific item
+   * - Otherwise reset to top
+   *
+   * During the transition (while `!isListContextCurrent`), skip paging logic
+   * and count updates to avoid querying with mismatched anchor/params or
+   * calculating counts from inconsistent state.
+   */
+  readonly listContextParams: TListContextParams;
+};
+
 export type PagingState<TListContextParams, TStartRow> = {
   estimatedTotal: number;
   hasReachedStart: boolean;
@@ -14,11 +35,16 @@ export function pagingReducer<TListContextParams, TStartRow>(
   action: PagingAction<TListContextParams, TStartRow>,
 ): PagingState<TListContextParams, TStartRow> {
   switch (action.type) {
-    case 'UPDATE_ESTIMATED_TOTAL':
+    case 'UPDATE_ESTIMATED_TOTAL': {
+      const newTotal = Math.max(state.estimatedTotal, action.newTotal);
+      if (newTotal === state.estimatedTotal) {
+        return state;
+      }
       return {
         ...state,
-        estimatedTotal: Math.max(state.estimatedTotal, action.newTotal),
+        estimatedTotal: newTotal,
       };
+    }
 
     case 'REACHED_START':
       return {...state, hasReachedStart: true};
@@ -85,13 +111,12 @@ export function pagingReducer<TListContextParams, TStartRow>(
       };
 
     default: {
-      // TypeScript will error if we missed a case
-      const _exhaustive: never = action;
-      _exhaustive;
+      action satisfies never;
       return state;
     }
   }
 }
+
 export type PagingAction<TListContextParams, TStartRow> =
   | {type: 'UPDATE_ESTIMATED_TOTAL'; newTotal: number}
   | {type: 'REACHED_START'}
@@ -113,23 +138,3 @@ export type PagingAction<TListContextParams, TStartRow> =
       anchor: Anchor<TStartRow>;
       listContextParams: TListContextParams;
     };
-type QueryAnchor<TListContextParams, TStartRow> = {
-  readonly anchor: Anchor<TStartRow>;
-  /**
-   * Associates an anchor with list query params to coordinate state during
-   * navigation. When list context params change (e.g., filter/sort changes or
-   * browser back/forward navigation), the anchor and scroll position must be
-   * updated atomically with the new query results.
-   *
-   * When `listContextParams !== queryAnchor.listContextParams`:
-   * - Use history state to restore previous scroll position and anchor if
-   *   navigating back
-   * - Use permalink anchor if loading a specific item
-   * - Otherwise reset to top
-   *
-   * During the transition (while `!isListContextCurrent`), skip paging logic
-   * and count updates to avoid querying with mismatched anchor/params or
-   * calculating counts from inconsistent state.
-   */
-  readonly listContextParams: TListContextParams;
-};
