@@ -182,11 +182,11 @@ export class RowRecordCache {
         `Loaded ${cache.size} row records in ${Date.now() - start} ms`,
       );
       r.resolve(cache);
+      return this.#cache;
     } catch (e) {
       r.reject(e); // Make sure the error is reflected in the cached promise
       throw e;
     }
-    return this.#cache;
   }
 
   getRowRecords(): Promise<ReadonlyMap<RowID, RowRecord>> {
