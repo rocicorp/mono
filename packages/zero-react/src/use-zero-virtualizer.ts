@@ -298,7 +298,6 @@ export function useZeroVirtualizer<
       estimateSize,
       overscan,
       getScrollElement,
-      _disableAutoAnchor: true, // We control anchor capture manually
       getItemKey: getRowKey
         ? (index: number) => {
             const row = rowAt(index);
