@@ -27,7 +27,7 @@
     "@prisma/client": "^7.2.0",
     "drizzle-orm": "^0.44.2",
     "pg": "^8.16.3",
-    "postgres": "^3.4.4",
+    "postgres": "3.4.7",
     "prisma": "^7.2.0",
     "shared": "0.0.0",
     "vitest": "4.0.15",
