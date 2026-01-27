@@ -115,7 +115,7 @@ function* getChildNodes(
  * Propagation: recurse DOWN to find target, copy objects on the way UP.
  * Siblings keep original refs. Only the ancestor path is copied.
  *
- *   root {users:[A,B], items:[C,D,E]}    --edit C-->    root' {users:[A,B], items:[C',D,E]}
+ *   root {users:[A,B], items:[C,D,E]}    --edit C-->    root' {users:[A,B], items':[C',D,E]}
  *         │ same ref        │                                  │              │
  *         └─────────────────┴── unchanged ──────────────┘     new array     C' new, D/E same
  */
@@ -174,7 +174,13 @@ export function applyChange(
   const {singular, relationships: childFormats} = format;
   switch (change.type) {
     // ADD: Insert row (rc=1) or increment refCount if duplicate.
-    // RefCount tracks identical rows reached via different query paths.
+    // RefCount tracks when the same row is reachable via multiple edges
+    // within a relationship:
+    //
+    //   issue.labels: [L1, L2]     both point to same creator
+    //        │    │                        │
+    //        ▼    ▼                        ▼
+    //   label.creator ──────────►  [User:rc=2]  (one row, two refs)
     //
     //   add(A)      add(A)      remove(A)   remove(A)
     //     ↓           ↓            ↓           ↓
@@ -196,7 +202,7 @@ export function applyChange(
         } else {
           // New row: create with rc=1, initialize nested relationships
           let newEntry = makeNewMetaEntry(change.node.row, schema, withIDs, 1);
-          newEntry = initializeRelationships(
+          newEntry = initializeRelationshipsForNewEntryIfAny(
             newEntry,
             change.node,
             schema,
@@ -216,14 +222,32 @@ export function applyChange(
         );
 
         if (newEntry) {
-          // New entry: initialize children, update in place if children added
-          const initializedEntry = initializeRelationships(
+          const initializedEntry = initializeRelationshipsForNewEntryIfAny(
             newEntry,
             change.node,
             schema,
             childFormats,
             withIDs,
           );
+          // Optimization: add() uses toSpliced() which inserts by reference,
+          // so newView[pos] === newEntry. Skip .with() when same ref:
+          //
+          //   add() ─► newView: [..., newEntry, ...]
+          //                          │
+          //                          ▼
+          //            initializeRelationshipsForNewEntryIfAny(newEntry)
+          //                          │
+          //            ┌─────────────┴─────────────┐
+          //            ▼                           ▼
+          //   No relationships:             Has relationships:
+          //   returns same ref              returns new obj
+          //            │                           │
+          //            ▼                           ▼
+          //   newView already correct       need .with(pos, new)
+          //   (skip extra O(n) copy)        to replace in array
+          //
+          // This check can be removed for simpler code at cost of one
+          // extra O(n) array copy per add when there are no relationships.
           if (initializedEntry !== newEntry) {
             return {
               ...parentEntry,
@@ -461,9 +485,26 @@ function applyEdit(
   return newEntry;
 }
 
-/** Initialize child relationships on a new entry. Hidden schemas use applyChange
- * to collapse the junction level; non-hidden build arrays in-place for efficiency. */
-function initializeRelationships(
+/**
+ * Initialize child relationships on a newly-added entry.
+ * Returns the same entry reference if no relationships to initialize,
+ * or a new entry (via spread) if relationships were added.
+ *
+ * New nodes don't exist in the view yet, so we can build in-place (no refs to preserve):
+ *
+ *   Existing node edit (must path-copy):     New node (can build in-place):
+ *
+ *   view: [A, B, C]                          view: [A, B, _]
+ *              │                                         │
+ *         edit C.child                              add C with children
+ *              │                                         │
+ *              ▼                                         ▼
+ *   view': [A, B, C']  ◄─ path-copy          view': [A, B, C{children:[...]}]
+ *                         up the tree                    └─ built in-place
+ *
+ * Hidden schemas still use applyChange to collapse junction levels.
+ */
+function initializeRelationshipsForNewEntryIfAny(
   entry: MetaEntry,
   node: ViewNode,
   schema: SourceSchema,
@@ -519,7 +560,7 @@ function initializeRelationships(
           };
         } else {
           childArray.splice(pos, 0, newEntry);
-          const initializedEntry = initializeRelationships(
+          const initializedEntry = initializeRelationshipsForNewEntryIfAny(
             newEntry,
             childNode,
             childSchema,

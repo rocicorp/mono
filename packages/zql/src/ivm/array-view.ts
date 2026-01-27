@@ -122,7 +122,15 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   get data() {
-    // Auto-flush safety net for backwards compatibility
+    // Auto-flush for backwards compatibility. Recommended: push() then flush().
+    //
+    //   push(A) ──► buffer ──► push(B) ──► buffer ──► flush() ──► apply all
+    //                                                    │
+    //   Legacy code may read .data here ─────────────────┘ (before flush)
+    //                          │
+    //                          ▼
+    //   Without auto-flush: stale data (missing A, B)
+    //   With auto-flush:    current data (has A, B)
     this.#applyPendingChanges();
     return this.#root[''] as V;
   }
