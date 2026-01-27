@@ -1,5 +1,16 @@
-import {useVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
-import {useEffect, useLayoutEffect, useMemo, useReducer, useState} from 'react';
+import {
+  defaultKeyExtractor,
+  useVirtualizer,
+  type Virtualizer,
+} from '@tanstack/react-virtual';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useState,
+  type Key,
+} from 'react';
 import {assert} from '../../shared/src/asserts.ts';
 import {pagingReducer, type PagingState} from './paging-reducer.ts';
 import type {UseQueryOptions} from './use-query.tsx';
@@ -84,6 +95,12 @@ export type UseZeroVirtualizerOptions<
   options?: UseQueryOptions | undefined;
   /** Function to extract the start row data from a full row (for pagination anchoring) */
   toStartRow: (row: TRow) => TStartRow;
+
+  /**
+   * Function to extract a unique key from a row, used for stable item identification.
+   * If provided, this will override {@linkcode TanstackUseVirtualizerOptions.getItemKey}
+   */
+  getRowKey?: ((row: TRow) => Key) | undefined;
 
   /**
    * Optional current permalink state for restoring virtualizer position.
@@ -176,6 +193,7 @@ export function useZeroVirtualizer<
   estimateSize,
   overscan = 5, // Virtualizer defaults to 1.
   getScrollElement,
+  getItemKey = defaultKeyExtractor,
 
   // Zero specific params
   listContextParams,
@@ -184,6 +202,7 @@ export function useZeroVirtualizer<
   getSingleQuery,
   options,
   toStartRow,
+  getRowKey,
 
   // Permalink state persistence
   permalinkState,
@@ -273,6 +292,12 @@ export function useZeroVirtualizer<
       estimateSize,
       overscan,
       getScrollElement,
+      getItemKey: getRowKey
+        ? (index: number) => {
+            const row = rowAt(index);
+            return row ? getRowKey(row) : getItemKey(index);
+          }
+        : getItemKey,
       initialOffset: () => {
         if (permalinkState?.scrollTop !== undefined) {
           return permalinkState.scrollTop;

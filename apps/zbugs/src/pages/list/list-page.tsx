@@ -161,15 +161,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const {
     virtualizer,
-    rowAt: issueAt,
+    rowAt,
     complete,
-    rowsEmpty: issuesEmpty,
+    rowsEmpty,
     permalinkNotFound,
     estimatedTotal,
     total,
   } = useZeroVirtualizer({
     estimateSize: () => ITEM_SIZE,
     getScrollElement: () => listRef.current,
+    getRowKey: row => row.id,
 
     listContextParams,
     permalinkID,
@@ -227,10 +228,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [permalinkNotFound, permalinkID, qs]);
 
   useEffect(() => {
-    if (!issuesEmpty || complete) {
+    if (!rowsEmpty || complete) {
       onReady();
     }
-  }, [issuesEmpty, complete, onReady]);
+  }, [rowsEmpty, complete, onReady]);
 
   useEffect(() => {
     if (complete) {
@@ -289,7 +290,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const issue = issueAt(index);
+    const issue = rowAt(index);
     if (issue === undefined) {
       return (
         <div
@@ -497,7 +498,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
-        {size && !issuesEmpty ? (
+        {size && !rowsEmpty ? (
           <div
             style={{
               width: size.width,

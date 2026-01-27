@@ -1190,4 +1190,277 @@ describe('useZeroVirtualizer', () => {
       cleanupTestContainer(root, container);
     }
   });
+
+  describe('getRowKey', () => {
+    test('uses getRowKey to generate stable keys for loaded rows', async () => {
+      const getRowKey = vi.fn((row: Item) => row.id);
+
+      const {result} = renderHook(
+        () => useZeroVirtualizer(createBaseHookOptions({getRowKey})),
+        {wrapper: createWrapper(z)},
+      );
+
+      // Wait for initial data to load
+      await waitFor(() => {
+        expect(result.current.rowsEmpty).toBe(false);
+      });
+
+      await z.markAllQueriesAsGot();
+
+      // Verify getRowKey was called for loaded rows
+      await waitFor(() => {
+        expect(getRowKey).toHaveBeenCalled();
+      });
+
+      // Verify getRowKey receives the correct row data (first row)
+      expect(getRowKey.mock.calls[0][0]).toEqual({
+        id: '1',
+        name: 'Item 0001',
+      });
+    });
+
+    test('falls back to index for unloaded rows when using getRowKey', async () => {
+      const getRowKey = vi.fn((row: Item) => row.id);
+
+      const {result} = renderHook(
+        () =>
+          useZeroVirtualizer(
+            createBaseHookOptions({
+              getRowKey,
+            }),
+          ),
+        {wrapper: createWrapper(z)},
+      );
+
+      // Wait for data to load
+      await waitFor(() => {
+        expect(result.current.rowsEmpty).toBe(false);
+      });
+
+      await z.markAllQueriesAsGot();
+
+      // Verify getRowKey was called (meaning it's working)
+      await waitFor(() => {
+        expect(getRowKey).toHaveBeenCalled();
+      });
+
+      const container = createTestContainer();
+      const root = createRoot(container);
+
+      try {
+        let hookResult!: ReturnType<
+          typeof useZeroVirtualizer<
+            HTMLElement,
+            Element,
+            string,
+            Item,
+            ReturnType<typeof toStartRow>
+          >
+        >;
+
+        function TestComponent() {
+          hookResult = useZeroVirtualizer(
+            createBaseHookOptions({
+              getRowKey,
+              getScrollElement: () =>
+                container.querySelector('#scroll-container'),
+            }),
+          );
+
+          const virtualItems = hookResult.virtualizer.getVirtualItems();
+
+          return (
+            <VirtualScrollContainer
+              result={hookResult}
+              virtualItems={virtualItems}
+            />
+          );
+        }
+
+        act(() => {
+          root.render(
+            <ZeroProvider zero={z}>
+              <TestComponent />
+            </ZeroProvider>,
+          );
+        });
+
+        await z.markAllQueriesAsGot();
+
+        await waitFor(() => {
+          expect(hookResult.rowsEmpty).toBe(false);
+        });
+
+        // Record initial keys for rows 0-10
+        const initialKeys = new Map<number, React.Key>();
+        const virtualItems = hookResult.virtualizer.getVirtualItems();
+        for (const item of virtualItems.slice(
+          0,
+          Math.min(10, virtualItems.length),
+        )) {
+          initialKeys.set(item.index, item.key);
+        }
+
+        // Scroll down significantly
+        const scrollContainer = container.querySelector(
+          '#scroll-container',
+        ) as HTMLElement;
+        act(() => {
+          scrollContainer.scrollTop = 5000;
+          hookResult.virtualizer.measure();
+        });
+
+        await z.markAllQueriesAsGot();
+
+        // Wait for new items to render (scroll to at least index 100)
+        await waitFor(() => {
+          const items = container.querySelectorAll('[data-index]');
+          const maxIndex = Math.max(
+            ...Array.from(items).map(
+              el => Number(el.getAttribute('data-index')) || 0,
+            ),
+          );
+          expect(maxIndex).toBeGreaterThan(100);
+        });
+
+        // Scroll back up to the beginning
+        act(() => {
+          scrollContainer.scrollTop = 0;
+          hookResult.virtualizer.measure();
+        });
+
+        await z.markAllQueriesAsGot();
+
+        // Wait for original items to be visible again
+        await waitFor(() => {
+          const items = container.querySelectorAll('[data-index]');
+          const minIndex = Math.min(
+            ...Array.from(items).map(
+              el => Number(el.getAttribute('data-index')) || 0,
+            ),
+          );
+          expect(minIndex).toBeLessThanOrEqual(10);
+        });
+
+        // Verify keys remained stable for the same rows
+        const finalVirtualItems = hookResult.virtualizer.getVirtualItems();
+        for (const item of finalVirtualItems.slice(0, 10)) {
+          const expectedKey = initialKeys.get(item.index);
+          if (expectedKey !== undefined) {
+            expect(item.key).toBe(expectedKey);
+          }
+        }
+
+        // Verify getRowKey was called consistently
+        expect(getRowKey).toHaveBeenCalled();
+      } finally {
+        cleanupTestContainer(root, container);
+      }
+    });
+
+    test('works without getRowKey (uses default index-based keys)', async () => {
+      const {result} = renderHook(
+        () =>
+          useZeroVirtualizer(
+            createBaseHookOptions({
+              // No getRowKey provided
+            }),
+          ),
+        {wrapper: createWrapper(z)},
+      );
+
+      await waitFor(() => {
+        expect(result.current.rowsEmpty).toBe(false);
+      });
+
+      await z.markAllQueriesAsGot();
+
+      // Without getRowKey, the implementation uses the default getItemKey
+      // which is passed through from TanStack Virtual's default behavior
+      // This test verifies the hook can work without getRowKey
+      expect(result.current.virtualizer).toBeDefined();
+      expect(result.current.rowAt(0)).toBeDefined();
+    });
+
+    test('getRowKey receives correct row data', async () => {
+      const getRowKey = vi.fn((row: Item) => {
+        // Verify row structure
+        expect(row).toHaveProperty('id');
+        expect(row).toHaveProperty('name');
+        expect(typeof row.id).toBe('string');
+        expect(typeof row.name).toBe('string');
+        return row.id;
+      });
+
+      const {result} = renderHook(
+        () => useZeroVirtualizer(createBaseHookOptions({getRowKey})),
+        {wrapper: createWrapper(z)},
+      );
+
+      await waitFor(() => {
+        expect(result.current.rowsEmpty).toBe(false);
+      });
+
+      await z.markAllQueriesAsGot();
+
+      // Verify getRowKey was called with valid Item objects
+      await waitFor(() => {
+        expect(getRowKey).toHaveBeenCalled();
+      });
+
+      // Get the first call and verify it received a proper Item
+      const firstCall = getRowKey.mock.calls[0];
+      expect(firstCall).toBeDefined();
+      expect(firstCall[0]).toEqual({
+        id: '1',
+        name: 'Item 0001',
+      });
+    });
+
+    test('getRowKey can return different key types (string, number)', async () => {
+      // Test with string keys
+      const stringKeyFn = vi.fn((row: Item) => row.id); // Returns string
+
+      const {result: stringResult} = renderHook(
+        () =>
+          useZeroVirtualizer(createBaseHookOptions({getRowKey: stringKeyFn})),
+        {wrapper: createWrapper(z)},
+      );
+
+      await waitFor(() => {
+        expect(stringResult.current.rowsEmpty).toBe(false);
+      });
+
+      await z.markAllQueriesAsGot();
+
+      await waitFor(() => {
+        expect(stringKeyFn).toHaveBeenCalled();
+      });
+
+      // Verify string keys are returned
+      expect(typeof stringKeyFn.mock.results[0].value).toBe('string');
+
+      // Test with numeric keys
+      const numericKeyFn = vi.fn((row: Item) => parseInt(row.id, 10));
+
+      const {result: numericResult} = renderHook(
+        () =>
+          useZeroVirtualizer(createBaseHookOptions({getRowKey: numericKeyFn})),
+        {wrapper: createWrapper(z)},
+      );
+
+      await waitFor(() => {
+        expect(numericResult.current.rowsEmpty).toBe(false);
+      });
+
+      await z.markAllQueriesAsGot();
+
+      await waitFor(() => {
+        expect(numericKeyFn).toHaveBeenCalled();
+      });
+
+      // Verify numeric keys are returned
+      expect(typeof numericKeyFn.mock.results[0].value).toBe('number');
+    });
+  });
 });
