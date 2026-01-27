@@ -51,7 +51,7 @@
     "js-cookie": "^3.0.5",
     "nanoid": "^5.1.2",
     "pg": "^8.16.3",
-    "postgres": "^3.4.4",
+    "postgres": "3.4.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.3.8",
