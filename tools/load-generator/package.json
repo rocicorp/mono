@@ -15,7 +15,7 @@
     "@rocicorp/logger": "^5.4.0",
     "nanoid": "^5.1.2",
     "pg-format": "npm:pg-format-fix@^1.0.5",
-    "postgres": "^3.4.4"
+    "postgres": "3.4.7"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
