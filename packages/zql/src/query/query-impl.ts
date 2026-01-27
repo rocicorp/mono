@@ -368,7 +368,7 @@ export class QueryImpl<
     if (typeof fieldOrExpressionFactory === 'function') {
       cond = fieldOrExpressionFactory(this.expressionBuilder());
     } else {
-      assert(opOrValue !== undefined, 'Invalid condition');
+      assert(arguments.length >= 2, 'Invalid condition. Too few arguments.');
       // Distinguish between 2-arg form (field, value) and 3-arg form (field, op, value)
       // using arguments.length to allow explicit undefined in 3-arg form.
       if (arguments.length === 2) {
