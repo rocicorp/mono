@@ -570,9 +570,13 @@ async function main() {
     SHARD_SIZE,
   );
 
-  // Use faker for realistic date spread across 4 years
-  const startDate = new Date('2020-01-01');
-  const endDate = new Date('2024-01-01');
+  // Use faker for realistic date spread (4 years ending at generation time)
+  const endDate = new Date();
+  const startDate = new Date(
+    endDate.getFullYear() - 4,
+    endDate.getMonth(),
+    endDate.getDate(),
+  );
 
   for (let i = 0; i < NUM_ISSUES; i++) {
     if (i % 100000 === 0) {
