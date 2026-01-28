@@ -1,8 +1,9 @@
-import type {LogContext} from '@rocicorp/logger';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import 'urlpattern-polyfill';
-import {assert} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import {type Type} from '../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -10,6 +11,7 @@ import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {isProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
+import {randInt} from '../../../shared/src/rand.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -62,6 +64,8 @@ export const getBodyPreview = async (
   return undefined;
 };
 
+const MAX_ATTEMPTS = 4;
+
 export async function fetchFromAPIServer<TValidator extends Type>(
   validator: TValidator,
   source: 'push' | 'transform',
@@ -72,6 +76,9 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   headerOptions: HeaderOptions,
   body: ReadonlyJSONValue,
 ) {
+  const fetchFromAPIServerID = randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
+  lc = lc.withContext('fetchFromAPIServerID', fetchFromAPIServerID);
+
   lc.debug?.('fetchFromAPIServer called', {
     url,
   });
@@ -130,119 +137,142 @@ export async function fetchFromAPIServer<TValidator extends Type>(
 
   const finalUrl = urlObj.toString();
 
-  try {
-    const response = await fetch(finalUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const bodyPreview = await getBodyPreview(response, lc);
-
-      // Bad Gateway or Gateway Timeout indicate the server was not reached
-      const level =
-        response.status === 502 || response.status === 504 ? 'warn' : 'info';
-      lc[level]?.('fetch from API server returned non-OK status', {
-        url: finalUrl,
-        status: response.status,
-        bodyPreview,
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    lc = lc.withContext('fetchFromAPIServerAttempt', attempt);
+    lc.debug?.('fetch from API server attempt');
+    const shouldRetry = async () => {
+      if (attempt < MAX_ATTEMPTS) {
+        const delayMs = getBackoffDelayMs(attempt);
+        lc.debug?.(`fetch from API server retrying in ${delayMs} ms`);
+        await sleep(delayMs);
+        return true;
+      }
+      lc.debug?.('fetch from API server reached max attempts, not retrying');
+      return false;
+    };
+    try {
+      const response = await fetch(finalUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
       });
 
-      throw new ProtocolErrorWithLevel(
-        source === 'push'
-          ? {
-              kind: ErrorKind.PushFailed,
-              origin: ErrorOrigin.ZeroCache,
-              reason: ErrorReason.HTTP,
-              status: response.status,
-              bodyPreview,
-              message: `Fetch from API server returned non-OK status ${response.status}`,
-              mutationIDs: [],
-            }
-          : {
-              kind: ErrorKind.TransformFailed,
-              origin: ErrorOrigin.ZeroCache,
-              reason: ErrorReason.HTTP,
-              status: response.status,
-              bodyPreview,
-              message: `Fetch from API server returned non-OK status ${response.status}`,
-              queryIDs: [],
-            },
-        level,
-      );
-    }
-
-    try {
-      const json = await response.json();
-
-      return validator.parse(json);
-    } catch (error) {
-      lc.warn?.(
-        'failed to parse response',
-        {
+      if (!response.ok) {
+        const bodyPreview = await getBodyPreview(response, lc);
+        lc.warn?.('fetch from API server returned non-OK status', {
           url: finalUrl,
-        },
+          status: response.status,
+          bodyPreview,
+        });
+        // Bad Gateway or Gateway Timeout indicate the server was not reached
+        // We retry these if we have retries remaining.
+        if (
+          (response.status === 502 || response.status === 504) &&
+          (await shouldRetry())
+        ) {
+          continue;
+        }
+
+        throw new ProtocolErrorWithLevel(
+          source === 'push'
+            ? {
+                kind: ErrorKind.PushFailed,
+                origin: ErrorOrigin.ZeroCache,
+                reason: ErrorReason.HTTP,
+                status: response.status,
+                bodyPreview,
+                message: `Fetch from API server returned non-OK status ${response.status}`,
+                mutationIDs: [],
+              }
+            : {
+                kind: ErrorKind.TransformFailed,
+                origin: ErrorOrigin.ZeroCache,
+                reason: ErrorReason.HTTP,
+                status: response.status,
+                bodyPreview,
+                message: `Fetch from API server returned non-OK status ${response.status}`,
+                queryIDs: [],
+              },
+          'warn',
+        );
+      }
+
+      try {
+        const json = await response.json();
+        const result = validator.parse(json);
+        lc.debug?.('fetch from API server succeeded');
+        return result;
+      } catch (error) {
+        lc.warn?.(
+          'failed to parse response',
+          {
+            url: finalUrl,
+          },
+          error,
+        );
+
+        throw new ProtocolErrorWithLevel(
+          source === 'push'
+            ? {
+                kind: ErrorKind.PushFailed,
+                origin: ErrorOrigin.ZeroCache,
+                reason: ErrorReason.Parse,
+                message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
+                mutationIDs: [],
+              }
+            : {
+                kind: ErrorKind.TransformFailed,
+                origin: ErrorOrigin.ZeroCache,
+                reason: ErrorReason.Parse,
+                message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
+                queryIDs: [],
+              },
+          'warn',
+          {cause: error},
+        );
+      }
+    } catch (error) {
+      if (isProtocolError(error)) {
+        throw error;
+      }
+
+      const isFetchFailed =
+        error instanceof TypeError && error.message === 'fetch failed';
+      // unexpected/unknown errors should be logged at 'error' level so they
+      // are investigated
+      let logLevel: LogLevel = isFetchFailed ? 'warn' : 'error';
+      lc[logLevel]?.(
+        'fetch from API server threw error',
+        {url: finalUrl},
         error,
       );
 
+      if (isFetchFailed && (await shouldRetry())) {
+        continue;
+      }
+
       throw new ProtocolErrorWithLevel(
         source === 'push'
           ? {
               kind: ErrorKind.PushFailed,
               origin: ErrorOrigin.ZeroCache,
-              reason: ErrorReason.Parse,
-              message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
+              reason: ErrorReason.Internal,
+              message: `Fetch from API server threw error: ${getErrorMessage(error)}`,
               mutationIDs: [],
             }
           : {
               kind: ErrorKind.TransformFailed,
               origin: ErrorOrigin.ZeroCache,
-              reason: ErrorReason.Parse,
-              message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
+              reason: ErrorReason.Internal,
+              message: `Fetch from API server threw error: ${getErrorMessage(error)}`,
               queryIDs: [],
             },
-        'warn',
+        logLevel,
         {cause: error},
       );
     }
-  } catch (error) {
-    if (isProtocolError(error)) {
-      throw error;
-    }
-
-    const logLevel =
-      error instanceof TypeError && error.message === 'fetch failed'
-        ? 'warn'
-        : 'error'; // a really unexpected error, log it at error level so it is investigated
-    lc[logLevel]?.(
-      'failed to fetch from API server with unknown error',
-      {
-        url: finalUrl,
-      },
-      error,
-    );
-
-    throw new ProtocolErrorWithLevel(
-      source === 'push'
-        ? {
-            kind: ErrorKind.PushFailed,
-            origin: ErrorOrigin.ZeroCache,
-            reason: ErrorReason.Internal,
-            message: `Fetch from API server failed with unknown error: ${getErrorMessage(error)}`,
-            mutationIDs: [],
-          }
-        : {
-            kind: ErrorKind.TransformFailed,
-            origin: ErrorOrigin.ZeroCache,
-            reason: ErrorReason.Internal,
-            message: `Fetch from API server failed with unknown error: ${getErrorMessage(error)}`,
-            queryIDs: [],
-          },
-      logLevel,
-      {cause: error},
-    );
   }
+  unreachable();
 }
 
 /**
@@ -268,4 +298,14 @@ export function urlMatch(
     }
   }
   return false;
+}
+
+/**
+ * Returns the delay in milliseconds for the next retry attempt using exponential backoff with jitter.
+ *
+ * The delay assumes the first retry is attempt 1.
+ * The formula is: `min(1000, 100 * 2^(attempt - 1) + jitter)` where jitter is between 0 and 100ms.
+ */
+function getBackoffDelayMs(attempt: number): number {
+  return Math.min(1000, 100 * Math.pow(2, attempt - 1) + Math.random() * 100);
 }
