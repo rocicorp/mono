@@ -1342,14 +1342,22 @@ describe('useZeroVirtualizer', () => {
           expect(minIndex).toBeLessThanOrEqual(10);
         });
 
-        // Verify keys remained stable for the same rows
-        const finalVirtualItems = hookResult.virtualizer.getVirtualItems();
-        for (const item of finalVirtualItems.slice(0, 10)) {
-          const expectedKey = initialKeys.get(item.index);
-          if (expectedKey !== undefined) {
-            expect(item.key).toBe(expectedKey);
+        // Wait for data to reload and keys to stabilize
+        await waitFor(() => {
+          const finalVirtualItems = hookResult.virtualizer.getVirtualItems();
+          const firstTenItems = finalVirtualItems.slice(0, 10);
+
+          // Ensure we have items to check
+          expect(firstTenItems.length).toBeGreaterThan(0);
+
+          // Verify keys remained stable for the same rows
+          for (const item of firstTenItems) {
+            const expectedKey = initialKeys.get(item.index);
+            if (expectedKey !== undefined) {
+              expect(item.key).toBe(expectedKey);
+            }
           }
-        }
+        });
 
         // Verify getRowKey was called consistently
         expect(getRowKey).toHaveBeenCalled();
