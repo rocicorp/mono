@@ -356,6 +356,7 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
