@@ -26,110 +26,110 @@ const isBulkMode =
     process.env.ZERO_SEED_BULK.toLocaleLowerCase().trim(),
   ) !== -1;
 
-// Indexes to drop/recreate in bulk mode (extracted from migrations)
-const BULK_DROP_INDEXES = [
-  'comment_issueid_idx',
-  'emoji_created_idx',
-  'emoji_subject_id_idx',
-  'issue_created_idx',
-  'issue_modified_idx',
-  'issue_open_modified_idx',
-  'issue_project_idx',
-  'issue_shortID_idx',
-  'issue_projectID_open_assigneeID_modified_idx',
-  'issue_projectID_open_creatorID_modified_idx',
-  'issue_projectID_open_modified_idx',
-  'issue_projectID_assigneeID_modified_idx',
-  'issue_projectID_creatorID_modified_idx',
-  'issue_projectID_modified_idx',
-  'issue_creatorID_idx',
-  'issue_assigneeID_idx',
-  'issuelabel_issueid_idx',
-  'user_githubid_idx',
-  'user_login_idx',
-  'label_project_idx',
-  'label_name_idx',
-  'project_lower_case_name_idx',
-];
+// Types for dynamically discovered schema objects
+interface IndexInfo {
+  indexName: string;
+  indexDdl: string;
+}
 
-// Foreign keys to drop/recreate in bulk mode
-const BULK_FK_CONSTRAINTS = [
-  {table: 'comment', name: 'comment_issueID_fkey'},
-  {table: 'comment', name: 'comment_creatorID_fkey'},
-  {table: 'emoji', name: 'emoji_creatorID_fkey'},
-  {table: 'issue', name: 'issue_creatorID_fkey'},
-  {table: 'issue', name: 'issue_assigneeID_fkey'},
-  {table: 'issue', name: 'issue_projectID_fkey'},
-  {table: 'issueLabel', name: 'issueLabel_labelID_projectID_fkey'},
-  {table: 'issueLabel', name: 'issueLabel_issueID_projectID_fkey'},
-  {table: 'issueNotifications', name: 'issueNotifications_userID_fkey'},
-  {table: 'issueNotifications', name: 'issueNotifications_issueID_fkey'},
-  {table: 'userPref', name: 'userPref_userID_fkey'},
-  {table: 'viewState', name: 'viewState_userID_fkey'},
-  {table: 'viewState', name: 'viewState_issueID_fkey'},
-  {table: 'label', name: 'label_projectID_fkey'},
-];
+interface ForeignKeyInfo {
+  tableName: string;
+  constraintName: string;
+  fkDefinition: string;
+}
 
-// FK recreation DDL (must match migration definitions)
-const BULK_FK_RECREATE_DDL = [
-  `ALTER TABLE "comment" ADD CONSTRAINT "comment_issueID_fkey" FOREIGN KEY ("issueID") REFERENCES "public"."issue"("id") ON DELETE cascade ON UPDATE no action`,
-  `ALTER TABLE "comment" ADD CONSTRAINT "comment_creatorID_fkey" FOREIGN KEY ("creatorID") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action`,
-  `ALTER TABLE "emoji" ADD CONSTRAINT "emoji_creatorID_fkey" FOREIGN KEY ("creatorID") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action`,
-  `ALTER TABLE "issue" ADD CONSTRAINT "issue_creatorID_fkey" FOREIGN KEY ("creatorID") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action`,
-  `ALTER TABLE "issue" ADD CONSTRAINT "issue_assigneeID_fkey" FOREIGN KEY ("assigneeID") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action`,
-  `ALTER TABLE "issue" ADD CONSTRAINT "issue_projectID_fkey" FOREIGN KEY ("projectID") REFERENCES "public"."project"("id") ON DELETE no action ON UPDATE no action`,
-  `ALTER TABLE "issueLabel" ADD CONSTRAINT "issueLabel_labelID_projectID_fkey" FOREIGN KEY ("labelID", "projectID") REFERENCES "public"."label"("id", "projectID") ON DELETE no action ON UPDATE no action`,
-  `ALTER TABLE "issueLabel" ADD CONSTRAINT "issueLabel_issueID_projectID_fkey" FOREIGN KEY ("issueID", "projectID") REFERENCES "public"."issue"("id", "projectID") ON DELETE cascade ON UPDATE no action`,
-  `ALTER TABLE "issueNotifications" ADD CONSTRAINT "issueNotifications_userID_fkey" FOREIGN KEY ("userID") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action`,
-  `ALTER TABLE "issueNotifications" ADD CONSTRAINT "issueNotifications_issueID_fkey" FOREIGN KEY ("issueID") REFERENCES "public"."issue"("id") ON DELETE cascade ON UPDATE no action`,
-  `ALTER TABLE "userPref" ADD CONSTRAINT "userPref_userID_fkey" FOREIGN KEY ("userID") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action`,
-  `ALTER TABLE "viewState" ADD CONSTRAINT "viewState_userID_fkey" FOREIGN KEY ("userID") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action`,
-  `ALTER TABLE "viewState" ADD CONSTRAINT "viewState_issueID_fkey" FOREIGN KEY ("issueID") REFERENCES "public"."issue"("id") ON DELETE cascade ON UPDATE no action`,
-  `ALTER TABLE "label" ADD CONSTRAINT "label_projectID_fkey" FOREIGN KEY ("projectID") REFERENCES "public"."project"("id") ON DELETE no action ON UPDATE no action`,
-];
+interface TriggerInfo {
+  tableName: string;
+  triggerName: string;
+}
 
-// Index recreation DDL
-const BULK_INDEX_RECREATE_DDL = [
-  `CREATE INDEX "comment_issueid_idx" ON "comment" USING btree ("issueID")`,
-  `CREATE INDEX "emoji_created_idx" ON "emoji" USING btree ("created")`,
-  `CREATE INDEX "emoji_subject_id_idx" ON "emoji" USING btree ("subjectID")`,
-  `CREATE INDEX "issue_created_idx" ON "issue" USING btree ("created")`,
-  `CREATE INDEX "issue_modified_idx" ON "issue" USING btree ("modified")`,
-  `CREATE INDEX "issue_open_modified_idx" ON "issue" USING btree ("open","modified")`,
-  `CREATE UNIQUE INDEX "issue_project_idx" ON "issue" USING btree ("id","projectID")`,
-  `CREATE INDEX "issue_shortID_idx" ON "issue" USING btree ("shortID")`,
-  `CREATE INDEX "issue_projectID_open_assigneeID_modified_idx" ON "issue" USING btree ("projectID","open","assigneeID","modified","id")`,
-  `CREATE INDEX "issue_projectID_open_creatorID_modified_idx" ON "issue" USING btree ("projectID","open","creatorID","modified","id")`,
-  `CREATE INDEX "issue_projectID_open_modified_idx" ON "issue" USING btree ("projectID","open","modified","id")`,
-  `CREATE INDEX "issue_projectID_assigneeID_modified_idx" ON "issue" USING btree ("projectID","assigneeID","modified","id")`,
-  `CREATE INDEX "issue_projectID_creatorID_modified_idx" ON "issue" USING btree ("projectID","creatorID","modified","id")`,
-  `CREATE INDEX "issue_projectID_modified_idx" ON "issue" USING btree ("projectID","modified","id")`,
-  `CREATE INDEX "issue_creatorID_idx" ON "issue" USING btree ("creatorID","id")`,
-  `CREATE INDEX "issue_assigneeID_idx" ON "issue" USING btree ("assigneeID","id")`,
-  `CREATE INDEX "issuelabel_issueid_idx" ON "issueLabel" USING btree ("issueID")`,
-  `CREATE UNIQUE INDEX "user_githubid_idx" ON "user" USING btree ("githubID")`,
-  `CREATE UNIQUE INDEX "user_login_idx" ON "user" USING btree ("login")`,
-  `CREATE UNIQUE INDEX "label_project_idx" ON "label" USING btree ("id","projectID")`,
-  `CREATE INDEX "label_name_idx" ON "label" USING btree ("name")`,
-  `CREATE UNIQUE INDEX "project_lower_case_name_idx" ON "project" USING btree ("lowerCaseName")`,
-];
+/**
+ * Discover all non-primary-key indexes for the given tables.
+ */
+async function discoverIndexes(
+  sql: postgres.Sql,
+  tables: readonly string[],
+): Promise<IndexInfo[]> {
+  const results: IndexInfo[] = [];
+  for (const table of tables) {
+    const rows = await sql<{indexname: string; index_ddl: string}[]>`
+      SELECT
+        pg_indexes.indexname,
+        pg_get_indexdef(pg_class.oid) as index_ddl
+      FROM pg_indexes
+      JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
+      JOIN pg_class ON pg_class.relname = pg_indexes.indexname
+        AND pg_class.relnamespace = pg_namespace.oid
+      JOIN pg_index ON pg_index.indexrelid = pg_class.oid
+      WHERE pg_indexes.tablename = ${table}
+        AND pg_indexes.schemaname = 'public'
+        AND pg_index.indisprimary = FALSE
+    `;
+    for (const row of rows) {
+      results.push({
+        indexName: row.indexname,
+        indexDdl: row.index_ddl,
+      });
+    }
+  }
+  return results;
+}
 
-// All triggers to disable in bulk mode
-const BULK_DISABLE_TRIGGERS: Array<{table: string; trigger: string}> = [
-  {table: 'issue', trigger: 'issue_set_last_modified'},
-  {table: 'issue', trigger: 'issue_set_created_on_insert_trigger'},
-  {table: 'comment', trigger: 'update_issue_modified_time_on_comment'},
-  {table: 'comment', trigger: 'comment_set_created_on_insert_trigger'},
-  {table: 'comment', trigger: 'check_comment_body_length'},
-  {table: 'emoji', trigger: 'emoji_check_subject_id_update_trigger'},
-  {table: 'emoji', trigger: 'emoji_set_created_on_insert_trigger'},
-  {table: 'issue', trigger: 'delete_emoji_on_issue_delete_trigger'},
-  {table: 'comment', trigger: 'delete_emoji_on_comment_delete_trigger'},
-  {
-    table: 'project',
-    trigger: 'project_set_lowercase_name_on_insert_or_update_trigger',
-  },
-];
+/**
+ * Discover all foreign key constraints in the public schema.
+ */
+async function discoverForeignKeys(
+  sql: postgres.Sql,
+): Promise<ForeignKeyInfo[]> {
+  const rows = await sql<
+    {constraint_name: string; table_name: string; fk_definition: string}[]
+  >`
+    SELECT
+      c.conname as constraint_name,
+      table_class.relname as table_name,
+      pg_get_constraintdef(c.oid) as fk_definition
+    FROM pg_constraint c
+    JOIN pg_class table_class ON c.conrelid = table_class.oid
+    JOIN pg_namespace table_ns ON table_class.relnamespace = table_ns.oid
+    WHERE c.contype = 'f'
+      AND table_ns.nspname = 'public'
+  `;
+  return rows.map(row => ({
+    tableName: row.table_name,
+    constraintName: row.constraint_name,
+    fkDefinition: row.fk_definition,
+  }));
+}
+
+/**
+ * Discover all user-defined triggers for the given tables.
+ */
+async function discoverTriggers(
+  sql: postgres.Sql,
+  tables: readonly string[],
+): Promise<TriggerInfo[]> {
+  const results: TriggerInfo[] = [];
+  for (const table of tables) {
+    const rows = await sql<{trigger_name: string; table_name: string}[]>`
+      SELECT
+        tgname as trigger_name,
+        relname as table_name
+      FROM pg_trigger
+      JOIN pg_class ON pg_trigger.tgrelid = pg_class.oid
+      JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+      WHERE NOT tgisinternal
+        AND pg_namespace.nspname = 'public'
+        AND relname = ${table}
+    `;
+    for (const row of rows) {
+      results.push({
+        tableName: row.table_name,
+        triggerName: row.trigger_name,
+      });
+    }
+  }
+  return results;
+}
 
 async function seed() {
   const dataDir =
@@ -269,53 +269,72 @@ async function seedBulk(
     }
   }
 
-  // Step 1: Set memory parameters for faster index rebuilds
+  // Discover all tables in public schema for comprehensive discovery
+  const allTablesResult = await sql<{tablename: string}[]>`
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+  `;
+  const allTables = allTablesResult.map(r => r.tablename);
+
+  // Step 1: Discover schema objects
+  // oxlint-disable-next-line no-console
+  console.log('Discovering schema objects...');
+  const [indexes, foreignKeys, triggers] = await Promise.all([
+    discoverIndexes(sql, allTables),
+    discoverForeignKeys(sql),
+    discoverTriggers(sql, allTables),
+  ]);
+  // oxlint-disable-next-line no-console
+  console.log(
+    `  Found ${indexes.length} indexes, ${foreignKeys.length} FKs, ${triggers.length} triggers`,
+  );
+
+  // Step 2: Set memory parameters for faster index rebuilds
   // oxlint-disable-next-line no-console
   console.log('Setting memory parameters...');
   await sql`SET maintenance_work_mem = '2GB'`;
   await sql`SET work_mem = '256MB'`;
 
-  // Step 2: Disable all triggers
+  // Step 3: Disable all triggers
   // oxlint-disable-next-line no-console
   console.log('Disabling triggers...');
-  for (const {table, trigger} of BULK_DISABLE_TRIGGERS) {
+  for (const {tableName, triggerName} of triggers) {
     try {
-      await sql`ALTER TABLE ${sql(table)} DISABLE TRIGGER ${sql.unsafe('"' + trigger + '"')}`;
+      await sql`ALTER TABLE ${sql(tableName)} DISABLE TRIGGER ${sql.unsafe('"' + triggerName + '"')}`;
     } catch (e) {
       // oxlint-disable-next-line no-console
       console.log(
-        `  Warning: could not disable trigger ${trigger} on ${table}: ${e}`,
+        `  Warning: could not disable trigger ${triggerName} on ${tableName}: ${e}`,
       );
     }
   }
 
-  // Step 3: Drop foreign key constraints
+  // Step 4: Drop foreign key constraints
   // oxlint-disable-next-line no-console
   console.log('Dropping foreign key constraints...');
-  for (const {table, name} of BULK_FK_CONSTRAINTS) {
+  for (const {tableName, constraintName} of foreignKeys) {
     try {
       await sql.unsafe(
-        `ALTER TABLE "${table}" DROP CONSTRAINT IF EXISTS "${name}"`,
+        `ALTER TABLE "${tableName}" DROP CONSTRAINT IF EXISTS "${constraintName}"`,
       );
     } catch (e) {
       // oxlint-disable-next-line no-console
-      console.log(`  Warning: could not drop FK ${name}: ${e}`);
+      console.log(`  Warning: could not drop FK ${constraintName}: ${e}`);
     }
   }
 
-  // Step 4: Drop non-PK indexes
+  // Step 5: Drop non-PK indexes
   // oxlint-disable-next-line no-console
   console.log('Dropping indexes...');
-  for (const idx of BULK_DROP_INDEXES) {
+  for (const {indexName} of indexes) {
     try {
-      await sql.unsafe(`DROP INDEX IF EXISTS "${idx}"`);
+      await sql.unsafe(`DROP INDEX IF EXISTS "${indexName}"`);
     } catch (e) {
       // oxlint-disable-next-line no-console
-      console.log(`  Warning: could not drop index ${idx}: ${e}`);
+      console.log(`  Warning: could not drop index ${indexName}: ${e}`);
     }
   }
 
-  // Step 5: COPY data (no transaction - each file is its own implicit transaction)
+  // Step 6: COPY data (no transaction - each file is its own implicit transaction)
   // oxlint-disable-next-line no-console
   console.log('Loading data via COPY...');
   for (const tableName of TABLES_IN_SEED_ORDER) {
@@ -354,51 +373,51 @@ async function seedBulk(
     console.log(`  ${tableName}: loaded ${tableRowCount} files`);
   }
 
-  // Step 6: Recreate indexes
+  // Step 7: Recreate indexes
   // oxlint-disable-next-line no-console
   console.log('Recreating indexes (this may take a while)...');
-  for (const ddl of BULK_INDEX_RECREATE_DDL) {
-    const indexName = ddl.match(/"([^"]+)"/)?.[1] ?? 'unknown';
+  for (const {indexName, indexDdl} of indexes) {
     // oxlint-disable-next-line no-console
     console.log(`  Creating index ${indexName}...`);
     try {
-      await sql.unsafe(ddl);
+      await sql.unsafe(indexDdl);
     } catch (e) {
       // oxlint-disable-next-line no-console
       console.log(`  Warning: could not create index ${indexName}: ${e}`);
     }
   }
 
-  // Step 7: Recreate foreign key constraints
+  // Step 8: Recreate foreign key constraints
   // oxlint-disable-next-line no-console
   console.log('Recreating foreign key constraints...');
-  for (const ddl of BULK_FK_RECREATE_DDL) {
-    const fkName = ddl.match(/CONSTRAINT "([^"]+)"/)?.[1] ?? 'unknown';
+  for (const {tableName, constraintName, fkDefinition} of foreignKeys) {
     // oxlint-disable-next-line no-console
-    console.log(`  Creating FK ${fkName}...`);
+    console.log(`  Creating FK ${constraintName}...`);
     try {
-      await sql.unsafe(ddl);
+      await sql.unsafe(
+        `ALTER TABLE "${tableName}" ADD CONSTRAINT "${constraintName}" ${fkDefinition}`,
+      );
     } catch (e) {
       // oxlint-disable-next-line no-console
-      console.log(`  Warning: could not create FK ${fkName}: ${e}`);
+      console.log(`  Warning: could not create FK ${constraintName}: ${e}`);
     }
   }
 
-  // Step 8: Re-enable triggers
+  // Step 9: Re-enable triggers
   // oxlint-disable-next-line no-console
   console.log('Re-enabling triggers...');
-  for (const {table, trigger} of BULK_DISABLE_TRIGGERS) {
+  for (const {tableName, triggerName} of triggers) {
     try {
-      await sql`ALTER TABLE ${sql(table)} ENABLE TRIGGER ${sql.unsafe('"' + trigger + '"')}`;
+      await sql`ALTER TABLE ${sql(tableName)} ENABLE TRIGGER ${sql.unsafe('"' + triggerName + '"')}`;
     } catch (e) {
       // oxlint-disable-next-line no-console
       console.log(
-        `  Warning: could not enable trigger ${trigger} on ${table}: ${e}`,
+        `  Warning: could not enable trigger ${triggerName} on ${tableName}: ${e}`,
       );
     }
   }
 
-  // Step 9: Analyze tables for query planner
+  // Step 10: Analyze tables for query planner
   // oxlint-disable-next-line no-console
   console.log('Running ANALYZE...');
   for (const tableName of TABLES_IN_SEED_ORDER) {
