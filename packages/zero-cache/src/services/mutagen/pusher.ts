@@ -24,11 +24,11 @@ import {type ZeroConfig} from '../../config/zero-config.ts';
 import {compileUrlPattern, fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
-import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
+import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 
 export interface Pusher extends RefCountedService {
   readonly pushURL: string | undefined;
@@ -171,7 +171,6 @@ export class PusherService implements Service, Pusher {
         'push',
         this.#lc,
         url,
-        false,
         this.#pushURLPatterns,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         {apiKey: this.#pushConfig.apiKey},
@@ -223,7 +222,6 @@ export class PusherService implements Service, Pusher {
         'push',
         this.#lc,
         url,
-        false,
         this.#pushURLPatterns,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         {apiKey: this.#pushConfig.apiKey},
@@ -556,7 +554,6 @@ class PushWorker {
         'push',
         this.#lc,
         url,
-        url === this.#userPushURL,
         this.#pushURLPatterns,
         {
           appID: this.#config.app.id,
@@ -594,8 +591,7 @@ class PushWorker {
     downstream: Subscription<Downstream>,
     errorBody: PushFailedBody,
   ): void {
-    const logLevel = errorBody.origin === ErrorOrigin.Server ? 'warn' : 'error';
-    downstream.fail(new ProtocolErrorWithLevel(errorBody, logLevel));
+    downstream.fail(new ProtocolErrorWithLevel(errorBody, 'warn'));
   }
 }
 
