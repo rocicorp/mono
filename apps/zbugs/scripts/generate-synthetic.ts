@@ -313,7 +313,6 @@ function fillTemplate(template: string, components: readonly string[]): string {
   });
 }
 
-
 // --- CSV helpers ---
 function escapeCSV(value: string): string {
   if (
@@ -601,10 +600,10 @@ async function main() {
       description = description.slice(0, 10237) + '...';
 
     // Timestamps - use faker for realistic date spread
-    const created = faker.date.between({from: startDate, to: endDate}).getTime();
-    const modified = faker.date
-      .between({from: created, to: endDate})
+    const created = faker.date
+      .between({from: startDate, to: endDate})
       .getTime();
+    const modified = faker.date.between({from: created, to: endDate}).getTime();
 
     // Open status (70% open)
     const open = rng() < 0.7;

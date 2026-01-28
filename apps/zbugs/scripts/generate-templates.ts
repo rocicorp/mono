@@ -15,6 +15,7 @@
  * Env vars:
  *   ANTHROPIC_API_KEY - required
  *   NUM_PROJECTS      - total projects (default 100, divided across 10 categories)
+ *   START_CATEGORY    - 1-indexed category to start from for resuming (default 1)
  */
 
 import * as fs from 'fs';
@@ -27,6 +28,9 @@ const TEMPLATES_DIR = path.join(__dirname, '../db/seed-data/templates');
 const NUM_PROJECTS_PER_CATEGORY = Math.ceil(
   (parseInt(process.env.NUM_PROJECTS ?? '100', 10) || 100) / 10,
 );
+
+// 1-indexed category number to start from (for resuming after failures)
+const START_CATEGORY = parseInt(process.env.START_CATEGORY ?? '1', 10);
 
 interface CategoryTemplates {
   category: string;
@@ -344,7 +348,16 @@ async function main() {
   // Process categories one at a time since each makes 8 API calls
   const allTemplates: CategoryTemplates[] = [];
 
-  for (let i = 0; i < CATEGORIES.length; i++) {
+  // Start from START_CATEGORY (1-indexed, so subtract 1 for array index)
+  const startIndex = Math.max(0, START_CATEGORY - 1);
+  if (startIndex > 0) {
+    // oxlint-disable-next-line no-console
+    console.log(
+      `Resuming from category ${START_CATEGORY} (${CATEGORIES[startIndex]}), skipping ${startIndex} categories`,
+    );
+  }
+
+  for (let i = startIndex; i < CATEGORIES.length; i++) {
     const category = CATEGORIES[i];
     // oxlint-disable-next-line no-console
     console.log(

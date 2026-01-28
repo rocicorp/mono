@@ -1,0 +1,33 @@
+{
+  "categories": [
+    {
+      "category": "ml-ai",
+      "projects": 10,
+      "labels": 48,
+      "titleTemplates": 211,
+      "descriptionTemplates": 103,
+      "commentTemplates": 150
+    },
+    {
+      "category": "embedded-iot",
+      "projects": 10,
+      "labels": 49,
+      "titleTemplates": 215,
+      "descriptionTemplates": 106,
+      "commentTemplates": 150
+    },
+    {
+      "category": "game-media",
+      "projects": 10,
+      "labels": 48,
+      "titleTemplates": 206,
+      "descriptionTemplates": 107,
+      "commentTemplates": 150
+    }
+  ],
+  "totalProjects": 30,
+  "totalLabels": 145,
+  "totalTitleTemplates": 632,
+  "totalDescriptionTemplates": 316,
+  "totalCommentTemplates": 450
+}
