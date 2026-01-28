@@ -21,6 +21,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {fileURLToPath} from 'url';
+import {faker} from '@faker-js/faker';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- Configuration ---
@@ -48,6 +49,9 @@ function mulberry32(seed: number): () => number {
 }
 
 const rng = mulberry32(SEED);
+
+// Seed faker for reproducibility (use same SEED as mulberry32)
+faker.seed(SEED);
 
 function randomInt(min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
@@ -309,116 +313,6 @@ function fillTemplate(template: string, components: readonly string[]): string {
   });
 }
 
-// --- Faker-lite name generation ---
-const FIRST_NAMES = [
-  'Alice',
-  'Bob',
-  'Carol',
-  'Dave',
-  'Eve',
-  'Frank',
-  'Grace',
-  'Henry',
-  'Iris',
-  'Jack',
-  'Kate',
-  'Leo',
-  'Maya',
-  'Noah',
-  'Olivia',
-  'Pat',
-  'Quinn',
-  'Rose',
-  'Sam',
-  'Tara',
-  'Uma',
-  'Victor',
-  'Wendy',
-  'Xander',
-  'Yuki',
-  'Zara',
-  'Aiden',
-  'Bella',
-  'Caleb',
-  'Diana',
-  'Ethan',
-  'Fiona',
-  'George',
-  'Hannah',
-  'Ivan',
-  'Julia',
-  'Kyle',
-  'Luna',
-  'Max',
-  'Nora',
-  'Oscar',
-  'Priya',
-  'Raj',
-  'Sofia',
-  'Tyler',
-  'Uma',
-  'Vera',
-  'Will',
-  'Ximena',
-  'Yosef',
-];
-
-const LAST_NAMES = [
-  'Smith',
-  'Johnson',
-  'Chen',
-  'Garcia',
-  'Kim',
-  'Patel',
-  'Brown',
-  'Lee',
-  'Wilson',
-  'Anderson',
-  'Taylor',
-  'Thomas',
-  'Moore',
-  'Martin',
-  'Jackson',
-  'White',
-  'Harris',
-  'Clark',
-  'Lewis',
-  'Walker',
-  'Hall',
-  'Young',
-  'Allen',
-  'Wright',
-  'King',
-  'Lopez',
-  'Hill',
-  'Green',
-  'Adams',
-  'Baker',
-  'Rivera',
-  'Campbell',
-  'Mitchell',
-  'Roberts',
-  'Carter',
-  'Phillips',
-  'Evans',
-  'Turner',
-  'Torres',
-  'Parker',
-  'Collins',
-  'Edwards',
-  'Stewart',
-  'Flores',
-  'Morris',
-  'Nguyen',
-  'Murphy',
-  'Rivera',
-  'Cook',
-  'Rogers',
-];
-
-function generateLogin(first: string, last: string, idx: number): string {
-  return `${first.toLowerCase()}${last.toLowerCase()}${idx}`;
-}
 
 // --- CSV helpers ---
 function escapeCSV(value: string): string {
@@ -584,17 +478,17 @@ async function main() {
     email: string;
   }> = [];
   for (let i = 0; i < NUM_USERS; i++) {
-    const first = FIRST_NAMES[i % FIRST_NAMES.length];
-    const last = LAST_NAMES[i % LAST_NAMES.length];
-    const login = generateLogin(first, last, i);
+    const firstName = faker.person.firstName();
+    const lastName = faker.person.lastName();
+    const login = `${firstName.toLowerCase()}${lastName.toLowerCase()}${i}`;
     users.push({
       id: `usr_${String(i).padStart(4, '0')}`,
       login,
-      name: `${first} ${last}`,
+      name: `${firstName} ${lastName}`,
       avatar: `https://robohash.org/${login}`,
       role: i < 10 ? 'crew' : 'user',
       githubID: 10000 + i,
-      email: `${login}@synthetic.dev`,
+      email: faker.internet.email({firstName, lastName}),
     });
   }
 
@@ -677,8 +571,9 @@ async function main() {
     SHARD_SIZE,
   );
 
-  const TIME_BASE = 1577836800000; // 2020-01-01
-  const TIME_RANGE = 4 * 365 * 24 * 3600000; // 4 years spread
+  // Use faker for realistic date spread across 4 years
+  const startDate = new Date('2020-01-01');
+  const endDate = new Date('2024-01-01');
 
   for (let i = 0; i < NUM_ISSUES; i++) {
     if (i % 100000 === 0) {
@@ -705,9 +600,11 @@ async function main() {
     if (description.length > 10240)
       description = description.slice(0, 10237) + '...';
 
-    // Timestamps - spread across 4 years
-    const created = TIME_BASE + Math.floor(rng() * TIME_RANGE);
-    const modified = created + randomInt(0, 86400000 * 30); // up to 30 days later
+    // Timestamps - use faker for realistic date spread
+    const created = faker.date.between({from: startDate, to: endDate}).getTime();
+    const modified = faker.date
+      .between({from: created, to: endDate})
+      .getTime();
 
     // Open status (70% open)
     const open = rng() < 0.7;
@@ -764,8 +661,10 @@ async function main() {
 
     const numComments = commentsPerIssue[issueIdx];
 
-    // Issue created timestamp (same formula as above for consistency)
-    const issueCreated = TIME_BASE + Math.floor(rng() * TIME_RANGE);
+    // Issue created timestamp (use faker for realistic spread)
+    const issueCreated = faker.date
+      .between({from: startDate, to: endDate})
+      .getTime();
 
     for (let c = 0; c < numComments; c++) {
       const commentID = `cmt_${String(commentIdx++).padStart(9, '0')}`;
@@ -778,8 +677,10 @@ async function main() {
 
       const creatorID = users[Math.floor(rng() * users.length)].id;
 
-      // Comment created 1 hour to 30 days after issue
-      const created = issueCreated + randomInt(3600000, 86400000 * 30);
+      // Comment created after issue (1 hour to 30 days later)
+      const created = faker.date
+        .between({from: issueCreated, to: endDate})
+        .getTime();
 
       await commentWriter.writeRow(
         [commentID, issueID, String(created), escapeCSV(body), creatorID].join(
