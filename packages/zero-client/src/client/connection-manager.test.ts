@@ -19,6 +19,11 @@ const sharedDisconnectError = new ClientError({
   message: 'Disconnect timed out',
 });
 
+const hiddenDisconnectError = new ClientError({
+  kind: ClientErrorKind.Hidden,
+  message: 'Connection closed because tab was hidden',
+});
+
 describe('ConnectionManager', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -118,6 +123,32 @@ describe('ConnectionManager', () => {
 
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
       expect(listener).not.toHaveBeenCalled();
+    });
+
+    test('transitions to connecting after hidden-tab disconnect', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+
+      vi.setSystemTime(DEFAULT_TIMEOUT_MS / 2);
+      manager.disconnected(hiddenDisconnectError);
+      expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
+
+      const listener = subscribe(manager);
+      const reconnectAt = DEFAULT_TIMEOUT_MS / 2 + 1_000;
+      vi.setSystemTime(reconnectAt);
+      manager.connecting();
+
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.Connecting,
+        attempt: 1,
+        disconnectAt: reconnectAt + DEFAULT_TIMEOUT_MS,
+      });
+      expect(listener).toHaveBeenCalledWith({
+        name: ConnectionStatus.Connecting,
+        attempt: 1,
+        disconnectAt: reconnectAt + DEFAULT_TIMEOUT_MS,
+      });
     });
 
     test('does nothing when disconnected after timing out', () => {
@@ -927,6 +958,15 @@ describe('ConnectionManager', () => {
         attempt: 2,
         disconnectAt: 2_000,
         reason,
+      };
+
+      expect(() => throwIfConnectionError(state)).not.toThrow();
+    });
+
+    test('does nothing when disconnected due to hidden tab', () => {
+      const state: ConnectionManagerState = {
+        name: ConnectionStatus.Disconnected,
+        reason: hiddenDisconnectError,
       };
 
       expect(() => throwIfConnectionError(state)).not.toThrow();
