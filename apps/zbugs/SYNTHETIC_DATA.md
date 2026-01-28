@@ -20,10 +20,10 @@ ANTHROPIC_API_KEY=sk-... npm run generate-templates
 
 Output: JSON files written to `db/seed-data/templates/` (one per category plus `summary.json`).
 
-| Env Var | Default | Description |
-|---------|---------|-------------|
-| `ANTHROPIC_API_KEY` | *(required)* | Anthropic API key |
-| `NUM_PROJECTS` | `100` | Total projects (divided across 10 categories) |
+| Env Var             | Default      | Description                                   |
+| ------------------- | ------------ | --------------------------------------------- |
+| `ANTHROPIC_API_KEY` | _(required)_ | Anthropic API key                             |
+| `NUM_PROJECTS`      | `100`        | Total projects (divided across 10 categories) |
 
 This step calls the Claude API in batches of 3 categories. Each category generates projects with components, labels, title/description/comment templates.
 
@@ -39,16 +39,16 @@ Output: sharded CSV files in `db/seed-data/synthetic/` named `{table}_{shard}.cs
 
 Tables generated: `user`, `project`, `label`, `issue`, `comment`, `issueLabel`.
 
-| Env Var | Default | Description |
-|---------|---------|-------------|
-| `NUM_ISSUES` | `1000000` | Total issues to generate |
-| `NUM_PROJECTS` | `100` | Total projects |
-| `NUM_USERS` | `100` | Total users |
-| `COMMENTS_PER_ISSUE` | `3.0` | Average comments per issue |
-| `LABELS_PER_ISSUE` | `1.5` | Average labels per issue |
-| `SHARD_SIZE` | `500000` | Rows per CSV shard file |
-| `OUTPUT_DIR` | `db/seed-data/synthetic/` | Output directory |
-| `SEED` | `42` | RNG seed for reproducible output |
+| Env Var              | Default                   | Description                      |
+| -------------------- | ------------------------- | -------------------------------- |
+| `NUM_ISSUES`         | `1000000`                 | Total issues to generate         |
+| `NUM_PROJECTS`       | `100`                     | Total projects                   |
+| `NUM_USERS`          | `100`                     | Total users                      |
+| `COMMENTS_PER_ISSUE` | `3.0`                     | Average comments per issue       |
+| `LABELS_PER_ISSUE`   | `1.5`                     | Average labels per issue         |
+| `SHARD_SIZE`         | `500000`                  | Rows per CSV shard file          |
+| `OUTPUT_DIR`         | `db/seed-data/synthetic/` | Output directory                 |
+| `SEED`               | `42`                      | RNG seed for reproducible output |
 
 ### Distribution Strategy
 
@@ -72,6 +72,7 @@ NUM_ISSUES=100000000 COMMENTS_PER_ISSUE=2.0 npm run generate-synthetic
 ```
 
 With default settings (`NUM_ISSUES=1000000`, `COMMENTS_PER_ISSUE=3.0`, `LABELS_PER_ISSUE=1.5`):
+
 - Issues: 1,000,000
 - Comments: ~3,000,000
 - IssueLabels: ~1,500,000
@@ -114,12 +115,12 @@ To force re-seeding an already-seeded database:
 ZERO_SEED_FORCE=true npm run db-seed-synthetic
 ```
 
-| Env Var | Default | Description |
-|---------|---------|-------------|
-| `ZERO_UPSTREAM_DB` | *(from `.env`)* | PostgreSQL connection string |
-| `ZERO_SEED_BULK` | *(set by script)* | Enables bulk load optimizations |
-| `ZERO_SEED_DATA_DIR` | *(set by script)* | Directory containing CSV shards |
-| `ZERO_SEED_FORCE` | *(unset)* | Set to `true` to re-seed even if data exists |
+| Env Var              | Default           | Description                                  |
+| -------------------- | ----------------- | -------------------------------------------- |
+| `ZERO_UPSTREAM_DB`   | _(from `.env`)_   | PostgreSQL connection string                 |
+| `ZERO_SEED_BULK`     | _(set by script)_ | Enables bulk load optimizations              |
+| `ZERO_SEED_DATA_DIR` | _(set by script)_ | Directory containing CSV shards              |
+| `ZERO_SEED_FORCE`    | _(unset)_         | Set to `true` to re-seed even if data exists |
 
 ## Verification
 
