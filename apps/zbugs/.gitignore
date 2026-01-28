@@ -30,3 +30,4 @@ zero-schema.json
 *.db-shm
 *.db-wal
 *.db-wal2
+db/seed-data/synthetic/
