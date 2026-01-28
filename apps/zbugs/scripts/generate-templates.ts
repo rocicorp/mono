@@ -1,14 +1,20 @@
 /**
  * Generates parameterized template pools via Claude API for synthetic data generation.
  *
- * Templates use {{slot}} placeholders that get filled by faker during CSV generation.
+ * Templates use {{slot}} placeholders that get filled during CSV generation.
+ * Designed to support up to 100M issues with max 300K per project and minimal repetition.
+ *
+ * Template counts per category:
+ *   - 200 title templates × ~15K slot combinations = 3M unique titles per project
+ *   - 100 description templates × ~1.5M slot combinations = 150M unique descriptions
+ *   - 150 comment templates × ~50K slot combinations = 7.5M unique comments per project
  *
  * Usage:
  *   ANTHROPIC_API_KEY=sk-... npx tsx scripts/generate-templates.ts
  *
  * Env vars:
  *   ANTHROPIC_API_KEY - required
- *   NUM_PROJECTS      - projects per category (default 10, total = NUM_PROJECTS_PER_CAT * 10)
+ *   NUM_PROJECTS      - total projects (default 100, divided across 10 categories)
  */
 
 import * as fs from 'fs';
@@ -69,7 +75,10 @@ const CATEGORY_DESCRIPTIONS: Record<Category, string> = {
     'Game/media software like render engines, physics simulators, audio mixers, asset pipelines, animation editors',
 };
 
-async function callClaude(prompt: string): Promise<string> {
+async function callClaude(
+  prompt: string,
+  maxTokens: number = 16384,
+): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY environment variable is required');
@@ -84,7 +93,7 @@ async function callClaude(prompt: string): Promise<string> {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
+      max_tokens: maxTokens,
       messages: [{role: 'user', content: prompt}],
     }),
   });
@@ -112,7 +121,7 @@ async function generateProjectsAndComponents(
 ): Promise<Array<{name: string; components: string[]}>> {
   const prompt = `Generate exactly ${NUM_PROJECTS_PER_CATEGORY} fictional software project names for the category "${category}" (${CATEGORY_DESCRIPTIONS[category]}).
 
-For each project, also generate 50 unique component/module names that would exist in that kind of project (e.g. for a web frontend: "checkout page", "search bar", "user profile modal", "navigation menu", "product carousel").
+For each project, also generate 100 unique component/module names that would exist in that kind of project (e.g. for a web frontend: "checkout page", "search bar", "user profile modal", "navigation menu", "product carousel", "notification badge", "settings panel", etc.).
 
 Return ONLY a JSON array, no other text:
 [
@@ -122,6 +131,7 @@ Return ONLY a JSON array, no other text:
 Requirements:
 - Project names should be 1-2 words, CamelCase, realistic software names
 - Components should be lowercase, 1-4 words, specific to the project's domain
+- Exactly 100 components per project
 - No duplicates within a project or across projects in this category`;
 
   const response = await callClaude(prompt);
@@ -152,8 +162,20 @@ Requirements:
   return parseJsonFromResponse(response) as string[];
 }
 
-async function generateTitleTemplates(category: Category): Promise<string[]> {
-  const prompt = `Generate exactly 200 unique issue title templates for software projects in the "${category}" category (${CATEGORY_DESCRIPTIONS[category]}).
+async function generateTitleTemplatesBatch(
+  category: Category,
+  batchNum: number,
+  batchSize: number,
+): Promise<string[]> {
+  const focusAreas = [
+    'bugs, crashes, and errors',
+    'features, enhancements, and improvements',
+  ];
+  const focus = focusAreas[batchNum % focusAreas.length];
+
+  const prompt = `Generate exactly ${batchSize} unique issue title templates for software projects in the "${category}" category (${CATEGORY_DESCRIPTIONS[category]}).
+
+Focus on: ${focus}
 
 Each template should use {{slot}} placeholders that will be filled later:
 - {{component}} - a module/component name
@@ -170,14 +192,21 @@ Return ONLY a JSON array of strings, no other text:
 ["{{component}} crashes when {{action}} in {{environment}}", ...]
 
 Requirements:
-- Exactly 200 templates
+- Exactly ${batchSize} templates
 - Each under 128 characters after slot filling (slots average ~15 chars)
-- Mix of bugs, features, performance issues, tasks
+- All templates should be unique and different from common patterns
 - Realistic software issue titles for ${category}
-- Each template must use at least one {{slot}}`;
+- Each template must use at least 2 {{slot}} placeholders for variety`;
 
   const response = await callClaude(prompt);
   return parseJsonFromResponse(response) as string[];
+}
+
+async function generateTitleTemplates(category: Category): Promise<string[]> {
+  // Generate 200 titles in 2 batches of 100 to avoid truncation
+  const batch1 = await generateTitleTemplatesBatch(category, 0, 100);
+  const batch2 = await generateTitleTemplatesBatch(category, 1, 100);
+  return [...batch1, ...batch2];
 }
 
 async function generateDescriptionTemplates(
@@ -194,22 +223,39 @@ Each template should use {{slot}} placeholders:
 - {{expected}} - expected behavior
 - {{actual}} - actual behavior
 - {{version}} - version number
+- {{dependency}} - a library/package name
+- {{feature}} - a feature name
+- {{metric}} - a performance metric
 
 Return ONLY a JSON array of strings, no other text.
 
 Requirements:
 - Exactly 100 templates
 - Each 100-500 characters
-- Include bug reports, feature requests, improvement proposals
-- Realistic, detailed descriptions for ${category}
-- Use standard bug report structure where appropriate`;
+- Include bug reports, feature requests, improvement proposals, performance issues
+- Realistic, detailed descriptions specific to ${category}
+- Use standard bug report structure where appropriate
+- Each template must use at least 3 {{slot}} placeholders for maximum variety`;
 
   const response = await callClaude(prompt);
   return parseJsonFromResponse(response) as string[];
 }
 
-async function generateCommentTemplates(category: Category): Promise<string[]> {
-  const prompt = `Generate exactly 100 unique issue comment templates for software projects in the "${category}" category (${CATEGORY_DESCRIPTIONS[category]}).
+async function generateCommentTemplatesBatch(
+  category: Category,
+  batchNum: number,
+  batchSize: number,
+): Promise<string[]> {
+  const focusAreas = [
+    'investigation updates and debugging findings',
+    'proposed fixes, workarounds, and solutions',
+    'questions, status updates, and code review feedback',
+  ];
+  const focus = focusAreas[batchNum % focusAreas.length];
+
+  const prompt = `Generate exactly ${batchSize} unique issue comment templates for software projects in the "${category}" category (${CATEGORY_DESCRIPTIONS[category]}).
+
+Focus on: ${focus}
 
 Each template should use {{slot}} placeholders:
 - {{component}} - a module/component name
@@ -219,17 +265,27 @@ Each template should use {{slot}} placeholders:
 - {{workaround}} - a temporary workaround
 - {{version}} - version number
 - {{user}} - a person's name
+- {{error}} - an error type
+- {{dependency}} - a library/package name
 
 Return ONLY a JSON array of strings, no other text.
 
 Requirements:
-- Exactly 100 templates
+- Exactly ${batchSize} templates
 - Each 50-400 characters
-- Mix of: investigation updates, proposed fixes, workarounds, status updates, questions, code review comments, test results
-- Realistic developer conversation for ${category}`;
+- Realistic developer conversation for ${category}
+- Each template must use at least 2 {{slot}} placeholders`;
 
   const response = await callClaude(prompt);
   return parseJsonFromResponse(response) as string[];
+}
+
+async function generateCommentTemplates(category: Category): Promise<string[]> {
+  // Generate 150 comments in 3 batches of 50 to avoid truncation
+  const batch1 = await generateCommentTemplatesBatch(category, 0, 50);
+  const batch2 = await generateCommentTemplatesBatch(category, 1, 50);
+  const batch3 = await generateCommentTemplatesBatch(category, 2, 50);
+  return [...batch1, ...batch2, ...batch3];
 }
 
 async function generateCategoryTemplates(
@@ -238,26 +294,29 @@ async function generateCategoryTemplates(
   // oxlint-disable-next-line no-console
   console.log(`Generating templates for category: ${category}`);
 
-  // Run all generations for this category in parallel
-  const [
-    projects,
-    labels,
-    titleTemplates,
-    descriptionTemplates,
-    commentTemplates,
-  ] = await Promise.all([
+  // Generate projects, labels, and descriptions in parallel (single API calls)
+  // oxlint-disable-next-line no-console
+  console.log(`  ${category}: generating projects, labels, descriptions...`);
+  const [projects, labels, descriptionTemplates] = await Promise.all([
     generateProjectsAndComponents(category),
     generateLabels(category),
-    generateTitleTemplates(category),
     generateDescriptionTemplates(category),
-    generateCommentTemplates(category),
   ]);
+
+  // Generate titles (2 batches) and comments (3 batches) sequentially
+  // oxlint-disable-next-line no-console
+  console.log(`  ${category}: generating title templates (2 batches)...`);
+  const titleTemplates = await generateTitleTemplates(category);
+
+  // oxlint-disable-next-line no-console
+  console.log(`  ${category}: generating comment templates (3 batches)...`);
+  const commentTemplates = await generateCommentTemplates(category);
 
   // oxlint-disable-next-line no-console
   console.log(
-    `  ${category}: ${projects.length} projects, ${labels.length} labels, ` +
-      `${titleTemplates.length} titles, ${descriptionTemplates.length} descriptions, ` +
-      `${commentTemplates.length} comments`,
+    `  ${category}: ${projects.length} projects (${projects[0]?.components?.length ?? 0} components each), ` +
+      `${labels.length} labels, ${titleTemplates.length} titles, ` +
+      `${descriptionTemplates.length} descriptions, ${commentTemplates.length} comments`,
   );
 
   return {
@@ -277,29 +336,28 @@ async function main() {
   console.log(
     `Generating templates for ${CATEGORIES.length} categories, ${NUM_PROJECTS_PER_CATEGORY} projects each...`,
   );
+  // oxlint-disable-next-line no-console
+  console.log(
+    'Each category: 100 components/project, 200 titles, 100 descriptions, 150 comments',
+  );
 
-  // Process categories in batches of 3 to avoid rate limits
-  const BATCH_SIZE = 3;
+  // Process categories one at a time since each makes 8 API calls
   const allTemplates: CategoryTemplates[] = [];
 
-  for (let i = 0; i < CATEGORIES.length; i += BATCH_SIZE) {
-    const batch = CATEGORIES.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < CATEGORIES.length; i++) {
+    const category = CATEGORIES[i];
     // oxlint-disable-next-line no-console
     console.log(
-      `\nBatch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(CATEGORIES.length / BATCH_SIZE)}: ${batch.join(', ')}`,
+      `\n=== Category ${i + 1}/${CATEGORIES.length}: ${category} ===`,
     );
-    const results = await Promise.all(
-      batch.map(cat => generateCategoryTemplates(cat)),
-    );
-    allTemplates.push(...results);
-  }
+    const result = await generateCategoryTemplates(category);
+    allTemplates.push(result);
 
-  // Write individual category files
-  for (const templates of allTemplates) {
-    const outPath = path.join(TEMPLATES_DIR, `${templates.category}.json`);
-    fs.writeFileSync(outPath, JSON.stringify(templates, null, 2));
+    // Write each category file as we go (in case of failure)
+    const outPath = path.join(TEMPLATES_DIR, `${result.category}.json`);
+    fs.writeFileSync(outPath, JSON.stringify(result, null, 2));
     // oxlint-disable-next-line no-console
-    console.log(`Wrote ${outPath}`);
+    console.log(`  Wrote ${outPath}`);
   }
 
   // Write summary
