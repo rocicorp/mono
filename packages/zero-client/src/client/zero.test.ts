@@ -3242,26 +3242,16 @@ describe('Disconnect on hide', () => {
 
     await c.test(z, changeVisibilityState);
 
-    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+    // Goes straight to Disconnected when hidden
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+    expect(z.connectionStatus).toBe(ConnectionStatus.Disconnected);
+    expect(z.connection.state.current).toEqual({
+      name: 'disconnected',
+      reason: 'Connection closed because tab was hidden',
+    });
     expect(await onOnlineChangeP).toBe(false);
     expect(z.online).toBe(false);
-
-    // Stays disconnected as long as we are hidden.
-    assert(z.connectionState.name === ConnectionStatus.Connecting);
-    const timeUntilGlobalDisconnect =
-      z.connectionState.disconnectAt - Date.now();
-    assert(timeUntilGlobalDisconnect > 0);
-    if (timeUntilGlobalDisconnect > 1) {
-      await vi.advanceTimersByTimeAsync(timeUntilGlobalDisconnect - 1);
-    }
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
-    expect(z.online).false;
     expect(document.visibilityState).toBe('hidden');
-
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Disconnected);
-    expect(z.online).false;
 
     onOnlineChangeP = makeOnOnlineChangePromise();
 

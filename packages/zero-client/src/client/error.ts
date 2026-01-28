@@ -42,7 +42,14 @@ export type NoSocketOriginError = ClientError<{
   kind: ClientErrorKind.NoSocketOrigin;
   message: string;
 }>;
-export type DisconnectedReason = OfflineError | NoSocketOriginError;
+export type HiddenError = ClientError<{
+  kind: ClientErrorKind.Hidden;
+  message: string;
+}>;
+export type DisconnectedReason =
+  | OfflineError
+  | NoSocketOriginError
+  | HiddenError;
 export type ServerError = ProtocolError<ErrorBody>;
 export type ZeroError = ServerError | ClientError;
 export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
@@ -158,7 +165,6 @@ export function getErrorConnectionTransition(
       case ClientErrorKind.ConnectTimeout:
       case ClientErrorKind.PingTimeout:
       case ClientErrorKind.PullTimeout:
-      case ClientErrorKind.Hidden:
       case ClientErrorKind.UnexpectedBaseCookie:
         return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
@@ -168,7 +174,8 @@ export function getErrorConnectionTransition(
       case ClientErrorKind.UserDisconnect:
         return {status: ConnectionStatus.Error, reason: ex} as const;
 
-      // Disconnected error (this should already result in a disconnected state)
+      // Disconnected errors
+      case ClientErrorKind.Hidden:
       case ClientErrorKind.Offline:
       case ClientErrorKind.NoSocketOrigin:
         return {
