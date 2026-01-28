@@ -608,7 +608,7 @@ describe('fetchFromAPIServer', () => {
       'Expected zeroCache PushFailed error',
     );
     expect(caught.errorBody.reason).toBe(ErrorReason.Internal);
-    expect(caught.errorBody.message).toMatch(/unknown error: boom/);
+    expect(caught.errorBody.message).toMatch(/threw error: boom/);
   });
 
   test('wraps rejected fetch calls for transform in ProtocolError with internal type', async () => {
@@ -639,7 +639,158 @@ describe('fetchFromAPIServer', () => {
       'Expected zeroCache TransformFailed error',
     );
     expect(caught.errorBody.reason).toBe(ErrorReason.Internal);
-    expect(caught.errorBody.message).toMatch(/unknown error: network failure/);
+    expect(caught.errorBody.message).toMatch(/threw error: network failure/);
+  });
+
+  describe('retries', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    test('retries on 502 and succeeds', async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response('bad gateway', {status: 502}))
+        .mockResolvedValueOnce(new Response('bad gateway', {status: 502}))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({success: true}), {status: 200}),
+        );
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      // 1st retry
+      await vi.advanceTimersByTimeAsync(1200);
+      // 2nd retry
+      await vi.advanceTimersByTimeAsync(1200);
+
+      const result = await promise;
+      expect(result).toEqual({success: true});
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    test('retries on 504 and succeeds', async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response('gateway timeout', {status: 504}))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({success: true}), {status: 200}),
+        );
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      await vi.advanceTimersByTimeAsync(1200);
+
+      const result = await promise;
+      expect(result).toEqual({success: true});
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('retries on fetch failed and succeeds', async () => {
+      mockFetch
+        .mockRejectedValueOnce(new TypeError('fetch failed'))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({success: true}), {status: 200}),
+        );
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      await vi.advanceTimersByTimeAsync(1200);
+
+      const result = await promise;
+      expect(result).toEqual({success: true});
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('fails after max retries (status code)', async () => {
+      mockFetch.mockResolvedValue(new Response('bad gateway', {status: 502}));
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      // Exhaust all retries
+      await Promise.all([
+        expect(promise).rejects.toThrow(/non-OK status 502/),
+        vi.advanceTimersByTimeAsync(5000),
+      ]);
+
+      // Initial + 3 retries (max attempts 4) = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    test('fails after max retries (fetch failed)', async () => {
+      mockFetch.mockRejectedValue(new TypeError('fetch failed'));
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      // Exhaust all retries
+      await Promise.all([
+        expect(promise).rejects.toThrow(/threw error: fetch failed/),
+        vi.advanceTimersByTimeAsync(5000),
+      ]);
+
+      // Initial + 3 retries = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    test('does not retry on other errors', async () => {
+      mockFetch.mockResolvedValue(new Response('bad request', {status: 400}));
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      await expect(promise).rejects.toThrow(/non-OK status 400/);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

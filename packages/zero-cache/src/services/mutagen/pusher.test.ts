@@ -1085,8 +1085,7 @@ describe('pusher errors', () => {
         kind: ErrorKind.PushFailed,
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
-        message:
-          'Fetch from API server failed with unknown error: string error',
+        message: 'Fetch from API server threw error: string error',
         mutationIDs: [
           {
             clientID: 'test-cid',
@@ -1300,8 +1299,7 @@ describe('pusher errors', () => {
         kind: ErrorKind.PushFailed,
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
-        message:
-          'Fetch from API server failed with unknown error: Network error',
+        message: 'Fetch from API server threw error: Network error',
         mutationIDs: [
           {
             clientID: 'test-cid',
