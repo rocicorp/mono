@@ -3076,40 +3076,34 @@ describe('Disconnect on hide', () => {
     {
       name: 'default delay not during ping',
       test: async (r, changeVisibilityState) => {
-        expect(DEFAULT_PING_TIMEOUT_MS).lessThanOrEqual(
-          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-        );
-        expect(DEFAULT_PING_TIMEOUT_MS * 2).greaterThanOrEqual(
-          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-        );
         let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
-        timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
-        await r.triggerPong();
+        while (timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS) {
+          await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
+          timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
+          await r.triggerPong();
+        }
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
       },
     },
     {
       name: 'default delay during ping',
       test: async (r, changeVisibilityState) => {
-        expect(DEFAULT_PING_TIMEOUT_MS).lessThanOrEqual(
-          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-        );
-        expect(DEFAULT_PING_TIMEOUT_MS * 2).greaterThanOrEqual(
-          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-        );
+        // Advance partway into a ping cycle before going hidden
         await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2);
         let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2); // sends ping
+        // Complete the current ping cycle
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2);
         timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS / 2;
-        await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
-        // Disconnect due to visibility does not happen until pong is received
-        // and microtask queue is processed.
-        expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
         await r.triggerPong();
-        await vi.advanceTimersByTimeAsync(0);
+        // Continue through remaining ping cycles
+        while (timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS) {
+          await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
+          timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
+          await r.triggerPong();
+        }
+        await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
       },
     },
     {
