@@ -398,6 +398,7 @@ class AnonymousTelemetryManager {
   }
 
   #getPlatform(): string {
+    if (process.env.ZERO_ON_CLOUD_ZERO) return 'cloudzero';
     if (process.env.FLY_APP_NAME || process.env.FLY_REGION) return 'fly.io';
     if (
       process.env.ECS_CONTAINER_METADATA_URI_V4 ||
