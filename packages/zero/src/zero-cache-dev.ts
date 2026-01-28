@@ -157,10 +157,11 @@ async function main() {
 
   if (config.schema.path) {
     if (config.query.url && config.mutate.url) {
-      lc.error?.(
-        'Cannot use -p/--path/ZERO_SCHEMA_PATH flag when using ZERO_MUTATE_URL and ZERO_QUERY_URL.',
+      lc.warn?.(
+        'Using -p/--path/ZERO_SCHEMA_PATH with ZERO_MUTATE_URL and ZERO_QUERY_URL. ' +
+          'Continuing in hybrid mode: legacy permissions will still be deployed/watched, ' +
+          'and custom queries/mutations will use the API endpoints.',
       );
-      process.exit(-1);
     }
 
     await deployPermissionsAndStartZeroCache();
