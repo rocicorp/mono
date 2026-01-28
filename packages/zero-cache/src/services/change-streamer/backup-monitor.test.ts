@@ -115,7 +115,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
   });
 
   test('only keeps one reservation per id', async () => {
-    const sub1 = await monitor.startSnapshotReservation('foo-bar');
+    const sub1 = monitor.startSnapshotReservation('foo-bar');
     expect(await getFirstMessage(sub1)).toEqual([
       'status',
       {
@@ -127,7 +127,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     ]);
     expect(sub1.active).toBe(true);
 
-    const sub2 = await monitor.startSnapshotReservation('bar-foo');
+    const sub2 = monitor.startSnapshotReservation('bar-foo');
     expect(await getFirstMessage(sub2)).toEqual([
       'status',
       {
@@ -140,7 +140,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     expect(sub1.active).toBe(true);
     expect(sub2.active).toBe(true);
 
-    const sub3 = await monitor.startSnapshotReservation('bar-foo');
+    const sub3 = monitor.startSnapshotReservation('bar-foo');
     expect(await getFirstMessage(sub3)).toEqual([
       'status',
       {
@@ -163,7 +163,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
 
     await monitor.checkWatermarksAndScheduleCleanup();
 
-    const sub = await monitor.startSnapshotReservation('foo-bar');
+    const sub = monitor.startSnapshotReservation('foo-bar');
     expect(await getFirstMessage(sub)).toEqual([
       'status',
       {
@@ -186,7 +186,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
   test('extends cleanup delay due to reservation', async () => {
     const time = Date.UTC(2025, 3, 24);
     vi.setSystemTime(time);
-    const sub = await monitor.startSnapshotReservation('boo-far');
+    const sub = monitor.startSnapshotReservation('boo-far');
     expect(await getFirstMessage(sub)).toEqual([
       'status',
       {
@@ -223,7 +223,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
   test('does not extend cleanup delay on prematurely terminated reservation', async () => {
     const time = Date.UTC(2025, 3, 24);
     vi.setSystemTime(time);
-    const sub = await monitor.startSnapshotReservation('boo-far');
+    const sub = monitor.startSnapshotReservation('boo-far');
     expect(await getFirstMessage(sub)).toEqual([
       'status',
       {
