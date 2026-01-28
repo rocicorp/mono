@@ -229,7 +229,7 @@ export const DEFAULT_PING_TIMEOUT_MS = 5_000;
  */
 export const PULL_TIMEOUT_MS = 5_000;
 
-export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5_000;
+export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5 * 60 * 1000;
 
 /**
  * The amount of time we allow for continuous connecting attempts before
