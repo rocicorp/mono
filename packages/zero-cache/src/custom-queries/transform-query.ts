@@ -117,7 +117,6 @@ export class CustomQueryTransformer {
             this.#config.url[0],
             'A ZERO_QUERY_URL must be configured for custom queries',
           ),
-        userQueryURL !== undefined,
         this.#urlPatterns,
         this.#shard,
         headerOptions,

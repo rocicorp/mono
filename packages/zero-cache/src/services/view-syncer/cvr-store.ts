@@ -1002,11 +1002,14 @@ export async function checkVersion(
 
 export class ClientNotFoundError extends ProtocolErrorWithLevel {
   constructor(message: string) {
-    super({
-      kind: ErrorKind.ClientNotFound,
-      message,
-      origin: ErrorOrigin.ZeroCache,
-    });
+    super(
+      {
+        kind: ErrorKind.ClientNotFound,
+        message,
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'warn',
+    );
   }
 }
 

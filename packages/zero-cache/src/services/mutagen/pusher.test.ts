@@ -931,12 +931,10 @@ describe('pusher errors', () => {
 
     const iterator = stream[Symbol.asyncIterator]();
     const failure = iterator.next();
-    const expectedLogLevel =
-      expectedError.origin === ErrorOrigin.Server ? 'warn' : 'error';
     await expect(failure).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
     await expect(failure).rejects.toMatchObject({
       errorBody: expectedError,
-      logLevel: expectedLogLevel,
+      logLevel: 'warn',
     });
   }
 
@@ -1096,7 +1094,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1246,7 +1244,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
 
     await expect(failure2).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
@@ -1265,7 +1263,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1311,7 +1309,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1360,7 +1358,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
 
     await pusher.stop();
