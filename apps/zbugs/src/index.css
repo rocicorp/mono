@@ -52,6 +52,285 @@
   --z-index-popover: 60;
 }
 
+/* Light Mode Theme */
+[data-theme='light'] {
+  /* Color overrides for light mode */
+  --color-background: rgba(255, 255, 255, 1);
+  --color-text-primary: rgba(0, 0, 0, 0.85);
+  --color-text-primary-active: rgba(0, 0, 0, 1);
+  --color-text-dimmed-label: rgba(0, 0, 0, 0.5);
+  --color-primary-cta: rgba(252, 33, 138, 1);
+  --color-primary-cta-dimmed: rgba(252, 33, 138, 0.15);
+  --color-primary-cta-outline: rgba(0, 0, 0, 0.15);
+  --color-light-outline: rgba(220, 220, 220, 1);
+  --color-row-hover: rgba(0, 0, 0, 0.05);
+  --color-nav-selected: rgba(245, 245, 245, 1);
+  --color-modal-background: rgba(255, 255, 255, 0.95);
+  --color-modal-outline: rgba(220, 220, 220, 1);
+  --color-button-outline: rgba(220, 220, 220, 1);
+  --color-tooltip-background: rgba(250, 250, 250, 1);
+  --color-tooltip-outline: rgba(220, 220, 220, 1);
+}
+
+[data-theme='light'] :root {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+[data-theme='light'] .modal-background {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+[data-theme='light'] .clear-search {
+  background-color: rgba(0, 0, 0, 0.1);
+  color: #000;
+}
+
+[data-theme='light'] .clear-search:hover {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme='light'] .list-view-header input {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='light'] .info-button {
+  filter: invert(0.2);
+}
+
+[data-theme='light'] .row.skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.06) 50%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+[data-theme='light'] .video-wrapper {
+  background: #f5f5f5;
+}
+
+[data-theme='light'] .onboarding-modal .keyboard-keys {
+  border: 1px solid #d0d0d0;
+  background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+  color: #000;
+}
+
+[data-theme='light'] .markdown-container blockquote {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* Light mode: Fix SVG icons and images */
+[data-theme='light'] .zero-logo,
+[data-theme='light'] .zero-mark {
+  filter: invert(1);
+}
+
+/* Light mode: Invert standalone icon elements */
+[data-theme='light'] .sidebar-status-open,
+[data-theme='light'] .sidebar-status-closed,
+[data-theme='light'] .filter-modal-button.creator-select,
+[data-theme='light'] .filter-modal-button.label-select,
+[data-theme='light'] .add-image-button,
+[data-theme='light'] .add-emoji-button img,
+[data-theme='light'] .logout-button,
+[data-theme='light'] .logout-button-mobile,
+[data-theme='light'] .sort-direction.desc,
+[data-theme='light'] .sort-direction.asc,
+[data-theme='light'] .search-toggle,
+[data-theme='light'] .button-dropdown::before {
+  filter: invert(1);
+}
+
+/* Light mode: SVG background icons visibility */
+/* The gray icons (#8A8F98) should be visible enough on white background */
+/* We cannot use CSS filters here as they would also affect the text */
+/* The icons remain at their original gray color for now */
+
+/* Light mode: Fix navigation and project picker visibility */
+[data-theme='light'] .section-tabs,
+[data-theme='light'] .nav-item {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .nav-item:hover,
+[data-theme='light'] .nav-active {
+  color: var(--color-primary-cta);
+}
+
+/* Light mode: Fix list view header */
+[data-theme='light'] .list-view-header {
+  color: var(--color-text-primary);
+}
+
+/* Light mode: Fix project picker dropdown text */
+[data-theme='light'] .project-picker-dropdown .input,
+[data-theme='light'] .project-picker-dropdown .option {
+  color: var(--color-text-primary);
+}
+
+/* Light mode: Invert project picker icons (rocket, zero mark) */
+[data-theme='light'] .project-picker-dropdown img.icon,
+[data-theme='light'] .project-picker-dropdown .selectedIcon,
+[data-theme='light'] .project-picker-dropdown .optionIcon {
+  filter: invert(1);
+}
+
+/* Light mode: Fix timestamps and dimmed text */
+[data-theme='light'] .issue-timestamp,
+[data-theme='light'] .breadcrumb-item,
+[data-theme='light'] .sort-control {
+  color: var(--color-text-dimmed-label);
+}
+
+/* Light mode: Adjust scrollbar */
+[data-theme='light'] body {
+  scrollbar-color: var(--color-nav-selected) transparent;
+}
+
+/* Light mode: Primary CTA button adjustments */
+[data-theme='light'] .primary-cta {
+  color: white;
+}
+
+[data-theme='light'] .primary-cta::before {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='light'] .primary-cta::after {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* Light mode: Image upload overlay */
+[data-theme='light'] .uploadingOverlay {
+  background-color: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.85);
+  border: 1px solid var(--color-button-outline);
+}
+
+/* Light mode: Comment permalinked background */
+[data-theme='light'] .permalinked {
+  background-color: rgba(252, 33, 138, 0.1);
+}
+
+/* Light mode: Connection status and other pills */
+[data-theme='light'] .connection-status-pill,
+[data-theme='light'] .emoji-pill {
+  border-color: var(--color-button-outline);
+}
+
+/* Light mode: Emoji picker customization */
+[data-theme='light'] emoji-picker {
+  --background: var(--color-modal-background);
+  --border-color: var(--color-modal-outline);
+  --input-border-color: var(--color-button-outline);
+  --input-font-color: var(--color-text-primary);
+  --input-placeholder-color: var(--color-text-dimmed-label);
+  --outline-color: var(--color-primary-cta);
+  --category-font-color: var(--color-text-primary);
+  --button-active-background: var(--color-nav-selected);
+  --button-hover-background: var(--color-row-hover);
+}
+
+/* Light mode: Toast notifications */
+[data-theme='light'] .Toastify__toast-body {
+  background: var(--color-tooltip-background);
+  border-color: var(--color-tooltip-outline);
+  color: var(--color-text-primary);
+}
+
+/* Light mode: Modals */
+[data-theme='light'] .modal {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .modal-container {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .header-line {
+  color: var(--color-text-primary);
+}
+
+/* Override Tailwind's text-white class in modal headers */
+[data-theme='light'] .header-line .text-white {
+  color: var(--color-text-primary) !important;
+}
+
+[data-theme='light'] .close-button svg {
+  color: var(--color-text-dimmed-label);
+  filter: invert(1);
+}
+
+[data-theme='light'] .close-button:hover svg {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .modal-confirm {
+  color: white;
+}
+
+[data-theme='light'] .comment-input {
+  color: var(--color-text-primary);
+  border-color: var(--color-button-outline);
+}
+
+/* Light mode: Filter modal */
+[data-theme='light'] .add-filter-modal {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .filter-modal-label {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .filter-modal-item input {
+  color: var(--color-text-primary);
+}
+
+/* Light mode: Issue detail page */
+[data-theme='light'] .issue-detail {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .issue-detail-title {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .issue-detail-label {
+  color: var(--color-text-dimmed-label);
+}
+
+[data-theme='light'] .description-container,
+[data-theme='light'] .markdown-container {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .timestamp-container {
+  color: var(--color-text-dimmed-label);
+}
+
+[data-theme='light'] .edit-buttons button,
+[data-theme='light'] .show-older-comments,
+[data-theme='light'] .login-to-comment {
+  color: var(--color-text-primary);
+  border-color: var(--color-button-outline);
+}
+
+[data-theme='light'] .sidebar-button,
+[data-theme='light'] .filter-modal-button {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .issue-creator {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .pill {
+  color: var(--color-text-primary);
+  border-color: var(--color-button-outline);
+}
+
 #root {
   display: flex;
   align-items: stretch;
