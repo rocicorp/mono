@@ -8,7 +8,10 @@ import {
   getValueAtPath,
   iterateLeaves,
 } from '../../../shared/src/object-traversal.ts';
-import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
+import type {
+  BaseDefaultSchema,
+  DefaultSchema,
+} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {validateInput} from '../query/validate-input.ts';
 import type {Transaction} from './custom.ts';
@@ -66,7 +69,7 @@ import {
 export function defineMutators<
   // let MD infer freely so defaults aren't erased by a MutatorDefinitions constraint
   const MD,
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
 >(
   // we assert types here for clear error messages
   definitions: MD & AssertMutatorDefinitions<MD>,
@@ -76,7 +79,7 @@ export function defineMutators<
   // same as MD above, but for TBase and TOverrides
   const TBase,
   const TOverrides,
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
 >(
   base:
     | MutatorRegistry<EnsureMutatorDefinitions<TBase>, S>
