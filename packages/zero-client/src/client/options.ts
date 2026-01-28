@@ -211,7 +211,7 @@ export interface ZeroOptions<
    *
    * Instances in hidden tabs are disconnected to save resources.
    *
-   * Default is 5_000.
+   * Default is 5 minutes.
    */
   hiddenTabDisconnectDelay?: number | undefined;
 
