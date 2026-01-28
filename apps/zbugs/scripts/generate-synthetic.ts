@@ -1,16 +1,18 @@
 /**
  * Streaming synthetic data generator for zbugs.
  *
- * Reads LLM-generated templates + source gigabugs CSVs, produces sharded CSVs
- * with ~1 billion rows of realistic synthetic data.
+ * Self-contained generator that produces sharded CSVs with synthetic data
+ * based on configuration parameters and LLM-generated templates.
  *
  * Usage:
  *   npx tsx scripts/generate-synthetic.ts
  *
  * Env vars:
+ *   NUM_ISSUES            - total issues to generate (default 1000000)
  *   NUM_PROJECTS          - total projects (default 100)
  *   NUM_USERS             - total users (default 100)
- *   MULTIPLICATION_FACTOR - batch count (default 345, yielding ~83M issues)
+ *   COMMENTS_PER_ISSUE    - average comments per issue (default 3.0)
+ *   LABELS_PER_ISSUE      - average labels per issue (default 1.5)
  *   SHARD_SIZE            - rows per CSV shard (default 500000)
  *   OUTPUT_DIR            - output directory (default db/seed-data/synthetic/)
  *   SEED                  - RNG seed for reproducibility (default 42)
@@ -18,24 +20,21 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as readline from 'readline';
 import {fileURLToPath} from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- Configuration ---
+const NUM_ISSUES = parseInt(process.env.NUM_ISSUES ?? '1000000', 10);
 const NUM_PROJECTS = parseInt(process.env.NUM_PROJECTS ?? '100', 10);
 const NUM_USERS = parseInt(process.env.NUM_USERS ?? '100', 10);
-const MULTIPLICATION_FACTOR = parseInt(
-  process.env.MULTIPLICATION_FACTOR ?? '345',
-  10,
-);
+const COMMENTS_PER_ISSUE = parseFloat(process.env.COMMENTS_PER_ISSUE ?? '3.0');
+const LABELS_PER_ISSUE = parseFloat(process.env.LABELS_PER_ISSUE ?? '1.5');
 const SHARD_SIZE = parseInt(process.env.SHARD_SIZE ?? '500000', 10);
 const OUTPUT_DIR = path.resolve(
   process.env.OUTPUT_DIR ?? path.join(__dirname, '../db/seed-data/synthetic/'),
 );
 const SEED = parseInt(process.env.SEED ?? '42', 10);
 const TEMPLATES_DIR = path.join(__dirname, '../db/seed-data/templates');
-const GIGABUGS_DIR = path.join(__dirname, '../db/seed-data/gigabugs');
 
 // --- Seeded PRNG (mulberry32) ---
 function mulberry32(seed: number): () => number {
@@ -56,6 +55,41 @@ function randomInt(min: number, max: number): number {
 
 function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(rng() * arr.length)];
+}
+
+// --- Pareto/Power-law distribution helpers ---
+/**
+ * Assigns numItems to buckets using power-law distribution.
+ * Lower alpha = more uniform, higher alpha = more skewed.
+ * Returns array where result[i] = bucket index for item i.
+ */
+function assignWithPareto(
+  numItems: number,
+  numBuckets: number,
+  alpha = 2,
+): number[] {
+  const result = new Array<number>(numItems);
+  for (let i = 0; i < numItems; i++) {
+    result[i] = Math.floor(Math.pow(rng(), alpha) * numBuckets);
+  }
+  return result;
+}
+
+/**
+ * Distributes totalItems across numBuckets with Pareto distribution.
+ * Returns array where result[i] = count for bucket i.
+ */
+function distributeWithPareto(
+  numBuckets: number,
+  totalItems: number,
+  alpha = 2,
+): number[] {
+  const result = new Array<number>(numBuckets).fill(0);
+  for (let i = 0; i < totalItems; i++) {
+    const idx = Math.floor(Math.pow(rng(), alpha) * numBuckets);
+    result[idx]++;
+  }
+  return result;
 }
 
 // --- Template types ---
@@ -463,67 +497,6 @@ class ShardedCSVWriter {
   }
 }
 
-// --- Read source CSV rows as arrays of strings ---
-async function readCSVRows(
-  filePath: string,
-): Promise<{header: string; rows: string[][]}> {
-  const readStream = fs.createReadStream(filePath, {encoding: 'utf8'});
-  const rl = readline.createInterface({
-    input: readStream,
-    crlfDelay: Infinity,
-  });
-
-  let header = '';
-  const rows: string[][] = [];
-  let isFirst = true;
-
-  for await (const line of rl) {
-    if (isFirst) {
-      header = line;
-      isFirst = false;
-      continue;
-    }
-    if (line.trim()) {
-      rows.push(parseCSVLine(line));
-    }
-  }
-
-  return {header, rows};
-}
-
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        current += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ',') {
-        fields.push(current);
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-  }
-  fields.push(current);
-  return fields;
-}
-
 // --- Load templates ---
 function loadTemplates(): CategoryTemplates[] {
   const templates: CategoryTemplates[] = [];
@@ -542,17 +515,6 @@ function loadTemplates(): CategoryTemplates[] {
     );
   }
   return templates;
-}
-
-// --- ID generation ---
-function batchHex(batch: number): string {
-  return batch.toString(16).padStart(3, '0');
-}
-
-function syntheticID(originalID: string, batch: number): string {
-  // Truncate original to fit: max 14 chars total = originalID prefix + '_' + 3-hex
-  const prefix = originalID.slice(0, 10);
-  return `${prefix}_${batchHex(batch)}`;
 }
 
 // --- Main generation ---
@@ -690,65 +652,23 @@ async function main() {
   }
   await labelWriter.close();
 
-  // --- Load source CSVs ---
+  // --- Pre-compute distributions ---
   // oxlint-disable-next-line no-console
-  console.log('Loading source issue CSVs...');
-  const sourceIssueFiles = fs
-    .readdirSync(GIGABUGS_DIR)
-    .filter(f => f.startsWith('issue_') && f.endsWith('.csv'))
-    .sort();
-  const allSourceIssues: string[][] = [];
-  for (const file of sourceIssueFiles) {
-    const {rows} = await readCSVRows(path.join(GIGABUGS_DIR, file));
-    allSourceIssues.push(...rows);
-  }
-  // oxlint-disable-next-line no-console
-  console.log(`  Loaded ${allSourceIssues.length} source issue rows`);
+  console.log('\nPre-computing distributions...');
 
-  // oxlint-disable-next-line no-console
-  console.log('Loading source comment CSVs...');
-  const sourceCommentFiles = fs
-    .readdirSync(GIGABUGS_DIR)
-    .filter(f => f.startsWith('comment_') && f.endsWith('.csv'))
-    .sort();
-  const allSourceComments: string[][] = [];
-  for (const file of sourceCommentFiles) {
-    const {rows} = await readCSVRows(path.join(GIGABUGS_DIR, file));
-    allSourceComments.push(...rows);
-  }
-  // oxlint-disable-next-line no-console
-  console.log(`  Loaded ${allSourceComments.length} source comment rows`);
+  // Assign issues to projects using Pareto distribution (some projects get many more issues)
+  const issueProjects = assignWithPareto(NUM_ISSUES, allProjects.length, 2);
 
-  // oxlint-disable-next-line no-console
-  console.log('Loading source issueLabel CSV...');
-  const {rows: sourceIssueLabels} = await readCSVRows(
-    path.join(GIGABUGS_DIR, 'issueLabel_000.csv'),
-  );
-  // oxlint-disable-next-line no-console
-  console.log(`  Loaded ${sourceIssueLabels.length} source issueLabel rows`);
+  // Distribute comments across issues using Pareto distribution (some issues get many comments)
+  const totalComments = Math.floor(NUM_ISSUES * COMMENTS_PER_ISSUE);
+  const commentsPerIssue = distributeWithPareto(NUM_ISSUES, totalComments, 2);
 
-  // Source issue header: id,title,open,modified,created,creatorID,assigneeID,description,visibility,projectID
-  // Source comment header: id,issueID,created,body,creatorID
-  // Source issueLabel header: labelID,issueID,projectID
-
-  // Load source labels to build a position map
-  const {rows: sourceLabelsRows} = await readCSVRows(
-    path.join(GIGABUGS_DIR, 'label_000.csv'),
-  );
-  const sourceLabelIDs = sourceLabelsRows.map(r => r[0]); // ordered label IDs
-
-  // Build source labelID -> index map
-  const sourceLabelIndexMap = new Map<string, number>();
-  for (let i = 0; i < sourceLabelIDs.length; i++) {
-    sourceLabelIndexMap.set(sourceLabelIDs[i], i);
-  }
+  // Calculate total issueLabels (average LABELS_PER_ISSUE per issue)
+  const totalIssueLabels = Math.floor(NUM_ISSUES * LABELS_PER_ISSUE);
 
   // --- Generate issues ---
-  const totalIssues = allSourceIssues.length * MULTIPLICATION_FACTOR;
   // oxlint-disable-next-line no-console
-  console.log(
-    `\nGenerating ~${totalIssues.toLocaleString()} issues (${MULTIPLICATION_FACTOR} batches x ${allSourceIssues.length.toLocaleString()} source rows)...`,
-  );
+  console.log(`\nGenerating ${NUM_ISSUES.toLocaleString()} issues...`);
 
   const issueWriter = new ShardedCSVWriter(
     OUTPUT_DIR,
@@ -757,85 +677,68 @@ async function main() {
     SHARD_SIZE,
   );
 
-  // Track issue -> project mapping for comments and issueLabels
-  // We don't store all in memory; we use deterministic project assignment
   const TIME_BASE = 1577836800000; // 2020-01-01
-  const TIME_SPREAD = 3600000; // 1 hour between batches
+  const TIME_RANGE = 4 * 365 * 24 * 3600000; // 4 years spread
 
-  for (let batch = 0; batch < MULTIPLICATION_FACTOR; batch++) {
-    if (batch % 50 === 0) {
+  for (let i = 0; i < NUM_ISSUES; i++) {
+    if (i % 100000 === 0) {
       // oxlint-disable-next-line no-console
       console.log(
-        `  Issues batch ${batch}/${MULTIPLICATION_FACTOR} (${((batch / MULTIPLICATION_FACTOR) * 100).toFixed(1)}%)`,
+        `  Issues: ${i.toLocaleString()}/${NUM_ISSUES.toLocaleString()} (${((i / NUM_ISSUES) * 100).toFixed(1)}%)`,
       );
     }
 
-    for (let si = 0; si < allSourceIssues.length; si++) {
-      const sourceRow = allSourceIssues[si];
-      const originalID = sourceRow[0];
-      const newID = syntheticID(originalID, batch);
+    const issueID = `iss_${String(i).padStart(9, '0')}`;
+    const projectIdx = issueProjects[i];
+    const project = allProjects[projectIdx];
+    const cat = categories[project.categoryIndex];
 
-      // Deterministic project assignment
-      const projectIdx = (si + batch) % allProjects.length;
-      const project = allProjects[projectIdx];
-      const cat = categories[project.categoryIndex];
+    // Generate title from template
+    const titleTemplate = cat.titleTemplates[i % cat.titleTemplates.length];
+    let title = fillTemplate(titleTemplate, project.components);
+    if (title.length > 128) title = title.slice(0, 125) + '...';
 
-      // Generate title from template
-      const titleTemplate =
-        cat.titleTemplates[(si + batch) % cat.titleTemplates.length];
-      let title = fillTemplate(titleTemplate, project.components);
-      if (title.length > 128) title = title.slice(0, 125) + '...';
+    // Generate description from template
+    const descTemplate =
+      cat.descriptionTemplates[(i * 3) % cat.descriptionTemplates.length];
+    let description = fillTemplate(descTemplate, project.components);
+    if (description.length > 10240)
+      description = description.slice(0, 10237) + '...';
 
-      // Generate description from template
-      const descTemplate =
-        cat.descriptionTemplates[
-          (si + batch * 3) % cat.descriptionTemplates.length
-        ];
-      let description = fillTemplate(descTemplate, project.components);
-      if (description.length > 10240)
-        description = description.slice(0, 10237) + '...';
+    // Timestamps - spread across 4 years
+    const created = TIME_BASE + Math.floor(rng() * TIME_RANGE);
+    const modified = created + randomInt(0, 86400000 * 30); // up to 30 days later
 
-      // Timestamps
-      const created =
-        TIME_BASE + batch * TIME_SPREAD + randomInt(0, TIME_SPREAD);
-      const modified = created + randomInt(0, 86400000 * 30); // up to 30 days later
+    // Open status (70% open)
+    const open = rng() < 0.7;
 
-      // Open status - vary per batch (60-80% open)
-      const openRatio = 0.6 + (batch % 20) * 0.01;
-      const open = rng() < openRatio;
+    const creatorID = users[Math.floor(rng() * users.length)].id;
+    const assigneeID =
+      rng() < 0.7 ? users[Math.floor(rng() * users.length)].id : '';
 
-      const creatorID =
-        users[Math.abs(hashStr(originalID + batch)) % users.length].id;
-      const assigneeID =
-        rng() < 0.7
-          ? users[Math.abs(hashStr(originalID + batch + 'a')) % users.length].id
-          : '';
+    const visibility = rng() < 0.9 ? 'public' : 'internal';
 
-      const visibility = rng() < 0.9 ? 'public' : 'internal';
-
-      await issueWriter.writeRow(
-        [
-          newID,
-          escapeCSV(title),
-          String(open),
-          String(modified),
-          String(created),
-          creatorID,
-          assigneeID,
-          escapeCSV(description),
-          visibility,
-          project.id,
-        ].join(','),
-      );
-    }
+    await issueWriter.writeRow(
+      [
+        issueID,
+        escapeCSV(title),
+        String(open),
+        String(modified),
+        String(created),
+        creatorID,
+        assigneeID,
+        escapeCSV(description),
+        visibility,
+        project.id,
+      ].join(','),
+    );
   }
   await issueWriter.close();
 
   // --- Generate comments ---
-  const totalComments = allSourceComments.length * MULTIPLICATION_FACTOR;
   // oxlint-disable-next-line no-console
   console.log(
-    `\nGenerating ~${totalComments.toLocaleString()} comments (${MULTIPLICATION_FACTOR} batches x ${allSourceComments.length.toLocaleString()} source rows)...`,
+    `\nGenerating ${totalComments.toLocaleString()} comments (avg ${COMMENTS_PER_ISSUE} per issue)...`,
   );
 
   const commentWriter = new ShardedCSVWriter(
@@ -845,69 +748,52 @@ async function main() {
     SHARD_SIZE,
   );
 
-  // Build source issueID -> index map for project lookup
-  const sourceIssueIDMap = new Map<string, number>();
-  for (let i = 0; i < allSourceIssues.length; i++) {
-    sourceIssueIDMap.set(allSourceIssues[i][0], i);
-  }
-
-  for (let batch = 0; batch < MULTIPLICATION_FACTOR; batch++) {
-    if (batch % 50 === 0) {
+  let commentIdx = 0;
+  for (let issueIdx = 0; issueIdx < NUM_ISSUES; issueIdx++) {
+    if (issueIdx % 100000 === 0) {
       // oxlint-disable-next-line no-console
       console.log(
-        `  Comments batch ${batch}/${MULTIPLICATION_FACTOR} (${((batch / MULTIPLICATION_FACTOR) * 100).toFixed(1)}%)`,
+        `  Comments: processing issue ${issueIdx.toLocaleString()}/${NUM_ISSUES.toLocaleString()} (${((issueIdx / NUM_ISSUES) * 100).toFixed(1)}%)`,
       );
     }
 
-    for (let ci = 0; ci < allSourceComments.length; ci++) {
-      const sourceRow = allSourceComments[ci];
-      const originalCommentID = sourceRow[0];
-      const originalIssueID = sourceRow[1];
+    const issueID = `iss_${String(issueIdx).padStart(9, '0')}`;
+    const projectIdx = issueProjects[issueIdx];
+    const project = allProjects[projectIdx];
+    const cat = categories[project.categoryIndex];
 
-      const newCommentID = syntheticID(originalCommentID, batch);
-      const newIssueID = syntheticID(originalIssueID, batch);
+    const numComments = commentsPerIssue[issueIdx];
 
-      // Find project for this comment's issue
-      const sourceIssueIdx = sourceIssueIDMap.get(originalIssueID);
-      let projectIdx = 0;
-      if (sourceIssueIdx !== undefined) {
-        projectIdx = (sourceIssueIdx + batch) % allProjects.length;
-      }
-      const project = allProjects[projectIdx];
-      const cat = categories[project.categoryIndex];
+    // Issue created timestamp (same formula as above for consistency)
+    const issueCreated = TIME_BASE + Math.floor(rng() * TIME_RANGE);
+
+    for (let c = 0; c < numComments; c++) {
+      const commentID = `cmt_${String(commentIdx++).padStart(9, '0')}`;
 
       // Generate body from template
       const bodyTemplate =
-        cat.commentTemplates[(ci + batch * 7) % cat.commentTemplates.length];
+        cat.commentTemplates[(commentIdx * 7) % cat.commentTemplates.length];
       let body = fillTemplate(bodyTemplate, project.components);
       if (body.length > 65536) body = body.slice(0, 65533) + '...';
 
-      const creatorID =
-        users[Math.abs(hashStr(originalCommentID + batch)) % users.length].id;
+      const creatorID = users[Math.floor(rng() * users.length)].id;
 
-      // Comment created after issue created
-      const issueCreated =
-        TIME_BASE + batch * TIME_SPREAD + randomInt(0, TIME_SPREAD);
-      const created = issueCreated + randomInt(3600000, 86400000 * 7); // 1hr to 7 days after issue
+      // Comment created 1 hour to 30 days after issue
+      const created = issueCreated + randomInt(3600000, 86400000 * 30);
 
       await commentWriter.writeRow(
-        [
-          newCommentID,
-          newIssueID,
-          String(created),
-          escapeCSV(body),
-          creatorID,
-        ].join(','),
+        [commentID, issueID, String(created), escapeCSV(body), creatorID].join(
+          ',',
+        ),
       );
     }
   }
   await commentWriter.close();
 
   // --- Generate issueLabels ---
-  const totalIssueLabels = sourceIssueLabels.length * MULTIPLICATION_FACTOR;
   // oxlint-disable-next-line no-console
   console.log(
-    `\nGenerating ~${totalIssueLabels.toLocaleString()} issueLabels (${MULTIPLICATION_FACTOR} batches x ${sourceIssueLabels.length.toLocaleString()} source rows)...`,
+    `\nGenerating ~${totalIssueLabels.toLocaleString()} issueLabels (avg ${LABELS_PER_ISSUE} per issue)...`,
   );
 
   const issueLabelWriter = new ShardedCSVWriter(
@@ -917,37 +803,41 @@ async function main() {
     SHARD_SIZE,
   );
 
-  for (let batch = 0; batch < MULTIPLICATION_FACTOR; batch++) {
-    if (batch % 50 === 0) {
+  let issueLabelCount = 0;
+  for (let issueIdx = 0; issueIdx < NUM_ISSUES; issueIdx++) {
+    if (issueIdx % 100000 === 0) {
       // oxlint-disable-next-line no-console
       console.log(
-        `  IssueLabels batch ${batch}/${MULTIPLICATION_FACTOR} (${((batch / MULTIPLICATION_FACTOR) * 100).toFixed(1)}%)`,
+        `  IssueLabels: processing issue ${issueIdx.toLocaleString()}/${NUM_ISSUES.toLocaleString()} (${((issueIdx / NUM_ISSUES) * 100).toFixed(1)}%)`,
       );
     }
 
-    for (let li = 0; li < sourceIssueLabels.length; li++) {
-      const sourceRow = sourceIssueLabels[li];
-      const sourceLabelID = sourceRow[0];
-      const sourceIssueID = sourceRow[1];
+    const issueID = `iss_${String(issueIdx).padStart(9, '0')}`;
+    const projectIdx = issueProjects[issueIdx];
+    const project = allProjects[projectIdx];
 
-      const newIssueID = syntheticID(sourceIssueID, batch);
+    // Uniform distribution: 1-3 labels per issue (or fewer if project has fewer labels)
+    const maxLabels = Math.min(3, project.labelIDs.length);
+    const numLabels = 1 + Math.floor(rng() * maxLabels);
 
-      // Find project for this issue
-      const sourceIssueIdx = sourceIssueIDMap.get(sourceIssueID);
-      let projectIdx = 0;
-      if (sourceIssueIdx !== undefined) {
-        projectIdx = (sourceIssueIdx + batch) % allProjects.length;
+    const usedLabelIndices = new Set<number>();
+    for (let l = 0; l < numLabels && l < project.labelIDs.length; l++) {
+      // Pick a random label, avoiding duplicates
+      let labelIdx: number;
+      let attempts = 0;
+      do {
+        labelIdx = Math.floor(rng() * project.labelIDs.length);
+        attempts++;
+      } while (usedLabelIndices.has(labelIdx) && attempts < 10);
+
+      if (!usedLabelIndices.has(labelIdx)) {
+        usedLabelIndices.add(labelIdx);
+        const labelID = project.labelIDs[labelIdx];
+        await issueLabelWriter.writeRow(
+          [labelID, issueID, project.id].join(','),
+        );
+        issueLabelCount++;
       }
-      const project = allProjects[projectIdx];
-
-      // Map source label position to this project's label set
-      const sourceLabelIdx = sourceLabelIndexMap.get(sourceLabelID) ?? 0;
-      const newLabelIdx = sourceLabelIdx % project.labelIDs.length;
-      const newLabelID = project.labelIDs[newLabelIdx];
-
-      await issueLabelWriter.writeRow(
-        [newLabelID, newIssueID, project.id].join(','),
-      );
     }
   }
   await issueLabelWriter.close();
@@ -964,25 +854,15 @@ async function main() {
   // oxlint-disable-next-line no-console
   console.log(`Labels: ${allLabels.length}`);
   // oxlint-disable-next-line no-console
-  console.log(`Issues: ~${totalIssues.toLocaleString()}`);
+  console.log(`Issues: ${NUM_ISSUES.toLocaleString()}`);
   // oxlint-disable-next-line no-console
-  console.log(`Comments: ~${totalComments.toLocaleString()}`);
+  console.log(`Comments: ${commentIdx.toLocaleString()}`);
   // oxlint-disable-next-line no-console
-  console.log(`IssueLabels: ~${totalIssueLabels.toLocaleString()}`);
+  console.log(`IssueLabels: ${issueLabelCount.toLocaleString()}`);
   // oxlint-disable-next-line no-console
   console.log(
-    `Total: ~${(users.length + allProjects.length + allLabels.length + totalIssues + totalComments + totalIssueLabels).toLocaleString()} rows`,
+    `Total: ${(users.length + allProjects.length + allLabels.length + NUM_ISSUES + commentIdx + issueLabelCount).toLocaleString()} rows`,
   );
-}
-
-// Simple string hash for deterministic selection
-function hashStr(s: string): number {
-  let hash = 0;
-  for (let i = 0; i < s.length; i++) {
-    const char = s.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  return hash;
 }
 
 main().catch(err => {

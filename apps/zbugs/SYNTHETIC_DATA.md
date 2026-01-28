@@ -1,15 +1,10 @@
 # Synthetic Data Generation Guide
 
-End-to-end process for generating ~1B rows of synthetic data and loading it into PostgreSQL for zbugs load testing.
+End-to-end process for generating large-scale synthetic data and loading it into PostgreSQL for zbugs load testing.
 
 ## Prerequisites
 
-1. **Gigabugs source data** — the generator reads source CSVs from `db/seed-data/gigabugs/` and multiplies them. Download them first:
-
-   ```bash
-   cd db/seed-data/gigabugs
-   bash getData.sh
-   ```
+1. **Templates** — LLM-generated templates must exist in `db/seed-data/templates/`. If not present, run Step 1 first.
 
 2. **Anthropic API key** — required for template generation (Step 1 only). Set `ANTHROPIC_API_KEY` in your environment.
 
@@ -34,7 +29,7 @@ This step calls the Claude API in batches of 3 categories. Each category generat
 
 ## Step 2: Generate CSV Data
 
-Reads templates + gigabugs source CSVs and produces sharded CSV files with synthetic data.
+Self-contained generator that produces sharded CSV files based on configuration parameters and templates.
 
 ```bash
 npm run generate-synthetic
@@ -46,22 +41,41 @@ Tables generated: `user`, `project`, `label`, `issue`, `comment`, `issueLabel`.
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
+| `NUM_ISSUES` | `1000000` | Total issues to generate |
 | `NUM_PROJECTS` | `100` | Total projects |
 | `NUM_USERS` | `100` | Total users |
-| `MULTIPLICATION_FACTOR` | `345` | Batch count — each source row is replicated this many times. Default yields ~83M issues. |
+| `COMMENTS_PER_ISSUE` | `3.0` | Average comments per issue |
+| `LABELS_PER_ISSUE` | `1.5` | Average labels per issue |
 | `SHARD_SIZE` | `500000` | Rows per CSV shard file |
 | `OUTPUT_DIR` | `db/seed-data/synthetic/` | Output directory |
 | `SEED` | `42` | RNG seed for reproducible output |
 
-### Scaling estimates
+### Distribution Strategy
 
-With the default `MULTIPLICATION_FACTOR=345` and the standard gigabugs source data:
+The generator uses realistic distributions for data:
 
-- Issues: `source_issues * 345` (~83M with ~240K source issues)
-- Comments: `source_comments * 345` (~comparable scale)
-- IssueLabels: `source_labels * 345`
+- **Issues across projects**: Pareto/power-law distribution — some projects get many more issues than others
+- **Comments across issues**: Pareto distribution — most issues have few comments, some have many
+- **Labels per issue**: Uniform distribution — 1-3 labels per issue
 
-To reach ~1B total rows, increase `MULTIPLICATION_FACTOR` accordingly based on your source data size.
+### Scaling Examples
+
+```bash
+# Small test dataset (~10K issues)
+NUM_ISSUES=10000 npm run generate-synthetic
+
+# Medium dataset (~1M issues, default)
+npm run generate-synthetic
+
+# Large dataset (~100M issues)
+NUM_ISSUES=100000000 COMMENTS_PER_ISSUE=2.0 npm run generate-synthetic
+```
+
+With default settings (`NUM_ISSUES=1000000`, `COMMENTS_PER_ISSUE=3.0`, `LABELS_PER_ISSUE=1.5`):
+- Issues: 1,000,000
+- Comments: ~3,000,000
+- IssueLabels: ~1,500,000
+- Total rows: ~4.5M
 
 ## Step 3: Start PostgreSQL
 
@@ -131,12 +145,31 @@ FROM "comment" c
 LEFT JOIN "issue" i ON c."issueID" = i."id"
 WHERE i."id" IS NULL;
 
--- Distribution across projects
+-- Distribution across projects (should show Pareto-like distribution)
 SELECT "projectID", COUNT(*) AS issue_count
 FROM "issue"
 GROUP BY "projectID"
 ORDER BY issue_count DESC
 LIMIT 10;
+
+-- Comments per issue distribution
+SELECT
+  CASE
+    WHEN comment_count = 0 THEN '0'
+    WHEN comment_count BETWEEN 1 AND 2 THEN '1-2'
+    WHEN comment_count BETWEEN 3 AND 5 THEN '3-5'
+    WHEN comment_count BETWEEN 6 AND 10 THEN '6-10'
+    ELSE '10+'
+  END AS bucket,
+  COUNT(*) AS issue_count
+FROM (
+  SELECT i.id, COUNT(c.id) AS comment_count
+  FROM "issue" i
+  LEFT JOIN "comment" c ON c."issueID" = i.id
+  GROUP BY i.id
+) sub
+GROUP BY bucket
+ORDER BY bucket;
 ```
 
 ## Alternative: Download Pre-generated Data
