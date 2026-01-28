@@ -456,7 +456,6 @@ class PushWorker {
         'push',
         this.#lc,
         url,
-        url === this.#userPushURL,
         this.#pushURLPatterns,
         {
           appID: this.#config.app.id,
@@ -492,8 +491,7 @@ class PushWorker {
     downstream: Subscription<Downstream>,
     errorBody: PushFailedBody,
   ): void {
-    const logLevel = errorBody.origin === ErrorOrigin.Server ? 'warn' : 'error';
-    downstream.fail(new ProtocolErrorWithLevel(errorBody, logLevel));
+    downstream.fail(new ProtocolErrorWithLevel(errorBody, 'warn'));
   }
 }
 

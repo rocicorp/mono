@@ -372,11 +372,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // ServiceRunner.
         this.#lc.debug?.('state changes are inactive');
         clearTimeout(this.#expiredQueriesTimer);
-        throw new ProtocolErrorWithLevel({
-          kind: ErrorKind.Rehome,
-          message: 'Reconnect required',
-          origin: ErrorOrigin.ZeroCache,
-        });
+        throw new ProtocolErrorWithLevel(
+          {
+            kind: ErrorKind.Rehome,
+            message: 'Reconnect required',
+            origin: ErrorOrigin.ZeroCache,
+          },
+          'info',
+        );
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
@@ -707,12 +710,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         initConnectionMessage,
         async (lc, clientID, msg: InitConnectionBody, cvr) => {
           if (cvr.clientSchema === null && !msg.clientSchema) {
-            throw new ProtocolErrorWithLevel({
-              kind: ErrorKind.InvalidConnectionRequest,
-              message:
-                'The initConnection message for a new client group must include client schema.',
-              origin: ErrorOrigin.ZeroCache,
-            });
+            throw new ProtocolErrorWithLevel(
+              {
+                kind: ErrorKind.InvalidConnectionRequest,
+                message:
+                  'The initConnection message for a new client group must include client schema.',
+                origin: ErrorOrigin.ZeroCache,
+              },
+              'warn',
+            );
           }
           await this.#handleConfigUpdate(
             lc,
@@ -1139,8 +1145,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
     const customQueryTransformer = this.#customQueryTransformer;
     if (customQueryTransformer && customQueries.size > 0) {
-      // Always transform custom queries, even during initialization,
-      // to ensure authorization validation with current auth context.
+      // Always transform custom queries during initialization to ensure
+      // authorization validation with current auth context.
       const transformedCustomQueries = await this.#runPriorityOp(
         lc,
         '#hydrateUnchangedQueries transforming custom queries',
@@ -1400,27 +1406,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 this.userQueryURL,
               ),
           );
-          this.#queryTransformations.add(1, {result: 'success'});
+
+          // Check if transform failed entirely (HTTP error or server-side failure).
+          // This should disconnect the client and keep existing pipelines intact.
+          if (
+            !Array.isArray(transformedCustomQueries) &&
+            transformedCustomQueries.kind === ErrorKind.TransformFailed
+          ) {
+            // TransformFailedBody indicates an HTTP or infrastructure error.
+            // Throw to disconnect the client without modifying pipelines.
+            throw new ProtocolErrorWithLevel(transformedCustomQueries, 'warn');
+          } else {
+            this.#queryTransformations.add(1, {result: 'success'});
+          }
         } catch (e) {
           this.#queryTransformations.add(1, {result: 'error'});
           throw e;
         } finally {
           const transformDuration = (performance.now() - transformStart) / 1000;
           this.#queryTransformationTime.record(transformDuration);
-        }
-
-        // Check if transform failed entirely (HTTP error or server-side failure).
-        // This should disconnect the client and keep existing pipelines intact.
-        if (
-          !Array.isArray(transformedCustomQueries) &&
-          transformedCustomQueries.kind === ErrorKind.TransformFailed
-        ) {
-          // TransformFailedBody indicates an HTTP or infrastructure error.
-          // Throw to disconnect the client without modifying pipelines.
-          throw new ProtocolErrorWithLevel(
-            transformedCustomQueries,
-            getLogLevel(transformedCustomQueries.kind),
-          );
         }
 
         // Process the transformed queries and track which ones succeeded.
