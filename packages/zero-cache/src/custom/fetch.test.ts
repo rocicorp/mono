@@ -60,7 +60,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      false,
       allowedPatterns,
       shard,
       {
@@ -98,7 +97,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       urlWithQuery,
-      true,
       allowedPatterns,
       shard,
       {},
@@ -122,7 +120,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {},
@@ -143,7 +140,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {
@@ -173,7 +169,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {
@@ -202,7 +197,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         'https://evil.example.com/endpoint',
-        true,
         allowedPatterns,
         shard,
         {},
@@ -221,7 +215,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         'https://evil.example.com/endpoint',
-        true,
         allowedPatterns,
         shard,
         {},
@@ -243,7 +236,6 @@ describe('fetchFromAPIServer', () => {
           'push',
           lc,
           url,
-          false,
           allowedPatterns,
           shard,
           {},
@@ -267,7 +259,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -309,7 +300,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -345,7 +335,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -378,7 +367,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -415,7 +403,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -450,7 +437,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -482,7 +468,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -514,7 +499,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -542,19 +526,19 @@ describe('getBodyPreview', () => {
 
   test('returns entire body when below truncation threshold', async () => {
     const res = new Response('short-body', {status: 200});
-    expect(await getBodyPreview(res, lc, 'warn')).toBe('short-body');
+    expect(await getBodyPreview(res, lc)).toBe('short-body');
   });
 
   test('truncates body to 512 characters and appends ellipsis', async () => {
     const longBody = 'a'.repeat(600);
     const res = new Response(longBody, {status: 200});
-    const preview = await getBodyPreview(res, lc, 'warn');
+    const preview = await getBodyPreview(res, lc);
     expect(preview).toHaveLength(515);
     expect(preview?.endsWith('...')).toBe(true);
     expect(preview?.startsWith('a'.repeat(512))).toBe(true);
   });
 
-  test('logs error and returns undefined when preview extraction fails', async () => {
+  test('logs warning and returns undefined when preview extraction fails', async () => {
     const sink = new TestLogSink();
     const logContext = new LogContext('debug', undefined, sink);
     const failingResponse = {
@@ -564,12 +548,10 @@ describe('getBodyPreview', () => {
       }),
     } as unknown as Response;
 
-    expect(
-      await getBodyPreview(failingResponse, logContext, 'error'),
-    ).toBeUndefined();
+    expect(await getBodyPreview(failingResponse, logContext)).toBeUndefined();
     expect(sink.messages).toHaveLength(1);
     const [level, _ctx, args] = sink.messages[0]!;
-    expect(level).toBe('error');
+    expect(level).toBe('warn');
     expect(args[0]).toBe('failed to get body preview');
   });
 });

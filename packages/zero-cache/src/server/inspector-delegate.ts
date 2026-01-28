@@ -3,7 +3,6 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {mapValues} from '../../../shared/src/objects.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import type {ServerMetrics as ServerMetricsJSON} from '../../../zero-protocol/src/inspect-down.ts';
 import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {
@@ -15,6 +14,7 @@ import {isDevelopmentMode} from '../config/normalize.ts';
 import type {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import type {HeaderOptions} from '../custom/fetch.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
+import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 
 /**
  * Server-side metrics collected for queries during materialization and update.
@@ -157,7 +157,7 @@ export class InspectorDelegate implements MetricsDelegate {
     );
 
     if ('kind' in results) {
-      throw new ProtocolError(results);
+      throw new ProtocolErrorWithLevel(results, 'warn');
     }
 
     const result = results[0];
