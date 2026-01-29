@@ -52,3 +52,21 @@
 .commentActions button:enabled:hover {
   opacity: 1;
 }
+
+/* Light mode overrides */
+[data-theme='light'] .commentItem {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .commentAuthor {
+  color: var(--color-text-primary);
+}
+
+[data-theme='light'] .commentTimestamp {
+  color: var(--color-text-dimmed-label);
+}
+
+[data-theme='light'] .commentActions button {
+  color: var(--color-text-primary);
+  border-color: var(--color-button-outline);
+}
