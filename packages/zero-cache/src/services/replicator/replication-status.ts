@@ -55,14 +55,7 @@ export class ReplicationStatusPublisher {
     e: unknown,
   ): Promise<never> {
     this.stop();
-    const event = replicationStatusEvent(
-      lc,
-      this.#db,
-      stage,
-      'ERROR',
-      String(e),
-    );
-    event.errorDetails = makeErrorDetails(e);
+    const event = replicationStatusError(lc, stage, 'ERROR', this.#db);
     await publishCriticalEvent(lc, event);
     throw e;
   }
@@ -96,15 +89,18 @@ export function replicationStatusError(
   lc: LogContext,
   stage: ReplicationStage,
   e: unknown,
+  db?: Database,
   now = new Date(),
 ) {
-  return replicationStatusEvent(lc, null, stage, 'ERROR', String(e), now);
+  const event = replicationStatusEvent(lc, db, stage, 'ERROR', String(e), now);
+  event.errorDetails = makeErrorDetails(e);
+  return event;
 }
 
 // Exported for testing.
 export function replicationStatusEvent(
   lc: LogContext,
-  db: Database | null,
+  db: Database | undefined,
   stage: ReplicationStage,
   status: Status,
   description?: string,
