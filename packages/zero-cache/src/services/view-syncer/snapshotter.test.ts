@@ -4,7 +4,6 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../db/specs.ts';
 import {DbFile, expectTables} from '../../test/lite.ts';
-import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   fakeReplicator,
@@ -51,7 +50,6 @@ describe('view-syncer/snapshotter', () => {
       `,
     );
     initReplicationState(db, ['zero_data'], '01');
-    initChangeLog(db);
 
     tableSpecs = computeZqlSpecs(lc, db);
 

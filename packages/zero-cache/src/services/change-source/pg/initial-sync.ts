@@ -7,6 +7,7 @@ import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
+import {must} from '../../../../../shared/src/must.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,
@@ -38,7 +39,7 @@ import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
-import {initChangeLog} from '../../replicator/schema/change-log.ts';
+import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {toLexiVersion} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
@@ -130,7 +131,6 @@ export async function initialSync(
     const initialVersion = toLexiVersion(lsn);
 
     initReplicationState(tx, publications, initialVersion);
-    initChangeLog(tx);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
@@ -354,8 +354,15 @@ function createLiteTables(
   tables: PublishedTableSpec[],
   initialVersion: string,
 ) {
+  // TODO: Figure out how to reuse the ChangeProcessor here to avoid
+  //       duplicating the ColumnMetadata logic.
+  const columnMetadata = must(ColumnMetadataStore.getInstance(tx));
   for (const t of tables) {
     tx.exec(createLiteTableStatement(mapPostgresToLite(t, initialVersion)));
+    const tableName = liteTableName(t);
+    for (const [colName, colSpec] of Object.entries(t.columns)) {
+      columnMetadata.insert(tableName, colName, colSpec);
+    }
   }
 }
 

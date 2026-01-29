@@ -4,6 +4,8 @@ import {
   escapeLike,
   type DefaultSchema,
   type Query,
+  type QueryResultType,
+  type Schema,
 } from '@rocicorp/zero';
 import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
@@ -11,13 +13,12 @@ import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
 import {builder, ZERO_PROJECT_NAME} from './schema.ts';
 
-function applyIssuePermissions<
-  // TReturn must be any or the `.one()` case does not match
-  // oxlint-disable-next-line no-explicit-any
-  TQuery extends Query<'issue', DefaultSchema, any>,
->(q: TQuery, role: Role | undefined): TQuery {
+function applyIssuePermissions<TQuery extends IssueQuery>(
+  q: TQuery,
+  role: Role | undefined,
+): TQuery {
   return q.where(({or, cmp, cmpLit}) =>
-    or(cmp('visibility', '=', 'public'), cmpLit(role ?? null, '=', 'crew')),
+    or(cmp('visibility', '=', 'public'), cmpLit(role, '=', 'crew')),
   ) as TQuery;
 }
 
@@ -36,13 +37,15 @@ const listContextParams = z.object({
 });
 export type ListContextParams = z.infer<typeof listContextParams>;
 
-const issueRowSort = z.object({
-  id: z.string(),
-  created: z.number(),
-  modified: z.number(),
-});
+export const issueRowSortSchema = z.readonly(
+  z.object({
+    id: z.string(),
+    created: z.number(),
+    modified: z.number(),
+  }),
+);
 
-type IssueRowSort = z.infer<typeof issueRowSort>;
+export type IssueRowSort = z.infer<typeof issueRowSortSchema>;
 
 function labelsOrderByName({
   args: {projectName, orderBy},
@@ -123,10 +126,7 @@ export const queries = defineQueries({
   ),
 
   userPref: defineQuery(keyValidator, ({ctx: auth, args: key}) =>
-    builder.userPref
-      .where('key', key)
-      .where('userID', auth?.sub ?? '')
-      .one(),
+    builder.userPref.where('key', key).where('userID', auth?.sub).one(),
   ),
   usersForProject: defineQuery(
     z.object({
@@ -208,17 +208,33 @@ export const queries = defineQueries({
       listContext: listContextParams,
       userID: z.string(),
       limit: z.nullable(z.number()),
-      start: z.nullable(issueRowSort),
+      start: z.nullable(issueRowSortSchema),
       dir: z.union([z.literal('forward'), z.literal('backward')]),
+      inclusive: z.optional(z.boolean()),
     }),
 
-    ({ctx: auth, args: {listContext, userID, limit, start, dir}}) =>
-      issueListV2(listContext, limit, userID, auth, start, dir),
+    ({ctx: auth, args: {listContext, userID, limit, start, dir, inclusive}}) =>
+      issueListV2(listContext, limit, userID, auth, start, dir, inclusive),
+  ),
+
+  /**
+   * This is used to get a single issue so that we can get the order for start at.
+   */
+  listIssueByID: defineQuery(
+    z.object({
+      listContext: listContextParams,
+      idField: z.union([z.literal('shortID'), z.literal('id')]),
+      idValue: z.union([z.string(), z.number()]),
+    }),
+    ({ctx: auth, args: {listContext, idField, idValue}}) =>
+      buildListQuery({role: auth?.role, listContext})
+        .where(idField, idValue)
+        .one(),
   ),
 
   emojiChange: defineQuery(idValidator, ({args: subjectID}) =>
     builder.emoji
-      .where('subjectID', subjectID ?? '')
+      .where('subjectID', subjectID)
       .related('creator', creator => creator.one()),
   ),
 
@@ -249,7 +265,7 @@ export const queries = defineQueries({
   prevNext: defineQuery(
     z.object({
       listContext: z.nullable(listContextParams),
-      issue: z.nullable(issueRowSort),
+      issue: z.nullable(issueRowSortSchema),
       dir: z.union([z.literal('next'), z.literal('prev')]),
     }),
     ({ctx: auth, args: {listContext, issue, dir}}) =>
@@ -268,7 +284,7 @@ export const queries = defineQueries({
       limit: z.number(),
     }),
     ({ctx: auth, args: {listContext, userID, limit}}) =>
-      issueListV2(listContext, limit, userID, auth, null, 'forward'),
+      issueListV2(listContext, limit, userID, auth, null, 'forward', false),
   ),
 
   userPicker: defineQuery(
@@ -314,6 +330,7 @@ function issueListV2(
   auth: AuthData | undefined,
   start: IssueRowSort | null,
   dir: 'forward' | 'backward',
+  inclusive: boolean | undefined,
 ) {
   return buildListQuery({
     listContext,
@@ -322,6 +339,7 @@ function issueListV2(
     role: auth?.role,
     start: start ?? undefined,
     dir,
+    inclusive,
   });
 }
 
@@ -334,7 +352,20 @@ export type ListQueryArgs = {
   limit?: number | undefined;
   start?: IssueRowSort | undefined;
   dir?: 'forward' | 'backward' | undefined;
+  inclusive?: boolean | undefined;
 };
+
+// TReturn must be any or the `.one()` case does not match
+// oxlint-disable-next-line no-explicit-any
+type IssueQuery = Query<'issue', DefaultSchema, any>;
+
+function alwaysFalse<
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
+  TReturn,
+>(q: Query<TTable, TSchema, TReturn>): Query<TTable, TSchema, TReturn> {
+  return q.where(({or}) => or());
+}
 
 export function buildListQuery(args: ListQueryArgs) {
   const {
@@ -344,20 +375,19 @@ export function buildListQuery(args: ListQueryArgs) {
     role,
     dir = 'forward',
     start,
+    inclusive = false,
   } = args;
 
   let q = issueQuery
     .related('viewState', q =>
-      (args.userID
-        ? q.where('userID', args.userID)
-        : q.where(({or}) => or())
-      ).one(),
+      (args.userID ? q.where('userID', args.userID) : alwaysFalse(q)).one(),
     )
     .related('labels');
 
   if (!listContext) {
-    return q.where(({or}) => or());
+    return alwaysFalse(q);
   }
+
   const {projectName = ZERO_PROJECT_NAME} = listContext;
 
   q = q.whereExists('project', q =>
@@ -374,7 +404,7 @@ export function buildListQuery(args: ListQueryArgs) {
   q = q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
 
   if (start) {
-    q = q.start(start);
+    q = q.start(start, {inclusive});
   }
   if (limit) {
     q = q.limit(limit);
@@ -406,3 +436,7 @@ export function buildListQuery(args: ListQueryArgs) {
 
   return applyIssuePermissions(q, role);
 }
+
+export type Issues = QueryResultType<typeof queries.issueListV2>;
+
+export type Issue = Issues[number];

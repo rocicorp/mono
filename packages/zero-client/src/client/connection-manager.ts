@@ -66,6 +66,7 @@ type TerminalConnectionManagerState = Extract<
 
 export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   #state: ConnectionManagerState;
+  #connectRequestResolver: Resolver<void> | undefined = resolver();
 
   /**
    * The timestamp when we first started trying to connect.
@@ -161,11 +162,52 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
     return this.#nextStatePromise();
   }
 
+  requestConnect(): void {
+    if (this.#connectRequestResolver === undefined) {
+      return;
+    }
+    this.#connectRequestResolver.resolve();
+    this.#connectRequestResolver = undefined;
+  }
+
+  waitForConnectRequest(): Promise<void> {
+    return this.#connectRequestResolver === undefined
+      ? Promise.resolve()
+      : this.#connectRequestResolver.promise;
+  }
+
+  #consumeConnectRequest(): boolean {
+    if (this.#connectRequestResolver !== undefined) {
+      return false;
+    }
+    this.#connectRequestResolver = resolver();
+    return true;
+  }
+
+  /**
+   * Consume a pending connect request and resume connecting.
+   *
+   * @returns true if a pending request was handled.
+   */
+  resumeFromConnectRequest(): boolean {
+    if (!this.isInTerminalState()) {
+      return false;
+    }
+    if (!this.#consumeConnectRequest()) {
+      return false;
+    }
+    this.connecting();
+    return true;
+  }
+
   /**
    * Transition to connecting state.
    *
    * This starts the timeout timer, but if we've entered disconnected state,
    * we stay there and continue retrying.
+   *
+   * If we're disconnected due to a hidden tab, allow a transition back to
+   * connecting when visibility returns.
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
@@ -177,14 +219,25 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
       return {nextStatePromise: this.#nextStatePromise()};
     }
 
+    const isHiddenDisconnect =
+      this.#state.name === ConnectionStatus.Disconnected &&
+      this.#state.reason.kind === ClientErrorKind.Hidden;
+
     // we cannot intentionally transition from disconnected to connecting
-    // disconnected can transition to connected on successful connection
-    // or a terminal state
-    if (this.#state.name === ConnectionStatus.Disconnected) {
+    // unless the disconnection was due to a hidden tab
+    if (
+      this.#state.name === ConnectionStatus.Disconnected &&
+      !isHiddenDisconnect
+    ) {
       return {nextStatePromise: this.#nextStatePromise()};
     }
 
     const now = Date.now();
+
+    if (isHiddenDisconnect) {
+      // Reset the retry window after a hidden-tab disconnect.
+      this.#connectingStartedAt = undefined;
+    }
 
     // If we're already connecting, increment the attempt counter
     if (this.#state.name === ConnectionStatus.Connecting) {
@@ -455,7 +508,8 @@ export const throwIfConnectionError = (state: ConnectionManagerState) => {
       isClientError(state.reason) &&
       (state.reason.kind === ClientErrorKind.ConnectTimeout ||
         state.reason.kind === ClientErrorKind.AbruptClose ||
-        state.reason.kind === ClientErrorKind.CleanClose)
+        state.reason.kind === ClientErrorKind.CleanClose ||
+        state.reason.kind === ClientErrorKind.Hidden)
     ) {
       return;
     }

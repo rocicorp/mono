@@ -5,6 +5,8 @@ import {
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {areEqual} from '../../../../../shared/src/arrays.ts';
+import {unreachable} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
@@ -18,11 +20,7 @@ import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
-import type {
-  ColumnSpec,
-  PublishedTableSpec,
-  TableSpec,
-} from '../../../db/specs.ts';
+import type {ColumnSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {
   oneAfter,
@@ -52,6 +50,7 @@ import type {
   DataChange,
   Identifier,
   MessageRelation,
+  TableMetadata,
 } from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
@@ -68,7 +67,11 @@ import {subscribe} from './logical-replication/stream.ts';
 import {fromBigInt, toLexiVersion, type LSN} from './lsn.ts';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
-import {getPublicationInfo, type PublishedSchema} from './schema/published.ts';
+import {
+  getPublicationInfo,
+  type PublishedSchema,
+  type PublishedTableWithReplicaIdentity,
+} from './schema/published.ts';
 import {
   dropShard,
   getInternalShardConfig,
@@ -532,7 +535,7 @@ class ChangeMaker {
             'data',
             {
               ...msg,
-              relation: withoutColumns(msg.relation),
+              relation: makeRelation(msg.relation),
               // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-DELETE
               key: must(msg.old ?? msg.key),
             },
@@ -546,7 +549,7 @@ class ChangeMaker {
             'data',
             {
               ...msg,
-              relation: withoutColumns(msg.relation),
+              relation: makeRelation(msg.relation),
               // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-UPDATE
               key: msg.old ?? msg.key,
             },
@@ -555,11 +558,9 @@ class ChangeMaker {
       }
 
       case 'insert':
-        return [['data', {...msg, relation: withoutColumns(msg.relation)}]];
+        return [['data', {...msg, relation: makeRelation(msg.relation)}]];
       case 'truncate':
-        return [
-          ['data', {...msg, relations: msg.relations.map(withoutColumns)}],
-        ];
+        return [['data', {...msg, relations: msg.relations.map(makeRelation)}]];
 
       case 'message':
         if (msg.prefix !== this.#shardPrefix) {
@@ -664,7 +665,7 @@ class ChangeMaker {
 
       // Validate the new table schemas
       for (const table of nextTbl.values()) {
-        validate(this.#lc, table, update.schema.indexes);
+        validate(this.#lc, table);
       }
 
       const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
@@ -692,7 +693,11 @@ class ChangeMaker {
       // CREATE
       for (const id of createdTbl) {
         const spec = must(nextTbl.get(id));
-        changes.push({tag: 'create-table', spec});
+        changes.push({
+          tag: 'create-table',
+          spec,
+          metadata: getMetadata(spec),
+        });
       }
 
       // Add indexes last since they may reference tables / columns that need
@@ -707,7 +712,10 @@ class ChangeMaker {
     }
   }
 
-  #getTableChanges(oldTable: TableSpec, newTable: TableSpec): DataChange[] {
+  #getTableChanges(
+    oldTable: PublishedTableWithReplicaIdentity,
+    newTable: PublishedTableWithReplicaIdentity,
+  ): DataChange[] {
     const changes: DataChange[] = [];
     if (
       oldTable.schema !== newTable.schema ||
@@ -717,6 +725,20 @@ class ChangeMaker {
         tag: 'rename-table',
         old: {schema: oldTable.schema, name: oldTable.name},
         new: {schema: newTable.schema, name: newTable.name},
+      });
+    }
+    if (
+      oldTable.replicaIdentity !== newTable.replicaIdentity ||
+      !areEqual(
+        oldTable.replicaIdentityColumns,
+        newTable.replicaIdentityColumns,
+      )
+    ) {
+      changes.push({
+        tag: 'update-table-metadata',
+        table: {schema: newTable.schema, name: newTable.name},
+        old: getMetadata(oldTable),
+        new: getMetadata(newTable),
       });
     }
     const table = {schema: newTable.schema, name: newTable.name};
@@ -759,7 +781,12 @@ class ChangeMaker {
       const column = {name, spec};
       // Validate that the ChangeProcessor will accept the column change.
       mapPostgresToLiteColumn(table.name, column);
-      changes.push({tag: 'add-column', table, column});
+      changes.push({
+        tag: 'add-column',
+        table,
+        column,
+        tableMetadata: getMetadata(newTable),
+      });
     }
     return changes;
   }
@@ -936,11 +963,50 @@ function columnsByID(
   return colsByID;
 }
 
+function getMetadata(table: PublishedTableWithReplicaIdentity): TableMetadata {
+  const metadata: TableMetadata = {
+    rowKey: {
+      columns: table.replicaIdentityColumns,
+    },
+  };
+  switch (table.replicaIdentity) {
+    case 'd':
+      metadata.rowKey.type = 'default';
+      break;
+    case 'i':
+      metadata.rowKey.type = 'index';
+      break;
+    case 'f':
+      metadata.rowKey.type = 'full';
+      break;
+    case 'n':
+      metadata.rowKey.type = 'nothing';
+      break;
+    case undefined:
+      break;
+    default:
+      unreachable(table.replicaIdentity);
+  }
+  return metadata;
+}
+
 // Avoid sending the `columns` from the Postgres MessageRelation message.
 // They are not used downstream and the message can be large.
-function withoutColumns(relation: PostgresRelation): MessageRelation {
-  const {columns: _, ...rest} = relation;
-  return rest;
+function makeRelation(relation: PostgresRelation): MessageRelation {
+  // Avoid sending the `columns` from the Postgres MessageRelation message.
+  // They are not used downstream and the message can be large.
+  const {columns: _, keyColumns, replicaIdentity, ...rest} = relation;
+  return {
+    ...rest,
+    rowKey: {
+      columns: keyColumns,
+      type: replicaIdentity,
+    },
+    // For now, deprecated columns are sent for backwards compatibility.
+    // These can be removed when bumping the MIN_PROTOCOL_VERSION to 5.
+    keyColumns,
+    replicaIdentity,
+  };
 }
 
 class UnsupportedSchemaChangeError extends Error {

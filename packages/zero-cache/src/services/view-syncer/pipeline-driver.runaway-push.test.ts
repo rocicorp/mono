@@ -16,7 +16,6 @@ import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
-import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   fakeReplicator,
@@ -54,7 +53,6 @@ describe('view-syncer/pipeline-driver', () => {
 
     db = dbFile.connect(lc);
     initReplicationState(db, ['zero_data'], '123');
-    initChangeLog(db);
     db.exec(`
       CREATE TABLE "zeroz.mutations" (
         "clientGroupID"  TEXT,

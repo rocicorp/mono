@@ -1,6 +1,4 @@
-import type {Row} from '@rocicorp/zero';
-import {useQuery, useZero} from '@rocicorp/zero/react';
-import {useVirtualizer} from '@tanstack/react-virtual';
+import {useQuery, useZero, useZeroVirtualizer} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
 import React, {
@@ -12,14 +10,14 @@ import React, {
   type CSSProperties,
   type KeyboardEvent,
 } from 'react';
+import {toast} from 'react-toastify';
 import {useDebouncedCallback} from 'use-debounce';
-import {useLocation, useParams, useSearch} from 'wouter';
-import {navigate} from 'wouter/use-browser-location';
+import {useParams, useSearch} from 'wouter';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {
   queries,
+  type IssueRowSort,
   type ListContext,
-  type ListContextParams,
 } from '../../../shared/queries.ts';
 import InfoIcon from '../../assets/images/icon-info.svg?react';
 import {Button} from '../../components/button.tsx';
@@ -30,69 +28,21 @@ import {OnboardingModal} from '../../components/onboarding-modal.tsx';
 import {RelativeTime} from '../../components/relative-time.tsx';
 import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
+import {useHash} from '../../hooks/use-hash.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
+import {useWouterPermalinkState} from '../../hooks/use-wouter-permalink-state.ts';
+import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
-import {isGigabugs, useListContext} from '../../routes.tsx';
+import {isGigabugs, links, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
+import {getIDFromString} from '../issue/get-id.tsx';
+import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
 
 let firstRowRendered = false;
-const ITEM_SIZE = 56;
-const MIN_PAGE_SIZE = 100;
-const NUM_ROWS_FOR_LOADING_SKELETON = 1;
-
-type Anchor = {
-  startRow: Row['issue'] | undefined;
-  direction: 'forward' | 'backward';
-  index: number;
-};
-
-type QueryAnchor = {
-  anchor: Anchor;
-  /**
-   * Associates an anchor with list query params.  This is for managing the
-   * transition when query params change.  When this happens the list should
-   * scroll to 0, the anchor reset to top, and estimate/total counts reset.
-   * During this transition, some renders has a mix of new list query params and
-   * list results and old anchor (as anchor reset is async via setState), it is
-   * important to:
-   * 1. avoid creating a query with the new query params but the old anchor, as
-   *    that would be loading a query that is not the correct one to display,
-   *    accomplished by using TOP_ANCHOR when
-   *    listContextParams !== queryAnchor.listContextParams
-   * 2. avoid calculating counts based on a mix of new list results and old
-   *    anchor, avoided by not updating counts when
-   *    listContextParams !== queryAnchor.listContextParams
-   * 3. avoid updating anchor for paging based on a mix of new list results and
-   *    old anchor, avoided by not doing paging updates when
-   *    listContextParams !== queryAnchor.listContextParams
-   */
-  listContextParams: ListContextParams;
-};
-
-const TOP_ANCHOR = Object.freeze({
-  startRow: undefined,
-  direction: 'forward',
-  index: 0,
-});
-
-const getNearPageEdgeThreshold = (pageSize: number) => Math.ceil(pageSize / 10);
-
-const toIssueArrayIndex = (index: number, anchor: Anchor) =>
-  anchor.direction === 'forward' ? index - anchor.index : anchor.index - index;
-
-const toBoundIssueArrayIndex = (
-  index: number,
-  anchor: Anchor,
-  length: number,
-) => Math.min(length - 1, Math.max(0, toIssueArrayIndex(index, anchor)));
-
-const toIndex = (issueArrayIndex: number, anchor: Anchor) =>
-  anchor.direction === 'forward'
-    ? issueArrayIndex + anchor.index
-    : anchor.index - issueArrayIndex;
+export const ITEM_SIZE = 56;
 
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
@@ -142,6 +92,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const open = status === 'open' ? true : status === 'closed' ? false : null;
 
+  const hash = useHash();
+  const permalinkID = useMemo(
+    () => (hash.startsWith('issue-') ? hash.slice(6) : null),
+    [hash],
+  );
+
   const listContextParams = useMemo(
     () =>
       ({
@@ -153,6 +109,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         labels,
         open,
         textFilter,
+        permalinkID,
       }) as const,
     [
       projectName,
@@ -163,108 +120,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
       open,
       textFilter,
       labels,
+      permalinkID,
     ],
   );
-
-  const [queryAnchor, setQueryAnchor] = useState<QueryAnchor>({
-    anchor: TOP_ANCHOR,
-    listContextParams,
-  });
-
-  const listRef = useRef<HTMLDivElement>(null);
-  const tableWrapperRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(tableWrapperRef);
-
-  const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
-  useEffect(() => {
-    // Make sure page size is enough to fill the scroll element at least
-    // 3 times.  Don't shrink page size.
-    const newPageSize = size
-      ? Math.max(MIN_PAGE_SIZE, Math.ceil(size?.height / ITEM_SIZE) * 3)
-      : MIN_PAGE_SIZE;
-    if (newPageSize > pageSize) {
-      setPageSize(newPageSize);
-    }
-  }, [pageSize, size]);
-
-  const anchor =
-    queryAnchor.listContextParams === listContextParams
-      ? queryAnchor.anchor
-      : TOP_ANCHOR;
-
-  const q = queries.issueListV2({
-    listContext: listContextParams,
-    userID: z.userID,
-    limit: pageSize,
-    start: anchor.startRow
-      ? {
-          id: anchor.startRow.id,
-          modified: anchor.startRow.modified,
-          created: anchor.startRow.created,
-        }
-      : null,
-    dir: anchor.direction,
-  });
-
-  const [estimatedTotal, setEstimatedTotal] = useState(0);
-  const [total, setTotal] = useState<number | undefined>(undefined);
-
-  // We don't want to cache every single keystroke. We already debounce
-  // keystrokes for the URL, so we just reuse that.
-  const [issues, issuesResult] = useQuery(
-    q,
-    textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
-  );
-
-  useEffect(() => {
-    if (issues.length > 0 || issuesResult.type === 'complete') {
-      onReady();
-    }
-  }, [issues.length, issuesResult.type, onReady]);
-
-  useEffect(() => {
-    if (queryAnchor.listContextParams !== listContextParams) {
-      if (listRef.current) {
-        listRef.current.scrollTop = 0;
-      }
-      setEstimatedTotal(0);
-      setTotal(undefined);
-      setQueryAnchor({
-        anchor: TOP_ANCHOR,
-        listContextParams,
-      });
-    }
-  }, [listContextParams, queryAnchor]);
-
-  useEffect(() => {
-    if (
-      queryAnchor.listContextParams !== listContextParams ||
-      anchor.direction !== 'forward'
-    ) {
-      return;
-    }
-    const eTotal = anchor.index + issues.length;
-    if (eTotal > estimatedTotal) {
-      setEstimatedTotal(eTotal);
-    }
-    if (issuesResult.type === 'complete' && issues.length < pageSize) {
-      setTotal(eTotal);
-    }
-  }, [
-    listContextParams,
-    queryAnchor,
-    issuesResult.type,
-    issues,
-    estimatedTotal,
-    pageSize,
-  ]);
-
-  useEffect(() => {
-    if (issuesResult.type === 'complete') {
-      recordPageLoad('list-page');
-      preload(z, projectName);
-    }
-  }, [login.loginState?.decoded, issuesResult.type, z]);
 
   let title;
   let shortTitle;
@@ -278,20 +136,115 @@ export function ListPage({onReady}: {onReady: () => void}) {
     shortTitle = statusCapitalized;
   }
 
-  const [location] = useLocation();
   const listContext: ListContext = useMemo(
     () => ({
-      href: `${location}?${search}`,
+      href: `${links.list({projectName})}?${search}`,
       title,
       params: listContextParams,
     }),
-    [location, search, title, listContextParams],
+    [projectName, search, title, listContextParams],
   );
 
   const {setListContext} = useListContext();
   useEffect(() => {
     setListContext(listContext);
+    document.title =
+      `Zero Bugs → ${listContext.title}` +
+      (permalinkID ? ` → Issue ${permalinkID}` : '');
   }, [listContext]);
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
+  const size = useElementSize(tableWrapperRef);
+
+  // oxlint-disable-next-line no-explicit-any
+  (globalThis as any).permalinkNavigate = (id: string | number) => {
+    navigate(`#issue-${id}`);
+  };
+
+  const [permalinkState, setPermalinkState] =
+    useWouterPermalinkState<IssueRowSort>();
+
+  const {
+    virtualizer,
+    rowAt,
+    complete,
+    rowsEmpty,
+    permalinkNotFound,
+    estimatedTotal,
+    total,
+  } = useZeroVirtualizer({
+    estimateSize: () => ITEM_SIZE,
+    getScrollElement: () => listRef.current,
+    getRowKey: row => row.id,
+
+    listContextParams,
+    permalinkID,
+
+    getPageQuery: (
+      limit: number,
+      start: IssueRowSort | null,
+      dir: 'forward' | 'backward',
+    ) =>
+      queries.issueListV2({
+        listContext: listContextParams,
+        userID: z.userID,
+        limit,
+        start,
+        dir,
+        inclusive: start === null,
+      }),
+
+    getSingleQuery: (id: string) => {
+      // Allow short ID too.
+      const {idField, idValue} = getIDFromString(id);
+      return queries.listIssueByID({
+        idField,
+        idValue,
+        listContext: listContextParams,
+      });
+    },
+
+    toStartRow: row => ({
+      id: row.id,
+      modified: row.modified,
+      created: row.created,
+    }),
+
+    options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
+
+    permalinkState,
+    onPermalinkStateChange: setPermalinkState,
+  });
+
+  useEffect(() => {
+    if (permalinkNotFound) {
+      const toastID = 'permalink-issue-not-found';
+      toast(
+        <ToastContent toastID={toastID}>
+          Permalink issue not found
+        </ToastContent>,
+        {
+          toastId: toastID,
+          containerId: 'bottom',
+        },
+      );
+      navigate(`?${qs}`, {replace: true});
+    }
+  }, [permalinkNotFound, permalinkID, qs]);
+
+  useEffect(() => {
+    if (!rowsEmpty || complete) {
+      onReady();
+    }
+  }, [rowsEmpty, complete, onReady]);
+
+  useEffect(() => {
+    if (complete) {
+      recordPageLoad('list-page');
+      preload(z, projectName);
+    }
+  }, [complete, z, projectName]);
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;
@@ -305,11 +258,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const onFilter = useCallback(
     (selection: Selection) => {
       if ('creator' in selection) {
-        navigate(addParam(qs, 'creator', selection.creator, 'exclusive'));
+        navigate(setParam(qs, 'creator', selection.creator));
       } else if ('assignee' in selection) {
-        navigate(addParam(qs, 'assignee', selection.assignee, 'exclusive'));
+        navigate(setParam(qs, 'assignee', selection.assignee));
       } else {
-        navigate(addParam(qs, 'label', selection.label));
+        navigate(appendParam(qs, 'label', selection.label));
       }
     },
     [qs],
@@ -317,28 +270,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const toggleSortField = useCallback(() => {
     navigate(
-      addParam(
-        qs,
-        'sort',
-        sortField === 'created' ? 'modified' : 'created',
-        'exclusive',
-      ),
+      setParam(qs, 'sort', sortField === 'created' ? 'modified' : 'created'),
     );
   }, [qs, sortField]);
 
   const toggleSortDirection = useCallback(() => {
-    navigate(
-      addParam(
-        qs,
-        'sortDir',
-        sortDirection === 'asc' ? 'desc' : 'asc',
-        'exclusive',
-      ),
-    );
+    navigate(setParam(qs, 'sortDir', sortDirection === 'asc' ? 'desc' : 'asc'));
   }, [qs, sortDirection]);
 
   const updateTextFilterQueryString = useDebouncedCallback((text: string) => {
-    navigate(addParam(qs, 'q', text, 'exclusive'));
+    navigate(setParam(qs, 'q', text));
   }, 500);
 
   const onTextFilterChange = (text: string) => {
@@ -347,14 +288,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const clearAndHideSearch = () => {
-    setTextFilter(null);
-    setForceSearchMode(false);
-    navigate(removeParam(qs, 'q'));
+    if (searchMode) {
+      setTextFilter(null);
+      setForceSearchMode(false);
+      navigate(removeParam(qs, 'q'));
+    }
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const issueArrayIndex = toIssueArrayIndex(index, anchor);
-    if (issueArrayIndex < 0 || issueArrayIndex >= issues.length) {
+    const issue = rowAt(index);
+    if (issue === undefined) {
       return (
         <div
           className={classNames('row', 'skeleton-shimmer')}
@@ -364,7 +307,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         ></div>
       );
     }
-    const issue = issues[issueArrayIndex];
+
     if (firstRowRendered === false) {
       mark('first issue row rendered');
       firstRowRendered = true;
@@ -380,6 +323,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
             login.loginState !== undefined
             ? 'unread'
             : null,
+          {
+            // TODO(arv): Extract into something cleaner
+            permalink:
+              issue.id === permalinkID || String(issue.shortID) === permalinkID,
+          },
         )}
         style={{
           ...style,
@@ -410,104 +358,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       </div>
     );
   };
-
-  const virtualizer = useVirtualizer({
-    count: total ?? estimatedTotal + NUM_ROWS_FOR_LOADING_SKELETON,
-    estimateSize: () => ITEM_SIZE,
-    overscan: 5,
-    getScrollElement: () => listRef.current,
-  });
-
-  const virtualItems = virtualizer.getVirtualItems();
-  useEffect(() => {
-    if (queryAnchor.listContextParams !== listContextParams) {
-      return;
-    }
-    const [firstItem] = virtualItems;
-    const lastItem = virtualItems[virtualItems.length - 1];
-    if (!lastItem) {
-      return;
-    }
-
-    if (
-      anchor.index !== 0 &&
-      firstItem.index <= getNearPageEdgeThreshold(pageSize)
-    ) {
-      // oxlint-disable-next-line no-console -- Debug logging in demo app
-      console.log('anchoring to top');
-      setQueryAnchor({
-        anchor: TOP_ANCHOR,
-        listContextParams,
-      });
-      return;
-    }
-
-    if (issuesResult.type !== 'complete') {
-      return;
-    }
-
-    const hasPrev = anchor.index !== 0;
-    const distanceFromStart =
-      anchor.direction === 'backward'
-        ? firstItem.index - (anchor.index - issues.length)
-        : firstItem.index - anchor.index;
-
-    const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
-
-    if (hasPrev && distanceFromStart <= nearPageEdgeThreshold) {
-      const issueArrayIndex = toBoundIssueArrayIndex(
-        lastItem.index + nearPageEdgeThreshold * 2,
-        anchor,
-        issues.length,
-      );
-      const index = toIndex(issueArrayIndex, anchor) - 1;
-      const a = {
-        index,
-        direction: 'backward',
-        startRow: issues[issueArrayIndex],
-      } as const;
-      // oxlint-disable-next-line no-console -- Debug logging in demo app
-      console.log('page up', a);
-      setQueryAnchor({
-        anchor: a,
-        listContextParams,
-      });
-      return;
-    }
-
-    const hasNext =
-      anchor.direction === 'backward' || issues.length === pageSize;
-    const distanceFromEnd =
-      anchor.direction === 'backward'
-        ? anchor.index - lastItem.index
-        : anchor.index + issues.length - lastItem.index;
-    if (hasNext && distanceFromEnd <= nearPageEdgeThreshold) {
-      const issueArrayIndex = toBoundIssueArrayIndex(
-        firstItem.index - nearPageEdgeThreshold * 2,
-        anchor,
-        issues.length,
-      );
-      const index = toIndex(issueArrayIndex, anchor) + 1;
-      const a = {
-        index,
-        direction: 'forward',
-        startRow: issues[issueArrayIndex],
-      } as const;
-      // oxlint-disable-next-line no-console -- Debug logging in demo app
-      console.log('page down', a);
-      setQueryAnchor({
-        anchor: a,
-        listContextParams,
-      });
-    }
-  }, [
-    listContextParams,
-    queryAnchor,
-    issues,
-    issuesResult,
-    pageSize,
-    virtualItems,
-  ]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
@@ -542,6 +392,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   return (
     <>
       <div className="list-view-header-container">
+        <ToastContainer position="bottom" />
         <h1
           className={classNames('list-view-header', {
             'search-mode': searchMode,
@@ -581,7 +432,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
               </span>
             </>
           )}
-          {issuesResult.type === 'complete' || total || estimatedTotal ? (
+          {complete || total || estimatedTotal ? (
             <>
               <span className="issue-count">
                 {project?.issueCountEstimate
@@ -653,16 +504,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
-        {size && issues.length > 0 ? (
+        {size && !rowsEmpty ? (
           <div
-            style={{width: size.width, height: size.height, overflow: 'auto'}}
+            style={{
+              width: size.width,
+              height: size.height,
+              overflow: 'auto',
+            }}
             ref={listRef}
           >
             <div
               className="virtual-list"
               style={{height: virtualizer.getTotalSize()}}
             >
-              {virtualItems.map(virtualRow => (
+              {virtualizer.getVirtualItems().map(virtualRow => (
                 <Row
                   key={virtualRow.key + ''}
                   index={virtualRow.index}
@@ -686,27 +541,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
   );
 }
 
-const addParam = (
-  qs: URLSearchParams,
-  key: string,
-  value: string,
-  mode?: 'exclusive',
-) => {
-  const newParams = new URLSearchParams(qs);
-  newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
-  return '?' + newParams.toString();
-};
-
 function roundEstimatedTotal(estimatedTotal: number) {
   return estimatedTotal < 50
     ? estimatedTotal
     : estimatedTotal - (estimatedTotal % 50);
-}
-
-function removeParam(qs: URLSearchParams, key: string, value?: string) {
-  const searchParams = new URLSearchParams(qs);
-  searchParams.delete(key, value);
-  return '?' + searchParams.toString();
 }
 
 function formatIssueCountEstimate(count: number) {

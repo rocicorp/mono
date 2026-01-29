@@ -22,7 +22,6 @@ import {
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
-import {initChangeLog} from './schema/change-log.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 
@@ -67,7 +66,6 @@ describe('replicator/incremental-sync', () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 
     initReplicationState(replica, ['zero_data'], '02');
-    initChangeLog(replica);
 
     initDB(
       replica,
@@ -271,7 +269,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 40960,
+            "replicaSize": 49152,
             "tables": [
               {
                 "columns": [
@@ -347,7 +345,6 @@ describe('replicator/incremental-sync', () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 
     initReplicationState(replica, ['zero_data'], '09');
-    initChangeLog(replica);
 
     initDB(
       replica,
@@ -414,7 +411,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 40960,
+            "replicaSize": 49152,
             "tables": [
               {
                 "columns": [
@@ -468,7 +465,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 49152,
+            "replicaSize": 57344,
             "tables": [
               {
                 "columns": [

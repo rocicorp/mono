@@ -8,6 +8,7 @@ import {
   jsonValueSchema,
   type JSONObject,
 } from '../../../../../../shared/src/bigint-json.ts';
+import {must} from '../../../../../../shared/src/must.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.ts';
 import type {Satisfies} from '../../../../types/satisfies.ts';
@@ -35,21 +36,59 @@ export const rollbackSchema = v.object({
   tag: v.literal('rollback'),
 });
 
-export const relationSchema = v.object({
-  schema: v.string(),
-  name: v.string(),
-  keyColumns: v.array(v.string()),
+const rowKeySchema = v.object({
+  // The columns used to identify a row in insert, update, and delete changes.
+  columns: v.array(v.string()),
 
-  // PG-specific. When replicaIdentity is 'full':
-  // * `keyColumns` contain all of the columns in the table.
-  // * the `key` of the Delete and Update messages represent the full row.
-  //
-  // The replicator handles these tables by extracting a row key from
-  // the full row based on the table's PRIMARY KEY or UNIQUE INDEX.
-  replicaIdentity: v
-    .literalUnion('default', 'nothing', 'full', 'index')
-    .optional(),
+  // An optional qualifier identifying how the key is chosen. Currently this
+  // is postgres-specific, describing the REPLICA IDENTITY, for which replica
+  // identity 'full' (FULL) is handled differently; the replicator handles
+  // these tables by extracting a row key from the full row based on the
+  // table's PRIMARY KEY or UNIQUE INDEX.
+  type: v.literalUnion('default', 'nothing', 'full', 'index').optional(),
 });
+
+export const relationSchema = v
+  .object({
+    schema: v.string(),
+    name: v.string(),
+
+    // This will become required.
+    rowKey: rowKeySchema.optional(),
+
+    /** Deprecated: set the rowKey.columns instead. */
+    keyColumns: v.array(v.string()).optional(),
+    /** Deprecated: set the rowKey.columns instead. */
+    replicaIdentity: v
+      .literalUnion('default', 'nothing', 'full', 'index')
+      .optional(),
+  })
+  .map(rel => {
+    const {rowKey, ...rest} = rel;
+    if (rowKey) {
+      return {...rest, rowKey};
+    }
+    return {
+      ...rest,
+      rowKey: {
+        columns: must(rel.keyColumns),
+        type: rel.replicaIdentity,
+      },
+    };
+  });
+
+// TableMetadata contains table-related configuration that does not affect the
+// actual data in the table, but rather how the table's change messages are
+// handled.
+//
+// Changes to the metadata are sent in an `table-update-metadata` change.
+export const tableMetadataSchema = v.object({
+  // The rowKey is the same object sent in the `relation` message of
+  // `insert`, `update`, and `delete` messages.
+  rowKey: rowKeySchema,
+});
+
+export type TableMetadata = v.Infer<typeof tableMetadataSchema>;
 
 export const rowSchema = v.record(jsonValueSchema);
 
@@ -93,12 +132,25 @@ export type Identifier = v.Infer<typeof identifierSchema>;
 export const createTableSchema = v.object({
   tag: v.literal('create-table'),
   spec: tableSpec,
+
+  // This must be set by change source implementations that support
+  // table/column backfill.
+  //
+  // TODO: to simplify the protocol, see if we can make this required
+  metadata: tableMetadataSchema.optional(),
 });
 
 export const renameTableSchema = v.object({
   tag: v.literal('rename-table'),
   old: identifierSchema,
   new: identifierSchema,
+});
+
+export const updateTableMetadataSchema = v.object({
+  tag: v.literal('update-table-metadata'),
+  table: identifierSchema,
+  old: tableMetadataSchema,
+  new: tableMetadataSchema,
 });
 
 const columnSchema = v.object({
@@ -110,6 +162,12 @@ export const addColumnSchema = v.object({
   tag: v.literal('add-column'),
   table: identifierSchema,
   column: columnSchema,
+
+  // This must be set by change source implementations that support
+  // table/column backfill.
+  //
+  // TODO: to simplify the protocol, see if we can make this required
+  tableMetadata: tableMetadataSchema.optional(),
 });
 
 export const updateColumnSchema = v.object({
@@ -152,6 +210,7 @@ export type MessageTruncate = v.Infer<typeof truncateSchema>;
 
 export type TableCreate = v.Infer<typeof createTableSchema>;
 export type TableRename = v.Infer<typeof renameTableSchema>;
+export type TableUpdateMetadata = v.Infer<typeof updateTableMetadataSchema>;
 export type ColumnAdd = v.Infer<typeof addColumnSchema>;
 export type ColumnUpdate = v.Infer<typeof updateColumnSchema>;
 export type ColumnDrop = v.Infer<typeof dropColumnSchema>;
@@ -166,6 +225,7 @@ export const dataChangeSchema = v.union(
   truncateSchema,
   createTableSchema,
   renameTableSchema,
+  updateTableMetadataSchema,
   addColumnSchema,
   updateColumnSchema,
   dropColumnSchema,

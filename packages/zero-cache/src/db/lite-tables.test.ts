@@ -5,7 +5,7 @@ import {Database} from '../../../zqlite/src/db.ts';
 import {
   ColumnMetadataStore,
   CREATE_COLUMN_METADATA_TABLE,
-} from '../services/change-source/column-metadata.ts';
+} from '../services/replicator/schema/column-metadata.ts';
 import {computeZqlSpecs, listIndexes, listTables} from './lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from './specs.ts';
 

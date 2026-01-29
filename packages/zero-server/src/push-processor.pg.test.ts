@@ -43,6 +43,7 @@ beforeEach(async () => {
 function makePush(
   mid: number | number[],
   mutatorName: string | string[] = customMutatorKey('|', ['foo', 'bar']),
+  clientID: string = 'cid',
 ): PushBody {
   const mids = Array.isArray(mid) ? mid : [mid];
   const mutatorNames = Array.isArray(mutatorName) ? mutatorName : [mutatorName];
@@ -54,7 +55,7 @@ function makePush(
     timestamp: 42,
     mutations: zip(mids, mutatorNames).map(([mid, mutatorName]) => ({
       type: 'custom',
-      clientID: 'cid',
+      clientID,
       id: mid,
       name: mutatorName,
       timestamp: 42,
@@ -1032,6 +1033,91 @@ describe('cleanup mutations', () => {
 
     // Verify no LMID was set (cleanup doesn't track LMID)
     await checkClientsTable(pg, undefined);
+  });
+
+  test('bulk cleanup mutation deletes all mutations for multiple clients', async () => {
+    const processor = new PushProcessor(
+      new ZQLDatabase(new PostgresJSConnection(pg), {
+        tables: {},
+        relationships: {},
+        version: 1,
+      }),
+    );
+
+    // Create mutation results for multiple clients by processing failing mutations
+    // Client 1: mutations 1, 2, 3
+    await processor.process(
+      mutators,
+      params,
+      makePush(
+        [1, 2, 3],
+        Array(3).fill(customMutatorKey('|', ['foo', 'baz'])),
+        'client1',
+      ),
+    );
+    // Client 2: mutations 1, 2
+    await processor.process(
+      mutators,
+      params,
+      makePush(
+        [1, 2],
+        Array(2).fill(customMutatorKey('|', ['foo', 'baz'])),
+        'client2',
+      ),
+    );
+    // Client 3: mutation 1 (should NOT be deleted)
+    await processor.process(
+      mutators,
+      params,
+      makePush([1], [customMutatorKey('|', ['foo', 'baz'])], 'client3'),
+    );
+
+    // Verify all results were written (6 total mutations)
+    const beforeCleanup = await pg.unsafe(
+      `select "clientID", "mutationID" from "zero_0"."mutations" order by "clientID", "mutationID"`,
+    );
+    expect(beforeCleanup).toEqual([
+      {clientID: 'client1', mutationID: 1n},
+      {clientID: 'client1', mutationID: 2n},
+      {clientID: 'client1', mutationID: 3n},
+      {clientID: 'client2', mutationID: 1n},
+      {clientID: 'client2', mutationID: 2n},
+      {clientID: 'client3', mutationID: 1n},
+    ]);
+
+    // Send bulk cleanup mutation to delete all mutations for client1 and client2
+    const cleanupResult = await processor.process(mutators, params, {
+      pushVersion: 1,
+      clientGroupID: 'cgid',
+      requestID: 'cleanup-rid',
+      schemaVersion: 1,
+      timestamp: 42,
+      mutations: [
+        {
+          type: 'custom',
+          clientID: 'client1',
+          id: 0,
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          timestamp: 42,
+          args: [
+            {
+              type: 'bulk',
+              clientGroupID: 'cgid',
+              clientIDs: ['client1', 'client2'],
+            },
+          ],
+        },
+      ],
+    });
+
+    // Verify cleanup returns empty mutations (fire-and-forget)
+    expect(cleanupResult).toEqual({mutations: []});
+
+    // Verify only client3's mutation remains
+    const afterCleanup = await pg.unsafe(
+      `select "clientID", "mutationID" from "zero_0"."mutations" order by "clientID", "mutationID"`,
+    );
+    expect(afterCleanup).toEqual([{clientID: 'client3', mutationID: 1n}]);
   });
 });
 

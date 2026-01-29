@@ -3,7 +3,6 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {mapValues} from '../../../shared/src/objects.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import type {ServerMetrics as ServerMetricsJSON} from '../../../zero-protocol/src/inspect-down.ts';
 import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {
@@ -15,6 +14,7 @@ import {isDevelopmentMode} from '../config/normalize.ts';
 import type {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import type {HeaderOptions} from '../custom/fetch.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
+import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 
 /**
  * Server-side metrics collected for queries during materialization and update.
@@ -36,9 +36,7 @@ const authenticatedClientGroupIDs = new Set<ClientGroupID>();
 export class InspectorDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
   readonly #perQueryServerMetrics = new Map<string, ServerMetrics>();
-  readonly #hashToIDs = new Map<string, Set<string>>();
-  readonly #queryIDToTransformationHash = new Map<string, string>();
-  readonly #transformationASTs: Map<string, AST> = new Map();
+  readonly #queryIDToAST: Map<string, AST> = new Map();
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
   constructor(customQueryTransformer: CustomQueryTransformer | undefined) {
@@ -51,16 +49,13 @@ export class InspectorDelegate implements MetricsDelegate {
     ...args: MetricMap[K]
   ): void {
     assert(isServerMetric(metric), `Invalid server metric: ${metric}`);
-    const transformationHash = args[0];
-
-    for (const queryID of this.#hashToIDs.get(transformationHash) ?? []) {
-      let serverMetrics = this.#perQueryServerMetrics.get(queryID);
-      if (!serverMetrics) {
-        serverMetrics = newMetrics();
-        this.#perQueryServerMetrics.set(queryID, serverMetrics);
-      }
-      serverMetrics[metric].add(value);
+    const queryID = args[0];
+    let serverMetrics = this.#perQueryServerMetrics.get(queryID);
+    if (!serverMetrics) {
+      serverMetrics = newMetrics();
+      this.#perQueryServerMetrics.set(queryID, serverMetrics);
     }
+    serverMetrics[metric].add(value);
     this.#globalMetrics[metric].add(value);
   }
 
@@ -74,34 +69,16 @@ export class InspectorDelegate implements MetricsDelegate {
   }
 
   getASTForQuery(queryID: string): AST | undefined {
-    const transformationHash = this.#queryIDToTransformationHash.get(queryID);
-    return transformationHash
-      ? this.#transformationASTs.get(transformationHash)
-      : undefined;
+    return this.#queryIDToAST.get(queryID);
   }
 
   removeQuery(queryID: string): void {
     this.#perQueryServerMetrics.delete(queryID);
-    this.#queryIDToTransformationHash.delete(queryID);
-    // Remove queryID from all hash-to-ID mappings
-    for (const [transformationHash, idSet] of this.#hashToIDs.entries()) {
-      idSet.delete(queryID);
-      if (idSet.size === 0) {
-        this.#hashToIDs.delete(transformationHash);
-        this.#transformationASTs.delete(transformationHash);
-      }
-    }
+    this.#queryIDToAST.delete(queryID);
   }
 
-  addQuery(transformationHash: string, queryID: string, ast: AST): void {
-    const existing = this.#hashToIDs.get(transformationHash);
-    if (existing === undefined) {
-      this.#hashToIDs.set(transformationHash, new Set([queryID]));
-    } else {
-      existing.add(queryID);
-    }
-    this.#queryIDToTransformationHash.set(queryID, transformationHash);
-    this.#transformationASTs.set(transformationHash, ast);
+  addQuery(queryID: string, ast: AST): void {
+    this.#queryIDToAST.set(queryID, ast);
   }
 
   /**
@@ -157,7 +134,7 @@ export class InspectorDelegate implements MetricsDelegate {
     );
 
     if ('kind' in results) {
-      throw new ProtocolError(results);
+      throw new ProtocolErrorWithLevel(results, 'warn');
     }
 
     const result = results[0];

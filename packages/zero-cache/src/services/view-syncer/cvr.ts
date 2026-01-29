@@ -585,7 +585,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   trackQueries(
     lc: LogContext,
     executed: {id: string; transformationHash: string}[],
-    removed: {id: string; transformationHash: string | undefined}[],
+    removed: {id: string}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
@@ -595,6 +595,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     ].flat(2);
 
     this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
+    // Immediately attach a rejection handler to avoid unhandled rejections.
+    // The error will surface when this.#existingRows is awaited.
+    void this.#existingRows.then(() => {});
 
     return {
       newVersion: this._cvr.version,

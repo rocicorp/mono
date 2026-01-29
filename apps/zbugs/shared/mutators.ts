@@ -398,10 +398,12 @@ async function updateIssueNotification(
 ) {
   await assertUserCanSeeIssue(tx, userID, issueID);
 
-  const existingNotification = builder.issueNotifications
-    .where('userID', userID)
-    .where('issueID', issueID)
-    .one();
+  const existingNotification = await tx.run(
+    builder.issueNotifications
+      .where('userID', userID)
+      .where('issueID', issueID)
+      .one(),
+  );
 
   // if the user is subscribing to the issue, and they don't already have a preference
   // or the forceUpdate flag is set, we upsert the notification.

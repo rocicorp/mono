@@ -40,6 +40,7 @@ export type SyncerWorkerData = {
 function getWebSocketServerOptions(config: ZeroConfig): ServerOptions {
   const options: ServerOptions = {
     noServer: true,
+    maxPayload: config.websocketMaxPayloadBytes,
   };
 
   if (config.websocketCompression) {
@@ -131,14 +132,9 @@ export class Syncer implements SingletonService {
     );
     recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
-    const existing = this.#connections.get(clientID);
-    if (existing) {
-      this.#lc.debug?.(
-        `client ${clientID} already connected, closing existing connection`,
-      );
-      existing.close(`replaced by ${params.wsID}`);
-    }
 
+    // Verify JWT BEFORE touching existing connections - prevents unauthenticated
+    // attackers from force-disconnecting legitimate users via DoS
     let decodedToken: JWTPayload | undefined;
     if (auth) {
       const tokenOptions = tokenConfigOptions(this.#config.auth);
@@ -165,9 +161,15 @@ export class Syncer implements SingletonService {
         try {
           decodedToken = await verifyToken(this.#config.auth, auth, {
             subject: userID,
+            ...(this.#config.auth.issuer && {
+              issuer: this.#config.auth.issuer,
+            }),
+            ...(this.#config.auth.audience && {
+              audience: this.#config.auth.audience,
+            }),
           });
           this.#lc.debug?.(
-            `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
+            `Received auth token [redacted...${auth.slice(-8)}] for clientID ${clientID}`,
           );
         } catch (e) {
           sendError(
@@ -190,6 +192,15 @@ export class Syncer implements SingletonService {
       }
     } else {
       this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
+    }
+
+    // Only check for and close existing connections AFTER auth is validated
+    const existing = this.#connections.get(clientID);
+    if (existing) {
+      this.#lc.debug?.(
+        `client ${clientID} already connected, closing existing connection`,
+      );
+      existing.close(`replaced by ${params.wsID}`);
     }
 
     const mutagen = this.#mutagens.getService(clientGroupID);

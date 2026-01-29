@@ -51,6 +51,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       baseCookie,
       protocolVersion,
       httpCookie,
+      origin,
     } = connectParams;
     this.#viewSyncer = viewSyncer;
     this.#mutagen = mutagen;
@@ -72,6 +73,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       protocolVersion,
       tokenData,
       httpCookie,
+      origin,
     };
   }
 
@@ -129,6 +131,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   msg[1],
                   this.#token,
                   this.#syncContext.httpCookie,
+                  this.#syncContext.origin,
                 ),
               ];
             }
@@ -166,11 +169,17 @@ export class SyncerWsMessageHandler implements MessageHandler {
           viewSyncer.changeDesiredQueries(this.#syncContext, msg),
         );
         break;
-      case 'deleteClients':
-        await startAsyncSpan(tracer, 'connection.deleteClients', () =>
-          viewSyncer.deleteClients(this.#syncContext, msg),
+      case 'deleteClients': {
+        const deletedClientIDs = await startAsyncSpan(
+          tracer,
+          'connection.deleteClients',
+          () => viewSyncer.deleteClients(this.#syncContext, msg),
         );
+        if (this.#pusher && deletedClientIDs.length > 0) {
+          await this.#pusher.deleteClientMutations(deletedClientIDs);
+        }
         break;
+      }
       case 'initConnection': {
         const ret: HandlerResult[] = [
           {
@@ -194,6 +203,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
               this.#syncContext.clientID,
               this.#syncContext.wsID,
               msg[1].userPushURL,
+              msg[1].userPushHeaders,
             ),
           });
         }

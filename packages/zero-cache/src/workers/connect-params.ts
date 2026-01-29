@@ -20,6 +20,7 @@ export type ConnectParams = {
   readonly userID: string;
   readonly initConnectionMsg: InitConnectionMessage | undefined;
   readonly httpCookie: string | undefined;
+  readonly origin: string | undefined;
 };
 
 export function getConnectParams(
@@ -66,6 +67,7 @@ export function getConnectParams(
         auth: authToken,
         userID,
         httpCookie: headers.cookie,
+        origin: headers.origin,
       },
       error: null,
     };

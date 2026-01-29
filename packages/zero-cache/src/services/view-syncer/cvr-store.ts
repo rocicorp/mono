@@ -24,7 +24,7 @@ import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
-import {cvrSchema, type ShardID, upstreamSchema} from '../../types/shards.ts';
+import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
@@ -67,6 +67,8 @@ export type CVRFlushStats = {
   rowsDeferred: number;
   statements: number;
 };
+
+let flushCounter = 0;
 
 const tracer = trace.getTracer('cvr-store', version);
 
@@ -128,7 +130,6 @@ export class CVRStore {
   readonly #id: string;
   readonly #failService: (e: unknown) => void;
   readonly #db: PostgresDB;
-  readonly #upstreamDb: PostgresDB | undefined;
   readonly #writes: Set<{
     stats: Partial<CVRFlushStats>;
     write: (
@@ -136,9 +137,6 @@ export class CVRStore {
       lastConnectTime: number,
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
-  readonly #upstreamWrites: ((
-    tx: PostgresTransaction,
-  ) => PendingQuery<MaybeRow[]>)[] = [];
   readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
   );
@@ -146,17 +144,11 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
-  readonly #upstreamSchemaName: string;
   #rowCount: number = 0;
 
   constructor(
     lc: LogContext,
     cvrDb: PostgresDB,
-    // Optionally undefined to deal with custom upstreams.
-    // This is temporary until we have a more principled protocol to deal with
-    // custom upstreams and clearing their custom mutator responses.
-    // An implementor could simply clear them after N minutes for the time being.
-    upstreamDb: PostgresDB | undefined,
     shard: ShardID,
     taskID: string,
     cvrID: string,
@@ -168,7 +160,6 @@ export class CVRStore {
   ) {
     this.#failService = failService;
     this.#db = cvrDb;
-    this.#upstreamDb = upstreamDb;
     this.#schema = cvrSchema(shard);
     this.#taskID = taskID;
     this.#id = cvrID;
@@ -183,7 +174,6 @@ export class CVRStore {
     );
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
-    this.#upstreamSchemaName = upstreamSchema(shard);
   }
 
   #cvr(table: string) {
@@ -232,34 +222,36 @@ export class CVRStore {
     };
 
     const [instance, clientsRows, queryRows, desiresRows] =
-      await this.#db.begin(Mode.READONLY, tx => [
-        tx<
-          (Omit<InstancesRow, 'clientGroupID'> & {
-            profileID: string | null;
-            deleted: boolean;
-            rowsVersion: string | null;
-          })[]
-        >`SELECT cvr."version", 
+      await this.#db.begin(Mode.READONLY, tx => {
+        lc.debug?.(`CVR tx started after ${Date.now() - start} ms`);
+        return [
+          tx<
+            (Omit<InstancesRow, 'clientGroupID'> & {
+              profileID: string | null;
+              deleted: boolean;
+              rowsVersion: string | null;
+            })[]
+          >`SELECT cvr."version",
                  "lastActive",
                  "ttlClock",
-                 "replicaVersion", 
-                 "owner", 
+                 "replicaVersion",
+                 "owner",
                  "grantedAt",
-                 "clientSchema", 
+                 "clientSchema",
                  "profileID",
                  "deleted",
                  rows."version" as "rowsVersion"
             FROM ${this.#cvr('instances')} AS cvr
-            LEFT JOIN ${this.#cvr('rowsVersion')} AS rows 
+            LEFT JOIN ${this.#cvr('rowsVersion')} AS rows
             ON cvr."clientGroupID" = rows."clientGroupID"
             WHERE cvr."clientGroupID" = ${id}`,
-        tx<Pick<ClientsRow, 'clientID'>[]>`SELECT "clientID" FROM ${this.#cvr(
-          'clients',
-        )}
+          tx<Pick<ClientsRow, 'clientID'>[]>`SELECT "clientID" FROM ${this.#cvr(
+            'clients',
+          )}
            WHERE "clientGroupID" = ${id}`,
-        tx<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')} 
+          tx<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')}
           WHERE "clientGroupID" = ${id} AND deleted IS DISTINCT FROM true`,
-        tx<DesiresRow[]>`SELECT 
+          tx<DesiresRow[]>`SELECT
           "clientGroupID",
           "clientID",
           "queryHash",
@@ -269,7 +261,12 @@ export class CVRStore {
           "inactivatedAtMs" AS "inactivatedAt"
           FROM ${this.#cvr('desires')}
           WHERE "clientGroupID" = ${id}`,
-      ]);
+        ];
+      });
+    lc.debug?.(
+      `CVR tx completed after ${Date.now() - start} ms ` +
+        `(${clientsRows.length} clients, ${queryRows.length} queries, ${desiresRows.length} desires)`,
+    );
 
     if (instance.length === 0) {
       // This is the first time we see this CVR.
@@ -598,16 +595,10 @@ export class CVRStore {
     this.#writes.add({
       stats: {clients: 1},
       write: sql =>
-        sql`DELETE FROM ${this.#cvr('clients')} 
-            WHERE "clientGroupID" = ${this.#id} 
+        sql`DELETE FROM ${this.#cvr('clients')}
+            WHERE "clientGroupID" = ${this.#id}
               AND "clientID" = ${clientID}`,
     });
-    this.#upstreamWrites.push(
-      sql =>
-        sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" 
-            WHERE "clientGroupID" = ${this.#id} 
-              AND "clientID" = ${clientID}`,
-    );
   }
 
   putDesiredQuery(
@@ -745,10 +736,13 @@ export class CVRStore {
   }
 
   async #checkVersionAndOwnership(
+    lc: LogContext,
     tx: PostgresTransaction,
     expectedCurrentVersion: CVRVersion,
     lastConnectTime: number,
   ): Promise<void> {
+    const start = Date.now();
+    lc.debug?.('checking cvr version and ownership');
     const expected = versionString(expectedCurrentVersion);
     const result = await tx<
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
@@ -763,6 +757,9 @@ export class CVRStore {
             owner: null,
             grantedAt: null,
           };
+    lc.debug?.(
+      'checked cvr version and ownership in ' + (Date.now() - start) + ' ms',
+    );
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
       throw new OwnershipError(owner, grantedAt, lastConnectTime);
     }
@@ -772,6 +769,7 @@ export class CVRStore {
   }
 
   async #flush(
+    lc: LogContext,
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
@@ -812,8 +810,10 @@ export class CVRStore {
     // Note: The CVR instance itself is only updated if there are material
     // changes (i.e. changes to the CVR contents) to flush.
     this.putInstance(cvr);
-
+    const start = Date.now();
+    lc.debug?.('flush tx beginning');
     const rowsFlushed = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
+      lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
       const pipelined: Promise<unknown>[] = [
         // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
         // query to acquire a row-level lock so that version-updating
@@ -823,12 +823,14 @@ export class CVRStore {
         // to this lock and can thus commit / be-committed independently of
         // cvr.instances.
         this.#checkVersionAndOwnership(
+          lc,
           tx,
           expectedCurrentVersion,
           lastConnectTime,
         ),
       ];
 
+      let i = 0;
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;
         stats.queries += write.stats.queries ?? 0;
@@ -836,7 +838,18 @@ export class CVRStore {
         stats.clients += write.stats.clients ?? 0;
         stats.rows += write.stats.rows ?? 0;
 
-        pipelined.push(write.write(tx, lastConnectTime).execute());
+        const writeIndex = i++;
+        const writeStart = Date.now();
+        pipelined.push(
+          write
+            .write(tx, lastConnectTime)
+            .execute()
+            .then(() => {
+              lc.debug?.(
+                `write ${writeIndex}/${this.#writes.size} completed in ${Date.now() - writeStart} ms`,
+              );
+            }),
+        );
         stats.statements++;
       }
 
@@ -845,6 +858,7 @@ export class CVRStore {
         cvr.version,
         this.#pendingRowRecordUpdates,
         'allow-defer',
+        lc,
       );
       pipelined.push(...rowUpdates);
       stats.statements += rowUpdates.length;
@@ -852,12 +866,13 @@ export class CVRStore {
       // Make sure Errors thrown by pipelined statements
       // are propagated up the stack.
       await Promise.all(pipelined);
-
+      lc.debug?.(`flush tx returning after ${Date.now() - start} ms`);
       if (rowUpdates.length === 0) {
         stats.rowsDeferred = this.#pendingRowRecordUpdates.size;
         return false;
       }
       stats.rows += this.#pendingRowRecordUpdates.size;
+
       return true;
     });
 
@@ -867,12 +882,6 @@ export class CVRStore {
       rowsFlushed,
     );
     recordRowsSynced(this.#rowCount);
-
-    if (this.#upstreamDb) {
-      await this.#upstreamDb.begin(Mode.READ_COMMITTED, async tx => {
-        await Promise.all(this.#upstreamWrites.map(write => write(tx)));
-      });
-    }
 
     return stats;
   }
@@ -888,8 +897,10 @@ export class CVRStore {
     lastConnectTime: number,
   ): Promise<CVRFlushStats | null> {
     const start = performance.now();
+    lc = lc.withContext('cvrFlushID', flushCounter++);
     try {
       const stats = await this.#flush(
+        lc,
         expectedCurrentVersion,
         cvr,
         lastConnectTime,
@@ -909,7 +920,6 @@ export class CVRStore {
       throw e;
     } finally {
       this.#writes.clear();
-      this.#upstreamWrites.length = 0;
       this.#pendingRowRecordUpdates.clear();
       this.#forceUpdates.clear();
     }
@@ -992,11 +1002,14 @@ export async function checkVersion(
 
 export class ClientNotFoundError extends ProtocolErrorWithLevel {
   constructor(message: string) {
-    super({
-      kind: ErrorKind.ClientNotFound,
-      message,
-      origin: ErrorOrigin.ZeroCache,
-    });
+    super(
+      {
+        kind: ErrorKind.ClientNotFound,
+        message,
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'warn',
+    );
   }
 }
 

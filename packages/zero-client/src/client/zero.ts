@@ -194,6 +194,7 @@ export type TestingContext = {
   socketResolver: () => Resolver<WebSocket>;
   connectionManager: () => ConnectionManager;
   queryDelegate: () => QueryDelegate;
+  queryManager: () => QueryManager;
   enableRefresh: () => boolean;
 };
 
@@ -231,7 +232,7 @@ export const DEFAULT_PING_TIMEOUT_MS = 5_000;
  */
 export const PULL_TIMEOUT_MS = 5_000;
 
-export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5_000;
+export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5 * 60 * 1000;
 
 /**
  * The amount of time we allow for continuous connecting attempts before
@@ -800,6 +801,7 @@ export class Zero<
         socketResolver: () => this.#socketResolver,
         connectionManager: () => this.#connectionManager,
         queryDelegate: () => this.#zeroContext,
+        queryManager: () => this.#queryManager,
         enableRefresh: () => this.#enableRefresh(),
       };
     }
@@ -1502,7 +1504,9 @@ export class Zero<
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
           userPushURL: this.#options.mutateURL,
+          userPushHeaders: this.#options.mutateHeaders,
           userQueryURL: this.#options.queryURL ?? this.#options.getQueriesURL,
+          userQueryHeaders: this.#options.queryHeaders,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1611,7 +1615,9 @@ export class Zero<
       this.#options.logLevel === 'debug',
       lc,
       this.#options.mutateURL,
+      this.#options.mutateHeaders,
       this.#options.queryURL ?? this.#options.getQueriesURL,
+      this.#options.queryHeaders,
       additionalConnectParams,
       await this.#activeClientsManager,
       this.#options.maxHeaderLength,
@@ -1982,9 +1988,10 @@ export class Zero<
                 break;
               }
 
-              case 'stateChange':
+              case 'stateChange': {
                 throwIfConnectionError(raceResult.result);
                 break;
+              }
 
               default:
                 unreachable(raceResult);
@@ -1999,8 +2006,13 @@ export class Zero<
               `Run loop paused in needs-auth state. Call zero.connection.connect({auth}) to resume.`,
               currentState.reason,
             );
-
-            await this.#connectionManager.waitForStateChange();
+            const resumeResult = await promiseRace({
+              connectRequest: this.#connectionManager.waitForConnectRequest(),
+              stateChange: this.#connectionManager.waitForStateChange(),
+            });
+            if (resumeResult.key === 'connectRequest') {
+              this.#connectionManager.resumeFromConnectRequest();
+            }
             break;
           }
 
@@ -2010,8 +2022,13 @@ export class Zero<
               `Run loop paused in error state. Call zero.connection.connect() to resume.`,
               currentState.reason,
             );
-
-            await this.#connectionManager.waitForStateChange();
+            const resumeResult = await promiseRace({
+              connectRequest: this.#connectionManager.waitForConnectRequest(),
+              stateChange: this.#connectionManager.waitForStateChange(),
+            });
+            if (resumeResult.key === 'connectRequest') {
+              this.#connectionManager.resumeFromConnectRequest();
+            }
             break;
           }
 
@@ -2408,7 +2425,9 @@ export async function createSocket(
   debugPerf: boolean,
   lc: LogContext,
   userPushURL: string | undefined,
+  userPushHeaders: Record<string, string> | undefined,
   userQueryURL: string | undefined,
+  userQueryHeaders: Record<string, string> | undefined,
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
   maxHeaderLength = 1024 * 8,
@@ -2457,7 +2476,9 @@ export async function createSocket(
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
         userPushURL,
+        userPushHeaders,
         userQueryURL,
+        userQueryHeaders,
         activeClients: [...activeClients],
       },
     ],

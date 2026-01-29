@@ -61,6 +61,7 @@ describe('view-syncer/yield-during-hydrate', () => {
     protocolVersion: PROTOCOL_VERSION,
     tokenData: undefined,
     httpCookie: undefined,
+    origin: undefined,
   };
 
   afterEach(() => {
@@ -200,7 +201,6 @@ describe('view-syncer/yield-during-hydrate', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,

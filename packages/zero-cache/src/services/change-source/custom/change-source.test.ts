@@ -72,6 +72,11 @@ describe('change-source/custom', () => {
               bar: {pos: 1, dataType: 'text'},
             },
           },
+          metadata: {
+            rowKey: {
+              columns: ['id'],
+            },
+          },
         },
       ],
       [
@@ -95,6 +100,9 @@ describe('change-source/custom', () => {
             schema: 'public',
             name: 'foo',
             keyColumns: ['id'],
+            rowKey: {
+              columns: ['id'],
+            },
           },
           new: {id: 'abcde', bar: 'baz'},
         },
@@ -112,6 +120,11 @@ describe('change-source/custom', () => {
               clientID: {pos: 1, dataType: 'text', notNull: true},
               lastMutationID: {pos: 2, dataType: 'bigint'},
               userID: {pos: 3, dataType: 'text'},
+            },
+          },
+          metadata: {
+            rowKey: {
+              columns: ['clientGroupID', 'clientID'],
             },
           },
         },
@@ -147,6 +160,11 @@ describe('change-source/custom', () => {
               mutation: {pos: 3, dataType: 'json'},
             },
           },
+          metadata: {
+            rowKey: {
+              columns: ['clientGroupID', 'clientID', 'mutationID'],
+            },
+          },
         },
       ],
       [
@@ -178,6 +196,11 @@ describe('change-source/custom', () => {
               lock: {pos: 0, dataType: 'bool', notNull: true},
               permissions: {pos: 1, dataType: 'json'},
               hash: {pos: 2, dataType: 'text'},
+            },
+          },
+          metadata: {
+            rowKey: {
+              columns: ['lock'],
             },
           },
         },
@@ -220,6 +243,125 @@ describe('change-source/custom', () => {
         // changeLog should be set up but empty, since it is
         // unnecessary / wasteful to record the initial state
         // in the change log.
+      ],
+      ['_zero.column_metadata']: [
+        {
+          character_max_length: null,
+          column_name: 'id',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 1,
+          table_name: 'foo',
+          upstream_type: 'text',
+        },
+        {
+          character_max_length: null,
+          column_name: 'bar',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 0,
+          table_name: 'foo',
+          upstream_type: 'text',
+        },
+        {
+          character_max_length: null,
+          column_name: 'clientGroupID',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 1,
+          table_name: 'bongo_0.clients',
+          upstream_type: 'text',
+        },
+        {
+          character_max_length: null,
+          column_name: 'clientID',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 1,
+          table_name: 'bongo_0.clients',
+          upstream_type: 'text',
+        },
+        {
+          character_max_length: null,
+          column_name: 'lastMutationID',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 0,
+          table_name: 'bongo_0.clients',
+          upstream_type: 'bigint',
+        },
+        {
+          character_max_length: null,
+          column_name: 'userID',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 0,
+          table_name: 'bongo_0.clients',
+          upstream_type: 'text',
+        },
+        {
+          character_max_length: null,
+          column_name: 'clientGroupID',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 1,
+          table_name: 'bongo_0.mutations',
+          upstream_type: 'text',
+        },
+        {
+          character_max_length: null,
+          column_name: 'clientID',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 1,
+          table_name: 'bongo_0.mutations',
+          upstream_type: 'text',
+        },
+        {
+          character_max_length: null,
+          column_name: 'mutationID',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 1,
+          table_name: 'bongo_0.mutations',
+          upstream_type: 'bigint',
+        },
+        {
+          character_max_length: null,
+          column_name: 'mutation',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 0,
+          table_name: 'bongo_0.mutations',
+          upstream_type: 'json',
+        },
+        {
+          character_max_length: null,
+          column_name: 'lock',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 1,
+          table_name: 'bongo.permissions',
+          upstream_type: 'bool',
+        },
+        {
+          character_max_length: null,
+          column_name: 'permissions',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 0,
+          table_name: 'bongo.permissions',
+          upstream_type: 'json',
+        },
+        {
+          character_max_length: null,
+          column_name: 'hash',
+          is_array: 0,
+          is_enum: 0,
+          is_not_null: 0,
+          table_name: 'bongo.permissions',
+          upstream_type: 'text',
+        },
       ],
     });
   });
