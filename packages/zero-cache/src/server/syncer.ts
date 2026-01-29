@@ -149,6 +149,7 @@ export default function runWorker(
             ? priorityOpRunningYieldThresholdMs
             : normalYieldThresholdMs,
         config.enableQueryPlanner,
+        config,
       ),
       sub,
       drainCoordinator,
