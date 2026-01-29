@@ -20,12 +20,6 @@ const TABLES_IN_SEED_ORDER = [
 ] as const;
 const TABLE_CSV_FILE_REGEX = `^(${TABLES_IN_SEED_ORDER.join('|')})(_.*)?.csv$`;
 
-const isBulkMode =
-  process.env.ZERO_SEED_BULK !== undefined &&
-  ['t', 'true', '1', ''].indexOf(
-    process.env.ZERO_SEED_BULK.toLocaleLowerCase().trim(),
-  ) !== -1;
-
 // Types for dynamically discovered schema objects
 interface IndexInfo {
   indexName: string;
@@ -146,14 +140,10 @@ async function seed() {
   console.log(process.env.ZERO_UPSTREAM_DB);
 
   const sql = postgres(process.env.ZERO_UPSTREAM_DB as string, {
-    // For bulk mode, increase timeouts since operations can run very long
-    ...(isBulkMode
-      ? {
-          idle_timeout: 0,
-          connect_timeout: 60,
-          max_lifetime: null,
-        }
-      : {}),
+    // Increase timeouts since operations can run long for large datasets
+    idle_timeout: 0,
+    connect_timeout: 60,
+    max_lifetime: null,
   });
 
   try {
@@ -171,10 +161,169 @@ async function seed() {
       process.exit(0);
     }
 
-    if (isBulkMode) {
-      await seedBulk(sql, dataDir, files, forceSeed);
-    } else {
-      await seedNormal(sql, dataDir, files, forceSeed);
+    // Check if already seeded
+    if (!forceSeed) {
+      const result = await sql`select 1 from "user" limit 1`;
+      if (result.length === 1) {
+        // oxlint-disable-next-line no-console
+        console.log('Database already seeded.');
+        process.exit(0);
+      }
+    }
+
+    // Discover all tables in public schema for comprehensive discovery
+    const allTablesResult = await sql<{tablename: string}[]>`
+      SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+    `;
+    const allTables = allTablesResult.map(r => r.tablename);
+
+    // Discover schema objects
+    // oxlint-disable-next-line no-console
+    console.log('Discovering schema objects...');
+    const [indexes, foreignKeys, triggers] = await Promise.all([
+      discoverIndexes(sql, allTables),
+      discoverForeignKeys(sql),
+      discoverTriggers(sql, allTables),
+    ]);
+    // oxlint-disable-next-line no-console
+    console.log(
+      `  Found ${indexes.length} indexes, ${foreignKeys.length} FKs, ${triggers.length} triggers`,
+    );
+
+    // Set memory parameters for faster index rebuilds
+    // oxlint-disable-next-line no-console
+    console.log('Setting memory parameters...');
+    await sql`SET maintenance_work_mem = '2GB'`;
+    await sql`SET work_mem = '256MB'`;
+
+    // Disable all triggers
+    // oxlint-disable-next-line no-console
+    console.log('Disabling triggers...');
+    for (const {tableName, triggerName} of triggers) {
+      try {
+        await sql`ALTER TABLE ${sql(tableName)} DISABLE TRIGGER ${sql.unsafe('"' + triggerName + '"')}`;
+      } catch (e) {
+        // oxlint-disable-next-line no-console
+        console.log(
+          `  Warning: could not disable trigger ${triggerName} on ${tableName}: ${e}`,
+        );
+      }
+    }
+
+    // Drop foreign key constraints
+    // oxlint-disable-next-line no-console
+    console.log('Dropping foreign key constraints...');
+    for (const {tableName, constraintName} of foreignKeys) {
+      try {
+        await sql.unsafe(
+          `ALTER TABLE "${tableName}" DROP CONSTRAINT IF EXISTS "${constraintName}"`,
+        );
+      } catch (e) {
+        // oxlint-disable-next-line no-console
+        console.log(`  Warning: could not drop FK ${constraintName}: ${e}`);
+      }
+    }
+
+    // Drop non-PK indexes
+    // oxlint-disable-next-line no-console
+    console.log('Dropping indexes...');
+    for (const {indexName} of indexes) {
+      try {
+        await sql.unsafe(`DROP INDEX IF EXISTS "${indexName}"`);
+      } catch (e) {
+        // oxlint-disable-next-line no-console
+        console.log(`  Warning: could not drop index ${indexName}: ${e}`);
+      }
+    }
+
+    // COPY data (no transaction - each file is its own implicit transaction)
+    // oxlint-disable-next-line no-console
+    console.log('Loading data via COPY...');
+    for (const tableName of TABLES_IN_SEED_ORDER) {
+      const tableFiles = files.filter(
+        f => f.startsWith(`${tableName}.`) || f.startsWith(`${tableName}_`),
+      );
+      if (tableFiles.length === 0) continue;
+
+      // oxlint-disable-next-line no-console
+      console.log(`  Loading ${tableName} (${tableFiles.length} files)...`);
+      let tableRowCount = 0;
+
+      for (const file of tableFiles) {
+        const filePath = join(dataDir, file);
+
+        const headerLine = await readFirstLine(filePath);
+        if (!headerLine) {
+          // oxlint-disable-next-line no-console
+          console.warn(`  Skipping empty file: ${filePath}`);
+          continue;
+        }
+
+        const columns = headerLine
+          .split(',')
+          .map(c => c.trim())
+          .map(c => c.replace(/^"|"$/g, ''));
+
+        const fileStream = fs.createReadStream(filePath, {encoding: 'utf8'});
+        const query =
+          await sql`COPY ${sql(tableName)} (${sql(columns)}) FROM STDIN DELIMITER ',' CSV HEADER`.writable();
+        await pipeline(fileStream, query);
+        tableRowCount++;
+      }
+
+      // oxlint-disable-next-line no-console
+      console.log(`  ${tableName}: loaded ${tableRowCount} files`);
+    }
+
+    // Recreate indexes
+    // oxlint-disable-next-line no-console
+    console.log('Recreating indexes (this may take a while)...');
+    for (const {indexName, indexDdl} of indexes) {
+      // oxlint-disable-next-line no-console
+      console.log(`  Creating index ${indexName}...`);
+      try {
+        await sql.unsafe(indexDdl);
+      } catch (e) {
+        // oxlint-disable-next-line no-console
+        console.log(`  Warning: could not create index ${indexName}: ${e}`);
+      }
+    }
+
+    // Recreate foreign key constraints
+    // oxlint-disable-next-line no-console
+    console.log('Recreating foreign key constraints...');
+    for (const {tableName, constraintName, fkDefinition} of foreignKeys) {
+      // oxlint-disable-next-line no-console
+      console.log(`  Creating FK ${constraintName}...`);
+      try {
+        await sql.unsafe(
+          `ALTER TABLE "${tableName}" ADD CONSTRAINT "${constraintName}" ${fkDefinition}`,
+        );
+      } catch (e) {
+        // oxlint-disable-next-line no-console
+        console.log(`  Warning: could not create FK ${constraintName}: ${e}`);
+      }
+    }
+
+    // Re-enable triggers
+    // oxlint-disable-next-line no-console
+    console.log('Re-enabling triggers...');
+    for (const {tableName, triggerName} of triggers) {
+      try {
+        await sql`ALTER TABLE ${sql(tableName)} ENABLE TRIGGER ${sql.unsafe('"' + triggerName + '"')}`;
+      } catch (e) {
+        // oxlint-disable-next-line no-console
+        console.log(
+          `  Warning: could not enable trigger ${triggerName} on ${tableName}: ${e}`,
+        );
+      }
+    }
+
+    // Analyze tables for query planner
+    // oxlint-disable-next-line no-console
+    console.log('Running ANALYZE...');
+    for (const tableName of TABLES_IN_SEED_ORDER) {
+      await sql`ANALYZE ${sql(tableName)}`;
     }
 
     // oxlint-disable-next-line no-console
@@ -184,244 +333,6 @@ async function seed() {
     // oxlint-disable-next-line no-console
     console.error('Seeding failed:', err);
     process.exit(1);
-  }
-}
-
-async function seedNormal(
-  sql: postgres.Sql,
-  dataDir: string,
-  files: string[],
-  forceSeed: boolean,
-) {
-  // Use a single transaction for atomicity
-  await sql.begin(async sql => {
-    let checkedIfAlreadySeeded = forceSeed;
-    await sql`ALTER TABLE issue DISABLE TRIGGER issue_set_last_modified;`;
-    await sql`ALTER TABLE issue DISABLE TRIGGER issue_set_created_on_insert_trigger;`;
-    await sql`ALTER TABLE comment DISABLE TRIGGER update_issue_modified_time_on_comment;`;
-    await sql`ALTER TABLE comment DISABLE TRIGGER comment_set_created_on_insert_trigger;`;
-    for (const tableName of TABLES_IN_SEED_ORDER) {
-      for (const file of files) {
-        if (
-          !file.startsWith(`${tableName}.`) &&
-          !file.startsWith(`${tableName}_`)
-        ) {
-          continue;
-        }
-        const filePath = join(dataDir, file);
-
-        if (!checkedIfAlreadySeeded) {
-          const result = await sql`select 1 from ${sql(tableName)} limit 1`;
-          if (result.length === 1) {
-            // oxlint-disable-next-line no-console
-            console.log('Database already seeded.');
-            return;
-          }
-          checkedIfAlreadySeeded = true;
-        }
-
-        const headerLine = await readFirstLine(filePath);
-        if (!headerLine) {
-          // eslint-disable-next-line no-console
-          console.warn(`Skipping empty file: ${filePath}`);
-          continue;
-        }
-
-        const columns = headerLine
-          .split(',')
-          .map(c => c.trim())
-          .map(c => c.replace(/^"|"$/g, ''));
-        // oxlint-disable-next-line no-console
-        console.log(
-          `Seeding table ${tableName} (${columns.join(', ')}) with rows from ${filePath}.`,
-        );
-        const fileStream = fs.createReadStream(filePath, {
-          encoding: 'utf8',
-        });
-        const query =
-          await sql`COPY ${sql(tableName)} (${sql(columns)}) FROM STDIN DELIMITER ',' CSV HEADER`.writable();
-        await pipeline(fileStream, query);
-      }
-    }
-    await sql`ALTER TABLE issue ENABLE TRIGGER issue_set_last_modified;`;
-    await sql`ALTER TABLE issue ENABLE TRIGGER issue_set_created_on_insert_trigger;`;
-    await sql`ALTER TABLE comment ENABLE TRIGGER update_issue_modified_time_on_comment;`;
-    await sql`ALTER TABLE comment ENABLE TRIGGER comment_set_created_on_insert_trigger;`;
-  });
-}
-
-async function seedBulk(
-  sql: postgres.Sql,
-  dataDir: string,
-  files: string[],
-  forceSeed: boolean,
-) {
-  // oxlint-disable-next-line no-console
-  console.log('Bulk mode enabled: optimizing for large data loads...');
-
-  // Check if already seeded (outside transaction for bulk)
-  if (!forceSeed) {
-    const result = await sql`select 1 from "user" limit 1`;
-    if (result.length === 1) {
-      // oxlint-disable-next-line no-console
-      console.log('Database already seeded.');
-      return;
-    }
-  }
-
-  // Discover all tables in public schema for comprehensive discovery
-  const allTablesResult = await sql<{tablename: string}[]>`
-    SELECT tablename FROM pg_tables WHERE schemaname = 'public'
-  `;
-  const allTables = allTablesResult.map(r => r.tablename);
-
-  // Step 1: Discover schema objects
-  // oxlint-disable-next-line no-console
-  console.log('Discovering schema objects...');
-  const [indexes, foreignKeys, triggers] = await Promise.all([
-    discoverIndexes(sql, allTables),
-    discoverForeignKeys(sql),
-    discoverTriggers(sql, allTables),
-  ]);
-  // oxlint-disable-next-line no-console
-  console.log(
-    `  Found ${indexes.length} indexes, ${foreignKeys.length} FKs, ${triggers.length} triggers`,
-  );
-
-  // Step 2: Set memory parameters for faster index rebuilds
-  // oxlint-disable-next-line no-console
-  console.log('Setting memory parameters...');
-  await sql`SET maintenance_work_mem = '2GB'`;
-  await sql`SET work_mem = '256MB'`;
-
-  // Step 3: Disable all triggers
-  // oxlint-disable-next-line no-console
-  console.log('Disabling triggers...');
-  for (const {tableName, triggerName} of triggers) {
-    try {
-      await sql`ALTER TABLE ${sql(tableName)} DISABLE TRIGGER ${sql.unsafe('"' + triggerName + '"')}`;
-    } catch (e) {
-      // oxlint-disable-next-line no-console
-      console.log(
-        `  Warning: could not disable trigger ${triggerName} on ${tableName}: ${e}`,
-      );
-    }
-  }
-
-  // Step 4: Drop foreign key constraints
-  // oxlint-disable-next-line no-console
-  console.log('Dropping foreign key constraints...');
-  for (const {tableName, constraintName} of foreignKeys) {
-    try {
-      await sql.unsafe(
-        `ALTER TABLE "${tableName}" DROP CONSTRAINT IF EXISTS "${constraintName}"`,
-      );
-    } catch (e) {
-      // oxlint-disable-next-line no-console
-      console.log(`  Warning: could not drop FK ${constraintName}: ${e}`);
-    }
-  }
-
-  // Step 5: Drop non-PK indexes
-  // oxlint-disable-next-line no-console
-  console.log('Dropping indexes...');
-  for (const {indexName} of indexes) {
-    try {
-      await sql.unsafe(`DROP INDEX IF EXISTS "${indexName}"`);
-    } catch (e) {
-      // oxlint-disable-next-line no-console
-      console.log(`  Warning: could not drop index ${indexName}: ${e}`);
-    }
-  }
-
-  // Step 6: COPY data (no transaction - each file is its own implicit transaction)
-  // oxlint-disable-next-line no-console
-  console.log('Loading data via COPY...');
-  for (const tableName of TABLES_IN_SEED_ORDER) {
-    const tableFiles = files.filter(
-      f => f.startsWith(`${tableName}.`) || f.startsWith(`${tableName}_`),
-    );
-    if (tableFiles.length === 0) continue;
-
-    // oxlint-disable-next-line no-console
-    console.log(`  Loading ${tableName} (${tableFiles.length} files)...`);
-    let tableRowCount = 0;
-
-    for (const file of tableFiles) {
-      const filePath = join(dataDir, file);
-
-      const headerLine = await readFirstLine(filePath);
-      if (!headerLine) {
-        // oxlint-disable-next-line no-console
-        console.warn(`  Skipping empty file: ${filePath}`);
-        continue;
-      }
-
-      const columns = headerLine
-        .split(',')
-        .map(c => c.trim())
-        .map(c => c.replace(/^"|"$/g, ''));
-
-      const fileStream = fs.createReadStream(filePath, {encoding: 'utf8'});
-      const query =
-        await sql`COPY ${sql(tableName)} (${sql(columns)}) FROM STDIN DELIMITER ',' CSV HEADER`.writable();
-      await pipeline(fileStream, query);
-      tableRowCount++;
-    }
-
-    // oxlint-disable-next-line no-console
-    console.log(`  ${tableName}: loaded ${tableRowCount} files`);
-  }
-
-  // Step 7: Recreate indexes
-  // oxlint-disable-next-line no-console
-  console.log('Recreating indexes (this may take a while)...');
-  for (const {indexName, indexDdl} of indexes) {
-    // oxlint-disable-next-line no-console
-    console.log(`  Creating index ${indexName}...`);
-    try {
-      await sql.unsafe(indexDdl);
-    } catch (e) {
-      // oxlint-disable-next-line no-console
-      console.log(`  Warning: could not create index ${indexName}: ${e}`);
-    }
-  }
-
-  // Step 8: Recreate foreign key constraints
-  // oxlint-disable-next-line no-console
-  console.log('Recreating foreign key constraints...');
-  for (const {tableName, constraintName, fkDefinition} of foreignKeys) {
-    // oxlint-disable-next-line no-console
-    console.log(`  Creating FK ${constraintName}...`);
-    try {
-      await sql.unsafe(
-        `ALTER TABLE "${tableName}" ADD CONSTRAINT "${constraintName}" ${fkDefinition}`,
-      );
-    } catch (e) {
-      // oxlint-disable-next-line no-console
-      console.log(`  Warning: could not create FK ${constraintName}: ${e}`);
-    }
-  }
-
-  // Step 9: Re-enable triggers
-  // oxlint-disable-next-line no-console
-  console.log('Re-enabling triggers...');
-  for (const {tableName, triggerName} of triggers) {
-    try {
-      await sql`ALTER TABLE ${sql(tableName)} ENABLE TRIGGER ${sql.unsafe('"' + triggerName + '"')}`;
-    } catch (e) {
-      // oxlint-disable-next-line no-console
-      console.log(
-        `  Warning: could not enable trigger ${triggerName} on ${tableName}: ${e}`,
-      );
-    }
-  }
-
-  // Step 10: Analyze tables for query planner
-  // oxlint-disable-next-line no-console
-  console.log('Running ANALYZE...');
-  for (const tableName of TABLES_IN_SEED_ORDER) {
-    await sql`ANALYZE ${sql(tableName)}`;
   }
 }
 
