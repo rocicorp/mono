@@ -384,15 +384,6 @@ describe('jwt auth without options', () => {
     const first = JSON.parse(messages[0]);
     expect(first[0]).toBe('connected');
 
-    // check that we logged a warning that the auth token must be manually verified by the user
-    expect(logSink.messages).toContainEqual([
-      'warn',
-      {},
-      [
-        'One of jwk, secret, or jwksUrl is not configured - the `authorization` header must be manually verified by the user',
-      ],
-    ]);
-
     // Services should be instantiated for successful connection
     expect(mutagens.length).toBe(1);
     expect(pushers.length).toBe(1);

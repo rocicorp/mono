@@ -185,10 +185,6 @@ export class Syncer implements SingletonService {
           ws.close(3000, 'Failed to decode JWT');
           return;
         }
-      } else {
-        this.#lc.warn?.(
-          `One of jwk, secret, or jwksUrl is not configured - the \`authorization\` header must be manually verified by the user`,
-        );
       }
     } else {
       this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
