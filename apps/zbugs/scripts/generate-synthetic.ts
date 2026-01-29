@@ -770,6 +770,7 @@ async function main() {
 }
 
 main().catch(err => {
+  // oxlint-disable-next-line no-console
   console.error('Synthetic data generation failed:', err);
   process.exit(1);
 });

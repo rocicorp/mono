@@ -410,6 +410,7 @@ async function main() {
 }
 
 main().catch(err => {
+  // oxlint-disable-next-line no-console
   console.error('Template generation failed:', err);
   process.exit(1);
 });
