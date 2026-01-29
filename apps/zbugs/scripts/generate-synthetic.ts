@@ -19,10 +19,10 @@
  *   SKIP_USERS            - when "true", skip user CSV generation (default false)
  */
 
+import {faker} from '@faker-js/faker';
 import * as fs from 'fs';
 import * as path from 'path';
 import {fileURLToPath} from 'url';
-import {faker} from '@faker-js/faker';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- Configuration ---
