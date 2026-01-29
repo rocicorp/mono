@@ -263,22 +263,27 @@ describe('replicator/replication-status', () => {
         lc,
         'Initializing',
         new Error('foobar'),
+        undefined,
         new Date(Date.UTC(2025, 9, 14, 1, 2, 3)),
       ),
-    ).toMatchInlineSnapshot(`
-      {
-        "component": "replication",
-        "description": "Error: foobar",
-        "stage": "Initializing",
-        "state": {
-          "indexes": [],
-          "replicaSize": undefined,
-          "tables": [],
-        },
-        "status": "ERROR",
-        "time": "2025-10-14T01:02:03.000Z",
-        "type": "zero/events/status/replication/v1",
-      }
-    `);
+    ).toMatchObject({
+      component: 'replication',
+      description: 'Error: foobar',
+      errorDetails: {
+        cause: undefined,
+        message: 'foobar',
+        name: 'Error',
+        stack: expect.stringMatching('Error: foobar'),
+      },
+      stage: 'Initializing',
+      state: {
+        indexes: [],
+        replicaSize: undefined,
+        tables: [],
+      },
+      status: 'ERROR',
+      time: '2025-10-14T01:02:03.000Z',
+      type: 'zero/events/status/replication/v1',
+    });
   });
 });
