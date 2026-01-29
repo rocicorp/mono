@@ -132,7 +132,7 @@ export async function handleInspect(
         if (legacyQuery) {
           using db = new Database(lc, config.replica.file);
           const dbRunner = new StatementRunner(db);
-          const loaded = loadPermissions(lc, dbRunner, config.app.id);
+          const loaded = loadPermissions(lc, dbRunner, config.app.id, config);
           if (loaded.permissions) {
             permissions = loaded.permissions;
           } else {

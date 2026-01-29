@@ -30,7 +30,7 @@ import {
   reloadPermissionsIfChanged,
   type LoadedPermissions,
 } from '../../auth/load-permissions.ts';
-import type {LogConfig} from '../../config/zero-config.ts';
+import type {LogConfig, ZeroConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {
@@ -118,6 +118,7 @@ export class PipelineDriver {
   readonly #storage: ClientGroupStorage;
   readonly #shardID: ShardID;
   readonly #logConfig: LogConfig;
+  readonly #config: ZeroConfig | undefined;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   readonly #yieldThresholdMs: () => number;
@@ -151,13 +152,15 @@ export class PipelineDriver {
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
     yieldThresholdMs: () => number,
-    enablePlanner?: boolean,
+    enablePlanner?: boolean | undefined,
+    config?: ZeroConfig | undefined,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
     this.#shardID = shardID;
     this.#logConfig = logConfig;
+    this.#config = config;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
@@ -244,6 +247,7 @@ export class PipelineDriver {
       this.#snapshotter.current().db,
       this.#shardID.appID,
       this.#permissions,
+      this.#config,
     );
     if (res.changed) {
       this.#permissions = res.permissions;
