@@ -30,6 +30,7 @@ export type GetPageQuery<TRow, TStartRow> = (
 ) => GetQueryReturnType<TRow>;
 
 export type GetSingleQuery<TRow> = (
+  // TODO(arv): id should be generic based on table primary key
   id: string,
 ) => GetQueryReturnType<TRow | undefined>;
 

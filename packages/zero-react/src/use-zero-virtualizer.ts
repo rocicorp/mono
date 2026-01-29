@@ -520,19 +520,21 @@ export function useZeroVirtualizer<
 
     const firstItem = virtualItems[0];
     const lastItem = virtualItems[virtualItems.length - 1];
+    // TODO(arv): These calculations are based on indexes. We should base them
+    // on pixels to support variable size items.
     const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
 
     const distanceFromStart = firstItem.index - firstRowIndex;
     const distanceFromEnd = firstRowIndex + rowsLength - lastItem.index;
 
-    if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
-      updateAnchorForEdge(
-        lastItem.index + 2 * nearPageEdgeThreshold,
-        'backward',
-        0,
-      );
-      return;
-    }
+    // if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
+    //   updateAnchorForEdge(
+    //     lastItem.index + 2 * nearPageEdgeThreshold,
+    //     'backward',
+    //     0,
+    //   );
+    //   return;
+    // }
 
     if (!atEnd && distanceFromEnd <= nearPageEdgeThreshold) {
       updateAnchorForEdge(

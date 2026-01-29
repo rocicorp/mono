@@ -142,7 +142,7 @@ export const Markdown = memo(({children}: {children: string}) => (
         return <p>{children}</p>;
       },
       // Ensure no additional processing for <img> elements
-      img: ({node: _n, key: _k, ref: _, ...props}) => <img {...props} />,
+      img: ({node: _n, ref: _, ...props}) => <img {...props} />,
       li: ({children, ref: _r, ...props}) => {
         const isTask = props.className?.includes('task-list-item');
         const nodes: React.ReactNode[] = React.Children.toArray(children);
