@@ -171,6 +171,16 @@ async function seed() {
       }
     }
 
+    // If forcing, truncate existing data
+    if (forceSeed) {
+      // oxlint-disable-next-line no-console
+      console.log('Force mode: truncating existing data...');
+      // Truncate in reverse order to respect foreign key dependencies
+      for (const tableName of [...TABLES_IN_SEED_ORDER].reverse()) {
+        await sql`TRUNCATE ${sql(tableName)} CASCADE`;
+      }
+    }
+
     // Discover all tables in public schema for comprehensive discovery
     const allTablesResult = await sql<{tablename: string}[]>`
       SELECT tablename FROM pg_tables WHERE schemaname = 'public'
