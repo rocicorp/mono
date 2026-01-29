@@ -1,0 +1,33 @@
+/* Virtual list preview overrides */
+.virtual-list-preview {
+  img {
+    display: none;
+  }
+
+  p {
+    margin: 0 0 0.5rem 0;
+    line-height: 1.4;
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  h1,
+  h2,
+  h3 {
+    margin: 0.5rem 0;
+    font-size: inherit;
+  }
+
+  pre,
+  blockquote {
+    margin: 0.5rem 0;
+  }
+
+  ul,
+  ol {
+    margin: 0.5rem 0;
+    padding-left: 1rem;
+  }
+}
