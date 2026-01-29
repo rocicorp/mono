@@ -92,10 +92,19 @@ export async function publishReplicationError(
   await publishCriticalEvent(lc, event);
 }
 
+export function replicationStatusError(
+  lc: LogContext,
+  stage: ReplicationStage,
+  e: unknown,
+  now = new Date(),
+) {
+  return replicationStatusEvent(lc, null, stage, 'ERROR', String(e), now);
+}
+
 // Exported for testing.
 export function replicationStatusEvent(
   lc: LogContext,
-  db: Database,
+  db: Database | null,
   stage: ReplicationStage,
   status: Status,
   description?: string,
@@ -110,9 +119,9 @@ export function replicationStatusEvent(
       description,
       time: now.toISOString(),
       state: {
-        tables: getReplicatedTables(db),
-        indexes: getReplicatedIndexes(db),
-        replicaSize: getReplicaSize(db),
+        tables: db ? getReplicatedTables(db) : [],
+        indexes: db ? getReplicatedIndexes(db) : [],
+        replicaSize: db ? getReplicaSize(db) : undefined,
       },
     };
   } catch (e) {
