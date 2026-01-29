@@ -22,8 +22,10 @@ const TABLE_CSV_FILE_REGEX = `^(${TABLES_IN_SEED_ORDER.join('|')})(_.*)?.csv$`;
 
 // Types for dynamically discovered schema objects
 interface IndexInfo {
+  tableName: string;
   indexName: string;
   indexDdl: string;
+  constraintName: string | null;
 }
 
 interface ForeignKeyInfo {
@@ -46,23 +48,34 @@ async function discoverIndexes(
 ): Promise<IndexInfo[]> {
   const results: IndexInfo[] = [];
   for (const table of tables) {
-    const rows = await sql<{indexname: string; index_ddl: string}[]>`
+    const rows = await sql<
+      {
+        indexname: string;
+        index_ddl: string;
+        constraint_name: string | null;
+      }[]
+    >`
       SELECT
         pg_indexes.indexname,
-        pg_get_indexdef(pg_class.oid) as index_ddl
+        pg_get_indexdef(pg_class.oid) as index_ddl,
+        pg_constraint.conname as constraint_name
       FROM pg_indexes
       JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
       JOIN pg_class ON pg_class.relname = pg_indexes.indexname
         AND pg_class.relnamespace = pg_namespace.oid
       JOIN pg_index ON pg_index.indexrelid = pg_class.oid
+      LEFT JOIN pg_constraint ON pg_constraint.conindid = pg_class.oid
+        AND pg_constraint.contype IN ('u', 'p')
       WHERE pg_indexes.tablename = ${table}
         AND pg_indexes.schemaname = 'public'
         AND pg_index.indisprimary = FALSE
     `;
     for (const row of rows) {
       results.push({
+        tableName: table,
         indexName: row.indexname,
         indexDdl: row.index_ddl,
+        constraintName: row.constraint_name,
       });
     }
   }
@@ -183,7 +196,13 @@ async function seed() {
       console.log('Force mode: truncating existing data...');
       // Truncate in reverse order to respect foreign key dependencies
       for (const tableName of [...TABLES_IN_SEED_ORDER].reverse()) {
-        await sql`TRUNCATE ${sql(tableName)} CASCADE`;
+        const exists = await sql`
+          SELECT 1 FROM pg_tables
+          WHERE schemaname = 'public' AND tablename = ${tableName}
+        `;
+        if (exists.length > 0) {
+          await sql`TRUNCATE ${sql(tableName)} CASCADE`;
+        }
       }
     }
 
@@ -245,12 +264,18 @@ async function seed() {
       }
     }
 
-    // Drop non-PK indexes
+    // Drop non-PK indexes (constraint-backed indexes must be dropped via ALTER TABLE)
     // oxlint-disable-next-line no-console
     console.log('Dropping indexes...');
-    for (const {indexName} of indexes) {
+    for (const {tableName, indexName, constraintName} of indexes) {
       try {
-        await sql.unsafe(`DROP INDEX IF EXISTS "${indexName}"`);
+        if (constraintName) {
+          await sql.unsafe(
+            `ALTER TABLE "${tableName}" DROP CONSTRAINT IF EXISTS "${constraintName}"`,
+          );
+        } else {
+          await sql.unsafe(`DROP INDEX IF EXISTS "${indexName}"`);
+        }
       } catch (e) {
         // oxlint-disable-next-line no-console
         console.log(`  Warning: could not drop index ${indexName}: ${e}`);
@@ -296,14 +321,23 @@ async function seed() {
       console.log(`  ${tableName}: loaded ${tableRowCount} files`);
     }
 
-    // Recreate indexes
+    // Recreate indexes (constraint-backed indexes are recreated via ALTER TABLE)
     // oxlint-disable-next-line no-console
     console.log('Recreating indexes (this may take a while)...');
-    for (const {indexName, indexDdl} of indexes) {
+    for (const {tableName, indexName, indexDdl, constraintName} of indexes) {
       // oxlint-disable-next-line no-console
       console.log(`  Creating index ${indexName}...`);
       try {
-        await sql.unsafe(indexDdl);
+        if (constraintName) {
+          // The DDL from pg_get_indexdef is a CREATE UNIQUE INDEX statement.
+          // First create the index, then add it as a constraint.
+          await sql.unsafe(indexDdl);
+          await sql.unsafe(
+            `ALTER TABLE "${tableName}" ADD CONSTRAINT "${constraintName}" UNIQUE USING INDEX "${indexName}"`,
+          );
+        } else {
+          await sql.unsafe(indexDdl);
+        }
       } catch (e) {
         // oxlint-disable-next-line no-console
         console.log(`  Warning: could not create index ${indexName}: ${e}`);
