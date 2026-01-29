@@ -2,7 +2,10 @@ import {useConnectionState} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import {Redirect, Route, Switch} from 'wouter';
 import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
-import {LoadingSpinner} from './components/loading-spinner.tsx';
+import {
+  getDemoLoadTime,
+  LoadingSpinner,
+} from './components/loading-spinner.tsx';
 import {Nav} from './components/nav.tsx';
 import {useLogin} from './hooks/use-login.tsx';
 import {useSoftNav} from './hooks/use-softnav.ts';
@@ -65,8 +68,51 @@ function OGImageUpdater() {
   return null;
 }
 
+function DemoLoadedPill({
+  loadTimeMs,
+  compact = false,
+}: {
+  loadTimeMs: number;
+  compact?: boolean | undefined;
+}) {
+  const [visible, setVisible] = useState(true);
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setFading(true), 8000);
+    const hideTimer = setTimeout(() => setVisible(false), 8500);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(hideTimer);
+    };
+  }, []);
+
+  if (!visible) {
+    return null;
+  }
+
+  const seconds = (loadTimeMs / 1000).toFixed(1);
+
+  return (
+    <div className={`demo-loaded-pill ${fading ? 'fading' : ''}`}>
+      <div className="demo-loaded-pill-header">
+        {compact
+          ? `Loaded in ${seconds} seconds.`
+          : `Tada! Loaded in ${seconds} seconds.`}
+      </div>
+      {!compact && (
+        <p className="demo-loaded-pill-body">
+          Zero syncs millions of rows to IndexedDB in seconds, enabling instant
+          queries and offline support.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function Root() {
   const [contentReady, setContentReady] = useState(false);
+  const [demoLoadTime, setDemoLoadTime] = useState<number | null>(null);
 
   useSoftNav();
 
@@ -80,12 +126,39 @@ export function Root() {
     }
   }, [connectionState, login]);
 
+  const qs = new URLSearchParams(window.location.search);
+  const isDemoMode = qs.has('demo');
+  const isDemoVideo = qs.has('demovideo');
+  const spinnerStay = isDemoMode && qs.has('spinnerstay');
+
+  // Capture demo load time when content becomes ready
+  useEffect(() => {
+    if (
+      contentReady &&
+      (isDemoMode || isDemoVideo) &&
+      !spinnerStay &&
+      demoLoadTime === null
+    ) {
+      const loadTime = getDemoLoadTime();
+      if (loadTime !== null) {
+        setDemoLoadTime(loadTime);
+      }
+    }
+  }, [contentReady, isDemoMode, isDemoVideo, spinnerStay, demoLoadTime]);
+
   return (
     <ListContextProvider>
-      {!contentReady && <LoadingSpinner />}
+      {(!contentReady || spinnerStay) && (
+        <LoadingSpinner forceShow={spinnerStay} />
+      )}
+      {demoLoadTime !== null && !spinnerStay && (
+        <DemoLoadedPill loadTimeMs={demoLoadTime} compact={isDemoVideo} />
+      )}
       <div
         className="app-container flex p-8"
-        style={{visibility: contentReady ? 'visible' : 'hidden'}}
+        style={{
+          visibility: contentReady && !spinnerStay ? 'visible' : 'hidden',
+        }}
       >
         <Switch>
           <Route path={routes.home}>
