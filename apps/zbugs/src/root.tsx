@@ -96,7 +96,9 @@ function DemoLoadedPill({
   return (
     <div className={`demo-loaded-pill ${fading ? 'fading' : ''}`}>
       <div className="demo-loaded-pill-header">
-        {compact ? `Loaded in ${seconds} seconds.` : `Tada! Loaded in ${seconds} seconds.`}
+        {compact
+          ? `Loaded in ${seconds} seconds.`
+          : `Tada! Loaded in ${seconds} seconds.`}
       </div>
       {!compact && (
         <p className="demo-loaded-pill-body">
