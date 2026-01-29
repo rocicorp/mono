@@ -2,7 +2,10 @@ import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {replicationStatusEvent} from './replication-status.ts';
+import {
+  replicationStatusError,
+  replicationStatusEvent,
+} from './replication-status.ts';
 
 describe('replicator/replication-status', () => {
   let lc: LogContext;
@@ -248,6 +251,31 @@ describe('replicator/replication-status', () => {
           ],
         },
         "status": "OK",
+        "time": "2025-10-14T01:02:03.000Z",
+        "type": "zero/events/status/replication/v1",
+      }
+    `);
+  });
+
+  test('error', () => {
+    expect(
+      replicationStatusError(
+        lc,
+        'Initializing',
+        new Error('foobar'),
+        new Date(Date.UTC(2025, 9, 14, 1, 2, 3)),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "component": "replication",
+        "description": "Error: foobar",
+        "stage": "Initializing",
+        "state": {
+          "indexes": [],
+          "replicaSize": undefined,
+          "tables": [],
+        },
+        "status": "ERROR",
         "time": "2025-10-14T01:02:03.000Z",
         "type": "zero/events/status/replication/v1",
       }
