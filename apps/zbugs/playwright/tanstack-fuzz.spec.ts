@@ -775,4 +775,178 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
       expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
     }
   });
+
+  test('resize row in overscan while next row is partially visible at top edge', async ({
+    page,
+  }) => {
+    console.log(
+      '\n📏 Testing resize row in overscan when next row is partially at top edge...\n',
+    );
+
+    // This test reproduces the specific scenario:
+    // 1. Row 1 is in overscan (rendered but above viewport)
+    // 2. Row 2 is partially visible at the top edge
+    // 3. Resize row 1 - the viewport should NOT shift
+
+    await resetList(page);
+
+    // The scroll container is the div with overflow:auto containing the virtualizer
+    // Scroll so that row 2's top edge is just above the viewport
+    // Row 0: ~176px, Row 1: ~176px, Row 2 starts at ~352px
+    // If we scroll to 400px, row 2's top (352) is above viewport,
+    // but row 2 is still partially visible
+
+    // Use the virtualizer's scrollToOffset to ensure proper state sync
+    await page.evaluate(() => {
+      // oxlint-disable-next-line no-explicit-any
+      const v = (window as any).virtualizer;
+      if (v) {
+        v.scrollToOffset(400);
+      }
+    });
+    // Wait for scroll event to propagate to virtualizer
+    await page.waitForTimeout(300);
+
+    // Get position of row 2 (should be negative, meaning top is above viewport)
+    const row2Position = await getRowPosition(page, 2);
+    console.log(
+      `Row 2 position (should be negative/partial): ${row2Position}px`,
+    );
+
+    // Get position of row 3 as our reference (should be visible)
+    const initialPosition = await getRowPosition(page, 3);
+    expect(initialPosition).not.toBeNull();
+    console.log(`Initial position of Row 3 (reference): ${initialPosition}px`);
+
+    // Get virtual items to see what's rendered
+    const virtualItems = await page.evaluate(() => {
+      // oxlint-disable-next-line no-explicit-any
+      const v = (window as any).virtualizer;
+      if (!v) return null;
+      return v
+        .getVirtualItems()
+        .map((item: {index: number; start: number; size: number}) => ({
+          index: item.index,
+          start: item.start,
+          size: item.size,
+        }));
+    });
+    console.log('Virtual items:', JSON.stringify(virtualItems?.slice(0, 10)));
+
+    // Get current scroll offset
+    const scrollInfo = await page.evaluate(() => {
+      // oxlint-disable-next-line no-explicit-any
+      const v = (window as any).virtualizer;
+      return {
+        scrollOffset: v?.scrollOffset,
+        scrollElement: v?.scrollElement ? 'exists' : 'null',
+      };
+    });
+    console.log(
+      `Scroll info: scrollOffset=${scrollInfo.scrollOffset}, scrollElement=${scrollInfo.scrollElement}`,
+    );
+
+    // Check that row 1 is actually in the virtual items (in overscan)
+    const row1InVirtualItems = virtualItems?.some(
+      (item: {index: number}) => item.index === 1,
+    );
+    console.log(`Row 1 in virtual items (overscan): ${row1InVirtualItems}`);
+
+    // Resize row 1 (which should be in overscan above the viewport)
+    console.log('Resizing Row 1 from current multiplier to 30...');
+    await page.evaluate(
+      ({rowIndex, multiplier}) => {
+        // oxlint-disable-next-line no-explicit-any
+        (window as any).resizeRow(rowIndex, multiplier);
+      },
+      {rowIndex: 1, multiplier: 30},
+    );
+    await page.waitForTimeout(500);
+
+    const afterPosition = await getRowPosition(page, 3);
+    console.log(`Position of Row 3 after resize: ${afterPosition}px`);
+
+    if (initialPosition !== null && afterPosition !== null) {
+      const drift = Math.abs(afterPosition - initialPosition);
+      console.log(`Drift: ${drift}px`);
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
+
+  test('resize row in overscan with narrow viewport', async ({page}) => {
+    console.log(
+      '\n📏 Testing resize row in overscan with NARROW viewport...\n',
+    );
+
+    // Narrow window causes rows to wrap and be taller than estimated
+    await page.setViewportSize({width: 400, height: 600});
+    await page.waitForTimeout(200);
+
+    await resetList(page);
+    await page.waitForTimeout(500); // Wait for rows to measure at narrow width
+
+    // Get measurements after narrow viewport
+    const measurements = await page.evaluate(() => {
+      // oxlint-disable-next-line no-explicit-any
+      const v = (window as any).virtualizer;
+      if (!v) return null;
+      const items = v.getVirtualItems();
+      return items
+        .slice(0, 5)
+        .map(
+          (item: {
+            index: number;
+            start: number;
+            size: number;
+            end: number;
+          }) => ({
+            index: item.index,
+            start: item.start,
+            size: item.size,
+            end: item.end,
+          }),
+        );
+    });
+    console.log('Initial measurements (narrow):', JSON.stringify(measurements));
+
+    // Scroll to position row 2 partially at top
+    // With narrow viewport, rows are taller, so scroll position needs adjustment
+    const row2Start = measurements?.[2]?.start ?? 400;
+    const scrollTo = row2Start + 50; // Scroll past row 2's top
+
+    console.log(`Scrolling to ${scrollTo} (row 2 starts at ${row2Start})`);
+    await page.evaluate(offset => {
+      // oxlint-disable-next-line no-explicit-any
+      const v = (window as any).virtualizer;
+      if (v) {
+        v.scrollToOffset(offset);
+      }
+    }, scrollTo);
+    await page.waitForTimeout(300);
+
+    // Get reference position of row 3
+    const initialPosition = await getRowPosition(page, 3);
+    expect(initialPosition).not.toBeNull();
+    console.log(`Initial position of Row 3 (reference): ${initialPosition}px`);
+
+    // Resize row 1 (which is in overscan above viewport)
+    console.log('Resizing Row 1 to multiplier 30...');
+    await page.evaluate(
+      ({rowIndex, multiplier}) => {
+        // oxlint-disable-next-line no-explicit-any
+        (window as any).resizeRow(rowIndex, multiplier);
+      },
+      {rowIndex: 1, multiplier: 30},
+    );
+    await page.waitForTimeout(500);
+
+    const afterPosition = await getRowPosition(page, 3);
+    console.log(`Position of Row 3 after resize: ${afterPosition}px`);
+
+    if (initialPosition !== null && afterPosition !== null) {
+      const drift = Math.abs(afterPosition - initialPosition);
+      console.log(`Drift: ${drift}px`);
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
 });

@@ -405,7 +405,6 @@ export class Virtualizer<
   elementsCache = new Map<Key, TItemElement>();
 
   // Rocicorp: State for splice detection and scroll stability
-  private previousKeys: Array<Key> = [];
   private anchorBeforeMeasurement: {
     key: Key;
     pixelOffset: number;
@@ -838,30 +837,26 @@ export class Virtualizer<
   ): void => {
     const newCount = newOpts.count;
     const newGetItemKey = newOpts.getItemKey ?? defaultKeyExtractor;
+    const oldMeasurements = this.measurementsCache;
 
-    // Build new keys array to detect changes
-    const newKeys: Array<Key> = [];
-    for (let i = 0; i < newCount; i++) {
-      newKeys.push(newGetItemKey(i));
-    }
-
-    const prevKeys = this.previousKeys;
-
-    // No previous keys - first render, just store and return
-    if (prevKeys.length === 0) {
-      this.previousKeys = newKeys;
+    // No previous measurements - first render, nothing to anchor
+    if (oldMeasurements.length === 0) {
       this.anchorBeforeMeasurement = null;
       return;
     }
 
-    // Check if keys changed
-    const keysChanged =
-      prevKeys.length !== newKeys.length ||
-      !prevKeys.every((k, i) => k === newKeys[i]);
+    // Check if keys changed by comparing lazily (bail on first difference)
+    let keysChanged = oldMeasurements.length !== newCount;
+    if (!keysChanged) {
+      for (let i = 0; i < newCount; i++) {
+        if (oldMeasurements[i]?.key !== newGetItemKey(i)) {
+          keysChanged = true;
+          break;
+        }
+      }
+    }
 
     if (!keysChanged) {
-      // Keys didn't change, update and return
-      this.previousKeys = newKeys;
       this.anchorBeforeMeasurement = null;
       return;
     }
@@ -869,16 +864,17 @@ export class Virtualizer<
     // Keys changed - capture anchor using CURRENT options (before they change)
     const scrollOffset = this.getScrollOffset();
     if (scrollOffset <= 0) {
-      this.previousKeys = newKeys;
       this.anchorBeforeMeasurement = null;
       return;
     }
 
-    // Create set of new keys for O(1) lookup
-    const newKeySet = new Set(newKeys);
+    // Build set of new keys for O(1) lookup when finding surviving items
+    const newKeySet = new Set<Key>();
+    for (let i = 0; i < newCount; i++) {
+      newKeySet.add(newGetItemKey(i));
+    }
 
     // Find the first visible item that still exists in new keys
-    const oldMeasurements = this.measurementsCache;
     let anchorItem: VirtualItem | undefined;
 
     for (const item of oldMeasurements) {
@@ -899,7 +895,6 @@ export class Virtualizer<
     }
 
     if (!anchorItem) {
-      this.previousKeys = newKeys;
       this.anchorBeforeMeasurement = null;
       return;
     }
@@ -912,7 +907,6 @@ export class Virtualizer<
       key: anchorItem.key,
       pixelOffset,
     };
-    this.previousKeys = newKeys;
 
     if (isDev && this.options.debug) {
       console.info(
@@ -1065,16 +1059,11 @@ export class Virtualizer<
       this.resizeItem(
         index,
         this.options.measureElement(node, entry, this),
-        node,
       );
     }
   };
 
-  /**
-   * Rocicorp enhancement: resizeItem now accepts the element to enable
-   * DOM-based position detection for resize-above-viewport handling.
-   */
-  resizeItem = (index: number, size: number, node?: TItemElement) => {
+  resizeItem = (index: number, size: number) => {
     const item = this.measurementsCache[index];
     if (!item) {
       return;
@@ -1083,33 +1072,20 @@ export class Virtualizer<
     const delta = size - itemSize;
 
     if (delta !== 0) {
-      // Rocicorp enhancement: Use DOM-based position detection for resize-above-viewport
-      let shouldAdjust = false;
+      // Determine if scroll should be adjusted when this item resizes.
+      // Use the cached position, which represents the BEFORE-resize state.
+      // DOM position is unreliable because it reflects the AFTER-resize state
+      // (the content has already changed by the time ResizeObserver fires).
+      const scrollOffset = this.getScrollOffset();
+      const shouldAdjust =
+        this.shouldAdjustScrollPositionOnItemSizeChange !== undefined
+          ? this.shouldAdjustScrollPositionOnItemSizeChange(item, delta, this)
+          : item.end < scrollOffset + this.scrollAdjustments;
 
-      if (this.shouldAdjustScrollPositionOnItemSizeChange !== undefined) {
-        shouldAdjust = this.shouldAdjustScrollPositionOnItemSizeChange(
-          item,
-          delta,
-          this,
+      if (isDev && this.options.debug) {
+        console.info(
+          `[resizeItem] index=${index} item.start=${item.start} item.end=${item.end} scrollOffset=${scrollOffset} scrollAdjustments=${this.scrollAdjustments} delta=${delta} shouldAdjust=${shouldAdjust}`,
         );
-      } else if (
-        node &&
-        this.scrollElement &&
-        'getBoundingClientRect' in this.scrollElement
-      ) {
-        // Use actual DOM position to determine if item is above viewport
-        const nodeRect = node.getBoundingClientRect();
-        const scrollRect = (
-          this.scrollElement as Element
-        ).getBoundingClientRect();
-        const itemTopRelativeToViewport = nodeRect.top - scrollRect.top;
-
-        // Adjust if item's top edge is above viewport top (item is above or partially above)
-        shouldAdjust = itemTopRelativeToViewport < 0;
-      } else {
-        // Fallback to original logic
-        shouldAdjust =
-          item.start < this.getScrollOffset() + this.scrollAdjustments;
       }
 
       if (shouldAdjust) {
