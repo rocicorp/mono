@@ -84,6 +84,10 @@ export class SolidView implements Output {
   #pendingChanges: ViewChange[] = [];
   readonly #updateTTL: (ttl: TTL) => void;
 
+  // Tracks the current root entry outside of Solid's store so we can read it
+  // directly in #applyChanges without abusing setState as a read mechanism.
+  #lastRoot: Entry;
+
   constructor(
     input: Input,
     onTransactionCommit: (cb: () => void) => void,
@@ -111,6 +115,7 @@ export class SolidView implements Output {
     );
 
     this.#setState = setState;
+    this.#lastRoot = initialRoot;
     this.#setState(
       reconcile(
         [
@@ -173,6 +178,7 @@ export class SolidView implements Output {
           }),
         );
         this.#setState(prev => [builderRoot, prev[1]]);
+        this.#lastRoot = builderRoot;
         this.#builderRoot = undefined;
       }
     } else {
@@ -199,26 +205,16 @@ export class SolidView implements Output {
     return emptyArray;
   }
 
-  #currentRoot: Entry | undefined;
-
   #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => ViewChange): void {
-    // Build new tree immutably, then reconcile() diffs by idSymbol.
-    // Solid's fine-grained reactivity only triggers signals for changed properties.
-    this.#setState((prev: State): State => {
-      this.#currentRoot = prev[0];
-      return prev;
-    });
-
-    if (this.#currentRoot === undefined) {
-      return;
-    }
-
+    // Build new tree immutably from last known root, then reconcile() diffs
+    // by idSymbol. Solid's fine-grained reactivity only triggers signals for
+    // changed properties.
     const newRoot = this.#applyChangesToRoot<T>(
       changes,
       mapper,
-      this.#currentRoot,
+      this.#lastRoot,
     );
-    this.#currentRoot = undefined;
+    this.#lastRoot = newRoot;
 
     if (isEmptyRoot(newRoot)) {
       this.#builderRoot = this.#createEmptyRoot();
