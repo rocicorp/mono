@@ -52,12 +52,17 @@ const insertOpSchema = v.object({
 /**
  * Upsert semantics. Inserts if entity with id does not already exist,
  * otherwise updates existing entity with id.
+ *
+ * By default, conflict detection uses the primary key. If `conflictColumns`
+ * is provided, those columns are used instead (for unique constraints).
  */
 const upsertOpSchema = v.object({
   op: v.literal('upsert'),
   tableName: v.string(),
   primaryKey: primaryKeySchema,
   value: rowSchema,
+  // Optional: columns to use for ON CONFLICT instead of primary key
+  conflictColumns: v.array(v.string()).optional(),
 });
 
 /**

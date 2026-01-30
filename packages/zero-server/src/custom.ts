@@ -15,12 +15,14 @@ import type {
 } from '../../zero-types/src/server-schema.ts';
 import {
   type CRUDExecutor,
+  type CRUDExecutorOptions,
   type CRUDKind,
   makeCRUDMutate,
   makeTransactionMutate,
   type SchemaCRUD,
   type TableCRUD,
   type TransactionMutate,
+  type UpsertOptions,
 } from '../../zql/src/mutate/crud.ts';
 import type {
   DBTransaction,
@@ -222,8 +224,11 @@ export class CRUDMutatorFactory<S extends Schema> {
       mapValues(tableCRUD, method => method.bind(txHolder)),
     ) as unknown as SchemaCRUD<S>;
 
-    return (table: string, kind: CRUDKind, args: unknown) => {
+    return (table: string, kind: CRUDKind, args: unknown, options?: CRUDExecutorOptions) => {
       const tableCRUD = boundCRUDs[table as keyof S['tables']];
+      if (kind === 'upsert' && options?.onConflict) {
+        return tableCRUD.upsert(args as never, {onConflict: options.onConflict});
+      }
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       return (tableCRUD as any)[kind](args);
     };
@@ -334,8 +339,11 @@ function makeServerCRUDExecutor<S extends Schema>(
   ) as unknown as SchemaCRUD<S>;
 
   // Return executor that dispatches to bound methods
-  return (table: string, kind: CRUDKind, args: unknown) => {
+  return (table: string, kind: CRUDKind, args: unknown, options?: CRUDExecutorOptions) => {
     const tableCRUD = boundCRUDs[table as keyof S['tables']];
+    if (kind === 'upsert' && options?.onConflict) {
+      return tableCRUD.upsert(args as never, {onConflict: options.onConflict});
+    }
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     return (tableCRUD as any)[kind](args);
   };
@@ -366,12 +374,13 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       const tx = this[dbTxSymbol];
       await tx.query(stmt.text, stmt.values);
     },
-    async upsert(this: WithHiddenTxAndSchema, value) {
+    async upsert(this: WithHiddenTxAndSchema, value, options?: UpsertOptions<TableSchema>) {
       value = removeUndefined(value);
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
-      const primaryKeyColumns = origAndServerNamesFor(
-        schema.primaryKey,
+      // use custom conflict columns if provided, otherwise fall back to primary key
+      const conflictColumns = origAndServerNamesFor(
+        options?.onConflict ?? schema.primaryKey,
         schema,
       );
       const stmt = formatPgInternalConvert(
@@ -384,7 +393,7 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
           ),
           ', ',
         )}) ON CONFLICT (${sql.join(
-          primaryKeyColumns.map(([, serverName]) => sql.ident(serverName)),
+          conflictColumns.map(([, serverName]) => sql.ident(serverName)),
           ', ',
         )}) DO UPDATE SET ${sql.join(
           Object.entries(value).map(

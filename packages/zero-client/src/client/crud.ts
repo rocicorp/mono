@@ -13,10 +13,12 @@ import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   CRUDExecutor,
+  CRUDExecutorOptions,
   DeleteID,
   InsertValue,
   TableMutator,
   UpdateValue,
+  UpsertOptions,
   UpsertValue,
 } from '../../../zql/src/mutate/crud.ts';
 import * as crudImpl from './crud-impl.ts';
@@ -107,12 +109,13 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       };
       return zeroCRUD({ops: [op]});
     },
-    upsert: (value: UpsertValue<S>) => {
+    upsert: (value: UpsertValue<S>, options?: UpsertOptions<S>) => {
       const op: UpsertOp = {
         op: 'upsert',
         tableName,
         primaryKey,
         value,
+        conflictColumns: options?.onConflict,
       };
       return zeroCRUD({ops: [op]});
     },
@@ -158,12 +161,13 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
       ops.push(op);
       return promiseVoid;
     },
-    upsert: (value: UpsertValue<S>) => {
+    upsert: (value: UpsertValue<S>, options?: UpsertOptions<S>) => {
       const op: UpsertOp = {
         op: 'upsert',
         tableName,
         primaryKey,
         value,
+        conflictColumns: options?.onConflict,
       };
       ops.push(op);
       return promiseVoid;
@@ -207,12 +211,12 @@ export function makeCRUDExecutor(
   schema: Schema,
   ivmBranch: IVMSourceBranch | undefined,
 ): CRUDExecutor {
-  return (tableName, kind, value) => {
+  return (tableName, kind, value, options?: CRUDExecutorOptions) => {
     const {primaryKey} = schema.tables[tableName];
     return crudImpl[kind](
       tx,
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      {op: kind, tableName, primaryKey, value} as any,
+      {op: kind, tableName, primaryKey, value, conflictColumns: options?.onConflict} as any,
       schema,
       ivmBranch,
     );
@@ -230,7 +234,11 @@ export function makeCRUDMutator(schema: Schema): CRUDMutator {
   ): Promise<void> => {
     const executor = makeCRUDExecutor(tx, schema, undefined);
     for (const op of crudArg.ops) {
-      await executor(op.tableName, op.op, op.value);
+      const options: CRUDExecutorOptions | undefined =
+        op.op === 'upsert' && op.conflictColumns
+          ? {onConflict: op.conflictColumns}
+          : undefined;
+      await executor(op.tableName, op.op, op.value, options);
     }
   };
 }
