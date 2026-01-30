@@ -10,6 +10,7 @@
 
 import * as React from 'react';
 import {flushSync} from 'react-dom';
+import type {PartialKeys, VirtualizerOptions} from './virtualizer.ts';
 import {
   Virtualizer,
   elementScroll,
@@ -19,7 +20,6 @@ import {
   observeWindowRect,
   windowScroll,
 } from './virtualizer.ts';
-import type {PartialKeys, VirtualizerOptions} from './virtualizer.ts';
 
 export * from './virtualizer.ts';
 
