@@ -603,6 +603,8 @@ export function TanstackTestApp() {
             flex: 1,
             overflow: 'auto',
             position: 'relative',
+            // Disable browser scroll anchoring - we handle scroll stability ourselves
+            overflowAnchor: 'none',
           }}
         >
           {rows.length === 0 ? (
