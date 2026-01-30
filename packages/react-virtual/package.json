@@ -1,0 +1,39 @@
+{
+  "name": "@rocicorp/react-virtual",
+  "version": "0.0.1",
+  "description": "Fork of @tanstack/react-virtual with scroll stability fixes for insert/delete/resize above viewport",
+  "author": "Rocicorp",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocicorp/mono.git",
+    "directory": "packages/react-virtual"
+  },
+  "keywords": [
+    "react",
+    "virtual",
+    "virtualizer",
+    "scroll",
+    "list"
+  ],
+  "type": "module",
+  "types": "src/index.tsx",
+  "main": "src/index.tsx",
+  "exports": {
+    ".": "./src/index.tsx",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
+    "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+  },
+  "scripts": {
+    "check-types": "tsc",
+    "lint": "oxlint src/",
+    "format": "prettier --write ."
+  }
+}

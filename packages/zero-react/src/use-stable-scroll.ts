@@ -1,5 +1,31 @@
-import type {Virtualizer} from '@tanstack/react-virtual';
 import {useCallback, useEffect, useLayoutEffect, useRef, type Key} from 'react';
+
+/**
+ * Interface for virtualizer methods used by this hook.
+ * Compatible with @tanstack/react-virtual.
+ *
+ * Note: If using @rocicorp/react-virtual, this hook is NOT needed
+ * as stability is built into the virtualizer itself.
+ *
+ * @deprecated When using @rocicorp/react-virtual, use virtualizer.measureElement directly.
+ */
+interface VirtualizerLike<TItemElement extends Element> {
+  getVirtualItems(): ReadonlyArray<{
+    index: number;
+    key: Key;
+    start: number;
+  }>;
+  measureElement(node: TItemElement | null): void;
+  scrollOffset: number | null | undefined;
+  options: {
+    getItemKey?: ((index: number) => Key) | undefined;
+  };
+  // Internal properties needed for stability - may not exist on all virtualizers
+  shouldAdjustScrollPositionOnItemSizeChange?: unknown;
+  elementsCache?: Map<Key, TItemElement>;
+  measurementsCache?: ReadonlyArray<{key: Key; start: number}>;
+  scrollToOffset?(offset: number): void;
+}
 
 /**
  * Snapshot of scroll position anchored to a specific item.
@@ -22,8 +48,8 @@ export type UseStableScrollOptions<
   TScrollElement extends HTMLElement,
   TItemElement extends Element,
 > = {
-  /** The Tanstack virtualizer instance */
-  virtualizer: Virtualizer<TScrollElement, TItemElement>;
+  /** The Tanstack virtualizer instance (or compatible fork) */
+  virtualizer: VirtualizerLike<TItemElement>;
   /** Function that returns the scroll container element */
   getScrollElement: () => TScrollElement | null;
   /** Whether to enable debug logging */
@@ -116,7 +142,12 @@ export function useStableScroll<
   const observedElementsRef = useRef(new Map<Element, string>());
 
   // Disable Tanstack's automatic scroll adjustments - we handle everything ourselves
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false;
+  // This property exists on @tanstack/react-virtual but may not on our fork
+  if ('shouldAdjustScrollPositionOnItemSizeChange' in virtualizer) {
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    (virtualizer as any).shouldAdjustScrollPositionOnItemSizeChange = () =>
+      false;
+  }
 
   const log = useCallback(
     (message: string) => {
@@ -218,8 +249,8 @@ export function useStableScroll<
 
       const {key} = anchorItem;
 
-      // Use Tanstack's elementsCache for O(1) element lookup
-      const anchorElement = virtualizer.elementsCache.get(key) as
+      // Use Tanstack's elementsCache for O(1) element lookup (if available)
+      const anchorElement = virtualizer.elementsCache?.get(key) as
         | Element
         | undefined;
 
@@ -231,7 +262,7 @@ export function useStableScroll<
         pixelOffset = anchorRect.top - scrollRect.top;
       } else {
         // Fallback to Tanstack's computed position
-        pixelOffset = anchorItem.start - scrollOffset;
+        pixelOffset = anchorItem.start - (scrollOffset ?? 0);
       }
 
       const anchor: ScrollAnchor = {
@@ -266,7 +297,7 @@ export function useStableScroll<
     }
 
     // Try DOM-based correction first (more accurate)
-    const anchorElement = virtualizer.elementsCache.get(anchor.key) as
+    const anchorElement = virtualizer.elementsCache?.get(anchor.key) as
       | Element
       | undefined;
 
@@ -294,6 +325,9 @@ export function useStableScroll<
 
     // Fallback: use Tanstack's measurementsCache if element not in DOM
     const measurements = virtualizer.measurementsCache;
+    if (!measurements) {
+      return false;
+    }
     const anchorMeasurement = measurements.find(m => m.key === anchor.key);
 
     if (anchorMeasurement) {
@@ -306,7 +340,7 @@ export function useStableScroll<
         log(
           `Cache correction #${anchor.correctionCount + 1}: error=${error.toFixed(1)}, scroll ${currentScroll.toFixed(1)} -> ${targetScroll.toFixed(1)}`,
         );
-        virtualizer.scrollToOffset(targetScroll);
+        virtualizer.scrollToOffset?.(targetScroll);
         anchor.correctionCount++;
         return true;
       }

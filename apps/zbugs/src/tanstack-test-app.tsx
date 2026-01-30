@@ -1,5 +1,4 @@
-import {useStableScroll} from '@rocicorp/zero/react';
-import {useVirtualizer} from '@tanstack/react-virtual';
+import {useVirtualizer} from '@rocicorp/react-virtual';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 interface RowData {
@@ -88,13 +87,6 @@ export function TanstackTestApp() {
     debug,
   });
 
-  // Use the stable scroll hook for scroll position stability across mutations and resizes
-  const {captureAnchor, measureElement} = useStableScroll({
-    virtualizer,
-    getScrollElement: () => parentRef.current,
-    debug: true,
-  });
-
   // Expose virtualizer and resizeRow for testing
   useEffect(() => {
     // oxlint-disable-next-line no-explicit-any
@@ -104,10 +96,12 @@ export function TanstackTestApp() {
     // Expose resizeRow function for testing
     w.resizeRow = (rowIndex: number, multiplier: number) => {
       if (rowIndex < 0 || rowIndex >= rows.length) {
+        // oxlint-disable-next-line no-console -- test helper
         console.error(`Invalid row index: ${rowIndex}`);
         return false;
       }
       if (multiplier < MIN_MULTIPLIER || multiplier > MAX_MULTIPLIER) {
+        // oxlint-disable-next-line no-console -- test helper
         console.error(
           `Multiplier must be between ${MIN_MULTIPLIER} and ${MAX_MULTIPLIER}`,
         );
@@ -230,9 +224,6 @@ export function TanstackTestApp() {
       );
       return;
     }
-
-    // Capture anchor before mutation
-    captureAnchor(idx);
 
     // Calculate the new rows array
     const maxIndex =
@@ -652,7 +643,7 @@ export function TanstackTestApp() {
                       key={row.id}
                       data-index={virtualItem.index}
                       data-key={row.id}
-                      ref={measureElement}
+                      ref={virtualizer.measureElement}
                       style={{
                         padding: '16px',
                         borderBottom: '1px solid #eee',
