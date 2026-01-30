@@ -235,7 +235,6 @@ export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
 export type {
-  QueryMaterializeClientEvent,
   QueryMaterializeEvent,
   UpdateNeededReason,
   ZeroOptions,

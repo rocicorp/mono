@@ -469,14 +469,6 @@ export class QueryManager implements InspectorDelegate {
 
     const queryID = args[0];
 
-    if (metric === 'query-materialization-client') {
-      try {
-        this.#hooks?.onQueryMaterializeClient?.({id: queryID});
-      } catch {
-        // Consumer hook errors must not break query execution.
-      }
-    }
-
     // Handle slow query logging for end-to-end materialization
     if (metric === 'query-materialization-end-to-end') {
       const ast = args[1];
@@ -501,15 +493,13 @@ export class QueryManager implements InspectorDelegate {
       }
 
       try {
-        if (ast) {
-          const entry = this.#queries.get(queryID);
-          this.#hooks?.onQueryMaterialize?.({
-            id: queryID,
-            ast,
-            durationMs: value,
-            name: entry?.name,
-          });
-        }
+        const entry = this.#queries.get(queryID);
+        this.#hooks?.onQueryMaterialize?.({
+          id: queryID,
+          ast: ast!,
+          durationMs: value,
+          name: entry?.name,
+        });
       } catch {
         // Consumer hook errors must not break query execution.
       }

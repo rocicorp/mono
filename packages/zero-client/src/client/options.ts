@@ -12,14 +12,6 @@ import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
- * Event fired when a query materialization completes on the client.
- */
-export type QueryMaterializeClientEvent = {
-  /** The query hash identifier. */
-  id: string;
-};
-
-/**
  * Event fired when a query has fully materialized, including server and
  * network round-trip time.
  */
@@ -63,13 +55,6 @@ export type QueryMaterializeEvent = {
  * ```
  */
 export type ZeroQueryHooks = {
-  /**
-   * Called when the client-side IVM pipeline materialization completes.
-   * This measures the time to build and materialize the local query pipeline
-   * before any server data is received.
-   */
-  onQueryMaterializeClient?: (event: QueryMaterializeClientEvent) => void;
-
   /**
    * Called when end-to-end query materialization completes, including
    * server processing and network round-trip time.
