@@ -257,13 +257,13 @@ describe('useZeroVirtualizer', () => {
 
     await waitFor(() => {
       expect(result.current.complete).toBe(true);
+      // Total is 1 since both ends are reached (atStart and atEnd are true for empty results)
+      expect(result.current.total).toBe(1);
     });
 
     expect(result.current.rowsEmpty).toBe(true);
     // Estimated total stays at 1 (loading skeleton) since empty results don't update it
     expect(result.current.estimatedTotal).toBe(1);
-    // Total is 1 since both ends are reached (atStart and atEnd are true for empty results)
-    expect(result.current.total).toBe(1);
 
     await z2.close();
   });
