@@ -481,25 +481,47 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
     expect(scrollDelta).toBeLessThanOrEqual(POSITION_TOLERANCE);
   });
 
-  test('splice at scroll position 0 should work correctly', async ({page}) => {
-    console.log('\n🔝 Testing splice at scroll position 0...\n');
+  test('splice at scroll position 0 should allow new content to appear', async ({
+    page,
+  }) => {
+    console.log(
+      '\n🔝 Testing splice at scroll position 0 - new content should appear...\n',
+    );
 
     await resetList(page);
     // Stay at the top (don't scroll)
 
-    const initialPosition = await getRowPosition(page, 0);
-    console.log(`Initial position of Row 0: ${initialPosition}px`);
+    const initialScrollTop = await page.evaluate(() => {
+      const scrollDivs = Array.from(document.querySelectorAll('div'));
+      const listContainer = scrollDivs.find(
+        d =>
+          (d as HTMLElement).style.overflow === 'auto' &&
+          (d as HTMLElement).style.position === 'relative',
+      ) as HTMLElement;
+      return listContainer?.scrollTop ?? 0;
+    });
 
+    console.log(`Initial scrollTop: ${initialScrollTop}px`);
+    expect(initialScrollTop).toBe(0);
+
+    // Insert 10 rows at the top
     await performSplice(page, 0, 0, 10, 500);
 
-    const finalPosition = await getRowPosition(page, 0);
-    console.log(`Final position of Row 0: ${finalPosition}px`);
+    const finalScrollTop = await page.evaluate(() => {
+      const scrollDivs = Array.from(document.querySelectorAll('div'));
+      const listContainer = scrollDivs.find(
+        d =>
+          (d as HTMLElement).style.overflow === 'auto' &&
+          (d as HTMLElement).style.position === 'relative',
+      ) as HTMLElement;
+      return listContainer?.scrollTop ?? 0;
+    });
 
-    if (initialPosition !== null && finalPosition !== null) {
-      const drift = Math.abs(finalPosition - initialPosition);
-      console.log(`Drift: ${drift}px`);
-      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
-    }
+    console.log(`Final scrollTop: ${finalScrollTop}px`);
+
+    // At scroll position 0, the user should stay at the top to see new content
+    // (no scroll adjustment when at the very top)
+    expect(finalScrollTop).toBeLessThanOrEqual(POSITION_TOLERANCE);
   });
 
   test('large batch insert should stabilize within maxAttempts', async ({
