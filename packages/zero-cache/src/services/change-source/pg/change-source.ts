@@ -36,15 +36,12 @@ import {
 } from '../../../types/shards.ts';
 import type {Sink} from '../../../types/streams.ts';
 import {Subscription, type PendingResult} from '../../../types/subscription.ts';
-import type {
-  ChangeSource,
-  ChangeStream,
-} from '../../change-streamer/change-streamer-service.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
   getSubscriptionState,
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
+import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import type {JSONObject} from '../protocol/current.ts';
 import type {
   DataChange,

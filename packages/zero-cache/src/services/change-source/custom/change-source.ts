@@ -9,10 +9,6 @@ import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import type {ShardConfig, ShardID} from '../../../types/shards.ts';
 import {stream} from '../../../types/streams.ts';
-import type {
-  ChangeSource,
-  ChangeStream,
-} from '../../change-streamer/change-streamer-service.ts';
 import {
   AutoResetSignal,
   type ReplicationConfig,
@@ -24,6 +20,7 @@ import {
   initReplicationState,
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
+import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
 import {type ChangeSourceUpstream} from '../protocol/current/upstream.ts';
 import {initSyncSchema} from './sync-schema.ts';
