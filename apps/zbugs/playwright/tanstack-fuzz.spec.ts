@@ -560,4 +560,197 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
       expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
     }
   });
+
+  test('resize row above viewport should preserve scroll position', async ({
+    page,
+  }) => {
+    console.log('\n📏 Testing resize row above viewport...\n');
+
+    const referenceRow = 100;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    // Resize a row above the viewport (row 10)
+    const resizeRowIndex = 10;
+    console.log(`Resizing Row ${resizeRowIndex} from multiplier 1 to 20...`);
+
+    // First resize to small, then to large
+    await page.evaluate(
+      ({rowIndex, multiplier}) => {
+        // oxlint-disable-next-line no-explicit-any
+        (window as any).resizeRow(rowIndex, multiplier);
+      },
+      {rowIndex: resizeRowIndex, multiplier: 20},
+    );
+    await page.waitForTimeout(300);
+
+    const afterPosition = await getRowPosition(page, referenceRow);
+    console.log(`Position after resize: ${afterPosition}px`);
+
+    if (initialPosition !== null && afterPosition !== null) {
+      const drift = Math.abs(afterPosition - initialPosition);
+      console.log(`Drift: ${drift}px`);
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
+
+  test('resize row in overscan above viewport should preserve scroll position', async ({
+    page,
+  }) => {
+    console.log(
+      '\n📏 Testing resize row in overscan (above viewport) should preserve scroll position...\n',
+    );
+
+    // Scroll to row 10, with overscan=5 the visible items include rows ~5-15
+    // We'll resize one of the overscan rows above the viewport
+    const referenceRow = 10;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+    await page.waitForTimeout(200);
+
+    // Find the first visible row position
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    // Get the virtual items to see what's in overscan
+    const virtualItemsInfo = await page.evaluate(() => {
+      // oxlint-disable-next-line no-explicit-any
+      const v = (window as any).virtualizer;
+      if (!v) return null;
+      const items = v.getVirtualItems();
+      return items.map(
+        (item: {index: number; start: number; size: number}) => ({
+          index: item.index,
+          start: item.start,
+          size: item.size,
+        }),
+      );
+    });
+    console.log('Virtual items:', JSON.stringify(virtualItemsInfo));
+
+    // Resize a row that's in overscan above the viewport
+    // With overscan=5 and scrolled to row 10, row 5-9 should be in overscan above
+    const resizeRowIndex = 7;
+    console.log(
+      `Resizing Row ${resizeRowIndex} (in overscan above viewport) from multiplier 1 to 30...`,
+    );
+
+    await page.evaluate(
+      ({rowIndex, multiplier}) => {
+        // oxlint-disable-next-line no-explicit-any
+        (window as any).resizeRow(rowIndex, multiplier);
+      },
+      {rowIndex: resizeRowIndex, multiplier: 30},
+    );
+    await page.waitForTimeout(500);
+
+    const afterPosition = await getRowPosition(page, referenceRow);
+    console.log(`Position after resize: ${afterPosition}px`);
+
+    if (initialPosition !== null && afterPosition !== null) {
+      const drift = Math.abs(afterPosition - initialPosition);
+      console.log(`Drift: ${drift}px`);
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
+
+  test('multiple resizes above viewport should not accumulate drift', async ({
+    page,
+  }) => {
+    console.log(
+      '\n🔄 Testing multiple resizes above viewport for drift accumulation...\n',
+    );
+
+    const referenceRow = 50;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    // Resize multiple rows above the viewport
+    for (let i = 0; i < 5; i++) {
+      const resizeRowIndex = i * 5; // Rows 0, 5, 10, 15, 20
+      const multiplier = 10 + i * 5; // Multipliers 10, 15, 20, 25, 30
+
+      console.log(
+        `  Resize ${i + 1}: Row ${resizeRowIndex} to multiplier ${multiplier}`,
+      );
+      await page.evaluate(
+        ({rowIndex, mult}) => {
+          // oxlint-disable-next-line no-explicit-any
+          (window as any).resizeRow(rowIndex, mult);
+        },
+        {rowIndex: resizeRowIndex, mult: multiplier},
+      );
+      await page.waitForTimeout(300);
+
+      const position = await getRowPosition(page, referenceRow);
+      if (position !== null && initialPosition !== null) {
+        const drift = Math.abs(position - initialPosition);
+        console.log(`    Position: ${position}px, drift: ${drift}px`);
+      }
+    }
+
+    const finalPosition = await getRowPosition(page, referenceRow);
+    if (initialPosition !== null && finalPosition !== null) {
+      const totalDrift = Math.abs(finalPosition - initialPosition);
+      console.log(`\nTotal drift after 5 resizes: ${totalDrift}px`);
+      expect(totalDrift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
+
+  test('resize row below viewport should not affect scroll position', async ({
+    page,
+  }) => {
+    console.log(
+      '\n⬇️ Testing resize row below viewport (should be no-op)...\n',
+    );
+
+    const referenceRow = 100;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    // Resize a row below the viewport (row 500)
+    const resizeRowIndex = 500;
+    console.log(
+      `Resizing Row ${resizeRowIndex} (below viewport) to multiplier 30...`,
+    );
+
+    await page.evaluate(
+      ({rowIndex, multiplier}) => {
+        // oxlint-disable-next-line no-explicit-any
+        (window as any).resizeRow(rowIndex, multiplier);
+      },
+      {rowIndex: resizeRowIndex, multiplier: 30},
+    );
+    await page.waitForTimeout(300);
+
+    const afterPosition = await getRowPosition(page, referenceRow);
+    console.log(`Position after resize: ${afterPosition}px`);
+
+    if (initialPosition !== null && afterPosition !== null) {
+      const drift = Math.abs(afterPosition - initialPosition);
+      console.log(`Drift: ${drift}px`);
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
 });

@@ -11,6 +11,12 @@ export type {
   GetQueryReturnType,
   GetSingleQuery,
 } from './use-rows.ts';
+export {
+  useStableScroll,
+  type CaptureAnchor,
+  type UseStableScrollOptions,
+  type UseStableScrollResult,
+} from './use-stable-scroll.ts';
 export {useZeroOnline} from './use-zero-online.tsx';
 export {
   useZeroVirtualizer,
