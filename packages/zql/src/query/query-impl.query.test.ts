@@ -1336,6 +1336,39 @@ test('null compare', async () => {
   `);
 });
 
+test('where with undefined converts to null', async () => {
+  const queryDelegate = new QueryDelegateImpl({callGot: true});
+  addData(queryDelegate);
+
+  // 2-arg form: .where(field, undefined) should not throw.
+  // It converts undefined to null and uses '=' operator,
+  // which returns no rows (NULL = NULL is false in SQL semantics).
+  const undefinedQuery = newQuery(schema, 'issue').where('ownerId', undefined);
+  const rows = await queryDelegate.run(undefinedQuery);
+  expect(rows).toEqual([]);
+
+  // 3-arg form: .where(field, 'IS', undefined) should match null rows
+  const isUndefinedQuery = newQuery(schema, 'issue').where(
+    'ownerId',
+    'IS',
+    undefined,
+  );
+  const isRows = await queryDelegate.run(isUndefinedQuery);
+  expect(isRows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 3,
+        "description": "description 3",
+        "id": "0003",
+        "ownerId": null,
+        "title": "issue 3",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
+});
+
 test('literal filter', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
