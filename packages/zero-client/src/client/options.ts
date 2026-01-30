@@ -6,9 +6,76 @@ import type {
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
+
+/**
+ * Event fired when a query materialization completes on the client.
+ */
+export type QueryMaterializeClientEvent = {
+  /** The query hash identifier. */
+  id: string;
+};
+
+/**
+ * Event fired when a query has fully materialized, including server and
+ * network round-trip time.
+ */
+export type QueryMaterializeEvent = {
+  /** The query hash identifier. */
+  id: string;
+  /** The normalized AST of the query. */
+  ast: AST;
+  /** Duration of the full materialization in milliseconds. */
+  durationMs: number;
+  /** The name of the query, if it is a named (custom) query. */
+  name: string | undefined;
+};
+
+/**
+ * Hooks for observing query lifecycle events. All hooks are optional and
+ * wrapped in try/catch internally, so errors in hooks never affect query
+ * execution.
+ *
+ * @example
+ * ```ts
+ * const z = new Zero({
+ *   // ...
+ *   hooks: {
+ *     onQueryMaterialize({id, ast, durationMs, name}) {
+ *       const tracer = trace.getTracer('zero-client');
+ *       const endTime = Date.now();
+ *       const startTime = endTime - durationMs;
+ *       tracer.startSpan('zero.query.materialize', {
+ *         startTime,
+ *         attributes: {
+ *           'zero.query.id': id,
+ *           'zero.query.table': ast.table,
+ *           ...(name && {'zero.query.name': name}),
+ *           'zero.query.duration_ms': durationMs,
+ *         },
+ *       }).end(endTime);
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export type ZeroQueryHooks = {
+  /**
+   * Called when the client-side IVM pipeline materialization completes.
+   * This measures the time to build and materialize the local query pipeline
+   * before any server data is received.
+   */
+  onQueryMaterializeClient?: (event: QueryMaterializeClientEvent) => void;
+
+  /**
+   * Called when end-to-end query materialization completes, including
+   * server processing and network round-trip time.
+   */
+  onQueryMaterialize?: (event: QueryMaterializeEvent) => void;
+};
 
 /**
  * Configuration for {@linkcode Zero}.
@@ -319,6 +386,18 @@ export interface ZeroOptions<
    */
   // TODO(arv): Mutators should also get context.
   context?: C | undefined;
+
+  /**
+   * Optional hooks for observing query lifecycle events. Useful for
+   * instrumenting query performance with OpenTelemetry or other telemetry
+   * systems.
+   *
+   * Hook invocations are wrapped in try/catch internally, so errors in
+   * hooks never affect query execution.
+   *
+   * @see {@link ZeroQueryHooks}
+   */
+  hooks?: ZeroQueryHooks | undefined;
 }
 
 /**
