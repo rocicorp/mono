@@ -136,6 +136,12 @@ async function seed() {
       process.env.ZERO_SEED_FORCE.toLocaleLowerCase().trim(),
     ) !== -1;
 
+  const appendMode =
+    process.env.ZERO_SEED_APPEND !== undefined &&
+    ['t', 'true', '1', ''].indexOf(
+      process.env.ZERO_SEED_APPEND.toLocaleLowerCase().trim(),
+    ) !== -1;
+
   // oxlint-disable-next-line no-console
   console.log(process.env.ZERO_UPSTREAM_DB);
 
@@ -161,8 +167,8 @@ async function seed() {
       process.exit(0);
     }
 
-    // Check if already seeded
-    if (!forceSeed) {
+    // Check if already seeded (skip in append mode)
+    if (!forceSeed && !appendMode) {
       const result = await sql`select 1 from "user" limit 1`;
       if (result.length === 1) {
         // oxlint-disable-next-line no-console
@@ -171,14 +177,19 @@ async function seed() {
       }
     }
 
-    // If forcing, truncate existing data
-    if (forceSeed) {
+    // If forcing (not appending), truncate existing data
+    if (forceSeed && !appendMode) {
       // oxlint-disable-next-line no-console
       console.log('Force mode: truncating existing data...');
       // Truncate in reverse order to respect foreign key dependencies
       for (const tableName of [...TABLES_IN_SEED_ORDER].reverse()) {
         await sql`TRUNCATE ${sql(tableName)} CASCADE`;
       }
+    }
+
+    if (appendMode) {
+      // oxlint-disable-next-line no-console
+      console.log('Append mode: adding data to existing tables...');
     }
 
     // Discover all tables in public schema for comprehensive discovery
