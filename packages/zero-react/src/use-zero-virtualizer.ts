@@ -524,7 +524,7 @@ export function useZeroVirtualizer<
     // on pixels to support variable size items.
     const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
 
-    const distanceFromStart = firstItem.index - firstRowIndex;
+    // const distanceFromStart = firstItem.index - firstRowIndex;
     const distanceFromEnd = firstRowIndex + rowsLength - lastItem.index;
 
     // if (!atStart && distanceFromStart <= nearPageEdgeThreshold) {
