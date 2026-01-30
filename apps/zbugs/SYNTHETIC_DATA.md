@@ -39,16 +39,17 @@ Output: sharded CSV files in `db/seed-data/synthetic/` named `{table}_{shard}.cs
 
 Tables generated: `user`, `project`, `label`, `issue`, `comment`, `issueLabel`.
 
-| Env Var              | Default                   | Description                      |
-| -------------------- | ------------------------- | -------------------------------- |
-| `NUM_ISSUES`         | `1000000`                 | Total issues to generate         |
-| `NUM_PROJECTS`       | `100`                     | Total projects                   |
-| `NUM_USERS`          | `100`                     | Total users                      |
-| `COMMENTS_PER_ISSUE` | `3.0`                     | Average comments per issue       |
-| `LABELS_PER_ISSUE`   | `1.5`                     | Average labels per issue         |
-| `SHARD_SIZE`         | `500000`                  | Rows per CSV shard file          |
-| `OUTPUT_DIR`         | `db/seed-data/synthetic/` | Output directory                 |
-| `SEED`               | `42`                      | RNG seed for reproducible output |
+| Env Var              | Default                   | Description                               |
+| -------------------- | ------------------------- | ----------------------------------------- |
+| `NUM_ISSUES`         | `1000000`                 | Total issues to generate                  |
+| `NUM_PROJECTS`       | `100`                     | Total projects                            |
+| `NUM_USERS`          | `100`                     | Total users                               |
+| `COMMENTS_PER_ISSUE` | `3.0`                     | Average comments per issue                |
+| `LABELS_PER_ISSUE`   | `1.5`                     | Average labels per issue                  |
+| `SHARD_SIZE`         | `500000`                  | Rows per CSV shard file                   |
+| `OUTPUT_DIR`         | `db/seed-data/synthetic/` | Output directory                          |
+| `SEED`               | `42`                      | RNG seed for reproducible output          |
+| `SKIP_USERS`         | `false`                   | Skip user CSV generation (for batch mode) |
 
 ### Distribution Strategy
 
@@ -115,12 +116,44 @@ To force re-seeding an already-seeded database:
 ZERO_SEED_FORCE=true npm run db-seed-synthetic
 ```
 
-| Env Var              | Default           | Description                                  |
-| -------------------- | ----------------- | -------------------------------------------- |
-| `ZERO_UPSTREAM_DB`   | _(from `.env`)_   | PostgreSQL connection string                 |
-| `ZERO_SEED_BULK`     | _(set by script)_ | Enables bulk load optimizations              |
-| `ZERO_SEED_DATA_DIR` | _(set by script)_ | Directory containing CSV shards              |
-| `ZERO_SEED_FORCE`    | _(unset)_         | Set to `true` to re-seed even if data exists |
+| Env Var              | Default           | Description                                     |
+| -------------------- | ----------------- | ----------------------------------------------- |
+| `ZERO_UPSTREAM_DB`   | _(from `.env`)_   | PostgreSQL connection string                    |
+| `ZERO_SEED_BULK`     | _(set by script)_ | Enables bulk load optimizations                 |
+| `ZERO_SEED_DATA_DIR` | _(set by script)_ | Directory containing CSV shards                 |
+| `ZERO_SEED_FORCE`    | _(unset)_         | Set to `true` to re-seed even if data exists    |
+| `ZERO_SEED_APPEND`   | _(unset)_         | Set to `true` to append data without truncating |
+
+## Generating Additional Batches
+
+You can generate multiple batches of data that coexist in the same database without ID collisions. Non-user entity IDs use seeded nanoid, so different seeds produce globally unique IDs.
+
+### Batch Workflow
+
+```bash
+# Batch 1: generate and load the initial dataset
+NUM_ISSUES=100000000 NUM_PROJECTS=100 SEED=42 npm run generate-synthetic
+npm run db-seed-synthetic
+
+# Batch 2: generate additional data with a different seed
+NUM_ISSUES=100000000 NUM_PROJECTS=1000 \
+  SKIP_USERS=true \
+  SEED=99 \
+  OUTPUT_DIR=db/seed-data/synthetic-batch-2/ \
+  npm run generate-synthetic
+
+# Load batch 2 in append mode
+ZERO_SEED_APPEND=true \
+  ZERO_SEED_DATA_DIR=db/seed-data/synthetic-batch-2/ \
+  npm run db-seed-synthetic
+```
+
+### Key points
+
+- **Different `SEED` per batch** — each seed produces a different RNG sequence, yielding unique nanoid IDs and different content.
+- **`SKIP_USERS=true`** — skips writing the user CSV since users are shared across batches. User IDs are sequential (`usr_0000`, `usr_0001`, ...) and are always the same regardless of `SEED`.
+- **`ZERO_SEED_APPEND=true`** — tells the seeder to skip the "already seeded" check and skip truncation, appending data to existing tables. Bulk optimizations (drop indexes, COPY, recreate indexes, ANALYZE) still run.
+- **`OUTPUT_DIR`** — point each batch at a separate directory so CSVs don't overwrite each other.
 
 ## Verification
 
