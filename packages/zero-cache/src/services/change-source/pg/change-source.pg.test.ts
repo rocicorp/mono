@@ -18,12 +18,9 @@ import {DbFile} from '../../../test/lite.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
 import {type PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
-import type {
-  ChangeSource,
-  ChangeStream,
-} from '../../change-streamer/change-streamer-service.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
+import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import type {
   Begin,
   ChangeStreamMessage,
