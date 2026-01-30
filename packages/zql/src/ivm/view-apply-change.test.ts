@@ -1,8 +1,16 @@
 import {describe, expect, test} from 'vitest';
 import {makeComparator} from './data.ts';
 import type {SourceSchema} from './schema.ts';
-import {applyChange, type ViewChange} from './view-apply-change.ts';
+import {
+  applyChange,
+  refCountSymbol,
+  type ViewChange,
+} from './view-apply-change.ts';
 import type {Entry, Format} from './view.ts';
+
+// Test helpers for cleaner entry access (casts are safe in tests)
+const entries = (e: Entry, key: string): Entry[] => e[key] as Entry[];
+const at = (e: Entry, key: string, i: number): Entry => entries(e, key)[i];
 
 describe('applyChange', () => {
   const relationship = '';
@@ -69,17 +77,13 @@ describe('applyChange', () => {
 
   describe('Multiple entries', () => {
     test('singular: false', () => {
-      // This should really be a WeakMap but for testing purposes we use a Map.
-
-      const parentEntry: Entry = {'': []};
+      let root: Entry = {'': []};
       const format: Format = {
         singular: false,
-        relationships: {
-          athletes: {
-            relationships: {},
-            singular: false,
-          },
-        },
+        relationships: {athletes: {relationships: {}, singular: false}},
+      };
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, relationship, format, true);
       };
 
       {
@@ -168,11 +172,9 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
-        expect(parentEntry).toMatchInlineSnapshot(`
+        expect(root).toMatchInlineSnapshot(`
           {
             "": [
               {
@@ -234,11 +236,9 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
-        expect(parentEntry).toMatchInlineSnapshot(`
+        expect(root).toMatchInlineSnapshot(`
           {
             "": [
               {
@@ -300,11 +300,9 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
-        expect(parentEntry).toMatchInlineSnapshot(`
+        expect(root).toMatchInlineSnapshot(`
           {
             "": [
               {
@@ -323,7 +321,7 @@ describe('applyChange', () => {
     test('singular: true', () => {
       // This should really be a WeakMap but for testing purposes we use a Map.
 
-      const parentEntry: Entry = {'': []};
+      let root: Entry = {'': []};
       const format: Format = {
         singular: false,
         relationships: {
@@ -332,6 +330,9 @@ describe('applyChange', () => {
             singular: true,
           },
         },
+      };
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, relationship, format, true);
       };
 
       {
@@ -420,11 +421,9 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
-        expect(parentEntry).toMatchInlineSnapshot(`
+        expect(root).toMatchInlineSnapshot(`
           {
             "": [
               {
@@ -484,11 +483,9 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
-        expect(parentEntry).toMatchInlineSnapshot(`
+        expect(root).toMatchInlineSnapshot(`
           {
             "": [
               {
@@ -548,11 +545,9 @@ describe('applyChange', () => {
           },
         ];
 
-        for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format, true);
-        }
+        changes.forEach(apply);
 
-        expect(parentEntry).toMatchInlineSnapshot(`
+        expect(root).toMatchInlineSnapshot(`
           {
             "": [
               {
@@ -584,14 +579,15 @@ describe('applyChange', () => {
         isHidden: false,
         compareRows: makeComparator([['id', 'asc']]),
       } as const;
-      const root = {'': []};
+      let root: Entry = {'': []};
       const format = {
         singular: false,
         relationships: {},
       };
 
-      const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, true);
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, '', format, true);
+      };
 
       apply({
         type: 'add',
@@ -730,14 +726,15 @@ describe('applyChange', () => {
         isHidden: false,
         compareRows: makeComparator([['id', 'asc']]),
       } as const;
-      const root = {'': undefined};
+      let root: Entry = {'': undefined};
       const format = {
         singular: true,
         relationships: {},
       };
 
-      const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, relationship, format, true);
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, relationship, format, true);
+      };
 
       apply({
         type: 'add',
@@ -888,14 +885,15 @@ describe('applyChange', () => {
         isHidden: false,
         compareRows: makeComparator([['id', 'asc']]),
       } as const;
-      const root = {'': []};
+      let root: Entry = {'': []};
       const format = {
         singular: false,
         relationships: {},
       };
 
-      const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, true);
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, '', format, true);
+      };
 
       apply({
         type: 'add',
@@ -1016,14 +1014,15 @@ describe('applyChange', () => {
         isHidden: false,
         compareRows: makeComparator([['id', 'asc']]),
       } as const;
-      const root = {'': []};
+      let root: Entry = {'': []};
       const format = {
         singular: false,
         relationships: {},
       };
 
-      const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, true);
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, '', format, true);
+      };
 
       apply({
         type: 'add',
@@ -1193,14 +1192,15 @@ describe('applyChange', () => {
         isHidden: false,
         compareRows: makeComparator([['id', 'asc']]),
       } as const;
-      const root = {'': undefined};
+      let root: Entry = {'': undefined};
       const format = {
         singular: true,
         relationships: {},
       };
 
-      const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, true);
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, '', format, true);
+      };
 
       apply({
         type: 'add',
@@ -1311,14 +1311,15 @@ describe('applyChange', () => {
         isHidden: false,
         compareRows: makeComparator([['id', 'asc']]),
       } as const;
-      const root = {'': undefined};
+      let root: Entry = {'': undefined};
       const format = {
         singular: true,
         relationships: {},
       };
 
-      const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, true);
+      const apply = (change: ViewChange) => {
+        root = applyChange(root, change, schema, '', format, true);
+      };
 
       apply({
         type: 'add',
@@ -1413,6 +1414,555 @@ describe('applyChange', () => {
           },
         }
       `);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ADD WITH CHILDREN TESTS
+  // Verify entries with child relationships are correctly positioned.
+  // Tests the indexOf optimization: add() returns pos, avoiding O(n) scan.
+  //
+  //   []  ──add B+kids──►  [B]  ──add A+kids──►  [A, B]
+  //                         │                     ↑
+  //                         │         binary search finds pos=0
+  //                         └──────────────────────┘
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe('add with initialized relationships', () => {
+
+    const schemaWithChildren: SourceSchema = {
+      tableName: 'parent',
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      primaryKey: ['id'],
+      sort: [['id', 'asc']],
+      system: 'client',
+      relationships: {
+        children: {
+          tableName: 'child',
+          columns: {id: {type: 'string'}, parentId: {type: 'string'}},
+          primaryKey: ['id'],
+          sort: [['id', 'asc']],
+          system: 'client',
+          relationships: {},
+          isHidden: false,
+          compareRows: makeComparator([['id', 'asc']]),
+        },
+      },
+      isHidden: false,
+      compareRows: makeComparator([['id', 'asc']]),
+    } as const;
+
+    const formatWithChildren: Format = {
+      singular: false,
+      relationships: {
+        children: {singular: false, relationships: {}},
+      },
+    };
+
+    const apply = (root: Entry, change: ViewChange) =>
+      applyChange(root, change, schemaWithChildren, '', formatWithChildren, true);
+
+    test('entry with children is placed at correct position', () => {
+      let root: Entry = {'': []};
+
+      // Add entries in non-alphabetical order to verify binary search positioning
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'b', name: 'Bob'},
+          relationships: {
+            children: () => [{row: {id: 'c1', parentId: 'b'}, relationships: {}}],
+          },
+        },
+      });
+
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'd', name: 'Dave'},
+          relationships: {
+            children: () => [{row: {id: 'c2', parentId: 'd'}, relationships: {}}],
+          },
+        },
+      });
+
+      // Add entry that should be inserted at position 0 (before 'b')
+      // This entry has children, so initializeRelationships will return a new entry
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'a', name: 'Alice'},
+          relationships: {
+            children: () => [{row: {id: 'c3', parentId: 'a'}, relationships: {}}],
+          },
+        },
+      });
+
+      // Verify entries are in correct sorted order with their children
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "children": [
+                {
+                  "id": "c3",
+                  "parentId": "a",
+                  Symbol(rc): 1,
+                  Symbol(id): ""c3"",
+                },
+              ],
+              "id": "a",
+              "name": "Alice",
+              Symbol(rc): 1,
+              Symbol(id): ""a"",
+            },
+            {
+              "children": [
+                {
+                  "id": "c1",
+                  "parentId": "b",
+                  Symbol(rc): 1,
+                  Symbol(id): ""c1"",
+                },
+              ],
+              "id": "b",
+              "name": "Bob",
+              Symbol(rc): 1,
+              Symbol(id): ""b"",
+            },
+            {
+              "children": [
+                {
+                  "id": "c2",
+                  "parentId": "d",
+                  Symbol(rc): 1,
+                  Symbol(id): ""c2"",
+                },
+              ],
+              "id": "d",
+              "name": "Dave",
+              Symbol(rc): 1,
+              Symbol(id): ""d"",
+            },
+          ],
+        }
+      `);
+    });
+
+    test('entry inserted in middle position with children', () => {
+      let root: Entry = {'': []};
+
+      // Add entries with gap for middle insertion
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'a', name: 'Alice'},
+          relationships: {children: () => []},
+        },
+      });
+
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'c', name: 'Charlie'},
+          relationships: {children: () => []},
+        },
+      });
+
+      // Insert entry in middle (at position 1) with multiple children
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'b', name: 'Bob'},
+          relationships: {
+            children: () => [
+              {row: {id: 'child1', parentId: 'b'}, relationships: {}},
+              {row: {id: 'child2', parentId: 'b'}, relationships: {}},
+            ],
+          },
+        },
+      });
+
+      // Verify middle entry has children and is at correct position
+      expect(at(root, '', 0)).toEqual(
+        expect.objectContaining({id: 'a', name: 'Alice'}),
+      );
+      expect(at(root, '', 1)).toEqual(
+        expect.objectContaining({id: 'b', name: 'Bob'}),
+      );
+      expect(at(root, '', 2)).toEqual(
+        expect.objectContaining({id: 'c', name: 'Charlie'}),
+      );
+
+      // Verify Bob's children are correctly initialized
+      const bobEntry = at(root, '', 1);
+      expect(entries(bobEntry, 'children')).toHaveLength(2);
+      expect(at(bobEntry, 'children', 0)).toEqual(
+        expect.objectContaining({id: 'child1', parentId: 'b'}),
+      );
+      expect(at(bobEntry, 'children', 1)).toEqual(
+        expect.objectContaining({id: 'child2', parentId: 'b'}),
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IMMUTABILITY TESTS
+  // Verify unchanged rows keep their object reference (enables React.memo etc.)
+  //
+  //   root ─┬─ [A, B, C]     edit B      root' ─┬─ [A, B', C]
+  //         │                  ────►            │
+  //         └─ users:[X,Y]                      └─ users:[X,Y]  ← same ref
+  //
+  //   A, C: same ref (unchanged)
+  //   B': new ref (edited)
+  //   users: same ref (sibling relationship untouched)
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe('Object identity preservation (immutability)', () => {
+    const simpleSchema = {
+      tableName: 'item',
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      primaryKey: ['id'],
+      sort: [['id', 'asc']],
+      system: 'client',
+      relationships: {},
+      isHidden: false,
+      compareRows: makeComparator([['id', 'asc']]),
+    } as const;
+
+    const format: Format = {singular: false, relationships: {}};
+
+    // Helper to reduce boilerplate in tests
+    const apply = (root: Entry, change: ViewChange) =>
+      applyChange(root, change, simpleSchema, '', format, true);
+
+    //   [A]  ──add B──►  [A, B]
+    //    ↑                 ↑
+    //    └─── same ref ────┘
+    test('unchanged rows keep their reference when adding a new row', () => {
+      let root: Entry = {'': []};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const firstRowRef = at(root, '', 0);
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      // First row should keep same reference (toBe checks reference equality)
+      expect(at(root, '', 0)).toBe(firstRowRef);
+      expect(entries(root, '')).toHaveLength(2);
+    });
+
+    test('unchanged rows keep their reference when removing another row', () => {
+      let root: Entry = {'': []};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      const firstRowRef = at(root, '', 0);
+
+      root = apply(root, {
+        type: 'remove',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      // First row should keep same reference
+      expect(at(root, '', 0)).toBe(firstRowRef);
+      expect(entries(root, '')).toHaveLength(1);
+    });
+
+    test('unchanged rows keep their reference when editing another row', () => {
+      let root: Entry = {'': []};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      const firstRowRef = at(root, '', 0);
+
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: '2', name: 'Bob'}},
+        node: {row: {id: '2', name: 'Bobby'}},
+      });
+
+      // First row should keep same reference
+      expect(at(root, '', 0)).toBe(firstRowRef);
+      // Second row should have new reference with updated data
+      expect(at(root, '', 1)).not.toBe(firstRowRef);
+      expect(at(root, '', 1)).toEqual(
+        expect.objectContaining({id: '2', name: 'Bobby'}),
+      );
+    });
+
+    //   [A]  ──edit A──►  [A']
+    //    │                  │
+    //    └── different ref ─┘
+    test('edited row gets new reference', () => {
+      let root: Entry = {'': []};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const originalRef = at(root, '', 0);
+
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: '1', name: 'Alice'}},
+        node: {row: {id: '1', name: 'Alicia'}},
+      });
+
+      // Edited row should have a new reference
+      expect(at(root, '', 0)).not.toBe(originalRef);
+      expect(at(root, '', 0)).toEqual(
+        expect.objectContaining({id: '1', name: 'Alicia'}),
+      );
+    });
+
+    test('root object changes when any modification occurs', () => {
+      let root: Entry = {'': []};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      // Root and list should have new references
+      expect(root).not.toBe(rootRef);
+      expect(root['']).not.toBe(listRef);
+    });
+
+    // Parent changes but untouched children keep their references:
+    //
+    //   P1 ─┬─ [C1, C2]    add C3     P1' ─┬─ [C1, C2, C3]
+    //       │               ────►          │    ↑   ↑
+    //       └─ ...                         └─   same refs
+    test('unchanged nested relationships keep their reference', () => {
+      const schemaWithRelationship: SourceSchema = {
+        tableName: 'parent',
+        columns: {id: {type: 'string'}, name: {type: 'string'}},
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {
+          children: {
+            tableName: 'child',
+            columns: {id: {type: 'string'}, parentId: {type: 'string'}},
+            primaryKey: ['id'],
+            sort: [['id', 'asc']],
+            system: 'client',
+            relationships: {},
+            isHidden: false,
+            compareRows: makeComparator([['id', 'asc']]),
+          },
+        },
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      };
+
+      const formatWithRelationship: Format = {
+        singular: false,
+        relationships: {
+          children: {
+            singular: false,
+            relationships: {},
+          },
+        },
+      };
+
+      const apply = (entry: Entry, change: ViewChange) =>
+        applyChange(entry, change, schemaWithRelationship, '', formatWithRelationship, true);
+
+      let root: Entry = {'': []};
+
+      // Add parent with children
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p1', name: 'Parent1'},
+          relationships: {
+            children: () => [
+              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
+              {row: {id: 'c2', parentId: 'p1'}, relationships: {}},
+            ],
+          },
+        },
+      });
+
+      const parent1 = at(root, '', 0);
+      const child1Ref = at(parent1, 'children', 0);
+      const child2Ref = at(parent1, 'children', 1);
+
+      // Add a new child to the parent
+      root = apply(root, {
+        type: 'child',
+        node: {row: {id: 'p1', name: 'Parent1'}},
+        child: {
+          relationshipName: 'children',
+          change: {
+            type: 'add',
+            node: {row: {id: 'c3', parentId: 'p1'}, relationships: {}},
+          },
+        },
+      });
+
+      const newParent1 = at(root, '', 0);
+      // Parent should have new reference (its children changed)
+      expect(newParent1).not.toBe(parent1);
+      // But existing children should keep their references
+      expect(at(newParent1, 'children', 0)).toBe(child1Ref);
+      expect(at(newParent1, 'children', 1)).toBe(child2Ref);
+      // New child is added
+      expect(entries(newParent1, 'children')).toHaveLength(3);
+    });
+
+    //   [A:rc=1]  ──add A──►  [A:rc=2]
+    //       │                     │
+    //       └─── different ref ───┘  (but same data)
+    test('refCount increment creates new reference but preserves data', () => {
+      let root: Entry = {'': []};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const originalRef = at(root, '', 0);
+      const originalRefCount = (originalRef as {[refCountSymbol]: number})[
+        refCountSymbol
+      ];
+
+      // Add same row again (should increment refCount)
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const newRef = at(root, '', 0);
+
+      // Reference should change (immutability)
+      expect(newRef).not.toBe(originalRef);
+      // RefCount should be incremented
+      expect((newRef as {[refCountSymbol]: number})[refCountSymbol]).toBe(
+        originalRefCount + 1,
+      );
+      // Data should be the same
+      expect(newRef).toEqual(expect.objectContaining({id: '1', name: 'Alice'}));
+    });
+
+    // Sibling parents are independent. Changing P1's children doesn't touch P2:
+    //
+    //   [P1─[C1], P2─[C2]]    add C3 to P1    [P1'─[C1,C3], P2─[C2]]
+    //              ↑            ────►                       ↑
+    //              └────────────── same ref ────────────────┘
+    test('child change on one parent does not affect other parents', () => {
+      const schemaWithRelationship: SourceSchema = {
+        tableName: 'parent',
+        columns: {id: {type: 'string'}, name: {type: 'string'}},
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {
+          children: {
+            tableName: 'child',
+            columns: {id: {type: 'string'}, parentId: {type: 'string'}},
+            primaryKey: ['id'],
+            sort: [['id', 'asc']],
+            system: 'client',
+            relationships: {},
+            isHidden: false,
+            compareRows: makeComparator([['id', 'asc']]),
+          },
+        },
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      };
+
+      const formatWithRelationship: Format = {
+        singular: false,
+        relationships: {
+          children: {
+            singular: false,
+            relationships: {},
+          },
+        },
+      };
+
+      const apply = (entry: Entry, change: ViewChange) =>
+        applyChange(entry, change, schemaWithRelationship, '', formatWithRelationship, true);
+
+      let root: Entry = {'': []};
+
+      // Add two parents with children
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p1', name: 'Parent1'},
+          relationships: {
+            children: () => [{row: {id: 'c1', parentId: 'p1'}, relationships: {}}],
+          },
+        },
+      });
+
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p2', name: 'Parent2'},
+          relationships: {
+            children: () => [{row: {id: 'c2', parentId: 'p2'}, relationships: {}}],
+          },
+        },
+      });
+
+      const parent1Ref = at(root, '', 0);
+      const parent2Ref = at(root, '', 1);
+      const parent2ChildrenRef = entries(parent2Ref, 'children');
+
+      // Add a child to parent1 only
+      root = apply(root, {
+        type: 'child',
+        node: {row: {id: 'p1', name: 'Parent1'}},
+        child: {
+          relationshipName: 'children',
+          change: {
+            type: 'add',
+            node: {row: {id: 'c3', parentId: 'p1'}, relationships: {}},
+          },
+        },
+      });
+
+      // Parent1 should have new reference
+      expect(at(root, '', 0)).not.toBe(parent1Ref);
+      // Parent2 should keep same reference (unchanged)
+      expect(at(root, '', 1)).toBe(parent2Ref);
+      // Parent2's children should keep same reference
+      expect(at(root, '', 1)['children']).toBe(parent2ChildrenRef);
     });
   });
 });
