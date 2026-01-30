@@ -1,10 +1,46 @@
-import {expect, test} from '@playwright/test';
+// oxlint-disable no-explicit-any
+// oxlint-disable require-await
+// oxlint-disable no-console
+
+/**
+ * Tanstack Virtualizer Fuzz Tests
+ *
+ * These tests verify that scroll position is preserved when splicing rows
+ * above the viewport in a virtualized list.
+ *
+ * Running the tests:
+ *   cd apps/zbugs
+ *   npx playwright test tanstack-fuzz.spec.ts
+ *
+ * Environment variables:
+ *   URL           - Base URL (default: http://localhost:5173)
+ *   NUM_FUZZ_TESTS - Number of random test cases (default: 50)
+ *   SEED          - Random seed for reproducibility (default: current timestamp)
+ *
+ * Examples:
+ *   # Run with default settings
+ *   npx playwright test tanstack-fuzz.spec.ts
+ *
+ *   # Run 100 tests with a specific seed for reproducibility
+ *   NUM_FUZZ_TESTS=100 SEED=12345 npx playwright test tanstack-fuzz.spec.ts
+ *
+ *   # Run against a different URL
+ *   URL=http://localhost:3000 npx playwright test tanstack-fuzz.spec.ts
+ */
+
+import {expect, test, type Page} from '@playwright/test';
 
 const BASE_URL = process.env.URL ?? 'http://localhost:5173';
 const NUM_FUZZ_TESTS = parseInt(process.env.NUM_FUZZ_TESTS ?? '50');
 const SEED = parseInt(process.env.SEED ?? Date.now().toString());
 
-// Simple seeded random number generator
+// Position tolerance in pixels - scrollTop only accepts integers, so 1px is the minimum achievable accuracy
+const POSITION_TOLERANCE = 1;
+
+// ============================================================================
+// Seeded Random Number Generator
+// ============================================================================
+
 class SeededRandom {
   private seed: number;
 
@@ -22,6 +58,10 @@ class SeededRandom {
   }
 }
 
+// ============================================================================
+// Test Case Types
+// ============================================================================
+
 interface TestCase {
   initialRows: number;
   scrollOffset: number;
@@ -31,7 +71,122 @@ interface TestCase {
   referenceRow: number;
 }
 
-function generateTestCase(rng: SeededRandom, caseNum: number): TestCase {
+interface TestResult {
+  case: number;
+  test: TestCase;
+  passed: boolean;
+  error?: string;
+  actualPosition?: number;
+  expectedPosition?: number;
+}
+
+// ============================================================================
+// Page Helpers
+// ============================================================================
+
+/**
+ * Gets the position of a row (by its "Row N" content) relative to the container.
+ */
+async function getRowPosition(
+  page: Page,
+  rowNumber: number,
+): Promise<number | null> {
+  return page.evaluate(refRow => {
+    const scrollDivs = Array.from(document.querySelectorAll('div'));
+    const listContainer = scrollDivs.find(
+      d =>
+        (d as HTMLElement).style.overflow === 'auto' &&
+        (d as HTMLElement).style.position === 'relative',
+    ) as HTMLElement;
+
+    if (!listContainer) return null;
+
+    const items = Array.from(document.querySelectorAll('[data-index]'));
+    const refItem = items.find(el =>
+      el.textContent?.includes(`Row ${refRow}`),
+    ) as HTMLElement;
+
+    if (!refItem) return null;
+
+    const rect = refItem.getBoundingClientRect();
+    const containerRect = listContainer.getBoundingClientRect();
+    return rect.top - containerRect.top;
+  }, rowNumber);
+}
+
+/**
+ * Gets the current scrollTop of the list container.
+ */
+async function getScrollTop(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const scrollDivs = Array.from(document.querySelectorAll('div'));
+    const listContainer = scrollDivs.find(
+      d =>
+        (d as HTMLElement).style.overflow === 'auto' &&
+        (d as HTMLElement).style.position === 'relative',
+    ) as HTMLElement;
+    return listContainer?.scrollTop ?? 0;
+  });
+}
+
+/**
+ * Scrolls to a specific row index using the virtualizer.
+ */
+async function scrollToRow(page: Page, rowIndex: number): Promise<void> {
+  await page.evaluate(refRow => {
+    if ((window as any).virtualizer) {
+      (window as any).virtualizer.scrollToIndex(refRow, {
+        align: 'start',
+        behavior: 'auto',
+      });
+    }
+  }, rowIndex);
+  await page.waitForTimeout(200);
+}
+
+/**
+ * Resets the list to 1000 rows.
+ */
+async function resetList(page: Page): Promise<void> {
+  await page.click('button:has-text("Reset")');
+  await page.waitForTimeout(200);
+}
+
+/**
+ * Performs a splice operation via the UI.
+ */
+async function performSplice(
+  page: Page,
+  index: number,
+  deleteCount: number,
+  insertCount: number,
+  waitMs = 500,
+): Promise<void> {
+  await page
+    .locator('text=Index:')
+    .locator('..')
+    .locator('input')
+    .fill(index.toString());
+  await page
+    .locator('text=Delete Count:')
+    .locator('..')
+    .locator('input')
+    .fill(deleteCount.toString());
+  await page
+    .locator('text=Insert Count:')
+    .locator('..')
+    .locator('input')
+    .fill(insertCount.toString());
+  await page.waitForTimeout(50);
+  await page.click('button:has-text("Splice")');
+  await page.waitForTimeout(waitMs);
+}
+
+// ============================================================================
+// Test Case Generation
+// ============================================================================
+
+function generateTestCase(rng: SeededRandom): TestCase {
   // Always use 1000 rows to simplify
   const initialRows = 1000;
 
@@ -61,6 +216,10 @@ function generateTestCase(rng: SeededRandom, caseNum: number): TestCase {
   };
 }
 
+// ============================================================================
+// Tests
+// ============================================================================
+
 test.describe('Tanstack Virtualizer Fuzz Tests', () => {
   test.setTimeout(120000);
 
@@ -71,7 +230,9 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
       if (
         text.includes('[SPLICE]') ||
         text.includes('[CORRECTION]') ||
-        text.includes('[shouldAdjust]')
+        text.includes('[shouldAdjust]') ||
+        text.includes('[ANCHOR]') ||
+        text.includes('[RESTORE]')
       ) {
         console.log(`[Browser Console] ${text}`);
       }
@@ -89,23 +250,17 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
     await page.waitForSelector('button:has-text("Reset")');
   });
 
-  test('fuzz test', async ({page}) => {
-    const testSeed = SEED;
-    const rng = new SeededRandom(testSeed);
-    const results: Array<{
-      case: number;
-      test: TestCase;
-      passed: boolean;
-      error?: string;
-      actualPosition?: number;
-      expectedPosition?: number;
-    }> = [];
+  test('fuzz test - random splices should preserve scroll position', async ({
+    page,
+  }) => {
+    const rng = new SeededRandom(SEED);
+    const results: TestResult[] = [];
 
-    console.log(`\n🎲 Starting fuzz test with seed: ${testSeed}`);
+    console.log(`\n🎲 Starting fuzz test with seed: ${SEED}`);
     console.log(`Running ${NUM_FUZZ_TESTS} test cases...\n`);
 
     for (let i = 0; i < NUM_FUZZ_TESTS; i++) {
-      const testCase = generateTestCase(rng, i);
+      const testCase = generateTestCase(rng);
 
       console.log(
         `Test ${i + 1}/${NUM_FUZZ_TESTS}: rows=${testCase.initialRows} ` +
@@ -113,150 +268,50 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
       );
 
       try {
-        // Reset to 1000 rows
-        await page.click('button:has-text("Reset")');
-        await page.waitForTimeout(200);
+        await resetList(page);
+        await scrollToRow(page, testCase.referenceRow);
 
-        // Scroll to the reference row using scrollToIndex
-        await page.evaluate(refRow => {
-          const scrollDivs = Array.from(document.querySelectorAll('div'));
-          const listContainer = scrollDivs.find(
-            d =>
-              (d as HTMLElement).style.overflow === 'auto' &&
-              (d as HTMLElement).style.position === 'relative',
-          ) as HTMLElement;
-
-          if (listContainer && (window as any).virtualizer) {
-            (window as any).virtualizer.scrollToIndex(refRow, {
-              align: 'start',
-              behavior: 'auto',
-            });
-          }
-        }, testCase.referenceRow);
-
-        await page.waitForTimeout(200);
-
-        // Get reference row position before splice
-        const beforePosition = await page.evaluate(refRow => {
-          const scrollDivs = Array.from(document.querySelectorAll('div'));
-          const listContainer = scrollDivs.find(
-            d =>
-              (d as HTMLElement).style.overflow === 'auto' &&
-              (d as HTMLElement).style.position === 'relative',
-          ) as HTMLElement;
-
-          if (!listContainer) return {error: 'No container'};
-
-          const items = Array.from(document.querySelectorAll('[data-index]'));
-          const refItem = items.find(el =>
-            el.textContent?.includes(`Row ${refRow}`),
-          ) as HTMLElement;
-
-          if (!refItem) return {error: `Row ${refRow} not found`};
-
-          const rect = refItem.getBoundingClientRect();
-          const containerRect = listContainer.getBoundingClientRect();
-          const positionInViewport = rect.top - containerRect.top;
-
-          return {
-            position: Math.round(positionInViewport),
-            scrollTop: listContainer.scrollTop,
-          };
-        }, testCase.referenceRow);
-
-        if ('error' in beforePosition) {
-          throw new Error(beforePosition.error);
+        const beforePosition = await getRowPosition(
+          page,
+          testCase.referenceRow,
+        );
+        if (beforePosition === null) {
+          throw new Error(
+            `Row ${testCase.referenceRow} not found before splice`,
+          );
         }
 
-        const expectedPosition = beforePosition.position;
+        await performSplice(
+          page,
+          testCase.spliceIndex,
+          testCase.deleteCount,
+          testCase.insertCount,
+        );
 
-        // Perform splice
-        await page
-          .locator('text=Index:')
-          .locator('..')
-          .locator('input')
-          .fill(testCase.spliceIndex.toString());
-        await page
-          .locator('text=Delete Count:')
-          .locator('..')
-          .locator('input')
-          .fill(testCase.deleteCount.toString());
-        await page
-          .locator('text=Insert Count:')
-          .locator('..')
-          .locator('input')
-          .fill(testCase.insertCount.toString());
-        await page.waitForTimeout(50);
-
-        await page.click('button:has-text("Splice")');
-
-        await page.waitForTimeout(500);
-
-        // Get reference row position after splice
-        const afterPosition = await page.evaluate(refRow => {
-          const scrollDivs = Array.from(document.querySelectorAll('div'));
-          const listContainer = scrollDivs.find(
-            d =>
-              (d as HTMLElement).style.overflow === 'auto' &&
-              (d as HTMLElement).style.position === 'relative',
-          ) as HTMLElement;
-
-          if (!listContainer) return {error: 'No container'};
-
-          const items = Array.from(document.querySelectorAll('[data-index]'));
-          const refItem = items.find(el =>
-            el.textContent?.includes(`Row ${refRow}`),
-          ) as HTMLElement;
-
-          if (!refItem) {
-            return {
-              error: `Row ${refRow} not found after splice`,
-              totalRows: items.length,
-              scrollTop: listContainer.scrollTop,
-            };
-          }
-
-          const rect = refItem.getBoundingClientRect();
-          const containerRect = listContainer.getBoundingClientRect();
-          const positionInViewport = rect.top - containerRect.top;
-
-          return {
-            position: Math.round(positionInViewport),
-            scrollTop: listContainer.scrollTop,
-            index: parseInt(refItem.getAttribute('data-index') || '-1'),
-          };
-        }, testCase.referenceRow);
-
-        if ('error' in afterPosition) {
-          // Reference row might have been deleted or moved out of viewport
-          console.log(`  ⚠️  ${afterPosition.error}`);
+        const afterPosition = await getRowPosition(page, testCase.referenceRow);
+        if (afterPosition === null) {
+          console.log(
+            `  ⚠️  Row ${testCase.referenceRow} not found after splice`,
+          );
           results.push({
             case: i + 1,
             test: testCase,
             passed: false,
-            error: afterPosition.error,
+            error: `Row ${testCase.referenceRow} not found after splice`,
           });
           continue;
         }
 
-        const actualPosition = afterPosition.position;
-        const positionDiff = Math.abs(actualPosition - expectedPosition);
-
-        const scrollDiff = afterPosition.scrollTop - beforePosition.scrollTop;
-
-        // Allow up to 5px tolerance for rounding errors
-        const passed = positionDiff <= 5;
+        const positionDiff = Math.abs(afterPosition - beforePosition);
+        const passed = positionDiff <= POSITION_TOLERANCE;
 
         if (passed) {
           console.log(
-            `  ✅ PASS: position ${actualPosition}px (expected ${expectedPosition}px, diff ${positionDiff}px)`,
+            `  ✅ PASS: position ${afterPosition}px (expected ${beforePosition}px, diff ${positionDiff}px)`,
           );
         } else {
           console.log(
-            `  ❌ FAIL: position ${actualPosition}px (expected ${expectedPosition}px, diff ${positionDiff}px)`,
-          );
-          console.log(
-            `    scrollTop: ${beforePosition.scrollTop}px → ${afterPosition.scrollTop}px (delta ${scrollDiff}px)`,
+            `  ❌ FAIL: position ${afterPosition}px (expected ${beforePosition}px, diff ${positionDiff}px)`,
           );
         }
 
@@ -264,8 +319,8 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
           case: i + 1,
           test: testCase,
           passed,
-          actualPosition,
-          expectedPosition,
+          actualPosition: afterPosition,
+          expectedPosition: beforePosition,
         });
       } catch (error) {
         console.log(`  ❌ ERROR: ${error}`);
@@ -286,7 +341,7 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
     console.log(`\n${'='.repeat(60)}`);
     console.log(`📊 FUZZ TEST SUMMARY`);
     console.log(`${'='.repeat(60)}`);
-    console.log(`Seed: ${testSeed}`);
+    console.log(`Seed: ${SEED}`);
     console.log(`Total tests: ${results.length}`);
     console.log(`Passed: ${passed} (${successRate}%)`);
     console.log(`Failed: ${failed}`);
@@ -298,14 +353,211 @@ test.describe('Tanstack Virtualizer Fuzz Tests', () => {
         .filter(r => !r.passed)
         .forEach(r => {
           console.log(
-            `  Case ${r.case}: rows=${r.test.initialRows} scroll=${r.test.scrollOffset} ` +
-              `splice(${r.test.spliceIndex},${r.test.deleteCount},${r.test.insertCount}) ` +
-              `${r.error || `position ${r.actualPosition}px vs ${r.expectedPosition}px`}`,
+            `  Case ${r.case}: splice(${r.test.spliceIndex},${r.test.deleteCount},${r.test.insertCount}) ` +
+              `ref=Row${r.test.referenceRow} - ` +
+              `${r.error || `${r.actualPosition}px vs ${r.expectedPosition}px`}`,
           );
         });
     }
 
-    // Fail the test if success rate is below 95%
-    expect(passed / results.length).toBeGreaterThanOrEqual(0.95);
+    expect(passed / results.length).toBeGreaterThanOrEqual(1.0);
+  });
+
+  test('repeated splices should not accumulate drift', async ({page}) => {
+    console.log('\n🔄 Testing repeated splices for drift accumulation...\n');
+
+    const referenceRow = 50;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    const numSplices = 20;
+    for (let i = 0; i < numSplices; i++) {
+      await performSplice(page, 0, 1, 2, 300);
+
+      const position = await getRowPosition(page, referenceRow);
+      if (position === null) {
+        console.log(`  Splice ${i + 1}: Row ${referenceRow} not found!`);
+        continue;
+      }
+
+      const drift = position - initialPosition!;
+      console.log(
+        `  Splice ${i + 1}: position=${position}px, drift=${drift}px`,
+      );
+    }
+
+    const finalPosition = await getRowPosition(page, referenceRow);
+    const totalDrift = Math.abs(finalPosition! - initialPosition!);
+    console.log(`\nFinal drift after ${numSplices} splices: ${totalDrift}px`);
+
+    expect(totalDrift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+
+  test('delete-only splices should not cause drift', async ({page}) => {
+    console.log('\n🗑️ Testing delete-only splices...\n');
+
+    const referenceRow = 100;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    for (let i = 0; i < 5; i++) {
+      await performSplice(page, 0, 10, 0, 300);
+
+      const position = await getRowPosition(page, referenceRow);
+      if (position === null) {
+        console.log(`  Delete ${i + 1}: Row ${referenceRow} not found!`);
+        continue;
+      }
+
+      const drift = Math.abs(position - initialPosition!);
+      console.log(
+        `  Delete ${i + 1}: position=${position}px, drift=${drift}px`,
+      );
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
+
+  test('insert-only splices should not cause drift', async ({page}) => {
+    console.log('\n➕ Testing insert-only splices...\n');
+
+    const referenceRow = 100;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    for (let i = 0; i < 5; i++) {
+      await performSplice(page, 0, 0, 50, 500);
+
+      const position = await getRowPosition(page, referenceRow);
+      if (position === null) {
+        console.log(`  Insert ${i + 1}: Row ${referenceRow} not found!`);
+        continue;
+      }
+
+      const drift = Math.abs(position - initialPosition!);
+      console.log(
+        `  Insert ${i + 1}: position=${position}px, drift=${drift}px`,
+      );
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
+
+  test('splice AFTER anchor should not move viewport', async ({page}) => {
+    console.log('\n⬇️ Testing splice after anchor (should be no-op)...\n');
+
+    const referenceRow = 100;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialScrollTop = await getScrollTop(page);
+    console.log(`Initial scrollTop: ${initialScrollTop}px`);
+
+    // Splice at index 500 (well after the anchor at ~100)
+    await performSplice(page, 500, 10, 50, 300);
+
+    const finalScrollTop = await getScrollTop(page);
+    const scrollDelta = Math.abs(finalScrollTop - initialScrollTop);
+    console.log(
+      `Final scrollTop: ${finalScrollTop}px, delta: ${scrollDelta}px`,
+    );
+
+    expect(scrollDelta).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+
+  test('splice at scroll position 0 should work correctly', async ({page}) => {
+    console.log('\n🔝 Testing splice at scroll position 0...\n');
+
+    await resetList(page);
+    // Stay at the top (don't scroll)
+
+    const initialPosition = await getRowPosition(page, 0);
+    console.log(`Initial position of Row 0: ${initialPosition}px`);
+
+    await performSplice(page, 0, 0, 10, 500);
+
+    const finalPosition = await getRowPosition(page, 0);
+    console.log(`Final position of Row 0: ${finalPosition}px`);
+
+    if (initialPosition !== null && finalPosition !== null) {
+      const drift = Math.abs(finalPosition - initialPosition);
+      console.log(`Drift: ${drift}px`);
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
+
+  test('large batch insert should stabilize within maxAttempts', async ({
+    page,
+  }) => {
+    console.log('\n📦 Testing large batch insert stabilization...\n');
+
+    const referenceRow = 200;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    // Insert 200 rows - requires multiple correction passes
+    await performSplice(page, 0, 0, 200, 1000);
+
+    const finalPosition = await getRowPosition(page, referenceRow);
+    console.log(`Final position: ${finalPosition}px`);
+
+    if (initialPosition !== null && finalPosition !== null) {
+      const drift = Math.abs(finalPosition - initialPosition);
+      console.log(`Drift: ${drift}px`);
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
+  });
+
+  test('rapid successive splices should not cause issues', async ({page}) => {
+    console.log('\n⚡ Testing rapid successive splices...\n');
+
+    const referenceRow = 100;
+    await resetList(page);
+    await scrollToRow(page, referenceRow);
+
+    const initialPosition = await getRowPosition(page, referenceRow);
+    expect(initialPosition).not.toBeNull();
+    console.log(
+      `Initial position of Row ${referenceRow}: ${initialPosition}px`,
+    );
+
+    // Rapid fire 10 splices with minimal wait
+    for (let i = 0; i < 10; i++) {
+      await performSplice(page, 0, 1, 1, 50);
+    }
+
+    // Wait for things to settle
+    await page.waitForTimeout(500);
+
+    const finalPosition = await getRowPosition(page, referenceRow);
+    console.log(`Final position: ${finalPosition}px`);
+
+    if (initialPosition !== null && finalPosition !== null) {
+      const drift = Math.abs(finalPosition - initialPosition);
+      console.log(`Drift after rapid splices: ${drift}px`);
+      expect(drift).toBeLessThanOrEqual(POSITION_TOLERANCE);
+    }
   });
 });
