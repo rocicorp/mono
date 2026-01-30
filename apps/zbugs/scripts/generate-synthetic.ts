@@ -16,6 +16,7 @@
  *   SHARD_SIZE            - rows per CSV shard (default 500000)
  *   OUTPUT_DIR            - output directory (default db/seed-data/synthetic/)
  *   SEED                  - RNG seed for reproducibility (default 42)
+ *   SKIP_USERS            - when "true", skip user CSV generation (default false)
  */
 
 import * as fs from 'fs';
@@ -35,6 +36,7 @@ const OUTPUT_DIR = path.resolve(
   process.env.OUTPUT_DIR ?? path.join(__dirname, '../db/seed-data/synthetic/'),
 );
 const SEED = parseInt(process.env.SEED ?? '42', 10);
+const SKIP_USERS = process.env.SKIP_USERS === 'true';
 const TEMPLATES_DIR = path.join(__dirname, '../db/seed-data/templates');
 
 // --- Seeded PRNG (mulberry32) ---
@@ -59,6 +61,18 @@ function randomInt(min: number, max: number): number {
 
 function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(rng() * arr.length)];
+}
+
+// --- Seeded nanoid ---
+const NANOID_ALPHABET =
+  '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-';
+
+function seededNanoid(size = 21): string {
+  let id = '';
+  for (let i = 0; i < size; i++) {
+    id += NANOID_ALPHABET[Math.floor(rng() * NANOID_ALPHABET.length)];
+  }
+  return id;
 }
 
 // --- Pareto/Power-law distribution helpers ---
@@ -439,12 +453,12 @@ async function main() {
     for (let pi = 0; pi < projectCount; pi++) {
       if (allProjects.length >= NUM_PROJECTS) break;
       const proj = cat.projects[pi];
-      const projectID = `proj_${String(allProjects.length).padStart(3, '0')}`;
+      const projectID = seededNanoid();
       const labelIDs: string[] = [];
 
       // Generate labels for this project
       for (let li = 0; li < cat.labels.length; li++) {
-        const labelID = `lbl_${projectID}_${String(li).padStart(2, '0')}`;
+        const labelID = seededNanoid();
         allLabels.push({
           id: labelID,
           name: cat.labels[li],
@@ -491,27 +505,32 @@ async function main() {
     });
   }
 
-  // Write users CSV
-  const userWriter = new ShardedCSVWriter(
-    OUTPUT_DIR,
-    'user',
-    'id,login,name,avatar,role,githubID,email',
-    SHARD_SIZE,
-  );
-  for (const u of users) {
-    await userWriter.writeRow(
-      [
-        u.id,
-        u.login,
-        escapeCSV(u.name),
-        u.avatar,
-        u.role,
-        String(u.githubID),
-        u.email,
-      ].join(','),
+  // Write users CSV (skip if SKIP_USERS=true, e.g. when appending a batch)
+  if (SKIP_USERS) {
+    // oxlint-disable-next-line no-console
+    console.log('  Skipping user CSV generation (SKIP_USERS=true)');
+  } else {
+    const userWriter = new ShardedCSVWriter(
+      OUTPUT_DIR,
+      'user',
+      'id,login,name,avatar,role,githubID,email',
+      SHARD_SIZE,
     );
+    for (const u of users) {
+      await userWriter.writeRow(
+        [
+          u.id,
+          u.login,
+          escapeCSV(u.name),
+          u.avatar,
+          u.role,
+          String(u.githubID),
+          u.email,
+        ].join(','),
+      );
+    }
+    await userWriter.close();
   }
-  await userWriter.close();
 
   // Write projects CSV
   // oxlint-disable-next-line no-console
@@ -578,6 +597,12 @@ async function main() {
     endDate.getDate(),
   );
 
+  // Pre-generate all issue IDs so comments and labels can reference them
+  const issueIDs = new Array<string>(NUM_ISSUES);
+  for (let i = 0; i < NUM_ISSUES; i++) {
+    issueIDs[i] = seededNanoid();
+  }
+
   for (let i = 0; i < NUM_ISSUES; i++) {
     if (i % 100000 === 0) {
       // oxlint-disable-next-line no-console
@@ -586,7 +611,7 @@ async function main() {
       );
     }
 
-    const issueID = `iss_${String(i).padStart(9, '0')}`;
+    const issueID = issueIDs[i];
     const projectIdx = issueProjects[i];
     const project = allProjects[projectIdx];
     const cat = categories[project.categoryIndex];
@@ -657,7 +682,7 @@ async function main() {
       );
     }
 
-    const issueID = `iss_${String(issueIdx).padStart(9, '0')}`;
+    const issueID = issueIDs[issueIdx];
     const projectIdx = issueProjects[issueIdx];
     const project = allProjects[projectIdx];
     const cat = categories[project.categoryIndex];
@@ -670,7 +695,8 @@ async function main() {
       .getTime();
 
     for (let c = 0; c < numComments; c++) {
-      const commentID = `cmt_${String(commentIdx++).padStart(9, '0')}`;
+      const commentID = seededNanoid();
+      commentIdx++;
 
       // Generate body from template
       const bodyTemplate =
@@ -716,7 +742,7 @@ async function main() {
       );
     }
 
-    const issueID = `iss_${String(issueIdx).padStart(9, '0')}`;
+    const issueID = issueIDs[issueIdx];
     const projectIdx = issueProjects[issueIdx];
     const project = allProjects[projectIdx];
 
