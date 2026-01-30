@@ -1,5 +1,5 @@
-import {useVirtualizer} from '@tanstack/react-virtual';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
+import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
 
 interface RowData {
   id: string;
@@ -7,7 +7,6 @@ interface RowData {
   multiplier: number;
 }
 
-const DEFAULT_HEIGHT = 100;
 const MAX_INSERT_COUNT = 10000;
 const MAX_MULTIPLIER = 50;
 const MIN_MULTIPLIER = 1;
@@ -55,64 +54,22 @@ function generateRows(
 
 const seed = 12345;
 
-export function TanstackTestApp() {
+export function VirtuosoTestApp() {
   const [rows, setRows] = useState<RowData[]>(() => generateRows(100, 0, seed));
   const [selectedRowId, setSelectedRowId] = useState<string>('');
   const [textMultiplier, setTextMultiplier] = useState<string>('1');
-  const [forceAdjust, setForceAdjust] = useState<boolean | null>(null);
   const [debug, setDebug] = useState<boolean>(false);
   const [index, setIndex] = useState<string>('0');
   const [deleteCount, setDeleteCount] = useState<string>('0');
   const [insertCount, setInsertCount] = useState<string>('10');
 
-  const parentRef = useRef<HTMLDivElement>(null);
-  const checkboxRef = useRef<HTMLInputElement>(null);
-
-  // Update checkbox indeterminate state
-  useEffect(() => {
-    if (checkboxRef.current) {
-      checkboxRef.current.indeterminate = forceAdjust === null;
-    }
-  }, [forceAdjust]);
-
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: useCallback(() => DEFAULT_HEIGHT, []),
-    getItemKey: useCallback(
-      (index: number) => rows[index]?.id ?? index,
-      [rows],
-    ),
-    overscan: 5,
-    debug,
-  });
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
 
   // Expose virtualizer for testing
   useEffect(() => {
     // oxlint-disable-next-line no-explicit-any
-    (window as any).virtualizer = virtualizer;
-  }, [virtualizer]);
-
-  // // Configure scroll position adjustment behavior
-  // // We disable Tanstack's automatic adjustments and handle everything ourselves
-  // virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
-  //   item: {index: number; start: number; size: number; end: number},
-  //   delta: number,
-  //   instance: typeof virtualizer,
-  // ) => {
-  //   // If this is the selected row being tested, check the tristate value
-  //   if (selectedRowId) {
-  //     const rowIndex = rows.findIndex(r => r.id === selectedRowId);
-  //     if (rowIndex === item.index) {
-  //       if (forceAdjust !== null) {
-  //         return forceAdjust;
-  //       }
-  //     }
-  //   }
-
-  //   // Disabled for manual testing
-  //   return false;
-  // };
+    (window as any).virtualizer = virtuosoRef.current;
+  }, []);
 
   const handleChangeText = (showAlerts = false): boolean => {
     const multiplier = parseInt(textMultiplier, 10);
@@ -228,8 +185,6 @@ export function TanstackTestApp() {
     updatedRows.splice(idx, delCnt, ...newRowsToInsert);
 
     setRows(updatedRows);
-
-    // No scroll adjustments - for manual testing
   };
 
   const handleRemoveAll = () => {
@@ -242,9 +197,6 @@ export function TanstackTestApp() {
     setRows(generateRows(1000, 0, seed));
     setSelectedRowId('');
   };
-
-  const virtualItems = virtualizer.getVirtualItems();
-  const totalSize = virtualizer.getTotalSize();
 
   const stats = useMemo(() => {
     if (rows.length === 0) return null;
@@ -278,7 +230,7 @@ export function TanstackTestApp() {
         }}
       >
         <h1 style={{margin: '0 0 20px 0', fontSize: '18px'}}>
-          Tanstack Virtualizer Test
+          React Virtuoso Test
         </h1>
 
         {/* Stats */}
@@ -313,12 +265,6 @@ export function TanstackTestApp() {
             <div>
               Total Rows: <strong>{rows.length}</strong>
             </div>
-            <div>
-              Virtual Items: <strong>{virtualItems.length}</strong>
-            </div>
-            <div>
-              Total Height: <strong>{Math.round(totalSize)}px</strong>
-            </div>
             {stats && (
               <>
                 <div>
@@ -332,10 +278,6 @@ export function TanstackTestApp() {
                 </div>
               </>
             )}
-            <div>
-              Scroll Offset:{' '}
-              <strong>{Math.round(virtualizer.scrollOffset ?? 0)}px</strong>
-            </div>
           </div>
         </div>
 
@@ -392,36 +334,6 @@ export function TanstackTestApp() {
                 borderRadius: '3px',
               }}
             />
-          </div>
-          <div style={{marginBottom: '8px'}}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
-            >
-              <input
-                ref={checkboxRef}
-                type="checkbox"
-                checked={forceAdjust === true}
-                onChange={() => {
-                  setForceAdjust(prev => {
-                    if (prev === null) return true;
-                    if (prev === true) return false;
-                    return null;
-                  });
-                }}
-                style={{marginRight: '6px'}}
-              />
-              Scroll adjustment for this row
-              {forceAdjust === null
-                ? ' (Default)'
-                : forceAdjust
-                  ? ' (Force Adjust)'
-                  : ' (Force No Adjust)'}
-            </label>
           </div>
           <button
             onClick={() => handleChangeText(true)}
@@ -586,107 +498,75 @@ export function TanstackTestApp() {
             Virtual List ({rows.length} rows)
           </h2>
         </div>
-        <div
-          ref={parentRef}
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            position: 'relative',
-          }}
-        >
-          {rows.length === 0 ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: '#999',
-              }}
-            >
-              No rows. Add some rows to get started.
-            </div>
-          ) : (
-            <div
-              style={{
-                height: `${totalSize}px`,
-                width: '100%',
-                position: 'relative',
-              }}
-            >
+        {rows.length === 0 ? (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#999',
+            }}
+          >
+            No rows. Add some rows to get started.
+          </div>
+        ) : (
+          <Virtuoso
+            ref={virtuosoRef}
+            style={{flex: 1}}
+            data={rows}
+            itemContent={(idx, row) => (
               <div
+                data-index={idx}
+                data-id={row.id}
                 style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                  padding: '16px',
+                  borderBottom: '1px solid #eee',
+                  backgroundColor:
+                    selectedRowId === row.id ? '#fff3cd' : '#fff',
+                  boxSizing: 'border-box',
+                  display: 'flex',
+                  flexDirection: 'column',
                 }}
               >
-                {virtualItems.map(virtualItem => {
-                  const row = rows[virtualItem.index];
-                  if (!row) return null;
-
-                  return (
-                    <div
-                      key={row.id}
-                      data-index={virtualItem.index}
-                      data-id={row.id}
-                      ref={virtualizer.measureElement}
-                      style={{
-                        padding: '16px',
-                        borderBottom: '1px solid #eee',
-                        backgroundColor:
-                          selectedRowId === row.id ? '#fff3cd' : '#fff',
-                        boxSizing: 'border-box',
-                        display: 'flex',
-                        flexDirection: 'column',
-                      }}
-                    >
-                      <div
-                        onClick={() => {
-                          setSelectedRowId(row.id);
-                          setTextMultiplier(row.multiplier.toString());
-                        }}
-                        style={{
-                          fontWeight: 'bold',
-                          fontSize: '14px',
-                          marginBottom: '4px',
-                          cursor: 'pointer',
-                          display: 'inline-block',
-                        }}
-                        title="Click to select for text change"
-                      >
-                        {row.id} (Index: {virtualItem.index})
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          color: '#666',
-                          marginBottom: '8px',
-                        }}
-                      >
-                        Content: {row.content.length} chars | Position:{' '}
-                        {virtualItem.start - (virtualizer.scrollOffset ?? 0)} |
-                        Size: {virtualItem.size}px | Start: {virtualItem.start}
-                        px
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          lineHeight: '1.5',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {row.content}
-                      </div>
-                    </div>
-                  );
-                })}
+                <div
+                  onClick={() => {
+                    setSelectedRowId(row.id);
+                    setTextMultiplier(row.multiplier.toString());
+                  }}
+                  style={{
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    marginBottom: '4px',
+                    cursor: 'pointer',
+                    display: 'inline-block',
+                  }}
+                  title="Click to select for text change"
+                >
+                  {row.id} (Index: {idx})
+                </div>
+                <div
+                  style={{
+                    fontSize: '13px',
+                    color: '#666',
+                    marginBottom: '8px',
+                  }}
+                >
+                  Content: {row.content.length} chars
+                </div>
+                <div
+                  style={{
+                    fontSize: '13px',
+                    lineHeight: '1.5',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {row.content}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          />
+        )}
       </div>
     </div>
   );
