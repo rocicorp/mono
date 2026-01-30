@@ -4,8 +4,9 @@
  * MIT License
  */
 
-import * as React from 'react'
-import { flushSync } from 'react-dom'
+import * as React from 'react';
+import {flushSync} from 'react-dom';
+import type {PartialKeys, VirtualizerOptions} from './virtualizer.ts';
 import {
   Virtualizer,
   elementScroll,
@@ -14,20 +15,19 @@ import {
   observeWindowOffset,
   observeWindowRect,
   windowScroll,
-} from './virtualizer.ts'
-import type { PartialKeys, VirtualizerOptions } from './virtualizer.ts'
+} from './virtualizer.ts';
 
-export * from './virtualizer.ts'
+export * from './virtualizer.ts';
 
 const useIsomorphicLayoutEffect =
-  typeof document !== 'undefined' ? React.useLayoutEffect : React.useEffect
+  typeof document !== 'undefined' ? React.useLayoutEffect : React.useEffect;
 
 export type ReactVirtualizerOptions<
   TScrollElement extends Element | Window,
   TItemElement extends Element,
 > = VirtualizerOptions<TScrollElement, TItemElement> & {
-  useFlushSync?: boolean
-}
+  useFlushSync?: boolean;
+};
 
 function useVirtualizerBase<
   TScrollElement extends Element | Window,
@@ -39,35 +39,35 @@ function useVirtualizerBase<
   TScrollElement,
   TItemElement
 > {
-  const rerender = React.useReducer(() => ({}), {})[1]
+  const rerender = React.useReducer(() => ({}), {})[1];
 
   const resolvedOptions: VirtualizerOptions<TScrollElement, TItemElement> = {
     ...options,
     onChange: (instance, sync) => {
       if (useFlushSync && sync) {
-        flushSync(rerender)
+        flushSync(rerender);
       } else {
-        rerender()
+        rerender();
       }
-      options.onChange?.(instance, sync)
+      options.onChange?.(instance, sync);
     },
-  }
+  };
 
   const [instance] = React.useState(
     () => new Virtualizer<TScrollElement, TItemElement>(resolvedOptions),
-  )
+  );
 
-  instance.setOptions(resolvedOptions)
-
-  useIsomorphicLayoutEffect(() => {
-    return instance._didMount()
-  }, [])
+  instance.setOptions(resolvedOptions);
 
   useIsomorphicLayoutEffect(() => {
-    return instance._willUpdate()
-  })
+    return instance._didMount();
+  }, []);
 
-  return instance
+  useIsomorphicLayoutEffect(() => {
+    return instance._willUpdate();
+  });
+
+  return instance;
 }
 
 export function useVirtualizer<
@@ -84,7 +84,7 @@ export function useVirtualizer<
     observeElementOffset: observeElementOffset,
     scrollToFn: elementScroll,
     ...options,
-  })
+  });
 }
 
 export function useWindowVirtualizer<TItemElement extends Element>(
@@ -97,12 +97,11 @@ export function useWindowVirtualizer<TItemElement extends Element>(
   >,
 ): Virtualizer<Window, TItemElement> {
   return useVirtualizerBase<Window, TItemElement>({
-    getScrollElement: () =>
-      typeof document !== 'undefined' ? window : null,
+    getScrollElement: () => (typeof document !== 'undefined' ? window : null),
     observeElementRect: observeWindowRect,
     observeElementOffset: observeWindowOffset,
     scrollToFn: windowScroll,
     initialOffset: () => (typeof document !== 'undefined' ? window.scrollY : 0),
     ...options,
-  })
+  });
 }
