@@ -42,7 +42,7 @@ import {
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
-import type {JSONObject} from '../protocol/current.ts';
+import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
   DataChange,
   Identifier,
@@ -228,7 +228,13 @@ class PostgresChangeSource implements ChangeSource {
     this.#replica = replica;
   }
 
-  async startStream(clientWatermark: string): Promise<ChangeStream> {
+  async startStream(
+    clientWatermark: string,
+    backfillRequests: BackfillRequest[] = [],
+  ): Promise<ChangeStream> {
+    if (backfillRequests.length) {
+      throw new Error('not implemented yet');
+    }
     const db = pgClient(this.#lc, this.#upstreamUri, {}, 'json-as-string');
     const {slot} = this.#replica;
 

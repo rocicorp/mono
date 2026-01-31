@@ -1,16 +1,26 @@
 import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import postgres from 'postgres';
+import postgres, {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import {disableStatementTimeout, type PostgresDB} from '../../types/pg.ts';
+import {
+  disableStatementTimeout,
+  type PostgresDB,
+  type PostgresTransaction,
+} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
+import type {
+  BackfillID,
+  BackfillRequest,
+  DataChange,
+  Identifier,
+  TableMetadata,
+} from '../change-source/protocol/current.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
 import type {StatusMessage} from '../change-source/protocol/current/status.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
@@ -21,7 +31,9 @@ import * as ErrorType from './error-type-enum.ts';
 import {
   AutoResetSignal,
   markResetRequired,
+  type BackfillingColumn,
   type ReplicationState,
+  type TableMetadataRow,
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
 
@@ -134,7 +146,10 @@ export class Storer implements Service {
     this.#lc.info?.(`assumed ownership at ${addressWithProtocol}`);
   }
 
-  async getLastWatermarkToStartStream(): Promise<string> {
+  async getStartStreamInitializationParameters(): Promise<{
+    lastWatermark: string;
+    backfillRequests: BackfillRequest[];
+  }> {
     // Before starting or restarting a stream from the change source,
     // wait for all queued changes to be processed so that we pick up
     // from the right spot.
@@ -142,9 +157,27 @@ export class Storer implements Service {
     this.#queue.enqueue(['ready', resolve]);
     await ready;
 
-    const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
-      SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
-    return lastWatermark;
+    const [[{lastWatermark}], backfillRequests] = await this.#db.begin(
+      Mode.READONLY,
+      sql => [
+        sql<{lastWatermark: string}[]>`
+        SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`,
+
+        // Formats a BackfillRequest using json_object_agg() to construct the
+        // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
+        // to make it optional and possibly `null`.
+        sql<BackfillRequest[]>`
+        SELECT b."schema", b."table" as name, t."metadata", 
+               json_object_agg(b."column", b."backfill") as columns
+          FROM ${this.#cdc('backfilling')} as b
+          LEFT JOIN ${this.#cdc('tableMetadata')} as t
+          ON (b."schema" = t."schema" AND b."table" = t."table")
+          GROUP BY b."schema", b."table", t."metadata"
+        `,
+      ],
+    );
+
+    return {lastWatermark, backfillRequests};
   }
 
   async getMinWatermarkForCatchup(): Promise<string | null> {
@@ -319,12 +352,12 @@ export class Storer implements Service {
         watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
         precommit: tag === 'commit' ? tx.preCommitWatermark : null,
         pos: tx.pos,
-        change: change as unknown as JSONValue,
+        change,
       };
 
-      const processed = tx.pool.process(tx => [
-        tx`
-        INSERT INTO ${this.#cdc('changeLog')} ${tx(entry)}`,
+      const processed = tx.pool.process(sql => [
+        sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+        ...(tag === 'data' ? this.#trackBackfillMetadata(sql, change) : []),
       ]);
 
       if (tag === 'data' && tx.pos % 10_000 === 0) {
@@ -489,6 +522,131 @@ export class Storer implements Service {
       }
       sub.fail(err);
     }
+  }
+
+  /**
+   * Returns the db statements necessary to track backfill and table metadata
+   * presented in the `change`, if any.
+   */
+  #trackBackfillMetadata(sql: PostgresTransaction, change: DataChange) {
+    const stmts: PendingQuery<Row[]>[] = [];
+
+    switch (change.tag) {
+      case 'update-table-metadata': {
+        const {table, new: metadata} = change;
+        stmts.push(this.#upsertTableMetadataStmt(sql, table, metadata));
+        break;
+      }
+
+      case 'create-table': {
+        const {spec, metadata, backfill} = change;
+        if (metadata) {
+          stmts.push(this.#upsertTableMetadataStmt(sql, spec, metadata));
+        }
+        if (backfill) {
+          Object.entries(backfill).forEach(([col, backfill]) => {
+            stmts.push(
+              this.#upsertColumnBackfillStmt(sql, spec, col, backfill),
+            );
+          });
+        }
+        break;
+      }
+
+      case 'rename-table': {
+        const {old} = change;
+        const row = {schema: change.new.schema, table: change.new.name};
+        stmts.push(
+          sql`UPDATE ${this.#cdc('tableMetadata')} SET ${sql(row)}
+                WHERE "schema" = ${old.schema} AND "table" = ${old.name}`,
+          sql`UPDATE ${this.#cdc('backfilling')} SET ${sql(row)}
+                WHERE "schema" = ${old.schema} AND "table" = ${old.name}`,
+        );
+        break;
+      }
+
+      case 'drop-table': {
+        const {
+          id: {schema, name},
+        } = change;
+        stmts.push(
+          sql`DELETE FROM ${this.#cdc('tableMetadata')}
+                WHERE "schema" = ${schema} AND "table" = ${name}`,
+          sql`DELETE FROM ${this.#cdc('backfilling')}
+                WHERE "schema" = ${schema} AND "table" = ${name}`,
+        );
+        break;
+      }
+
+      case 'add-column': {
+        const {table, tableMetadata, column, backfill} = change;
+        if (tableMetadata) {
+          stmts.push(this.#upsertTableMetadataStmt(sql, table, tableMetadata));
+        }
+        if (backfill) {
+          stmts.push(
+            this.#upsertColumnBackfillStmt(sql, table, column.name, backfill),
+          );
+        }
+        break;
+      }
+
+      case 'update-column': {
+        const {
+          table: {schema, name: table},
+          old: {name: oldName},
+          new: {name: newName},
+        } = change;
+        if (oldName !== newName) {
+          stmts.push(
+            sql`UPDATE ${this.#cdc('backfilling')} SET "column" = ${newName}
+                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" = ${oldName}`,
+          );
+        }
+        break;
+      }
+
+      case 'drop-column': {
+        const {
+          table: {schema, name},
+          column,
+        } = change;
+        stmts.push(
+          sql`DELETE FROM ${this.#cdc('backfilling')}
+                WHERE "schema" = ${schema} AND "table" = ${name} AND "column" = ${column}`,
+        );
+        break;
+        break;
+      }
+    }
+    return stmts;
+  }
+
+  #upsertTableMetadataStmt(
+    sql: PostgresTransaction,
+    {schema, name: table}: Identifier,
+    metadata: TableMetadata,
+  ) {
+    const row: TableMetadataRow = {schema, table, metadata};
+    return sql`
+        INSERT INTO ${this.#cdc('tableMetadata')} ${sql(row)}
+          ON CONFLICT ("schema", "table") 
+          DO UPDATE SET ${sql(row)};
+    `;
+  }
+
+  #upsertColumnBackfillStmt(
+    sql: PostgresTransaction,
+    {schema, name: table}: Identifier,
+    column: string,
+    backfill: BackfillID,
+  ) {
+    const row: BackfillingColumn = {schema, table, column, backfill};
+    return sql`
+        INSERT INTO ${this.#cdc('backfilling')} ${sql(row)}
+          ON CONFLICT ("schema", "table", "column") 
+          DO UPDATE SET ${sql(row)};
+    `;
   }
 
   stop() {
