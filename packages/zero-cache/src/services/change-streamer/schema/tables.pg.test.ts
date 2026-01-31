@@ -13,17 +13,17 @@ import {
 
 describe('change-streamer/schema/tables', () => {
   const lc = createSilentLogContext();
-  let db: PostgresDB;
+  let sql: PostgresDB;
 
   const APP_ID = 'rezo';
   const SHARD_NUM = 8;
   const shard = {appID: APP_ID, shardNum: SHARD_NUM};
 
   beforeEach<PgTest>(async ({testDBs}) => {
-    db = await testDBs.create('change_streamer_schema_tables');
-    await db.begin(tx => setupCDCTables(lc, tx, shard));
+    sql = await testDBs.create('change_streamer_schema_tables');
+    await sql.begin(tx => setupCDCTables(lc, tx, shard));
 
-    return () => testDBs.drop(db);
+    return () => testDBs.drop(sql);
   });
 
   test('ensureReplicationConfig', async () => {
@@ -32,7 +32,7 @@ describe('change-streamer/schema/tables', () => {
 
     await ensureReplicationConfig(
       lc,
-      db,
+      sql,
       {
         replicaVersion: '183',
         publications: ['zero_data', 'zero_metadata'],
@@ -42,7 +42,7 @@ describe('change-streamer/schema/tables', () => {
       true,
     );
 
-    await expectTables(db, {
+    await expectTables(sql, {
       ['rezo_8/cdc.replicationConfig']: [
         {
           replicaVersion: '183',
@@ -62,17 +62,21 @@ describe('change-streamer/schema/tables', () => {
       ['rezo_8/cdc.changeLog']: [],
     });
 
-    await db`
+    await sql`
     INSERT INTO "rezo_8/cdc"."changeLog" (watermark, pos, change)
-        values ('184', 1, JSONB('{"foo":"bar"}'));
+        VALUES ('184', 1, JSONB('{"foo":"bar"}'));
     UPDATE "rezo_8/cdc"."replicationState" 
         SET "lastWatermark" = '184', owner = 'my-task';
+    INSERT INTO "rezo_8/cdc"."tableMetadata" (schema, "table", metadata)
+        VALUES ('public', 'foo', '{"foo":"bar"}');
+    INSERT INTO "rezo_8/cdc"."backfilling" (schema, "table", "column", backfill)
+        VALUES ('public', 'foo', 'boo', '{"id":123}');
     `.simple();
 
     // Should be a no-op.
     await ensureReplicationConfig(
       lc,
-      db,
+      sql,
       {
         replicaVersion: '183',
         publications: ['zero_metadata', 'zero_data'],
@@ -82,7 +86,7 @@ describe('change-streamer/schema/tables', () => {
       true,
     );
 
-    await expectTables(db, {
+    await expectTables(sql, {
       ['rezo_8/cdc.replicationConfig']: [
         {
           replicaVersion: '183',
@@ -107,10 +111,25 @@ describe('change-streamer/schema/tables', () => {
           precommit: null,
         },
       ],
+      ['rezo_8/cdc.tableMetadata']: [
+        {
+          schema: 'public',
+          table: 'foo',
+          metadata: {foo: 'bar'},
+        },
+      ],
+      ['rezo_8/cdc.backfilling']: [
+        {
+          schema: 'public',
+          table: 'foo',
+          column: 'boo',
+          backfill: {id: 123},
+        },
+      ],
     });
 
-    await markResetRequired(db, shard);
-    await expectTables(db, {
+    await markResetRequired(sql, shard);
+    await expectTables(sql, {
       ['rezo_8/cdc.replicationConfig']: [
         {
           replicaVersion: '183',
@@ -127,12 +146,27 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
+      ['rezo_8/cdc.tableMetadata']: [
+        {
+          schema: 'public',
+          table: 'foo',
+          metadata: {foo: 'bar'},
+        },
+      ],
+      ['rezo_8/cdc.backfilling']: [
+        {
+          schema: 'public',
+          table: 'foo',
+          column: 'boo',
+          backfill: {id: 123},
+        },
+      ],
     });
 
     // Should not affect auto-reset = false (i.e. no-op).
     await ensureReplicationConfig(
       lc,
-      db,
+      sql,
       {
         replicaVersion: '183',
         publications: ['zero_metadata', 'zero_data'],
@@ -146,7 +180,7 @@ describe('change-streamer/schema/tables', () => {
     await expect(
       ensureReplicationConfig(
         lc,
-        db,
+        sql,
         {
           replicaVersion: '183',
           publications: ['zero_metadata', 'zero_data'],
@@ -160,7 +194,7 @@ describe('change-streamer/schema/tables', () => {
     // Different replica version should wipe the tables.
     await ensureReplicationConfig(
       lc,
-      db,
+      sql,
       {
         replicaVersion: '1g8',
         publications: ['zero_data', 'zero_metadata'],
@@ -170,7 +204,7 @@ describe('change-streamer/schema/tables', () => {
       true,
     );
 
-    await expectTables(db, {
+    await expectTables(sql, {
       ['rezo_8/cdc.replicationConfig']: [
         {
           replicaVersion: '1g8',
@@ -188,6 +222,8 @@ describe('change-streamer/schema/tables', () => {
         },
       ],
       ['rezo_8/cdc.changeLog']: [],
+      ['rezo_8/cdc.tableMetadata']: [],
+      ['rezo_8/cdc.backfilling']: [],
     });
 
     // Different replica version at a non-initial watermark
@@ -195,7 +231,7 @@ describe('change-streamer/schema/tables', () => {
     await expect(
       ensureReplicationConfig(
         lc,
-        db,
+        sql,
         {
           replicaVersion: '1gg',
           publications: ['zero_data', 'zero_metadata'],

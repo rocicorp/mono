@@ -319,8 +319,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       let err: unknown;
       let watermark: string | null = null;
       try {
-        const startAfter = await this.#storer.getLastWatermarkToStartStream();
-        const stream = await this.#source.startStream(startAfter);
+        const {lastWatermark, backfillRequests} =
+          await this.#storer.getStartStreamInitializationParameters();
+        const stream = await this.#source.startStream(
+          lastWatermark,
+          backfillRequests,
+        );
         this.#stream = stream;
         this.#state.resetBackoff();
         watermark = null;

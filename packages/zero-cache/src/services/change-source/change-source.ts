@@ -1,5 +1,6 @@
 import type {Sink, Source} from '../../types/streams.ts';
 import type {
+  BackfillRequest,
   ChangeSourceUpstream,
   ChangeStreamMessage,
 } from './protocol/current.ts';
@@ -20,5 +21,8 @@ export interface ChangeSource {
    * Starts a stream of changes starting after the specific watermark,
    * with a corresponding sink for upstream acknowledgements.
    */
-  startStream(afterWatermark: string): Promise<ChangeStream>;
+  startStream(
+    afterWatermark: string,
+    backfillRequests?: BackfillRequest[],
+  ): Promise<ChangeStream>;
 }
