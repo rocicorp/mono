@@ -258,6 +258,41 @@ describe('ConnectionManager', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
+    test('does nothing when in needs-auth state', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+      const authError = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'unauthorized',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+      manager.needsAuth(authError);
+
+      const listener = subscribe(manager);
+      manager.connecting();
+
+      expect(manager.is(ConnectionStatus.NeedsAuth)).toBe(true);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    test('does nothing when in error state', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
+      });
+      const fatalError = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'internal error',
+      });
+      manager.error(fatalError);
+
+      const listener = subscribe(manager);
+      manager.connecting();
+
+      expect(manager.is(ConnectionStatus.Error)).toBe(true);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     test('does not create multiple timeout intervals when called rapidly', () => {
       const manager = new ConnectionManager({
         disconnectTimeout: 1_000,
@@ -730,7 +765,8 @@ describe('ConnectionManager', () => {
 
       const {nextStatePromise} = manager.error(errorDetail);
 
-      manager.connecting();
+      // force=true required to transition from terminal states
+      manager.connecting(undefined, true);
 
       await expect(nextStatePromise).resolves.toEqual(
         expect.objectContaining({
@@ -991,7 +1027,8 @@ describe('ConnectionManager', () => {
 
       const {nextStatePromise} = manager.needsAuth(authError);
 
-      manager.connecting();
+      // force=true required to transition from terminal states
+      manager.connecting(undefined, true);
 
       await expect(nextStatePromise).resolves.toEqual(
         expect.objectContaining({

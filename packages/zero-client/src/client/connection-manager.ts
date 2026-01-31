@@ -196,7 +196,8 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
     if (!this.#consumeConnectRequest()) {
       return false;
     }
-    this.connecting();
+    // force=true to allow transition from terminal states when explicitly requested
+    this.connecting(undefined, true);
     return true;
   }
 
@@ -211,11 +212,19 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  connecting(reason?: ZeroError): {
+  connecting(reason?: ZeroError, force?: boolean): {
     nextStatePromise: Promise<ConnectionManagerState>;
   } {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
+      return {nextStatePromise: this.#nextStatePromise()};
+    }
+
+    // cannot transition from terminal states (needs-auth, error) unless forced.
+    // This prevents race conditions where a websocket close event could override
+    // a needs-auth state. The force flag is used when connect() is explicitly
+    // called to resume from terminal states.
+    if (!force && ConnectionManager.isTerminalState(this.#state)) {
       return {nextStatePromise: this.#nextStatePromise()};
     }
 
