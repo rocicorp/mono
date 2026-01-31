@@ -10,6 +10,17 @@ export type SchemaCRUD<S extends Schema> = {
 
 export type TransactionMutate<S extends Schema> = SchemaCRUD<S>;
 
+/**
+ * Options for upsert operations.
+ */
+export type UpsertOptions<S extends TableSchema> = {
+  /**
+   * Columns to use for conflict detection instead of the primary key.
+   * Use this when upserting based on a unique constraint other than the primary key.
+   */
+  onConflict?: (keyof S['columns'] & string)[];
+};
+
 export type TableCRUD<S extends TableSchema> = {
   /**
    * Writes a row if a row with the same primary key doesn't already exist.
@@ -21,11 +32,15 @@ export type TableCRUD<S extends TableSchema> = {
 
   /**
    * Writes a row unconditionally, overwriting any existing row with the same
-   * primary key. Non-primary-key fields that are 'optional' can be omitted or
-   * set to `undefined`. Such fields will be assigned the value `null`
-   * optimistically and then the default value as defined by the server.
+   * primary key (or custom conflict columns if specified). Non-primary-key
+   * fields that are 'optional' can be omitted or set to `undefined`. Such
+   * fields will be assigned the value `null` optimistically and then the
+   * default value as defined by the server.
+   *
+   * @param value - The row data to upsert
+   * @param options - Optional settings including custom conflict columns
    */
-  upsert: (value: UpsertValue<S>) => Promise<void>;
+  upsert: (value: UpsertValue<S>, options?: UpsertOptions<S>) => Promise<void>;
 
   /**
    * Updates a row with the same primary key. If no such row exists, this
@@ -90,11 +105,15 @@ export type TableMutator<TS extends TableSchema> = {
 
   /**
    * Writes a row unconditionally, overwriting any existing row with the same
-   * primary key. Non-primary-key fields that are 'optional' can be omitted or
-   * set to `undefined`. Such fields will be assigned the value `null`
-   * optimistically and then the default value as defined by the server.
+   * primary key (or custom conflict columns if specified). Non-primary-key
+   * fields that are 'optional' can be omitted or set to `undefined`. Such
+   * fields will be assigned the value `null` optimistically and then the
+   * default value as defined by the server.
+   *
+   * @param value - The row data to upsert
+   * @param options - Optional settings including custom conflict columns
    */
-  upsert: (value: UpsertValue<TS>) => Promise<void>;
+  upsert: (value: UpsertValue<TS>, options?: UpsertOptions<TS>) => Promise<void>;
 
   /**
    * Updates a row with the same primary key. If no such row exists, this
@@ -111,6 +130,14 @@ export type TableMutator<TS extends TableSchema> = {
 };
 
 /**
+ * Options passed to the executor for CRUD operations.
+ */
+export type CRUDExecutorOptions = {
+  /** For upsert: columns to use for ON CONFLICT instead of primary key */
+  onConflict?: string[];
+};
+
+/**
  * A function that executes a CRUD operation.
  * Client and server provide different implementations.
  */
@@ -118,6 +145,7 @@ export type CRUDExecutor = (
   table: string,
   kind: CRUDKind,
   args: unknown,
+  options?: CRUDExecutorOptions,
 ) => Promise<void>;
 
 /**
@@ -180,12 +208,13 @@ function makeTableCRUD(
   tableName: string,
   executor: CRUDExecutor,
 ): TableCRUD<TableSchema> {
-  return Object.fromEntries(
-    CRUD_KINDS.map(kind => [
-      kind,
-      (value: unknown) => executor(tableName, kind, value),
-    ]),
-  ) as TableCRUD<TableSchema>;
+  return {
+    insert: (value: unknown) => executor(tableName, 'insert', value),
+    upsert: (value: unknown, options?: UpsertOptions<TableSchema>) =>
+      executor(tableName, 'upsert', value, options?.onConflict ? {onConflict: options.onConflict} : undefined),
+    update: (value: unknown) => executor(tableName, 'update', value),
+    delete: (value: unknown) => executor(tableName, 'delete', value),
+  };
 }
 
 export type CRUDMutator<
