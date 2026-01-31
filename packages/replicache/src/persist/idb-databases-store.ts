@@ -22,7 +22,8 @@ export type IndexedDBDatabase = {
   readonly replicacheName: string;
   readonly replicacheFormatVersion: number;
   readonly schemaVersion: string;
-  readonly lastOpenedTimestampMS?: number;
+  /** @deprecated No longer used. Kept for backwards compatibility when reading old data. */
+  readonly lastOpenedTimestampMS?: number | undefined;
 };
 
 export type IndexedDBDatabaseRecord = {
@@ -61,7 +62,7 @@ export class IDBDatabasesStore {
   }
 
   putDatabase(db: IndexedDBDatabase): Promise<IndexedDBDatabaseRecord> {
-    return this.#putDatabase({...db, lastOpenedTimestampMS: Date.now()});
+    return this.#putDatabase(db);
   }
 
   putDatabaseForTesting(
