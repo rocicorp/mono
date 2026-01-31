@@ -6,7 +6,11 @@ import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import {disableStatementTimeout, type PostgresDB} from '../../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../../types/shards.ts';
-import type {Change} from '../../change-source/protocol/current/data.ts';
+import type {
+  BackfillID,
+  Change,
+  TableMetadata,
+} from '../../change-source/protocol/current/data.ts';
 import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
 
 // For readability in the sql statements.
@@ -94,12 +98,45 @@ function createReplicationConfigTable(shard: ShardID) {
 `;
 }
 
+export function createBackfillTables(shard: ShardID) {
+  return /*sql*/ `
+  CREATE TABLE ${schema(shard)}."tableMetadata" (
+    "schema" TEXT NOT NULL,
+    "table" TEXT NOT NULL,
+    "metadata" JSONB NOT NULL,
+    PRIMARY KEY("schema", "table")
+  );
+
+  CREATE TABLE ${schema(shard)}."backfilling" (
+    "schema" TEXT NOT NULL,
+    "table" TEXT NOT NULL,
+    "column" TEXT NOT NULL,
+    "backfill" JSONB NOT NULL,
+    PRIMARY KEY("schema", "table", "column")
+  );
+  `;
+}
+
+export type TableMetadataRow = {
+  schema: string;
+  table: string;
+  metadata: TableMetadata;
+};
+
+export type BackfillingColumn = {
+  schema: string;
+  table: string;
+  column: string;
+  backfill: BackfillID;
+};
+
 function createTables(shard: ShardID) {
   return (
     createSchema(shard) +
     createChangeLogTable(shard) +
     createReplicationStateTable(shard) +
-    createReplicationConfigTable(shard)
+    createReplicationConfigTable(shard) +
+    createBackfillTables(shard)
   );
 }
 
@@ -176,6 +213,8 @@ export async function ensureReplicationConfig(
         stmts.push(
           sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
           sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
+          sql`TRUNCATE TABLE ${sql(schema)}."tableMetadata"`,
+          sql`TRUNCATE TABLE ${sql(schema)}."backfilling"`,
         );
       }
     }

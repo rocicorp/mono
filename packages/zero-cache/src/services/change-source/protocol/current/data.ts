@@ -122,12 +122,24 @@ export const truncateSchema = v.object({
   relations: v.array(relationSchema),
 });
 
-const identifierSchema = v.object({
+export const identifierSchema = v.object({
   schema: v.string(),
   name: v.string(),
 });
 
 export type Identifier = v.Infer<typeof identifierSchema>;
+
+// A BackfillID is an upstream specific stable identifier for a column
+// that needs backfilling. This id is used to ensure that the schema, table,
+// and column names of a requested backfill still match the original
+// underlying upstream ID.
+//
+// The change-streamer stores these IDs as opaque values while a column is
+// being backfilled, and initiates new change-source streams with the IDs
+// in order to restart backfills that did not complete in previous sessions.
+export const backfillIDSchema = v.record(v.union(v.number(), v.string()));
+
+export type BackfillID = v.Infer<typeof backfillIDSchema>;
 
 export const createTableSchema = v.object({
   tag: v.literal('create-table'),
@@ -138,6 +150,25 @@ export const createTableSchema = v.object({
   //
   // TODO: to simplify the protocol, see if we can make this required
   metadata: tableMetadataSchema.optional(),
+
+  // Indicate that columns of the table require backfilling. These columns
+  // should be created on the replica but not yet synced the clients.
+  //
+  // ## State Persistence
+  //
+  // To obviate the need for change-source implementations to persist state
+  // related to backfill progress, the change-source only tracks backfills
+  // **for the current session**. In the event that the session is interrupted
+  // before columns have been fully backfilled, it is the responsibility of the
+  // change-streamer to send {@link BackfillRequest}s when it reconnects.
+  //
+  // This means that the change-streamer must track and persist:
+  // * the backfill IDs of the columns requiring backfilling
+  // * the most current table metadata of the associated table(s)
+  //
+  // The change-streamer then uses this information to send backfill requests
+  // when it reconnects.
+  backfill: v.record(backfillIDSchema).optional(),
 });
 
 export const renameTableSchema = v.object({
@@ -168,6 +199,9 @@ export const addColumnSchema = v.object({
   //
   // TODO: to simplify the protocol, see if we can make this required
   tableMetadata: tableMetadataSchema.optional(),
+
+  // See documentation for the `backfill` field of the `create-table` change.
+  backfill: backfillIDSchema.optional(),
 });
 
 export const updateColumnSchema = v.object({
