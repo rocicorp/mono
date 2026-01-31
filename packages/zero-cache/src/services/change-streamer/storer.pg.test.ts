@@ -761,9 +761,8 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['112', ['commit', messages.commit(), {watermark: '112'}]]);
 
-      expect(
-        await storer.getStartStreamInitializationParameters(),
-      ).toMatchInlineSnapshot(`
+      expect(await storer.getStartStreamInitializationParameters())
+        .toMatchInlineSnapshot(`
         {
           "backfillRequests": Result [],
           "lastWatermark": "112",
