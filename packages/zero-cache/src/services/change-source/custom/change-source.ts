@@ -22,7 +22,10 @@ import {
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
-import {type ChangeSourceUpstream} from '../protocol/current/upstream.ts';
+import {
+  type BackfillRequest,
+  type ChangeSourceUpstream,
+} from '../protocol/current/upstream.ts';
 import {initSyncSchema} from './sync-schema.ts';
 
 /**
@@ -90,7 +93,15 @@ class CustomChangeSource implements ChangeSource {
     return this.#startStream();
   }
 
-  startStream(clientWatermark: string): Promise<ChangeStream> {
+  startStream(
+    clientWatermark: string,
+    backfillRequests: BackfillRequest[] = [],
+  ): Promise<ChangeStream> {
+    if (backfillRequests?.length) {
+      throw new Error(
+        'backfill is yet not supported for custom change sources',
+      );
+    }
     return Promise.resolve(this.#startStream(clientWatermark));
   }
 
