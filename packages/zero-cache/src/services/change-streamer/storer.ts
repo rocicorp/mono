@@ -532,10 +532,11 @@ export class Storer implements Service {
     const stmts: PendingQuery<Row[]>[] = [];
 
     switch (change.tag) {
-      case 'update-table-metadata':
+      case 'update-table-metadata': {
         const {table, new: metadata} = change;
         stmts.push(this.#upsertTableMetadataStmt(sql, table, metadata));
         break;
+      }
 
       case 'create-table': {
         const {spec, metadata, backfill} = change;
