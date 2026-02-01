@@ -19,6 +19,7 @@ import {
   nullableUpstream,
   upstreamDataType,
 } from '../../../types/lite.ts';
+import type {BackfillID} from '../../change-source/protocol/current.ts';
 
 /**
  * Structured column metadata, replacing the old pipe-delimited string format.
@@ -31,6 +32,7 @@ export interface ColumnMetadata {
   isArray: boolean;
   /** Maximum character length for varchar/char types */
   characterMaxLength?: number | null;
+  isBackfilling: boolean;
 }
 
 type ColumnMetadataRow = {
@@ -39,6 +41,7 @@ type ColumnMetadataRow = {
   is_enum: number;
   is_array: number;
   character_max_length: number | null;
+  backfill: string | null;
 };
 
 export const CREATE_COLUMN_METADATA_TABLE = `
@@ -50,6 +53,7 @@ export const CREATE_COLUMN_METADATA_TABLE = `
     is_enum INTEGER NOT NULL,
     is_array INTEGER NOT NULL,
     character_max_length INTEGER,
+    backfill TEXT,
     PRIMARY KEY (table_name, column_name)
   );
 `;
@@ -66,6 +70,7 @@ export class ColumnMetadataStore {
 
   readonly #insertStmt: Statement;
   readonly #updateStmt: Statement;
+  readonly #clearBackfillStmt: Statement;
   readonly #deleteColumnStmt: Statement;
   readonly #deleteTableStmt: Statement;
   readonly #renameTableStmt: Statement;
@@ -76,8 +81,8 @@ export class ColumnMetadataStore {
   private constructor(db: Database) {
     this.#insertStmt = db.prepare(`
       INSERT INTO "_zero.column_metadata"
-        (table_name, column_name, upstream_type, is_not_null, is_enum, is_array, character_max_length)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+        (table_name, column_name, upstream_type, is_not_null, is_enum, is_array, character_max_length, backfill)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.#updateStmt = db.prepare(`
@@ -88,6 +93,12 @@ export class ColumnMetadataStore {
           is_enum = ?,
           is_array = ?,
           character_max_length = ?
+      WHERE table_name = ? AND column_name = ?
+    `);
+
+    this.#clearBackfillStmt = db.prepare(/*sql*/ `
+      UPDATE "_zero.column_metadata"
+      SET backfill = NULL
       WHERE table_name = ? AND column_name = ?
     `);
 
@@ -108,13 +119,13 @@ export class ColumnMetadataStore {
     `);
 
     this.#getColumnStmt = db.prepare(`
-      SELECT upstream_type, is_not_null, is_enum, is_array, character_max_length
+      SELECT upstream_type, is_not_null, is_enum, is_array, character_max_length, backfill
       FROM "_zero.column_metadata"
       WHERE table_name = ? AND column_name = ?
     `);
 
     this.#getTableStmt = db.prepare(`
-      SELECT column_name, upstream_type, is_not_null, is_enum, is_array, character_max_length
+      SELECT column_name, upstream_type, is_not_null, is_enum, is_array, character_max_length, backfill
       FROM "_zero.column_metadata"
       WHERE table_name = ?
       ORDER BY column_name
@@ -150,15 +161,21 @@ export class ColumnMetadataStore {
     return instance;
   }
 
-  insert(tableName: string, columnName: string, spec: ColumnSpec): void {
+  insert(
+    tableName: string,
+    columnName: string,
+    spec: ColumnSpec,
+    backfill?: BackfillID | undefined,
+  ): void {
     const metadata = pgColumnSpecToMetadata(spec);
-    this.#insertMetadata(tableName, columnName, metadata);
+    this.#insertMetadata(tableName, columnName, metadata, backfill);
   }
 
   #insertMetadata(
     tableName: string,
     columnName: string,
-    metadata: ColumnMetadata,
+    metadata: Omit<ColumnMetadata, 'isBackfilling'>,
+    backfill?: BackfillID | undefined,
   ): void {
     this.#insertStmt.run(
       tableName,
@@ -168,6 +185,7 @@ export class ColumnMetadataStore {
       metadata.isEnum ? 1 : 0,
       metadata.isArray ? 1 : 0,
       metadata.characterMaxLength ?? null,
+      backfill ? JSON.stringify(backfill) : null,
     );
   }
 
@@ -188,6 +206,10 @@ export class ColumnMetadataStore {
       tableName,
       oldColumnName,
     );
+  }
+
+  clearBackfilling(tableName: string, columnName: string): void {
+    this.#clearBackfillStmt.run(tableName, columnName);
   }
 
   deleteColumn(tableName: string, columnName: string): void {
@@ -217,6 +239,7 @@ export class ColumnMetadataStore {
       isEnum: row.is_enum !== 0,
       isArray: row.is_array !== 0,
       characterMaxLength: row.character_max_length,
+      isBackfilling: row.backfill !== null,
     };
   }
 
@@ -233,6 +256,7 @@ export class ColumnMetadataStore {
         isEnum: row.is_enum !== 0,
         isArray: row.is_array !== 0,
         characterMaxLength: row.character_max_length,
+        isBackfilling: row.backfill !== null,
       });
     }
 
@@ -243,20 +267,39 @@ export class ColumnMetadataStore {
     const result = this.#hasTableStmt.get();
     return result !== undefined;
   }
+}
 
-  /**
-   * Populates metadata table from existing tables that use pipe notation.
-   * This is used during migration v8 to backfill the metadata table.
-   */
-  populateFromExistingTables(tables: LiteTableSpec[]): void {
-    for (const table of tables) {
-      for (const [columnName, columnSpec] of Object.entries(table.columns)) {
-        const metadata = liteTypeStringToMetadata(
-          columnSpec.dataType,
-          columnSpec.characterMaximumLength,
-        );
-        this.#insertMetadata(table.name, columnName, metadata);
-      }
+/**
+ * Populates metadata table from existing tables that use pipe notation.
+ * This is used during migration v8 to backfill the metadata table.
+ */
+export function populateFromExistingTables(
+  db: Database,
+  tables: LiteTableSpec[],
+): void {
+  // The backfill column is not relevant here, and does not exist on
+  // older versions of the replica.
+  const legacyInsertStmt = db.prepare(`
+      INSERT INTO "_zero.column_metadata"
+        (table_name, column_name, upstream_type, is_not_null, is_enum, is_array, character_max_length)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+  for (const table of tables) {
+    for (const [columnName, columnSpec] of Object.entries(table.columns)) {
+      const metadata = liteTypeStringToMetadata(
+        columnSpec.dataType,
+        columnSpec.characterMaximumLength,
+      );
+      legacyInsertStmt.run(
+        table.name,
+        columnName,
+        metadata.upstreamType,
+        metadata.isNotNull ? 1 : 0,
+        metadata.isEnum ? 1 : 0,
+        metadata.isArray ? 1 : 0,
+        metadata.characterMaxLength ?? null,
+      );
     }
   }
 }
@@ -284,6 +327,7 @@ export function liteTypeStringToMetadata(
     isEnum: checkIsEnum(liteTypeString),
     isArray: isArrayType,
     characterMaxLength: characterMaxLength ?? null,
+    isBackfilling: false,
   };
 }
 
@@ -313,5 +357,6 @@ export function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
     isEnum: isEnumColumn(spec),
     isArray: isArrayColumn(spec),
     characterMaxLength: spec.characterMaximumLength ?? null,
+    isBackfilling: false,
   };
 }
