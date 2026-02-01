@@ -212,7 +212,10 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  connecting(reason?: ZeroError, force?: boolean): {
+  connecting(
+    reason?: ZeroError,
+    force?: boolean,
+  ): {
     nextStatePromise: Promise<ConnectionManagerState>;
   } {
     // cannot transition from closed to any other status
