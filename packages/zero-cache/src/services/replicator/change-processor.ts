@@ -48,6 +48,7 @@ import type {
   TableCreate,
   TableDrop,
   TableRename,
+  TableUpdateMetadata,
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
@@ -62,6 +63,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
   updateReplicationWatermark,
 } from './schema/replication-state.ts';
+import {TableMetadataTracker} from './schema/table-metadata.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
@@ -83,6 +85,7 @@ export type CommitResult = {
  */
 export class ChangeProcessor {
   readonly #db: StatementRunner;
+  readonly #tableMetadata: TableMetadataTracker;
   readonly #mode: ChangeProcessorMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
@@ -101,6 +104,7 @@ export class ChangeProcessor {
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#db = db;
+    this.#tableMetadata = new TableMetadataTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
   }
@@ -167,6 +171,7 @@ export class ChangeProcessor {
           lc,
           this.#db,
           this.#mode,
+          this.#tableMetadata,
           this.#tableSpecs,
           commitVersion,
           jsonFormat,
@@ -247,8 +252,7 @@ export class ChangeProcessor {
         tx.processRenameTable(msg);
         break;
       case 'update-table-metadata':
-        // TODO: Process this appropriately when backfill logic is added
-        lc.info?.(`Received table metadata update`, msg);
+        tx.processTableMetadata(msg);
         break;
       case 'add-column':
         tx.processAddColumn(msg);
@@ -303,6 +307,7 @@ class TransactionProcessor {
   readonly #db: StatementRunner;
   readonly #mode: ChangeProcessorMode;
   readonly #version: LexiVersion;
+  readonly #tableMetadata: TableMetadataTracker;
   readonly #tableSpecs: Map<string, LiteTableSpec>;
   readonly #jsonFormat: JSONFormat;
   readonly #columnMetadata: ColumnMetadataStore;
@@ -314,6 +319,7 @@ class TransactionProcessor {
     lc: LogContext,
     db: StatementRunner,
     mode: ChangeProcessorMode,
+    tableMetadata: TableMetadataTracker,
     tableSpecs: Map<string, LiteTableSpec>,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
@@ -350,6 +356,7 @@ class TransactionProcessor {
     this.#db = db;
     this.#version = commitVersion;
     this.#lc = lc.withContext('version', commitVersion);
+    this.#tableMetadata = tableMetadata;
     this.#tableSpecs = tableSpecs;
     // The column_metadata table is guaranteed to exist since the
     // replica-schema.ts migration to v8.
@@ -535,19 +542,33 @@ class TransactionProcessor {
     }
   }
   processCreateTable(create: TableCreate) {
+    if (create.metadata) {
+      this.#tableMetadata.set(create.spec, create.metadata);
+    }
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createLiteTableStatement(table));
 
     // Write to metadata table
     for (const [colName, colSpec] of Object.entries(create.spec.columns)) {
-      this.#columnMetadata.insert(table.name, colName, colSpec);
+      this.#columnMetadata.insert(
+        table.name,
+        colName,
+        colSpec,
+        create.backfill?.[colName],
+      );
     }
 
     this.#logResetOp(table.name);
     this.#lc.info?.(create.tag, table.name);
   }
 
+  processTableMetadata(msg: TableUpdateMetadata) {
+    this.#tableMetadata.set(msg.table, msg.new);
+  }
+
   processRenameTable(rename: TableRename) {
+    this.#tableMetadata.rename(rename.old, rename.new);
+
     const oldName = liteTableName(rename.old);
     const newName = liteTableName(rename.new);
     this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
@@ -561,6 +582,9 @@ class TransactionProcessor {
   }
 
   processAddColumn(msg: ColumnAdd) {
+    if (msg.tableMetadata) {
+      this.#tableMetadata.set(msg.table, msg.tableMetadata);
+    }
     const table = liteTableName(msg.table);
     const {name} = msg.column;
     const spec = mapPostgresToLiteColumn(table, msg.column);
@@ -569,7 +593,7 @@ class TransactionProcessor {
     );
 
     // Write to metadata table
-    this.#columnMetadata.insert(table, name, msg.column.spec);
+    this.#columnMetadata.insert(table, name, msg.column.spec, msg.backfill);
 
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, msg.column);
@@ -652,6 +676,8 @@ class TransactionProcessor {
   }
 
   processDropTable(drop: TableDrop) {
+    this.#tableMetadata.drop(drop.id);
+
     const name = liteTableName(drop.id);
     this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
 

@@ -16,6 +16,7 @@ import {
 import {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {
+  createReplicationStateTables,
   getSubscriptionState,
   initReplicationState,
   type SubscriptionState,
@@ -160,6 +161,7 @@ export async function initialSync(
   });
   const {changes} = changeSource.initialSync();
 
+  createReplicationStateTables(tx);
   const processor = new ChangeProcessor(
     new StatementRunner(tx),
     'initial-sync',
@@ -185,7 +187,12 @@ export async function initialSync(
             `Copying upstream tables at version ${commitWatermark}`,
             5000,
           );
-          initReplicationState(tx, [...publications].sort(), commitWatermark);
+          initReplicationState(
+            tx,
+            [...publications].sort(),
+            commitWatermark,
+            false,
+          );
           processor.processMessage(lc, change);
           break;
         }

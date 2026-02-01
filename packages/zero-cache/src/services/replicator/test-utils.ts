@@ -137,7 +137,10 @@ export class ReplicationMessages<
     };
   }
 
-  createTable(spec: TableSpec): TableCreate {
+  createTable(
+    spec: TableSpec,
+    tableCreate?: Pick<TableCreate, 'metadata' | 'backfill'>,
+  ): TableCreate {
     return {
       tag: 'create-table',
       spec,
@@ -147,6 +150,7 @@ export class ReplicationMessages<
           type: 'default',
         },
       },
+      ...tableCreate,
     };
   }
 
@@ -165,6 +169,7 @@ export class ReplicationMessages<
     table: TableName,
     column: string,
     spec: ColumnSpec,
+    columnAdd?: Pick<ColumnAdd, 'tableMetadata' | 'backfill'>,
   ): ColumnAdd {
     return {
       tag: 'add-column',
@@ -175,6 +180,7 @@ export class ReplicationMessages<
           columns: ['not-mocked-for-the-test'],
         },
       },
+      ...columnAdd,
     };
   }
 
