@@ -182,20 +182,34 @@ export function computeZqlSpecs(
   tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
   fullTables?: Map<string, LiteTableSpec>,
 ): Map<string, LiteAndZqlSpec> {
+  return computeZqlSpecsFromLiteSpecs(
+    listTables(replica),
+    listIndexes(replica),
+    tableSpecs,
+    fullTables,
+    lc,
+  );
+}
+
+export function computeZqlSpecsFromLiteSpecs(
+  tables: LiteTableSpec[],
+  indexes: LiteIndexSpec[],
+  tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
+  fullTables?: Map<string, LiteTableSpec>,
+  lc?: LogContext,
+): Map<string, LiteAndZqlSpec> {
   tableSpecs.clear();
   fullTables?.clear();
 
-  const uniqueColumns = new Map<string, string[][]>();
-  for (const {tableName, columns} of listIndexes(replica).filter(
-    idx => idx.unique,
-  )) {
-    if (!uniqueColumns.has(tableName)) {
-      uniqueColumns.set(tableName, []);
+  const uniqueIndexColumns = new Map<string, string[][]>();
+  for (const {tableName, columns} of indexes.filter(idx => idx.unique)) {
+    if (!uniqueIndexColumns.has(tableName)) {
+      uniqueIndexColumns.set(tableName, []);
     }
-    uniqueColumns.get(tableName)?.push(Object.keys(columns));
+    uniqueIndexColumns.get(tableName)?.push(Object.keys(columns));
   }
 
-  listTables(replica).forEach(fullTable => {
+  tables.forEach(fullTable => {
     fullTables?.set(fullTable.name, fullTable);
 
     // Only include columns for which the mapped ZQL Value is defined.
@@ -211,23 +225,15 @@ export function computeZqlSpecs(
         .map(([col]) => col),
     );
 
-    // Collect all columns that are part of a unique index.
-    const allKeyColumns = new Set<string>();
-
-    const uniqueKeys = uniqueColumns.get(fullTable.name) ?? [];
-    // Examine all column combinations that can serve as a primary key.
-    const keys = uniqueKeys.filter(key => {
-      if (difference(new Set(key), notNullColumns).size > 0) {
-        return false; // Exclude indexes over non-visible columns.
-      }
-      for (const col of key) {
-        allKeyColumns.add(col);
-      }
-      return true;
-    });
+    const uniqueKeys = uniqueIndexColumns.get(fullTable.name) ?? [];
+    // Examine all column combinations that can serve as a primary key,
+    // i.e. excluding indexes over nullable or unsynced columns.
+    const keys = uniqueKeys.filter(
+      key => difference(new Set(key), notNullColumns).size === 0,
+    );
     if (keys.length === 0) {
       // Only include tables with a row key.
-      lc.debug?.(
+      lc?.debug?.(
         `not syncing table ${fullTable.name} because it has no primary key`,
       );
       return;
