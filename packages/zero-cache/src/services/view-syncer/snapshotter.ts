@@ -310,8 +310,11 @@ class Snapshot {
   }
 
   changesSince(prevVersion: string) {
+    // Note: The queried fields are constrained to only those that are relevant
+    // to the snapshot diff, i.e. those defined in the changeLogEntrySchema.
     const cached = this.db.statementCache.get(
-      'SELECT * FROM "_zero.changeLog2" WHERE stateVersion > ? ORDER BY stateVersion ASC, pos ASC',
+      `SELECT "stateVersion", "table", "rowKey", "op" FROM "_zero.changeLog2"
+         WHERE "stateVersion" > ? ORDER BY "stateVersion" ASC, "pos" ASC`,
     );
     return {
       changes: cached.statement.iterate(prevVersion),

@@ -212,6 +212,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":123}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '06',
@@ -219,6 +220,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":456}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -226,6 +228,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -233,6 +236,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":987}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -240,6 +244,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":234}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -269,7 +274,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 49152,
+            "replicaSize": 57344,
             "tables": [
               {
                 "columns": [
@@ -411,7 +416,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 49152,
+            "replicaSize": 57344,
             "tables": [
               {
                 "columns": [
@@ -465,7 +470,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 57344,
+            "replicaSize": 65536,
             "tables": [
               {
                 "columns": [
