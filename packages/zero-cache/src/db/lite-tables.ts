@@ -33,9 +33,10 @@ type ColumnInfo = {
   keyPos: number;
 };
 
-export function listTables(db: Database): LiteTableSpec[] {
-  const metadataStore = ColumnMetadataStore.getInstance(db);
-
+export function listTables(
+  db: Database,
+  useColumnMetadata = true,
+): LiteTableSpec[] {
   const columns = db
     .prepare(
       `
@@ -76,7 +77,9 @@ export function listTables(db: Database): LiteTableSpec[] {
       | typeof PostgresTypeClass.Enum
       | null;
 
-    const metadata = metadataStore?.getColumn(col.table, col.name);
+    const metadata = useColumnMetadata
+      ? ColumnMetadataStore.getInstance(db)?.getColumn(col.table, col.name)
+      : undefined;
     if (metadata) {
       // Read from metadata table and convert to pipe notation
       dataType = metadataToLiteTypeString(metadata);
