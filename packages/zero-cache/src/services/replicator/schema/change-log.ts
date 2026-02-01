@@ -60,26 +60,38 @@ export const CREATE_CHANGELOG_SCHEMA =
   //              : 'd' for delete
   //              : 'r' for table reset (schema change)
   //              : 't' for table truncation (which also resets the pipeline)
+  // backfillingColumnVersions
+  //              : A JSON mapping from column name to stateVersion tracked
+  //                for replicated writes of columns that are being backfilled.
+  //                This is used to prevent backfill data, which is at a
+  //                fixed snapshot/version outside of the replication stream,
+  //                from overwriting newer column values.
   //
   // Naming note: To maintain compatibility between a new replication-manager
   // and old view-syncers, the previous _zero.changeLog table is preserved
   // and its replacement given a new name "changeLog2".
   `
   CREATE TABLE "_zero.changeLog2" (
-    "stateVersion" TEXT NOT NULL,
-    "pos"          INT  NOT NULL,
-    "table"        TEXT NOT NULL,
-    "rowKey"       TEXT NOT NULL,
-    "op"           TEXT NOT NULL,
+    "stateVersion"              TEXT NOT NULL,
+    "pos"                       INT  NOT NULL,
+    "table"                     TEXT NOT NULL,
+    "rowKey"                    TEXT NOT NULL,
+    "op"                        TEXT NOT NULL,
+    "backfillingColumnVersions" TEXT DEFAULT '{}',
     PRIMARY KEY("stateVersion", "pos"),
     UNIQUE("table", "rowKey")
   );
   `;
 
+/**
+ * Contains the changeLog fields relevant for computing the diff between
+ * two snapshots of a replica. The `pos` and `backfillingColumnVersions`
+ * fields are excluded, though the query should be ordered by
+ * `<stateVersion, pos>`.
+ */
 export const changeLogEntrySchema = v
   .object({
     stateVersion: v.string(),
-    pos: v.number(),
     table: v.string(),
     rowKey: v.string(),
     op: v.literalUnion(SET_OP, DEL_OP, TRUNCATE_OP, RESET_OP),

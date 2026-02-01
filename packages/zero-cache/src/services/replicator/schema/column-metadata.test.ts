@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../../shared/src/must.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import type {LiteTableSpec} from '../../../db/specs.ts';
 import {
@@ -7,6 +8,8 @@ import {
   CREATE_COLUMN_METADATA_TABLE,
   liteTypeStringToMetadata,
   metadataToLiteTypeString,
+  populateFromExistingTables,
+  type ColumnMetadata,
 } from './column-metadata.ts';
 
 function createTestDb(): Database {
@@ -15,18 +18,15 @@ function createTestDb(): Database {
   return db;
 }
 
-function createTestStore(): ColumnMetadataStore {
+function createTestStore(): {store: ColumnMetadataStore; db: Database} {
   const db = createTestDb();
-  const store = ColumnMetadataStore.getInstance(db);
-  if (!store) {
-    throw new Error('Failed to create metadata store - table should exist');
-  }
-  return store;
+  const store = must(ColumnMetadataStore.getInstance(db));
+  return {store, db};
 }
 
 describe('column-metadata', () => {
   test('creates table and enforces primary key', () => {
-    const store = createTestStore();
+    const {store} = createTestStore();
 
     expect(store.hasTable()).toBe(true);
 
@@ -46,7 +46,7 @@ describe('column-metadata', () => {
   });
 
   test('insert and read metadata', () => {
-    const store = createTestStore();
+    const {store} = createTestStore();
 
     store.insert('users', 'id', {
       pos: 0,
@@ -60,11 +60,33 @@ describe('column-metadata', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
+    });
+
+    // backfilling
+    store.insert(
+      'users',
+      'value',
+      {
+        pos: 1,
+        dataType: 'text',
+        notNull: false,
+      },
+      {backfill: 123},
+    );
+
+    expect(store.getColumn('users', 'value')).toEqual({
+      upstreamType: 'text',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+      isBackfilling: true,
     });
   });
 
   test('update column metadata', () => {
-    const store = createTestStore();
+    const {store} = createTestStore();
     store.insert('users', 'name', {
       pos: 0,
       dataType: 'varchar',
@@ -81,6 +103,7 @@ describe('column-metadata', () => {
       {
         "characterMaxLength": 200,
         "isArray": false,
+        "isBackfilling": false,
         "isEnum": false,
         "isNotNull": true,
         "upstreamType": "varchar",
@@ -88,8 +111,50 @@ describe('column-metadata', () => {
     `);
   });
 
+  test('clear column backfilling', () => {
+    const {store} = createTestStore();
+    store.insert('users', 'id', {pos: 0, dataType: 'int8'}, {backfill: 'boo'});
+    store.insert('users', 'val', {pos: 1, dataType: 'text'}, {backfill: 'boo'});
+
+    expect(store.getColumn('users', 'id')).toEqual({
+      upstreamType: 'int8',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+      isBackfilling: true,
+    });
+    expect(store.getColumn('users', 'val')).toEqual({
+      upstreamType: 'text',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+      isBackfilling: true,
+    });
+
+    store.clearBackfilling('users', 'val');
+
+    expect(store.getColumn('users', 'id')).toEqual({
+      upstreamType: 'int8',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+      isBackfilling: true,
+    });
+    expect(store.getColumn('users', 'val')).toEqual({
+      upstreamType: 'text',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+      isBackfilling: false,
+    });
+  });
+
   test('delete column metadata', () => {
-    const store = createTestStore();
+    const {store} = createTestStore();
     store.insert('users', 'id', {
       pos: 0,
       dataType: 'int8',
@@ -105,7 +170,7 @@ describe('column-metadata', () => {
   });
 
   test('delete and rename table metadata', () => {
-    const store = createTestStore();
+    const {store} = createTestStore();
     store.insert('users', 'id', {
       pos: 0,
       dataType: 'int8',
@@ -131,6 +196,7 @@ describe('column-metadata', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     expect(liteTypeStringToMetadata('varchar|NOT_NULL', 255)).toEqual({
@@ -139,6 +205,7 @@ describe('column-metadata', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: 255,
+      isBackfilling: false,
     });
 
     // Enum types
@@ -148,6 +215,7 @@ describe('column-metadata', () => {
       isEnum: true,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     // Old-style array format (backward compatibility)
@@ -157,6 +225,7 @@ describe('column-metadata', () => {
       isEnum: false,
       isArray: true,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     expect(liteTypeStringToMetadata('int4|NOT_NULL[]')).toEqual({
@@ -165,6 +234,7 @@ describe('column-metadata', () => {
       isEnum: false,
       isArray: true,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     // New-style array format with |TEXT_ARRAY
@@ -174,6 +244,7 @@ describe('column-metadata', () => {
       isEnum: false,
       isArray: true,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     expect(liteTypeStringToMetadata('int4[]|NOT_NULL|TEXT_ARRAY')).toEqual({
@@ -182,6 +253,7 @@ describe('column-metadata', () => {
       isEnum: false,
       isArray: true,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     // Array of enums with both flags
@@ -193,12 +265,13 @@ describe('column-metadata', () => {
       isEnum: true,
       isArray: true,
       characterMaxLength: null,
+      isBackfilling: false,
     });
   });
 
   describe('populateFromExistingTables', () => {
     test('populates metadata from LiteTableSpec array', () => {
-      const store = createTestStore();
+      const {store, db} = createTestStore();
 
       const tables: LiteTableSpec[] = [
         {
@@ -255,7 +328,7 @@ describe('column-metadata', () => {
         },
       ];
 
-      store.populateFromExistingTables(tables);
+      populateFromExistingTables(db, tables);
 
       expect(store.getColumn('posts', 'id')).toEqual({
         upstreamType: 'int8',
@@ -263,6 +336,7 @@ describe('column-metadata', () => {
         isEnum: false,
         isArray: false,
         characterMaxLength: null,
+        isBackfilling: false,
       });
 
       expect(store.getColumn('posts', 'status')).toEqual({
@@ -271,6 +345,7 @@ describe('column-metadata', () => {
         isEnum: true,
         isArray: false,
         characterMaxLength: null,
+        isBackfilling: false,
       });
 
       expect(store.getColumn('users', 'email')).toEqual({
@@ -279,6 +354,7 @@ describe('column-metadata', () => {
         isEnum: false,
         isArray: false,
         characterMaxLength: 255,
+        isBackfilling: false,
       });
 
       expect(store.getColumn('users', 'id')).toEqual({
@@ -287,6 +363,7 @@ describe('column-metadata', () => {
         isEnum: false,
         isArray: false,
         characterMaxLength: null,
+        isBackfilling: false,
       });
 
       expect(store.getColumn('users', 'tags')).toEqual({
@@ -295,19 +372,20 @@ describe('column-metadata', () => {
         isEnum: false,
         isArray: true,
         characterMaxLength: null,
+        isBackfilling: false,
       });
     });
 
     test('handles empty table list', () => {
-      const store = createTestStore();
+      const {store, db} = createTestStore();
 
-      store.populateFromExistingTables([]);
+      populateFromExistingTables(db, []);
 
       expect(store.getTable('users').size).toBe(0);
     });
 
     test('handles table with no columns', () => {
-      const store = createTestStore();
+      const {store, db} = createTestStore();
 
       const tables: LiteTableSpec[] = [
         {
@@ -316,7 +394,7 @@ describe('column-metadata', () => {
         },
       ];
 
-      store.populateFromExistingTables(tables);
+      populateFromExistingTables(db, tables);
 
       expect(store.getTable('empty_table').size).toBe(0);
     });
@@ -333,6 +411,7 @@ describe('column-metadata', () => {
         isEnum: true,
         isArray: true,
         characterMaxLength: null,
+        isBackfilling: false,
       });
     });
 
@@ -346,6 +425,7 @@ describe('column-metadata', () => {
         isEnum: false,
         isArray: true,
         characterMaxLength: null,
+        isBackfilling: false,
       });
     });
 
@@ -359,6 +439,7 @@ describe('column-metadata', () => {
         isEnum: false,
         isArray: true,
         characterMaxLength: null,
+        isBackfilling: false,
       });
     });
 
@@ -372,6 +453,7 @@ describe('column-metadata', () => {
         isEnum: true,
         isArray: true,
         characterMaxLength: null,
+        isBackfilling: false,
       });
     });
 
@@ -385,6 +467,7 @@ describe('column-metadata', () => {
         isEnum: false,
         isArray: true,
         characterMaxLength: null,
+        isBackfilling: false,
       });
     });
   });
@@ -491,6 +574,7 @@ describe('column-metadata', () => {
         isEnum: true,
         isArray: true,
         characterMaxLength: null,
+        isBackfilling: false,
       });
 
       // Verify round-trip produces the normalized format with |TEXT_ARRAY
@@ -515,13 +599,7 @@ describe('column-metadata', () => {
         input: string;
         expectedOutput?: string;
         characterMaxLength?: number;
-        expectedMetadata: {
-          upstreamType: string;
-          isNotNull: boolean;
-          isEnum: boolean;
-          isArray: boolean;
-          characterMaxLength: number | null;
-        };
+        expectedMetadata: ColumnMetadata;
       }> = [
         {
           input: 'int8',
@@ -531,6 +609,7 @@ describe('column-metadata', () => {
             isEnum: false,
             isArray: false,
             characterMaxLength: null,
+            isBackfilling: false,
           },
         },
         {
@@ -542,6 +621,7 @@ describe('column-metadata', () => {
             isEnum: false,
             isArray: false,
             characterMaxLength: 200,
+            isBackfilling: false,
           },
         },
         {
@@ -552,6 +632,7 @@ describe('column-metadata', () => {
             isEnum: true,
             isArray: false,
             characterMaxLength: null,
+            isBackfilling: false,
           },
         },
         {
@@ -563,6 +644,7 @@ describe('column-metadata', () => {
             isEnum: false,
             isArray: true,
             characterMaxLength: null,
+            isBackfilling: false,
           },
         },
         {
@@ -574,6 +656,7 @@ describe('column-metadata', () => {
             isEnum: true,
             isArray: true,
             characterMaxLength: null,
+            isBackfilling: false,
           },
         },
       ];

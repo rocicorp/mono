@@ -253,6 +253,7 @@ describe('change-source/custom', () => {
           is_not_null: 1,
           table_name: 'foo',
           upstream_type: 'text',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -262,6 +263,7 @@ describe('change-source/custom', () => {
           is_not_null: 0,
           table_name: 'foo',
           upstream_type: 'text',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -271,6 +273,7 @@ describe('change-source/custom', () => {
           is_not_null: 1,
           table_name: 'bongo_0.clients',
           upstream_type: 'text',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -280,6 +283,7 @@ describe('change-source/custom', () => {
           is_not_null: 1,
           table_name: 'bongo_0.clients',
           upstream_type: 'text',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -289,6 +293,7 @@ describe('change-source/custom', () => {
           is_not_null: 0,
           table_name: 'bongo_0.clients',
           upstream_type: 'bigint',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -298,6 +303,7 @@ describe('change-source/custom', () => {
           is_not_null: 0,
           table_name: 'bongo_0.clients',
           upstream_type: 'text',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -307,6 +313,7 @@ describe('change-source/custom', () => {
           is_not_null: 1,
           table_name: 'bongo_0.mutations',
           upstream_type: 'text',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -316,6 +323,7 @@ describe('change-source/custom', () => {
           is_not_null: 1,
           table_name: 'bongo_0.mutations',
           upstream_type: 'text',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -325,6 +333,7 @@ describe('change-source/custom', () => {
           is_not_null: 1,
           table_name: 'bongo_0.mutations',
           upstream_type: 'bigint',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -334,6 +343,7 @@ describe('change-source/custom', () => {
           is_not_null: 0,
           table_name: 'bongo_0.mutations',
           upstream_type: 'json',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -343,6 +353,7 @@ describe('change-source/custom', () => {
           is_not_null: 1,
           table_name: 'bongo.permissions',
           upstream_type: 'bool',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -352,6 +363,7 @@ describe('change-source/custom', () => {
           is_not_null: 0,
           table_name: 'bongo.permissions',
           upstream_type: 'json',
+          backfill: null,
         },
         {
           character_max_length: null,
@@ -361,6 +373,7 @@ describe('change-source/custom', () => {
           is_not_null: 0,
           table_name: 'bongo.permissions',
           upstream_type: 'text',
+          backfill: null,
         },
       ],
     });

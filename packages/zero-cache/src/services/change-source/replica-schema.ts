@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
-import {must} from '../../../../shared/src/must.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {listTables} from '../../db/lite-tables.ts';
 import {
@@ -9,15 +8,12 @@ import {
   type Migration,
 } from '../../db/migration-lite.ts';
 import {AutoResetSignal} from '../change-streamer/schema/tables.ts';
-import {CREATE_CHANGELOG_SCHEMA} from '../replicator/schema/change-log.ts';
-import {
-  ColumnMetadataStore,
-  CREATE_COLUMN_METADATA_TABLE,
-} from '../replicator/schema/column-metadata.ts';
+import {populateFromExistingTables} from '../replicator/schema/column-metadata.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
   recordEvent,
 } from '../replicator/schema/replication-state.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../replicator/schema/table-metadata.ts';
 
 export async function initReplica(
   log: LogContext,
@@ -67,6 +63,31 @@ export async function upgradeReplica(
   );
 }
 
+export const CREATE_V6_COLUMN_METADATA_TABLE = /*sql*/ `
+  CREATE TABLE "_zero.column_metadata" (
+    table_name TEXT NOT NULL,
+    column_name TEXT NOT NULL,
+    upstream_type TEXT NOT NULL,
+    is_not_null INTEGER NOT NULL,
+    is_enum INTEGER NOT NULL,
+    is_array INTEGER NOT NULL,
+    character_max_length INTEGER,
+    PRIMARY KEY (table_name, column_name)
+  );
+`;
+
+export const CREATE_V7_CHANGE_LOG = /*sql*/ `
+  CREATE TABLE "_zero.changeLog2" (
+    "stateVersion"              TEXT NOT NULL,
+    "pos"                       INT  NOT NULL,
+    "table"                     TEXT NOT NULL,
+    "rowKey"                    TEXT NOT NULL,
+    "op"                        TEXT NOT NULL,
+    PRIMARY KEY("stateVersion", "pos"),
+    UNIQUE("table", "rowKey")
+  );
+`;
+
 export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   // There's no incremental migration from v1. Just reset the replica.
   4: {
@@ -94,15 +115,21 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       // is compatible with older zero-caches. However, it is truncated for
       // space savings (since historic changes were never read).
       db.exec(`DELETE FROM "_zero.changeLog"`);
-      db.exec(CREATE_CHANGELOG_SCHEMA); // Creates _zero.changeLog2
+      // First version of changeLog2
+      db.exec(CREATE_V7_CHANGE_LOG);
     },
   },
 
   8: {
     migrateSchema: (_, db) => {
-      let store = ColumnMetadataStore.getInstance(db);
-      if (!store) {
-        db.exec(CREATE_COLUMN_METADATA_TABLE);
+      const tableExists = db
+        .prepare(
+          `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_zero.column_metadata'`,
+        )
+        .get();
+
+      if (!tableExists) {
+        db.exec(CREATE_V6_COLUMN_METADATA_TABLE);
       }
     },
     migrateData: (_, db) => {
@@ -111,9 +138,21 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       // versions but did not initialize the table for new replicas.
       db.exec(/*sql*/ `DELETE FROM "_zero.column_metadata"`);
 
-      const store = ColumnMetadataStore.getInstance(db);
-      const tables = listTables(db);
-      must(store).populateFromExistingTables(tables);
+      const tables = listTables(db, false);
+      populateFromExistingTables(db, tables);
+    },
+  },
+
+  9: {
+    migrateSchema: (_, db) => {
+      db.exec(
+        /*sql*/ `
+        ALTER TABLE "_zero.changeLog2" 
+          ADD COLUMN "backfillingColumnVersions" TEXT DEFAULT '{}';
+        ALTER TABLE "_zero.column_metadata"
+          ADD COLUMN backfill TEXT;
+      ` + CREATE_TABLE_METADATA_TABLE,
+      );
     },
   },
 };
