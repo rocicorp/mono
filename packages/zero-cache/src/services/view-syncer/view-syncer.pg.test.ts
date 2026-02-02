@@ -7,6 +7,7 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
+import {resolver} from '@rocicorp/resolver';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
@@ -43,7 +44,7 @@ import type {ReplicaState} from '../replicator/replicator.ts';
 import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {CVRStore} from './cvr-store.ts';
-import {CVRQueryDrivenUpdater} from './cvr.ts';
+import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
@@ -71,6 +72,7 @@ import {
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
 import type {ViewSyncerService} from './view-syncer.ts';
+import {ClientHandler} from './client-handler.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
@@ -4892,5 +4894,60 @@ describe('view-syncer/service', () => {
     await expect(nextPoke(client)).rejects.toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Reconnect required]`,
     );
+  });
+
+  test('changeDesiredQueries errors after view-syncer shutdown', async () => {
+    // Bring pipelines into the synced state so changeDesiredQueries hits
+    // #syncQueryPipelineSet and currentPermissions.
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client);
+
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    // Gate the CVR flush so we can shut down while a config update is in-flight.
+    const {promise: flushStarted, resolve: signalFlushStarted} =
+      resolver<void>();
+    const allowFlush = resolver<void>();
+    const originalFlush = CVRUpdater.prototype.flush;
+    const flushSpy = vi
+      .spyOn(CVRUpdater.prototype, 'flush')
+      .mockImplementation(async function (
+        this: CVRUpdater,
+        ...args: Parameters<CVRUpdater['flush']>
+      ) {
+        signalFlushStarted();
+        await allowFlush.promise;
+        return originalFlush.apply(this, args);
+      });
+    const failSpy = vi.spyOn(ClientHandler.prototype, 'fail');
+
+    // Start the config update; it will block on the flush gate.
+    const changePromise = vs.changeDesiredQueries(SYNC_CONTEXT, [
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {op: 'put', hash: 'query-hash2', ast: USERS_QUERY},
+        ],
+      },
+    ]);
+
+    await flushStarted;
+    // Close the snapshotter DB while changeDesiredQueries is paused.
+    try {
+      await vs.stop();
+      await viewSyncerDone;
+      allowFlush.resolve();
+      await changePromise;
+
+      // the error then will result in failing the client connection
+      expect(failSpy).not.toHaveBeenCalled();
+    } finally {
+      allowFlush.resolve();
+      flushSpy.mockRestore();
+      failSpy.mockRestore();
+    }
   });
 });
