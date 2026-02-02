@@ -28,7 +28,12 @@ describe('Chinook planner tests', () => {
 
     // Get table specs using computeZqlSpecs
     const tableSpecs = new Map<string, LiteAndZqlSpec>();
-    computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
+    computeZqlSpecs(
+      createSilentLogContext(),
+      dbs.sqlite,
+      {includeBackfillingColumns: false},
+      tableSpecs,
+    );
 
     costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 

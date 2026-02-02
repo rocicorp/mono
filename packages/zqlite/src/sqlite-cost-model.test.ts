@@ -1,9 +1,9 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {Database} from './db.ts';
-import {btreeCost, createSQLiteCostModel} from './sqlite-cost-model.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
+import {Database} from './db.ts';
+import {btreeCost, createSQLiteCostModel} from './sqlite-cost-model.ts';
 
 describe('SQLite cost model', () => {
   let db: Database;
@@ -32,7 +32,7 @@ describe('SQLite cost model', () => {
 
     // Get table specs using computeZqlSpecs
     const tableSpecs = new Map<string, LiteAndZqlSpec>();
-    computeZqlSpecs(lc, db, tableSpecs);
+    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}, tableSpecs);
 
     // Create the cost model
     costModel = createSQLiteCostModel(db, tableSpecs);
@@ -261,7 +261,7 @@ describe('SQLite cost model with skewed data (STAT4 verification)', () => {
 
     // Get table specs
     const tableSpecs = new Map<string, LiteAndZqlSpec>();
-    computeZqlSpecs(lc, db, tableSpecs);
+    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}, tableSpecs);
 
     // Create the cost model
     costModel = createSQLiteCostModel(db, tableSpecs);

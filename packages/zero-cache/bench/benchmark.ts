@@ -22,7 +22,9 @@ export function bench(opts: Options) {
   const lc = createSilentLogContext();
   const db = new Database(lc, dbFile);
   const sources = new Map<string, Source>();
-  const tableSpecs = computeZqlSpecs(lc, db);
+  const tableSpecs = computeZqlSpecs(lc, db, {
+    includeBackfillingColumns: true,
+  });
 
   class BenchmarkQueryDelegate extends QueryDelegateBase {
     readonly defaultQueryComplete = true;

@@ -58,7 +58,13 @@ describe('client schemas', () => {
       CREATE TABLE "zero.permissions" (lock bool PRIMARY KEY);
       CREATE TABLE "zero_0.clients" (clientGroupID TEXT PRIMARY KEY);
       `);
-    computeZqlSpecs(lc, db, tableSpecs, fullTables);
+    computeZqlSpecs(
+      lc,
+      db,
+      {includeBackfillingColumns: false},
+      tableSpecs,
+      fullTables,
+    );
   });
 
   test.each([

@@ -6,14 +6,19 @@ import {
   ColumnMetadataStore,
   CREATE_COLUMN_METADATA_TABLE,
 } from '../services/replicator/schema/column-metadata.ts';
-import {computeZqlSpecs, listIndexes, listTables} from './lite-tables.ts';
-import type {LiteIndexSpec, LiteTableSpec} from './specs.ts';
+import {
+  computeZqlSpecs,
+  listIndexes,
+  listTables,
+  type LiteTableSpecWithReplicationStatus,
+} from './lite-tables.ts';
+import type {LiteIndexSpec} from './specs.ts';
 
 describe('lite/tables', () => {
   type Case = {
     name: string;
     setupQuery: string;
-    expectedResult: LiteTableSpec[];
+    expectedResult: LiteTableSpecWithReplicationStatus[];
   };
 
   const cases: Case[] = [
@@ -52,6 +57,7 @@ describe('lite/tables', () => {
             },
           },
           primaryKey: ['clientID'],
+          backfilling: [],
         },
       ],
     },
@@ -157,6 +163,7 @@ describe('lite/tables', () => {
             },
           },
           primaryKey: ['user_id'],
+          backfilling: [],
         },
       ],
     },
@@ -209,6 +216,7 @@ describe('lite/tables', () => {
             },
           },
           primaryKey: ['org_id', 'component_id', 'issue_id'],
+          backfilling: [],
         },
       ],
     },
@@ -325,7 +333,11 @@ describe('computeZqlSpec', () => {
   function t(setup: string) {
     const db = new Database(createSilentLogContext(), ':memory:');
     db.exec(setup);
-    return [...computeZqlSpecs(createSilentLogContext(), db).values()];
+    return [
+      ...computeZqlSpecs(createSilentLogContext(), db, {
+        includeBackfillingColumns: false,
+      }).values(),
+    ];
   }
 
   test('plain primary key', () => {
@@ -344,6 +356,7 @@ describe('computeZqlSpec', () => {
                 "b",
               ],
             ],
+            "backfilling": [],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -422,6 +435,7 @@ describe('computeZqlSpec', () => {
                 "b",
               ],
             ],
+            "backfilling": [],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -481,6 +495,7 @@ describe('computeZqlSpec', () => {
                 "d",
               ],
             ],
+            "backfilling": [],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -559,6 +574,7 @@ describe('computeZqlSpec', () => {
                 "d",
               ],
             ],
+            "backfilling": [],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -647,6 +663,7 @@ describe('computeZqlSpec', () => {
                 "d",
               ],
             ],
+            "backfilling": [],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -734,6 +751,7 @@ describe('computeZqlSpec', () => {
                 "c",
               ],
             ],
+            "backfilling": [],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -821,6 +839,7 @@ describe('computeZqlSpec', () => {
                 "d",
               ],
             ],
+            "backfilling": [],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -920,6 +939,7 @@ describe('computeZqlSpec', () => {
                 "order",
               ],
             ],
+            "backfilling": [],
             "columns": {
               "createdAt": {
                 "characterMaximumLength": null,
@@ -1097,6 +1117,293 @@ describe('metadata table integration', () => {
     expect(tables[0].columns.status.dataType).toBe('user_status|TEXT_ENUM');
     expect(tables[0].columns.tags.elemPgTypeClass).toBe('b');
     expect(tables[0].columns.status.elemPgTypeClass).toBe(null);
+  });
+
+  test('exclude backfilling columns from zqlspecs', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create metadata table
+    db.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    // Create table with plain SQLite types (no pipe notation)
+    db.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY,
+        name TEXT,
+        blob TEXT
+      );
+      CREATE UNIQUE INDEX users_pk ON users (id);
+    `);
+
+    // Populate metadata table
+    const store = ColumnMetadataStore.getInstance(db);
+    expect(store).toBeDefined();
+
+    must(store).insert('users', 'id', {
+      pos: 0,
+      dataType: 'int8',
+      notNull: true,
+    });
+
+    must(store).insert('users', 'name', {
+      pos: 1,
+      dataType: 'varchar',
+    });
+
+    must(store).insert(
+      'users',
+      'blob',
+      {
+        pos: 2,
+        dataType: 'text',
+      },
+      {backfillID: 123},
+    );
+
+    expect(
+      computeZqlSpecs(createSilentLogContext(), db, {
+        includeBackfillingColumns: false,
+      }).get('users'),
+    ).toMatchInlineSnapshot(`
+      {
+        "tableSpec": {
+          "allPotentialPrimaryKeys": [
+            [
+              "id",
+            ],
+          ],
+          "backfilling": [
+            "blob",
+          ],
+          "columns": {
+            "id": {
+              "characterMaximumLength": null,
+              "dataType": "int8|NOT_NULL",
+              "dflt": null,
+              "elemPgTypeClass": null,
+              "notNull": false,
+              "pos": 1,
+            },
+            "name": {
+              "characterMaximumLength": null,
+              "dataType": "varchar",
+              "dflt": null,
+              "elemPgTypeClass": null,
+              "notNull": false,
+              "pos": 2,
+            },
+          },
+          "name": "users",
+          "primaryKey": [
+            "id",
+          ],
+          "uniqueKeys": [
+            [
+              "id",
+            ],
+          ],
+        },
+        "zqlSpec": {
+          "id": {
+            "type": "number",
+          },
+          "name": {
+            "type": "string",
+          },
+        },
+      }
+    `);
+
+    expect(
+      computeZqlSpecs(createSilentLogContext(), db, {
+        includeBackfillingColumns: true,
+      }).get('users'),
+    ).toMatchInlineSnapshot(`
+      {
+        "tableSpec": {
+          "allPotentialPrimaryKeys": [
+            [
+              "id",
+            ],
+          ],
+          "backfilling": [
+            "blob",
+          ],
+          "columns": {
+            "blob": {
+              "characterMaximumLength": null,
+              "dataType": "text",
+              "dflt": null,
+              "elemPgTypeClass": null,
+              "notNull": false,
+              "pos": 3,
+            },
+            "id": {
+              "characterMaximumLength": null,
+              "dataType": "int8|NOT_NULL",
+              "dflt": null,
+              "elemPgTypeClass": null,
+              "notNull": false,
+              "pos": 1,
+            },
+            "name": {
+              "characterMaximumLength": null,
+              "dataType": "varchar",
+              "dflt": null,
+              "elemPgTypeClass": null,
+              "notNull": false,
+              "pos": 2,
+            },
+          },
+          "name": "users",
+          "primaryKey": [
+            "id",
+          ],
+          "uniqueKeys": [
+            [
+              "id",
+            ],
+          ],
+        },
+        "zqlSpec": {
+          "blob": {
+            "type": "string",
+          },
+          "id": {
+            "type": "number",
+          },
+          "name": {
+            "type": "string",
+          },
+        },
+      }
+    `);
+  });
+
+  test('exclude backfilling table from zqlspecs', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create metadata table
+    db.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    // Create table with plain SQLite types (no pipe notation)
+    db.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY,
+        name TEXT,
+        blob TEXT
+      );
+      CREATE UNIQUE INDEX users_pk ON users (id);
+    `);
+
+    // Populate metadata table
+    const store = ColumnMetadataStore.getInstance(db);
+    expect(store).toBeDefined();
+
+    must(store).insert(
+      'users',
+      'id',
+      {
+        pos: 0,
+        dataType: 'int8',
+        notNull: true,
+      },
+      {backfillID: 123},
+    );
+
+    must(store).insert(
+      'users',
+      'name',
+      {
+        pos: 1,
+        dataType: 'varchar',
+      },
+      {backfillID: 456},
+    );
+
+    must(store).insert(
+      'users',
+      'blob',
+      {
+        pos: 2,
+        dataType: 'text',
+      },
+      {backfillID: 789},
+    );
+
+    // The entire table is excluded from syncing.
+    expect(
+      computeZqlSpecs(createSilentLogContext(), db, {
+        includeBackfillingColumns: false,
+      }).get('users'),
+    ).toBeUndefined();
+
+    expect(
+      computeZqlSpecs(createSilentLogContext(), db, {
+        includeBackfillingColumns: true,
+      }).get('users'),
+    ).toMatchInlineSnapshot(`
+      {
+        "tableSpec": {
+          "allPotentialPrimaryKeys": [
+            [
+              "id",
+            ],
+          ],
+          "backfilling": [
+            "id",
+            "name",
+            "blob",
+          ],
+          "columns": {
+            "blob": {
+              "characterMaximumLength": null,
+              "dataType": "text",
+              "dflt": null,
+              "elemPgTypeClass": null,
+              "notNull": false,
+              "pos": 3,
+            },
+            "id": {
+              "characterMaximumLength": null,
+              "dataType": "int8|NOT_NULL",
+              "dflt": null,
+              "elemPgTypeClass": null,
+              "notNull": false,
+              "pos": 1,
+            },
+            "name": {
+              "characterMaximumLength": null,
+              "dataType": "varchar",
+              "dflt": null,
+              "elemPgTypeClass": null,
+              "notNull": false,
+              "pos": 2,
+            },
+          },
+          "name": "users",
+          "primaryKey": [
+            "id",
+          ],
+          "uniqueKeys": [
+            [
+              "id",
+            ],
+          ],
+        },
+        "zqlSpec": {
+          "blob": {
+            "type": "string",
+          },
+          "id": {
+            "type": "number",
+          },
+          "name": {
+            "type": "string",
+          },
+        },
+      }
+    `);
   });
 
   test('partial metadata: reads from metadata table for some columns, fallback for others', () => {

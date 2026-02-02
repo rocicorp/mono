@@ -183,6 +183,7 @@ export const publishedSchema = v
     const zqlSpecs = computeZqlSpecsFromLiteSpecs(
       tables.map(t => mapPostgresToLite(t)),
       indexes.map(mapPostgresToLiteIndex),
+      {includeBackfillingColumns: true},
     );
     return {
       indexes,

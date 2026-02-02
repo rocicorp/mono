@@ -13,6 +13,7 @@ import {
   computeZqlSpecs,
   listIndexes,
   listTables,
+  type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
 import {
   mapPostgresToLite,
@@ -52,12 +53,7 @@ import type {
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
-import {
-  logDeleteOp,
-  logResetOp,
-  logSetOp,
-  logTruncateOp,
-} from './schema/change-log.ts';
+import {ChangeLog} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
@@ -85,6 +81,7 @@ export type CommitResult = {
  */
 export class ChangeProcessor {
   readonly #db: StatementRunner;
+  readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
   readonly #mode: ChangeProcessorMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
@@ -104,6 +101,7 @@ export class ChangeProcessor {
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#db = db;
+    this.#changeLog = new ChangeLog(db.db);
     this.#tableMetadata = new TableMetadataTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
@@ -171,6 +169,7 @@ export class ChangeProcessor {
           lc,
           this.#db,
           this.#mode,
+          this.#changeLog,
           this.#tableMetadata,
           this.#tableSpecs,
           commitVersion,
@@ -307,8 +306,9 @@ class TransactionProcessor {
   readonly #db: StatementRunner;
   readonly #mode: ChangeProcessorMode;
   readonly #version: LexiVersion;
+  readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
-  readonly #tableSpecs: Map<string, LiteTableSpec>;
+  readonly #tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>;
   readonly #jsonFormat: JSONFormat;
   readonly #columnMetadata: ColumnMetadataStore;
 
@@ -319,8 +319,9 @@ class TransactionProcessor {
     lc: LogContext,
     db: StatementRunner,
     mode: ChangeProcessorMode,
+    changeLog: ChangeLog,
     tableMetadata: TableMetadataTracker,
-    tableSpecs: Map<string, LiteTableSpec>,
+    tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
   ) {
@@ -356,6 +357,7 @@ class TransactionProcessor {
     this.#db = db;
     this.#version = commitVersion;
     this.#lc = lc.withContext('version', commitVersion);
+    this.#changeLog = changeLog;
     this.#tableMetadata = tableMetadata;
     this.#tableSpecs = tableSpecs;
     // The column_metadata table is guaranteed to exist since the
@@ -370,7 +372,9 @@ class TransactionProcessor {
   #reloadTableSpecs() {
     this.#tableSpecs.clear();
     // zqlSpecs include the primary key derived from unique indexes
-    const zqlSpecs = computeZqlSpecs(this.#lc, this.#db.db);
+    const zqlSpecs = computeZqlSpecs(this.#lc, this.#db.db, {
+      includeBackfillingColumns: true,
+    });
     for (let spec of listTables(this.#db.db)) {
       if (!spec.primaryKey) {
         spec = {
@@ -415,11 +419,8 @@ class TransactionProcessor {
 
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
-    const newRow = liteRow(
-      insert.new,
-      this.#tableSpec(table),
-      this.#jsonFormat,
-    );
+    const tableSpec = this.#tableSpec(table);
+    const newRow = liteRow(insert.new, tableSpec, this.#jsonFormat);
 
     this.#upsert(table, {
       ...newRow.row,
@@ -437,7 +438,7 @@ class TransactionProcessor {
       return;
     }
     const key = this.#getKey(newRow, insert);
-    this.#logSetOp(table, key);
+    this.#logSetOp(table, key, getBackfilledColumns(newRow.row, tableSpec));
   }
 
   #upsert(table: string, row: LiteRow) {
@@ -468,11 +469,8 @@ class TransactionProcessor {
   //       with TOASTed values.
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
-    const newRow = liteRow(
-      update.new,
-      this.#tableSpec(table),
-      this.#jsonFormat,
-    );
+    const tableSpec = this.#tableSpec(table);
+    const newRow = liteRow(update.new, tableSpec, this.#jsonFormat);
     const row = {...newRow.row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
 
     // update.key is set with the old values if the key has changed.
@@ -485,9 +483,9 @@ class TransactionProcessor {
     const newKey = this.#getKey(newRow, update);
 
     if (oldKey) {
-      this.#logDeleteOp(table, oldKey);
+      this.#logDeleteOp(table, oldKey, tableSpec.backfilling);
     }
-    this.#logSetOp(table, newKey);
+    this.#logSetOp(table, newKey, getBackfilledColumns(newRow.row, tableSpec));
 
     const currKey = oldKey ?? newKey;
     const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
@@ -511,16 +509,14 @@ class TransactionProcessor {
 
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
+    const tableSpec = this.#tableSpec(table);
     const rowKey = this.#getKey(
-      liteRow(del.key, this.#tableSpec(table), this.#jsonFormat),
+      liteRow(del.key, tableSpec, this.#jsonFormat),
       del,
     );
 
     this.#delete(table, rowKey);
-
-    if (this.#mode === 'serving') {
-      this.#logDeleteOp(table, rowKey);
-    }
+    this.#logDeleteOp(table, rowKey, tableSpec.backfilling);
   }
 
   #delete(table: string, rowKey: LiteRowKey) {
@@ -712,28 +708,47 @@ class TransactionProcessor {
     this.#logResetOp(table);
   }
 
-  #logSetOp(table: string, key: LiteRowKey) {
-    if (this.#mode === 'serving') {
-      logSetOp(this.#db, this.#version, this.#pos++, table, key);
+  /**
+   * @param backfilledColumns `backfilling` columns for which values were set
+   */
+  #logSetOp(
+    table: string,
+    key: LiteRowKey,
+    backfilledColumns: string[] | undefined,
+  ) {
+    // The "serving" replicator always writes to the change-log (for IVM).
+    // The "backup" replicator only needs to write to the change log
+    // when writing columns that are being backfilled.
+    if (this.#mode === 'serving' || backfilledColumns !== undefined) {
+      this.#changeLog.logSetOp(
+        this.#version,
+        this.#pos++,
+        table,
+        key,
+        backfilledColumns,
+      );
     }
   }
 
-  #logDeleteOp(table: string, key: LiteRowKey) {
-    if (this.#mode === 'serving') {
-      logDeleteOp(this.#db, this.#version, this.#pos++, table, key);
+  #logDeleteOp(table: string, key: LiteRowKey, backfilling?: string[]) {
+    // The "serving" replicator always writes to the change-log (for IVM).
+    // The "backup" replicator only needs to write to the change log
+    // when writing columns that are being backfilled.
+    if (this.#mode === 'serving' || backfilling?.length) {
+      this.#changeLog.logDeleteOp(this.#version, this.#pos++, table, key);
     }
   }
 
   #logTruncateOp(table: string) {
     if (this.#mode === 'serving') {
-      logTruncateOp(this.#db, this.#version, table);
+      this.#changeLog.logTruncateOp(this.#version, table);
     }
   }
 
   #logResetOp(table: string) {
     this.#schemaChanged = true;
     if (this.#mode === 'serving') {
-      logResetOp(this.#db, this.#version, table);
+      this.#changeLog.logResetOp(this.#version, table);
     }
     this.#reloadTableSpecs();
   }
@@ -771,6 +786,16 @@ class TransactionProcessor {
     lc.info?.(`aborting transaction ${this.#version}`);
     this.#db.rollback();
   }
+}
+
+function getBackfilledColumns(
+  row: LiteRow,
+  {backfilling}: LiteTableSpecWithReplicationStatus,
+): string[] | undefined {
+  if (!backfilling?.length) {
+    return undefined; // common case
+  }
+  return backfilling.filter(col => col in row);
 }
 
 function ensureError(err: unknown): Error {

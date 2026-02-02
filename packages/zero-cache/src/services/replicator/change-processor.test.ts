@@ -4,8 +4,12 @@ import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {listIndexes, listTables} from '../../db/lite-tables.ts';
-import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
+import {
+  listIndexes,
+  listTables,
+  type LiteTableSpecWithReplicationStatus,
+} from '../../db/lite-tables.ts';
+import type {LiteIndexSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -17,7 +21,7 @@ import {
 } from './schema/replication-state.ts';
 import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
 
-describe('replicator/incremental-sync', () => {
+describe('replicator/change-processor', () => {
   let lc: LogContext;
   let servingReplica: Database;
   let servingProcessor: ChangeProcessor;
@@ -51,7 +55,7 @@ describe('replicator/incremental-sync', () => {
     setup: string;
     downstream: ChangeStreamData[];
     data: Record<string, Record<string, unknown>[]>;
-    tableSpecs?: LiteTableSpec[];
+    tableSpecs?: LiteTableSpecWithReplicationStatus[];
     indexSpecs?: LiteIndexSpec[];
   };
 
@@ -528,6 +532,30 @@ describe('replicator/incremental-sync', () => {
         baz: [],
         ['_zero.changeLog2']: [
           {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"id":1}',
+            stateVersion: '0e',
+            table: 'foo',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 1n,
+            rowKey: '{"id":2}',
+            stateVersion: '0e',
+            table: 'foo',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 2n,
+            rowKey: '{"id":3}',
+            stateVersion: '0e',
+            table: 'foo',
+          },
+          {
             stateVersion: '0e',
             pos: 3n,
             table: 'bar',
@@ -550,6 +578,30 @@ describe('replicator/incremental-sync', () => {
             op: 's',
             rowKey: '{"id":6}',
             backfillingColumnVersions: '{}',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 6n,
+            rowKey: '{"id":7}',
+            stateVersion: '0e',
+            table: 'baz',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 7n,
+            rowKey: '{"id":8}',
+            stateVersion: '0e',
+            table: 'baz',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 8n,
+            rowKey: '{"id":9}',
+            stateVersion: '0e',
+            table: 'baz',
           },
           {
             stateVersion: '0e',
@@ -1015,7 +1067,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":"bar"}',
-            backfillingColumnVersions: '{}',
+            backfillingColumnVersions: '{"serial":"0e"}',
           },
           {
             stateVersion: '0e',
@@ -1023,7 +1075,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":"baz"}',
-            backfillingColumnVersions: '{}',
+            backfillingColumnVersions: '{"serial":"0e"}',
           },
         ],
         ['_zero.tableMetadata']: [
@@ -1121,6 +1173,7 @@ describe('replicator/incremental-sync', () => {
               pos: 5,
             },
           },
+          backfilling: ['serial'],
         },
       ],
       indexSpecs: [],
@@ -1196,6 +1249,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [],
@@ -1298,7 +1352,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
-            backfillingColumnVersions: '{}',
+            backfillingColumnVersions: '{"newJSON":"0e"}',
           },
         ],
         ['_zero.tableMetadata']: [
@@ -1386,6 +1440,7 @@ describe('replicator/incremental-sync', () => {
               pos: 5,
             },
           },
+          backfilling: ['newJSON'],
         },
       ],
       indexSpecs: [],
@@ -1413,6 +1468,14 @@ describe('replicator/incremental-sync', () => {
           {id: 4n, ['_0_version']: '0e'},
         ],
         ['_zero.changeLog2']: [
+          {
+            stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
           {
             stateVersion: '0e',
             pos: -1n,
@@ -1452,6 +1515,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [],
@@ -1487,6 +1551,14 @@ describe('replicator/incremental-sync', () => {
           {id: 4n, newName: 'yay', ['_0_version']: '0e'},
         ],
         ['_zero.changeLog2']: [
+          {
+            stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
           {
             stateVersion: '0e',
             pos: -1n,
@@ -1534,6 +1606,7 @@ describe('replicator/incremental-sync', () => {
               pos: 3,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1576,6 +1649,14 @@ describe('replicator/incremental-sync', () => {
           {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
         ],
         ['_zero.changeLog2']: [
+          {
+            stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
           {
             stateVersion: '0e',
             pos: -1n,
@@ -1623,6 +1704,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1670,6 +1752,14 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
@@ -1715,6 +1805,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1758,6 +1849,14 @@ describe('replicator/incremental-sync', () => {
           {id: 4n, newName: 'yay', ['_0_version']: '0e'},
         ],
         ['_zero.changeLog2']: [
+          {
+            stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
           {
             stateVersion: '0e',
             pos: -1n,
@@ -1805,6 +1904,7 @@ describe('replicator/incremental-sync', () => {
               pos: 3,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1855,6 +1955,14 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
@@ -1900,6 +2008,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1946,6 +2055,14 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
@@ -1991,6 +2108,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -2047,6 +2165,14 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
@@ -2092,6 +2218,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -2123,6 +2250,14 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         ['_zero.changeLog2']: [
+          {
+            stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
+          },
           {
             stateVersion: '0e',
             pos: -1n,
@@ -2208,6 +2343,7 @@ describe('replicator/incremental-sync', () => {
               pos: 3,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [],
@@ -2378,6 +2514,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
     },
@@ -2385,22 +2522,33 @@ describe('replicator/incremental-sync', () => {
 
   for (const c of cases) {
     test(c.name, () => {
-      for (const [replica, processor, includeChangeLog] of [
-        [servingReplica, servingProcessor, true],
-        [backupReplica, backupProcessor, false],
-      ] satisfies [Database, ChangeProcessor, boolean][]) {
+      for (const [replica, processor, log] of [
+        [servingReplica, servingProcessor, 'all-entries'],
+        [backupReplica, backupProcessor, 'only-backfills'],
+      ] satisfies [
+        Database,
+        ChangeProcessor,
+        'all-entries' | 'only-backfills',
+      ][]) {
         initDB(replica, c.setup);
 
         for (const change of c.downstream) {
           processor.processMessage(lc, change);
         }
 
-        if (includeChangeLog) {
+        if (log === 'all-entries') {
           expectTables(replica, c.data, 'bigint');
         } else {
+          // Only log entries relevant to backfill
           expectTables(
             replica,
-            {...c.data, ['_zero.changeLog2']: []},
+            {
+              ...c.data,
+              ['_zero.changeLog2']:
+                c.data['_zero.changeLog2']?.filter(
+                  log => log.backfillingColumnVersions !== '{}',
+                ) ?? [],
+            },
             'bigint',
           );
         }
