@@ -202,7 +202,13 @@ export class PipelineDriver {
   #initAndResetCommon(clientSchema: ClientSchema) {
     const {db} = this.#snapshotter.current();
     const fullTables = new Map<string, LiteTableSpec>();
-    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
+    computeZqlSpecs(
+      this.#lc,
+      db.db,
+      {includeBackfillingColumns: false},
+      this.#tableSpecs,
+      fullTables,
+    );
     checkClientSchema(
       this.#shardID,
       clientSchema,
