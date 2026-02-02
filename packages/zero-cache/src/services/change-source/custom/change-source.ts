@@ -269,7 +269,7 @@ function validateInitiallySyncedData(
   db: Database,
   shard: ShardID,
 ) {
-  const tables = computeZqlSpecs(lc, db);
+  const tables = computeZqlSpecs(lc, db, {includeBackfillingColumns: true});
   const required = getRequiredTables(shard);
   for (const [name, columns] of Object.entries(required)) {
     const table = tables.get(name)?.zqlSpec;

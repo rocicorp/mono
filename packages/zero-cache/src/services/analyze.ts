@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
@@ -17,7 +18,6 @@ import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
 import {runAst} from './run-ast.ts';
 import {TimeSliceTimer, type TokenData} from './view-syncer/view-syncer.ts';
-import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 
 const TIME_SLICE_LAP_THRESHOLD_MS = 200;
 
@@ -37,7 +37,13 @@ export async function analyzeQuery(
   const tableSpecs = new Map<string, LiteAndZqlSpec>();
   const tables = new Map<string, TableSource>();
 
-  computeZqlSpecs(lc, db, tableSpecs, fullTables);
+  computeZqlSpecs(
+    lc,
+    db,
+    {includeBackfillingColumns: false},
+    tableSpecs,
+    fullTables,
+  );
 
   const planDebugger = joinPlans ? new AccumulatorDebugger() : undefined;
   const costModel = joinPlans
