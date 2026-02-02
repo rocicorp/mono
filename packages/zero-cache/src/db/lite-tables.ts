@@ -33,10 +33,18 @@ type ColumnInfo = {
   keyPos: number;
 };
 
+export type LiteTableSpecWithReplicationStatus = LiteTableSpec & {
+  readonly backfilling?: string[];
+};
+
+type MutableLiteTableSpecWithReplicationStatus = MutableLiteTableSpec & {
+  backfilling: string[];
+};
+
 export function listTables(
   db: Database,
   useColumnMetadata = true,
-): LiteTableSpec[] {
+): LiteTableSpecWithReplicationStatus[] {
   const columns = db
     .prepare(
       `
@@ -58,7 +66,7 @@ export function listTables(
     .all() as ColumnInfo[];
 
   const tables: LiteTableSpec[] = [];
-  let table: MutableLiteTableSpec | undefined;
+  let table: MutableLiteTableSpecWithReplicationStatus | undefined;
 
   columns.forEach(col => {
     if (col.table !== table?.name) {
@@ -66,6 +74,7 @@ export function listTables(
       table = {
         name: col.table,
         columns: {},
+        backfilling: [],
       };
       tables.push(table);
     }
@@ -106,6 +115,9 @@ export function listTables(
       dflt: col.dflt,
       elemPgTypeClass,
     };
+    if (metadata?.isBackfilling) {
+      table.backfilling.push(col.name);
+    }
     if (col.keyPos) {
       table.primaryKey ??= [];
       while (table.primaryKey.length < col.keyPos) {
@@ -161,6 +173,17 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
   return ret;
 }
 
+export type ZqlSpecOptions = {
+  /**
+   * Controls whether to include backfilling columns in the computed
+   * LiteAndZqlSpec. In general, backfilling columns should be include
+   * in "replication" logic (copying data from upstream to the replica),
+   * and excluded from "sync" logic (sending data from the replica to
+   * clients).
+   */
+  includeBackfillingColumns: boolean;
+};
+
 /**
  * Computes a TableSpec "view" of the replicated data that is
  * suitable for processing / consumption for the client. This
@@ -179,12 +202,14 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
 export function computeZqlSpecs(
   lc: LogContext,
   replica: Database,
+  opts: ZqlSpecOptions,
   tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
   fullTables?: Map<string, LiteTableSpec>,
 ): Map<string, LiteAndZqlSpec> {
   return computeZqlSpecsFromLiteSpecs(
     listTables(replica),
     listIndexes(replica),
+    opts,
     tableSpecs,
     fullTables,
     lc,
@@ -192,8 +217,9 @@ export function computeZqlSpecs(
 }
 
 export function computeZqlSpecsFromLiteSpecs(
-  tables: LiteTableSpec[],
+  tables: LiteTableSpecWithReplicationStatus[],
   indexes: LiteIndexSpec[],
+  {includeBackfillingColumns}: ZqlSpecOptions,
   tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
   fullTables?: Map<string, LiteTableSpec>,
   lc?: LogContext,
@@ -212,9 +238,14 @@ export function computeZqlSpecsFromLiteSpecs(
   tables.forEach(fullTable => {
     fullTables?.set(fullTable.name, fullTable);
 
-    // Only include columns for which the mapped ZQL Value is defined.
+    const backfilling = new Set(fullTable.backfilling);
+    // Only include columns that:
+    // - have a defined ZQL Value
+    // - aren't backfilling if `includeBackfillingColumns` is false
     const visibleColumns = Object.entries(fullTable.columns).filter(
-      ([, {dataType}]) => liteTypeToZqlValueType(dataType),
+      ([col, {dataType}]) =>
+        liteTypeToZqlValueType(dataType) &&
+        (includeBackfillingColumns || !backfilling.has(col)),
     );
     const notNullColumns = new Set(
       visibleColumns
@@ -233,8 +264,13 @@ export function computeZqlSpecsFromLiteSpecs(
     );
     if (keys.length === 0) {
       // Only include tables with a row key.
+      //
+      // Note that this will automatically exclude tables that are being
+      // backfilled (when includeBackfillingColumns is `false`) since candidate
+      // keys only include visible columns.
       lc?.debug?.(
-        `not syncing table ${fullTable.name} because it has no primary key`,
+        `not syncing table ${fullTable.name} because it ` +
+          (backfilling.size ? 'is being backfilled' : 'has no primary key'),
       );
       return;
     }

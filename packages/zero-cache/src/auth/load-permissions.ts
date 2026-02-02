@@ -81,7 +81,9 @@ export function reloadPermissionsIfChanged(
 }
 
 export function getSchema(lc: LogContext, replica: Database): Schema {
-  const specs = computeZqlSpecs(lc, replica);
+  const specs = computeZqlSpecs(lc, replica, {
+    includeBackfillingColumns: false,
+  });
   const tables = Object.fromEntries(
     [...specs.values()].map(table => {
       const {

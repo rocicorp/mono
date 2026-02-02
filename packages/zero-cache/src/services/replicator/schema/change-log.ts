@@ -4,7 +4,7 @@ import {
   stringify,
 } from '../../../../../shared/src/bigint-json.ts';
 import * as v from '../../../../../shared/src/valita.ts';
-import type {StatementRunner} from '../../../db/statements.ts';
+import type {Database, Statement} from '../../../../../zqlite/src/db.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
 import type {LiteRowKey} from '../../../types/lite.ts';
 import {normalizedKeyOrder} from '../../../types/row-key.ts';
@@ -107,82 +107,111 @@ export const changeLogEntrySchema = v
 
 export type ChangeLogEntry = v.Infer<typeof changeLogEntrySchema>;
 
-export function logSetOp(
-  db: StatementRunner,
-  version: LexiVersion,
-  pos: number,
-  table: string,
-  row: LiteRowKey,
-): string {
-  return logRowOp(db, version, pos, table, row, SET_OP);
-}
+export class ChangeLog {
+  readonly #logRowOpStmt: Statement;
+  readonly #logRowOpWithBackfillStmt: Statement;
+  readonly #logTableWideOpStmt;
 
-export function logDeleteOp(
-  db: StatementRunner,
-  version: LexiVersion,
-  pos: number,
-  table: string,
-  row: LiteRowKey,
-): string {
-  return logRowOp(db, version, pos, table, row, DEL_OP);
-}
+  constructor(db: Database) {
+    this.#logRowOpStmt = db.prepare(/*sql*/ `
+      INSERT OR REPLACE INTO "_zero.changeLog2" 
+        (stateVersion, pos, "table", rowKey, op)
+        VALUES (@version, @pos, @table, JSON(@rowKey), @op)
+    `);
 
-function logRowOp(
-  db: StatementRunner,
-  version: LexiVersion,
-  pos: number,
-  table: string,
-  row: LiteRowKey,
-  op: string,
-): string {
-  const rowKey = stringify(normalizedKeyOrder(row));
-  db.run(
-    `
-    INSERT OR REPLACE INTO "_zero.changeLog2" 
-      (stateVersion, pos, "table", rowKey, op)
-      VALUES (@version, @pos, @table, JSON(@rowKey), @op)
-    `,
-    {version, pos, table, rowKey, op},
-  );
-  return rowKey;
-}
-export function logTruncateOp(
-  db: StatementRunner,
-  version: LexiVersion,
-  table: string,
-) {
-  logTableWideOp(db, version, table, TRUNCATE_OP);
-}
+    this.#logRowOpWithBackfillStmt = db.prepare(/*sql*/ `
+      INSERT INTO "_zero.changeLog2" 
+        (stateVersion, pos, "table", rowKey, op, backfillingColumnVersions)
+        VALUES (@version, @pos, @table, JSON(@rowKey), @op, 
+                JSON(@backfillingColumnVersions))
+        ON CONFLICT ("table", rowKey) DO UPDATE 
+                   SET stateVersion = excluded.stateVersion,
+                                pos = excluded.pos,
+                                 op = excluded.op,
+          backfillingColumnVersions = json_patch(
+          backfillingColumnVersions, excluded.backfillingColumnVersions)
+    `);
 
-export function logResetOp(
-  db: StatementRunner,
-  version: LexiVersion,
-  table: string,
-) {
-  logTableWideOp(db, version, table, RESET_OP);
-}
+    // Because table-wide ops result in aborting an incremental update
+    // and rehydrating all queries at "head", they are assigned pos = -1
+    // as an optimization to abort as early as possible to skip unnecessary
+    // updates.
+    //
+    // However, changeLog entries that are destined to be "skipped" are
+    // nonetheless kept for the purpose of tracking backfillingColumnVersions.
+    this.#logTableWideOpStmt = db.prepare(/*sql*/ `
+      INSERT OR REPLACE INTO "_zero.changeLog2" 
+        (stateVersion, pos, "table", rowKey, op) 
+        VALUES (@version, -1, @table, @version, @op)
+    `);
+  }
 
-function logTableWideOp(
-  db: StatementRunner,
-  version: LexiVersion,
-  table: string,
-  op: 't' | 'r',
-) {
-  // Delete any existing changes for the table (in this version) since the
-  // table wide op invalidates them.
-  db.run(
-    `
-    DELETE FROM "_zero.changeLog2" WHERE stateVersion = ? AND "table" = ?
-    `,
-    version,
-    table,
-  );
+  /**
+   *
+   * @param backfilled The backfilling columns for which values were set. Note
+   *   that an empty list and the `undefined` value mean different things;
+   *   * An empty list indicates that a backfill is in progress but no
+   *     backfilling values were set. In this case, existing
+   *     backfillingColumnVersions are preserved.
+   *   * `undefined` indicates that there are no columns being backfilled.
+   *     In this case, any vestigial `backfillingColumnVersions` value
+   *     is cleared.
+   */
+  logSetOp(
+    version: LexiVersion,
+    pos: number,
+    table: string,
+    row: LiteRowKey,
+    backfilled: string[] | undefined,
+  ): string {
+    return this.#logRowOp(version, pos, table, row, SET_OP, backfilled);
+  }
 
-  db.run(
-    `
-    INSERT OR REPLACE INTO "_zero.changeLog2" (stateVersion, pos, "table", rowKey, op) 
-      VALUES (@version, -1, @table, @version, @op)
-    `,
-    {version, table, op},
-  );
+  logDeleteOp(
+    version: LexiVersion,
+    pos: number,
+    table: string,
+    row: LiteRowKey,
+  ): string {
+    // Note: For delete ops, it is always safe to clear the
+    //       backfillingColumnVersions because the backfill algorithm
+    //       understands that deletes apply to the whole row.
+    return this.#logRowOp(version, pos, table, row, DEL_OP, undefined);
+  }
+
+  #logRowOp(
+    version: LexiVersion,
+    pos: number,
+    table: string,
+    row: LiteRowKey,
+    op: string,
+    backfilled: string[] | undefined,
+  ): string {
+    const rowKey = stringify(normalizedKeyOrder(row));
+    if (backfilled === undefined) {
+      this.#logRowOpStmt.run({version, pos, table, rowKey, op});
+    } else {
+      const versions: Record<string, string> = {};
+      for (const col of backfilled) {
+        versions[col] = version;
+      }
+      this.#logRowOpWithBackfillStmt.run({
+        version,
+        pos,
+        table,
+        rowKey,
+        op,
+        backfillingColumnVersions: JSON.stringify(versions),
+      });
+    }
+    return rowKey;
+  }
+
+  logTruncateOp(version: LexiVersion, table: string) {
+    this.#logTableWideOpStmt.run({version, table, op: TRUNCATE_OP});
+  }
+
+  logResetOp(version: LexiVersion, table: string) {
+    this.#logTableWideOpStmt.run({version, table, op: RESET_OP});
+  }
 }
