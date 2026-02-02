@@ -1,6 +1,7 @@
 import {PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
 import {getSignedUrl} from '@aws-sdk/s3-request-presigner';
 import {nanoid} from 'nanoid';
+import {ALLOWED_CONTENT_TYPES} from '../../shared/consts.ts';
 
 if (!process.env.AWS_REGION) {
   // oxlint-disable-next-line no-console -- Configuration warning in demo app
@@ -29,14 +30,6 @@ const s3 =
     : undefined;
 
 const BUCKET_NAME = 'zbugs-image-uploads';
-
-const ALLOWED_CONTENT_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'image/svg+xml',
-];
 
 export async function getPresignedUrl(
   contentType: string,
