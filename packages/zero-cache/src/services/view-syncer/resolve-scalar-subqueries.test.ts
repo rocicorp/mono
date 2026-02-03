@@ -24,8 +24,8 @@ describe('resolve-scalar-subqueries', () => {
     db = new Database(lc, ':memory:');
     db.exec(/* sql */ `
       CREATE TABLE users (
-        id TEXT,
-        email TEXT,
+        id "text|NOT_NULL",
+        email "text|NOT_NULL",
         name TEXT,
         _0_version TEXT NOT NULL
       );
@@ -33,7 +33,7 @@ describe('resolve-scalar-subqueries', () => {
       CREATE UNIQUE INDEX users_email_key ON users (email ASC);
 
       CREATE TABLE issues (
-        id TEXT,
+        id "text|NOT_NULL",
         "ownerId" TEXT,
         title TEXT,
         _0_version TEXT NOT NULL
@@ -41,8 +41,8 @@ describe('resolve-scalar-subqueries', () => {
       CREATE UNIQUE INDEX issues_pkey ON issues (id ASC);
 
       CREATE TABLE "compoundKey" (
-        a TEXT,
-        b TEXT,
+        a "text|NOT_NULL",
+        b "text|NOT_NULL",
         val TEXT,
         _0_version TEXT NOT NULL
       );
@@ -71,12 +71,6 @@ describe('resolve-scalar-subqueries', () => {
     `);
 
     computeZqlSpecs(lc, db, tableSpecs);
-    // eslint-disable-next-line no-console
-    console.log('tableSpecs keys:', [...tableSpecs.keys()]);
-    for (const [k, v] of tableSpecs) {
-      // eslint-disable-next-line no-console
-      console.log(k, 'uniqueKeys:', v.tableSpec.uniqueKeys);
-    }
   });
 
   describe('extractLiteralEqualityConstraints', () => {
@@ -88,9 +82,7 @@ describe('resolve-scalar-subqueries', () => {
         right: {type: 'literal', value: 'alice@example.com'},
       };
       const result = extractLiteralEqualityConstraints(condition);
-      expect(result).toEqual(
-        new Map([['email', 'alice@example.com']]),
-      );
+      expect(result).toEqual(new Map([['email', 'alice@example.com']]));
     });
 
     test('ignores non-equality operators', () => {

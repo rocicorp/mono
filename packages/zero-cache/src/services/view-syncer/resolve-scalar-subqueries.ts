@@ -205,18 +205,13 @@ export function conditionToSQL(
     case 'simple': {
       const left = valueToSQL(condition.left, params);
       const right = valueToSQL(condition.right, params);
-      if (
-        condition.op === 'IN' ||
-        condition.op === 'NOT IN'
-      ) {
+      if (condition.op === 'IN' || condition.op === 'NOT IN') {
         // IN/NOT IN with array literal
         if (
           condition.right.type === 'literal' &&
           Array.isArray(condition.right.value)
         ) {
-          const placeholders = condition.right.value
-            .map(() => '?')
-            .join(', ');
+          const placeholders = condition.right.value.map(() => '?').join(', ');
           // The array values were already pushed in valueToSQL, but we
           // need to redo this properly. Remove the last param (the array)
           // and add individual values.
@@ -247,7 +242,9 @@ export function conditionToSQL(
         `Unexpected ${condition.type} condition in simple subquery WHERE`,
       );
     default:
-      throw new Error(`Unknown condition type: ${(condition as Condition).type}`);
+      throw new Error(
+        `Unknown condition type: ${(condition as Condition).type}`,
+      );
   }
 }
 
