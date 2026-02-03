@@ -75,7 +75,3 @@ export function min(...versions: AtLeastOne<LexiVersion>): LexiVersion {
   }
   return winner;
 }
-
-export function oneAfter(version: LexiVersion) {
-  return versionToLexi(versionFromLexi(version) + 1n);
-}
