@@ -4896,7 +4896,7 @@ describe('view-syncer/service', () => {
     );
   });
 
-  test('changeDesiredQueries errors after view-syncer shutdown', async () => {
+  test('stop waits for in-flight changeDesiredQueries', async () => {
     // Bring pipelines into the synced state so changeDesiredQueries hits
     // #syncQueryPipelineSet and currentPermissions.
     const client = connect(SYNC_CONTEXT, [
@@ -4907,7 +4907,7 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
     await nextPoke(client);
 
-    // Gate the CVR flush so we can shut down while a config update is in-flight.
+    // Gate the CVR flush so we can stop while a config update is in-flight.
     const {promise: flushStarted, resolve: signalFlushStarted} =
       resolver<void>();
     const allowFlush = resolver<void>();
@@ -4935,15 +4935,19 @@ describe('view-syncer/service', () => {
     ]);
 
     await flushStarted;
-    // Close the snapshotter DB while changeDesiredQueries is paused.
     try {
       await vs.stop();
       await viewSyncerDone;
       allowFlush.resolve();
       await changePromise;
 
-      // the error then will result in failing the client connection
-      expect(failSpy).not.toHaveBeenCalled();
+      // The in-flight update should be rejected with a Rehome error.
+      expect(failSpy).toHaveBeenCalled();
+      const lastError = failSpy.mock.calls.at(-1)?.[0];
+      expect(lastError).toBeInstanceOf(ProtocolError);
+      const protocolError = lastError as ProtocolError;
+      expect(protocolError.kind).toBe(ErrorKind.Rehome);
+      expect(protocolError.message).toBe('Reconnect required');
     } finally {
       allowFlush.resolve();
       flushSpy.mockRestore();

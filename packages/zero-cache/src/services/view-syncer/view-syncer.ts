@@ -368,22 +368,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#lock.withLock(async () => {
       this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
       const lc = this.#lc.withContext('lock', rid);
-      if (!this.#stateChanges.active) {
-        // view-syncer has been shutdown. this can be a backlog of tasks
-        // queued on the lock, or it can be a race condition in which a
-        // client connects before the ViewSyncer has been deleted from the
-        // ServiceRunner.
-        this.#lc.debug?.('state changes are inactive');
-        clearTimeout(this.#expiredQueriesTimer);
-        throw new ProtocolErrorWithLevel(
-          {
-            kind: ErrorKind.Rehome,
-            message: 'Reconnect required',
-            origin: ErrorOrigin.ZeroCache,
-          },
-          'info',
-        );
-      }
+      this.#ensureActive(lc);
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
         this.#lc.info?.(`closing clientGroupID=${this.id}`);
@@ -1119,6 +1104,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }, delay);
   }
 
+  #ensureActive(lc: LogContext) {
+    if (this.#stateChanges.active) {
+      return;
+    }
+    // view-syncer has been shutdown. this can be a backlog of tasks
+    // queued on the lock, or it can be a race condition in which a
+    // client connects before the ViewSyncer has been deleted from the
+    // ServiceRunner.
+    lc.debug?.('state changes are inactive');
+    clearTimeout(this.#expiredQueriesTimer);
+    throw new ProtocolErrorWithLevel(
+      {
+        kind: ErrorKind.Rehome,
+        message: 'Reconnect required',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'info',
+    );
+  }
+
   /**
    * Adds and hydrates pipelines for queries whose results are already
    * recorded in the CVR. Namely:
@@ -1363,6 +1368,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     customQueryTransformMode: CustomQueryTransformMode,
   ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async () => {
+      this.#ensureActive(lc);
       assert(
         this.#pipelines.initialized(),
         'pipelines must be initialized (syncQueryPipelineSet)',
