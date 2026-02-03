@@ -17,6 +17,7 @@ import type {
   Correlation,
   LiteralReference,
   Ordering,
+  ScalarSubqueryCondition,
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
@@ -304,6 +305,8 @@ function where(
       )})`;
     case 'correlatedSubquery':
       return exists(spec, condition, table);
+    case 'scalarSubquery':
+      return scalarSubquery(spec, condition, table);
     case 'simple':
       return simple(spec, condition, table);
   }
@@ -344,6 +347,38 @@ function exists(
         ),
       )})`;
   }
+}
+
+function scalarSubquery(
+  spec: Spec,
+  condition: ScalarSubqueryCondition,
+  parentTable: Table,
+): SQLQuery {
+  const parentFields = condition.field.map(f =>
+    colIdent(spec.server, {table: parentTable, zql: f}),
+  );
+
+  const subqueryTable = makeTable(spec, condition.subquery.table);
+  const subqueryCols = condition.column.map(c =>
+    colIdent(spec.server, {table: subqueryTable, zql: c}),
+  );
+
+  const op = sql.__dangerous__rawValue(condition.op);
+
+  const subqueryWhere = condition.subquery.where
+    ? sql`WHERE ${where(spec, condition.subquery.where, subqueryTable)}`
+    : sql``;
+  const subqueryOrderBy = orderBy(
+    spec,
+    condition.subquery.orderBy,
+    subqueryTable,
+  );
+
+  if (condition.field.length === 1) {
+    return sql`${parentFields[0]} ${op} (SELECT ${subqueryCols[0]} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
+  }
+
+  return sql`(${sql.join(parentFields, ', ')}) ${op} (SELECT ${sql.join(subqueryCols, ', ')} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
 }
 
 export function makeCorrelator(
