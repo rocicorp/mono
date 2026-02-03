@@ -36,7 +36,12 @@ dbs.sqlite.exec('ANALYZE;');
 const tables: {[key: string]: TableSchema} = schema.tables;
 // Get table specs using computeZqlSpecs
 const tableSpecs = new Map<string, LiteAndZqlSpec>();
-computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
+computeZqlSpecs(
+  createSilentLogContext(),
+  dbs.sqlite,
+  {includeBackfillingColumns: false},
+  tableSpecs,
+);
 
 // Create SQLite cost model
 const costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);

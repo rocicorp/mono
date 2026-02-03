@@ -143,6 +143,9 @@ function getReplicatedTables(db: Database): ReplicatedTable[] {
   const clientSchema = computeZqlSpecs(
     createSilentLogContext(), // avoid logging warnings about indexes
     db,
+    // TODO: Consider exposing backfilling columns with an indication
+    //       of backfill status.
+    {includeBackfillingColumns: false},
     new Map(),
     fullTables,
   );

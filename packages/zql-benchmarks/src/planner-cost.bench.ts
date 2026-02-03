@@ -1,20 +1,20 @@
 import {bench, run, summary} from 'mitata';
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {mapAST} from '../../zero-protocol/src/ast.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {TableSchema} from '../../zero-types/src/schema.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {planQuery} from '../../zql/src/planner/planner-builder.ts';
+import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
-import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
-import {must} from '../../shared/src/must.ts';
-import type {TableSchema} from '../../zero-types/src/schema.ts';
 
 const pgContent = await getChinook();
 
@@ -30,7 +30,12 @@ dbs.sqlite.exec('ANALYZE;');
 const tables: {[key: string]: TableSchema} = schema.tables;
 // Get table specs using computeZqlSpecs
 const tableSpecs = new Map<string, LiteAndZqlSpec>();
-computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
+computeZqlSpecs(
+  createSilentLogContext(),
+  dbs.sqlite,
+  {includeBackfillingColumns: false},
+  tableSpecs,
+);
 
 // Create SQLite cost model
 const costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
