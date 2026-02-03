@@ -408,6 +408,7 @@ export class Virtualizer<
   private anchorBeforeMeasurement: {
     key: Key;
     pixelOffset: number;
+    scrollOffset: number;
   } | null = null;
 
   private observer = (() => {
@@ -906,6 +907,7 @@ export class Virtualizer<
     this.anchorBeforeMeasurement = {
       key: anchorItem.key,
       pixelOffset,
+      scrollOffset, // Store scrollOffset for restoration
     };
 
     if (isDev && this.options.debug) {
@@ -941,8 +943,9 @@ export class Virtualizer<
     }
 
     // Calculate where the anchor should be now based on new measurements
-    // NOTE: We use computed position, NOT DOM position, because DOM hasn't updated yet
-    const scrollOffset = this.getScrollOffset();
+    // NOTE: We use the SAME scrollOffset that was captured during anchor capture
+    // to ensure consistency in our position calculations
+    const scrollOffset = anchor.scrollOffset;
     const currentPixelOffset = anchorMeasurement.start - scrollOffset;
 
     // Calculate the error (how far anchor moved from its original position)
@@ -1056,10 +1059,7 @@ export class Virtualizer<
     }
 
     if (node.isConnected) {
-      this.resizeItem(
-        index,
-        this.options.measureElement(node, entry, this),
-      );
+      this.resizeItem(index, this.options.measureElement(node, entry, this));
     }
   };
 
