@@ -55,6 +55,13 @@ function generateRows(
 
 const seed = 12345;
 
+// Helper to create row content with multiplier
+function createRowContent(rowIndex: number, multiplier: number): string {
+  const baseSentence =
+    'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ';
+  return `Row ${rowIndex} - ${baseSentence.repeat(multiplier)}`;
+}
+
 export function TanstackTestApp() {
   const [rows, setRows] = useState<RowData[]>(() => generateRows(100, 0, seed));
   const [selectedRowId, setSelectedRowId] = useState<string>('');
@@ -66,6 +73,7 @@ export function TanstackTestApp() {
   const [insertCount, setInsertCount] = useState<string>('10');
   const [autoMode, setAutoMode] = useState<boolean>(false);
   const [autoModeLog, setAutoModeLog] = useState<string[]>([]);
+  const [useFixedHeight, setUseFixedHeight] = useState<boolean>(false);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualItemsRef = useRef<
@@ -73,10 +81,22 @@ export function TanstackTestApp() {
   >([]);
   const rowsRef = useRef(rows);
 
+  const estimateSize = useCallback(
+    (index: number) => {
+      if (useFixedHeight) {
+        return DEFAULT_HEIGHT;
+      }
+      // Dynamic: estimate based on multiplier if known
+      const row = rows[index];
+      return row ? row.multiplier * 20 + 50 : DEFAULT_HEIGHT;
+    },
+    [useFixedHeight, rows],
+  );
+
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: useCallback(() => DEFAULT_HEIGHT, []),
+    estimateSize,
     getItemKey: useCallback(
       (index: number) => rows[index]?.id ?? index,
       [rows],
@@ -84,6 +104,54 @@ export function TanstackTestApp() {
     overscan: 5,
     debug,
   });
+
+  // Render a single row's content (shared between fixed and dynamic modes)
+  const renderRowContent = useCallback(
+    (
+      row: RowData,
+      virtualItem: ReturnType<typeof virtualizer.getVirtualItems>[0],
+    ) => (
+      <>
+        <div
+          onClick={() => {
+            setSelectedRowId(row.id);
+            setTextMultiplier(row.multiplier.toString());
+          }}
+          style={{
+            fontWeight: 'bold',
+            fontSize: '14px',
+            marginBottom: '4px',
+            cursor: 'pointer',
+            display: 'inline-block',
+          }}
+          title="Click to select for text change"
+        >
+          {row.id} (Index: {virtualItem.index})
+        </div>
+        <div
+          style={{
+            fontSize: '13px',
+            color: '#666',
+            marginBottom: '8px',
+          }}
+        >
+          Content: {row.content.length} chars | Position:{' '}
+          {virtualItem.start - (virtualizer.scrollOffset ?? 0)} | Size:{' '}
+          {virtualItem.size}px | Start: {virtualItem.start}px
+        </div>
+        <div
+          style={{
+            fontSize: '13px',
+            lineHeight: '1.5',
+            wordBreak: 'break-word',
+          }}
+        >
+          {row.content}
+        </div>
+      </>
+    ),
+    [virtualizer.scrollOffset],
+  );
 
   // Expose virtualizer and resizeRow for testing
   useEffect(() => {
@@ -107,12 +175,9 @@ export function TanstackTestApp() {
       }
       setRows(prev => {
         const updated = [...prev];
-        const baseSentence =
-          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ';
-        const newContent = `Row ${rowIndex} - ${baseSentence.repeat(multiplier)}`;
         updated[rowIndex] = {
           ...updated[rowIndex],
-          content: newContent,
+          content: createRowContent(rowIndex, multiplier),
           multiplier,
         };
         return updated;
@@ -124,6 +189,11 @@ export function TanstackTestApp() {
       delete w.resizeRow;
     };
   }, [virtualizer, rows.length, setRows]);
+
+  // Reset measurements when fixed height mode changes
+  useEffect(() => {
+    virtualizer.measure();
+  }, [useFixedHeight, virtualizer]);
 
   const handleChangeText = (showAlerts = false): boolean => {
     const multiplier = parseInt(textMultiplier, 10);
@@ -150,12 +220,9 @@ export function TanstackTestApp() {
 
     setRows(prev => {
       const updated = [...prev];
-      const baseSentence =
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ';
-      const newContent = `Row ${rowIndex} - ${baseSentence.repeat(multiplier)}`;
       updated[rowIndex] = {
         ...updated[rowIndex],
-        content: newContent,
+        content: createRowContent(rowIndex, multiplier),
         multiplier,
       };
       return updated;
@@ -177,12 +244,9 @@ export function TanstackTestApp() {
       if (rowIndex !== -1) {
         setRows(prev => {
           const updated = [...prev];
-          const baseSentence =
-            'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ';
-          const newContent = `Row ${rowIndex} - ${baseSentence.repeat(multiplier)}`;
           updated[rowIndex] = {
             ...updated[rowIndex],
-            content: newContent,
+            content: createRowContent(rowIndex, multiplier),
             multiplier,
           };
           return updated;
@@ -392,12 +456,9 @@ export function TanstackTestApp() {
         setRows(prev => {
           const updated = [...prev];
           if (updated[targetIdx]) {
-            const baseSentence =
-              'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ';
-            const newContent = `Row ${targetIdx} - ${baseSentence.repeat(newMultiplier)}`;
             updated[targetIdx] = {
               ...updated[targetIdx],
-              content: newContent,
+              content: createRowContent(targetIdx, newMultiplier),
               multiplier: newMultiplier,
             };
           }
@@ -670,6 +731,44 @@ export function TanstackTestApp() {
           </button>
         </div>
 
+        {/* Performance Options */}
+        <div
+          style={{
+            marginBottom: '20px',
+            padding: '12px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '4px',
+          }}
+        >
+          <h3 style={{margin: '0 0 8px 0', fontSize: '14px'}}>
+            Performance Options
+          </h3>
+          <div style={{marginBottom: '8px'}}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={useFixedHeight}
+                onChange={e => {
+                  setUseFixedHeight(e.target.checked);
+                }}
+                style={{marginRight: '6px'}}
+              />
+              Use Fixed Row Heights
+            </label>
+          </div>
+          <div style={{fontSize: '11px', color: '#666'}}>
+            When enabled, all rows use fixed 100px height with absolute
+            positioning and transform translateY.
+          </div>
+        </div>
+
         {/* Auto Mode */}
         <div
           style={{
@@ -799,16 +898,9 @@ export function TanstackTestApp() {
                 position: 'relative',
               }}
             >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
-                }}
-              >
-                {virtualItems.map(virtualItem => {
+              {useFixedHeight ? (
+                // Fixed height mode: use transform translateY positioning
+                virtualItems.map(virtualItem => {
                   const row = rows[virtualItem.index];
                   if (!row) return null;
 
@@ -816,59 +908,63 @@ export function TanstackTestApp() {
                     <div
                       key={row.id}
                       data-index={virtualItem.index}
-                      data-key={row.id}
-                      ref={virtualizer.measureElement}
                       style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: `${DEFAULT_HEIGHT}px`,
+                        transform: `translateY(${virtualItem.start}px)`,
                         padding: '16px',
                         borderBottom: '1px solid #eee',
                         backgroundColor:
                           selectedRowId === row.id ? '#fff3cd' : '#fff',
                         boxSizing: 'border-box',
+                        overflow: 'hidden',
                         display: 'flex',
                         flexDirection: 'column',
                       }}
                     >
-                      <div
-                        onClick={() => {
-                          setSelectedRowId(row.id);
-                          setTextMultiplier(row.multiplier.toString());
-                        }}
-                        style={{
-                          fontWeight: 'bold',
-                          fontSize: '14px',
-                          marginBottom: '4px',
-                          cursor: 'pointer',
-                          display: 'inline-block',
-                        }}
-                        title="Click to select for text change"
-                      >
-                        {row.id} (Index: {virtualItem.index})
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          color: '#666',
-                          marginBottom: '8px',
-                        }}
-                      >
-                        Content: {row.content.length} chars | Position:{' '}
-                        {virtualItem.start - (virtualizer.scrollOffset ?? 0)} |
-                        Size: {virtualItem.size}px | Start: {virtualItem.start}
-                        px
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          lineHeight: '1.5',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {row.content}
-                      </div>
+                      {renderRowContent(row, virtualItem)}
                     </div>
                   );
-                })}
-              </div>
+                })
+              ) : (
+                // Dynamic height mode: use wrapper with translateY + measureElement
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
+                  }}
+                >
+                  {virtualItems.map(virtualItem => {
+                    const row = rows[virtualItem.index];
+                    if (!row) return null;
+
+                    return (
+                      <div
+                        key={row.id}
+                        data-index={virtualItem.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          padding: '16px',
+                          borderBottom: '1px solid #eee',
+                          backgroundColor:
+                            selectedRowId === row.id ? '#fff3cd' : '#fff',
+                          boxSizing: 'border-box',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        {renderRowContent(row, virtualItem)}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
