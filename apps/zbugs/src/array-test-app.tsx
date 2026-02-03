@@ -268,6 +268,62 @@ function ArrayTestAppContent() {
     debug,
   ]);
 
+  // Auto-shift anchor backward when scrolling near the start of the data window
+  useEffect(() => {
+    if (virtualItems.length === 0 || !complete || atStart) {
+      return;
+    }
+
+    const firstItem = virtualItems[0];
+    // Convert virtualizer index to logical index
+    const firstLogicalIndex = toLogicalIndex(firstItem.index);
+
+    // How far is the first visible item from the start of our data window?
+    const distanceFromStart = firstLogicalIndex - firstRowIndex;
+
+    // Threshold: shift anchor when we're within 10% of page size from the start
+    const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE / 10);
+
+    if (distanceFromStart <= nearPageEdgeThreshold) {
+      // Shift anchor backward: use last visible item as new anchor
+      const lastItem = virtualItems[virtualItems.length - 1];
+      const lastLogicalIndex = toLogicalIndex(lastItem.index);
+      const lastDataIndex = firstRowIndex + rowsLength - 1;
+      // Go forward a bit from the last visible to have room to scroll down
+      const newAnchorIndex = Math.min(
+        lastDataIndex,
+        lastLogicalIndex + 2 * nearPageEdgeThreshold,
+      );
+      const newAnchorRow = rowAt(newAnchorIndex);
+
+      if (newAnchorRow && newAnchorIndex !== anchorIndex) {
+        if (debug) {
+          console.log(
+            '[AutoAnchor] Shifting backward:',
+            'distanceFromStart=',
+            distanceFromStart,
+            'newAnchorIndex=',
+            newAnchorIndex,
+          );
+        }
+        setAnchorKind('backward');
+        setAnchorIndex(newAnchorIndex);
+        setStartRow(toStartRow(newAnchorRow));
+        setPermalinkID(undefined);
+      }
+    }
+  }, [
+    virtualItems,
+    complete,
+    atStart,
+    firstRowIndex,
+    rowsLength,
+    toLogicalIndex,
+    rowAt,
+    anchorIndex,
+    debug,
+  ]);
+
   return (
     <div
       style={{
