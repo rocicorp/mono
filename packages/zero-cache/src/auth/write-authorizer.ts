@@ -110,7 +110,9 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       addEdge() {},
       decorateFilterInput: input => input,
     };
-    this.#tableSpecs = computeZqlSpecs(this.#lc, replica);
+    this.#tableSpecs = computeZqlSpecs(this.#lc, replica, {
+      includeBackfillingColumns: false,
+    });
     this.#statementRunner = new StatementRunner(replica);
     this.reloadPermissions();
   }
