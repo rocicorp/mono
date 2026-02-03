@@ -256,6 +256,7 @@ function replicaStats(lc: LogContext, config: ZeroConfig, out: Writable) {
   );
 
   try {
+    out.write('\n');
     printStats('replication', getReplicationStats(db), out);
   } catch (e) {
     lc.error?.(`unable to get replication state`, e);
