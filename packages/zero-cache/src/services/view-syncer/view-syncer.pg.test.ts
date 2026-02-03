@@ -73,9 +73,14 @@ import {
 } from './view-syncer-test-util.ts';
 import type {ViewSyncerService} from './view-syncer.ts';
 import {ClientHandler} from './client-handler.ts';
+import {PipelineDriver} from './pipeline-driver.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   let storageDB: Database;
   let replicaDbFile: DbFile;
   let replica: Database;
@@ -4912,17 +4917,24 @@ describe('view-syncer/service', () => {
       resolver<void>();
     const allowFlush = resolver<void>();
     const originalFlush = CVRUpdater.prototype.flush;
-    const flushSpy = vi
-      .spyOn(CVRUpdater.prototype, 'flush')
-      .mockImplementation(async function (
-        this: CVRUpdater,
-        ...args: Parameters<CVRUpdater['flush']>
-      ) {
-        signalFlushStarted();
-        await allowFlush.promise;
-        return originalFlush.apply(this, args);
-      });
+    vi.spyOn(CVRUpdater.prototype, 'flush').mockImplementation(async function (
+      this: CVRUpdater,
+      ...args: Parameters<CVRUpdater['flush']>
+    ) {
+      signalFlushStarted();
+      await allowFlush.promise;
+      return originalFlush.apply(this, args);
+    });
     const failSpy = vi.spyOn(ClientHandler.prototype, 'fail');
+    let flushReleased = false;
+    let destroyCalledAfterRelease = false;
+    const originalDestroy = PipelineDriver.prototype.destroy;
+    const destroySpy = vi
+      .spyOn(PipelineDriver.prototype, 'destroy')
+      .mockImplementation(function (this: PipelineDriver) {
+        destroyCalledAfterRelease = flushReleased;
+        return originalDestroy.call(this);
+      });
 
     // Start the config update; it will block on the flush gate.
     const changePromise = vs.changeDesiredQueries(SYNC_CONTEXT, [
@@ -4935,23 +4947,14 @@ describe('view-syncer/service', () => {
     ]);
 
     await flushStarted;
-    try {
-      await vs.stop();
-      await viewSyncerDone;
-      allowFlush.resolve();
-      await changePromise;
+    const stopPromise = vs.stop();
+    flushReleased = true;
+    allowFlush.resolve();
+    await Promise.all([stopPromise, viewSyncerDone, changePromise]);
 
-      // The in-flight update should be rejected with a Rehome error.
-      expect(failSpy).toHaveBeenCalled();
-      const lastError = failSpy.mock.calls.at(-1)?.[0];
-      expect(lastError).toBeInstanceOf(ProtocolError);
-      const protocolError = lastError as ProtocolError;
-      expect(protocolError.kind).toBe(ErrorKind.Rehome);
-      expect(protocolError.message).toBe('Reconnect required');
-    } finally {
-      allowFlush.resolve();
-      flushSpy.mockRestore();
-      failSpy.mockRestore();
-    }
+    // The in-flight update should finish without failing the client.
+    expect(failSpy).not.toHaveBeenCalled();
+    expect(destroySpy).toHaveBeenCalled();
+    expect(destroyCalledAfterRelease).toBe(true);
   });
 });
