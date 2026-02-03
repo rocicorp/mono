@@ -997,7 +997,7 @@ export class Virtualizer<
     if (!keysChanged) {
       // Keys unchanged - leave anchor as-is (don't clear it)
       if (isDev && debug) {
-        console.info('[Splice] keys unchanged, preserving anchor state');
+        console.debug('[Splice] keys unchanged, preserving anchor state');
       }
       return;
     }
