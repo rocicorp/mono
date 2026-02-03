@@ -11,7 +11,7 @@ import {isAdminPasswordValid} from '../config/zero-config.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
-import {fromLexiVersion} from './change-source/pg/lsn.ts';
+import {fromStateVersionString} from './change-source/pg/lsn.ts';
 import {getReplicationState} from './replicator/schema/replication-state.ts';
 
 async function upstreamStats(lc: LogContext, config: ZeroConfig) {
@@ -242,7 +242,7 @@ function replicationStats(lc: LogContext, config: ZeroConfig) {
 
 function getReplicationStats(db: Database) {
   const {stateVersion} = getReplicationState(new StatementRunner(db));
-  const lsn = fromLexiVersion(stateVersion);
+  const lsn = fromStateVersionString(stateVersion);
   return {lsn};
 }
 
