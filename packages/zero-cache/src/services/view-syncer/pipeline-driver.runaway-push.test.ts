@@ -254,9 +254,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(() => {
       for (const _ of pipelines.advance({
         elapsedLap: () => 0,
-        totalElapsed: () => {
-          return (changeCount + 1) * 100;
-        },
+        totalElapsed: () => (changeCount + 1) * 100,
       }).changes) {
         changeCount++;
       }
