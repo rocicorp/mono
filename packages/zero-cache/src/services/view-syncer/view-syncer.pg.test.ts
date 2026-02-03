@@ -3074,6 +3074,77 @@ describe('view-syncer/service', () => {
     `);
   });
 
+  test('ignores deleteClients from old wsID', async () => {
+    const ttl = 5000; // 5s
+    vi.setSystemTime(Date.UTC(2025, 2, 4));
+
+    const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+    ]);
+
+    const {queue: client2, source: connectSource2} = connectWithQueueAndSource(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY, ttl}],
+    );
+
+    await nextPoke(client1);
+    await nextPoke(client2);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(client1);
+    await nextPoke(client1);
+
+    await nextPoke(client2);
+    await nextPoke(client2);
+
+    connectSource2.cancel();
+
+    const deletedClientIDs = await vs.deleteClients(
+      {...SYNC_CONTEXT, wsID: 'old-wsid'},
+      ['deleteClients', {clientIDs: ['bar']}],
+    );
+
+    expect(deletedClientIDs).toEqual([]);
+    await expectNoPokes(client1);
+
+    expect(
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`,
+    ).toMatchInlineSnapshot(
+      `
+      Result [
+        {
+          "clientID": "foo",
+        },
+        {
+          "clientID": "bar",
+        },
+      ]
+    `,
+    );
+
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "ttl", "inactivatedAt" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "foo",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hash1",
+          "ttl": "00:00:05",
+        },
+        {
+          "clientID": "bar",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hash2",
+          "ttl": "00:00:05",
+        },
+      ]
+    `);
+  });
+
   test('activeClients inactivates queries from inactive clients', async () => {
     const ttl = 5000; // 5s
     vi.setSystemTime(Date.UTC(2025, 5, 30));
