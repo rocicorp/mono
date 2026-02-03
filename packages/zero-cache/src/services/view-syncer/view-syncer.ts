@@ -81,6 +81,7 @@ import type {DrainCoordinator} from './drain-coordinator.ts';
 import {handleInspect} from './inspect-handler.ts';
 import type {PipelineDriver} from './pipeline-driver.ts';
 import {type RowChange} from './pipeline-driver.ts';
+import {resolveSimpleScalarSubqueries} from './resolve-scalar-subqueries.ts';
 import {
   cmpVersions,
   EMPTY_CVR_VERSION,
@@ -1233,6 +1234,45 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
+      // Resolve scalar subqueries and hydrate companions before parent.
+      const {ast: resolvedAST, companions} = resolveSimpleScalarSubqueries(
+        transformedAst,
+        this.#pipelines.tableSpecs,
+        this.#pipelines.currentDB,
+      );
+
+      const companionIDs: string[] = [];
+      for (let i = 0; i < companions.length; i++) {
+        const companionID = `scalar:${queryID}:${i}`;
+        companionIDs.push(companionID);
+
+        // Persist companion internal query to the CVR store so it
+        // participates in row tracking. The CVRSnapshot is readonly,
+        // but the store is the source of truth.
+        if (!cvr.queries[companionID]) {
+          this.#cvrStore.putQuery({
+            id: companionID,
+            ast: companions[i].ast,
+            type: 'internal',
+          } satisfies InternalQueryRecord);
+        }
+
+        // Hydrate companion pipeline.
+        const companionTimer = new TimeSliceTimer(lc);
+        for (const change of this.#pipelines.addQuery(
+          companionID,
+          companionID,
+          companions[i].ast,
+          await companionTimer.start(),
+        )) {
+          if (change === 'yield') {
+            await companionTimer.yieldProcess(
+              'yield in hydrateUnchangedQueries companion',
+            );
+          }
+        }
+      }
+
       const timer = new TimeSliceTimer(lc);
       let count = 0;
       await startAsyncSpan(
@@ -1241,12 +1281,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         async span => {
           span.setAttribute('queryHash', queryID);
           span.setAttribute('transformationHash', transformationHash);
-          span.setAttribute('table', transformedAst.table);
+          span.setAttribute('table', resolvedAST.table);
           for (const change of this.#pipelines.addQuery(
             transformationHash,
             queryID,
-            transformedAst,
+            resolvedAST,
             await timer.start(),
+            transformedAst,
+            companionIDs,
           )) {
             if (change === 'yield') {
               await timer.yieldProcess('yield in hydrateUnchangedQueries');
@@ -1622,6 +1664,49 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc = lc.withContext('stateVersion', stateVersion);
       lc.info?.(`hydrating ${addQueries.length} queries`);
 
+      // Resolve scalar subqueries and collect companion queries.
+      // Each companion is a query that syncs the scalar subquery's lookup
+      // table rows so the client can evaluate the EXISTS rewrite.
+      const resolvedAddQueries: {
+        id: string;
+        ast: AST;
+        originalAST: AST;
+        transformationHash: string;
+        companionIDs: string[];
+      }[] = [];
+      const companionQueries: {
+        id: string;
+        ast: AST;
+        parentID: string;
+      }[] = [];
+
+      for (const q of addQueries) {
+        const {ast: resolvedAST, companions} = resolveSimpleScalarSubqueries(
+          q.ast,
+          this.#pipelines.tableSpecs,
+          this.#pipelines.currentDB,
+        );
+
+        const companionIDs: string[] = [];
+        for (let i = 0; i < companions.length; i++) {
+          const companionID = `scalar:${q.id}:${i}`;
+          companionIDs.push(companionID);
+          companionQueries.push({
+            id: companionID,
+            ast: companions[i].ast,
+            parentID: q.id,
+          });
+        }
+
+        resolvedAddQueries.push({
+          id: q.id,
+          ast: resolvedAST,
+          originalAST: q.ast,
+          transformationHash: q.transformationHash,
+          companionIDs,
+        });
+      }
+
       const updater = new CVRQueryDrivenUpdater(
         this.#cvrStore,
         cvr,
@@ -1629,27 +1714,53 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#pipelines.replicaVersion,
       );
 
+      // Register companion queries as internal queries in the CVR
+      // via the updater (which has a mutable copy of the CVR).
+      for (const c of companionQueries) {
+        updater.putInternalQuery({
+          id: c.id,
+          ast: c.ast,
+          type: 'internal',
+        });
+      }
+
+      // Build the full list of executed queries: companions + parents.
+      const allExecuted: {id: string; transformationHash: string}[] = [
+        ...companionQueries.map(c => ({
+          id: c.id,
+          transformationHash: c.id, // Companions use their ID as hash
+        })),
+        ...resolvedAddQueries.map(q => ({
+          id: q.id,
+          transformationHash: q.transformationHash,
+        })),
+      ];
+
+      // Collect companion IDs to also remove when removing parent queries.
+      const allRemoved: {id: string}[] = [...removeQueries];
+      for (const q of removeQueries) {
+        const removedCompanions = this.#pipelines.removeQuery(q.id);
+        for (const companionID of removedCompanions) {
+          allRemoved.push({id: companionID});
+          updater.removeInternalQuery(companionID);
+        }
+        // Remove per-query server metrics when query is deleted
+        this.#inspectorDelegate.removeQuery(q.id);
+        // Clean up thrashing detection for removed queries
+        this.#queryReplacements.delete(q.id);
+      }
+
       // Note: This kicks off background PG queries for CVR data associated with the
       // executed and removed queries.
       const {newVersion, queryPatches} = updater.trackQueries(
         lc,
-        addQueries,
-        removeQueries,
+        allExecuted,
+        allRemoved,
       );
       const clients = this.#getClients();
       const pokers = startPoke(clients, newVersion);
       for (const patch of queryPatches) {
         await pokers.addPatch(patch);
-      }
-
-      // Removing queries is easy. The pipelines are dropped, and the CVR
-      // updater handles the updates and pokes.
-      for (const q of removeQueries) {
-        this.#pipelines.removeQuery(q.id);
-        // Remove per-query server metrics when query is deleted
-        this.#inspectorDelegate.removeQuery(q.id);
-        // Clean up thrashing detection for removed queries
-        this.#queryReplacements.delete(q.id);
       }
 
       let totalProcessTime = 0;
@@ -1665,7 +1776,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await yieldProcess(lc);
 
       function* generateRowChanges(slowHydrateThreshold: number) {
-        for (const q of addQueries) {
+        // Hydrate companion queries first so their rows are synced
+        // before the parent query is hydrated.
+        for (const c of companionQueries) {
+          lc.debug?.(`adding companion pipeline for ${c.id}`);
+          yield* pipelines.addQuery(
+            c.id, // use companion ID as transformation hash
+            c.id,
+            c.ast,
+            timer.startWithoutYielding(),
+          );
+          timer.stop();
+        }
+
+        for (const q of resolvedAddQueries) {
           lc = lc
             .withContext('hash', q.id)
             .withContext('transformationHash', q.transformationHash);
@@ -1676,6 +1800,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             q.id,
             q.ast,
             timer.startWithoutYielding(),
+            q.originalAST,
+            q.companionIDs,
           );
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
@@ -1717,7 +1843,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         lc,
         cvr,
         finalVersion,
-        addQueries.map(q => q.id),
+        [
+          ...resolvedAddQueries.map(q => q.id),
+          ...companionQueries.map(c => c.id),
+        ],
         pokers,
       );
 

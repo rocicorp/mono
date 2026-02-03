@@ -70,7 +70,7 @@ describe('resolve-scalar-subqueries', () => {
       VALUES ('x', 'y', 'found', '1');
     `);
 
-    computeZqlSpecs(lc, db, tableSpecs);
+    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}, tableSpecs);
   });
 
   describe('extractLiteralEqualityConstraints', () => {
@@ -390,20 +390,32 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toEqual({
+      expect(result.ast.where).toEqual({
         type: 'simple',
         op: '=',
         left: {type: 'column', name: 'ownerId'},
         right: {type: 'literal', value: 'u1'},
       });
+      // Companion should contain the subquery AST
+      expect(result.companions).toHaveLength(1);
+      expect(result.companions[0].ast).toEqual({
+        table: 'users',
+        alias: 'zsubq_scalar_users',
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'email'},
+          right: {type: 'literal', value: 'alice@example.com'},
+        },
+      });
     });
 
-    test('resolves simple != scalar subquery', () => {
+    test('resolves simple IS NOT scalar subquery', () => {
       const ast: AST = {
         table: 'issues',
         where: {
           type: 'scalarSubquery',
-          op: '!=',
+          op: 'IS NOT',
           field: ['ownerId'],
           subquery: {
             table: 'users',
@@ -420,9 +432,9 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toEqual({
+      expect(result.ast.where).toEqual({
         type: 'simple',
-        op: '!=',
+        op: 'IS NOT',
         left: {type: 'column', name: 'ownerId'},
         right: {type: 'literal', value: 'u1'},
       });
@@ -450,7 +462,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toEqual({
+      expect(result.ast.where).toEqual({
         type: 'simple',
         op: '=',
         left: {type: 'literal', value: 1},
@@ -486,7 +498,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toEqual({
+      expect(result.ast.where).toEqual({
         type: 'simple',
         op: '=',
         left: {type: 'literal', value: 1},
@@ -518,7 +530,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toBe(condition);
+      expect(result.ast.where).toBe(condition);
     });
 
     test('leaves compound field scalar subquery unchanged', () => {
@@ -544,7 +556,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toBe(condition);
+      expect(result.ast.where).toBe(condition);
     });
 
     test('resolves scalar subquery nested in AND', () => {
@@ -580,7 +592,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toEqual({
+      expect(result.ast.where).toEqual({
         type: 'and',
         conditions: [
           {
@@ -632,7 +644,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toEqual({
+      expect(result.ast.where).toEqual({
         type: 'or',
         conditions: [
           {
@@ -684,7 +696,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toEqual({
+      expect(result.ast.where).toEqual({
         type: 'simple',
         op: '=',
         left: {type: 'column', name: 'ownerId'},
@@ -726,7 +738,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.related![0].subquery.where).toEqual({
+      expect(result.ast.related![0].subquery.where).toEqual({
         type: 'simple',
         op: '=',
         left: {type: 'column', name: 'ownerId'},
@@ -747,7 +759,7 @@ describe('resolve-scalar-subqueries', () => {
       };
 
       const result = resolveSimpleScalarSubqueries(ast, tableSpecs, db);
-      expect(result.where).toBe(condition);
+      expect(result.ast.where).toBe(condition);
     });
   });
 });

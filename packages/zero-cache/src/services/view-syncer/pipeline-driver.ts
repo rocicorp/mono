@@ -76,12 +76,16 @@ type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
   readonly transformedAst: AST;
+  readonly originalAST: AST;
   readonly transformationHash: string;
+  readonly companionQueryIDs: string[];
 };
 
 type QueryInfo = {
   readonly transformedAst: AST;
+  readonly originalAST: AST;
   readonly transformationHash: string;
+  readonly companionQueryIDs: string[];
 };
 
 type AdvanceContext = {
@@ -234,6 +238,16 @@ export class PipelineDriver {
     return must(this.#replicaVersion, 'Not yet initialized');
   }
 
+  /** @returns The table specs for the current snapshot. Must be initialized. */
+  get tableSpecs(): Map<string, LiteAndZqlSpec> {
+    return this.#tableSpecs;
+  }
+
+  /** @returns The current SQLite database. Must be initialized. */
+  get currentDB(): Database {
+    return this.#snapshotter.current().db.db;
+  }
+
   /**
    * Returns the current version of the database. This will reflect the
    * latest version change when calling {@link advance()} once the
@@ -329,6 +343,8 @@ export class PipelineDriver {
     queryID: string,
     query: AST,
     timer: Timer,
+    originalAST?: AST | undefined,
+    companionQueryIDs?: string[] | undefined,
   ): Iterable<RowChange | 'yield'> {
     assert(
       this.initialized(),
@@ -340,16 +356,6 @@ export class PipelineDriver {
       : undefined;
 
     const costModel = this.#ensureCostModelExistsIfEnabled(
-      this.#snapshotter.current().db.db,
-    );
-
-    // Resolve simple scalar subqueries (ones with unique-key literal
-    // constraints) by executing them against SQLite and replacing them
-    // with literal conditions. Non-simple subqueries continue to the
-    // existing EXISTS rewrite in buildPipelineInternal.
-    query = resolveSimpleScalarSubqueries(
-      query,
-      this.#tableSpecs,
       this.#snapshotter.current().db.db,
     );
 
@@ -426,20 +432,35 @@ export class PipelineDriver {
       input,
       hydrationTimeMs,
       transformedAst: query,
+      originalAST: originalAST ?? query,
       transformationHash,
+      companionQueryIDs: companionQueryIDs ?? [],
     });
   }
 
   /**
-   * Removes the pipeline for the query. This is a no-op if the query
-   * was not added.
+   * Removes the pipeline for the query and any associated companion
+   * pipelines. This is a no-op if the query was not added.
+   *
+   * @returns The companion query IDs that were removed, or an empty
+   * array if the query had no companions or was not found.
    */
-  removeQuery(queryID: string) {
+  removeQuery(queryID: string): string[] {
     const pipeline = this.#pipelines.get(queryID);
     if (pipeline) {
       this.#pipelines.delete(queryID);
       pipeline.input.destroy();
+      // Remove companion pipelines
+      for (const companionID of pipeline.companionQueryIDs) {
+        const companion = this.#pipelines.get(companionID);
+        if (companion) {
+          this.#pipelines.delete(companionID);
+          companion.input.destroy();
+        }
+      }
+      return pipeline.companionQueryIDs;
     }
+    return [];
   }
 
   /**
@@ -502,6 +523,7 @@ export class PipelineDriver {
       pos: 0,
     };
     try {
+      const changedTables = new Set<string>();
       for (const {table, prevValues, nextValue} of diff) {
         // Advance progress is checked each time a row is fetched
         // from a TableSource during push processing, but some pushes
@@ -518,6 +540,7 @@ export class PipelineDriver {
             // no pipelines read from this table, so no need to process the change
             continue;
           }
+          changedTables.add(table);
           const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
           let editOldRow: Row | undefined = undefined;
           for (const prevValue of prevValues) {
@@ -570,9 +593,80 @@ export class PipelineDriver {
         table.setDB(curr.db.db);
       }
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
+
+      // Re-resolve parent queries whose companion table data changed.
+      // This detects when a scalar subquery's resolved literal changes
+      // (e.g., user email changed → different user ID).
+      yield* this.#reResolveCompanionParents(changedTables, timer);
+
       this.#lc.debug?.(`Advanced to ${curr.version}`);
     } finally {
       this.#advanceContext = null;
+    }
+  }
+
+  /**
+   * After an advancement, checks if any companion query's source table
+   * changed. If so, re-resolves the parent's original AST against the
+   * current SQLite snapshot. If the resolved literal changed, removes and
+   * re-adds the parent pipeline, yielding the resulting row changes.
+   */
+  *#reResolveCompanionParents(
+    changedTables: Set<string>,
+    timer: Timer,
+  ): Iterable<RowChange | 'yield'> {
+    if (changedTables.size === 0) {
+      return;
+    }
+
+    // Find parent pipelines that have companions whose tables changed.
+    const parentsToReResolve: [string, Pipeline][] = [];
+    for (const [queryID, pipeline] of this.#pipelines) {
+      if (pipeline.companionQueryIDs.length === 0) {
+        continue;
+      }
+      // Check if any companion's table was in the changed set.
+      for (const companionID of pipeline.companionQueryIDs) {
+        const companion = this.#pipelines.get(companionID);
+        if (companion && changedTables.has(companion.transformedAst.table)) {
+          parentsToReResolve.push([queryID, pipeline]);
+          break;
+        }
+      }
+    }
+
+    for (const [queryID, pipeline] of parentsToReResolve) {
+      const {ast: newResolved} = resolveSimpleScalarSubqueries(
+        pipeline.originalAST,
+        this.#tableSpecs,
+        this.#snapshotter.current().db.db,
+      );
+
+      // Compare the new resolved AST with the old one by checking
+      // if the transformation hash (based on resolved AST) changed.
+      if (deepEqual(newResolved, pipeline.transformedAst)) {
+        continue; // Resolved literal unchanged; no rebuild needed.
+      }
+
+      this.#lc.debug?.(
+        `Companion data changed for ${queryID}, rebuilding pipeline`,
+      );
+
+      // Remove and re-add the parent pipeline with the new resolved AST.
+      // Preserve the original AST and companion IDs.
+      const {companionQueryIDs, originalAST, transformationHash} = pipeline;
+      this.#pipelines.delete(queryID);
+      pipeline.input.destroy();
+      // Don't remove companions — they're still valid.
+
+      yield* this.addQuery(
+        transformationHash,
+        queryID,
+        newResolved,
+        timer,
+        originalAST,
+        companionQueryIDs,
+      );
     }
   }
 

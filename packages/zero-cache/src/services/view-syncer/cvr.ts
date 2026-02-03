@@ -570,6 +570,25 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   /**
+   * Registers an internal query in the CVR if it doesn't already exist.
+   * This must be called before {@link trackQueries} for any companion
+   * or other internal queries that need to participate in tracking.
+   */
+  putInternalQuery(query: InternalQueryRecord): void {
+    if (!this._cvr.queries[query.id]) {
+      this._cvr.queries[query.id] = query;
+      this._cvrStore.putQuery(query);
+    }
+  }
+
+  /**
+   * Removes an internal query from the CVR.
+   */
+  removeInternalQuery(queryID: string): void {
+    delete this._cvr.queries[queryID];
+  }
+
+  /**
    * Initiates the tracking of the specified `executed` and `removed` queries.
    * This kicks of a lookup of existing {@link RowRecord}s currently associated
    * with those queries, which will be used to reconcile the rows to keep

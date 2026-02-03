@@ -8,6 +8,16 @@ import type {
 import type {Database} from '../../../../zqlite/src/db.ts';
 import type {LiteAndZqlSpec} from '../../db/specs.ts';
 
+export type CompanionSubquery = {
+  /** The original scalar subquery AST (the subquery table query). */
+  ast: AST;
+};
+
+export type ResolveResult = {
+  ast: AST;
+  companions: CompanionSubquery[];
+};
+
 /**
  * Resolves "simple" scalar subqueries by executing them against SQLite
  * and replacing them with literal conditions. A scalar subquery is simple
@@ -17,27 +27,33 @@ import type {LiteAndZqlSpec} from '../../db/specs.ts';
  *
  * Non-simple scalar subqueries are left untouched for the existing
  * EXISTS rewrite in buildPipelineInternal.
+ *
+ * Returns the resolved AST and a list of companion subquery ASTs whose
+ * rows need to be synced to the client for the EXISTS rewrite to work.
  */
 export function resolveSimpleScalarSubqueries(
   ast: AST,
   tableSpecs: Map<string, LiteAndZqlSpec>,
   db: Database,
-): AST {
-  return resolveASTRecursive(ast, tableSpecs, db);
+): ResolveResult {
+  const companions: CompanionSubquery[] = [];
+  const resolved = resolveASTRecursive(ast, tableSpecs, db, companions);
+  return {ast: resolved, companions};
 }
 
 function resolveASTRecursive(
   ast: AST,
   tableSpecs: Map<string, LiteAndZqlSpec>,
   db: Database,
+  companions: CompanionSubquery[],
 ): AST {
   const where = ast.where
-    ? resolveCondition(ast.where, tableSpecs, db)
+    ? resolveCondition(ast.where, tableSpecs, db, companions)
     : undefined;
 
   const related = ast.related?.map(r => ({
     ...r,
-    subquery: resolveASTRecursive(r.subquery, tableSpecs, db),
+    subquery: resolveASTRecursive(r.subquery, tableSpecs, db, companions),
   }));
 
   if (where !== ast.where || related !== ast.related) {
@@ -50,14 +66,15 @@ function resolveCondition(
   condition: Condition,
   tableSpecs: Map<string, LiteAndZqlSpec>,
   db: Database,
+  companions: CompanionSubquery[],
 ): Condition {
   switch (condition.type) {
     case 'scalarSubquery':
-      return resolveScalarSubquery(condition, tableSpecs, db);
+      return resolveScalarSubquery(condition, tableSpecs, db, companions);
     case 'and':
     case 'or': {
       const resolved = condition.conditions.map(c =>
-        resolveCondition(c, tableSpecs, db),
+        resolveCondition(c, tableSpecs, db, companions),
       );
       if (resolved.every((c, i) => c === condition.conditions[i])) {
         return condition;
@@ -73,6 +90,7 @@ function resolveScalarSubquery(
   condition: ScalarSubqueryCondition,
   tableSpecs: Map<string, LiteAndZqlSpec>,
   db: Database,
+  companions: CompanionSubquery[],
 ): Condition {
   // Only handle single-column field and column references
   if (condition.field.length > 1 || condition.column.length > 1) {
@@ -85,6 +103,10 @@ function resolveScalarSubquery(
   }
 
   const value = executeScalarSubquery(subquery, condition.column[0], db);
+
+  // Record the companion subquery AST so its rows are synced to the client.
+  // The client rewrites scalar subqueries to EXISTS and needs those rows.
+  companions.push({ast: subquery});
 
   if (value === undefined || value === null) {
     // No rows or NULL value — both x = NULL and x != NULL are false in SQL
