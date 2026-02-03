@@ -1,3 +1,4 @@
+import {deepEqual} from '../../shared/src/json.ts';
 import type {Anchor} from './use-rows.ts';
 
 type QueryAnchor<TListContextParams, TStartRow> = {
@@ -26,14 +27,14 @@ export type PagingState<TListContextParams, TStartRow> = {
   hasReachedStart: boolean;
   hasReachedEnd: boolean;
   queryAnchor: QueryAnchor<TListContextParams, TStartRow>;
-  pagingPhase: 'idle' | 'adjusting' | 'skipping';
-  pendingScrollAdjustment: number;
+  pagingPhase: 'idle' | 'skipping';
 };
 
 export function pagingReducer<TListContextParams, TStartRow>(
   state: PagingState<TListContextParams, TStartRow>,
   action: PagingAction<TListContextParams, TStartRow>,
 ): PagingState<TListContextParams, TStartRow> {
+  console.log('Paging action:', action);
   switch (action.type) {
     case 'UPDATE_ESTIMATED_TOTAL': {
       const newTotal = Math.max(state.estimatedTotal, action.newTotal);
@@ -52,14 +53,19 @@ export function pagingReducer<TListContextParams, TStartRow>(
     case 'REACHED_END':
       return {...state, hasReachedEnd: true};
 
-    case 'UPDATE_ANCHOR':
-      return {
+    case 'UPDATE_ANCHOR': {
+      const newState = {
         ...state,
         queryAnchor: {
           ...state.queryAnchor,
           anchor: action.anchor,
         },
       };
+      if (deepEqual(state, newState)) {
+        return state;
+      }
+      return newState;
+    }
 
     case 'SHIFT_ANCHOR_DOWN':
       return {
@@ -68,8 +74,8 @@ export function pagingReducer<TListContextParams, TStartRow>(
           ...state.queryAnchor,
           anchor: action.newAnchor,
         },
-        pendingScrollAdjustment: action.offset,
-        pagingPhase: 'adjusting',
+        estimatedTotal: state.estimatedTotal + action.offset,
+        pagingPhase: 'skipping',
       };
 
     case 'RESET_TO_TOP':
@@ -79,15 +85,7 @@ export function pagingReducer<TListContextParams, TStartRow>(
           ...state.queryAnchor,
           anchor: {index: 0, kind: 'forward', startRow: undefined},
         },
-        pendingScrollAdjustment: action.offset,
-        pagingPhase: 'adjusting',
-      };
-
-    case 'SCROLL_ADJUSTED':
-      return {
-        ...state,
-        estimatedTotal: state.estimatedTotal + state.pendingScrollAdjustment,
-        pendingScrollAdjustment: 0,
+        estimatedTotal: state.estimatedTotal + action.offset,
         pagingPhase: 'skipping',
       };
 
@@ -128,7 +126,6 @@ export type PagingAction<TListContextParams, TStartRow> =
       newAnchor: Anchor<TStartRow>;
     }
   | {type: 'RESET_TO_TOP'; offset: number}
-  | {type: 'SCROLL_ADJUSTED'}
   | {type: 'PAGING_COMPLETE'}
   | {
       type: 'RESET_STATE';

@@ -1,7 +1,7 @@
+import type {Virtualizer} from '@rocicorp/react-virtual';
+import {useWindowVirtualizer} from '@rocicorp/react-virtual';
 import type {Row} from '@rocicorp/zero';
 import {useQuery, useZero} from '@rocicorp/zero/react';
-import type {Virtualizer} from '@tanstack/react-virtual';
-import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {
   useCallback,

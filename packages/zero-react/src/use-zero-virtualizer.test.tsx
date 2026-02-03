@@ -1,4 +1,4 @@
-import type {Virtualizer} from '@tanstack/react-virtual';
+import type {Virtualizer} from '@rocicorp/react-virtual';
 import {act, renderHook, waitFor} from '@testing-library/react';
 import type {ReactNode} from 'react';
 import type {Root} from 'react-dom/client';

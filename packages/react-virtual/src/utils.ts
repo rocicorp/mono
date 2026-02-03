@@ -59,7 +59,7 @@ export function memo<TDeps extends ReadonlyArray<any>, TResult>(
         return str;
       };
 
-      console.info(
+      console.debug(
         `%c⏱ ${pad(resultEndTime, 5)} /${pad(depEndTime, 5)} ms`,
         `
             font-size: .6rem;

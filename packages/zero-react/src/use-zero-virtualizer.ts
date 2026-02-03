@@ -2,16 +2,18 @@ import {
   defaultKeyExtractor,
   useVirtualizer,
   type Virtualizer,
-} from '@tanstack/react-virtual';
+} from '@rocicorp/react-virtual';
 import {
   useEffect,
   useLayoutEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type Key,
 } from 'react';
 import {assert} from '../../shared/src/asserts.ts';
+import {deepEqual, type ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {pagingReducer, type PagingState} from './paging-reducer.ts';
 import type {UseQueryOptions} from './use-query.tsx';
 import {
@@ -216,16 +218,11 @@ export function useZeroVirtualizer<
   TRow,
   TStartRow
 >): ZeroVirtualizerResult<TScrollElement, TItemElement, TRow> {
+  const debug = restVirtualizerOptions.debug ?? false;
+
   // Initialize paging state from permalinkState directly to avoid Strict Mode double-mount rows
   const [
-    {
-      estimatedTotal,
-      hasReachedStart,
-      hasReachedEnd,
-      queryAnchor,
-      pagingPhase,
-      pendingScrollAdjustment,
-    },
+    {estimatedTotal, hasReachedStart, hasReachedEnd, queryAnchor, pagingPhase},
     dispatch,
   ] = useReducer(
     pagingReducer<TListContextParams, TStartRow>,
@@ -246,7 +243,6 @@ export function useZeroVirtualizer<
           listContextParams,
         },
         pagingPhase: 'idle',
-        pendingScrollAdjustment: 0,
       };
     },
   );
@@ -254,12 +250,22 @@ export function useZeroVirtualizer<
   const isListContextCurrent =
     queryAnchor.listContextParams === listContextParams;
 
+  // TODO(arv): Clean up
+  // Memoize anchor based on actual values, not object identity
+  const anchorRef = useRef<Anchor<TStartRow>>(queryAnchor.anchor);
+  if (!anchorEquals(anchorRef.current, queryAnchor.anchor)) {
+    anchorRef.current = queryAnchor.anchor;
+  }
+
+  // Track when we need to restore scroll position after UPDATE_ANCHOR
+  const needsScrollRestorationRef = useRef(false);
+
   const anchor = useMemo(() => {
     if (isListContextCurrent) {
-      return queryAnchor.anchor;
+      return anchorRef.current;
     }
     return permalinkID ? createPermalinkAnchor(permalinkID) : TOP_ANCHOR;
-  }, [isListContextCurrent, queryAnchor.anchor, permalinkID]);
+  }, [isListContextCurrent, anchorRef.current, permalinkID]);
 
   const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
 
@@ -292,6 +298,7 @@ export function useZeroVirtualizer<
       estimateSize,
       overscan,
       getScrollElement,
+      _disableAutoAnchor: true, // We control anchor capture manually
       getItemKey: getRowKey
         ? (index: number) => {
             const row = rowAt(index);
@@ -375,46 +382,17 @@ export function useZeroVirtualizer<
     }
   }, [estimatedTotal, complete, newEstimatedTotal]);
 
-  // Apply scroll adjustments synchronously with layout to prevent visual jumps
-  useLayoutEffect(() => {
-    if (pendingScrollAdjustment !== 0) {
-      virtualizer.scrollToOffset(
-        (virtualizer.scrollOffset ?? 0) +
-          pendingScrollAdjustment *
-            // TODO: Support dynamic item sizes
-            estimateSize(0),
-      );
-
-      dispatch({type: 'SCROLL_ADJUSTED'});
-    }
-  }, [pendingScrollAdjustment, virtualizer]);
-
   useEffect(() => {
     if (rowsEmpty || !isListContextCurrent) {
       return;
     }
 
-    if (pagingPhase === 'skipping' && pendingScrollAdjustment === 0) {
+    if (pagingPhase === 'skipping') {
       dispatch({type: 'PAGING_COMPLETE'});
       return;
     }
 
-    // Skip if there's a pending scroll adjustment - let useLayoutEffect handle it
-    if (pendingScrollAdjustment !== 0) {
-      return;
-    }
-
-    // First row is before start of list - need to shift down
-    if (firstRowIndex < 0) {
-      const placeholderRows = !atStart ? NUM_ROWS_FOR_LOADING_SKELETON : 0;
-      const offset = -firstRowIndex + placeholderRows;
-      const newAnchor = {
-        ...anchor,
-        index: anchor.index + offset,
-      };
-      dispatch({type: 'SHIFT_ANCHOR_DOWN', offset, newAnchor});
-      return;
-    }
+    // Removed SHIFT_ANCHOR_DOWN - the virtualizer handles scroll stability automatically with stable keys
 
     if (atStart && firstRowIndex > 0) {
       dispatch({type: 'RESET_TO_TOP', offset: -firstRowIndex});
@@ -424,11 +402,40 @@ export function useZeroVirtualizer<
     firstRowIndex,
     anchor,
     atStart,
-    pendingScrollAdjustment,
     pagingPhase,
     rowsEmpty,
     isListContextCurrent,
     // virtualizer - omitted to avoid infinite render loops from scroll events
+  ]);
+
+  // Restore scroll position after UPDATE_ANCHOR to sync with query anchor
+  useLayoutEffect(() => {
+    if (
+      !needsScrollRestorationRef.current ||
+      rowsEmpty ||
+      pagingPhase === 'skipping'
+    ) {
+      return;
+    }
+
+    // Find the item matching the query anchor by checking the startRow data
+    const items = virtualizer.getVirtualItems();
+    if (items.length > 0) {
+      virtualizer.restoreScrollAnchor();
+      needsScrollRestorationRef.current = false;
+
+      if (debug) {
+        console.log(
+          '[ScrollRestore] Called restoreScrollAnchor after UPDATE_ANCHOR',
+        );
+      }
+    }
+  }, [
+    needsScrollRestorationRef.current,
+    rowsEmpty,
+    pagingPhase,
+    virtualizer,
+    debug,
   ]);
 
   // Use layoutEffect to restore scroll position synchronously to avoid visual jumps
@@ -482,14 +489,17 @@ export function useZeroVirtualizer<
 
   const virtualItems = virtualizer.getVirtualItems();
 
+  // Track if we've dispatched UPDATE_ANCHOR this render cycle to prevent double-dispatch
+  const pendingAnchorUpdateRef = useRef(false);
+
   useEffect(() => {
     if (
       !isListContextCurrent ||
       virtualItems.length === 0 ||
       !complete ||
-      pagingPhase !== 'idle' ||
-      pendingScrollAdjustment !== 0
+      pagingPhase !== 'idle'
     ) {
+      pendingAnchorUpdateRef.current = false;
       return;
     }
 
@@ -505,16 +515,36 @@ export function useZeroVirtualizer<
       type: 'forward' | 'backward',
       indexOffset: number,
     ) => {
+      // Prevent double-dispatch before state updates
+      if (pendingAnchorUpdateRef.current) {
+        return;
+      }
+
       const index = toBoundIndex(targetIndex, firstRowIndex, rowsLength);
       const startRow = rowAt(index);
       assert(startRow !== undefined || type === 'forward');
+      const newAnchor = {
+        index: index + indexOffset,
+        kind: type,
+        startRow,
+      } as Anchor<TStartRow>;
+
+      // Don't dispatch if anchor hasn't changed
+      if (anchorEquals(anchor, newAnchor)) {
+        return;
+      }
+
+      // Capture scroll anchor BEFORE dispatching UPDATE_ANCHOR
+      virtualizer.captureScrollAnchor();
+
+      // Capture scroll anchor BEFORE dispatching UPDATE_ANCHOR
+      virtualizer.captureScrollAnchor();
+
+      pendingAnchorUpdateRef.current = true;
+      needsScrollRestorationRef.current = true;
       dispatch({
         type: 'UPDATE_ANCHOR',
-        anchor: {
-          index: index + indexOffset,
-          kind: type,
-          startRow,
-        } as Anchor<TStartRow>,
+        anchor: newAnchor,
       });
     };
 
@@ -548,7 +578,6 @@ export function useZeroVirtualizer<
     isListContextCurrent,
     virtualItems,
     pagingPhase,
-    pendingScrollAdjustment,
     complete,
     pageSize,
     firstRowIndex,
@@ -556,6 +585,7 @@ export function useZeroVirtualizer<
     atStart,
     atEnd,
     rowAt,
+    anchor, // Add anchor to dependencies so we can compare
   ]);
 
   return {
@@ -596,4 +626,26 @@ function getNearPageEdgeThreshold(pageSize: number) {
 
 function makeEven(n: number) {
   return n % 2 === 0 ? n : n + 1;
+}
+
+function anchorEquals<TStartRow>(
+  anchor: Anchor<TStartRow>,
+  newAnchor: Anchor<TStartRow>,
+) {
+  if (anchor.kind !== newAnchor.kind || anchor.index !== newAnchor.index) {
+    return false;
+  }
+
+  if (anchor.kind === 'permalink') {
+    return (
+      anchor.id ===
+      (newAnchor as Extract<Anchor<TStartRow>, {kind: 'permalink'}>).id
+    );
+  }
+
+  return deepEqual(
+    anchor.startRow as ReadonlyJSONValue | undefined,
+    (newAnchor as Extract<Anchor<TStartRow>, {startRow: TStartRow | undefined}>)
+      .startRow as ReadonlyJSONValue | undefined,
+  );
 }
