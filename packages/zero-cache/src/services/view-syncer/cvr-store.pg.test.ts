@@ -4,11 +4,11 @@ import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {test, type PgTest} from '../../test/db.ts';
-import {versionToLexi} from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowID} from '../../types/row-key.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
+import {stateVersionToString} from '../../types/state-version.ts';
 import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import {ClientNotFoundError, CVRStore, OwnershipError} from './cvr-store.ts';
 import {
@@ -642,7 +642,7 @@ describe('view-syncer/cvr-store', () => {
 
     // Commit 30 flushes of 10 rows each.
     for (let i = 20; i < 320; i += 10) {
-      const version = versionToLexi(i);
+      const version = stateVersionToString({major: i});
       const updater = new CVRQueryDrivenUpdater(store, cvr, version, '01');
       updater.trackQueries(
         lc,
@@ -719,7 +719,7 @@ describe('view-syncer/cvr-store', () => {
 
     // Commit 30 flushes of 10 rows each.
     for (let i = 20; i < 320; i += 10) {
-      const version = versionToLexi(i);
+      const version = stateVersionToString({major: i});
       const updater = new CVRQueryDrivenUpdater(store, cvr, version, '01');
       updater.trackQueries(
         lc,
@@ -746,7 +746,7 @@ describe('view-syncer/cvr-store', () => {
     const updater = new CVRQueryDrivenUpdater(
       store,
       cvr,
-      versionToLexi(320),
+      stateVersionToString({major: 320}),
       '01',
     );
     updater.trackQueries(

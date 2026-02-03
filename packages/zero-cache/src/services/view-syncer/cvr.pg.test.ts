@@ -579,7 +579,7 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          version: '1a9:02',
+          version: '1a9.28wa:02',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
           ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
@@ -601,7 +601,7 @@ describe('view-syncer/cvr', () => {
           queryArgs: null,
           queryName: null,
           transformationVersion: null,
-          patchVersion: '1a9:02',
+          patchVersion: '1a9.28wa:02',
           internal: null,
           deleted: false,
         },
@@ -611,7 +611,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
           queryHash: 'oneHash',
-          patchVersion: '1a9:01',
+          patchVersion: '1a9.28wa:01',
           deleted: false,
           inactivatedAt: null,
           ttl: DEFAULT_TTL_MS,
@@ -633,7 +633,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual({
       id: 'abc123',
-      version: {stateVersion: '1a9', configVersion: 2},
+      version: {stateVersion: '1a9.28wa', configVersion: 2},
       replicaVersion: '123',
       lastActive: 1713830400000,
       ttlClock: ttlClockFromNumber(1713830400000),
@@ -651,12 +651,12 @@ describe('view-syncer/cvr', () => {
           transformationHash: 'twoHash',
           clientState: {
             fooClient: {
-              version: {stateVersion: '1a9', configVersion: 1},
+              version: {stateVersion: '1a9.28wa', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
-          patchVersion: {stateVersion: '1a9', configVersion: 2},
+          patchVersion: {stateVersion: '1a9.28wa', configVersion: 2},
         },
       },
       clientSchema: null,
