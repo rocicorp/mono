@@ -47,6 +47,10 @@ function ArrayTestAppContent() {
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [debug, setDebug] = useState<boolean>(false);
 
+  // Track last anchor shift to prevent rapid consecutive shifts
+  const lastAnchorShiftRef = useRef<number>(0);
+  const ANCHOR_SHIFT_COOLDOWN = 500; // ms
+
   const {
     rowAt,
     rowsLength,
@@ -174,24 +178,22 @@ function ArrayTestAppContent() {
     // Don't decrease estimate unless we've reached start or end
   }, [firstRowIndex, rowsLength, atStart, atEnd, estimatedTotal, debug]);
 
-  // Create a Proxy to make rows behave like an array
-  // The virtualizer uses indices 0, 1, 2, ...
-  // With estimatedTotal, we expose indices 0 to estimatedTotal-1 (plus placeholders)
+  // The virtualizer uses indices 0, 1, 2, ... mapping directly to logical data indices
   // rowAt will return undefined for indices outside the current data window
 
-  const startPlaceholder = atStart ? 0 : 1;
   const endPlaceholder = atEnd ? 0 : 1;
 
   // Convert virtualizer index to logical data index
-  // Virtualizer index 0 is placeholder (if !atStart), then logical indices 0, 1, 2...
+  // Virtualizer indices map directly to logical indices (rowAt handles the window)
   const toLogicalIndex = useCallback(
-    (virtualizerIndex: number) => virtualizerIndex - startPlaceholder,
-    [startPlaceholder],
+    (virtualizerIndex: number) => virtualizerIndex,
+    [],
   );
 
   const rows = useMemo(() => {
-    // Total length: placeholder + estimatedTotal + placeholder
-    const totalLength = startPlaceholder + estimatedTotal + endPlaceholder;
+    // Total length: data window extends from 0 to firstRowIndex + rowsLength - 1
+    // Plus 1 placeholder at end if not atEnd
+    const totalLength = firstRowIndex + rowsLength + endPlaceholder;
 
     const handler: ProxyHandler<RowData[]> = {
       get(target, prop) {
@@ -201,24 +203,20 @@ function ArrayTestAppContent() {
         if (typeof prop === 'string') {
           const index = parseInt(prop, 10);
           if (!isNaN(index) && index >= 0) {
-            // Start placeholder
-            if (!atStart && index === 0) {
-              return undefined;
-            }
             // End placeholder
             if (!atEnd && index === totalLength - 1) {
               return undefined;
             }
-            // Map to logical index (0-based)
-            const logicalIndex = index - startPlaceholder;
-            return rowAt(logicalIndex);
+            // Pass index directly to rowAt - it handles logical indices
+            // and returns undefined for indices outside the data window
+            return rowAt(index);
           }
         }
         return Reflect.get(target, prop);
       },
     };
     return new Proxy<RowData[]>([], handler);
-  }, [rowAt, estimatedTotal, startPlaceholder, endPlaceholder, atStart, atEnd]);
+  }, [rowAt, firstRowIndex, rowsLength, endPlaceholder, atEnd]);
 
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -277,6 +275,12 @@ function ArrayTestAppContent() {
       return;
     }
 
+    // Cooldown to prevent rapid consecutive shifts
+    const now = Date.now();
+    if (now - lastAnchorShiftRef.current < ANCHOR_SHIFT_COOLDOWN) {
+      return;
+    }
+
     const lastItem = virtualItems[virtualItems.length - 1];
     // Convert virtualizer index to logical index
     const lastLogicalIndex = toLogicalIndex(lastItem.index);
@@ -285,17 +289,24 @@ function ArrayTestAppContent() {
     // How far is the last visible item from the end of our data window?
     const distanceFromEnd = lastDataIndex - lastLogicalIndex;
 
-    // Threshold: shift anchor when we're within 20% of page size from the end (like zbugs)
-    const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE * 0.2);
+    // Threshold: shift anchor when we're within 10% of page size from the end
+    // (matches useZeroVirtualizer's getNearPageEdgeThreshold)
+    const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE * 0.1);
 
+    if (debug) {
+      console.log('[AutoAnchor forward] Check:', {
+        distanceFromEnd,
+        nearPageEdgeThreshold,
+        wouldTrigger: distanceFromEnd <= nearPageEdgeThreshold,
+      });
+    }
+
+    // Trigger when near end of data window
+    // (backward auto-anchor is disabled, so no ping-pong concern)
     if (distanceFromEnd <= nearPageEdgeThreshold) {
-      // Shift anchor forward: go back 40% from first visible
-      const firstItem = virtualItems[0];
-      const firstLogicalIndex = toLogicalIndex(firstItem.index);
-      const newAnchorIndex = Math.max(
-        firstRowIndex,
-        firstLogicalIndex - Math.ceil(PAGE_SIZE * 0.4),
-      );
+      // Shift anchor forward: position anchor so LAST visible item
+      // will be at ~60% into the new window (giving 40% buffer ahead)
+      const newAnchorIndex = lastLogicalIndex - Math.ceil(PAGE_SIZE * 0.6);
       const newAnchorRow = rowAt(newAnchorIndex);
 
       if (newAnchorRow && newAnchorIndex !== anchorIndex) {
@@ -304,10 +315,13 @@ function ArrayTestAppContent() {
             '[AutoAnchor] Shifting forward:',
             'distanceFromEnd=',
             distanceFromEnd,
+            'lastLogicalIndex=',
+            lastLogicalIndex,
             'newAnchorIndex=',
             newAnchorIndex,
           );
         }
+        lastAnchorShiftRef.current = now;
         setAnchorKind('forward');
         setAnchorIndex(newAnchorIndex);
         setStartRow(toStartRow(newAnchorRow));
@@ -327,11 +341,19 @@ function ArrayTestAppContent() {
   ]);
 
   // Auto-shift anchor backward when scrolling near the start of the data window
+  // TODO: Re-enable once we understand the ping-pong issue better
+  // For now, disabled like useZeroVirtualizer
   useEffect(() => {
     if (virtualItems.length === 0 || !complete || atStart) {
       if (debug && virtualItems.length > 0) {
         console.log('[AutoAnchor backward] Skipping:', {complete, atStart});
       }
+      return;
+    }
+
+    // Cooldown to prevent rapid consecutive shifts
+    const now = Date.now();
+    if (now - lastAnchorShiftRef.current < ANCHOR_SHIFT_COOLDOWN) {
       return;
     }
 
@@ -342,34 +364,33 @@ function ArrayTestAppContent() {
     // How far is the first visible item from the start of our data window?
     const distanceFromStart = firstLogicalIndex - firstRowIndex;
 
+    // Threshold: shift anchor when we're within 10% of page size from the edge
+    const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE * 0.1);
+
     if (debug) {
       console.log('[AutoAnchor backward] Check:', {
+        distanceFromStart,
+        nearPageEdgeThreshold,
+        wouldTrigger: distanceFromStart <= nearPageEdgeThreshold,
         firstLogicalIndex,
         firstRowIndex,
-        distanceFromStart,
         anchorKind,
         anchorIndex,
       });
     }
 
-    // Threshold: shift anchor when we're within 20% of page size from the start (like zbugs)
-    const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE * 0.2);
-
+    // Trigger when near start of data window
     if (distanceFromStart <= nearPageEdgeThreshold) {
-      // Shift anchor backward: go forward 40% from last visible
-      const lastItem = virtualItems[virtualItems.length - 1];
-      const lastLogicalIndex = toLogicalIndex(lastItem.index);
-      const lastDataIndex = firstRowIndex + rowsLength - 1;
-      const newAnchorIndex = Math.min(
-        lastDataIndex,
-        lastLogicalIndex + Math.ceil(PAGE_SIZE * 0.4),
-      );
+      // Shift anchor backward: position anchor so FIRST visible item
+      // will be at ~40% into the new window (giving 40% buffer behind)
+      // For backward anchor, data goes from (anchorIndex - rowsLength) to anchorIndex
+      // So newAnchorIndex = firstLogicalIndex + 60% of page size
+      const newAnchorIndex = firstLogicalIndex + Math.ceil(PAGE_SIZE * 0.6);
       const newAnchorRow = rowAt(newAnchorIndex);
 
       if (debug) {
         console.log('[AutoAnchor backward] Attempting shift:', {
-          lastLogicalIndex,
-          lastDataIndex,
+          firstLogicalIndex,
           newAnchorIndex,
           hasRow: !!newAnchorRow,
           currentAnchorIndex: anchorIndex,
@@ -382,10 +403,13 @@ function ArrayTestAppContent() {
             '[AutoAnchor] Shifting backward:',
             'distanceFromStart=',
             distanceFromStart,
+            'firstLogicalIndex=',
+            firstLogicalIndex,
             'newAnchorIndex=',
             newAnchorIndex,
           );
         }
+        lastAnchorShiftRef.current = now;
         setAnchorKind('backward');
         setAnchorIndex(newAnchorIndex);
         setStartRow(toStartRow(newAnchorRow));
@@ -403,22 +427,6 @@ function ArrayTestAppContent() {
     anchorIndex,
     debug,
   ]);
-
-  // When we reach the start with a backward anchor, reset to forward from top
-  useEffect(() => {
-    if (atStart && anchorKind === 'backward' && firstRowIndex < 0) {
-      if (debug) {
-        console.log(
-          '[AutoAnchor] Reached start with backward anchor, resetting to top',
-        );
-      }
-      setAnchorKind('forward');
-      setAnchorIndex(0);
-      setStartRow(undefined);
-      setPermalinkID(undefined);
-      virtualizer.scrollToOffset(0);
-    }
-  }, [atStart, anchorKind, firstRowIndex, debug, virtualizer]);
 
   return (
     <div
@@ -473,10 +481,10 @@ function ArrayTestAppContent() {
           </div>
           <div style={{fontSize: '13px'}}>
             <div>
-              Rows Length: <strong>{rows.length}</strong>
+              rows.length: <strong>{rows.length}</strong>
             </div>
             <div>
-              Window Size: <strong>{rowsLength}</strong>
+              Window Size (rowsLength): <strong>{rowsLength}</strong>
             </div>
             <div>
               Virtual Items: <strong>{virtualItems.length}</strong>
@@ -485,8 +493,7 @@ function ArrayTestAppContent() {
               Total Height: <strong>{Math.round(totalSize)}px</strong>
             </div>
             <div>
-              Scroll Offset:{' '}
-              <strong>{Math.round(virtualizer.scrollOffset ?? 0)}px</strong>
+              Scroll Offset: <strong>{virtualizer.scrollOffset ?? 0}px</strong>
             </div>
             <div>
               Complete: <strong>{complete ? 'Yes' : 'No'}</strong>
