@@ -456,7 +456,10 @@ export class Virtualizer<
     });
 
     // Rocicorp: Capture anchor BEFORE options change to detect splices
-    this.captureAnchorBeforeOptionsChange(opts);
+    // (unless disabled for external control)
+    if (!(opts as any)._disableAutoAnchor) {
+      this.captureAnchorBeforeOptionsChange(opts, opts.debug ?? false);
+    }
 
     this.options = {
       debug: false,
@@ -829,13 +832,144 @@ export class Virtualizer<
   );
 
   /**
+   * Rocicorp enhancement: Capture scroll anchor to maintain position during data changes.
+   * Call this BEFORE changing data/options that will cause keys to change.
+   * Then call restoreScrollAnchor() after measurements complete.
+   */
+  captureScrollAnchor = () => {
+    const debug = this.options.debug ?? false;
+    const oldMeasurements = this.measurementsCache;
+
+    // No previous measurements - first render, nothing to anchor
+    if (oldMeasurements.length === 0) {
+      this.anchorBeforeMeasurement = null;
+      if (isDev && debug) {
+        console.info('[Splice] anchor=null (no previous measurements)');
+      }
+      return;
+    }
+
+    const scrollOffset = this.getScrollOffset();
+    if (scrollOffset <= 0) {
+      this.anchorBeforeMeasurement = null;
+      if (isDev && debug) {
+        console.info('[Splice] anchor=null (scrollOffset <= 0)');
+      }
+      return;
+    }
+
+    // Find the first visible item
+    let anchorItem: VirtualItem | undefined;
+    for (const item of oldMeasurements) {
+      if (item.start >= scrollOffset) {
+        anchorItem = item;
+        break;
+      }
+    }
+
+    // Fallback: find any item at or near scroll offset
+    if (!anchorItem) {
+      for (const item of oldMeasurements) {
+        if (item.end > scrollOffset) {
+          anchorItem = item;
+          break;
+        }
+      }
+    }
+
+    if (!anchorItem) {
+      this.anchorBeforeMeasurement = null;
+      if (isDev && debug) {
+        console.info('[Splice] anchor=null (no visible item found)');
+      }
+      return;
+    }
+
+    const pixelOffset = anchorItem.start - scrollOffset;
+
+    this.anchorBeforeMeasurement = {
+      key: anchorItem.key,
+      pixelOffset,
+      scrollOffset,
+    };
+
+    if (isDev && debug) {
+      console.info(
+        `[Splice] anchor={key=${String(anchorItem.key)}, pixelOffset=${pixelOffset.toFixed(1)}, scrollOffset=${scrollOffset}} (captured from item at index=${anchorItem.index} start=${anchorItem.start})`,
+      );
+    }
+  };
+
+  /**
+   * Rocicorp enhancement: Restore scroll position to captured anchor.
+   * Call this after data changes and measurements are complete.
+   */
+  restoreScrollAnchor = () => {
+    const anchor = this.anchorBeforeMeasurement;
+    if (!anchor) {
+      return;
+    }
+
+    this.anchorBeforeMeasurement = null;
+    const debug = this.options.debug ?? false;
+    if (isDev && debug) {
+      console.info('[Splice] anchor=null (consumed in restoreScrollAnchor)');
+    }
+
+    const newMeasurements = this.measurementsCache;
+    const anchorMeasurement = newMeasurements.find(
+      (m: VirtualItem) => m.key === anchor.key,
+    );
+    if (!anchorMeasurement) {
+      if (isDev && debug) {
+        console.info(
+          `[Splice] anchor key=${String(anchor.key)} not found in new measurements`,
+        );
+      }
+      return;
+    }
+
+    const scrollOffset = anchor.scrollOffset;
+    const currentPixelOffset = anchorMeasurement.start - scrollOffset;
+    const error = currentPixelOffset - anchor.pixelOffset;
+
+    if (isDev && debug) {
+      console.info(
+        `[Splice] anchor=${String(anchor.key)} oldPixelOffset=${anchor.pixelOffset.toFixed(1)} newStart=${anchorMeasurement.start} scrollOffset=${scrollOffset} currentPixelOffset=${currentPixelOffset.toFixed(1)} error=${error.toFixed(1)}`,
+      );
+    }
+
+    if (Math.abs(error) > 1) {
+      if (isDev && debug) {
+        console.info(
+          `[Splice] adjusting scroll by ${error.toFixed(1)}px to restore anchor position`,
+        );
+      }
+      this._scrollToOffset(this.getScrollOffset(), {
+        adjustments: (this.scrollAdjustments += error),
+        behavior: undefined,
+      });
+    }
+  };
+
+  /**
    * Rocicorp enhancement: Capture anchor position BEFORE options change.
    * This is called at the START of setOptions to capture the current
    * visible item's position before keys get updated.
    */
   private captureAnchorBeforeOptionsChange = (
     newOpts: VirtualizerOptions<TScrollElement, TItemElement>,
+    debug: boolean,
   ): void => {
+    // Allow skipping anchor capture when caller will handle scroll restoration
+    if ((newOpts as any)._skipAnchorCapture) {
+      this.anchorBeforeMeasurement = null;
+      if (isDev && debug) {
+        console.info('[Splice] anchor=null (skipped by _skipAnchorCapture)');
+      }
+      return;
+    }
+
     const newCount = newOpts.count;
     const newGetItemKey = newOpts.getItemKey ?? defaultKeyExtractor;
     const oldMeasurements = this.measurementsCache;
@@ -843,6 +977,9 @@ export class Virtualizer<
     // No previous measurements - first render, nothing to anchor
     if (oldMeasurements.length === 0) {
       this.anchorBeforeMeasurement = null;
+      if (isDev && debug) {
+        console.info('[Splice] anchor=null (no previous measurements)');
+      }
       return;
     }
 
@@ -858,7 +995,10 @@ export class Virtualizer<
     }
 
     if (!keysChanged) {
-      this.anchorBeforeMeasurement = null;
+      // Keys unchanged - leave anchor as-is (don't clear it)
+      if (isDev && debug) {
+        console.info('[Splice] keys unchanged, preserving anchor state');
+      }
       return;
     }
 
@@ -866,9 +1006,13 @@ export class Virtualizer<
     const scrollOffset = this.getScrollOffset();
     if (scrollOffset <= 0) {
       this.anchorBeforeMeasurement = null;
+      if (isDev && debug) {
+        console.info('[Splice] anchor=null (scrollOffset <= 0)');
+      }
       return;
     }
 
+    // TODO(arv): Is this really necessary?
     // Build set of new keys for O(1) lookup when finding surviving items
     const newKeySet = new Set<Key>();
     for (let i = 0; i < newCount; i++) {
@@ -878,6 +1022,8 @@ export class Virtualizer<
     // Find the first visible item that still exists in new keys
     let anchorItem: VirtualItem | undefined;
 
+    // TODO(arv): Is oldMeasurements always sorted by start?
+    // do a binary search here if so
     for (const item of oldMeasurements) {
       if (item.start >= scrollOffset && newKeySet.has(item.key)) {
         anchorItem = item;
@@ -897,6 +1043,11 @@ export class Virtualizer<
 
     if (!anchorItem) {
       this.anchorBeforeMeasurement = null;
+      if (isDev && debug) {
+        console.info(
+          '[Splice] anchor=null (no surviving item found in new keys)',
+        );
+      }
       return;
     }
 
@@ -910,9 +1061,9 @@ export class Virtualizer<
       scrollOffset, // Store scrollOffset for restoration
     };
 
-    if (isDev && this.options.debug) {
+    if (isDev && debug) {
       console.info(
-        `[Splice] captured anchor: key=${String(anchorItem.key)} start=${anchorItem.start} scrollOffset=${scrollOffset} pixelOffset=${pixelOffset.toFixed(1)}`,
+        `[Splice] anchor={key=${String(anchorItem.key)}, pixelOffset=${pixelOffset.toFixed(1)}, scrollOffset=${scrollOffset}} (captured from item at index=${anchorItem.index} start=${anchorItem.start})`,
       );
     }
   };
@@ -930,6 +1081,9 @@ export class Virtualizer<
     }
 
     this.anchorBeforeMeasurement = null;
+    if (isDev && this.options.debug) {
+      console.info('[Splice] anchor=null (consumed in handleSpliceStability)');
+    }
 
     // Find the anchor in new measurements
     const anchorMeasurement = newMeasurements.find(m => m.key === anchor.key);
@@ -959,10 +1113,19 @@ export class Virtualizer<
 
     if (Math.abs(error) > 1) {
       // Adjust scroll to put anchor back at original position
+      if (isDev && this.options.debug) {
+        console.info(
+          `[Splice] adjusting scroll by ${error.toFixed(1)}px to restore anchor position`,
+        );
+      }
       this._scrollToOffset(this.getScrollOffset(), {
         adjustments: (this.scrollAdjustments += error),
         behavior: undefined,
       });
+    } else if (isDev && this.options.debug) {
+      console.info(
+        `[Splice] no adjustment needed, error=${error.toFixed(1)}px is within tolerance`,
+      );
     }
   };
 

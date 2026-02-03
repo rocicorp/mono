@@ -1,5 +1,5 @@
+import type {VirtualItem} from '@rocicorp/react-virtual';
 import {useZero, useZeroVirtualizer} from '@rocicorp/zero/react';
-import type {VirtualItem} from '@tanstack/react-virtual';
 import {
   memo,
   useCallback,
@@ -162,7 +162,7 @@ function VirtualList() {
       // permalinkState,
       // onPermalinkStateChange: setPermalinkState,
 
-      debug: true,
+      debug: true, // Enable to debug page load drift issue
     });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -223,6 +223,8 @@ function VirtualList() {
           flex: 1,
           overflow: 'auto',
           position: 'relative',
+          // Disable browser scroll anchoring - virtualizer handles scroll stability
+          overflowAnchor: 'none',
         }}
       >
         <div
