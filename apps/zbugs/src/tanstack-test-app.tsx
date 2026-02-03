@@ -1,5 +1,5 @@
 import {useVirtualizer} from '@rocicorp/react-virtual';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 
 interface RowData {
   id: string;
@@ -59,21 +59,26 @@ export function TanstackTestApp() {
   const [rows, setRows] = useState<RowData[]>(() => generateRows(100, 0, seed));
   const [selectedRowId, setSelectedRowId] = useState<string>('');
   const [textMultiplier, setTextMultiplier] = useState<string>('1');
-  const [forceAdjust, setForceAdjust] = useState<boolean | null>(null);
+  // const [forceAdjust, setForceAdjust] = useState<boolean | null>(null);
   const [debug, setDebug] = useState<boolean>(false);
   const [index, setIndex] = useState<string>('0');
   const [deleteCount, setDeleteCount] = useState<string>('0');
   const [insertCount, setInsertCount] = useState<string>('10');
+  const [autoMode, setAutoMode] = useState<boolean>(false);
+  const [autoModeLog, setAutoModeLog] = useState<string[]>([]);
 
   const parentRef = useRef<HTMLDivElement>(null);
-  const checkboxRef = useRef<HTMLInputElement>(null);
-
-  // Update checkbox indeterminate state
-  useEffect(() => {
-    if (checkboxRef.current) {
-      checkboxRef.current.indeterminate = forceAdjust === null;
-    }
-  }, [forceAdjust]);
+  const virtualItemsRef = useRef<
+    ReturnType<typeof virtualizer.getVirtualItems>
+  >([]);
+  const rowsRef = useRef(rows);
+  const pendingStabilityCheckRef = useRef<{
+    refRowId: string;
+    refRowIndex: number;
+    refRowPositionBefore: number;
+    scrollTopBefore: number;
+    operation: string;
+  } | null>(null);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -257,17 +262,285 @@ export function TanstackTestApp() {
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
 
-  const stats = useMemo(() => {
-    if (rows.length === 0) return null;
-    const contentLengths = rows.map(r => r.content.length);
-    return {
-      min: Math.min(...contentLengths),
-      max: Math.max(...contentLengths),
-      avg: Math.round(
-        contentLengths.reduce((sum, l) => sum + l, 0) / contentLengths.length,
-      ),
+  // Keep refs up to date for use in auto mode timer
+  virtualItemsRef.current = virtualItems;
+  rowsRef.current = rows;
+
+  // Check stability after state updates
+  useEffect(() => {
+    const pending = pendingStabilityCheckRef.current;
+    if (!pending) return;
+    pendingStabilityCheckRef.current = null;
+
+    // Check multiple times to see how scroll settles
+    const checkStability = (attempt: number) => {
+      const scrollElement = parentRef.current;
+      if (!scrollElement) return;
+
+      const scrollTopAfter = scrollElement.scrollTop;
+
+      // Find the reference row in the DOM by its data-key
+      const refRowElement = document.querySelector(
+        `[data-key="${pending.refRowId}"]`,
+      ) as HTMLElement;
+      if (!refRowElement) {
+        // oxlint-disable-next-line no-console -- debug
+        console.log(
+          `[AUTO-SPLICE] After[${attempt}]: refRow=${pending.refRowId} NOT FOUND in DOM`,
+        );
+        return;
+      }
+
+      const refRowRect = refRowElement.getBoundingClientRect();
+      const containerRect = scrollElement.getBoundingClientRect();
+      const refRowPositionAfter = refRowRect.top - containerRect.top;
+
+      const positionDrift = refRowPositionAfter - pending.refRowPositionBefore;
+      const scrollDrift = scrollTopAfter - pending.scrollTopBefore;
+
+      // oxlint-disable-next-line no-console -- debug
+      console.log(
+        `[AUTO-SPLICE] After[${attempt}]: refRow=${pending.refRowId} posInViewport=${refRowPositionAfter.toFixed(1)}px scrollTop=${scrollTopAfter.toFixed(1)}`,
+      );
+
+      // Only report final check
+      if (attempt === 2) {
+        // oxlint-disable-next-line no-console -- debug
+        console.log(
+          `[AUTO-SPLICE] Drift: position=${positionDrift.toFixed(1)}px scroll=${scrollDrift.toFixed(1)}px op="${pending.operation}"`,
+        );
+
+        if (Math.abs(positionDrift) > 2) {
+          // oxlint-disable-next-line no-console -- debug
+          console.warn(
+            `[AUTO-SPLICE] ⚠️ UNSTABLE: Row ${pending.refRowId} moved by ${positionDrift.toFixed(1)}px!`,
+          );
+        }
+      }
     };
-  }, [rows]);
+
+    // Check at 50ms, 150ms, 300ms to see how things settle
+    setTimeout(() => checkStability(0), 50);
+    setTimeout(() => checkStability(1), 150);
+    setTimeout(() => checkStability(2), 300);
+  }, [rows]); // Run after rows change
+
+  // Auto mode: perform random splices every 0.5-1.5 seconds
+  useEffect(() => {
+    if (!autoMode) return;
+
+    const performAutoSplice = () => {
+      const currentRows = rowsRef.current;
+      const currentVirtualItems = virtualItemsRef.current;
+      if (currentRows.length === 0 || currentVirtualItems.length === 0) return;
+
+      const scrollElement = parentRef.current;
+      if (!scrollElement) return;
+
+      const scrollTop = scrollElement.scrollTop;
+      const viewportHeight = scrollElement.clientHeight;
+      const scrollBottom = scrollTop + viewportHeight;
+
+      // Find visible range (indices that are on screen)
+      const visibleStartIndex = currentVirtualItems.findIndex(
+        item => item.start + item.size > scrollTop,
+      );
+      const visibleEndIndex = currentVirtualItems.findIndex(
+        item => item.start >= scrollBottom,
+      );
+
+      const firstVisibleIdx =
+        visibleStartIndex >= 0
+          ? currentVirtualItems[visibleStartIndex].index
+          : 0;
+      const lastVisibleIdx =
+        visibleEndIndex >= 0
+          ? (currentVirtualItems[visibleEndIndex - 1]?.index ??
+            currentRows.length - 1)
+          : (currentVirtualItems[currentVirtualItems.length - 1]?.index ??
+            currentRows.length - 1);
+
+      // Capture reference row position BEFORE mutation for stability tracking
+      // Use the first fully visible row as reference
+      const refItem =
+        currentVirtualItems.find(
+          item =>
+            item.start >= scrollTop && item.start + item.size <= scrollBottom,
+        ) ?? currentVirtualItems[visibleStartIndex];
+
+      let refRowId: string | undefined;
+      let refRowPositionBefore: number | undefined;
+      let refRowIndex: number | undefined;
+      if (refItem) {
+        refRowIndex = refItem.index;
+        refRowId = currentRows[refItem.index]?.id;
+        // Position relative to viewport top
+        refRowPositionBefore = refItem.start - scrollTop;
+        // oxlint-disable-next-line no-console -- debug
+        console.log(
+          `[AUTO-SPLICE] Before: refRow=${refRowId} index=${refRowIndex} posInViewport=${refRowPositionBefore.toFixed(1)}px scrollTop=${scrollTop.toFixed(1)}`,
+        );
+      }
+
+      // Decide operation type: 0 = splice (delete+insert), 1 = resize
+      const opType = Math.floor(Math.random() * 2);
+      let logEntry = '';
+
+      if (opType === 0 && currentRows.length > 10) {
+        // Splice operation - delete and insert at same position, avoid visible range
+        let targetIdx: number;
+        const canSpliceBefore = firstVisibleIdx > 0;
+        const canSpliceAfter = lastVisibleIdx < currentRows.length - 1;
+
+        if (canSpliceBefore && canSpliceAfter) {
+          // Pick randomly before or after
+          if (Math.random() < 0.5) {
+            targetIdx = Math.floor(Math.random() * firstVisibleIdx);
+          } else {
+            targetIdx =
+              lastVisibleIdx +
+              1 +
+              Math.floor(
+                Math.random() * (currentRows.length - lastVisibleIdx - 1),
+              );
+          }
+        } else if (canSpliceBefore) {
+          targetIdx = Math.floor(Math.random() * firstVisibleIdx);
+        } else if (canSpliceAfter) {
+          targetIdx =
+            lastVisibleIdx +
+            1 +
+            Math.floor(
+              Math.random() * (currentRows.length - lastVisibleIdx - 1),
+            );
+        } else {
+          // Can't splice without affecting viewport
+          logEntry = `Skip splice: no safe range (visible: ${firstVisibleIdx}-${lastVisibleIdx})`;
+          setAutoModeLog(prev => [logEntry, ...prev.slice(0, 9)]);
+          return;
+        }
+
+        // Determine delete count (0-3)
+        const maxDelete =
+          targetIdx < firstVisibleIdx
+            ? firstVisibleIdx - targetIdx
+            : currentRows.length - targetIdx;
+        const delCount = Math.min(Math.floor(Math.random() * 4), maxDelete);
+
+        // Determine insert count (0-3)
+        const insCount = Math.floor(Math.random() * 4);
+
+        if (delCount === 0 && insCount === 0) {
+          // Do at least something
+          logEntry = `Skip splice: would be no-op`;
+          setAutoModeLog(prev => [logEntry, ...prev.slice(0, 9)]);
+          return;
+        }
+
+        const maxIndex =
+          currentRows.length > 0
+            ? Math.max(
+                ...currentRows.map(r => {
+                  const match = r.content.match(/Row (\d+)/);
+                  return match ? parseInt(match[1], 10) : 0;
+                }),
+              )
+            : -1;
+        const newRows =
+          insCount > 0 ? generateRows(insCount, maxIndex + 1, Date.now()) : [];
+        logEntry = `Splice at ${targetIdx}: -${delCount} +${insCount} (visible: ${firstVisibleIdx}-${lastVisibleIdx})`;
+
+        // Set up stability check before mutation
+        if (
+          refRowId &&
+          refRowPositionBefore !== undefined &&
+          refRowIndex !== undefined
+        ) {
+          pendingStabilityCheckRef.current = {
+            refRowId,
+            refRowIndex,
+            refRowPositionBefore,
+            scrollTopBefore: scrollTop,
+            operation: logEntry,
+          };
+        }
+
+        setRows(prev => {
+          const updated = [...prev];
+          updated.splice(targetIdx, delCount, ...newRows);
+          return updated;
+        });
+      } else {
+        // Resize operation - target items in virtual range but not visible
+        // Virtual items that are rendered but off-screen
+        const offScreenVirtual = currentVirtualItems.filter(item => {
+          const itemTop = item.start;
+          const itemBottom = item.start + item.size;
+          // Item is completely above or below viewport
+          return itemBottom <= scrollTop || itemTop >= scrollBottom;
+        });
+
+        if (offScreenVirtual.length === 0) {
+          logEntry = `Skip resize: no off-screen virtual items (visible: ${firstVisibleIdx}-${lastVisibleIdx})`;
+          setAutoModeLog(prev => [logEntry, ...prev.slice(0, 9)]);
+          return;
+        }
+
+        const targetItem =
+          offScreenVirtual[Math.floor(Math.random() * offScreenVirtual.length)];
+        const targetIdx = targetItem.index;
+        const newMultiplier = Math.floor(Math.random() * 10) + 1;
+        logEntry = `Resize index ${targetIdx} to ${newMultiplier}x (visible: ${firstVisibleIdx}-${lastVisibleIdx})`;
+
+        // Set up stability check before mutation
+        if (
+          refRowId &&
+          refRowPositionBefore !== undefined &&
+          refRowIndex !== undefined
+        ) {
+          pendingStabilityCheckRef.current = {
+            refRowId,
+            refRowIndex,
+            refRowPositionBefore,
+            scrollTopBefore: scrollTop,
+            operation: logEntry,
+          };
+        }
+
+        setRows(prev => {
+          const updated = [...prev];
+          if (updated[targetIdx]) {
+            const baseSentence =
+              'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ';
+            const newContent = `Row ${targetIdx} - ${baseSentence.repeat(newMultiplier)}`;
+            updated[targetIdx] = {
+              ...updated[targetIdx],
+              content: newContent,
+              multiplier: newMultiplier,
+            };
+          }
+          return updated;
+        });
+      }
+
+      setAutoModeLog(prev => [logEntry, ...prev.slice(0, 9)]);
+    };
+
+    // Random interval between 500ms-1.5s
+    const scheduleNext = () => {
+      const delay = 500 + Math.random() * 1000;
+      return setTimeout(() => {
+        performAutoSplice();
+        timerId = scheduleNext();
+      }, delay);
+    };
+
+    let timerId = scheduleNext();
+
+    return () => {
+      clearTimeout(timerId);
+    };
+  }, [autoMode]);
 
   return (
     <div
@@ -330,19 +603,7 @@ export function TanstackTestApp() {
             <div>
               Total Height: <strong>{Math.round(totalSize)}px</strong>
             </div>
-            {stats && (
-              <>
-                <div>
-                  Content Length Range:{' '}
-                  <strong>
-                    {stats.min}-{stats.max} chars
-                  </strong>
-                </div>
-                <div>
-                  Avg Content Length: <strong>{stats.avg} chars</strong>
-                </div>
-              </>
-            )}
+
             <div>
               Scroll Offset:{' '}
               <strong>{Math.round(virtualizer.scrollOffset ?? 0)}px</strong>
@@ -403,36 +664,6 @@ export function TanstackTestApp() {
                 borderRadius: '3px',
               }}
             />
-          </div>
-          <div style={{marginBottom: '8px'}}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
-            >
-              <input
-                ref={checkboxRef}
-                type="checkbox"
-                checked={forceAdjust === true}
-                onChange={() => {
-                  setForceAdjust(prev => {
-                    if (prev === null) return true;
-                    if (prev === true) return false;
-                    return null;
-                  });
-                }}
-                style={{marginRight: '6px'}}
-              />
-              Scroll adjustment for this row
-              {forceAdjust === null
-                ? ' (Default)'
-                : forceAdjust
-                  ? ' (Force Adjust)'
-                  : ' (Force No Adjust)'}
-            </label>
           </div>
           <button
             onClick={() => handleChangeText(true)}
@@ -555,6 +786,65 @@ export function TanstackTestApp() {
           >
             Remove All
           </button>
+        </div>
+
+        {/* Auto Mode */}
+        <div
+          style={{
+            marginBottom: '20px',
+            padding: '12px',
+            backgroundColor: autoMode ? '#d4edda' : '#fff',
+            borderRadius: '4px',
+            border: autoMode ? '2px solid #28a745' : '1px solid transparent',
+          }}
+        >
+          <h3 style={{margin: '0 0 8px 0', fontSize: '14px'}}>Auto Mode</h3>
+          <div style={{marginBottom: '8px'}}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={autoMode}
+                onChange={e => {
+                  setAutoMode(e.target.checked);
+                  if (e.target.checked) {
+                    setAutoModeLog([]);
+                  }
+                }}
+                style={{marginRight: '6px'}}
+              />
+              Enable Auto Splicing (0.5-1.5s interval)
+            </label>
+          </div>
+          <div style={{fontSize: '11px', color: '#666', marginBottom: '8px'}}>
+            Performs random splices (delete+insert) and resizes outside the
+            visible viewport. Resizes target off-screen virtual items.
+          </div>
+          {autoModeLog.length > 0 && (
+            <div
+              style={{
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                backgroundColor: '#f8f9fa',
+                padding: '8px',
+                borderRadius: '3px',
+                maxHeight: '120px',
+                overflowY: 'auto',
+              }}
+            >
+              {autoModeLog.map((log, i) => (
+                <div key={i} style={{marginBottom: '2px'}}>
+                  {log}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Reset */}
