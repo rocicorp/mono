@@ -470,7 +470,11 @@ export function buildListQuery(args: ListQueryArgs) {
           )
         : undefined,
       ...(labels ?? []).map(label =>
-        exists('labels', q => q.where('name', label)),
+        exists('issueLabels', q =>
+          q.where(({cmp: c, scalar: s}) =>
+            c('labelID', s(builder.label.where('name', label), 'id')),
+          ),
+        ),
       ),
     ),
   );
