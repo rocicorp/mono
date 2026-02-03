@@ -1,6 +1,7 @@
 import {PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
 import {getSignedUrl} from '@aws-sdk/s3-request-presigner';
 import {nanoid} from 'nanoid';
+import {ALLOWED_CONTENT_TYPES} from '../../shared/consts.ts';
 
 if (!process.env.AWS_REGION) {
   // oxlint-disable-next-line no-console -- Configuration warning in demo app
@@ -36,6 +37,12 @@ export async function getPresignedUrl(
   if (!s3) {
     throw new Error(
       'S3 client is not initialized due to missing environment variables',
+    );
+  }
+
+  if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
+    throw new Error(
+      `Invalid content type: ${contentType}. Allowed types: ${ALLOWED_CONTENT_TYPES.join(', ')}`,
     );
   }
 
