@@ -10,6 +10,11 @@ import {versionFromLexi, versionToLexi} from './lexi-version.ts';
  *
  * The `minor` version is optional and used to auxiliary state changes,
  * such as writes from pending backfills.
+ *
+ * StateVersions are persisted and passed as lexicographically ordered
+ * strings, using the LexiVersion format for major and minor versions,
+ * separated by a dot. If there is no minor version, the StateVersion
+ * is represented by a single LexiVersion.
  */
 export type StateVersion = {
   major: bigint;
