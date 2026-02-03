@@ -3,6 +3,10 @@ import {jsonSchema} from '../../../../../shared/src/json-schema.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../../zero-protocol/src/ast.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
+import {
+  majorVersionToString,
+  stateVersionFromString,
+} from '../../../types/state-version.ts';
 import {ttlClockSchema} from '../ttl-clock.ts';
 import type {QueriesRow} from './cvr.ts';
 
@@ -34,12 +38,12 @@ export const cvrVersionSchema = v.object({
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
 
 export const EMPTY_CVR_VERSION: CVRVersion = {
-  stateVersion: versionToLexi(0),
+  stateVersion: majorVersionToString(0),
 } as const;
 
 export function oneAfter(v: NullableCVRVersion): CVRVersion {
   return v === null
-    ? {stateVersion: versionToLexi(0)}
+    ? {stateVersion: majorVersionToString(0)}
     : {
         stateVersion: v.stateVersion,
         configVersion: (v.configVersion ?? 0) + 1,
@@ -304,15 +308,15 @@ export function versionFromString(str: string): CVRVersion {
   const stateVersion = parts[0];
   switch (parts.length) {
     case 1: {
-      versionFromLexi(stateVersion); // Purely for validation.
+      stateVersionFromString(stateVersion); // Purely for validation.
       return {stateVersion};
     }
     case 2: {
-      const minorVersion = versionFromLexi(parts[1]);
-      if (minorVersion > BigInt(Number.MAX_SAFE_INTEGER)) {
+      const configVersion = versionFromLexi(parts[1]);
+      if (configVersion > BigInt(Number.MAX_SAFE_INTEGER)) {
         throw new Error(`minorVersion ${parts[1]} exceeds max safe integer`);
       }
-      return {stateVersion, configVersion: Number(minorVersion)};
+      return {stateVersion, configVersion: Number(configVersion)};
     }
     default:
       throw new TypeError(`Invalid version string ${str}`);

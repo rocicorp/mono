@@ -20,7 +20,7 @@ import {
 import type {PostgresDB} from '../../../types/pg.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
 import {initialSync, INSERT_BATCH_SIZE} from './initial-sync.ts';
-import {fromLexiVersion} from './lsn.ts';
+import {fromStateVersionString} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
 import {UnsupportedTableSchemaError} from './schema/validation.ts';
@@ -2601,7 +2601,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           FROM pg_replication_slots WHERE slot_name = ${r.slot}`;
         expect(slots[0]).toEqual({
           slotName: r.slot,
-          lsn: fromLexiVersion(replicaState.stateVersion),
+          lsn: fromStateVersionString(replicaState.stateVersion),
         });
 
         expect(eventSink.slice(0, 2)).toMatchObject([

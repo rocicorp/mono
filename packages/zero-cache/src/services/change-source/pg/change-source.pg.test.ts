@@ -15,8 +15,11 @@ import {
   test,
 } from '../../../test/db.ts';
 import {DbFile} from '../../../test/lite.ts';
-import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
 import {type PostgresDB} from '../../../types/pg.ts';
+import {
+  majorVersionFromString,
+  majorVersionToString,
+} from '../../../types/state-version.ts';
 import type {Source} from '../../../types/streams.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
@@ -27,7 +30,7 @@ import type {
   Commit,
 } from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
-import {fromLexiVersion} from './lsn.ts';
+import {fromStateVersionString} from './lsn.ts';
 import {dropEventTriggerStatements} from './schema/ddl.ts';
 
 const APP_ID = '23';
@@ -349,9 +352,9 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     const results = await upstream<{confirmed: string}[]>`
     SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
         WHERE slot_name = ${replicationSlot}`;
-    const expected = versionFromLexi(commit1[2].watermark);
+    const expected = majorVersionFromString(commit1[2].watermark);
     expect(results).toEqual([
-      {confirmed: fromLexiVersion(versionToLexi(expected))},
+      {confirmed: fromStateVersionString(majorVersionToString(expected))},
     ]);
   });
 
@@ -485,6 +488,17 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     expect(await changes3.dequeue()).toMatchObject(begin3);
     expect(await changes3.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
     expect(await changes3.dequeue()).toEqual(commit3);
+
+    stream3.changes.cancel();
+
+    // Similarly, start a stream from after the secondCommit that has
+    // a minor version to confirm that it is ignored.
+    const stream4 = await startStream(`${commit2[2].watermark}.3z8d2`);
+    const changes4 = drainToQueue(stream4.changes);
+
+    expect(await changes4.dequeue()).toMatchObject(begin3);
+    expect(await changes4.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    expect(await changes4.dequeue()).toEqual(commit3);
 
     stream3.changes.cancel();
   });
