@@ -3,6 +3,7 @@ import {jsonSchema} from '../../../../../shared/src/json-schema.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../../zero-protocol/src/ast.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
+import {majorVersionToString} from '../../../types/state-version.ts';
 import {ttlClockSchema} from '../ttl-clock.ts';
 import type {QueriesRow} from './cvr.ts';
 
@@ -13,7 +14,7 @@ export const cvrVersionSchema = v.object({
   stateVersion: v.string(), // LexiVersion
 
   /**
-   * `minorVersion` is subversion of `stateVersion` that is initially absent for each
+   * `configVersion` is subversion of `stateVersion` that is initially absent for each
    * `stateVersion`, and incremented for configuration changes that affect the contents
    * of the CVR such as:
    *
@@ -28,21 +29,21 @@ export const cvrVersionSchema = v.object({
    * When the `stateVersion` moves forward, the `minorVersion` is reset to absent.
    * In this manner it behaves like the analogous concept in semantic versioning.
    */
-  minorVersion: v.number().optional(),
+  configVersion: v.number().optional(),
 });
 
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
 
 export const EMPTY_CVR_VERSION: CVRVersion = {
-  stateVersion: versionToLexi(0),
+  stateVersion: majorVersionToString(0),
 } as const;
 
 export function oneAfter(v: NullableCVRVersion): CVRVersion {
   return v === null
-    ? {stateVersion: versionToLexi(0)}
+    ? {stateVersion: majorVersionToString(0)}
     : {
         stateVersion: v.stateVersion,
-        minorVersion: (v.minorVersion ?? 0) + 1,
+        configVersion: (v.configVersion ?? 0) + 1,
       };
 }
 
@@ -62,7 +63,7 @@ export function cmpVersions(
           ? -1
           : a.stateVersion > b.stateVersion
             ? 1
-            : (a.minorVersion ?? 0) - (b.minorVersion ?? 0);
+            : (a.configVersion ?? 0) - (b.configVersion ?? 0);
 }
 
 export function maxVersion(a: CVRVersion, b?: CVRVersion): CVRVersion {
@@ -294,8 +295,8 @@ export function versionString(v: CVRVersion) {
   // storage key path separator (e.g. "/") so that "01/row-hash" is less than "01:01/row-hash".
   // In particular, the traditional separator for major.minor versions (".") does not
   // satisfy this quality.
-  return v.minorVersion
-    ? `${v.stateVersion}:${versionToLexi(v.minorVersion)}`
+  return v.configVersion
+    ? `${v.stateVersion}:${versionToLexi(v.configVersion)}`
     : v.stateVersion;
 }
 
@@ -312,7 +313,7 @@ export function versionFromString(str: string): CVRVersion {
       if (minorVersion > BigInt(Number.MAX_SAFE_INTEGER)) {
         throw new Error(`minorVersion ${parts[1]} exceeds max safe integer`);
       }
-      return {stateVersion, minorVersion: Number(minorVersion)};
+      return {stateVersion, configVersion: Number(minorVersion)};
     }
     default:
       throw new TypeError(`Invalid version string ${str}`);

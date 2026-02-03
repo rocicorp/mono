@@ -11,44 +11,44 @@ describe('view-syncer/schema/types', () => {
   test('version comparison', () => {
     expect(
       cmpVersions(
-        {stateVersion: '02', minorVersion: 1},
-        {stateVersion: '01', minorVersion: 2},
+        {stateVersion: '02', configVersion: 1},
+        {stateVersion: '01', configVersion: 2},
       ),
     ).toBeGreaterThan(0);
 
     expect(
       cmpVersions(
-        {stateVersion: '01', minorVersion: 2},
-        {stateVersion: '02', minorVersion: 1},
+        {stateVersion: '01', configVersion: 2},
+        {stateVersion: '02', configVersion: 1},
       ),
     ).toBeLessThan(0);
 
     expect(
       cmpVersions(
-        {stateVersion: '02', minorVersion: 1},
-        {stateVersion: '02', minorVersion: 2},
+        {stateVersion: '02', configVersion: 1},
+        {stateVersion: '02', configVersion: 2},
       ),
     ).toBeLessThan(0);
 
     expect(
       cmpVersions(
-        {stateVersion: '02', minorVersion: 2},
-        {stateVersion: '02', minorVersion: 1},
+        {stateVersion: '02', configVersion: 2},
+        {stateVersion: '02', configVersion: 1},
       ),
     ).toBeGreaterThan(0);
 
     expect(
-      cmpVersions({stateVersion: '02'}, {stateVersion: '02', minorVersion: 1}),
+      cmpVersions({stateVersion: '02'}, {stateVersion: '02', configVersion: 1}),
     ).toBeLessThan(0);
 
     expect(
-      cmpVersions({stateVersion: '02', minorVersion: 1}, {stateVersion: '02'}),
+      cmpVersions({stateVersion: '02', configVersion: 1}, {stateVersion: '02'}),
     ).toBeGreaterThan(0);
 
     expect(
       cmpVersions(
-        {stateVersion: '02', minorVersion: 2},
-        {stateVersion: '02', minorVersion: 2},
+        {stateVersion: '02', configVersion: 2},
+        {stateVersion: '02', configVersion: 2},
       ),
     ).toBe(0);
 
@@ -62,11 +62,11 @@ describe('view-syncer/schema/types', () => {
       {cookie: null, version: null},
       {cookie: '00', version: {stateVersion: '00'}},
       {cookie: '2abc', version: {stateVersion: '2abc'}},
-      {cookie: '00:01', version: {stateVersion: '00', minorVersion: 1}},
-      {cookie: '100:0a', version: {stateVersion: '100', minorVersion: 10}},
+      {cookie: '00:01', version: {stateVersion: '00', configVersion: 1}},
+      {cookie: '100:0a', version: {stateVersion: '100', configVersion: 10}},
       {
         cookie: 'a128adk2f9s:110',
-        version: {stateVersion: 'a128adk2f9s', minorVersion: 36},
+        version: {stateVersion: 'a128adk2f9s', configVersion: 36},
       },
     ] satisfies {
       cookie: string | null;
@@ -98,23 +98,23 @@ describe('view-syncer/schema/types', () => {
     [
       {
         version: {stateVersion: '00'},
-        plusOne: {stateVersion: '00', minorVersion: 1},
+        plusOne: {stateVersion: '00', configVersion: 1},
       },
       {
         version: {stateVersion: '2abc'},
-        plusOne: {stateVersion: '2abc', minorVersion: 1},
+        plusOne: {stateVersion: '2abc', configVersion: 1},
       },
       {
-        version: {stateVersion: '00', minorVersion: 1},
-        plusOne: {stateVersion: '00', minorVersion: 2},
+        version: {stateVersion: '00', configVersion: 1},
+        plusOne: {stateVersion: '00', configVersion: 2},
       },
       {
-        version: {stateVersion: '100', minorVersion: 10},
-        plusOne: {stateVersion: '100', minorVersion: 11},
+        version: {stateVersion: '100', configVersion: 10},
+        plusOne: {stateVersion: '100', configVersion: 11},
       },
       {
-        version: {stateVersion: 'a128adk2f9s', minorVersion: 36},
-        plusOne: {stateVersion: 'a128adk2f9s', minorVersion: 37},
+        version: {stateVersion: 'a128adk2f9s', configVersion: 36},
+        plusOne: {stateVersion: 'a128adk2f9s', configVersion: 37},
       },
     ] satisfies {
       version: CVRVersion;

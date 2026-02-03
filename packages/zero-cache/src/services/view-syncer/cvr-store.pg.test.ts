@@ -220,7 +220,7 @@ describe('view-syncer/cvr-store', () => {
     const cvr = await loading;
     expect(cvr.version).toEqual({
       stateVersion: '05',
-      minorVersion: 1,
+      configVersion: 1,
     });
   });
 
