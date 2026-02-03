@@ -22,18 +22,17 @@ import {Database} from '../../../../../zqlite/src/db.ts';
 import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
 import type {ColumnSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {
-  oneAfter,
-  versionFromLexi,
-  versionToLexi,
-  type LexiVersion,
-} from '../../../types/lexi-version.ts';
+import {type LexiVersion} from '../../../types/lexi-version.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {
   upstreamSchema,
   type ShardConfig,
   type ShardID,
 } from '../../../types/shards.ts';
+import {
+  majorVersionFromString,
+  majorVersionToString,
+} from '../../../types/state-version.ts';
 import type {Sink} from '../../../types/streams.ts';
 import {Subscription, type PendingResult} from '../../../types/subscription.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
@@ -61,7 +60,7 @@ import type {
   MessageRelation as PostgresRelation,
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe} from './logical-replication/stream.ts';
-import {fromBigInt, toLexiVersion, type LSN} from './lsn.ts';
+import {fromBigInt, toStateVersionString, type LSN} from './lsn.ts';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
 import {
@@ -258,13 +257,13 @@ class PostgresChangeSource implements ChangeSource {
     clientWatermark: string,
     shardConfig: InternalShardConfig,
   ): Promise<ChangeStream> {
-    const clientStart = oneAfter(clientWatermark);
+    const clientStart = majorVersionFromString(clientWatermark) + 1n;
     const {messages, acks} = await subscribe(
       this.#lc,
       db,
       slot,
       [...shardConfig.publications],
-      versionFromLexi(clientStart),
+      clientStart,
     );
 
     const changes = Subscription.create<ChangeStreamMessage>({
@@ -284,7 +283,11 @@ class PostgresChangeSource implements ChangeSource {
       try {
         for await (const [lsn, msg] of messages) {
           if (msg.tag === 'keepalive') {
-            changes.push(['status', msg, {watermark: versionToLexi(lsn)}]);
+            changes.push([
+              'status',
+              msg,
+              {watermark: majorVersionToString(lsn)},
+            ]);
             continue;
           }
           let last: PendingResult | undefined;
@@ -424,7 +427,7 @@ export class Acker {
 
     // Note: Sending '0/0' means "keep alive but do not update confirmed_flush_lsn"
     // https://github.com/postgres/postgres/blob/3edc67d337c2e498dad1cd200e460f7c63e512e6/src/backend/replication/walsender.c#L2457
-    const lsn = watermark ? versionFromLexi(watermark) : 0n;
+    const lsn = watermark ? majorVersionFromString(watermark) : 0n;
     this.#acks.push(lsn);
   }
 }
@@ -523,7 +526,7 @@ class ChangeMaker {
           [
             'begin',
             {...msg, json: 's'},
-            {commitWatermark: toLexiVersion(must(msg.commitLsn))},
+            {commitWatermark: toStateVersionString(must(msg.commitLsn))},
           ],
         ];
 
@@ -574,7 +577,11 @@ class ChangeMaker {
 
       case 'commit':
         return [
-          ['commit', msg, {watermark: toLexiVersion(must(msg.commitLsn))}],
+          [
+            'commit',
+            msg,
+            {watermark: toStateVersionString(must(msg.commitLsn))},
+          ],
         ];
 
       case 'relation':

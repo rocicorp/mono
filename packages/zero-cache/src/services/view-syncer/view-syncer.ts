@@ -498,13 +498,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (this.#drainCoordinator.shouldDrain()) {
         this.#drainCoordinator.drainNextIn(this.#totalHydrationTimeMs());
       }
-      this.#cleanup();
+      await this.#cleanup();
     } catch (e) {
       this.#lc[getLogLevel(e)]?.(
         `stopping view-syncer ${this.id}: ${String(e)}`,
         e,
       );
-      this.#cleanup(e);
+      await this.#cleanup(e);
     } finally {
       // Always wait for the cvrStore to flush, regardless of how the service
       // was stopped.
@@ -764,12 +764,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: DeleteClientsMessage,
   ): Promise<string[]> {
-    return await this.#runInLockForClient(
+    const deletedClientIDs = await this.#runInLockForClient(
       ctx,
       [msg[0], {deleted: msg[1]}],
       (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
         this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
     );
+    return deletedClientIDs ?? [];
   }
 
   #getTTLClock(now: number): TTLClock {
@@ -785,7 +786,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     this.#ttlClock = ttlClock;
     this.#ttlClockBase = now;
-    return ttlClock as TTLClock;
+    return ttlClock;
   }
 
   #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
@@ -891,7 +892,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr: CVRSnapshot,
     ) => Promise<R>,
     newClient?: ClientHandler,
-  ): Promise<R> {
+  ): Promise<R | undefined> {
     this.#lc.debug?.('viewSyncer.#runInLockForClient');
     const {clientID, wsID} = ctx;
     const [cmd, body] = msg;
@@ -949,7 +950,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             throw e;
           }
         }
-        return result as R;
+        return result;
       },
     );
   }
@@ -1981,8 +1982,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
-    return this.#runInLockForClient(context, msg, this.#handleInspect);
+  async inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
+    await this.#runInLockForClient(context, msg, this.#handleInspect);
   }
 
   // oxlint-disable-next-line require-await
@@ -2015,11 +2016,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#stopped.promise;
   }
 
-  #cleanup(err?: unknown) {
+  async #cleanup(err?: unknown) {
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
 
-    this.#pipelines.destroy();
     for (const client of this.#clients.values()) {
       if (err) {
         client.fail(err);
@@ -2027,6 +2027,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         client.close(`closed clientGroupID=${this.id}`);
       }
     }
+
+    // Wait for existing lock logic to complete before
+    // cleaning up the pipelines and closing db connections.
+    await this.#lock.withLock(() => {});
+    this.#pipelines.destroy();
   }
 
   /**
