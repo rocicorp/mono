@@ -62,6 +62,14 @@ function createRowContent(rowIndex: number, multiplier: number): string {
   return `Row ${rowIndex} - ${baseSentence.repeat(multiplier)}`;
 }
 
+// Helper to calculate size based on multiplier and mode
+function calculateSize(multiplier: number, useFixedHeight: boolean): number {
+  if (useFixedHeight) {
+    return DEFAULT_HEIGHT + multiplier * 10;
+  }
+  return multiplier * 20 + 50;
+}
+
 export function TanstackTestApp() {
   const [rows, setRows] = useState<RowData[]>(() => generateRows(100, 0, seed));
   const [selectedRowId, setSelectedRowId] = useState<string>('');
@@ -83,12 +91,11 @@ export function TanstackTestApp() {
 
   const estimateSize = useCallback(
     (index: number) => {
-      if (useFixedHeight) {
+      const row = rows[index];
+      if (!row) {
         return DEFAULT_HEIGHT;
       }
-      // Dynamic: estimate based on multiplier if known
-      const row = rows[index];
-      return row ? row.multiplier * 20 + 50 : DEFAULT_HEIGHT;
+      return calculateSize(row.multiplier, useFixedHeight);
     },
     [useFixedHeight, rows],
   );
@@ -173,6 +180,7 @@ export function TanstackTestApp() {
         );
         return false;
       }
+      const newSize = calculateSize(multiplier, useFixedHeight);
       setRows(prev => {
         const updated = [...prev];
         updated[rowIndex] = {
@@ -182,6 +190,7 @@ export function TanstackTestApp() {
         };
         return updated;
       });
+      virtualizer.resizeItem(rowIndex, newSize);
       return true;
     };
 
@@ -242,6 +251,7 @@ export function TanstackTestApp() {
     ) {
       const rowIndex = rows.findIndex(r => r.id === selectedRowId);
       if (rowIndex !== -1) {
+        const newSize = calculateSize(multiplier, useFixedHeight);
         setRows(prev => {
           const updated = [...prev];
           updated[rowIndex] = {
@@ -251,6 +261,7 @@ export function TanstackTestApp() {
           };
           return updated;
         });
+        virtualizer.resizeItem(rowIndex, newSize);
       }
     }
   };
@@ -359,6 +370,7 @@ export function TanstackTestApp() {
             currentRows.length - 1);
 
       // Decide operation type: 0 = splice (delete+insert), 1 = resize
+      // In fixed height mode, resizing changes estimates but still tests stability
       const opType = Math.floor(Math.random() * 2);
       let logEntry = '';
 
@@ -451,6 +463,7 @@ export function TanstackTestApp() {
           offScreenVirtual[Math.floor(Math.random() * offScreenVirtual.length)];
         const targetIdx = targetItem.index;
         const newMultiplier = Math.floor(Math.random() * 10) + 1;
+        const newSize = calculateSize(newMultiplier, useFixedHeight);
         logEntry = `Resize index ${targetIdx} to ${newMultiplier}x (visible: ${firstVisibleIdx}-${lastVisibleIdx})`;
 
         setRows(prev => {
@@ -464,6 +477,7 @@ export function TanstackTestApp() {
           }
           return updated;
         });
+        virtualizer.resizeItem(targetIdx, newSize);
       }
 
       setAutoModeLog(prev => [logEntry, ...prev.slice(0, 9)]);
@@ -913,10 +927,10 @@ export function TanstackTestApp() {
                         top: 0,
                         left: 0,
                         width: '100%',
-                        height: `${DEFAULT_HEIGHT}px`,
+                        height: `${virtualItem.size}px`,
                         transform: `translateY(${virtualItem.start}px)`,
-                        padding: '16px',
-                        borderBottom: '1px solid #eee',
+                        padding: '20px',
+                        borderBottom: '1px solid #ddd',
                         backgroundColor:
                           selectedRowId === row.id ? '#fff3cd' : '#fff',
                         boxSizing: 'border-box',
@@ -950,8 +964,8 @@ export function TanstackTestApp() {
                         data-index={virtualItem.index}
                         ref={virtualizer.measureElement}
                         style={{
-                          padding: '16px',
-                          borderBottom: '1px solid #eee',
+                          padding: '20px',
+                          borderBottom: '1px solid #ddd',
                           backgroundColor:
                             selectedRowId === row.id ? '#fff3cd' : '#fff',
                           boxSizing: 'border-box',
