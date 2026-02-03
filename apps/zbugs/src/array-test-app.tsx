@@ -494,6 +494,7 @@ function ArrayTestAppContent() {
           </div>
           <div style={{marginBottom: '8px'}}>
             <button
+              hidden={true}
               onClick={() => {
                 setAnchorKind('permalink');
                 setAnchorIndex(0);
