@@ -8,8 +8,11 @@ import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
 import {isAdminPasswordValid} from '../config/zero-config.ts';
+import {StatementRunner} from '../db/statements.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
+import {fromLexiVersion} from './change-source/pg/lsn.ts';
+import {getReplicationState} from './replicator/schema/replication-state.ts';
 
 async function upstreamStats(
   lc: LogContext,
@@ -251,6 +254,18 @@ function replicaStats(lc: LogContext, config: ZeroConfig, out: Writable) {
     ] as const,
     out,
   );
+
+  try {
+    printStats('replication', getReplicationStats(db), out);
+  } catch (e) {
+    lc.error?.(`unable to get replication state`, e);
+  }
+}
+
+function getReplicationStats(db: Database) {
+  const {stateVersion} = getReplicationState(new StatementRunner(db));
+  const lsn = fromLexiVersion(stateVersion);
+  return {lsn};
 }
 
 function osStats(out: Writable) {
@@ -292,12 +307,17 @@ async function printPgStats(
 
 function printStats(
   group: string,
-  queries: readonly [name: string, result: unknown][],
+  queriesOrObject:
+    | readonly [name: string, result: unknown][]
+    | Record<string, unknown>,
   out: Writable,
 ) {
+  const queries = Array.isArray(queriesOrObject)
+    ? queriesOrObject
+    : Object.entries(queriesOrObject);
   out.write('\n' + header(group));
   for (const [name, result] of queries) {
-    out.write('\n' + name + BigIntJSON.stringify(result, null, 2));
+    out.write('\n' + name + ' ' + BigIntJSON.stringify(result, null, 2));
   }
 }
 
@@ -313,6 +333,15 @@ export async function handleStatzRequest(
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="Statz Protected Area"')
       .send('Unauthorized');
+    return;
+  }
+
+  const query = req.query as Record<string, unknown>;
+  if (query.replication !== undefined) {
+    const stats = getReplicationStats(new Database(lc, config.replica.file));
+    await res
+      .header('Content-Type', 'application/json')
+      .send(JSON.stringify(stats));
     return;
   }
 
