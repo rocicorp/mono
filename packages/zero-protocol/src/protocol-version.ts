@@ -51,7 +51,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 43 renames `plans` to `sqlitePlans`, `plannerEvents` to `joinPlans`, and `plannerDebug` option to `joinPlans` (0.25)
 // -- version 44 adds profileID to connection URL (0.25)
 // -- version 45 adds userPushHeaders and userQueryHeaders to initConnection (0.25)
-export const PROTOCOL_VERSION = 45;
+// -- version 46 adds optional auth token to push body (0.25)
+export const PROTOCOL_VERSION = 46;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
