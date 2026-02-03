@@ -2148,6 +2148,7 @@ describe('scalar subquery via cmp + scalar', () => {
           ],
           "op": "=",
           "subquery": {
+            "alias": "zsubq_scalar_user",
             "table": "user",
           },
           "type": "scalarSubquery",
@@ -2177,6 +2178,7 @@ describe('scalar subquery via cmp + scalar', () => {
           ],
           "op": "!=",
           "subquery": {
+            "alias": "zsubq_scalar_user",
             "table": "user",
           },
           "type": "scalarSubquery",
@@ -2206,6 +2208,7 @@ describe('scalar subquery via cmp + scalar', () => {
           ],
           "op": "=",
           "subquery": {
+            "alias": "zsubq_scalar_user",
             "table": "user",
             "where": {
               "left": {
@@ -2247,6 +2250,7 @@ describe('scalar subquery via cmp + scalar', () => {
           ],
           "op": "!=",
           "subquery": {
+            "alias": "zsubq_scalar_user",
             "table": "user",
             "where": {
               "left": {
@@ -2317,6 +2321,7 @@ describe('scalar subquery via cmp + scalar', () => {
           ],
           "op": "!=",
           "subquery": {
+            "alias": "zsubq_scalar_user",
             "table": "user",
             "where": {
               "left": {

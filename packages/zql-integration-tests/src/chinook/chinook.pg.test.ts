@@ -145,6 +145,31 @@ describe(
               ),
           },
           {
+            name: 'Scalar subquery: tracks for album by title',
+            createQuery: q =>
+              q.track.where(({cmp, scalar}) =>
+                cmp(
+                  'albumId',
+                  scalar(q.album.where('title', 'Riot Act').one(), 'id'),
+                ),
+              ),
+          },
+          // Note: != scalar subquery is not tested here because it rewrites to
+          // NOT EXISTS which is not supported on the memory backend.
+          {
+            name: 'Scalar subquery: with and combinator',
+            createQuery: q =>
+              q.track.where(({and, cmp, scalar}) =>
+                and(
+                  cmp(
+                    'albumId',
+                    scalar(q.album.where('title', 'Riot Act').one(), 'id'),
+                  ),
+                  cmp('name', 'LIKE', '%Mine%'),
+                ),
+              ),
+          },
+          {
             name: 'Prefix like',
             createQuery: q => q.album.where('title', 'LIKE', 'Riot%').limit(1),
             manualVerification: [

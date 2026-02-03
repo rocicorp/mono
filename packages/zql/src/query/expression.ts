@@ -2,6 +2,7 @@
 import {must} from '../../../shared/src/must.ts';
 import {
   toStaticParam,
+  SUBQ_PREFIX,
   type AST,
   type CompoundKey,
   type Condition,
@@ -163,7 +164,10 @@ export class ExpressionBuilder<
     options?: ExistsOptions,
   ): Condition => this.#exists(relationship, cb, options);
 
-  scalar = (query: Query<string, any>, column: string): ScalarReference => {
+  scalar = (
+    query: Query<string, any, any>,
+    column: string,
+  ): ScalarReference => {
     const qi = asQueryInternals(query);
     return {
       [toScalarRef]: {
@@ -267,12 +271,16 @@ export function cmp(
   }
 
   if (isScalarReference(actualValue)) {
+    const subqueryAst = actualValue[toScalarRef].ast;
     return {
       type: 'scalarSubquery',
       op: op as '=' | '!=',
       field: [field] as CompoundKey,
       column: actualValue[toScalarRef].column,
-      subquery: actualValue[toScalarRef].ast,
+      subquery: {
+        ...subqueryAst,
+        alias: subqueryAst.alias ?? `${SUBQ_PREFIX}scalar_${subqueryAst.table}`,
+      },
     };
   }
 
