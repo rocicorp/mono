@@ -72,13 +72,6 @@ export function TanstackTestApp() {
     ReturnType<typeof virtualizer.getVirtualItems>
   >([]);
   const rowsRef = useRef(rows);
-  const pendingStabilityCheckRef = useRef<{
-    refRowId: string;
-    refRowIndex: number;
-    refRowPositionBefore: number;
-    scrollTopBefore: number;
-    operation: string;
-  } | null>(null);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -266,65 +259,6 @@ export function TanstackTestApp() {
   virtualItemsRef.current = virtualItems;
   rowsRef.current = rows;
 
-  // Check stability after state updates
-  useEffect(() => {
-    const pending = pendingStabilityCheckRef.current;
-    if (!pending) return;
-    pendingStabilityCheckRef.current = null;
-
-    // Check multiple times to see how scroll settles
-    const checkStability = (attempt: number) => {
-      const scrollElement = parentRef.current;
-      if (!scrollElement) return;
-
-      const scrollTopAfter = scrollElement.scrollTop;
-
-      // Find the reference row in the DOM by its data-key
-      const refRowElement = document.querySelector(
-        `[data-key="${pending.refRowId}"]`,
-      ) as HTMLElement;
-      if (!refRowElement) {
-        // oxlint-disable-next-line no-console -- debug
-        console.log(
-          `[AUTO-SPLICE] After[${attempt}]: refRow=${pending.refRowId} NOT FOUND in DOM`,
-        );
-        return;
-      }
-
-      const refRowRect = refRowElement.getBoundingClientRect();
-      const containerRect = scrollElement.getBoundingClientRect();
-      const refRowPositionAfter = refRowRect.top - containerRect.top;
-
-      const positionDrift = refRowPositionAfter - pending.refRowPositionBefore;
-      const scrollDrift = scrollTopAfter - pending.scrollTopBefore;
-
-      // oxlint-disable-next-line no-console -- debug
-      console.log(
-        `[AUTO-SPLICE] After[${attempt}]: refRow=${pending.refRowId} posInViewport=${refRowPositionAfter.toFixed(1)}px scrollTop=${scrollTopAfter.toFixed(1)}`,
-      );
-
-      // Only report final check
-      if (attempt === 2) {
-        // oxlint-disable-next-line no-console -- debug
-        console.log(
-          `[AUTO-SPLICE] Drift: position=${positionDrift.toFixed(1)}px scroll=${scrollDrift.toFixed(1)}px op="${pending.operation}"`,
-        );
-
-        if (Math.abs(positionDrift) > 2) {
-          // oxlint-disable-next-line no-console -- debug
-          console.warn(
-            `[AUTO-SPLICE] ⚠️ UNSTABLE: Row ${pending.refRowId} moved by ${positionDrift.toFixed(1)}px!`,
-          );
-        }
-      }
-    };
-
-    // Check at 50ms, 150ms, 300ms to see how things settle
-    setTimeout(() => checkStability(0), 50);
-    setTimeout(() => checkStability(1), 150);
-    setTimeout(() => checkStability(2), 300);
-  }, [rows]); // Run after rows change
-
   // Auto mode: perform random splices every 0.5-1.5 seconds
   useEffect(() => {
     if (!autoMode) return;
@@ -359,28 +293,6 @@ export function TanstackTestApp() {
             currentRows.length - 1)
           : (currentVirtualItems[currentVirtualItems.length - 1]?.index ??
             currentRows.length - 1);
-
-      // Capture reference row position BEFORE mutation for stability tracking
-      // Use the first fully visible row as reference
-      const refItem =
-        currentVirtualItems.find(
-          item =>
-            item.start >= scrollTop && item.start + item.size <= scrollBottom,
-        ) ?? currentVirtualItems[visibleStartIndex];
-
-      let refRowId: string | undefined;
-      let refRowPositionBefore: number | undefined;
-      let refRowIndex: number | undefined;
-      if (refItem) {
-        refRowIndex = refItem.index;
-        refRowId = currentRows[refItem.index]?.id;
-        // Position relative to viewport top
-        refRowPositionBefore = refItem.start - scrollTop;
-        // oxlint-disable-next-line no-console -- debug
-        console.log(
-          `[AUTO-SPLICE] Before: refRow=${refRowId} index=${refRowIndex} posInViewport=${refRowPositionBefore.toFixed(1)}px scrollTop=${scrollTop.toFixed(1)}`,
-        );
-      }
 
       // Decide operation type: 0 = splice (delete+insert), 1 = resize
       const opType = Math.floor(Math.random() * 2);
@@ -450,21 +362,6 @@ export function TanstackTestApp() {
           insCount > 0 ? generateRows(insCount, maxIndex + 1, Date.now()) : [];
         logEntry = `Splice at ${targetIdx}: -${delCount} +${insCount} (visible: ${firstVisibleIdx}-${lastVisibleIdx})`;
 
-        // Set up stability check before mutation
-        if (
-          refRowId &&
-          refRowPositionBefore !== undefined &&
-          refRowIndex !== undefined
-        ) {
-          pendingStabilityCheckRef.current = {
-            refRowId,
-            refRowIndex,
-            refRowPositionBefore,
-            scrollTopBefore: scrollTop,
-            operation: logEntry,
-          };
-        }
-
         setRows(prev => {
           const updated = [...prev];
           updated.splice(targetIdx, delCount, ...newRows);
@@ -491,21 +388,6 @@ export function TanstackTestApp() {
         const targetIdx = targetItem.index;
         const newMultiplier = Math.floor(Math.random() * 10) + 1;
         logEntry = `Resize index ${targetIdx} to ${newMultiplier}x (visible: ${firstVisibleIdx}-${lastVisibleIdx})`;
-
-        // Set up stability check before mutation
-        if (
-          refRowId &&
-          refRowPositionBefore !== undefined &&
-          refRowIndex !== undefined
-        ) {
-          pendingStabilityCheckRef.current = {
-            refRowId,
-            refRowIndex,
-            refRowPositionBefore,
-            scrollTopBefore: scrollTop,
-            operation: logEntry,
-          };
-        }
 
         setRows(prev => {
           const updated = [...prev];
