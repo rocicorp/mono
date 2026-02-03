@@ -187,11 +187,11 @@ describe('view-syncer/service', () => {
         'query-hash1': {
           ast: ISSUES_QUERY,
           type: 'client',
-          clientState: {foo: {version: {stateVersion: '00', minorVersion: 1}}},
+          clientState: {foo: {version: {stateVersion: '00', configVersion: 1}}},
           id: 'query-hash1',
         },
       },
-      version: {stateVersion: '00', minorVersion: 1},
+      version: {stateVersion: '00', configVersion: 1},
     });
   });
 
@@ -310,7 +310,7 @@ describe('view-syncer/service', () => {
             foo: {
               inactivatedAt,
               ttl: DEFAULT_TTL_MS,
-              version: {minorVersion: 2, stateVersion: '00'},
+              version: {configVersion: 2, stateVersion: '00'},
             },
           },
           id: 'query-hash1',
@@ -322,13 +322,13 @@ describe('view-syncer/service', () => {
             foo: {
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
-              version: {stateVersion: '00', minorVersion: 2},
+              version: {stateVersion: '00', configVersion: 2},
             },
           },
           id: 'query-hash2',
         },
       },
-      version: {stateVersion: '00', minorVersion: 2},
+      version: {stateVersion: '00', configVersion: 2},
     });
   });
 
@@ -1259,7 +1259,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -1517,7 +1517,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "01",
                   },
                 },
@@ -2163,7 +2163,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -2181,7 +2181,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -2342,7 +2342,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "01",
                   },
                 },
@@ -2350,7 +2350,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -2375,7 +2375,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "01",
                   },
                 },
@@ -2383,7 +2383,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },

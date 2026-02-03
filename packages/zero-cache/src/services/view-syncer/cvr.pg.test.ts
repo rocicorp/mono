@@ -633,7 +633,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual({
       id: 'abc123',
-      version: {stateVersion: '1a9', minorVersion: 2},
+      version: {stateVersion: '1a9', configVersion: 2},
       replicaVersion: '123',
       lastActive: 1713830400000,
       ttlClock: ttlClockFromNumber(1713830400000),
@@ -651,12 +651,12 @@ describe('view-syncer/cvr', () => {
           transformationHash: 'twoHash',
           clientState: {
             fooClient: {
-              version: {stateVersion: '1a9', minorVersion: 1},
+              version: {stateVersion: '1a9', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
-          patchVersion: {stateVersion: '1a9', minorVersion: 2},
+          patchVersion: {stateVersion: '1a9', configVersion: 2},
         },
       },
       clientSchema: null,
@@ -746,7 +746,7 @@ describe('view-syncer/cvr', () => {
 
     expect(cvr).toEqual({
       id: 'abc123',
-      version: {stateVersion: '1a9', minorVersion: 2},
+      version: {stateVersion: '1a9', configVersion: 2},
       replicaVersion: '112',
       lastActive: Date.UTC(2024, 3, 23),
       ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
@@ -764,12 +764,12 @@ describe('view-syncer/cvr', () => {
           transformationHash: 'twoHash',
           clientState: {
             fooClient: {
-              version: {stateVersion: '1a9', minorVersion: 1},
+              version: {stateVersion: '1a9', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
-          patchVersion: {stateVersion: '1a9', minorVersion: 2},
+          patchVersion: {stateVersion: '1a9', configVersion: 2},
         },
       },
       clientSchema: null,
@@ -1011,12 +1011,12 @@ describe('view-syncer/cvr', () => {
               ttl: DEFAULT_TTL_MS,
             },
             fooClient: {
-              version: {stateVersion: '1a9', minorVersion: 1},
+              version: {stateVersion: '1a9', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
-          patchVersion: {stateVersion: '1a9', minorVersion: 2},
+          patchVersion: {stateVersion: '1a9', configVersion: 2},
         },
       },
       clientSchema: null,
@@ -1037,7 +1037,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -1060,7 +1060,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -1072,7 +1072,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -1084,7 +1084,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -1108,7 +1108,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -1120,7 +1120,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -1132,7 +1132,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -1153,7 +1153,7 @@ describe('view-syncer/cvr', () => {
                         "type": "query",
                       },
                       "toVersion": {
-                        "minorVersion": 1,
+                        "configVersion": 1,
                         "stateVersion": "1aa",
                       },
                     },
@@ -1180,7 +1180,7 @@ describe('view-syncer/cvr', () => {
     `);
     expect(updated).toEqual({
       id: 'abc123',
-      version: {stateVersion: '1aa', minorVersion: 1}, // minorVersion bump
+      version: {stateVersion: '1aa', configVersion: 1}, // configVersion bump
       replicaVersion: '101',
       lastActive: 1713916800000,
       ttlClock: ttlClockFromNumber(1713916800000),
@@ -1264,7 +1264,7 @@ describe('view-syncer/cvr', () => {
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
               version: {
-                minorVersion: 1,
+                configVersion: 1,
                 stateVersion: '1aa',
               },
             },
@@ -1272,7 +1272,7 @@ describe('view-syncer/cvr', () => {
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
               version: {
-                minorVersion: 1,
+                configVersion: 1,
                 stateVersion: '1aa',
               },
             },
@@ -1289,12 +1289,12 @@ describe('view-syncer/cvr', () => {
           transformationVersion: undefined,
           clientState: {
             barClient: {
-              version: {stateVersion: '1aa', minorVersion: 1},
+              version: {stateVersion: '1aa', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
-          patchVersion: {stateVersion: '1a9', minorVersion: 2},
+          patchVersion: {stateVersion: '1a9', configVersion: 2},
         },
         threeHash: {
           id: 'threeHash',
@@ -1302,12 +1302,12 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'comments'},
           clientState: {
             barClient: {
-              version: {stateVersion: '1aa', minorVersion: 1},
+              version: {stateVersion: '1aa', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
             fooClient: {
-              version: {stateVersion: '1aa', minorVersion: 1},
+              version: {stateVersion: '1aa', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
@@ -1319,7 +1319,7 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'users'},
           clientState: {
             fooClient: {
-              version: {stateVersion: '1aa', minorVersion: 1},
+              version: {stateVersion: '1aa', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
@@ -1594,7 +1594,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 2,
+            "configVersion": 2,
             "stateVersion": "1aa",
           },
         },
@@ -1867,7 +1867,7 @@ describe('view-syncer/cvr', () => {
       [{id: 'oneHash', transformationHash: 'serverOneHash'}],
       [],
     );
-    expect(newVersion).toEqual({stateVersion: '1aa', minorVersion: 1});
+    expect(newVersion).toEqual({stateVersion: '1aa', configVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
       [
         {
@@ -1877,7 +1877,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -1943,7 +1943,7 @@ describe('view-syncer/cvr', () => {
         },
       },
       {
-        toVersion: {stateVersion: '1aa', minorVersion: 1},
+        toVersion: {stateVersion: '1aa', configVersion: 1},
         patch: {
           type: 'row',
           op: 'put',
@@ -2018,7 +2018,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1a9",
           },
         },
@@ -2056,14 +2056,14 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           clientState: {
             fooClient: {
-              version: {stateVersion: '1a9', minorVersion: 1},
+              version: {stateVersion: '1a9', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'serverOneHash',
-          transformationVersion: {stateVersion: '1aa', minorVersion: 1},
-          patchVersion: {stateVersion: '1aa', minorVersion: 1},
+          transformationVersion: {stateVersion: '1aa', configVersion: 1},
+          patchVersion: {stateVersion: '1aa', configVersion: 1},
         },
       },
       lastActive: 1713834000000,
@@ -2353,7 +2353,7 @@ describe('view-syncer/cvr', () => {
       [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
       [],
     );
-    expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
+    expect(newVersion).toEqual({stateVersion: '1ba', configVersion: 1});
     expect(queryPatches).toHaveLength(0);
 
     expect(
@@ -2372,7 +2372,7 @@ describe('view-syncer/cvr', () => {
       ),
     ).toEqual([
       {
-        toVersion: {stateVersion: '1aa', minorVersion: 1},
+        toVersion: {stateVersion: '1aa', configVersion: 1},
         patch: {
           type: 'row',
           op: 'put',
@@ -2384,7 +2384,7 @@ describe('view-syncer/cvr', () => {
 
     expect(updater.updatedVersion()).toEqual({
       stateVersion: '1ba',
-      minorVersion: 1,
+      configVersion: 1,
     });
 
     expect(
@@ -2404,7 +2404,7 @@ describe('view-syncer/cvr', () => {
       ),
     ).toEqual([
       {
-        toVersion: {stateVersion: '1ba', minorVersion: 1},
+        toVersion: {stateVersion: '1ba', configVersion: 1},
         patch: {
           type: 'row',
           op: 'put',
@@ -2466,7 +2466,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -2478,7 +2478,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1a9",
           },
         },
@@ -2515,14 +2515,14 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           clientState: {
             fooClient: {
-              version: {stateVersion: '1a9', minorVersion: 1},
+              version: {stateVersion: '1a9', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'serverTwoHash',
-          transformationVersion: {stateVersion: '1ba', minorVersion: 1},
-          patchVersion: {stateVersion: '1aa', minorVersion: 1},
+          transformationVersion: {stateVersion: '1ba', configVersion: 1},
+          patchVersion: {stateVersion: '1aa', configVersion: 1},
         },
       },
       lastActive: 1713834000000,
@@ -2666,7 +2666,7 @@ describe('view-syncer/cvr', () => {
       [{id: 'oneHash', transformationHash: 'newXFormHash'}],
       [],
     ));
-    expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 2});
+    expect(newVersion).toEqual({stateVersion: '1ba', configVersion: 2});
     expect(queryPatches).toHaveLength(0);
 
     ({cvr: updated, flushed} = await updater.flush(
@@ -2914,7 +2914,7 @@ describe('view-syncer/cvr', () => {
       ],
       [],
     );
-    expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
+    expect(newVersion).toEqual({stateVersion: '1ba', configVersion: 1});
     expect(queryPatches).toHaveLength(0);
 
     expect(
@@ -2933,7 +2933,7 @@ describe('view-syncer/cvr', () => {
       ),
     ).toEqual([
       {
-        toVersion: {stateVersion: '1aa', minorVersion: 1},
+        toVersion: {stateVersion: '1aa', configVersion: 1},
         patch: {
           type: 'row',
           op: 'put',
@@ -3043,7 +3043,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -3054,7 +3054,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -3066,7 +3066,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1a9",
           },
         },
@@ -3078,7 +3078,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1a9",
           },
         },
@@ -3118,14 +3118,14 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           clientState: {
             fooClient: {
-              version: {stateVersion: '1a9', minorVersion: 1},
+              version: {stateVersion: '1a9', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'updatedServerOneHash',
           transformationVersion: newVersion,
-          patchVersion: {stateVersion: '1aa', minorVersion: 1},
+          patchVersion: {stateVersion: '1aa', configVersion: 1},
         },
         twoHash: {
           id: 'twoHash',
@@ -3133,14 +3133,14 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           clientState: {
             fooClient: {
-              version: {stateVersion: '1a9', minorVersion: 1},
+              version: {stateVersion: '1a9', configVersion: 1},
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'updatedServerTwoHash',
           transformationVersion: newVersion,
-          patchVersion: {stateVersion: '1aa', minorVersion: 1},
+          patchVersion: {stateVersion: '1aa', configVersion: 1},
         },
       },
     } satisfies CVRSnapshot);
@@ -3429,7 +3429,7 @@ describe('view-syncer/cvr', () => {
       [],
       [{id: 'oneHash'}],
     );
-    expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
+    expect(newVersion).toEqual({stateVersion: '1ba', configVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
       [
         {
@@ -3439,7 +3439,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1ba",
           },
         },
@@ -3856,14 +3856,14 @@ describe('view-syncer/cvr', () => {
                 "inactivatedAt": undefined,
                 "ttl": 300000,
                 "version": {
-                  "minorVersion": 1,
+                  "configVersion": 1,
                   "stateVersion": "1a9",
                 },
               },
             },
             "id": "oneHash",
             "patchVersion": {
-              "minorVersion": 1,
+              "configVersion": 1,
               "stateVersion": "1aa",
             },
             "transformationHash": "serverOneHash",
@@ -3881,14 +3881,14 @@ describe('view-syncer/cvr', () => {
                 "inactivatedAt": undefined,
                 "ttl": 300000,
                 "version": {
-                  "minorVersion": 1,
+                  "configVersion": 1,
                   "stateVersion": "1a9",
                 },
               },
             },
             "id": "twoHash",
             "patchVersion": {
-              "minorVersion": 1,
+              "configVersion": 1,
               "stateVersion": "1aa",
             },
             "transformationHash": "serverTwoHash",
@@ -3934,7 +3934,7 @@ describe('view-syncer/cvr', () => {
       ),
     ).toEqual([
       {
-        toVersion: {stateVersion: '1aa', minorVersion: 1},
+        toVersion: {stateVersion: '1aa', configVersion: 1},
         patch: {
           type: 'row',
           op: 'put',
@@ -4027,7 +4027,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -4038,7 +4038,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -4050,7 +4050,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1a9",
           },
         },
@@ -4062,7 +4062,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1a9",
           },
         },
@@ -5223,7 +5223,7 @@ describe('view-syncer/cvr', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "1a9",
                   },
                 },
@@ -5273,7 +5273,7 @@ describe('view-syncer/cvr', () => {
                 inactivatedAt: ttlClock,
                 ttl: DEFAULT_TTL_MS,
                 version: {
-                  minorVersion: 1,
+                  configVersion: 1,
                   stateVersion: '1aa',
                 },
               },
@@ -5286,7 +5286,7 @@ describe('view-syncer/cvr', () => {
         },
         replicaVersion: '120',
         version: {
-          minorVersion: 1,
+          configVersion: 1,
           stateVersion: '1aa',
         },
         clientSchema: null,
@@ -5384,7 +5384,7 @@ describe('view-syncer/cvr', () => {
               inactivatedAt: undefined,
               ttl,
               version: {
-                minorVersion: 1,
+                configVersion: 1,
                 stateVersion: '1a9',
               },
             },
@@ -5417,7 +5417,7 @@ describe('view-syncer/cvr', () => {
               inactivatedAt: now,
               ttl,
               version: {
-                minorVersion: 1,
+                configVersion: 1,
                 stateVersion: '1aa',
               },
             },
@@ -5533,7 +5533,7 @@ describe('view-syncer/cvr', () => {
                     "inactivatedAt": undefined,
                     "ttl": 300000,
                     "version": {
-                      "minorVersion": 1,
+                      "configVersion": 1,
                       "stateVersion": "1a9",
                     },
                   },
@@ -5542,7 +5542,7 @@ describe('view-syncer/cvr', () => {
                 "patchVersion": undefined,
                 "transformationHash": "oneHashTransformed",
                 "transformationVersion": {
-                  "minorVersion": 1,
+                  "configVersion": 1,
                   "stateVersion": "1a9",
                 },
                 "type": "client",
@@ -5573,7 +5573,7 @@ describe('view-syncer/cvr', () => {
               "type": "query",
             },
             "toVersion": {
-              "minorVersion": 1,
+              "configVersion": 1,
               "stateVersion": "1aa",
             },
           },
@@ -5607,7 +5607,7 @@ describe('view-syncer/cvr', () => {
                 inactivatedAt: ttlClock,
                 ttl: DEFAULT_TTL_MS,
                 version: {
-                  minorVersion: 1,
+                  configVersion: 1,
                   stateVersion: '1aa',
                 },
               },
@@ -5616,14 +5616,14 @@ describe('view-syncer/cvr', () => {
             patchVersion: undefined,
             transformationHash: 'oneHashTransformed',
             transformationVersion: {
-              minorVersion: 1,
+              configVersion: 1,
               stateVersion: '1a9',
             },
           },
         },
         replicaVersion: '120',
         version: {
-          minorVersion: 1,
+          configVersion: 1,
           stateVersion: '1aa',
         },
         clientSchema: null,
@@ -5706,7 +5706,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": undefined,
             "ttl": 10,
             "version": {
-              "minorVersion": 1,
+              "configVersion": 1,
               "stateVersion": "1a9",
             },
           }
@@ -5727,7 +5727,7 @@ describe('view-syncer/cvr', () => {
               "type": "query",
             },
             "toVersion": {
-              "minorVersion": 1,
+              "configVersion": 1,
               "stateVersion": "1aa",
             },
           },
@@ -5746,7 +5746,7 @@ describe('view-syncer/cvr', () => {
           "inactivatedAt": undefined,
           "ttl": 600000,
           "version": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         }
@@ -5870,7 +5870,7 @@ describe('view-syncer/cvr', () => {
             "type": "query",
           },
           "toVersion": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         },
@@ -5915,7 +5915,7 @@ describe('view-syncer/cvr', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "1a9",
                   },
                 },
@@ -5923,7 +5923,7 @@ describe('view-syncer/cvr', () => {
                   "inactivatedAt": 1709683200000,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "1aa",
                   },
                 },
@@ -5931,7 +5931,7 @@ describe('view-syncer/cvr', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "1a9",
                   },
                 },
@@ -5946,7 +5946,7 @@ describe('view-syncer/cvr', () => {
           "replicaVersion": "120",
           "ttlClock": 1709683200000,
           "version": {
-            "minorVersion": 1,
+            "configVersion": 1,
             "stateVersion": "1aa",
           },
         }
@@ -6238,7 +6238,7 @@ describe('view-syncer/cvr', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "1a9",
                   },
                 },
@@ -6246,7 +6246,7 @@ describe('view-syncer/cvr', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "1a9",
                   },
                 },

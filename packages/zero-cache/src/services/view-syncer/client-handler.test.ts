@@ -168,7 +168,7 @@ describe('view-syncer/client-handler', () => {
 
     let pokers = startPoke(handlers, poke1Version);
     await pokers.addPatch({
-      toVersion: {stateVersion: '11z', minorVersion: 1},
+      toVersion: {stateVersion: '11z', configVersion: 1},
       patch: {
         type: 'query',
         op: 'put',
@@ -195,7 +195,7 @@ describe('view-syncer/client-handler', () => {
       },
     });
     await pokers.addPatch({
-      toVersion: {stateVersion: '120', minorVersion: 2},
+      toVersion: {stateVersion: '120', configVersion: 2},
       patch: {type: 'query', op: 'del', id: 'barhash', clientID: 'foo'},
     });
     await pokers.addPatch({
@@ -208,7 +208,7 @@ describe('view-syncer/client-handler', () => {
     });
 
     await pokers.addPatch({
-      toVersion: {stateVersion: '120', minorVersion: 2},
+      toVersion: {stateVersion: '120', configVersion: 2},
       patch: {
         type: 'row',
         op: 'put',
@@ -234,7 +234,7 @@ describe('view-syncer/client-handler', () => {
       },
     });
     await pokers.addPatch({
-      toVersion: {stateVersion: '11z', minorVersion: 1},
+      toVersion: {stateVersion: '11z', configVersion: 1},
       patch: {
         type: 'row',
         op: 'del',
