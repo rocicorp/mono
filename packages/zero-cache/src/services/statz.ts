@@ -286,7 +286,7 @@ function printStats(group: string, statsObject: StatsObject, out: Writable) {
 
 /**
  * HTTP query parameters:
- * * `filter`: restricts the groups to compute stats
+ * * `group`: restricts the groups for which stats are computed
  * * `format=json`: returns the stats as a JSON object
  * * `pretty`: formats the JSON object with indentation
  */
@@ -325,10 +325,10 @@ export async function handleStatzRequest(
 
   const query = req.query as Record<string, unknown>;
   const groups =
-    typeof query.filter === 'string'
-      ? query.filter.split(',')
-      : Array.isArray(query.filter)
-        ? query.filter
+    typeof query.group === 'string'
+      ? query.group.split(',')
+      : Array.isArray(query.group)
+        ? query.group
         : undefined;
 
   const stats = await Promise.all(
