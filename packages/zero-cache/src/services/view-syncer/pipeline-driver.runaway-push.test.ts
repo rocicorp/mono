@@ -250,14 +250,12 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     );
 
-    let elapsedCalls = 0;
     let changeCount = 0;
     expect(() => {
       for (const _ of pipelines.advance({
         elapsedLap: () => 0,
         totalElapsed: () => {
-          elapsedCalls++;
-          return elapsedCalls * 100;
+          return (changeCount + 1) * 100;
         },
       }).changes) {
         changeCount++;
