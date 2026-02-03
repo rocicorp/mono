@@ -498,13 +498,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (this.#drainCoordinator.shouldDrain()) {
         this.#drainCoordinator.drainNextIn(this.#totalHydrationTimeMs());
       }
-      this.#cleanup();
+      await this.#cleanup();
     } catch (e) {
       this.#lc[getLogLevel(e)]?.(
         `stopping view-syncer ${this.id}: ${String(e)}`,
         e,
       );
-      this.#cleanup(e);
+      await this.#cleanup(e);
     } finally {
       // Always wait for the cvrStore to flush, regardless of how the service
       // was stopped.
@@ -2015,11 +2015,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#stopped.promise;
   }
 
-  #cleanup(err?: unknown) {
+  async #cleanup(err?: unknown) {
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
 
-    this.#pipelines.destroy();
     for (const client of this.#clients.values()) {
       if (err) {
         client.fail(err);
@@ -2027,6 +2026,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         client.close(`closed clientGroupID=${this.id}`);
       }
     }
+
+    // Wait for existing lock logic to complete before
+    // cleaning up the pipelines and closing db connections.
+    await this.#lock.withLock(() => {});
+    this.#pipelines.destroy();
   }
 
   /**
