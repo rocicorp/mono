@@ -42,6 +42,7 @@ import {type RowKey} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
+import {resolveSimpleScalarSubqueries} from './resolve-scalar-subqueries.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
@@ -339,6 +340,16 @@ export class PipelineDriver {
       : undefined;
 
     const costModel = this.#ensureCostModelExistsIfEnabled(
+      this.#snapshotter.current().db.db,
+    );
+
+    // Resolve simple scalar subqueries (ones with unique-key literal
+    // constraints) by executing them against SQLite and replacing them
+    // with literal conditions. Non-simple subqueries continue to the
+    // existing EXISTS rewrite in buildPipelineInternal.
+    query = resolveSimpleScalarSubqueries(
+      query,
+      this.#tableSpecs,
       this.#snapshotter.current().db.db,
     );
 
