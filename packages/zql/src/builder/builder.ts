@@ -289,36 +289,11 @@ function rewriteScalarSubquery(condition: ScalarSubqueryCondition): Condition {
     };
   }
 
-  // field != (SELECT col FROM ...) rewrites to:
-  // AND(
-  //   EXISTS (uncorrelated subquery) — guards against empty result,
-  //   NOT EXISTS (correlated subquery) — no matching row
-  // )
-  const uncorrelatedExists: CorrelatedSubqueryCondition = {
-    type: 'correlatedSubquery',
-    related: {
-      correlation: {
-        parentField: condition.field,
-        childField: condition.field,
-      },
-      subquery: {
-        ...condition.subquery,
-        alias: condition.subquery.alias
-          ? condition.subquery.alias + '_uncorr'
-          : undefined,
-      },
-    },
-    op: 'EXISTS',
-  };
-  const correlatedNotExists: CorrelatedSubqueryCondition = {
+  // field IS NOT (SELECT col FROM ...) rewrites to NOT EXISTS with correlation
+  return {
     type: 'correlatedSubquery',
     related: correlated,
     op: 'NOT EXISTS',
-  };
-
-  return {
-    type: 'and',
-    conditions: [uncorrelatedExists, correlatedNotExists],
   };
 }
 

@@ -128,7 +128,7 @@ export const correlatedSubqueryConditionSchema: v.Type<CorrelatedSubqueryConditi
 export const scalarSubqueryConditionSchema: v.Type<ScalarSubqueryCondition> =
   v.readonlyObject({
     type: v.literal('scalarSubquery'),
-    op: v.literalUnion('=', '!='),
+    op: v.literalUnion('=', 'IS NOT'),
     field: v.lazy(() => compoundKeySchema),
     subquery: v.lazy(() => astSchema),
     column: v.lazy(() => compoundKeySchema),
@@ -339,7 +339,7 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
 
 export type ScalarSubqueryCondition = {
   type: 'scalarSubquery';
-  op: '=' | '!=';
+  op: '=' | 'IS NOT';
   field: CompoundKey;
   subquery: AST;
   column: CompoundKey;

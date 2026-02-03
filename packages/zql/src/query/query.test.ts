@@ -988,8 +988,8 @@ describe('Where expression factory and builder', () => {
     // scalar in cmp - valid destination table (self)
     query.where(({cmp, scalar}) => cmp('s', scalar(selfQuery, 's')));
 
-    // scalar in cmp with != op
-    query.where(({cmp, scalar}) => cmp('s', '!=', scalar(selfQuery, 's')));
+    // scalar in cmp with IS NOT op
+    query.where(({cmp, scalar}) => cmp('s', 'IS NOT', scalar(selfQuery, 's')));
 
     // scalar with a related table
     query.where(({cmp, scalar}) => cmp('a', scalar(testRelQuery, 'a')));

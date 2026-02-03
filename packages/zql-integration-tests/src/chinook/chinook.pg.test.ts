@@ -154,7 +154,7 @@ describe(
                 ),
               ),
           },
-          // Note: != scalar subquery is not tested here because it rewrites to
+          // Note: IS NOT scalar subquery is not tested here because it rewrites to
           // NOT EXISTS which is not supported on the memory backend.
           {
             name: 'Scalar subquery: with and combinator',

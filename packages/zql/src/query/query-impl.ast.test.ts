@@ -2157,13 +2157,13 @@ describe('scalar subquery via cmp + scalar', () => {
     `);
   });
 
-  test('scalar with != op', () => {
+  test('scalar with IS NOT op', () => {
     const issueQuery = newQuery(schema, 'issue');
 
     expect(
       ast(
         issueQuery.where(({cmp, scalar}) =>
-          cmp('ownerId', '!=', scalar(userQuery, 'id')),
+          cmp('ownerId', 'IS NOT', scalar(userQuery, 'id')),
         ),
       ),
     ).toMatchInlineSnapshot(`
@@ -2176,7 +2176,7 @@ describe('scalar subquery via cmp + scalar', () => {
           "field": [
             "ownerId",
           ],
-          "op": "!=",
+          "op": "IS NOT",
           "subquery": {
             "alias": "zsubq_scalar_user",
             "table": "user",
@@ -2229,13 +2229,17 @@ describe('scalar subquery via cmp + scalar', () => {
     `);
   });
 
-  test('scalar with != and where condition', () => {
+  test('scalar with IS NOT and where condition', () => {
     const issueQuery = newQuery(schema, 'issue');
 
     expect(
       ast(
         issueQuery.where(({cmp, scalar}) =>
-          cmp('ownerId', '!=', scalar(userQuery.where('name', 'Alice'), 'id')),
+          cmp(
+            'ownerId',
+            'IS NOT',
+            scalar(userQuery.where('name', 'Alice'), 'id'),
+          ),
         ),
       ),
     ).toMatchInlineSnapshot(`
@@ -2248,7 +2252,7 @@ describe('scalar subquery via cmp + scalar', () => {
           "field": [
             "ownerId",
           ],
-          "op": "!=",
+          "op": "IS NOT",
           "subquery": {
             "alias": "zsubq_scalar_user",
             "table": "user",
@@ -2319,7 +2323,7 @@ describe('scalar subquery via cmp + scalar', () => {
           "field": [
             "ownerId",
           ],
-          "op": "!=",
+          "op": "IS NOT",
           "subquery": {
             "alias": "zsubq_scalar_user",
             "table": "user",

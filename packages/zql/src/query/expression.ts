@@ -95,7 +95,7 @@ export class ExpressionBuilder<
 
   cmp<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
-  >(field: TSelector, op: '=' | '!=', value: ScalarReference): Condition;
+  >(field: TSelector, op: '=' | 'IS NOT', value: ScalarReference): Condition;
   cmp<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(field: TSelector, value: ScalarReference): Condition;
@@ -227,7 +227,7 @@ export function not(expression: Condition): Condition {
     case 'scalarSubquery':
       return {
         ...expression,
-        op: expression.op === '=' ? '!=' : '=',
+        op: expression.op === '=' ? 'IS NOT' : '=',
       };
     case 'simple':
       return {
@@ -271,10 +271,15 @@ export function cmp(
   }
 
   if (isScalarReference(actualValue)) {
+    if (op !== '=' && op !== 'IS NOT') {
+      throw new Error(
+        `Scalar subqueries only support '=' and 'IS NOT' operators, got '${op}'`,
+      );
+    }
     const subqueryAst = actualValue[toScalarRef].ast;
     return {
       type: 'scalarSubquery',
-      op: op as '=' | '!=',
+      op,
       field: [field] as CompoundKey,
       column: actualValue[toScalarRef].column,
       subquery: {
