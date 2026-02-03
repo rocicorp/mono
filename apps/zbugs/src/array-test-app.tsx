@@ -133,51 +133,6 @@ function ArrayTestAppContent() {
     debug,
   ]);
 
-  // Track estimated total - only grows, except when we reach start or end
-  const [estimatedTotal, setEstimatedTotal] = useState(0);
-
-  // Update estimated total based on what we know
-  useEffect(() => {
-    // The furthest index we've seen is firstRowIndex + rowsLength
-    const currentEnd = firstRowIndex + rowsLength;
-
-    if (debug) {
-      console.log('[estimatedTotal update check]', {
-        currentEnd,
-        estimatedTotal,
-        atStart,
-        atEnd,
-        firstRowIndex,
-        rowsLength,
-      });
-    }
-
-    if (atStart && atEnd) {
-      // We know the exact total
-      if (debug)
-        console.log('[estimatedTotal] Setting exact total:', rowsLength);
-      setEstimatedTotal(rowsLength);
-    } else if (atEnd) {
-      // We know the exact end now
-      if (debug)
-        console.log('[estimatedTotal] Setting from atEnd:', currentEnd);
-      setEstimatedTotal(currentEnd);
-    } else if (atStart) {
-      // We know we start at 0, so current end is accurate
-      if (debug)
-        console.log(
-          '[estimatedTotal] atStart, max with currentEnd:',
-          currentEnd,
-        );
-      setEstimatedTotal(prev => Math.max(prev, currentEnd));
-    } else if (currentEnd > estimatedTotal) {
-      // We've seen further than before, update estimate
-      if (debug) console.log('[estimatedTotal] Growing to:', currentEnd);
-      setEstimatedTotal(currentEnd);
-    }
-    // Don't decrease estimate unless we've reached start or end
-  }, [firstRowIndex, rowsLength, atStart, atEnd, estimatedTotal, debug]);
-
   // The virtualizer uses indices 0, 1, 2, ... mapping directly to logical data indices
   // rowAt will return undefined for indices outside the current data window
 
