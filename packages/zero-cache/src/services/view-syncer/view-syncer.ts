@@ -764,12 +764,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: DeleteClientsMessage,
   ): Promise<string[]> {
-    return await this.#runInLockForClient(
+    const deletedClientIDs = await this.#runInLockForClient(
       ctx,
       [msg[0], {deleted: msg[1]}],
       (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
         this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
     );
+    return deletedClientIDs ?? [];
   }
 
   #getTTLClock(now: number): TTLClock {
@@ -785,7 +786,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     this.#ttlClock = ttlClock;
     this.#ttlClockBase = now;
-    return ttlClock as TTLClock;
+    return ttlClock;
   }
 
   #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
@@ -891,7 +892,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr: CVRSnapshot,
     ) => Promise<R>,
     newClient?: ClientHandler,
-  ): Promise<R> {
+  ): Promise<R | undefined> {
     this.#lc.debug?.('viewSyncer.#runInLockForClient');
     const {clientID, wsID} = ctx;
     const [cmd, body] = msg;
@@ -949,7 +950,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             throw e;
           }
         }
-        return result as R;
+        return result;
       },
     );
   }
@@ -1981,8 +1982,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
-    return this.#runInLockForClient(context, msg, this.#handleInspect);
+  async inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
+    await this.#runInLockForClient(context, msg, this.#handleInspect);
   }
 
   // oxlint-disable-next-line require-await
