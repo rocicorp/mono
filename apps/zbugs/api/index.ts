@@ -120,6 +120,8 @@ fastify.get<{
     .cookie('jwt', jwt, {
       path: '/',
       expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      secure: !request.hostname.includes('localhost'),
+      sameSite: 'strict',
     })
     .redirect(
       request.query.redirect ? decodeURIComponent(request.query.redirect) : '/',
