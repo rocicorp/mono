@@ -3,7 +3,6 @@ import {jsonSchema} from '../../../../../shared/src/json-schema.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../../zero-protocol/src/ast.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
-import {majorVersionToString} from '../../../types/state-version.ts';
 import {ttlClockSchema} from '../ttl-clock.ts';
 import type {QueriesRow} from './cvr.ts';
 
@@ -35,12 +34,12 @@ export const cvrVersionSchema = v.object({
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
 
 export const EMPTY_CVR_VERSION: CVRVersion = {
-  stateVersion: majorVersionToString(0),
+  stateVersion: versionToLexi(0),
 } as const;
 
 export function oneAfter(v: NullableCVRVersion): CVRVersion {
   return v === null
-    ? {stateVersion: majorVersionToString(0)}
+    ? {stateVersion: versionToLexi(0)}
     : {
         stateVersion: v.stateVersion,
         configVersion: (v.configVersion ?? 0) + 1,
