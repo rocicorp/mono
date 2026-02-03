@@ -85,8 +85,8 @@ function assignWithPareto(
   numItems: number,
   numBuckets: number,
   alpha = 2,
-): number[] {
-  const result = new Array<number>(numItems);
+): Uint32Array {
+  const result = new Uint32Array(numItems);
   for (let i = 0; i < numItems; i++) {
     result[i] = Math.floor(Math.pow(rng(), alpha) * numBuckets);
   }
@@ -101,8 +101,8 @@ function distributeWithPareto(
   numBuckets: number,
   totalItems: number,
   alpha = 2,
-): number[] {
-  const result = new Array<number>(numBuckets).fill(0);
+): Uint32Array {
+  const result = new Uint32Array(numBuckets);
   for (let i = 0; i < totalItems; i++) {
     const idx = Math.floor(Math.pow(rng(), alpha) * numBuckets);
     result[idx]++;
