@@ -48,8 +48,11 @@ function ArrayTestAppContent() {
   const [debug, setDebug] = useState<boolean>(true);
   const [autoPagingEnabled, setAutoPagingEnabled] = useState<boolean>(false);
 
-  // Track last anchor shift to prevent rapid consecutive shifts
-  const lastAnchorShiftRef = useRef<number>(0);
+  // Track last anchor shift to prevent ping-pong (shift in one direction triggering immediate opposite shift)
+  const lastAnchorShiftRef = useRef<{
+    time: number;
+    direction: 'forward' | 'backward';
+  }>({time: 0, direction: 'forward'});
   const ANCHOR_SHIFT_COOLDOWN = 500; // ms
 
   // Track if we've positioned the permalink
@@ -336,13 +339,7 @@ function ArrayTestAppContent() {
 
   // Auto-shift anchor forward when scrolling near the end of the data window
   useEffect(() => {
-    if (!autoPagingEnabled || virtualItems.length === 0 || !complete || atEnd) {
-      return;
-    }
-
-    // Cooldown to prevent rapid consecutive shifts
-    const now = Date.now();
-    if (now - lastAnchorShiftRef.current < ANCHOR_SHIFT_COOLDOWN) {
+    if (!autoPagingEnabled || virtualItems.length === 0 || atEnd) {
       return;
     }
 
@@ -395,6 +392,15 @@ function ArrayTestAppContent() {
     // Trigger when near end of data window
     // (backward auto-anchor is disabled, so no ping-pong concern)
     if (distanceFromEnd <= nearPageEdgeThreshold) {
+      // Cooldown check - prevent ping-pong by blocking if last shift was opposite direction
+      const now = Date.now();
+      if (
+        lastAnchorShiftRef.current.direction === 'backward' &&
+        now - lastAnchorShiftRef.current.time < ANCHOR_SHIFT_COOLDOWN
+      ) {
+        return;
+      }
+
       // Shift anchor forward: position anchor so LAST visible item
       // will be at ~60% into the new window (giving 40% buffer ahead)
       const newAnchorIndex = lastLogicalIndex - Math.ceil(PAGE_SIZE * 0.6);
@@ -412,7 +418,7 @@ function ArrayTestAppContent() {
             newAnchorIndex,
           );
         }
-        lastAnchorShiftRef.current = now;
+        lastAnchorShiftRef.current = {time: now, direction: 'forward'};
         setAnchorKind('forward');
         setAnchorIndex(newAnchorIndex);
         setStartRow(toStartRow(newAnchorRow));
@@ -421,7 +427,6 @@ function ArrayTestAppContent() {
     }
   }, [
     virtualItems,
-    complete,
     atEnd,
     firstRowIndex,
     rowsLength,
@@ -438,23 +443,15 @@ function ArrayTestAppContent() {
     if (
       !autoPagingEnabled ||
       virtualItems.length === 0 ||
-      !complete ||
       atStart ||
       anchorKind === 'permalink' // Permalink anchors naturally have firstRowIndex < 0
     ) {
       if (debug && virtualItems.length > 0) {
         console.log('[AutoAnchor backward] Skipping:', {
-          complete,
           atStart,
           anchorKind,
         });
       }
-      return;
-    }
-
-    // Cooldown to prevent rapid consecutive shifts
-    const now = Date.now();
-    if (now - lastAnchorShiftRef.current < ANCHOR_SHIFT_COOLDOWN) {
       return;
     }
 
@@ -508,6 +505,15 @@ function ArrayTestAppContent() {
 
     // Trigger when near start of data window
     if (distanceFromStart <= nearPageEdgeThreshold) {
+      // Cooldown check - prevent ping-pong by blocking if last shift was opposite direction
+      const now = Date.now();
+      if (
+        lastAnchorShiftRef.current.direction === 'forward' &&
+        now - lastAnchorShiftRef.current.time < ANCHOR_SHIFT_COOLDOWN
+      ) {
+        return;
+      }
+
       // Shift anchor backward: position anchor so FIRST visible item
       // will be at ~40% into the new window (giving 40% buffer behind)
       // For backward anchor, data goes from (anchorIndex - rowsLength) to anchorIndex
@@ -536,7 +542,7 @@ function ArrayTestAppContent() {
             newAnchorIndex,
           );
         }
-        lastAnchorShiftRef.current = now;
+        lastAnchorShiftRef.current = {time: now, direction: 'backward'};
         setAnchorKind('backward');
         setAnchorIndex(newAnchorIndex);
         setStartRow(toStartRow(newAnchorRow));
@@ -545,7 +551,6 @@ function ArrayTestAppContent() {
     }
   }, [
     virtualItems,
-    complete,
     atStart,
     firstRowIndex,
     rowsLength,
