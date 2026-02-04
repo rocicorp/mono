@@ -42,6 +42,8 @@ import {type RowKey} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
+import type {LiteralValue} from '../../../../zero-protocol/src/ast.ts';
+import {resolveSimpleScalarSubqueries} from '../../../../zqlite/src/resolve-scalar-subqueries.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
@@ -76,6 +78,19 @@ type Pipeline = {
   readonly hydrationTimeMs: number;
   readonly transformedAst: AST;
   readonly transformationHash: string;
+  /** Pre-resolution AST (set on the parent pipeline that has companions). */
+  readonly originalAST?: AST | undefined;
+  /** Query IDs of companion pipelines associated with this parent. */
+  readonly companionQueryIDs?: string[] | undefined;
+  /**
+   * For companion pipelines: the scalar value extracted after hydration.
+   * For parent pipelines: undefined.
+   */
+  readonly scalarValue?: LiteralValue | null | undefined;
+  /** For companion pipelines: the field name whose value is the scalar. */
+  readonly companionChildField?: string | undefined;
+  /** For companion pipelines: the parent query ID. */
+  readonly parentQueryID?: string | undefined;
 };
 
 type QueryInfo = {
@@ -420,12 +435,104 @@ export class PipelineDriver {
   }
 
   /**
-   * Removes the pipeline for the query. This is a no-op if the query
-   * was not added.
+   * Adds a pipeline for the query, resolving any simple scalar subqueries
+   * as companion IVM pipelines. Companion pipelines are hydrated first, their
+   * scalar values are extracted and substituted into the parent AST, then the
+   * parent pipeline is hydrated with the resolved AST.
+   *
+   * Returns the row changes from both companion and parent hydrations.
+   * Companion query IDs (if any) are pushed into `outCompanionQueryIDs`.
+   */
+  *addQueryWithCompanions(
+    transformationHash: string,
+    queryID: string,
+    ast: AST,
+    timer: Timer,
+    outCompanionQueryIDs?: string[] | undefined,
+  ): Iterable<RowChange | 'yield'> {
+    const companionQueryIDs: string[] = [];
+    const companionRows: (RowChange | 'yield')[] = [];
+    let companionIndex = 0;
+
+    const {ast: resolvedAST} = resolveSimpleScalarSubqueries(
+      ast,
+      this.#tableSpecs,
+      (subqueryAST, childField) => {
+        const companionID = `scalar:${queryID}:${companionIndex++}`;
+        companionQueryIDs.push(companionID);
+
+        // Hydrate companion as a full IVM pipeline, collecting rows.
+        for (const change of this.addQuery(
+          transformationHash,
+          companionID,
+          subqueryAST,
+          timer,
+        )) {
+          companionRows.push(change);
+        }
+
+        // Extract scalar value from the first hydrated add row.
+        const firstAdd = companionRows.find(
+          c => c !== 'yield' && c.type === 'add' && c.queryID === companionID,
+        ) as RowAdd | undefined;
+        const value =
+          (firstAdd?.row?.[childField] as LiteralValue | undefined) ??
+          undefined;
+
+        // Tag the companion pipeline with its scalar value, field, and parent.
+        const pipeline = this.#pipelines.get(companionID);
+        if (pipeline) {
+          this.#pipelines.set(companionID, {
+            ...pipeline,
+            scalarValue: value,
+            companionChildField: childField,
+            parentQueryID: queryID,
+          });
+        }
+
+        return value;
+      },
+    );
+
+    // Yield buffered companion rows first.
+    yield* companionRows;
+
+    // Add the main query with the resolved AST.
+    yield* this.addQuery(transformationHash, queryID, resolvedAST, timer);
+
+    // Tag the parent pipeline with companion tracking info.
+    const parentPipeline = this.#pipelines.get(queryID);
+    if (parentPipeline && companionQueryIDs.length > 0) {
+      this.#pipelines.set(queryID, {
+        ...parentPipeline,
+        originalAST: ast,
+        companionQueryIDs,
+      });
+    }
+
+    // Communicate companion IDs to the caller.
+    if (outCompanionQueryIDs) {
+      outCompanionQueryIDs.push(...companionQueryIDs);
+    }
+  }
+
+  /**
+   * Removes the pipeline for the query. If the query has companion pipelines,
+   * they are also removed. This is a no-op if the query was not added.
    */
   removeQuery(queryID: string) {
     const pipeline = this.#pipelines.get(queryID);
     if (pipeline) {
+      // Remove companion pipelines if this is a parent query.
+      if (pipeline.companionQueryIDs) {
+        for (const companionID of pipeline.companionQueryIDs) {
+          const companion = this.#pipelines.get(companionID);
+          if (companion) {
+            this.#pipelines.delete(companionID);
+            companion.input.destroy();
+          }
+        }
+      }
       this.#pipelines.delete(queryID);
       pipeline.input.destroy();
     }
@@ -560,8 +667,72 @@ export class PipelineDriver {
       }
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
       this.#lc.debug?.(`Advanced to ${curr.version}`);
+
+      // Re-resolve parent pipelines whose companion scalar values changed.
+      yield* this.#reResolveCompanions(timer);
     } finally {
       this.#advanceContext = null;
+    }
+  }
+
+  /**
+   * After advancement, checks if any companion pipeline's scalar value
+   * has changed. If so, tears down the parent and all its companions,
+   * then re-creates them from the parent's originalAST.
+   *
+   * Companion pipelines participate in normal IVM advancement, so their
+   * underlying data is already up to date. We re-fetch the scalar value
+   * from the companion's IVM output and compare with the stored value.
+   */
+  *#reResolveCompanions(timer: Timer): Iterable<RowChange | 'yield'> {
+    // Collect parent query IDs that need re-resolution because a
+    // companion's scalar value changed.
+    const parentsToReResolve = new Set<string>();
+
+    for (const [, pipeline] of this.#pipelines) {
+      if (
+        pipeline.parentQueryID === undefined ||
+        pipeline.companionChildField === undefined
+      ) {
+        continue; // not a companion
+      }
+      // Re-read the companion's current scalar value from its IVM output.
+      const childField = pipeline.companionChildField;
+      let newValue: LiteralValue | null | undefined = undefined;
+      for (const node of pipeline.input.fetch({})) {
+        if (node !== 'yield') {
+          // Companion has at most 1 row (unique index constraint).
+          newValue =
+            (node.row[childField] as LiteralValue | undefined) ?? undefined;
+          break;
+        }
+      }
+
+      if (newValue !== pipeline.scalarValue) {
+        parentsToReResolve.add(pipeline.parentQueryID);
+      }
+    }
+
+    // Re-resolve each affected parent by tearing down the whole tree
+    // (parent + companions) and rebuilding from the parent's originalAST.
+    for (const parentID of parentsToReResolve) {
+      const parent = this.#pipelines.get(parentID);
+      if (!parent?.originalAST) {
+        continue;
+      }
+      const {originalAST, transformationHash} = parent;
+
+      // Remove the parent (which also removes its companions).
+      this.removeQuery(parentID);
+
+      // Re-create from originalAST. This re-resolves scalar subqueries
+      // with current companion values.
+      yield* this.addQueryWithCompanions(
+        transformationHash,
+        parentID,
+        originalAST,
+        timer,
+      );
     }
   }
 

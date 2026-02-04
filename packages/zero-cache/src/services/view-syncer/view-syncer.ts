@@ -1242,7 +1242,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           span.setAttribute('queryHash', queryID);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', transformedAst.table);
-          for (const change of this.#pipelines.addQuery(
+          for (const change of this.#pipelines.addQueryWithCompanions(
             transformationHash,
             queryID,
             transformedAst,
@@ -1671,7 +1671,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
-          yield* pipelines.addQuery(
+          yield* pipelines.addQueryWithCompanions(
             q.transformationHash,
             q.id,
             q.ast,
