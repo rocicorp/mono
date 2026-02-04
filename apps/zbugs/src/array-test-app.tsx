@@ -11,7 +11,7 @@ import {ZeroInit} from './zero-init.js';
 type RowData = Issues[number];
 
 const DEFAULT_HEIGHT = 275;
-const PLACEHOLDER_HEIGHT = 50;
+const PLACEHOLDER_HEIGHT = 50; //DEFAULT_HEIGHT / 2;
 const PAGE_SIZE = 50;
 
 const toStartRow = (row: {id: string; modified: number; created: number}) => ({
@@ -271,7 +271,11 @@ function ArrayTestAppContent() {
     }
 
     // Permalink row is loaded - ensure it's at the correct scroll position
-    if (!hasPositionedPermalinkRef.current && anchorIndex !== null) {
+    // Keep repositioning until data is complete to handle changing firstRowIndex
+    if (
+      (!hasPositionedPermalinkRef.current || !complete) &&
+      anchorIndex !== null
+    ) {
       // The permalink is at logical index 0
       // Convert to virtualizer index: virtualizerIndex = logicalIndex - firstRowIndex + startPlaceholder
       const permalinkLogicalIndex = anchorIndex;
@@ -288,6 +292,7 @@ function ArrayTestAppContent() {
           atEnd,
           firstRowIndex,
           startPlaceholder,
+          complete,
         });
       }
 
@@ -296,7 +301,17 @@ function ArrayTestAppContent() {
         align: 'start',
       });
 
-      hasPositionedPermalinkRef.current = true;
+      if (debug) {
+        console.log('[Permalink] Scrolled to index', {
+          targetVirtualIndex,
+          complete,
+        });
+      }
+
+      // Only mark as positioned once data is complete
+      if (complete) {
+        hasPositionedPermalinkRef.current = true;
+      }
     }
 
     // Once complete, enable auto-paging
@@ -331,7 +346,33 @@ function ArrayTestAppContent() {
       return;
     }
 
-    const lastItem = virtualItems[virtualItems.length - 1];
+    // Find last non-placeholder item
+    let lastItem = virtualItems[virtualItems.length - 1];
+    let lastRow = rows[lastItem.index];
+
+    if (!lastRow) {
+      // Try to find last non-placeholder item
+      for (let i = virtualItems.length - 2; i >= 0; i--) {
+        const item = virtualItems[i];
+        const row = rows[item.index];
+        if (row) {
+          lastItem = item;
+          lastRow = row;
+          break;
+        }
+      }
+
+      // Skip if no non-placeholder items found
+      if (!lastRow) {
+        if (debug) {
+          console.log(
+            '[AutoAnchor forward] Skipping: no non-placeholder items',
+          );
+        }
+        return;
+      }
+    }
+
     // Convert virtualizer index to logical index
     const lastLogicalIndex = toLogicalIndex(lastItem.index);
     const lastDataIndex = firstRowIndex + rowsLength - 1;
@@ -398,10 +439,15 @@ function ArrayTestAppContent() {
       !autoPagingEnabled ||
       virtualItems.length === 0 ||
       !complete ||
-      atStart
+      atStart ||
+      anchorKind === 'permalink' // Permalink anchors naturally have firstRowIndex < 0
     ) {
       if (debug && virtualItems.length > 0) {
-        console.log('[AutoAnchor backward] Skipping:', {complete, atStart});
+        console.log('[AutoAnchor backward] Skipping:', {
+          complete,
+          atStart,
+          anchorKind,
+        });
       }
       return;
     }
@@ -412,7 +458,33 @@ function ArrayTestAppContent() {
       return;
     }
 
-    const firstItem = virtualItems[0];
+    // Find first non-placeholder item
+    let firstItem = virtualItems[0];
+    let firstRow = rows[firstItem.index];
+
+    if (!firstRow) {
+      // Try to find first non-placeholder item
+      for (let i = 1; i < virtualItems.length; i++) {
+        const item = virtualItems[i];
+        const row = rows[item.index];
+        if (row) {
+          firstItem = item;
+          firstRow = row;
+          break;
+        }
+      }
+
+      // Skip if no non-placeholder items found
+      if (!firstRow) {
+        if (debug) {
+          console.log(
+            '[AutoAnchor backward] Skipping: no non-placeholder items',
+          );
+        }
+        return;
+      }
+    }
+
     // Convert virtualizer index to logical index
     const firstLogicalIndex = toLogicalIndex(firstItem.index);
 
