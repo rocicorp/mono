@@ -8,11 +8,7 @@ import {
   type Migration,
 } from '../../../../db/migration.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
-import {
-  appSchema,
-  upstreamSchema,
-  type ShardConfig,
-} from '../../../../types/shards.ts';
+import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
@@ -195,12 +191,9 @@ function getIncrementalMigrations(
       },
     },
 
-    11: {
-      migrateSchema: async (lc, sql) => {
-        await sql`DROP TABLE IF EXISTS ${sql(appSchema(shard))}."schemaVersions"`;
-        lc.info?.(`Dropped legacy schemaVersions table`);
-      },
-    },
+    // Formerly dropped the schemaVersions table, but restored in the v13
+    // migration for rollback safety.
+    11: {},
 
     // Upgrade DDL trigger to query schemaOID, needed information for auto-backfill.
     12: {
@@ -209,6 +202,29 @@ function getIncrementalMigrations(
           SELECT publications FROM ${sql(shardConfigTable)}`;
         await setupTriggers(lc, sql, {...shard, publications});
         lc.info?.(`Upgraded DDL event triggers`);
+      },
+    },
+
+    // Recreates the legacy schemaVersions table that was prematurely dropped
+    // in the (former) v11 migration. It needs to remain present for at least one
+    // release in order to be rollback safe.
+    //
+    // TODO: Drop the table once a release that no longer reads the table has
+    // been rolled out.
+    13: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          CREATE TABLE IF NOT EXISTS ${sql(upstreamSchema(shard))}."schemaVersions" (
+            "minSupportedVersion" INT4,
+            "maxSupportedVersion" INT4,
+            "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
+        );`;
+        await sql`
+          INSERT INTO ${sql(upstreamSchema(shard))}."schemaVersions" 
+            ("lock", "minSupportedVersion", "maxSupportedVersion")
+            VALUES (true, 1, 1)
+            ON CONFLICT DO NOTHING;
+        `;
       },
     },
   };
