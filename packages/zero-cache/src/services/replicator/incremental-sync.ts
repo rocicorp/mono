@@ -114,7 +114,7 @@ export class IncrementalSyncer {
               if (result?.schemaUpdated) {
                 statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
               }
-              if (result?.watermark) {
+              if (result?.watermark && result?.changeLogUpdated) {
                 void this.#notifier.notifySubscribers({state: 'version-ready'});
               }
               break;

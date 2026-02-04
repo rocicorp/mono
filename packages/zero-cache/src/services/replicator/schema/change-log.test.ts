@@ -532,4 +532,28 @@ describe('replicator/schema/change-log', () => {
       backfillingColumnVersions: '{}',
     });
   });
+
+  test('getLatestRowOp', () => {
+    changeLog.logSetOp('123', 0, 'foo', {a: 1, b: 2}, ['c', 'b']);
+    changeLog.logSetOp('123', 1, 'bar', {b: 1, a: 2}, undefined);
+
+    expect(changeLog.getLatestRowOp('bar', {a: 3, b: 4})).toBeUndefined();
+    expect(changeLog.getLatestRowOp('foo', {b: 2, a: 1})).toEqual({
+      stateVersion: '123',
+      table: 'foo',
+      rowKey: '{"a":1,"b":2}',
+      op: 's',
+      backfillingColumnVersions: {
+        b: '123',
+        c: '123',
+      },
+    });
+    expect(changeLog.getLatestRowOp('bar', {a: 2, b: 1})).toEqual({
+      stateVersion: '123',
+      table: 'bar',
+      rowKey: '{"a":2,"b":1}',
+      op: 's',
+      backfillingColumnVersions: {},
+    });
+  });
 });
