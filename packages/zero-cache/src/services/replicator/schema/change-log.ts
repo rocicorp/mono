@@ -107,10 +107,23 @@ export const changeLogEntrySchema = v
 
 export type ChangeLogEntry = v.Infer<typeof changeLogEntrySchema>;
 
+const rawChangeLogEntrySchema = v.object({
+  stateVersion: v.string(),
+  table: v.string(),
+  rowKey: v.string(),
+  op: v.literalUnion(SET_OP, DEL_OP, TRUNCATE_OP, RESET_OP),
+  backfillingColumnVersions: v
+    .string()
+    .map(val => v.record(v.string()).parse(JSON.parse(val))),
+});
+
+export type RawChangeLogEntry = v.Infer<typeof rawChangeLogEntrySchema>;
+
 export class ChangeLog {
   readonly #logRowOpStmt: Statement;
   readonly #logRowOpWithBackfillStmt: Statement;
   readonly #logTableWideOpStmt;
+  readonly #getRowOpStmt: Statement;
 
   constructor(db: Database) {
     this.#logRowOpStmt = db.prepare(/*sql*/ `
@@ -143,6 +156,10 @@ export class ChangeLog {
       INSERT OR REPLACE INTO "_zero.changeLog2" 
         (stateVersion, pos, "table", rowKey, op) 
         VALUES (@version, -1, @table, @version, @op)
+    `);
+
+    this.#getRowOpStmt = db.prepare(/*sql*/ `
+      SELECT * FROM "_zero.changeLog2" WHERE "table" = ? AND "rowKey" = JSON(?)
     `);
   }
 
@@ -177,6 +194,14 @@ export class ChangeLog {
     //       backfillingColumnVersions because the backfill algorithm
     //       understands that deletes apply to the whole row.
     return this.#logRowOp(version, pos, table, row, DEL_OP, undefined);
+  }
+
+  getLatestRowOp(table: string, row: LiteRowKey) {
+    const rowKey = stringify(normalizedKeyOrder(row));
+    const result = this.#getRowOpStmt.get(table, rowKey);
+    return result === undefined
+      ? undefined
+      : v.parse(result, rawChangeLogEntrySchema, 'passthrough');
   }
 
   #logRowOp(

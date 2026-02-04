@@ -64,8 +64,10 @@ export interface ChangeStreamer {
 //   - Adds `metadata` to `create-table` message
 //   - Adds `tableMetadata` to `add-column` message
 //   - Adds `table-update-metadata` message
+// v6: v0.26
+//   - Adds support for `backfill` messages
 
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 export type SubscriberContext = {
   /**
