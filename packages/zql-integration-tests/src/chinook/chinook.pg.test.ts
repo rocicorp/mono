@@ -150,7 +150,7 @@ describe(
               q.track.where(({cmp, scalar}) =>
                 cmp(
                   'albumId',
-                  scalar(q.album.where('title', 'Riot Act').one(), 'id'),
+                  scalar(q.album.where('title', 'Riot Act'), 'id'),
                 ),
               ),
           },
@@ -163,7 +163,7 @@ describe(
                 and(
                   cmp(
                     'albumId',
-                    scalar(q.album.where('title', 'Riot Act').one(), 'id'),
+                    scalar(q.album.where('title', 'Riot Act'), 'id'),
                   ),
                   cmp('name', 'LIKE', '%Mine%'),
                 ),

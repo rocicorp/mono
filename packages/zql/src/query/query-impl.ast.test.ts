@@ -2145,6 +2145,7 @@ describe('scalar subquery via cmp + scalar', () => {
           "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
+            "limit": 1,
             "table": "user",
           },
           "type": "scalarSubquery",
@@ -2171,6 +2172,7 @@ describe('scalar subquery via cmp + scalar', () => {
           "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
+            "limit": 1,
             "table": "user",
           },
           "type": "scalarSubquery",
@@ -2197,6 +2199,7 @@ describe('scalar subquery via cmp + scalar', () => {
           "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
+            "limit": 1,
             "table": "user",
             "where": {
               "left": {
@@ -2239,6 +2242,7 @@ describe('scalar subquery via cmp + scalar', () => {
           "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
+            "limit": 1,
             "table": "user",
             "where": {
               "left": {
@@ -2306,6 +2310,7 @@ describe('scalar subquery via cmp + scalar', () => {
           "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
+            "limit": 1,
             "table": "user",
             "where": {
               "left": {

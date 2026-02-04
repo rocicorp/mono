@@ -170,7 +170,7 @@ export class ExpressionBuilder<
     const qi = asQueryInternals(query);
     return {
       [toScalarRef]: {
-        ast: qi.ast,
+        ast: {...qi.ast, limit: 1},
         column,
       },
     };
