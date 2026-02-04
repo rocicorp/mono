@@ -26,7 +26,7 @@ import {
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
+import {type FetchRequest, type Input} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {
   type Source,
@@ -80,6 +80,7 @@ export class TableSource implements Source {
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
   readonly #shouldYield: () => boolean;
+  readonly #disabledConnections = new Set<Input>();
   #stmts: Statements;
   #overlay?: Overlay | undefined;
   #pushEpoch = 0;
@@ -128,6 +129,20 @@ export class TableSource implements Source {
    */
   setDB(db: Database) {
     this.#stmts = this.#getStatementsFor(db);
+  }
+
+  /**
+   * Marks a connection as disabled so that {@link genPush} skips it.
+   * Used to avoid pushing to parent pipelines that will be torn down and
+   * rebuilt after companion scalar values change.
+   */
+  disableConnection(input: Input) {
+    this.#disabledConnections.add(input);
+  }
+
+  /** Clears all disabled connections, re-enabling them for subsequent pushes. */
+  clearDisabledConnections() {
+    this.#disabledConnections.clear();
   }
 
   #getStatementsFor(db: Database) {
@@ -378,8 +393,13 @@ export class TableSource implements Source {
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
 
+    const connections =
+      this.#disabledConnections.size > 0
+        ? this.#connections.filter(c => !this.#disabledConnections.has(c.input))
+        : this.#connections;
+
     yield* genPushAndWriteWithSplitEdit(
-      this.#connections,
+      connections,
       change,
       exists,
       setOverlay,

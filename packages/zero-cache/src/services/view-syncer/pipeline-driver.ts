@@ -84,6 +84,8 @@ type Pipeline = {
   readonly companionQueryIDs?: string[] | undefined;
   /** For companion pipelines: the parent query ID. */
   readonly parentQueryID?: string | undefined;
+  /** Source inputs connected to table sources for this pipeline. */
+  readonly sourceInputs: SourceInput[];
 };
 
 type QueryInfo = {
@@ -352,6 +354,7 @@ export class PipelineDriver {
       this.#snapshotter.current().db.db,
     );
 
+    const sourceInputs: SourceInput[] = [];
     const input = buildPipeline(
       query,
       {
@@ -359,13 +362,15 @@ export class PipelineDriver {
         enableNotExists: true, // Server-side can handle NOT EXISTS
         getSource: name => this.#getSource(name),
         createStorage: () => this.#createStorage(),
-        decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
-          new MeasurePushOperator(
-            input,
+        decorateSourceInput: (si: SourceInput, _queryID: string): Input => {
+          sourceInputs.push(si);
+          return new MeasurePushOperator(
+            si,
             queryID,
             this.#inspectorDelegate,
             'query-update-server',
-          ),
+          );
+        },
         decorateInput: input => input,
         addEdge() {},
         decorateFilterInput: input => input,
@@ -426,6 +431,7 @@ export class PipelineDriver {
       hydrationTimeMs,
       transformedAst: query,
       transformationHash,
+      sourceInputs,
     });
   }
 
@@ -654,6 +660,12 @@ export class PipelineDriver {
         });
       }
 
+      // Clear disabled inputs before re-resolving companions so that
+      // the rebuilt pipelines can push normally.
+      for (const table of this.#tables.values()) {
+        table.clearDisabledConnections();
+      }
+
       // Set the new snapshot on all TableSources.
       const {curr} = diff;
       for (const table of this.#tables.values()) {
@@ -795,6 +807,19 @@ export class PipelineDriver {
             const pipeline = this.#pipelines.get(changeOrYield.queryID);
             if (pipeline?.parentQueryID !== undefined) {
               this.#parentsToReResolve.add(pipeline.parentQueryID);
+              // Disable the parent's source inputs so that subsequent
+              // pushes in this advancement skip the parent pipeline,
+              // which will be torn down and rebuilt in #reResolveCompanions.
+              const parentPipeline = this.#pipelines.get(
+                pipeline.parentQueryID,
+              );
+              if (parentPipeline) {
+                for (const si of parentPipeline.sourceInputs) {
+                  for (const tableSource of this.#tables.values()) {
+                    tableSource.disableConnection(si);
+                  }
+                }
+              }
             }
           }
           yield changeOrYield;
