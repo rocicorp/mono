@@ -4,7 +4,6 @@ import {
   toStaticParam,
   SUBQ_PREFIX,
   type AST,
-  type CompoundKey,
   type Condition,
   type LiteralValue,
   type Parameter,
@@ -31,7 +30,7 @@ export const toScalarRef = Symbol('toScalarRef');
 export type ScalarReference = {
   readonly [toScalarRef]: {
     readonly ast: AST;
-    readonly column: CompoundKey;
+    readonly column: string;
   };
 };
 
@@ -172,7 +171,7 @@ export class ExpressionBuilder<
     return {
       [toScalarRef]: {
         ast: qi.ast,
-        column: [column] as CompoundKey,
+        column,
       },
     };
   };
@@ -280,7 +279,7 @@ export function cmp(
     return {
       type: 'scalarSubquery',
       op,
-      parentField: [field] as CompoundKey,
+      parentField: field,
       childField: actualValue[toScalarRef].column,
       subquery: {
         ...subqueryAst,

@@ -354,14 +354,16 @@ function scalarSubquery(
   condition: ScalarSubqueryCondition,
   parentTable: Table,
 ): SQLQuery {
-  const parentFields = condition.parentField.map(f =>
-    colIdent(spec.server, {table: parentTable, zql: f}),
-  );
+  const parentCol = colIdent(spec.server, {
+    table: parentTable,
+    zql: condition.parentField,
+  });
 
   const subqueryTable = makeTable(spec, condition.subquery.table);
-  const subqueryCols = condition.childField.map(c =>
-    colIdent(spec.server, {table: subqueryTable, zql: c}),
-  );
+  const childCol = colIdent(spec.server, {
+    table: subqueryTable,
+    zql: condition.childField,
+  });
 
   const op = sql.__dangerous__rawValue(condition.op);
 
@@ -374,11 +376,7 @@ function scalarSubquery(
     subqueryTable,
   );
 
-  if (condition.parentField.length === 1) {
-    return sql`${parentFields[0]} ${op} (SELECT ${subqueryCols[0]} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
-  }
-
-  return sql`(${sql.join(parentFields, ', ')}) ${op} (SELECT ${sql.join(subqueryCols, ', ')} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
+  return sql`${parentCol} ${op} (SELECT ${childCol} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
 }
 
 export function makeCorrelator(

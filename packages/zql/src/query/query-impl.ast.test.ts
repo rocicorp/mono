@@ -2140,13 +2140,9 @@ describe('scalar subquery via cmp + scalar', () => {
       {
         "table": "issue",
         "where": {
-          "childField": [
-            "id",
-          ],
+          "childField": "id",
           "op": "=",
-          "parentField": [
-            "ownerId",
-          ],
+          "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
             "table": "user",
@@ -2170,13 +2166,9 @@ describe('scalar subquery via cmp + scalar', () => {
       {
         "table": "issue",
         "where": {
-          "childField": [
-            "id",
-          ],
+          "childField": "id",
           "op": "IS NOT",
-          "parentField": [
-            "ownerId",
-          ],
+          "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
             "table": "user",
@@ -2200,13 +2192,9 @@ describe('scalar subquery via cmp + scalar', () => {
       {
         "table": "issue",
         "where": {
-          "childField": [
-            "id",
-          ],
+          "childField": "id",
           "op": "=",
-          "parentField": [
-            "ownerId",
-          ],
+          "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
             "table": "user",
@@ -2246,13 +2234,9 @@ describe('scalar subquery via cmp + scalar', () => {
       {
         "table": "issue",
         "where": {
-          "childField": [
-            "id",
-          ],
+          "childField": "id",
           "op": "IS NOT",
-          "parentField": [
-            "ownerId",
-          ],
+          "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
             "table": "user",
@@ -2293,8 +2277,8 @@ describe('scalar subquery via cmp + scalar', () => {
         {
           type: 'scalarSubquery',
           op: '=',
-          parentField: ['ownerId'],
-          childField: ['id'],
+          parentField: 'ownerId',
+          childField: 'id',
         },
         {
           type: 'simple',
@@ -2317,13 +2301,9 @@ describe('scalar subquery via cmp + scalar', () => {
       {
         "table": "issue",
         "where": {
-          "childField": [
-            "id",
-          ],
+          "childField": "id",
           "op": "IS NOT",
-          "parentField": [
-            "ownerId",
-          ],
+          "parentField": "ownerId",
           "subquery": {
             "alias": "zsubq_scalar_user",
             "table": "user",

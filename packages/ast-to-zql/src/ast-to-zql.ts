@@ -86,7 +86,7 @@ function transformCondition(
     case 'correlatedSubquery':
       return transformExistsCondition(condition, prefix, args);
     case 'scalarSubquery':
-      return `${prefix}Scalar('${condition.parentField[0]}', '${condition.op}', ...)`;
+      return `${prefix}Scalar('${condition.parentField}', '${condition.op}', ...)`;
     default:
       unreachable(condition);
   }
