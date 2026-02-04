@@ -14,6 +14,7 @@ import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
+import {DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   getSubscriptionState,
@@ -57,6 +58,7 @@ describe('replicator/change-processor', () => {
     data: Record<string, Record<string, unknown>[]>;
     tableSpecs?: LiteTableSpecWithReplicationStatus[];
     indexSpecs?: LiteIndexSpec[];
+    expectedTablesInBackupReplicatorChangeLog?: string[];
   };
 
   const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
@@ -70,6 +72,7 @@ describe('replicator/change-processor', () => {
   });
   const fooBarBaz = new ReplicationMessages({foo: 'id', bar: 'id', baz: 'id'});
   const tables = new ReplicationMessages({transaction: 'column'});
+  const bff = new ReplicationMessages({bff: ['b', 'a', 'c']});
 
   const cases: Case[] = [
     {
@@ -1128,6 +1131,7 @@ describe('replicator/change-processor', () => {
           },
         ],
       },
+      expectedTablesInBackupReplicatorChangeLog: ['foo'],
       tableSpecs: [
         {
           name: 'foo',
@@ -1395,6 +1399,7 @@ describe('replicator/change-processor', () => {
           },
         ],
       },
+      expectedTablesInBackupReplicatorChangeLog: ['foo'],
       tableSpecs: [
         {
           name: 'foo',
@@ -2518,6 +2523,851 @@ describe('replicator/change-processor', () => {
         },
       ],
     },
+    {
+      name: 'in-progress table backfill',
+      setup: ``,
+      downstream: [
+        // Create a table that needs backfilling.
+        ['begin', bff.begin(), {commitWatermark: '0e'}],
+        [
+          'data',
+          bff.createTable(
+            {
+              schema: 'public',
+              name: 'bff',
+              primaryKey: ['b', 'a', 'c'],
+              columns: {
+                a: {dataType: 'int', pos: 0},
+                b: {dataType: 'int', pos: 1},
+                c: {dataType: 'int', pos: 2},
+                d: {dataType: 'int', pos: 3},
+                e: {dataType: 'int', pos: 4},
+              },
+            },
+            {
+              metadata: {rowKey: {columns: ['b', 'a', 'c']}},
+              backfill: {
+                a: {id: 1},
+                b: {id: 2},
+                c: {id: 3},
+                d: {id: 4},
+                e: {id: 5},
+              },
+            },
+          ),
+        ],
+        [
+          'data',
+          bff.createIndex({
+            name: 'bff_pkey',
+            schema: 'public',
+            tableName: 'bff',
+            unique: true,
+            columns: {
+              b: 'ASC',
+              a: 'ASC',
+              c: 'ASC',
+            },
+          }),
+        ],
+        ['commit', bff.commit(), {watermark: '0e'}],
+
+        // Partial update at 101
+        ['begin', bff.begin(), {commitWatermark: '101'}],
+        ['data', bff.update('bff', {a: 1, b: 2, c: 3, d: 500, e: 700})],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, d: 98})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, e: 87})],
+        ['data', bff.delete('bff', {a: 10, b: 20, c: 30})],
+        ['commit', fooBarBaz.commit(), {watermark: '101'}],
+
+        // Another partial update at 123
+        ['begin', bff.begin(), {commitWatermark: '123'}],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, e: 77})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, d: 90})],
+        // Row will be deleted later than the backfill
+        ['data', bff.delete('bff', {a: 100, b: 200, c: 300})],
+        // Row full row, so nothing to backfill
+        ['data', bff.update('bff', {a: 1000, b: 2000, c: 3000, d: 4, e: 5})],
+        ['commit', fooBarBaz.commit(), {watermark: '123'}],
+
+        // Backfill at a snapshot in between (115)
+        ['begin', bff.begin(), {commitWatermark: '123.01'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [
+              [2, 1, 3, 501, 701],
+              [54, 32, 76, 1000, 2000],
+            ],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.01'}],
+        ['begin', bff.begin(), {commitWatermark: '123.02'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [
+              [45, 23, 67, 3000, 4000],
+              [20, 10, 30, 5000, 6000],
+              [200, 100, 300, 7000, 8000],
+            ],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
+        ['begin', bff.begin(), {commitWatermark: '123.03'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [[2000, 1000, 3000, -1, -2]],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.03'}],
+      ],
+      data: {
+        bff: [
+          {
+            // Note: The version is unchanged even though backfill updated
+            //       a replicated row.
+            _0_version: '101',
+            a: 1n,
+            b: 2n,
+            c: 3n,
+            d: 501n,
+            e: 701n,
+          },
+          {
+            _0_version: '123',
+            a: 23n,
+            b: 45n,
+            c: 67n,
+            d: 3000n, // 98@101 overwritten by backfill 3000
+            e: 77n, // 77@123 not overwritten by backfill 4000
+          },
+          {
+            _0_version: '123',
+            a: 32n,
+            b: 54n,
+            c: 76n,
+            d: 90n, // 90@123 not overwritten by backfill 1000
+            e: 2000n, // 87@101 not overwritten by backfill 2000
+          },
+          {
+            // rows introduced by backfill use the watermark as the version
+            _0_version: '115',
+            a: 10n,
+            b: 20n,
+            c: 30n,
+            d: 5000n,
+            e: 6000n,
+          },
+          {
+            _0_version: '123',
+            a: 1000n,
+            b: 2000n,
+            c: 3000n,
+            d: 4n, // 4@123 not overwritten by backfill -1
+            e: 5n, // 5@123 not overwritten by backfill -2
+          },
+        ],
+        ['_zero.changeLog2']: [
+          {
+            backfillingColumnVersions:
+              '{"a":"101","b":"101","c":"101","d":"101","e":"101"}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"a":1,"b":2,"c":3}',
+            stateVersion: '101',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","d":"101","e":"123"}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"a":23,"b":45,"c":67}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","e":"101","d":"123"}',
+            op: 's',
+            pos: 1n,
+            rowKey: '{"a":32,"b":54,"c":76}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 3n,
+            rowKey: '{"a":10,"b":20,"c":30}',
+            stateVersion: '101',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 2n,
+            rowKey: '{"a":100,"b":200,"c":300}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","d":"123","e":"123"}',
+            op: 's',
+            pos: 3n,
+            rowKey: '{"a":1000,"b":2000,"c":3000}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+        ],
+      },
+      expectedTablesInBackupReplicatorChangeLog: ['bff'],
+    },
+    {
+      name: 'in-progress column backfill',
+      setup: /*sql*/ `
+        CREATE TABLE bff(a int, b int, c int, _0_version TEXT, PRIMARY KEY(a, b, c));
+        INSERT INTO bff(a, b, c, _0_version) VALUES (1, 2, 3, '03');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (23, 45, 67, '03');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (32, 54, 76, '06');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (10, 20, 30, '09');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (100, 200, 300, '0a');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (1000, 2000, 3000, '0b');
+      `,
+      downstream: [
+        // Add 'e' and 'd' columns to be backfilled
+        ['begin', bff.begin(), {commitWatermark: '0e'}],
+        [
+          'data',
+          bff.addColumn(
+            'bff',
+            'd',
+            {dataType: 'int', pos: 3},
+            {
+              tableMetadata: {rowKey: {columns: ['b', 'a', 'c']}},
+              backfill: {id: 4},
+            },
+          ),
+        ],
+        [
+          'data',
+          bff.addColumn(
+            'bff',
+            'e',
+            {dataType: 'int', pos: 4},
+            {
+              tableMetadata: {rowKey: {columns: ['b', 'a', 'c']}},
+              backfill: {id: 5},
+            },
+          ),
+        ],
+        ['commit', bff.commit(), {watermark: '0e'}],
+
+        // Partial update at 101
+        ['begin', bff.begin(), {commitWatermark: '101'}],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, d: 98})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, e: 87})],
+        ['data', bff.delete('bff', {a: 10, b: 20, c: 30})],
+        ['commit', fooBarBaz.commit(), {watermark: '101'}],
+
+        // Another partial update at 123
+        ['begin', bff.begin(), {commitWatermark: '123'}],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, e: 77})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, d: 90})],
+        // Row will be deleted later than the backfill
+        ['data', bff.delete('bff', {a: 100, b: 200, c: 300})],
+        // Row full row, so nothing to backfill
+        ['data', bff.update('bff', {a: 1000, b: 2000, c: 3000, d: 4, e: 5})],
+        ['commit', fooBarBaz.commit(), {watermark: '123'}],
+
+        // Backfill at a snapshot in between (115)
+        ['begin', bff.begin(), {commitWatermark: '123.01'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [
+              [2, 1, 3, 4, 5],
+              [54, 32, 76, 1000, 2000],
+            ],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.01'}],
+        ['begin', bff.begin(), {commitWatermark: '123.02'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [
+              [45, 23, 67, 3000, 4000],
+              [20, 10, 30, 5000, 6000],
+              [200, 100, 300, 7000, 8000],
+            ],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
+        ['begin', bff.begin(), {commitWatermark: '123.03'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [[2000, 1000, 3000, -1, -2]],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.03'}],
+      ],
+      data: {
+        bff: [
+          {
+            // Note: Versions are unchanged even though backfill values
+            //       are added.
+            _0_version: '03',
+            a: 1n,
+            b: 2n,
+            c: 3n,
+            d: 4n,
+            e: 5n,
+          },
+          {
+            _0_version: '123',
+            a: 23n,
+            b: 45n,
+            c: 67n,
+            d: 3000n, // 98@101 overwritten by backfill 3000
+            e: 77n, // 77@123 not overwritten by backfill 4000
+          },
+          {
+            _0_version: '123',
+            a: 32n,
+            b: 54n,
+            c: 76n,
+            d: 90n, // 90@123 not overwritten by backfill 1000
+            e: 2000n, // 87@101 not overwritten by backfill 2000
+          },
+          {
+            // rows introduced by backfill use the watermark as the version.
+            // In practice this would correspond with an INSERT from the
+            // replication stream.
+            _0_version: '115',
+            a: 10n,
+            b: 20n,
+            c: 30n,
+            d: 5000n,
+            e: 6000n,
+          },
+          {
+            _0_version: '123',
+            a: 1000n,
+            b: 2000n,
+            c: 3000n,
+            d: 4n, // 4@123 not overwritten by backfill -1
+            e: 5n, // 5@123 not overwritten by backfill -2
+          },
+        ],
+        ['_zero.changeLog2']: [
+          {
+            backfillingColumnVersions: '{"d":"101","e":"123"}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"a":23,"b":45,"c":67}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{"e":"101","d":"123"}',
+            op: 's',
+            pos: 1n,
+            rowKey: '{"a":32,"b":54,"c":76}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 2n,
+            rowKey: '{"a":10,"b":20,"c":30}',
+            stateVersion: '101',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 2n,
+            rowKey: '{"a":100,"b":200,"c":300}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{"d":"123","e":"123"}',
+            op: 's',
+            pos: 3n,
+            rowKey: '{"a":1000,"b":2000,"c":3000}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+        ],
+      },
+      expectedTablesInBackupReplicatorChangeLog: ['bff'],
+    },
+    {
+      name: 'completed table backfill',
+      setup: ``,
+      downstream: [
+        // Create a table that needs backfilling.
+        ['begin', bff.begin(), {commitWatermark: '0e'}],
+        [
+          'data',
+          bff.createTable(
+            {
+              schema: 'public',
+              name: 'bff',
+              primaryKey: ['b', 'a', 'c'],
+              columns: {
+                a: {dataType: 'int', pos: 0},
+                b: {dataType: 'int', pos: 1},
+                c: {dataType: 'int', pos: 2},
+                d: {dataType: 'int', pos: 3},
+                e: {dataType: 'int', pos: 4},
+              },
+            },
+            {
+              metadata: {rowKey: {columns: ['b', 'a', 'c']}},
+              backfill: {
+                a: {id: 1},
+                b: {id: 2},
+                c: {id: 3},
+                d: {id: 4},
+                e: {id: 5},
+              },
+            },
+          ),
+        ],
+        [
+          'data',
+          bff.createIndex({
+            name: 'bff_pkey',
+            schema: 'public',
+            tableName: 'bff',
+            unique: true,
+            columns: {
+              b: 'ASC',
+              a: 'ASC',
+              c: 'ASC',
+            },
+          }),
+        ],
+        ['commit', bff.commit(), {watermark: '0e'}],
+
+        // Partial update at 101
+        ['begin', bff.begin(), {commitWatermark: '101'}],
+        ['data', bff.update('bff', {a: 1, b: 2, c: 3, d: 500, e: 700})],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, d: 98})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, e: 87})],
+        ['data', bff.delete('bff', {a: 10, b: 20, c: 30})],
+        ['commit', fooBarBaz.commit(), {watermark: '101'}],
+
+        // Another partial update at 123
+        ['begin', bff.begin(), {commitWatermark: '123'}],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, e: 77})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, d: 90})],
+        // Row will be deleted later than the backfill
+        ['data', bff.delete('bff', {a: 100, b: 200, c: 300})],
+        // Row full row, so nothing to backfill
+        ['data', bff.update('bff', {a: 1000, b: 2000, c: 3000, d: 4, e: 5})],
+        ['commit', fooBarBaz.commit(), {watermark: '123'}],
+
+        // Backfill at a snapshot in between (115)
+        ['begin', bff.begin(), {commitWatermark: '123.01'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [
+              [2, 1, 3, 501, 701],
+              [54, 32, 76, 1000, 2000],
+              [45, 23, 67, 3000, 4000],
+              [20, 10, 30, 5000, 6000],
+              [200, 100, 300, 7000, 8000],
+            ],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.01'}],
+        ['begin', bff.begin(), {commitWatermark: '123.02'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [[2000, 1000, 3000, -1, -2]],
+            completed: true,
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
+      ],
+      data: {
+        bff: [
+          {
+            _0_version: '123.02',
+            a: 1n,
+            b: 2n,
+            c: 3n,
+            d: 501n,
+            e: 701n,
+          },
+          {
+            _0_version: '123.02',
+            a: 23n,
+            b: 45n,
+            c: 67n,
+            d: 3000n, // 98@101 overwritten by backfill 3000
+            e: 77n, // 77@123 not overwritten by backfill 4000
+          },
+          {
+            _0_version: '123.02',
+            a: 32n,
+            b: 54n,
+            c: 76n,
+            d: 90n, // 90@123 not overwritten by backfill 1000
+            e: 2000n, // 87@101 not overwritten by backfill 2000
+          },
+          {
+            _0_version: '123.02',
+            a: 10n,
+            b: 20n,
+            c: 30n,
+            d: 5000n,
+            e: 6000n,
+          },
+          {
+            _0_version: '123.02',
+            a: 1000n,
+            b: 2000n,
+            c: 3000n,
+            d: 4n, // 4@123 not overwritten by backfill -1
+            e: 5n, // 5@123 not overwritten by backfill -2
+          },
+        ],
+        ['_zero.changeLog2']: [
+          {
+            backfillingColumnVersions:
+              '{"a":"101","b":"101","c":"101","d":"101","e":"101"}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"a":1,"b":2,"c":3}',
+            stateVersion: '101',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","d":"101","e":"123"}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"a":23,"b":45,"c":67}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","e":"101","d":"123"}',
+            op: 's',
+            pos: 1n,
+            rowKey: '{"a":32,"b":54,"c":76}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 3n,
+            rowKey: '{"a":10,"b":20,"c":30}',
+            stateVersion: '101',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 2n,
+            rowKey: '{"a":100,"b":200,"c":300}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","d":"123","e":"123"}',
+            op: 's',
+            pos: 3n,
+            rowKey: '{"a":1000,"b":2000,"c":3000}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '123.02',
+            stateVersion: '123.02',
+            table: 'bff',
+          },
+        ],
+      },
+      expectedTablesInBackupReplicatorChangeLog: ['bff'],
+    },
+    {
+      name: 'completed column backfill',
+      setup: /*sql*/ `
+        CREATE TABLE bff(a int, b int, c int, _0_version TEXT, PRIMARY KEY(a, b, c));
+        INSERT INTO bff(a, b, c, _0_version) VALUES (1, 2, 3, '03');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (23, 45, 67, '03');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (32, 54, 76, '06');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (10, 20, 30, '09');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (100, 200, 300, '0a');
+        INSERT INTO bff(a, b, c, _0_version) VALUES (1000, 2000, 3000, '0b');
+      `,
+      downstream: [
+        // Add 'e' and 'd' columns to be backfilled
+        ['begin', bff.begin(), {commitWatermark: '0e'}],
+        [
+          'data',
+          bff.addColumn(
+            'bff',
+            'd',
+            {dataType: 'int', pos: 3},
+            {
+              tableMetadata: {rowKey: {columns: ['b', 'a', 'c']}},
+              backfill: {id: 4},
+            },
+          ),
+        ],
+        [
+          'data',
+          bff.addColumn(
+            'bff',
+            'e',
+            {dataType: 'int', pos: 4},
+            {
+              tableMetadata: {rowKey: {columns: ['b', 'a', 'c']}},
+              backfill: {id: 5},
+            },
+          ),
+        ],
+        ['commit', bff.commit(), {watermark: '0e'}],
+
+        // Partial update at 101
+        ['begin', bff.begin(), {commitWatermark: '101'}],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, d: 98})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, e: 87})],
+        ['data', bff.delete('bff', {a: 10, b: 20, c: 30})],
+        ['commit', fooBarBaz.commit(), {watermark: '101'}],
+
+        // Another partial update at 123
+        ['begin', bff.begin(), {commitWatermark: '123'}],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, e: 77})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, d: 90})],
+        // Row will be deleted later than the backfill
+        ['data', bff.delete('bff', {a: 100, b: 200, c: 300})],
+        // Row full row, so nothing to backfill
+        ['data', bff.update('bff', {a: 1000, b: 2000, c: 3000, d: 4, e: 5})],
+        ['commit', fooBarBaz.commit(), {watermark: '123'}],
+
+        // Backfill at a snapshot in between (115)
+        ['begin', bff.begin(), {commitWatermark: '123.01'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [
+              [2, 1, 3, 4, 5],
+              [54, 32, 76, 1000, 2000],
+              [45, 23, 67, 3000, 4000],
+              [20, 10, 30, 5000, 6000],
+              [200, 100, 300, 7000, 8000],
+              [2000, 1000, 3000, -1, -2],
+            ],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.01'}],
+        ['begin', bff.begin(), {commitWatermark: '123.02'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '115',
+            columns: ['d', 'e'],
+            rowValues: [],
+            completed: true,
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
+      ],
+      data: {
+        bff: [
+          {
+            _0_version: '123.02',
+            a: 1n,
+            b: 2n,
+            c: 3n,
+            d: 4n,
+            e: 5n,
+          },
+          {
+            _0_version: '123.02',
+            a: 23n,
+            b: 45n,
+            c: 67n,
+            d: 3000n, // 98@101 overwritten by backfill 3000
+            e: 77n, // 77@123 not overwritten by backfill 4000
+          },
+          {
+            _0_version: '123.02',
+            a: 32n,
+            b: 54n,
+            c: 76n,
+            d: 90n, // 90@123 not overwritten by backfill 1000
+            e: 2000n, // 87@101 not overwritten by backfill 2000
+          },
+          {
+            _0_version: '123.02',
+            a: 10n,
+            b: 20n,
+            c: 30n,
+            d: 5000n,
+            e: 6000n,
+          },
+          {
+            _0_version: '123.02',
+            a: 1000n,
+            b: 2000n,
+            c: 3000n,
+            d: 4n, // 4@123 not overwritten by backfill -1
+            e: 5n, // 5@123 not overwritten by backfill -2
+          },
+        ],
+        ['_zero.changeLog2']: [
+          {
+            backfillingColumnVersions: '{"d":"101","e":"123"}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"a":23,"b":45,"c":67}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{"e":"101","d":"123"}',
+            op: 's',
+            pos: 1n,
+            rowKey: '{"a":32,"b":54,"c":76}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 2n,
+            rowKey: '{"a":10,"b":20,"c":30}',
+            stateVersion: '101',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 2n,
+            rowKey: '{"a":100,"b":200,"c":300}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{"d":"123","e":"123"}',
+            op: 's',
+            pos: 3n,
+            rowKey: '{"a":1000,"b":2000,"c":3000}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '123.02',
+            stateVersion: '123.02',
+            table: 'bff',
+          },
+        ],
+      },
+      expectedTablesInBackupReplicatorChangeLog: ['bff'],
+    },
   ];
 
   for (const c of cases) {
@@ -2538,16 +3388,22 @@ describe('replicator/change-processor', () => {
 
         if (log === 'all-entries') {
           expectTables(replica, c.data, 'bigint');
-        } else {
-          // Only log entries relevant to backfill
+        } else if (c.data['_zero.changeLog2']) {
+          const fullChangeLog = c.data['_zero.changeLog2'] as {
+            table: string;
+            op: string;
+          }[];
+          const backfillingTables =
+            c.expectedTablesInBackupReplicatorChangeLog ?? [];
           expectTables(
             replica,
             {
               ...c.data,
-              ['_zero.changeLog2']:
-                c.data['_zero.changeLog2']?.filter(
-                  log => log.backfillingColumnVersions !== '{}',
-                ) ?? [],
+              ['_zero.changeLog2']: fullChangeLog.filter(
+                entry =>
+                  (entry.op === SET_OP || entry.op === DEL_OP) &&
+                  backfillingTables.includes(entry.table),
+              ),
             },
             'bigint',
           );

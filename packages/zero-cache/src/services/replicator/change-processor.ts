@@ -40,6 +40,7 @@ import type {
   ColumnUpdate,
   IndexCreate,
   IndexDrop,
+  MessageBackfill,
   MessageCommit,
   MessageDelete,
   MessageInsert,
@@ -53,7 +54,7 @@ import type {
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
-import {ChangeLog} from './schema/change-log.ts';
+import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
@@ -66,6 +67,7 @@ export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 export type CommitResult = {
   watermark: string;
   schemaUpdated: boolean;
+  changeLogUpdated: boolean;
 };
 
 /**
@@ -221,8 +223,11 @@ export class ChangeProcessor {
       this.#currentTx = null;
 
       assert(watermark, 'watermark is required for commit messages');
-      const schemaUpdated = tx.processCommit(msg, watermark);
-      return {watermark, schemaUpdated};
+      const {schemaUpdated, changeLogUpdated} = tx.processCommit(
+        msg,
+        watermark,
+      );
+      return {watermark, schemaUpdated, changeLogUpdated};
     }
 
     if (msg.tag === 'rollback') {
@@ -271,6 +276,9 @@ export class ChangeProcessor {
       case 'drop-index':
         tx.processDropIndex(msg);
         break;
+      case 'backfill':
+        tx.processBackfill(msg);
+        break;
       default:
         unreachable(msg);
     }
@@ -314,6 +322,7 @@ class TransactionProcessor {
 
   #pos = 0;
   #schemaChanged = false;
+  #numChangeLogEntries = 0;
 
   constructor(
     lc: LogContext,
@@ -459,14 +468,11 @@ class TransactionProcessor {
   // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-TUPLEDATA
   //
   // However, in certain cases an UPDATE may be received for a row that
-  // was not initially synced, such as when:
-  // (1) an existing table is added to the app's publication, or
-  // (2) a new sharding key is added to a shard during resharding.
+  // was not initially synced, such as when, an existing table is added
+  // to the app's publication.
   //
   // In order to facilitate "resumptive" replication, the logic falls back to
   // an INSERT if the update did not change any rows.
-  // TODO: Figure out a solution for resumptive replication of rows
-  //       with TOASTed values.
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
     const tableSpec = this.#tableSpec(table);
@@ -537,6 +543,7 @@ class TransactionProcessor {
       this.#logTruncateOp(table);
     }
   }
+
   processCreateTable(create: TableCreate) {
     if (create.metadata) {
       this.#tableMetadata.set(create.spec, create.metadata);
@@ -554,7 +561,17 @@ class TransactionProcessor {
       );
     }
 
-    this.#logResetOp(table.name);
+    if (
+      Object.keys(create.backfill ?? {}).length ===
+      Object.keys(create.spec.columns).length
+    ) {
+      this.#reloadTableSpecs();
+    } else {
+      // Make the table visible immediately unless all of the columns are
+      // being backfilled. In the backfill case, the version bump will happen
+      // with the backfill is complete.
+      this.#logResetOp(table.name);
+    }
     this.#lc.info?.(create.tag, table.name);
   }
 
@@ -591,7 +608,13 @@ class TransactionProcessor {
     // Write to metadata table
     this.#columnMetadata.insert(table, name, msg.column.spec, msg.backfill);
 
-    this.#bumpVersions(table);
+    if (msg.backfill) {
+      this.#reloadTableSpecs();
+    } else {
+      // Make the new column visible immediately if it's not being backfilled.
+      // Otherwise, the version bump will happen with the backfill is complete.
+      this.#bumpVersions(table);
+    }
     this.#lc.info?.(msg.tag, table, msg.column);
   }
 
@@ -690,7 +713,17 @@ class TransactionProcessor {
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
     // having a unique index), so reset pipelines to refresh table schemas.
-    this.#logResetOp(index.tableName);
+    // However, the reset is not necessary if the index is for a table
+    // that is not yet visible due to backfilling.
+    const tableSpec = must(this.#tableSpecs.get(index.tableName));
+    if (
+      (tableSpec.backfilling ?? []).length ===
+      Object.entries(tableSpec.columns).length - 1 // don't count _0_version
+    ) {
+      this.#reloadTableSpecs();
+    } else {
+      this.#logResetOp(index.tableName);
+    }
     this.#lc.info?.(create.tag, index.name);
   }
 
@@ -727,6 +760,7 @@ class TransactionProcessor {
         key,
         backfilledColumns,
       );
+      this.#numChangeLogEntries++;
     }
   }
 
@@ -736,12 +770,14 @@ class TransactionProcessor {
     // when writing columns that are being backfilled.
     if (this.#mode === 'serving' || backfilling?.length) {
       this.#changeLog.logDeleteOp(this.#version, this.#pos++, table, key);
+      this.#numChangeLogEntries++;
     }
   }
 
   #logTruncateOp(table: string) {
     if (this.#mode === 'serving') {
       this.#changeLog.logTruncateOp(this.#version, table);
+      this.#numChangeLogEntries++;
     }
   }
 
@@ -749,12 +785,96 @@ class TransactionProcessor {
     this.#schemaChanged = true;
     if (this.#mode === 'serving') {
       this.#changeLog.logResetOp(this.#version, table);
+      this.#numChangeLogEntries++;
     }
     this.#reloadTableSpecs();
   }
 
-  /** @returns `true` if the schema was updated. */
-  processCommit(commit: MessageCommit, watermark: string): boolean {
+  processBackfill({
+    relation,
+    watermark,
+    columns,
+    rowValues,
+    completed,
+  }: MessageBackfill) {
+    const tableName = liteTableName(relation);
+    const tableSpec = must(this.#tableSpecs.get(tableName));
+    const rowKeyCols = relation.rowKey.columns;
+    const cols = [...rowKeyCols, ...columns];
+
+    // Common parts of the INSERT sql statement.
+    const insertColsStr = [...cols, ZERO_VERSION_COLUMN_NAME].map(id).join(',');
+    const qMarks = Array.from({length: cols.length + 1}, () => '?').join(',');
+    const rowKeyColsStr = rowKeyCols.map(id).join(',');
+
+    let backfilled = 0;
+    let skipped = 0;
+    for (const v of rowValues) {
+      const row = liteRow(
+        Object.fromEntries(cols.map((c, i) => [c, v[i]])),
+        tableSpec,
+        this.#jsonFormat,
+      );
+      const rowKey = this.#getKey(row, {relation});
+      const rowOp = this.#changeLog.getLatestRowOp(tableName, rowKey);
+      if (rowOp?.op === DEL_OP && rowOp.stateVersion > watermark) {
+        skipped++;
+        continue; // the row was deleted after the backfill snapshot
+      }
+      const updates =
+        rowOp?.op === SET_OP
+          ? columns.filter(
+              c => (rowOp.backfillingColumnVersions[c] ?? '') <= watermark,
+            )
+          : columns;
+      if (updates.length === 0) {
+        // row already has newer values for all backfilling columns.
+        skipped++;
+        continue;
+      }
+      const updateStmts = updates.map(col => `${id(col)}=excluded.${id(col)}`);
+      this.#db.run(
+        /*sql*/ `
+        INSERT INTO ${id(tableName)} (${insertColsStr}) VALUES (${qMarks})
+          ON CONFLICT (${rowKeyColsStr})
+          DO UPDATE SET ${updateStmts.join(',')};
+      `,
+        ...Object.values(row.row),
+        watermark, // the _0_version for new rows (i.e. table backfill)
+      );
+      backfilled++;
+    }
+
+    this.#lc.debug?.(
+      `backfilled ${backfilled} rows (skipped ${skipped}) into ${tableName}`,
+    );
+
+    if (completed) {
+      const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
+      for (const col of cols) {
+        columnMetadata.clearBackfilling(tableName, col);
+      }
+      // Given that new columns are being exposed for every row in the table, bump the
+      // row version for all rows.
+      this.#bumpVersions(tableName);
+      this.#lc.info?.(`finished backfilling ${tableName}`);
+
+      // Note that there is no need to clear the backfillingColumnVersions values
+      // in the changeLog. It could theoretically be done for clarity but:
+      // (1) it could be non-trivial in terms of latency introduced and
+      // (2) the data must be preserved if _other_ columns are in the process
+      //     of being backfilled
+      //
+      // Thus, for speed and simplicity, the values are left as is. (Note that
+      // subsequent replicated changes to those rows will clear the values if
+      // no backfills are in progress).
+    }
+  }
+
+  processCommit(
+    commit: MessageCommit,
+    watermark: string,
+  ): {schemaUpdated: boolean; changeLogUpdated: boolean} {
     if (watermark !== this.#version) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
@@ -779,7 +899,10 @@ class TransactionProcessor {
     const elapsedMs = Date.now() - this.#startMs;
     this.#lc.debug?.(`Committed tx@${this.#version} (${elapsedMs} ms)`);
 
-    return this.#schemaChanged;
+    return {
+      schemaUpdated: this.#schemaChanged,
+      changeLogUpdated: this.#numChangeLogEntries > 0,
+    };
   }
 
   abort(lc: LogContext) {
