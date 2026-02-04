@@ -41,15 +41,19 @@ function ArrayTestAppContent() {
   const [anchorIndex, setAnchorIndex] = useState(0);
   const [anchorKind, setAnchorKind] = useState<
     'forward' | 'backward' | 'permalink'
-  >('forward');
+  >('permalink');
   const [startRow, setStartRow] = useState<IssueRowSort | undefined>(undefined);
-  const [permalinkID, setPermalinkID] = useState<string | undefined>(undefined);
+  const [permalinkID, setPermalinkID] = useState<string | undefined>('3130');
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
-  const [debug, setDebug] = useState<boolean>(false);
+  const [debug, setDebug] = useState<boolean>(true);
+  const [autoPagingEnabled, setAutoPagingEnabled] = useState<boolean>(false);
 
   // Track last anchor shift to prevent rapid consecutive shifts
   const lastAnchorShiftRef = useRef<number>(0);
   const ANCHOR_SHIFT_COOLDOWN = 500; // ms
+
+  // Track if we've positioned the permalink
+  const hasPositionedPermalinkRef = useRef(false);
 
   const {
     rowAt,
@@ -59,14 +63,15 @@ function ArrayTestAppContent() {
     atStart,
     atEnd,
     firstRowIndex,
+    permalinkNotFound,
   } = useRows<RowData, IssueRowSort>({
     pageSize: PAGE_SIZE,
     anchor:
-      anchorKind === 'permalink'
+      anchorKind === 'permalink' && permalinkID
         ? {
             kind: 'permalink',
             index: anchorIndex,
-            id: permalinkID!,
+            id: permalinkID,
           }
         : anchorKind === 'forward'
           ? {
@@ -74,11 +79,17 @@ function ArrayTestAppContent() {
               index: anchorIndex,
               startRow,
             }
-          : {
-              kind: 'backward',
-              index: anchorIndex,
-              startRow: startRow!,
-            },
+          : anchorKind === 'backward' && startRow
+            ? {
+                kind: 'backward',
+                index: anchorIndex,
+                startRow,
+              }
+            : {
+                kind: 'forward',
+                index: anchorIndex,
+                startRow,
+              },
     getPageQuery: useCallback(
       (
         limit: number,
@@ -183,7 +194,6 @@ function ArrayTestAppContent() {
     firstRowIndex,
     rowsLength,
     endPlaceholder,
-    endPlaceholder,
     atEnd,
     atStart,
     startPlaceholder,
@@ -240,9 +250,78 @@ function ArrayTestAppContent() {
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
 
+  // Handle permalink positioning and enable auto-paging when ready
+  useEffect(() => {
+    // Reset positioning flag when switching modes
+    if (anchorKind !== 'permalink') {
+      hasPositionedPermalinkRef.current = false;
+      if (!autoPagingEnabled) {
+        setAutoPagingEnabled(true);
+      }
+      return;
+    }
+
+    // For permalink mode:
+    // 1. Once the permalink row is loaded (rowsLength > 0), scroll to position it
+    // 2. Once complete (before/after pages loaded), enable auto-paging
+
+    if (rowsLength === 0) {
+      // No data yet, keep auto-paging disabled
+      return;
+    }
+
+    // Permalink row is loaded - ensure it's at the correct scroll position
+    if (!hasPositionedPermalinkRef.current && anchorIndex !== null) {
+      // The permalink is at logical index 0
+      // Convert to virtualizer index: virtualizerIndex = logicalIndex - firstRowIndex + startPlaceholder
+      const permalinkLogicalIndex = anchorIndex;
+      const targetVirtualIndex =
+        permalinkLogicalIndex - firstRowIndex + startPlaceholder;
+
+      if (debug) {
+        console.log('[Permalink] Scrolling to position:', {
+          permalinkLogicalIndex,
+          targetVirtualIndex,
+          anchorIndex,
+          rowsLength,
+          atStart,
+          atEnd,
+          firstRowIndex,
+          startPlaceholder,
+        });
+      }
+
+      // Scroll to the permalink row
+      virtualizer.scrollToIndex(targetVirtualIndex, {
+        align: 'start',
+      });
+
+      hasPositionedPermalinkRef.current = true;
+    }
+
+    // Once complete, enable auto-paging
+    if (complete && !autoPagingEnabled) {
+      if (debug) {
+        console.log('[Permalink] Data complete, enabling auto-paging');
+      }
+      setAutoPagingEnabled(true);
+    }
+  }, [
+    anchorKind,
+    rowsLength,
+    complete,
+    autoPagingEnabled,
+    anchorIndex,
+    startPlaceholder,
+    virtualizer,
+    debug,
+    atStart,
+    atEnd,
+  ]);
+
   // Auto-shift anchor forward when scrolling near the end of the data window
   useEffect(() => {
-    if (virtualItems.length === 0 || !complete || atEnd) {
+    if (!autoPagingEnabled || virtualItems.length === 0 || !complete || atEnd) {
       return;
     }
 
@@ -315,7 +394,12 @@ function ArrayTestAppContent() {
   // TODO: Re-enable once we understand the ping-pong issue better
   // For now, disabled like useZeroVirtualizer
   useEffect(() => {
-    if (virtualItems.length === 0 || !complete || atStart) {
+    if (
+      !autoPagingEnabled ||
+      virtualItems.length === 0 ||
+      !complete ||
+      atStart
+    ) {
       if (debug && virtualItems.length > 0) {
         console.log('[AutoAnchor backward] Skipping:', {complete, atStart});
       }
@@ -439,6 +523,7 @@ function ArrayTestAppContent() {
                 alignItems: 'center',
                 fontSize: '12px',
                 cursor: 'pointer',
+                marginBottom: '6px',
               }}
             >
               <input
@@ -448,6 +533,22 @@ function ArrayTestAppContent() {
                 style={{marginRight: '6px'}}
               />
               Debug Mode
+            </label>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={autoPagingEnabled}
+                onChange={e => setAutoPagingEnabled(e.target.checked)}
+                style={{marginRight: '6px'}}
+              />
+              Auto-Paging on Scroll
             </label>
           </div>
           <div style={{fontSize: '13px'}}>
@@ -490,6 +591,11 @@ function ArrayTestAppContent() {
             <div>
               Selected Row: <strong>{selectedRowIndex ?? 'None'}</strong>
             </div>
+            {permalinkNotFound && (
+              <div style={{color: '#d32f2f', fontWeight: 'bold'}}>
+                Permalink Not Found!
+              </div>
+            )}
           </div>
         </div>
 
@@ -510,8 +616,9 @@ function ArrayTestAppContent() {
           </div>
           <div style={{marginBottom: '8px'}}>
             <button
-              hidden={true}
               onClick={() => {
+                hasPositionedPermalinkRef.current = false;
+                setAutoPagingEnabled(false);
                 setAnchorKind('permalink');
                 setAnchorIndex(0);
                 setPermalinkID('3130');
