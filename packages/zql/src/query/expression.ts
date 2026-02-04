@@ -163,6 +163,12 @@ export class ExpressionBuilder<
     options?: ExistsOptions,
   ): Condition => this.#exists(relationship, cb, options);
 
+  /**
+   * EXPERIMENTAL. Use at your own risk.
+   * Currently this has no benefit over `whereExists`
+   * In future versions, scalar subqueries will unlock query optimizations
+   * that are not possible with `whereExists`
+   */
   scalar = (
     query: Query<string, any, any>,
     column: string,
