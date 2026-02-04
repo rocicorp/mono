@@ -137,18 +137,21 @@ function ArrayTestAppContent() {
   // rowAt will return undefined for indices outside the current data window
 
   const endPlaceholder = atEnd ? 0 : 1;
+  const startPlaceholder = atStart ? 0 : 1;
 
   // Convert virtualizer index to logical data index
-  // Virtualizer indices map directly to logical indices (rowAt handles the window)
+  // Virtualizer indices: [start placeholder] + [data] + [end placeholder]
+  // Need to account for start placeholder offset
   const toLogicalIndex = useCallback(
-    (virtualizerIndex: number) => virtualizerIndex,
-    [],
+    (virtualizerIndex: number) => {
+      return firstRowIndex + (virtualizerIndex - startPlaceholder);
+    },
+    [firstRowIndex, startPlaceholder],
   );
 
   const rows = useMemo(() => {
-    // Total length: data window extends from 0 to firstRowIndex + rowsLength - 1
-    // Plus 1 placeholder at end if not atEnd
-    const totalLength = firstRowIndex + rowsLength + endPlaceholder;
+    // Total length: [start placeholder if !atStart] + data window + [end placeholder if !atEnd]
+    const totalLength = startPlaceholder + rowsLength + endPlaceholder;
 
     const handler: ProxyHandler<RowData[]> = {
       get(target, prop) {
@@ -158,20 +161,33 @@ function ArrayTestAppContent() {
         if (typeof prop === 'string') {
           const index = parseInt(prop, 10);
           if (!isNaN(index) && index >= 0) {
+            // Start placeholder
+            if (!atStart && index === 0) {
+              return undefined;
+            }
             // End placeholder
             if (!atEnd && index === totalLength - 1) {
               return undefined;
             }
-            // Pass index directly to rowAt - it handles logical indices
-            // and returns undefined for indices outside the data window
-            return rowAt(index);
+            // Map virtualizer index to logical index, accounting for start placeholder
+            const logicalIndex = firstRowIndex + (index - startPlaceholder);
+            return rowAt(logicalIndex);
           }
         }
         return Reflect.get(target, prop);
       },
     };
     return new Proxy<RowData[]>([], handler);
-  }, [rowAt, firstRowIndex, rowsLength, endPlaceholder, atEnd]);
+  }, [
+    rowAt,
+    firstRowIndex,
+    rowsLength,
+    endPlaceholder,
+    endPlaceholder,
+    atEnd,
+    atStart,
+    startPlaceholder,
+  ]);
 
   const parentRef = useRef<HTMLDivElement>(null);
 
