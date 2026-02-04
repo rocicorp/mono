@@ -148,5 +148,12 @@ function transformCondition(
         },
       };
     }
+    case 'scalarSubquery': {
+      const query = transformQueryInternal(lc, cond.subquery, auth);
+      return {
+        ...cond,
+        subquery: query,
+      };
+    }
   }
 }

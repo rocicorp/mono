@@ -125,11 +125,21 @@ export const correlatedSubqueryConditionSchema: v.Type<CorrelatedSubqueryConditi
     flip: v.boolean().optional(),
   });
 
+export const scalarSubqueryConditionSchema: v.Type<ScalarSubqueryCondition> =
+  v.readonlyObject({
+    type: v.literal('scalarSubquery'),
+    op: v.literalUnion('=', 'IS NOT'),
+    parentField: v.string(),
+    subquery: v.lazy(() => astSchema),
+    childField: v.string(),
+  });
+
 export const conditionSchema: v.Type<Condition> = v.union(
   simpleConditionSchema,
   v.lazy(() => conjunctionSchema),
   v.lazy(() => disjunctionSchema),
   correlatedSubqueryConditionSchema,
+  scalarSubqueryConditionSchema,
 );
 
 const conjunctionSchema: v.Type<Conjunction> = v.readonlyObject({
@@ -292,7 +302,8 @@ export type Condition =
   | SimpleCondition
   | Conjunction
   | Disjunction
-  | CorrelatedSubqueryCondition;
+  | CorrelatedSubqueryCondition
+  | ScalarSubqueryCondition;
 
 export type SimpleCondition = {
   readonly type: 'simple';
@@ -325,6 +336,14 @@ export type CorrelatedSubqueryCondition = {
 };
 
 export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
+
+export type ScalarSubqueryCondition = {
+  type: 'scalarSubquery';
+  op: '=' | 'IS NOT';
+  parentField: string;
+  subquery: AST;
+  childField: string;
+};
 
 interface ASTTransform {
   tableName(orig: string): string;
@@ -413,6 +432,13 @@ function transformWhere(
         subquery: transformAST(subquery, transform),
       },
     };
+  } else if (where.type === 'scalarSubquery') {
+    return {
+      ...where,
+      parentField: columnName(table, where.parentField),
+      childField: columnName(where.subquery.table, where.childField),
+      subquery: transformAST(where.subquery, transform),
+    };
   }
 
   return {
@@ -499,6 +525,20 @@ function cmpCondition(a: Condition, b: Condition): number {
     return -1; // Order correlatedSubquery before conjuctions/disjuctions
   }
 
+  if (a.type === 'scalarSubquery') {
+    if (b.type !== 'scalarSubquery') {
+      return -1; // Order scalarSubquery before conjunctions/disjunctions
+    }
+    return (
+      compareUTF8(a.parentField, b.parentField) ||
+      compareUTF8(a.childField, b.childField) ||
+      compareUTF8MaybeNull(a.op, b.op)
+    );
+  }
+  if (b.type === 'scalarSubquery') {
+    return 1;
+  }
+
   const val = compareUTF8MaybeNull(a.type, b.type);
   if (val !== 0) {
     return val;
@@ -551,7 +591,11 @@ function cmpRelated(a: CorrelatedSubquery, b: CorrelatedSubquery): number {
  * empty Conjunctions.
  */
 function flattened(cond: Condition): Condition | undefined {
-  if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
+  if (
+    cond.type === 'simple' ||
+    cond.type === 'correlatedSubquery' ||
+    cond.type === 'scalarSubquery'
+  ) {
     return cond;
   }
   const conditions = defined(
