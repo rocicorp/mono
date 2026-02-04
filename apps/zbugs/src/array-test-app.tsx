@@ -13,6 +13,7 @@ type RowData = Issues[number];
 const DEFAULT_HEIGHT = 275;
 const PLACEHOLDER_HEIGHT = 50; //DEFAULT_HEIGHT / 2;
 const PAGE_SIZE = 50;
+const UNIFORM_ROW_HEIGHT = 63;
 
 const toStartRow = (row: {id: string; modified: number; created: number}) => ({
   id: row.id,
@@ -47,6 +48,9 @@ function ArrayTestAppContent() {
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [debug, setDebug] = useState<boolean>(false);
   const [autoPagingEnabled, setAutoPagingEnabled] = useState<boolean>(false);
+  const [heightMode, setHeightMode] = useState<
+    'dynamic' | 'uniform' | 'non-uniform'
+  >('dynamic');
 
   // Track if we've positioned the permalink
   const hasPositionedPermalinkRef = useRef(false);
@@ -174,16 +178,39 @@ function ArrayTestAppContent() {
 
   const estimateSize = useCallback(
     (index: number) => {
-      // Return estimate - virtualizer will measure actual heights
       const row = rows.get(index);
-      return row ? DEFAULT_HEIGHT : PLACEHOLDER_HEIGHT;
+      if (!row) {
+        return PLACEHOLDER_HEIGHT;
+      }
+
+      if (heightMode === 'uniform') {
+        // Fixed uniform height
+        return UNIFORM_ROW_HEIGHT;
+      }
+
+      if (heightMode === 'non-uniform') {
+        // Fixed non-uniform height based on description length
+        const baseHeight = 120; // Base height without description
+        if (!row.description) {
+          return baseHeight;
+        }
+        // Add height based on description length (approximately 150 chars per line)
+        const descriptionLines = Math.ceil(row.description.length / 150);
+        const descriptionHeight = descriptionLines * 20;
+        return baseHeight + descriptionHeight;
+      }
+
+      // Dynamic height - virtualizer will measure
+      return DEFAULT_HEIGHT;
     },
-    [rows],
+    [rows, heightMode],
   );
+
+  const getScrollElement = useCallback(() => parentRef.current, []);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
-    getScrollElement: () => parentRef.current,
+    getScrollElement,
     estimateSize,
     getItemKey: useCallback(
       (index: number) => {
@@ -203,20 +230,10 @@ function ArrayTestAppContent() {
     debug,
   });
 
-  // Expose virtualizer for testing
+  // Reset virtualizer measurements when height mode changes
   useEffect(() => {
-    // oxlint-disable-next-line no-explicit-any
-    const w = window as any;
-    w.virtualizer = virtualizer;
-    w.rowAt = rowAt;
-    w.rows2 = rows;
-
-    return () => {
-      delete w.virtualizer;
-      delete w.rowAt;
-      delete w.rows2;
-    };
-  }, [virtualizer, rowAt, rows]);
+    virtualizer.measure();
+  }, [heightMode]);
 
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
@@ -484,42 +501,38 @@ function ArrayTestAppContent() {
             borderRadius: '4px',
           }}
         >
-          <h3 style={{margin: '0 0 8px 0', fontSize: '14px'}}>Stats</h3>
           <div style={{marginBottom: '8px'}}>
             <label
               style={{
-                display: 'flex',
-                alignItems: 'center',
                 fontSize: '12px',
-                cursor: 'pointer',
-                marginBottom: '6px',
+                fontWeight: 'bold',
+                marginBottom: '4px',
+                display: 'block',
               }}
             >
-              <input
-                type="checkbox"
-                checked={debug}
-                onChange={e => setDebug(e.target.checked)}
-                style={{marginRight: '6px'}}
-              />
-              Debug Mode
+              Row Height Mode:
             </label>
-            <label
+            <select
+              value={heightMode}
+              onChange={e =>
+                setHeightMode(
+                  e.target.value as 'dynamic' | 'uniform' | 'non-uniform',
+                )
+              }
               style={{
-                display: 'flex',
-                alignItems: 'center',
+                width: '100%',
+                padding: '4px',
                 fontSize: '12px',
-                cursor: 'pointer',
+                borderRadius: '3px',
+                border: '1px solid #ccc',
               }}
             >
-              <input
-                type="checkbox"
-                checked={autoPagingEnabled}
-                onChange={e => setAutoPagingEnabled(e.target.checked)}
-                style={{marginRight: '6px'}}
-              />
-              Auto-Paging on Scroll
-            </label>
+              <option value="dynamic">Dynamic (Measured)</option>
+              <option value="uniform">Fixed Uniform</option>
+              <option value="non-uniform">Fixed Non-Uniform</option>
+            </select>
           </div>
+          <h3 style={{margin: '0 0 8px 0', fontSize: '14px'}}>Stats</h3>
           <div style={{fontSize: '13px'}}>
             <div>
               rows.length: <strong>{rows.length}</strong>
@@ -784,7 +797,11 @@ function ArrayTestAppContent() {
                     <div
                       key={virtualItem.key}
                       data-index={virtualItem.index}
-                      ref={virtualizer.measureElement}
+                      ref={
+                        heightMode === 'dynamic'
+                          ? virtualizer.measureElement
+                          : undefined
+                      }
                       onClick={() => {
                         if (issue) {
                           setSelectedRowIndex(logicalIndex);
@@ -795,12 +812,17 @@ function ArrayTestAppContent() {
                         borderBottom: '1px solid #eee',
                         backgroundColor: isSelected ? '#e3f2fd' : '#fff',
                         cursor: issue ? 'pointer' : 'default',
+                        boxSizing: 'border-box',
                         ...(!issue
                           ? {
                               height: PLACEHOLDER_HEIGHT,
-                              boxSizing: 'border-box',
                             }
-                          : {}),
+                          : heightMode !== 'dynamic'
+                            ? {
+                                height: virtualItem.size,
+                                overflow: 'hidden',
+                              }
+                            : {}),
                       }}
                     >
                       {issue ? (
