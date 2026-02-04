@@ -45,18 +45,16 @@ function ArrayTestAppContent() {
   const [startRow, setStartRow] = useState<IssueRowSort | undefined>(undefined);
   const [permalinkID, setPermalinkID] = useState<string | undefined>('3130');
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
-  const [debug, setDebug] = useState<boolean>(true);
+  const [debug, setDebug] = useState<boolean>(false);
   const [autoPagingEnabled, setAutoPagingEnabled] = useState<boolean>(false);
-
-  // Track last anchor shift to prevent ping-pong (shift in one direction triggering immediate opposite shift)
-  const lastAnchorShiftRef = useRef<{
-    time: number;
-    direction: 'forward' | 'backward';
-  }>({time: 0, direction: 'forward'});
-  const ANCHOR_SHIFT_COOLDOWN = 500; // ms
 
   // Track if we've positioned the permalink
   const hasPositionedPermalinkRef = useRef(false);
+
+  // Track if we're waiting for data to complete after an anchor shift
+  // This prevents ping-pong: shifts blocked until data loads and completes
+  const waitingForCompleteRef = useRef(false);
+  const hasSeenIncompleteRef = useRef(false); // Track if we've seen incomplete state after shift
 
   const {
     rowAt,
@@ -123,30 +121,6 @@ function ArrayTestAppContent() {
     toStartRow,
   });
 
-  // Log useRows state changes
-  useEffect(() => {
-    if (debug) {
-      console.log('[useRows state]', {
-        firstRowIndex,
-        rowsLength,
-        atStart,
-        atEnd,
-        complete,
-        anchorKind,
-        anchorIndex,
-      });
-    }
-  }, [
-    firstRowIndex,
-    rowsLength,
-    atStart,
-    atEnd,
-    complete,
-    anchorKind,
-    anchorIndex,
-    debug,
-  ]);
-
   // The virtualizer uses indices 0, 1, 2, ... mapping directly to logical data indices
   // rowAt will return undefined for indices outside the current data window
 
@@ -164,34 +138,28 @@ function ArrayTestAppContent() {
   );
 
   const rows = useMemo(() => {
-    // Total length: [start placeholder if !atStart] + data window + [end placeholder if !atEnd]
-    const totalLength = startPlaceholder + rowsLength + endPlaceholder;
+    const length = startPlaceholder + rowsLength + endPlaceholder;
 
-    const handler: ProxyHandler<RowData[]> = {
-      get(target, prop) {
-        if (prop === 'length') {
-          return totalLength;
+    return {
+      length,
+      get(index: number) {
+        if (index < 0) {
+          return undefined;
         }
-        if (typeof prop === 'string') {
-          const index = parseInt(prop, 10);
-          if (!isNaN(index) && index >= 0) {
-            // Start placeholder
-            if (!atStart && index === 0) {
-              return undefined;
-            }
-            // End placeholder
-            if (!atEnd && index === totalLength - 1) {
-              return undefined;
-            }
-            // Map virtualizer index to logical index, accounting for start placeholder
-            const logicalIndex = firstRowIndex + (index - startPlaceholder);
-            return rowAt(logicalIndex);
-          }
+
+        // Start placeholder
+        if (!atStart && index === 0) {
+          return undefined;
         }
-        return Reflect.get(target, prop);
+        // End placeholder
+        if (!atEnd && index === length - 1) {
+          return undefined;
+        }
+        // Map virtualizer index to logical index, accounting for start placeholder
+        const logicalIndex = firstRowIndex + (index - startPlaceholder);
+        return rowAt(logicalIndex);
       },
     };
-    return new Proxy<RowData[]>([], handler);
   }, [
     rowAt,
     firstRowIndex,
@@ -207,7 +175,7 @@ function ArrayTestAppContent() {
   const estimateSize = useCallback(
     (index: number) => {
       // Return estimate - virtualizer will measure actual heights
-      const row = rows[index];
+      const row = rows.get(index);
       return row ? DEFAULT_HEIGHT : PLACEHOLDER_HEIGHT;
     },
     [rows],
@@ -219,7 +187,7 @@ function ArrayTestAppContent() {
     estimateSize,
     getItemKey: useCallback(
       (index: number) => {
-        const row = rows[index];
+        const row = rows.get(index);
         if (row) {
           return row.id;
         }
@@ -241,12 +209,12 @@ function ArrayTestAppContent() {
     const w = window as any;
     w.virtualizer = virtualizer;
     w.rowAt = rowAt;
-    w.rows = rows;
+    w.rows2 = rows;
 
     return () => {
       delete w.virtualizer;
       delete w.rowAt;
-      delete w.rows;
+      delete w.rows2;
     };
   }, [virtualizer, rowAt, rows]);
 
@@ -285,31 +253,10 @@ function ArrayTestAppContent() {
       const targetVirtualIndex =
         permalinkLogicalIndex - firstRowIndex + startPlaceholder;
 
-      if (debug) {
-        console.log('[Permalink] Scrolling to position:', {
-          permalinkLogicalIndex,
-          targetVirtualIndex,
-          anchorIndex,
-          rowsLength,
-          atStart,
-          atEnd,
-          firstRowIndex,
-          startPlaceholder,
-          complete,
-        });
-      }
-
       // Scroll to the permalink row
       virtualizer.scrollToIndex(targetVirtualIndex, {
         align: 'start',
       });
-
-      if (debug) {
-        console.log('[Permalink] Scrolled to index', {
-          targetVirtualIndex,
-          complete,
-        });
-      }
 
       // Only mark as positioned once data is complete
       if (complete) {
@@ -319,9 +266,6 @@ function ArrayTestAppContent() {
 
     // Once complete, enable auto-paging
     if (complete && !autoPagingEnabled) {
-      if (debug) {
-        console.log('[Permalink] Data complete, enabling auto-paging');
-      }
       setAutoPagingEnabled(true);
     }
   }, [
@@ -331,10 +275,8 @@ function ArrayTestAppContent() {
     autoPagingEnabled,
     anchorIndex,
     startPlaceholder,
+    firstRowIndex,
     virtualizer,
-    debug,
-    atStart,
-    atEnd,
   ]);
 
   // Auto-shift anchor forward when scrolling near the end of the data window
@@ -343,15 +285,31 @@ function ArrayTestAppContent() {
       return;
     }
 
+    // Prevent ping-pong: if we're waiting for data to complete after a shift, don't shift opposite direction
+    if (waitingForCompleteRef.current && !complete) {
+      hasSeenIncompleteRef.current = true;
+      return;
+    }
+
+    // Only reset waiting flag after we've seen incomplete → complete cycle
+    if (
+      waitingForCompleteRef.current &&
+      complete &&
+      hasSeenIncompleteRef.current
+    ) {
+      waitingForCompleteRef.current = false;
+      hasSeenIncompleteRef.current = false;
+    }
+
     // Find last non-placeholder item
     let lastItem = virtualItems[virtualItems.length - 1];
-    let lastRow = rows[lastItem.index];
+    let lastRow = rows.get(lastItem.index);
 
     if (!lastRow) {
       // Try to find last non-placeholder item
       for (let i = virtualItems.length - 2; i >= 0; i--) {
         const item = virtualItems[i];
-        const row = rows[item.index];
+        const row = rows.get(item.index);
         if (row) {
           lastItem = item;
           lastRow = row;
@@ -361,11 +319,6 @@ function ArrayTestAppContent() {
 
       // Skip if no non-placeholder items found
       if (!lastRow) {
-        if (debug) {
-          console.log(
-            '[AutoAnchor forward] Skipping: no non-placeholder items',
-          );
-        }
         return;
       }
     }
@@ -381,44 +334,16 @@ function ArrayTestAppContent() {
     // (matches useZeroVirtualizer's getNearPageEdgeThreshold)
     const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE * 0.1);
 
-    if (debug) {
-      console.log('[AutoAnchor forward] Check:', {
-        distanceFromEnd,
-        nearPageEdgeThreshold,
-        wouldTrigger: distanceFromEnd <= nearPageEdgeThreshold,
-      });
-    }
-
     // Trigger when near end of data window
     // (backward auto-anchor is disabled, so no ping-pong concern)
     if (distanceFromEnd <= nearPageEdgeThreshold) {
-      // Cooldown check - prevent ping-pong by blocking if last shift was opposite direction
-      const now = Date.now();
-      if (
-        lastAnchorShiftRef.current.direction === 'backward' &&
-        now - lastAnchorShiftRef.current.time < ANCHOR_SHIFT_COOLDOWN
-      ) {
-        return;
-      }
-
       // Shift anchor forward: position anchor so LAST visible item
       // will be at ~60% into the new window (giving 40% buffer ahead)
       const newAnchorIndex = lastLogicalIndex - Math.ceil(PAGE_SIZE * 0.6);
       const newAnchorRow = rowAt(newAnchorIndex);
 
       if (newAnchorRow && newAnchorIndex !== anchorIndex) {
-        if (debug) {
-          console.log(
-            '[AutoAnchor] Shifting forward:',
-            'distanceFromEnd=',
-            distanceFromEnd,
-            'lastLogicalIndex=',
-            lastLogicalIndex,
-            'newAnchorIndex=',
-            newAnchorIndex,
-          );
-        }
-        lastAnchorShiftRef.current = {time: now, direction: 'forward'};
+        waitingForCompleteRef.current = true; // Wait for data to load before allowing opposite shift
         setAnchorKind('forward');
         setAnchorIndex(newAnchorIndex);
         setStartRow(toStartRow(newAnchorRow));
@@ -433,12 +358,12 @@ function ArrayTestAppContent() {
     toLogicalIndex,
     rowAt,
     anchorIndex,
-    debug,
+    complete,
+    autoPagingEnabled,
+    rows,
   ]);
 
   // Auto-shift anchor backward when scrolling near the start of the data window
-  // TODO: Re-enable once we understand the ping-pong issue better
-  // For now, disabled like useZeroVirtualizer
   useEffect(() => {
     if (
       !autoPagingEnabled ||
@@ -446,24 +371,34 @@ function ArrayTestAppContent() {
       atStart ||
       anchorKind === 'permalink' // Permalink anchors naturally have firstRowIndex < 0
     ) {
-      if (debug && virtualItems.length > 0) {
-        console.log('[AutoAnchor backward] Skipping:', {
-          atStart,
-          anchorKind,
-        });
-      }
       return;
+    }
+
+    // Prevent ping-pong: if we're waiting for data to complete after a shift, don't shift opposite direction
+    if (waitingForCompleteRef.current && !complete) {
+      hasSeenIncompleteRef.current = true;
+      return;
+    }
+
+    // Only reset waiting flag after we've seen incomplete → complete cycle
+    if (
+      waitingForCompleteRef.current &&
+      complete &&
+      hasSeenIncompleteRef.current
+    ) {
+      waitingForCompleteRef.current = false;
+      hasSeenIncompleteRef.current = false;
     }
 
     // Find first non-placeholder item
     let firstItem = virtualItems[0];
-    let firstRow = rows[firstItem.index];
+    let firstRow = rows.get(firstItem.index);
 
     if (!firstRow) {
       // Try to find first non-placeholder item
       for (let i = 1; i < virtualItems.length; i++) {
         const item = virtualItems[i];
-        const row = rows[item.index];
+        const row = rows.get(item.index);
         if (row) {
           firstItem = item;
           firstRow = row;
@@ -473,11 +408,6 @@ function ArrayTestAppContent() {
 
       // Skip if no non-placeholder items found
       if (!firstRow) {
-        if (debug) {
-          console.log(
-            '[AutoAnchor backward] Skipping: no non-placeholder items',
-          );
-        }
         return;
       }
     }
@@ -491,29 +421,8 @@ function ArrayTestAppContent() {
     // Threshold: shift anchor when we're within 10% of page size from the edge
     const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE * 0.1);
 
-    if (debug) {
-      console.log('[AutoAnchor backward] Check:', {
-        distanceFromStart,
-        nearPageEdgeThreshold,
-        wouldTrigger: distanceFromStart <= nearPageEdgeThreshold,
-        firstLogicalIndex,
-        firstRowIndex,
-        anchorKind,
-        anchorIndex,
-      });
-    }
-
     // Trigger when near start of data window
     if (distanceFromStart <= nearPageEdgeThreshold) {
-      // Cooldown check - prevent ping-pong by blocking if last shift was opposite direction
-      const now = Date.now();
-      if (
-        lastAnchorShiftRef.current.direction === 'forward' &&
-        now - lastAnchorShiftRef.current.time < ANCHOR_SHIFT_COOLDOWN
-      ) {
-        return;
-      }
-
       // Shift anchor backward: position anchor so FIRST visible item
       // will be at ~40% into the new window (giving 40% buffer behind)
       // For backward anchor, data goes from (anchorIndex - rowsLength) to anchorIndex
@@ -521,28 +430,8 @@ function ArrayTestAppContent() {
       const newAnchorIndex = firstLogicalIndex + Math.ceil(PAGE_SIZE * 0.6);
       const newAnchorRow = rowAt(newAnchorIndex);
 
-      if (debug) {
-        console.log('[AutoAnchor backward] Attempting shift:', {
-          firstLogicalIndex,
-          newAnchorIndex,
-          hasRow: !!newAnchorRow,
-          currentAnchorIndex: anchorIndex,
-        });
-      }
-
       if (newAnchorRow && newAnchorIndex !== anchorIndex) {
-        if (debug) {
-          console.log(
-            '[AutoAnchor] Shifting backward:',
-            'distanceFromStart=',
-            distanceFromStart,
-            'firstLogicalIndex=',
-            firstLogicalIndex,
-            'newAnchorIndex=',
-            newAnchorIndex,
-          );
-        }
-        lastAnchorShiftRef.current = {time: now, direction: 'backward'};
+        waitingForCompleteRef.current = true; // Wait for data to load before allowing opposite shift
         setAnchorKind('backward');
         setAnchorIndex(newAnchorIndex);
         setStartRow(toStartRow(newAnchorRow));
@@ -557,7 +446,10 @@ function ArrayTestAppContent() {
     toLogicalIndex,
     rowAt,
     anchorIndex,
-    debug,
+    complete,
+    autoPagingEnabled,
+    anchorKind,
+    rows,
   ]);
 
   return (
@@ -884,7 +776,7 @@ function ArrayTestAppContent() {
                 }}
               >
                 {virtualItems.map(virtualItem => {
-                  const issue = rows[virtualItem.index];
+                  const issue = rows.get(virtualItem.index);
                   const logicalIndex = toLogicalIndex(virtualItem.index);
                   const isSelected = selectedRowIndex === logicalIndex;
 
