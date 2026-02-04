@@ -82,13 +82,6 @@ type Pipeline = {
   readonly originalAST?: AST | undefined;
   /** Query IDs of companion pipelines associated with this parent. */
   readonly companionQueryIDs?: string[] | undefined;
-  /**
-   * For companion pipelines: the scalar value extracted after hydration.
-   * For parent pipelines: undefined.
-   */
-  readonly scalarValue?: LiteralValue | null | undefined;
-  /** For companion pipelines: the field name whose value is the scalar. */
-  readonly companionChildField?: string | undefined;
   /** For companion pipelines: the parent query ID. */
   readonly parentQueryID?: string | undefined;
 };
@@ -140,6 +133,8 @@ export class PipelineDriver {
   #streamer: Streamer | null = null;
   #hydrateContext: HydrateContext | null = null;
   #advanceContext: AdvanceContext | null = null;
+  /** Parent query IDs whose companions received diffs during advancement. */
+  readonly #parentsToReResolve = new Set<string>();
   #replicaVersion: string | null = null;
   #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
@@ -479,13 +474,11 @@ export class PipelineDriver {
           (firstAdd?.row?.[childField] as LiteralValue | undefined) ??
           undefined;
 
-        // Tag the companion pipeline with its scalar value, field, and parent.
+        // Tag the companion pipeline with its parent.
         const pipeline = this.#pipelines.get(companionID);
         if (pipeline) {
           this.#pipelines.set(companionID, {
             ...pipeline,
-            scalarValue: value,
-            companionChildField: childField,
             parentQueryID: queryID,
           });
         }
@@ -591,6 +584,7 @@ export class PipelineDriver {
       this.#hydrateContext === null,
       'Cannot advance while hydration is in progress',
     );
+    this.#parentsToReResolve.clear();
     this.#advanceContext = {
       timer,
       totalHydrationTimeMs: this.totalHydrationTimeMs(),
@@ -676,46 +670,21 @@ export class PipelineDriver {
   }
 
   /**
-   * After advancement, checks if any companion pipeline's scalar value
-   * has changed. If so, tears down the parent and all its companions,
-   * then re-creates them from the parent's originalAST.
-   *
-   * Companion pipelines participate in normal IVM advancement, so their
-   * underlying data is already up to date. We re-fetch the scalar value
-   * from the companion's IVM output and compare with the stored value.
+   * Tears down and rebuilds parent pipelines whose companion pipelines
+   * received diffs during advancement. The set of affected parents is
+   * populated by {@link #push} as it yields row changes.
    */
   *#reResolveCompanions(timer: Timer): Iterable<RowChange | 'yield'> {
-    // Collect parent query IDs that need re-resolution because a
-    // companion's scalar value changed.
-    const parentsToReResolve = new Set<string>();
-
-    for (const [, pipeline] of this.#pipelines) {
-      if (
-        pipeline.parentQueryID === undefined ||
-        pipeline.companionChildField === undefined
-      ) {
-        continue; // not a companion
-      }
-      // Re-read the companion's current scalar value from its IVM output.
-      const childField = pipeline.companionChildField;
-      let newValue: LiteralValue | null | undefined = undefined;
-      for (const node of pipeline.input.fetch({})) {
-        if (node !== 'yield') {
-          // Companion has at most 1 row (unique index constraint).
-          newValue =
-            (node.row[childField] as LiteralValue | undefined) ?? undefined;
-          break;
-        }
-      }
-
-      if (newValue !== pipeline.scalarValue) {
-        parentsToReResolve.add(pipeline.parentQueryID);
-      }
+    if (this.#parentsToReResolve.size === 0) {
+      return;
     }
 
-    // Re-resolve each affected parent by tearing down the whole tree
-    // (parent + companions) and rebuilding from the parent's originalAST.
-    for (const parentID of parentsToReResolve) {
+    // Copy and clear before rebuilding, since addQueryWithCompanions
+    // may push through companions that re-populate the set.
+    const parentIDs = [...this.#parentsToReResolve];
+    this.#parentsToReResolve.clear();
+
+    for (const parentID of parentIDs) {
       const parent = this.#pipelines.get(parentID);
       if (!parent?.originalAST) {
         continue;
@@ -822,6 +791,12 @@ export class PipelineDriver {
           yield 'yield';
         }
         for (const changeOrYield of this.#stopAccumulating().stream()) {
+          if (changeOrYield !== 'yield') {
+            const pipeline = this.#pipelines.get(changeOrYield.queryID);
+            if (pipeline?.parentQueryID !== undefined) {
+              this.#parentsToReResolve.add(pipeline.parentQueryID);
+            }
+          }
           yield changeOrYield;
         }
         this.#startAccumulating();
