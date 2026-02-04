@@ -60,7 +60,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      false,
       allowedPatterns,
       shard,
       {
@@ -98,7 +97,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       urlWithQuery,
-      true,
       allowedPatterns,
       shard,
       {},
@@ -122,7 +120,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {},
@@ -143,7 +140,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {
@@ -177,7 +173,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {
@@ -210,7 +205,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {
@@ -239,7 +233,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {
@@ -268,7 +261,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {
@@ -300,7 +292,6 @@ describe('fetchFromAPIServer', () => {
       'push',
       lc,
       baseUrl,
-      true,
       allowedPatterns,
       shard,
       {
@@ -328,7 +319,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         'https://evil.example.com/endpoint',
-        true,
         allowedPatterns,
         shard,
         {},
@@ -347,7 +337,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         'https://evil.example.com/endpoint',
-        true,
         allowedPatterns,
         shard,
         {},
@@ -369,7 +358,6 @@ describe('fetchFromAPIServer', () => {
           'push',
           lc,
           url,
-          false,
           allowedPatterns,
           shard,
           {},
@@ -393,7 +381,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -435,7 +422,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -471,7 +457,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -504,7 +489,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -541,7 +525,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -576,7 +559,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -608,7 +590,6 @@ describe('fetchFromAPIServer', () => {
         'push',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -627,7 +608,7 @@ describe('fetchFromAPIServer', () => {
       'Expected zeroCache PushFailed error',
     );
     expect(caught.errorBody.reason).toBe(ErrorReason.Internal);
-    expect(caught.errorBody.message).toMatch(/unknown error: boom/);
+    expect(caught.errorBody.message).toMatch(/threw error: boom/);
   });
 
   test('wraps rejected fetch calls for transform in ProtocolError with internal type', async () => {
@@ -640,7 +621,6 @@ describe('fetchFromAPIServer', () => {
         'transform',
         lc,
         baseUrl,
-        false,
         allowedPatterns,
         shard,
         {},
@@ -659,7 +639,158 @@ describe('fetchFromAPIServer', () => {
       'Expected zeroCache TransformFailed error',
     );
     expect(caught.errorBody.reason).toBe(ErrorReason.Internal);
-    expect(caught.errorBody.message).toMatch(/unknown error: network failure/);
+    expect(caught.errorBody.message).toMatch(/threw error: network failure/);
+  });
+
+  describe('retries', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    test('retries on 502 and succeeds', async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response('bad gateway', {status: 502}))
+        .mockResolvedValueOnce(new Response('bad gateway', {status: 502}))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({success: true}), {status: 200}),
+        );
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      // 1st retry
+      await vi.advanceTimersByTimeAsync(1200);
+      // 2nd retry
+      await vi.advanceTimersByTimeAsync(1200);
+
+      const result = await promise;
+      expect(result).toEqual({success: true});
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    test('retries on 504 and succeeds', async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response('gateway timeout', {status: 504}))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({success: true}), {status: 200}),
+        );
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      await vi.advanceTimersByTimeAsync(1200);
+
+      const result = await promise;
+      expect(result).toEqual({success: true});
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('retries on fetch failed and succeeds', async () => {
+      mockFetch
+        .mockRejectedValueOnce(new TypeError('fetch failed'))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({success: true}), {status: 200}),
+        );
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      await vi.advanceTimersByTimeAsync(1200);
+
+      const result = await promise;
+      expect(result).toEqual({success: true});
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('fails after max retries (status code)', async () => {
+      mockFetch.mockResolvedValue(new Response('bad gateway', {status: 502}));
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      // Exhaust all retries
+      await Promise.all([
+        expect(promise).rejects.toThrow(/non-OK status 502/),
+        vi.advanceTimersByTimeAsync(5000),
+      ]);
+
+      // Initial + 3 retries (max attempts 4) = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    test('fails after max retries (fetch failed)', async () => {
+      mockFetch.mockRejectedValue(new TypeError('fetch failed'));
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      // Exhaust all retries
+      await Promise.all([
+        expect(promise).rejects.toThrow(/threw error: fetch failed/),
+        vi.advanceTimersByTimeAsync(5000),
+      ]);
+
+      // Initial + 3 retries = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    test('does not retry on other errors', async () => {
+      mockFetch.mockResolvedValue(new Response('bad request', {status: 400}));
+
+      const promise = fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+
+      await expect(promise).rejects.toThrow(/non-OK status 400/);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
@@ -668,19 +799,19 @@ describe('getBodyPreview', () => {
 
   test('returns entire body when below truncation threshold', async () => {
     const res = new Response('short-body', {status: 200});
-    expect(await getBodyPreview(res, lc, 'warn')).toBe('short-body');
+    expect(await getBodyPreview(res, lc)).toBe('short-body');
   });
 
   test('truncates body to 512 characters and appends ellipsis', async () => {
     const longBody = 'a'.repeat(600);
     const res = new Response(longBody, {status: 200});
-    const preview = await getBodyPreview(res, lc, 'warn');
+    const preview = await getBodyPreview(res, lc);
     expect(preview).toHaveLength(515);
     expect(preview?.endsWith('...')).toBe(true);
     expect(preview?.startsWith('a'.repeat(512))).toBe(true);
   });
 
-  test('logs error and returns undefined when preview extraction fails', async () => {
+  test('logs warning and returns undefined when preview extraction fails', async () => {
     const sink = new TestLogSink();
     const logContext = new LogContext('debug', undefined, sink);
     const failingResponse = {
@@ -690,12 +821,10 @@ describe('getBodyPreview', () => {
       }),
     } as unknown as Response;
 
-    expect(
-      await getBodyPreview(failingResponse, logContext, 'error'),
-    ).toBeUndefined();
+    expect(await getBodyPreview(failingResponse, logContext)).toBeUndefined();
     expect(sink.messages).toHaveLength(1);
     const [level, _ctx, args] = sink.messages[0]!;
-    expect(level).toBe('error');
+    expect(level).toBe('warn');
     expect(args[0]).toBe('failed to get body preview');
   });
 });

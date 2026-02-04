@@ -17,15 +17,6 @@ describe('ProtocolErrorWithLevel', () => {
     expect(error.message).toBe('test message');
     expect(error.logLevel).toBe('warn');
   });
-
-  test('defaults to warn log level', () => {
-    const error = new ProtocolErrorWithLevel({
-      kind: ErrorKind.Internal,
-      message: 'test message',
-      origin: ErrorOrigin.ZeroCache,
-    });
-    expect(error.logLevel).toBe('warn');
-  });
 });
 
 describe('getLogLevel', () => {

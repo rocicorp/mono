@@ -9,10 +9,7 @@ import {getConnectionURI, type PgTest, test} from '../../../test/db.ts';
 import {DbFile} from '../../../test/lite.ts';
 import {type PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
-import type {
-  ChangeSource,
-  ChangeStream,
-} from '../../change-streamer/change-streamer-service.ts';
+import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import type {MessageInsert} from '../protocol/current.ts';
 import type {
   ChangeStreamMessage,

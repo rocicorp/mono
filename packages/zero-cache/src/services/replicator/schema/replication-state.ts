@@ -8,7 +8,10 @@
 import * as v from '../../../../../shared/src/valita.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import type {StatementRunner} from '../../../db/statements.ts';
+import {CREATE_CHANGELOG_SCHEMA} from './change-log.ts';
+import {CREATE_COLUMN_METADATA_TABLE} from './column-metadata.ts';
 import {ZERO_VERSION_COLUMN_NAME} from './constants.ts';
+import {CREATE_TABLE_METADATA_TABLE} from './table-metadata.ts';
 
 export {ZERO_VERSION_COLUMN_NAME};
 
@@ -50,7 +53,10 @@ const CREATE_REPLICATION_STATE_SCHEMA =
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
   ` +
-  CREATE_RUNTIME_EVENTS_TABLE;
+  CREATE_CHANGELOG_SCHEMA +
+  CREATE_RUNTIME_EVENTS_TABLE +
+  CREATE_COLUMN_METADATA_TABLE +
+  CREATE_TABLE_METADATA_TABLE;
 
 const stringArray = v.array(v.string());
 
@@ -77,8 +83,11 @@ export function initReplicationState(
   db: Database,
   publications: string[],
   watermark: string,
+  createTables = true,
 ) {
-  db.exec(CREATE_REPLICATION_STATE_SCHEMA);
+  if (createTables) {
+    createReplicationStateTables(db);
+  }
   db.prepare(
     `
     INSERT INTO "_zero.replicationConfig" 
@@ -91,6 +100,15 @@ export function initReplicationState(
     `,
   ).run(watermark);
   recordEvent(db, 'sync');
+}
+
+/**
+ * Exposed as a separate function for the custom change source,
+ * which needs the tables to be created in order to construct
+ * ChangeProcessor before it knows the initial watermark.
+ */
+export function createReplicationStateTables(db: Database) {
+  db.exec(CREATE_REPLICATION_STATE_SCHEMA);
 }
 
 export function recordEvent(db: Database, event: RuntimeEvent) {

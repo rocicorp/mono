@@ -1,4 +1,4 @@
-import {useQuery, useConnectionState} from '@rocicorp/zero/react';
+import {useConnectionState, useQuery} from '@rocicorp/zero/react';
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
@@ -281,6 +281,7 @@ const addStatusParam = (
   status: 'closed' | 'all' | undefined,
 ) => {
   const newParams = new URLSearchParams(qs);
+  newParams.delete('id'); // Remove permalink ID when changing status filter
   if (status === undefined) {
     newParams.delete('status');
   } else {

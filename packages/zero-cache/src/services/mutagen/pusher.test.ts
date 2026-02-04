@@ -931,12 +931,10 @@ describe('pusher errors', () => {
 
     const iterator = stream[Symbol.asyncIterator]();
     const failure = iterator.next();
-    const expectedLogLevel =
-      expectedError.origin === ErrorOrigin.Server ? 'warn' : 'error';
     await expect(failure).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
     await expect(failure).rejects.toMatchObject({
       errorBody: expectedError,
-      logLevel: expectedLogLevel,
+      logLevel: 'warn',
     });
   }
 
@@ -1087,8 +1085,7 @@ describe('pusher errors', () => {
         kind: ErrorKind.PushFailed,
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
-        message:
-          'Fetch from API server failed with unknown error: string error',
+        message: 'Fetch from API server threw error: string error',
         mutationIDs: [
           {
             clientID: 'test-cid',
@@ -1096,7 +1093,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1246,7 +1243,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
 
     await expect(failure2).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
@@ -1265,7 +1262,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1302,8 +1299,7 @@ describe('pusher errors', () => {
         kind: ErrorKind.PushFailed,
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
-        message:
-          'Fetch from API server failed with unknown error: Network error',
+        message: 'Fetch from API server threw error: Network error',
         mutationIDs: [
           {
             clientID: 'test-cid',
@@ -1311,7 +1307,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1360,7 +1356,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
 
     await pusher.stop();

@@ -4,24 +4,24 @@ import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {listIndexes, listTables} from '../../db/lite-tables.ts';
-import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
+import {
+  listIndexes,
+  listTables,
+  type LiteTableSpecWithReplicationStatus,
+} from '../../db/lite-tables.ts';
+import type {LiteIndexSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
-import {
-  ColumnMetadataStore,
-  CREATE_COLUMN_METADATA_TABLE,
-} from '../change-source/column-metadata.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
-import {initChangeLog} from './schema/change-log.ts';
+import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   getSubscriptionState,
   initReplicationState,
 } from './schema/replication-state.ts';
 import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
 
-describe('replicator/incremental-sync', () => {
+describe('replicator/change-processor', () => {
   let lc: LogContext;
   let servingReplica: Database;
   let servingProcessor: ChangeProcessor;
@@ -31,6 +31,7 @@ describe('replicator/incremental-sync', () => {
   beforeEach(() => {
     lc = createSilentLogContext();
     servingReplica = new Database(lc, ':memory:');
+    initReplicationState(servingReplica, ['zero_data'], '02');
     servingProcessor = new ChangeProcessor(
       new StatementRunner(servingReplica),
       'serving',
@@ -39,6 +40,7 @@ describe('replicator/incremental-sync', () => {
       },
     );
     backupReplica = new Database(lc, ':memory:');
+    initReplicationState(backupReplica, ['zero_data'], '02');
     backupProcessor = new ChangeProcessor(
       new StatementRunner(backupReplica),
       'backup',
@@ -53,7 +55,7 @@ describe('replicator/incremental-sync', () => {
     setup: string;
     downstream: ChangeStreamData[];
     data: Record<string, Record<string, unknown>[]>;
-    tableSpecs?: LiteTableSpec[];
+    tableSpecs?: LiteTableSpecWithReplicationStatus[];
     indexSpecs?: LiteIndexSpec[];
   };
 
@@ -190,6 +192,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":123}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '06',
@@ -197,6 +200,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":456}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -204,6 +208,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -211,6 +216,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":987}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -218,6 +224,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":234}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -277,6 +284,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":123}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -365,6 +373,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789,"orgID":2}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0a',
@@ -372,6 +381,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":456,"orgID":1}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0a',
@@ -379,6 +389,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0a',
@@ -386,6 +397,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":123,"orgID":2}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -454,6 +466,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":789,"orgID":2}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0c',
@@ -461,6 +474,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0c',
@@ -468,6 +482,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":0,"issueID":456,"orgID":1}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0c',
@@ -475,6 +490,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":987,"orgID":2}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -516,11 +532,36 @@ describe('replicator/incremental-sync', () => {
         baz: [],
         ['_zero.changeLog2']: [
           {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"id":1}',
+            stateVersion: '0e',
+            table: 'foo',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 1n,
+            rowKey: '{"id":2}',
+            stateVersion: '0e',
+            table: 'foo',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 2n,
+            rowKey: '{"id":3}',
+            stateVersion: '0e',
+            table: 'foo',
+          },
+          {
             stateVersion: '0e',
             pos: 3n,
             table: 'bar',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -528,6 +569,7 @@ describe('replicator/incremental-sync', () => {
             table: 'bar',
             op: 's',
             rowKey: '{"id":5}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -535,6 +577,31 @@ describe('replicator/incremental-sync', () => {
             table: 'bar',
             op: 's',
             rowKey: '{"id":6}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 6n,
+            rowKey: '{"id":7}',
+            stateVersion: '0e',
+            table: 'baz',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 7n,
+            rowKey: '{"id":8}',
+            stateVersion: '0e',
+            table: 'baz',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 's',
+            pos: 8n,
+            rowKey: '{"id":9}',
+            stateVersion: '0e',
+            table: 'baz',
           },
           {
             stateVersion: '0e',
@@ -542,6 +609,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 't',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0i',
@@ -549,6 +617,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 't',
             rowKey: '0i',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0i',
@@ -556,6 +625,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":101}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -610,6 +680,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0b',
             pos: 1n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 'd',
@@ -617,6 +688,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0b',
             pos: 2n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 's',
@@ -624,6 +696,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0b',
             pos: 3n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 'd',
@@ -631,6 +704,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0b',
             pos: 4n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -703,6 +777,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 0n,
             table: 'foo',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 's',
@@ -710,6 +785,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 1n,
             table: 'foo',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 'd',
@@ -717,6 +793,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 2n,
             table: 'foo',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 's',
@@ -724,6 +801,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 3n,
             table: 'foo',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 'd',
@@ -731,6 +809,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 4n,
             table: 'foo',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 's',
@@ -738,6 +817,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 5n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 'd',
@@ -745,6 +825,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 6n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 's',
@@ -752,6 +833,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 7n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 's',
@@ -759,6 +841,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 9n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
           {
             op: 'd',
@@ -766,6 +849,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '06',
             pos: 10n,
             table: 'full',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -807,6 +891,7 @@ describe('replicator/incremental-sync', () => {
             table: 'transaction',
             op: 't',
             rowKey: '07',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '07',
@@ -814,6 +899,7 @@ describe('replicator/incremental-sync', () => {
             table: 'transaction',
             op: 'd',
             rowKey: '{"column":1}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '07',
@@ -821,6 +907,7 @@ describe('replicator/incremental-sync', () => {
             table: 'transaction',
             op: 'd',
             rowKey: '{"column":2}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -887,6 +974,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '08',
@@ -894,6 +982,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":0,"issueID":789,"orgID":2}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '08',
@@ -901,6 +990,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":456,"orgID":1}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -912,22 +1002,35 @@ describe('replicator/incremental-sync', () => {
         ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         [
           'data',
-          fooBarBaz.createTable({
-            schema: 'public',
-            name: 'foo',
-            columns: {
-              id: {pos: 0, dataType: 'varchar'},
-              count: {pos: 1, dataType: 'int8'},
-              bool: {pos: 3, dataType: 'bool'},
-              serial: {
-                pos: 4,
-                dataType: 'int4',
-                dflt: "nextval('issues_serial_seq'::regclass)",
-                notNull: true,
+          fooBarBaz.createTable(
+            {
+              schema: 'public',
+              name: 'foo',
+              columns: {
+                id: {pos: 0, dataType: 'varchar'},
+                count: {pos: 1, dataType: 'int8'},
+                bool: {pos: 3, dataType: 'bool'},
+                serial: {
+                  pos: 4,
+                  dataType: 'int4',
+                  dflt: "nextval('issues_serial_seq'::regclass)",
+                  notNull: true,
+                },
+              },
+              primaryKey: ['id'],
+            },
+            {
+              metadata: {
+                rowKey: {
+                  type: 'index',
+                  columns: ['id', 'serial'],
+                },
+              },
+              backfill: {
+                serial: {upstreamID: 123},
               },
             },
-            primaryKey: ['id'],
-          }),
+          ),
         ],
         [
           'data',
@@ -956,6 +1059,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -963,6 +1067,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":"bar"}',
+            backfillingColumnVersions: '{"serial":"0e"}',
           },
           {
             stateVersion: '0e',
@@ -970,6 +1075,56 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":"baz"}',
+            backfillingColumnVersions: '{"serial":"0e"}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            metadata: '{"rowKey":{"type":"index","columns":["id","serial"]}}',
+          },
+        ],
+        ['_zero.column_metadata']: [
+          {
+            backfill: null,
+            character_max_length: null,
+            column_name: 'id',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: 'foo',
+            upstream_type: 'varchar',
+          },
+          {
+            backfill: null,
+            character_max_length: null,
+            column_name: 'count',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: 'foo',
+            upstream_type: 'int8',
+          },
+          {
+            backfill: null,
+            character_max_length: null,
+            column_name: 'bool',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: 'foo',
+            upstream_type: 'bool',
+          },
+          {
+            backfill: '{"upstreamID":123}',
+            character_max_length: null,
+            column_name: 'serial',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: 'foo',
+            upstream_type: 'int4',
           },
         ],
       },
@@ -1018,6 +1173,7 @@ describe('replicator/incremental-sync', () => {
               pos: 5,
             },
           },
+          backfilling: ['serial'],
         },
       ],
       indexSpecs: [],
@@ -1029,6 +1185,9 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, _0_version) VALUES (1, '00');
         INSERT INTO foo(id, _0_version) VALUES (2, '00');
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
+
+        INSERT INTO "_zero.tableMetadata" ("schema", "table", "metadata")
+          VALUES ('public', 'foo', '{"rowKey":{"columns":["id"]}}');
       `,
       downstream: [
         ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
@@ -1050,6 +1209,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1057,6 +1217,14 @@ describe('replicator/incremental-sync', () => {
             table: 'bar',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'bar',
+            metadata: '{"rowKey":{"columns":["id"]}}',
           },
         ],
       },
@@ -1081,6 +1249,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [],
@@ -1113,10 +1282,18 @@ describe('replicator/incremental-sync', () => {
         ],
         [
           'data',
-          fooBarBaz.addColumn('foo', 'newJSON', {
-            pos: 10,
-            dataType: 'json',
-          }),
+          fooBarBaz.addColumn(
+            'foo',
+            'newJSON',
+            {
+              pos: 10,
+              dataType: 'json',
+            },
+            {
+              tableMetadata: {rowKey: {columns: ['id']}},
+              backfill: {upstreamID: 988},
+            },
+          ),
         ],
         [
           'data',
@@ -1167,6 +1344,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1174,6 +1352,46 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{"newJSON":"0e"}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            metadata: '{"rowKey":{"columns":["id"]}}',
+          },
+        ],
+        ['_zero.column_metadata']: [
+          {
+            backfill: null,
+            character_max_length: null,
+            column_name: 'newInt',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: 'foo',
+            upstream_type: 'int8',
+          },
+          {
+            backfill: null,
+            character_max_length: null,
+            column_name: 'newBool',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: 'foo',
+            upstream_type: 'bool',
+          },
+          {
+            backfill: '{"upstreamID":988}',
+            character_max_length: null,
+            column_name: 'newJSON',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: 'foo',
+            upstream_type: 'json',
           },
         ],
       },
@@ -1222,6 +1440,7 @@ describe('replicator/incremental-sync', () => {
               pos: 5,
             },
           },
+          backfilling: ['newJSON'],
         },
       ],
       indexSpecs: [],
@@ -1251,10 +1470,19 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1262,6 +1490,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -1286,6 +1515,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [],
@@ -1323,10 +1553,19 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1334,6 +1573,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -1366,6 +1606,7 @@ describe('replicator/incremental-sync', () => {
               pos: 3,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1410,10 +1651,19 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1421,6 +1671,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -1453,6 +1704,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1500,10 +1752,19 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1511,6 +1772,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -1543,6 +1805,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1588,10 +1851,19 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1599,6 +1871,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -1631,6 +1904,7 @@ describe('replicator/incremental-sync', () => {
               pos: 3,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1681,10 +1955,19 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1692,6 +1975,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -1724,6 +2008,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1770,10 +2055,19 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1781,6 +2075,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -1813,6 +2108,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1869,10 +2165,19 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":3}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0e',
@@ -1880,6 +2185,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -1912,6 +2218,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
       indexSpecs: [
@@ -1930,6 +2237,10 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, _0_version) VALUES (1, '00');
         INSERT INTO foo(id, _0_version) VALUES (2, '00');
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
+      
+        INSERT INTO "_zero.tableMetadata" ("schema", "table", "metadata") VALUES
+          ('public', 'foo', '{"rowKey":{"columns":["id"]}}'),
+          ('public', 'bar', '{"rowKey":{"columns":["id"]}}');
       `,
       downstream: [
         ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
@@ -1941,14 +2252,100 @@ describe('replicator/incremental-sync', () => {
         ['_zero.changeLog2']: [
           {
             stateVersion: '0e',
+            pos: 0n,
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+            backfillingColumnVersions: '{}',
+          },
+          {
+            stateVersion: '0e',
             pos: -1n,
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'bar',
+            metadata: '{"rowKey":{"columns":["id"]}}',
           },
         ],
       },
       tableSpecs: [],
+      indexSpecs: [],
+    },
+    {
+      name: 'update table metadata',
+      setup: `
+        CREATE TABLE foo(id INT8, id2 INT8, _0_version TEXT);
+      
+        INSERT INTO "_zero.tableMetadata" ("schema", "table", "metadata") VALUES
+          ('public', 'foo', '{"rowKey":{"columns":["id"]}}'),
+          ('public', 'bar', '{"rowKey":{"columns":["id"]}}');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
+        [
+          'data',
+          {
+            tag: 'update-table-metadata',
+            table: {schema: 'public', name: 'foo'},
+            old: {rowKey: {columns: []}},
+            new: {rowKey: {type: 'index', columns: ['id2']}},
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            metadata: '{"rowKey":{"type":"index","columns":["id2"]}}',
+          },
+          {
+            schema: 'public',
+            table: 'bar',
+            metadata: '{"rowKey":{"columns":["id"]}}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              elemPgTypeClass: null,
+              pos: 1,
+            },
+            id2: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              elemPgTypeClass: null,
+              pos: 2,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              elemPgTypeClass: null,
+              pos: 3,
+            },
+          },
+          backfilling: [],
+        },
+      ],
       indexSpecs: [],
     },
     {
@@ -1980,6 +2377,7 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 'r',
             rowKey: '0e',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -2083,6 +2481,7 @@ describe('replicator/incremental-sync', () => {
             table: 'transaction',
             op: 'r',
             rowKey: '07',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -2115,6 +2514,7 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
+          backfilling: [],
         },
       ],
     },
@@ -2122,24 +2522,33 @@ describe('replicator/incremental-sync', () => {
 
   for (const c of cases) {
     test(c.name, () => {
-      for (const [replica, processor, includeChangeLog] of [
-        [servingReplica, servingProcessor, true],
-        [backupReplica, backupProcessor, false],
-      ] satisfies [Database, ChangeProcessor, boolean][]) {
+      for (const [replica, processor, log] of [
+        [servingReplica, servingProcessor, 'all-entries'],
+        [backupReplica, backupProcessor, 'only-backfills'],
+      ] satisfies [
+        Database,
+        ChangeProcessor,
+        'all-entries' | 'only-backfills',
+      ][]) {
         initDB(replica, c.setup);
-        initReplicationState(replica, ['zero_data'], '02');
-        initChangeLog(replica);
 
         for (const change of c.downstream) {
           processor.processMessage(lc, change);
         }
 
-        if (includeChangeLog) {
+        if (log === 'all-entries') {
           expectTables(replica, c.data, 'bigint');
         } else {
+          // Only log entries relevant to backfill
           expectTables(
             replica,
-            {...c.data, ['_zero.changeLog2']: []},
+            {
+              ...c.data,
+              ['_zero.changeLog2']:
+                c.data['_zero.changeLog2']?.filter(
+                  log => log.backfillingColumnVersions !== '{}',
+                ) ?? [],
+            },
             'bigint',
           );
         }
@@ -2174,7 +2583,6 @@ describe('replicator/change-processor-errors', () => {
     `);
 
     initReplicationState(replica, ['zero_data', 'zero_metadata'], '02');
-    initChangeLog(replica);
   });
 
   type Case = {
@@ -2287,11 +2695,6 @@ describe('replicator/column-metadata-integration', () => {
     lc = createSilentLogContext();
     replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data', 'zero_metadata'], '02');
-    initChangeLog(replica);
-
-    // Create the metadata table
-    replica.exec(CREATE_COLUMN_METADATA_TABLE);
-
     processor = createChangeProcessor(replica);
   });
 
@@ -2332,6 +2735,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     const nameMetadata = must(store).getColumn('foo', 'name');
@@ -2341,6 +2745,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: 255,
+      isBackfilling: false,
     });
 
     const activeMetadata = must(store).getColumn('foo', 'active');
@@ -2350,6 +2755,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
   });
 
@@ -2407,6 +2813,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     expect(must(store).getColumn('bar', 'value')).toEqual({
@@ -2415,6 +2822,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
   });
 
@@ -2475,6 +2883,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
   });
 
@@ -2538,6 +2947,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
   });
 
@@ -2598,6 +3008,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
   });
 
@@ -2755,6 +3166,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: true,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     const statusMetadata = must(store).getColumn('foo', 'status');
@@ -2764,6 +3176,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: true,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
   });
 
@@ -2806,6 +3219,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
 
     expect(tableMetadata.get('email')).toEqual({
@@ -2814,6 +3228,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: 255,
+      isBackfilling: false,
     });
 
     expect(tableMetadata.get('isActive')).toEqual({
@@ -2822,6 +3237,7 @@ describe('replicator/column-metadata-integration', () => {
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
+      isBackfilling: false,
     });
   });
 });

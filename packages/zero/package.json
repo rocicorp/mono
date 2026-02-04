@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.26.0",
+  "version": "0.25.13",
   "description": "Zero is a web framework for serverless web development.",
   "author": "Rocicorp, Inc.",
   "repository": {
@@ -68,7 +68,7 @@
     "nanoid": "^5.1.2",
     "parse-prometheus-text-format": "^1.1.1",
     "pg-format": "npm:pg-format-fix@^1.0.5",
-    "postgres": "^3.4.4",
+    "postgres": "3.4.7",
     "prettier": "^3.5.3",
     "semver": "^7.5.4",
     "tsx": "^4.19.1",

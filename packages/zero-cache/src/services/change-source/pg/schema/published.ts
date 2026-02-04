@@ -2,7 +2,13 @@ import {literal} from 'pg-format';
 import type postgres from 'postgres';
 import {equals} from '../../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
+import {computeZqlSpecsFromLiteSpecs} from '../../../../db/lite-tables.ts';
+import {
+  mapPostgresToLite,
+  mapPostgresToLiteIndex,
+} from '../../../../db/pg-to-lite.ts';
 import {publishedIndexSpec, publishedTableSpec} from '../../../../db/specs.ts';
+import {liteTableName} from '../../../../types/names.ts';
 
 export function publishedTableQuery(publications: readonly string[]) {
   // Notes:
@@ -173,40 +179,56 @@ export const publishedSchema = v
     tables: v.array(publishedTableSpec),
     indexes: v.array(publishedIndexSpec),
   })
-  .map(({tables, indexes}) => ({
-    indexes,
+  .map(({tables, indexes}) => {
+    const zqlSpecs = computeZqlSpecsFromLiteSpecs(
+      tables.map(t => mapPostgresToLite(t)),
+      indexes.map(mapPostgresToLiteIndex),
+      {includeBackfillingColumns: true},
+    );
+    return {
+      indexes,
 
-    // Denormalize the schema such that each `table` includes the
-    // `replicaIdentityColumns` corresponding to the table's
-    // replica identity and associated primary key or index.
-    tables: tables.map(table => {
-      const replicaIdentityColumns: string[] = [];
-      switch (table.replicaIdentity) {
-        case 'd':
-          replicaIdentityColumns.push(...(table.primaryKey ?? []));
-          break;
-        case 'i':
-          replicaIdentityColumns.push(
-            ...Object.keys(
-              indexes.find(
-                ind =>
-                  ind.schema === table.schema &&
-                  ind.tableName === table.name &&
-                  ind.isReplicaIdentity,
-              )?.columns ?? {},
-            ),
-          );
-          break;
-        case 'f':
-          replicaIdentityColumns.push(...Object.keys(table.columns));
-          break;
-      }
-      return {
-        ...table,
-        replicaIdentityColumns,
-      };
-    }),
-  }));
+      // Denormalize the schema such that each `table` includes the
+      // `replicaIdentityColumns` corresponding to the table's
+      // replica identity and associated primary key or index.
+      tables: tables.map(table => {
+        const replicaIdentityColumns: string[] = [];
+        switch (table.replicaIdentity) {
+          case 'd':
+            replicaIdentityColumns.push(...(table.primaryKey ?? []));
+            break;
+          case 'i':
+            replicaIdentityColumns.push(
+              ...Object.keys(
+                indexes.find(
+                  ind =>
+                    ind.schema === table.schema &&
+                    ind.tableName === table.name &&
+                    ind.isReplicaIdentity,
+                )?.columns ?? {},
+              ),
+            );
+            break;
+          case 'f': {
+            // For the key columns of replica identity "full", use the columns
+            // that the replicator/change-processor will end up using
+            // (in #getKey()) as the row key.
+            const zqlTable = zqlSpecs.get(liteTableName(table));
+            // Note: There zql spec will be absent if the table is not synced,
+            //       e.g. if it has no suitable unique indexes.
+            if (zqlTable) {
+              replicaIdentityColumns.push(...zqlTable.tableSpec.primaryKey);
+            }
+            break;
+          }
+        }
+        return {
+          ...table,
+          replicaIdentityColumns,
+        };
+      }),
+    };
+  });
 
 export type PublishedSchema = v.Infer<typeof publishedSchema>;
 

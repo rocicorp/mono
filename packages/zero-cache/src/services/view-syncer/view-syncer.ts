@@ -375,11 +375,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // ServiceRunner.
         this.#lc.debug?.('state changes are inactive');
         clearTimeout(this.#expiredQueriesTimer);
-        throw new ProtocolErrorWithLevel({
-          kind: ErrorKind.Rehome,
-          message: 'Reconnect required',
-          origin: ErrorOrigin.ZeroCache,
-        });
+        throw new ProtocolErrorWithLevel(
+          {
+            kind: ErrorKind.Rehome,
+            message: 'Reconnect required',
+            origin: ErrorOrigin.ZeroCache,
+          },
+          'info',
+        );
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
@@ -495,13 +498,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (this.#drainCoordinator.shouldDrain()) {
         this.#drainCoordinator.drainNextIn(this.#totalHydrationTimeMs());
       }
-      this.#cleanup();
+      await this.#cleanup();
     } catch (e) {
       this.#lc[getLogLevel(e)]?.(
         `stopping view-syncer ${this.id}: ${String(e)}`,
         e,
       );
-      this.#cleanup(e);
+      await this.#cleanup(e);
     } finally {
       // Always wait for the cvrStore to flush, regardless of how the service
       // was stopped.
@@ -712,12 +715,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         initConnectionMessage,
         async (lc, clientID, msg: InitConnectionBody, cvr) => {
           if (cvr.clientSchema === null && !msg.clientSchema) {
-            throw new ProtocolErrorWithLevel({
-              kind: ErrorKind.InvalidConnectionRequest,
-              message:
-                'The initConnection message for a new client group must include client schema.',
-              origin: ErrorOrigin.ZeroCache,
-            });
+            throw new ProtocolErrorWithLevel(
+              {
+                kind: ErrorKind.InvalidConnectionRequest,
+                message:
+                  'The initConnection message for a new client group must include client schema.',
+                origin: ErrorOrigin.ZeroCache,
+              },
+              'warn',
+            );
           }
           await this.#handleConfigUpdate(
             lc,
@@ -758,12 +764,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: DeleteClientsMessage,
   ): Promise<string[]> {
-    return await this.#runInLockForClient(
+    const deletedClientIDs = await this.#runInLockForClient(
       ctx,
       [msg[0], {deleted: msg[1]}],
       (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
         this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
     );
+    return deletedClientIDs ?? [];
   }
 
   #getTTLClock(now: number): TTLClock {
@@ -779,7 +786,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     this.#ttlClock = ttlClock;
     this.#ttlClockBase = now;
-    return ttlClock as TTLClock;
+    return ttlClock;
   }
 
   #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
@@ -885,7 +892,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr: CVRSnapshot,
     ) => Promise<R>,
     newClient?: ClientHandler,
-  ): Promise<R> {
+  ): Promise<R | undefined> {
     this.#lc.debug?.('viewSyncer.#runInLockForClient');
     const {clientID, wsID} = ctx;
     const [cmd, body] = msg;
@@ -943,7 +950,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             throw e;
           }
         }
-        return result as R;
+        return result;
       },
     );
   }
@@ -1173,8 +1180,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
     const customQueryTransformer = this.#customQueryTransformer;
     if (customQueryTransformer && customQueries.size > 0) {
-      // Always transform custom queries, even during initialization,
-      // to ensure authorization validation with current auth context.
+      // Always transform custom queries during initialization to ensure
+      // authorization validation with current auth context.
       const transformedCustomQueries = await this.#runPriorityOp(
         lc,
         '#hydrateUnchangedQueries transforming custom queries',
@@ -1447,27 +1454,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 this.userQueryURL,
               ),
           );
-          this.#queryTransformations.add(1, {result: 'success'});
+
+          // Check if transform failed entirely (HTTP error or server-side failure).
+          // This should disconnect the client and keep existing pipelines intact.
+          if (
+            !Array.isArray(transformedCustomQueries) &&
+            transformedCustomQueries.kind === ErrorKind.TransformFailed
+          ) {
+            // TransformFailedBody indicates an HTTP or infrastructure error.
+            // Throw to disconnect the client without modifying pipelines.
+            throw new ProtocolErrorWithLevel(transformedCustomQueries, 'warn');
+          } else {
+            this.#queryTransformations.add(1, {result: 'success'});
+          }
         } catch (e) {
           this.#queryTransformations.add(1, {result: 'error'});
           throw e;
         } finally {
           const transformDuration = (performance.now() - transformStart) / 1000;
           this.#queryTransformationTime.record(transformDuration);
-        }
-
-        // Check if transform failed entirely (HTTP error or server-side failure).
-        // This should disconnect the client and keep existing pipelines intact.
-        if (
-          !Array.isArray(transformedCustomQueries) &&
-          transformedCustomQueries.kind === ErrorKind.TransformFailed
-        ) {
-          // TransformFailedBody indicates an HTTP or infrastructure error.
-          // Throw to disconnect the client without modifying pipelines.
-          throw new ProtocolErrorWithLevel(
-            transformedCustomQueries,
-            getLogLevel(transformedCustomQueries.kind),
-          );
         }
 
         // Process the transformed queries and track which ones succeeded.
@@ -1977,8 +1982,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
-    return this.#runInLockForClient(context, msg, this.#handleInspect);
+  async inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
+    await this.#runInLockForClient(context, msg, this.#handleInspect);
   }
 
   // oxlint-disable-next-line require-await
@@ -2011,11 +2016,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#stopped.promise;
   }
 
-  #cleanup(err?: unknown) {
+  async #cleanup(err?: unknown) {
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
 
-    this.#pipelines.destroy();
     for (const client of this.#clients.values()) {
       if (err) {
         client.fail(err);
@@ -2023,6 +2027,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         client.close(`closed clientGroupID=${this.id}`);
       }
     }
+
+    // Wait for existing lock logic to complete before
+    // cleaning up the pipelines and closing db connections.
+    await this.#lock.withLock(() => {});
+    this.#pipelines.destroy();
   }
 
   /**

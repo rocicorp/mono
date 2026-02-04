@@ -332,7 +332,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             handle: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -481,7 +481,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             username: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -533,7 +533,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             login: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -747,7 +747,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             bar: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -755,7 +755,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             foo: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -820,7 +820,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             boo: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -873,7 +873,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             boo: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1128,7 +1128,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             name: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1446,7 +1446,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             b: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1467,7 +1467,11 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'resumptive replication',
       `
-      CREATE TABLE existing (a TEXT PRIMARY KEY, b TEXT);
+      CREATE TABLE existing (
+        a TEXT UNIQUE NOT NULL, 
+        b TEXT NOT NULL,
+        PRIMARY KEY (a, b)
+      );
       INSERT INTO existing (a, b) VALUES ('c', 'd');
       INSERT INTO existing (a, b) VALUES ('e', 'f');
 
@@ -1486,17 +1490,18 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'create-table',
           metadata: {
             rowKey: {
-              columns: ['a'],
+              columns: ['a', 'b'],
               type: 'default',
             },
           },
         },
         {tag: 'create-index'},
+        {tag: 'create-index'},
         {
           tag: 'create-table',
           metadata: {
             rowKey: {
-              columns: ['a', 'b'],
+              columns: ['a'], // computes the shortest eligible key
               type: 'full',
             },
           },
@@ -1531,7 +1536,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             b: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1559,7 +1564,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             },
             b: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
@@ -1579,7 +1584,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tableName: 'existing',
           name: 'existing_pkey',
-          columns: {a: 'ASC'},
+          columns: {a: 'ASC', b: 'ASC'},
           unique: true,
         },
         {
@@ -1601,13 +1606,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           table: {schema: 'public', name: 'existing'},
           old: {
             rowKey: {
-              columns: ['a'],
+              columns: ['a', 'b'],
               type: 'default',
             },
           },
           new: {
             rowKey: {
-              columns: ['a', 'b'],
+              columns: ['a'], // computes the shortest eligible key
               type: 'full',
             },
           },

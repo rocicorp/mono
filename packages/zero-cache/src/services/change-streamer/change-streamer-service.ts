@@ -9,14 +9,16 @@ import {
 } from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {ShardID} from '../../types/shards.ts';
-import type {Sink, Source} from '../../types/streams.ts';
+import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
+import type {
+  ChangeSource,
+  ChangeStream,
+} from '../change-source/change-source.ts';
 import {
   type ChangeStreamControl,
   type ChangeStreamData,
-  type ChangeStreamMessage,
 } from '../change-source/protocol/current/downstream.ts';
-import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.ts';
 import {publishReplicationError} from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
@@ -93,26 +95,6 @@ export async function initializeStreamer(
  * use for tracking a position in a replication stream.
  */
 export type WatermarkedChange = [watermark: string, ChangeStreamData];
-
-export type ChangeStream = {
-  changes: Source<ChangeStreamMessage>;
-
-  /**
-   * A Sink to push the {@link StatusMessage}s that reflect Commits
-   * that have been successfully stored by the {@link Storer}, or
-   * downstream {@link StatusMessage}s henceforth.
-   */
-  acks: Sink<ChangeSourceUpstream>;
-};
-
-/** Encapsulates an upstream-specific implementation of a stream of Changes. */
-export interface ChangeSource {
-  /**
-   * Starts a stream of changes starting after the specific watermark,
-   * with a corresponding sink for upstream acknowledgements.
-   */
-  startStream(afterWatermark: string): Promise<ChangeStream>;
-}
 
 /**
  * Upstream-agnostic dispatch of messages in a {@link ChangeStreamMessage} to a
@@ -337,8 +319,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       let err: unknown;
       let watermark: string | null = null;
       try {
-        const startAfter = await this.#storer.getLastWatermarkToStartStream();
-        const stream = await this.#source.startStream(startAfter);
+        const {lastWatermark, backfillRequests} =
+          await this.#storer.getStartStreamInitializationParameters();
+        const stream = await this.#source.startStream(
+          lastWatermark,
+          backfillRequests,
+        );
         this.#stream = stream;
         this.#state.resetBackoff();
         watermark = null;

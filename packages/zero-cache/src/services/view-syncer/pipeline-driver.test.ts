@@ -16,10 +16,11 @@ import {
 } from '../../../../zqlite/src/database-storage.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {listTables} from '../../db/lite-tables.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
-import {initChangeLog} from '../replicator/schema/change-log.ts';
+import {populateFromExistingTables} from '../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   fakeReplicator,
@@ -66,7 +67,6 @@ describe('view-syncer/pipeline-driver', () => {
 
     db = dbFile.connect(lc);
     initReplicationState(db, ['zero_data'], '123');
-    initChangeLog(db);
     db.exec(`
       CREATE TABLE "${mutationsTableName}" (
         "clientGroupID"  TEXT,
@@ -87,6 +87,7 @@ describe('view-syncer/pipeline-driver', () => {
         issueID TEXT,
         upvotes INTEGER,
         ignored BYTEA,
+        stillBeingBackfilled TEXT,
          _0_version TEXT NOT NULL);
       CREATE TABLE "issueLabels" (
         issueID TEXT,
@@ -124,6 +125,18 @@ describe('view-syncer/pipeline-driver', () => {
       INSERT INTO "uniques" (id, name, _0_version) VALUES ('foo', 'bar', '123');
       INSERT INTO "uniques" (id, name, _0_version) VALUES ('boo', 'dar', '123');
       `);
+
+    // Initialize ColumnMetadata and mark a column as being backfilled,
+    // to verify that it does not appear in the pipeline results.
+    populateFromExistingTables(db, listTables(db, false));
+    db.prepare(
+      /*sql*/ `
+      UPDATE "_zero.column_metadata" 
+        SET backfill = '{"upstreamID":123}'
+        WHERE table_name = 'comments' 
+         AND column_name = 'stillBeingBackfilled'
+      `,
+    ).run();
     replicator = fakeReplicator(lc, db);
   });
 

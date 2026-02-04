@@ -19,6 +19,7 @@ import type {
   MutatorDefs,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from '../../../replicache/src/types.ts';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {
   getBrowserGlobal,
@@ -179,7 +180,6 @@ import {
   fromReplicacheAuthToken,
   toReplicacheAuthToken,
 } from './zero-rep.ts';
-import {AbortError} from '../../../shared/src/abort-error.ts';
 
 export type NoRelations = Record<string, never>;
 
@@ -232,7 +232,7 @@ export const DEFAULT_PING_TIMEOUT_MS = 5_000;
  */
 export const PULL_TIMEOUT_MS = 5_000;
 
-export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5_000;
+export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5 * 60 * 1000;
 
 /**
  * The amount of time we allow for continuous connecting attempts before
@@ -1733,7 +1733,9 @@ export class Zero<
         this.#connectionManager.closed();
         break;
       case NO_STATUS_TRANSITION:
-        this.#connectionManager.connecting(transition.reason);
+        if (!this.#connectionManager.isInTerminalState()) {
+          this.#connectionManager.connecting(transition.reason);
+        }
         break;
       default:
         unreachable(transition);
