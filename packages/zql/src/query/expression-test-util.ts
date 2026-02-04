@@ -175,7 +175,7 @@ export function stringify(c: Condition): string {
     case 'correlatedSubquery':
       return c.op + ' ()';
     case 'scalarSubquery':
-      return `${c.field[0]} ${c.op} (SCALAR)`;
+      return `${c.parentField[0]} ${c.op} (SCALAR)`;
   }
 }
 function eat(tokens: string[], expectedToken: string) {

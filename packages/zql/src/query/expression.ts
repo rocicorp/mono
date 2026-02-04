@@ -280,8 +280,8 @@ export function cmp(
     return {
       type: 'scalarSubquery',
       op,
-      field: [field] as CompoundKey,
-      column: actualValue[toScalarRef].column,
+      parentField: [field] as CompoundKey,
+      childField: actualValue[toScalarRef].column,
       subquery: {
         ...subqueryAst,
         alias: subqueryAst.alias ?? `${SUBQ_PREFIX}scalar_${subqueryAst.table}`,

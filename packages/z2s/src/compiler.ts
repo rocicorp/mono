@@ -354,12 +354,12 @@ function scalarSubquery(
   condition: ScalarSubqueryCondition,
   parentTable: Table,
 ): SQLQuery {
-  const parentFields = condition.field.map(f =>
+  const parentFields = condition.parentField.map(f =>
     colIdent(spec.server, {table: parentTable, zql: f}),
   );
 
   const subqueryTable = makeTable(spec, condition.subquery.table);
-  const subqueryCols = condition.column.map(c =>
+  const subqueryCols = condition.childField.map(c =>
     colIdent(spec.server, {table: subqueryTable, zql: c}),
   );
 
@@ -374,7 +374,7 @@ function scalarSubquery(
     subqueryTable,
   );
 
-  if (condition.field.length === 1) {
+  if (condition.parentField.length === 1) {
     return sql`${parentFields[0]} ${op} (SELECT ${subqueryCols[0]} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
   }
 

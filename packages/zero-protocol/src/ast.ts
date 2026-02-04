@@ -129,9 +129,9 @@ export const scalarSubqueryConditionSchema: v.Type<ScalarSubqueryCondition> =
   v.readonlyObject({
     type: v.literal('scalarSubquery'),
     op: v.literalUnion('=', 'IS NOT'),
-    field: v.lazy(() => compoundKeySchema),
+    parentField: v.lazy(() => compoundKeySchema),
     subquery: v.lazy(() => astSchema),
-    column: v.lazy(() => compoundKeySchema),
+    childField: v.lazy(() => compoundKeySchema),
   });
 
 export const conditionSchema: v.Type<Condition> = v.union(
@@ -340,9 +340,9 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
 export type ScalarSubqueryCondition = {
   type: 'scalarSubquery';
   op: '=' | 'IS NOT';
-  field: CompoundKey;
+  parentField: CompoundKey;
   subquery: AST;
-  column: CompoundKey;
+  childField: CompoundKey;
 };
 
 interface ASTTransform {
@@ -435,8 +435,8 @@ function transformWhere(
   } else if (where.type === 'scalarSubquery') {
     return {
       ...where,
-      field: key(table, where.field),
-      column: key(where.subquery.table, where.column),
+      parentField: key(table, where.parentField),
+      childField: key(where.subquery.table, where.childField),
       subquery: transformAST(where.subquery, transform),
     };
   }
@@ -530,8 +530,8 @@ function cmpCondition(a: Condition, b: Condition): number {
       return -1; // Order scalarSubquery before conjunctions/disjunctions
     }
     return (
-      compareUTF8(a.field[0], b.field[0]) ||
-      compareUTF8(a.column[0], b.column[0]) ||
+      compareUTF8(a.parentField[0], b.parentField[0]) ||
+      compareUTF8(a.childField[0], b.childField[0]) ||
       compareUTF8MaybeNull(a.op, b.op)
     );
   }

@@ -274,8 +274,8 @@ function rewriteScalarSubqueryConditions(condition: Condition): Condition {
 function rewriteScalarSubquery(condition: ScalarSubqueryCondition): Condition {
   const correlated: CorrelatedSubquery = {
     correlation: {
-      parentField: condition.field,
-      childField: condition.column,
+      parentField: condition.parentField,
+      childField: condition.childField,
     },
     subquery: condition.subquery,
   };
