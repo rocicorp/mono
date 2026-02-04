@@ -10,6 +10,7 @@ import type {
   LiteralReference,
   Ordering,
   Parameter,
+  ScalarSubqueryCondition,
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
@@ -86,7 +87,7 @@ function transformCondition(
     case 'correlatedSubquery':
       return transformExistsCondition(condition, prefix, args);
     case 'scalarSubquery':
-      return `${prefix}Scalar('${condition.parentField}', '${condition.op}', ...)`;
+      return transformScalarSubqueryCondition(condition, prefix, args);
     default:
       unreachable(condition);
   }
@@ -202,6 +203,29 @@ function transformExistsCondition(
   args.add('exists');
 
   return `not(exists('${relationship}')))`;
+}
+
+function transformScalarSubqueryCondition(
+  condition: ScalarSubqueryCondition,
+  prefix: Prefix,
+  args: Args,
+): string {
+  const subqueryCode = astToZQL(condition.subquery);
+  const scalarExpr = `scalar(q => q${subqueryCode}, '${condition.childField}')`;
+
+  let cmpExpr: string;
+  if (condition.op === '=') {
+    cmpExpr = `cmp('${condition.parentField}', ${scalarExpr})`;
+  } else {
+    cmpExpr = `cmp('${condition.parentField}', '${condition.op}', ${scalarExpr})`;
+  }
+
+  if (prefix === '.where') {
+    return `.where(({cmp, scalar}) => ${cmpExpr})`;
+  }
+  args.add('cmp');
+  args.add('scalar');
+  return cmpExpr;
 }
 
 // If the `exists` is applied against a junction edge, both hops will have the same alias and both hops will be exists conditions.
