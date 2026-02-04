@@ -821,7 +821,6 @@ class TransactionProcessor {
         skipped++;
         continue; // the row was deleted after the backfill snapshot
       }
-      const fullRow = {...row.row, [ZERO_VERSION_COLUMN_NAME]: watermark};
       const updates =
         rowOp?.op === SET_OP
           ? columns.filter(
@@ -840,7 +839,8 @@ class TransactionProcessor {
           ON CONFLICT (${rowKeyColsStr})
           DO UPDATE SET ${updateStmts.join(',')};
       `,
-        Object.values(fullRow),
+        ...Object.values(row.row),
+        watermark, // the _0_version for new rows (i.e. table backfill)
       );
       backfilled++;
     }
