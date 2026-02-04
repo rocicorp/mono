@@ -77,6 +77,14 @@ export const relationSchema = v
     };
   });
 
+// The eventual fate of relationSchema
+export const newRelationSchema = v.object({
+  schema: v.string(),
+  name: v.string(),
+
+  rowKey: rowKeySchema,
+});
+
 // TableMetadata contains table-related configuration that does not affect the
 // actual data in the table, but rather how the table's change messages are
 // handled.
@@ -232,6 +240,40 @@ export const dropIndexSchema = v.object({
   id: identifierSchema,
 });
 
+// A batch of rows from a single table containing column values
+// to be backfilled.
+export const backfillSchema = v.object({
+  tag: v.literal('backfill'),
+
+  relation: newRelationSchema,
+
+  // The columns to be backfilled. `rowKey` columns are automatically excluded,
+  // which means that this field may be empty.
+  columns: v.array(v.string()),
+
+  // The watermark at which the backfill data was queried. Note that this
+  // generally will be different from the commit watermarks of the main change
+  // stream, and in particular, the commit watermark of the backfill change's
+  // enclosing transaction.
+  watermark: v.string(),
+
+  // A batch of row values, each row consisting of the `rowKey`
+  // values, followed by the `column` values, in the same order in which
+  // the column names appear in their respective fields, e.g.
+  //
+  // ```
+  // [
+  //   [...rowKeyValues, ...columnValues],  // row 1
+  //   [...rowKeyValues, ...columnValues],  // row 2
+  // ]
+  // ```
+  rowValues: v.array(v.array(jsonValueSchema)),
+
+  // Indicates that the backfill for the specified columns have
+  // been successfully backfilled and can be published to clients.
+  completed: v.boolean().optional(),
+});
+
 export type MessageBegin = v.Infer<typeof beginSchema>;
 export type MessageCommit = v.Infer<typeof commitSchema>;
 export type MessageRollback = v.Infer<typeof rollbackSchema>;
@@ -241,6 +283,8 @@ export type MessageInsert = v.Infer<typeof insertSchema>;
 export type MessageUpdate = v.Infer<typeof updateSchema>;
 export type MessageDelete = v.Infer<typeof deleteSchema>;
 export type MessageTruncate = v.Infer<typeof truncateSchema>;
+
+export type MessageBackfill = v.Infer<typeof backfillSchema>;
 
 export type TableCreate = v.Infer<typeof createTableSchema>;
 export type TableRename = v.Infer<typeof renameTableSchema>;
@@ -266,6 +310,7 @@ export const dataChangeSchema = v.union(
   dropTableSchema,
   createIndexSchema,
   dropIndexSchema,
+  backfillSchema,
 );
 
 export type DataChange = Satisfies<
