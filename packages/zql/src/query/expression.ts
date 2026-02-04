@@ -2,12 +2,15 @@
 import {must} from '../../../shared/src/must.ts';
 import {
   toStaticParam,
+  SUBQ_PREFIX,
+  type AST,
   type Condition,
   type LiteralValue,
   type Parameter,
   type SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
+import {asQueryInternals} from './query-internals.ts';
 import type {
   AvailableRelationships,
   DestTableName,
@@ -21,6 +24,24 @@ import type {
 export type ParameterReference = {
   [toStaticParam](): Parameter;
 };
+
+export const toScalarRef = Symbol('toScalarRef');
+
+export type ScalarReference = {
+  readonly [toScalarRef]: {
+    readonly ast: AST;
+    readonly column: string;
+  };
+};
+
+export function isScalarReference(value: unknown): value is ScalarReference {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof value === 'object' &&
+    toScalarRef in (value as Record<symbol, unknown>)
+  );
+}
 
 /**
  * A factory function that creates a condition. This is used to create
@@ -40,14 +61,14 @@ export type ParameterReference = {
  */
 export interface ExpressionFactory<
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
+  TSchema extends ZeroSchema,
 > {
   (eb: ExpressionBuilder<TTable, TSchema>): Condition;
 }
 
 export class ExpressionBuilder<
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
+  TSchema extends ZeroSchema,
 > {
   readonly #exists: (
     relationship: string,
@@ -64,12 +85,19 @@ export class ExpressionBuilder<
   ) {
     this.#exists = exists;
     this.exists = this.exists.bind(this);
+    this.scalar = this.scalar.bind(this);
   }
 
   get eb() {
     return this;
   }
 
+  cmp<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+  >(field: TSelector, op: '=' | 'IS NOT', value: ScalarReference): Condition;
+  cmp<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+  >(field: TSelector, value: ScalarReference): Condition;
   cmp<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
     TOperator extends SimpleOperator,
@@ -92,8 +120,13 @@ export class ExpressionBuilder<
   ): Condition;
   cmp(
     field: string,
-    opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
-    value?: ParameterReference | LiteralValue | undefined,
+    opOrValue:
+      | SimpleOperator
+      | ParameterReference
+      | ScalarReference
+      | LiteralValue
+      | undefined,
+    value?: ParameterReference | ScalarReference | LiteralValue | undefined,
   ): Condition {
     if (arguments.length === 2) {
       return cmp(field, opOrValue);
@@ -129,6 +162,25 @@ export class ExpressionBuilder<
     ) => Query<any, TSchema>,
     options?: ExistsOptions,
   ): Condition => this.#exists(relationship, cb, options);
+
+  /**
+   * EXPERIMENTAL. Use at your own risk.
+   * Currently this has no benefit over `whereExists`
+   * In future versions, scalar subqueries will unlock query optimizations
+   * that are not possible with `whereExists`
+   */
+  scalar = (
+    query: Query<string, any, any>,
+    column: string,
+  ): ScalarReference => {
+    const qi = asQueryInternals(query);
+    return {
+      [toScalarRef]: {
+        ast: {...qi.ast, limit: 1},
+        column,
+      },
+    };
+  };
 }
 
 export function and(...conditions: (Condition | undefined)[]): Condition {
@@ -177,6 +229,11 @@ export function not(expression: Condition): Condition {
         related: expression.related,
         op: negateOperator(expression.op),
       };
+    case 'scalarSubquery':
+      return {
+        ...expression,
+        op: expression.op === '=' ? 'IS NOT' : '=',
+      };
     case 'simple':
       return {
         type: 'simple',
@@ -189,20 +246,52 @@ export function not(expression: Condition): Condition {
 
 export function cmp(
   field: string,
-  opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
-  value?: ParameterReference | LiteralValue | undefined,
+  opOrValue:
+    | SimpleOperator
+    | ParameterReference
+    | ScalarReference
+    | LiteralValue
+    | undefined,
+  value?: ParameterReference | ScalarReference | LiteralValue | undefined,
 ): Condition {
   let op: SimpleOperator;
-  let actualValue: ParameterReference | LiteralValue | undefined;
+  let actualValue:
+    | ParameterReference
+    | ScalarReference
+    | LiteralValue
+    | undefined;
 
   if (arguments.length === 2) {
     // 2-arg form: cmp(field, value) - defaults to '=' operator
-    actualValue = opOrValue as ParameterReference | LiteralValue | undefined;
+    actualValue = opOrValue as
+      | ParameterReference
+      | ScalarReference
+      | LiteralValue
+      | undefined;
     op = '=';
   } else {
     // 3-arg form: cmp(field, op, value)
     op = opOrValue as SimpleOperator;
     actualValue = value;
+  }
+
+  if (isScalarReference(actualValue)) {
+    if (op !== '=' && op !== 'IS NOT') {
+      throw new Error(
+        `Scalar subqueries only support '=' and 'IS NOT' operators, got '${op}'`,
+      );
+    }
+    const subqueryAst = actualValue[toScalarRef].ast;
+    return {
+      type: 'scalarSubquery',
+      op,
+      parentField: field,
+      childField: actualValue[toScalarRef].column,
+      subquery: {
+        ...subqueryAst,
+        alias: subqueryAst.alias ?? `${SUBQ_PREFIX}scalar_${subqueryAst.table}`,
+      },
+    };
   }
 
   return {
@@ -245,7 +334,11 @@ function isAlwaysFalse(condition: Condition): boolean {
 }
 
 export function simplifyCondition(c: Condition): Condition {
-  if (c.type === 'simple' || c.type === 'correlatedSubquery') {
+  if (
+    c.type === 'simple' ||
+    c.type === 'correlatedSubquery' ||
+    c.type === 'scalarSubquery'
+  ) {
     return c;
   }
   if (c.conditions.length === 1) {
