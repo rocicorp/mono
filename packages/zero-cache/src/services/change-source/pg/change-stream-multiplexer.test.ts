@@ -98,8 +98,8 @@ describe('change-stream-multiplexer', () => {
       {tag: 'begin'},
       {commitWatermark: '123'},
     ];
-    stream.reserve('foo');
-    stream.push(begin);
+    void stream.reserve('foo');
+    void stream.push(begin);
 
     expect(listenFn1).toHaveBeenCalledExactlyOnceWith(begin);
     expect(listenFn2).toHaveBeenCalledExactlyOnceWith(begin);
@@ -109,7 +109,7 @@ describe('change-stream-multiplexer', () => {
       {tag: 'commit'},
       {watermark: '123'},
     ];
-    stream.push(commit);
+    void stream.push(commit);
 
     expect(listenFn1).toHaveBeenNthCalledWith(2, commit);
     expect(listenFn2).toHaveBeenNthCalledWith(2, commit);

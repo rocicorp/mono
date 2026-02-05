@@ -205,6 +205,7 @@ async function checkAndUpdateUpstream(
   return upstreamReplica;
 }
 
+// Parameterize this if necessary. In practice starvation may never happen.
 const MAX_LOW_PRIORITY_DELAY_MS = 1000;
 
 /**
@@ -290,6 +291,7 @@ class PostgresChangeSource implements ChangeSource {
     void (async function () {
       try {
         let reserved = false;
+
         for await (const [lsn, msg] of messages) {
           // Note: no reservation is needed for pushStatus().
           if (msg.tag === 'keepalive') {

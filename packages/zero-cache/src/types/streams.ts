@@ -177,7 +177,7 @@ export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
         // (via {@link Subscription.queued}.
         const {result} = sink.push(msg);
         pending.push(result);
-        result.then(() => pending.shift());
+        void result.then(() => pending.shift());
 
         if (pending.length <= bufferMessages) {
           // immediately allow more messages
