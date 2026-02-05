@@ -384,39 +384,6 @@ export class PipelineDriver {
       this.#snapshotter.current().db.db,
     );
 
-    const resolvedQuery = this.#resolveScalarSubqueries(query);
-
-    const input = buildPipeline(
-      resolvedQuery,
-      {
-        debug: debugDelegate,
-        enableNotExists: true, // Server-side can handle NOT EXISTS
-        getSource: name => this.#getSource(name),
-        createStorage: () => this.#createStorage(),
-        decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
-          new MeasurePushOperator(
-            input,
-            queryID,
-            this.#inspectorDelegate,
-            'query-update-server',
-          ),
-        decorateInput: input => input,
-        addEdge() {},
-        decorateFilterInput: input => input,
-      },
-      queryID,
-      costModel,
-    );
-    const schema = input.getSchema();
-    input.setOutput({
-      push: change => {
-        const streamer = this.#streamer;
-        assert(streamer, 'must #startAccumulating() before pushing changes');
-        streamer.accumulate(queryID, schema, [change]);
-        return [];
-      },
-    });
-
     assert(
       this.#advanceContext === null,
       'Cannot hydrate while advance is in progress',
@@ -425,42 +392,75 @@ export class PipelineDriver {
       timer,
     };
     try {
+      const resolvedQuery = this.#resolveScalarSubqueries(query);
+
+      const input = buildPipeline(
+        resolvedQuery,
+        {
+          debug: debugDelegate,
+          enableNotExists: true, // Server-side can handle NOT EXISTS
+          getSource: name => this.#getSource(name),
+          createStorage: () => this.#createStorage(),
+          decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
+            new MeasurePushOperator(
+              input,
+              queryID,
+              this.#inspectorDelegate,
+              'query-update-server',
+            ),
+          decorateInput: input => input,
+          addEdge() {},
+          decorateFilterInput: input => input,
+        },
+        queryID,
+        costModel,
+      );
+      const schema = input.getSchema();
+      input.setOutput({
+        push: change => {
+          const streamer = this.#streamer;
+          assert(streamer, 'must #startAccumulating() before pushing changes');
+          streamer.accumulate(queryID, schema, [change]);
+          return [];
+        },
+      });
+
       yield* hydrateInternal(input, queryID, must(this.#primaryKeys));
+
+      const hydrationTimeMs = timer.totalElapsed();
+      if (runtimeDebugFlags.trackRowCountsVended) {
+        if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
+          let totalRowsConsidered = 0;
+          const lc = this.#lc
+            .withContext('queryID', queryID)
+            .withContext('hydrationTimeMs', hydrationTimeMs);
+          for (const tableName of this.#tables.keys()) {
+            const entries = Object.entries(
+              debugDelegate?.getVendedRowCounts()[tableName] ?? {},
+            );
+            totalRowsConsidered += entries.reduce(
+              (acc, entry) => acc + entry[1],
+              0,
+            );
+            lc.info?.(tableName + ' VENDED: ', entries);
+          }
+          lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
+        }
+      }
+      debugDelegate?.reset();
+
+      // Note: This hydrationTime is a wall-clock overestimate, as it does
+      // not take time slicing into account. The view-syncer resets this
+      // to a more precise processing-time measurement with setHydrationTime().
+      this.#pipelines.set(queryID, {
+        input,
+        hydrationTimeMs,
+        transformedAst: resolvedQuery,
+        transformationHash,
+      });
     } finally {
       this.#hydrateContext = null;
     }
-
-    const hydrationTimeMs = timer.totalElapsed();
-    if (runtimeDebugFlags.trackRowCountsVended) {
-      if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
-        let totalRowsConsidered = 0;
-        const lc = this.#lc
-          .withContext('queryID', queryID)
-          .withContext('hydrationTimeMs', hydrationTimeMs);
-        for (const tableName of this.#tables.keys()) {
-          const entries = Object.entries(
-            debugDelegate?.getVendedRowCounts()[tableName] ?? {},
-          );
-          totalRowsConsidered += entries.reduce(
-            (acc, entry) => acc + entry[1],
-            0,
-          );
-          lc.info?.(tableName + ' VENDED: ', entries);
-        }
-        lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
-      }
-    }
-    debugDelegate?.reset();
-
-    // Note: This hydrationTime is a wall-clock overestimate, as it does
-    // not take time slicing into account. The view-syncer resets this
-    // to a more precise processing-time measurement with setHydrationTime().
-    this.#pipelines.set(queryID, {
-      input,
-      hydrationTimeMs,
-      transformedAst: resolvedQuery,
-      transformationHash,
-    });
   }
 
   /**
