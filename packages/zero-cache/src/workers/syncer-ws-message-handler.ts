@@ -30,9 +30,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #pusher: Pusher | undefined;
-  // DEPRECATED: remove #token
-  // and forward auth and cookie headers that were
-  // sent with the push.
+  // Fallback token from connection time - prefer auth from push message
   readonly #token: string | undefined;
 
   constructor(
@@ -125,11 +123,13 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 this.#pusher,
                 'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
               );
+              // prefer fresh auth from push message over cached connection token
+              const authToken = msg[1].auth ?? this.#token;
               return [
                 this.#pusher.enqueuePush(
                   this.#syncContext.clientID,
                   msg[1],
-                  this.#token,
+                  authToken,
                   this.#syncContext.httpCookie,
                   this.#syncContext.origin,
                 ),

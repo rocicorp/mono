@@ -34,5 +34,5 @@ test('When the URL changes we need to update the protocol version', async () => 
   // might not understand it. You may need to bump the PROTOCOL_VERSION and
   // update the expected values.
   expect(hash).toBe('10r2tfvet9a3s');
-  expect(PROTOCOL_VERSION).toBe(46);
+  expect(PROTOCOL_VERSION).toBe(47);
 });
