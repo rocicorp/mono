@@ -1729,6 +1729,9 @@ describe('view-syncer/cvr', () => {
   const ROW_KEY3 = {id: '888'};
   const ROW_ID3: RowID = {...ROW_TABLE, rowKey: ROW_KEY3};
 
+  const ROW_KEY4 = {id: '999'};
+  const ROW_ID4: RowID = {...ROW_TABLE, rowKey: ROW_KEY4};
+
   const DELETE_ROW_KEY = {id: '456'};
 
   const IN_OLD_PATCH_ROW_KEY = {id: '777'};
@@ -5117,6 +5120,560 @@ describe('view-syncer/cvr', () => {
         ],
       }),
     );
+  });
+
+  describe('markReExecuted', () => {
+    test('produces correct delete patches for old rows', async () => {
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: Date.UTC(2024, 3, 23),
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+          },
+        ],
+        queries: [],
+        desires: [],
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: {parentQuery: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      };
+
+      await setInitialState(cvrDb, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+      updater.markReExecuted(lc, ['parentQuery']);
+
+      // Re-hydration delivers a new row instead of the old one.
+      expect(
+        await updater.received(
+          lc,
+          new Map([
+            [
+              ROW_ID2,
+              {
+                version: '05',
+                refCounts: {parentQuery: 1},
+                contents: {id: 'new-row'},
+              },
+            ],
+          ]),
+        ),
+      ).toEqual([
+        {
+          toVersion: {stateVersion: '1ba'},
+          patch: {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID2,
+            contents: {id: 'new-row'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
+
+      // ROW_ID1 was not re-received, so it should be deleted.
+      expect(await updater.deleteUnreferencedRows()).toEqual([
+        {
+          patch: {type: 'row', op: 'del', id: ROW_ID1},
+          toVersion: {stateVersion: '1ba'},
+        },
+      ] satisfies PatchToVersion[]);
+
+      const {cvr: updated} = await updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
+        ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+      );
+
+      // Verify round tripping.
+      const cvrStore2 = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
+      expect(reloaded).toEqual(updated);
+
+      await expectState(cvrDb, {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1ba',
+            replicaVersion: '120',
+            lastActive: Date.UTC(2024, 3, 23, 1),
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+            owner: 'my-task',
+            grantedAt: LAST_CONNECT,
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+          },
+        ],
+        queries: [],
+        desires: [],
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: null,
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY2,
+            rowVersion: '05',
+            refCounts: {parentQuery: 1},
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      });
+    });
+
+    test('retroactively strips already-received rows', async () => {
+      // Scenario: A row is referenced by two queries (regularQuery and
+      // parentQuery). During the push phase, the row is received with a
+      // version bump via regularQuery. Then markReExecuted is called for
+      // parentQuery, which retroactively strips parentQuery's old refCount
+      // from the already-processed row. Finally re-hydration re-adds
+      // parentQuery:1, resulting in the correct final refCounts without
+      // double-counting.
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: Date.UTC(2024, 3, 23),
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+          },
+        ],
+        queries: [],
+        desires: [],
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: {regularQuery: 1, parentQuery: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      };
+
+      await setInitialState(cvrDb, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+      // Push phase: received() with a new version for regularQuery BEFORE
+      // markReExecuted. Since #removedOrExecutedQueryIDs is empty at this
+      // point, the merge preserves existing parentQuery:1.
+      // Merged result in #receivedRows: {regularQuery: 1, parentQuery: 1}
+      // (existing {regularQuery:1, parentQuery:1} merged with received
+      //  {regularQuery: 0} — no new regularQuery refs added, just
+      //  preserving existing).
+      // Actually, to receive a version bump without changing refCounts,
+      // we pass refCounts: {} (empty).
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {},
+              contents: {id: 'push-phase-version-bump'},
+            },
+          ],
+        ]),
+      );
+
+      // Now mark parentQuery as re-executed. This retroactively strips
+      // parentQuery from ROW_ID1's merged refCounts in #receivedRows.
+      // Before: {regularQuery: 1, parentQuery: 1}
+      // After:  {regularQuery: 1}
+      updater.markReExecuted(lc, ['parentQuery']);
+
+      // Re-hydration delivers ROW_ID1 with parentQuery:1 again.
+      // Since the row was previouslyReceived, this merges {regularQuery: 1}
+      // with {parentQuery: 1}, giving {regularQuery: 1, parentQuery: 1}.
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {parentQuery: 1},
+              contents: {id: 'rehydration'},
+            },
+          ],
+        ]),
+      );
+
+      // Row should NOT be deleted — it still has refs from both queries.
+      expect(await updater.deleteUnreferencedRows()).toEqual([]);
+
+      const {cvr: updated} = await updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
+        ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+      );
+
+      // Verify round tripping.
+      const cvrStore2 = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
+      expect(reloaded).toEqual(updated);
+
+      await expectState(cvrDb, {
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '04',
+            refCounts: {regularQuery: 1, parentQuery: 1},
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      });
+    });
+
+    test('row falling out of re-resolved query gets deleted', async () => {
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: Date.UTC(2024, 3, 23),
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+          },
+        ],
+        queries: [],
+        desires: [],
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: {parentQuery: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      };
+
+      await setInitialState(cvrDb, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+      updater.markReExecuted(lc, ['parentQuery']);
+
+      // Do NOT call received() for ROW_ID1 — it fell out of results.
+
+      // ROW_ID1 should be deleted.
+      expect(await updater.deleteUnreferencedRows()).toEqual([
+        {
+          patch: {type: 'row', op: 'del', id: ROW_ID1},
+          toVersion: {stateVersion: '1ba'},
+        },
+      ] satisfies PatchToVersion[]);
+
+      const {cvr: updated} = await updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
+        ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+      );
+
+      // Verify round tripping.
+      const cvrStore2 = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
+      expect(reloaded).toEqual(updated);
+
+      await expectState(cvrDb, {
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: null,
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      });
+    });
+
+    test('multiple companion queries', async () => {
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: Date.UTC(2024, 3, 23),
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+          },
+        ],
+        queries: [],
+        desires: [],
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: {'scalar:q1:0': 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY2,
+            rowVersion: '03',
+            refCounts: {q1: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      };
+
+      await setInitialState(cvrDb, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+      updater.markReExecuted(lc, ['q1', 'scalar:q1:0']);
+
+      // Re-hydration delivers new companion and parent rows.
+      expect(
+        await updater.received(
+          lc,
+          new Map([
+            [
+              ROW_ID3,
+              {
+                version: '05',
+                refCounts: {'scalar:q1:0': 1},
+                contents: {id: 'new-companion'},
+              },
+            ],
+            [
+              ROW_ID4,
+              {
+                version: '05',
+                refCounts: {q1: 1},
+                contents: {id: 'new-parent'},
+              },
+            ],
+          ]),
+        ),
+      ).toEqual([
+        {
+          toVersion: {stateVersion: '1ba'},
+          patch: {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID3,
+            contents: {id: 'new-companion'},
+          },
+        },
+        {
+          toVersion: {stateVersion: '1ba'},
+          patch: {
+            type: 'row',
+            op: 'put',
+            id: ROW_ID4,
+            contents: {id: 'new-parent'},
+          },
+        },
+      ] satisfies PatchToVersion[]);
+
+      // Old rows (ROW_ID1, ROW_ID2) should be deleted.
+      const deletePatches = await updater.deleteUnreferencedRows();
+      expect(deletePatches).toHaveLength(2);
+      expect(deletePatches).toEqual(
+        expect.arrayContaining([
+          {
+            patch: {type: 'row', op: 'del', id: ROW_ID1},
+            toVersion: {stateVersion: '1ba'},
+          },
+          {
+            patch: {type: 'row', op: 'del', id: ROW_ID2},
+            toVersion: {stateVersion: '1ba'},
+          },
+        ] satisfies PatchToVersion[]),
+      );
+
+      const {cvr: updated} = await updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
+        ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+      );
+
+      // Verify round tripping.
+      const cvrStore2 = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
+      expect(reloaded).toEqual(updated);
+
+      await expectState(cvrDb, {
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: null,
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY2,
+            rowVersion: '03',
+            refCounts: null,
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY3,
+            rowVersion: '05',
+            refCounts: {'scalar:q1:0': 1},
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY4,
+            rowVersion: '05',
+            refCounts: {q1: 1},
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      });
+    });
   });
 
   describe('markDesiredQueryAsInactive', () => {
