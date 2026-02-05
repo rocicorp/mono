@@ -708,6 +708,23 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   /**
+   * Marks the given query IDs as re-executed so that their old refCounts
+   * will be stripped when re-hydration rows arrive via {@link received()}.
+   * This is lighter than {@link trackQueries}: it does not access
+   * `cvr.queries` (which would crash for companion query IDs like
+   * `scalar:q1:0` that aren't in the CVR) and does not produce query
+   * patches.
+   */
+  markReExecuted(lc: LogContext, queryIDs: string[]) {
+    for (const id of queryIDs) {
+      this.#removedOrExecutedQueryIDs.add(id);
+    }
+    // Kick off async lookup of existing rows (awaited by deleteUnreferencedRows).
+    this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
+    void this.#existingRows.then(() => {});
+  }
+
+  /**
    * Asserts that a new version has already been set.
    *
    * After {@link #executed} and {@link #removed} are called, we must have properly

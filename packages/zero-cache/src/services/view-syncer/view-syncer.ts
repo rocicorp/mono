@@ -1931,11 +1931,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const start = performance.now();
 
       const timer = new TimeSliceTimer(lc);
-      const {version, numChanges, changes} = this.#pipelines.advance(timer);
+      let updater: CVRQueryDrivenUpdater;
+      const {version, numChanges, changes} = this.#pipelines.advance(
+        timer,
+        (queryIDs: string[]) => updater.markReExecuted(lc, queryIDs),
+      );
       lc = lc.withContext('newVersion', version);
 
       // Probably need a new updater type. CVRAdvancementUpdater?
-      const updater = new CVRQueryDrivenUpdater(
+      updater = new CVRQueryDrivenUpdater(
         this.#cvrStore,
         cvr,
         version,
@@ -1964,6 +1968,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           return e;
         }
         throw e;
+      }
+
+      // Clean up rows from re-resolved companion queries that are
+      // no longer in results. This is a no-op when no re-resolution
+      // occurred (#removedOrExecutedQueryIDs is empty).
+      for (const patch of await updater.deleteUnreferencedRows(lc)) {
+        await pokers.addPatch(patch);
       }
 
       // Commit the changes and update the CVR snapshot.

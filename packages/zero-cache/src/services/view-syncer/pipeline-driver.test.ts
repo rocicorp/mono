@@ -1768,4 +1768,310 @@ describe('view-syncer/pipeline-driver', () => {
 
     expect(() => changes()).toThrowError();
   });
+
+  // Scalar subquery: issues WHERE id = scalar(comments WHERE id = '10', issueID)
+  // Comment '10' has issueID = '1', so this resolves to issues WHERE id = '1'.
+  const ISSUES_WITH_SCALAR_SUBQUERY: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'scalarSubquery',
+      op: '=',
+      parentField: 'id',
+      childField: 'issueID',
+      subquery: {
+        table: 'comments',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: '10'},
+        },
+      },
+    },
+  };
+
+  test('addQueryWithCompanions hydrates companion then parent', () => {
+    pipelines.init(clientSchema);
+
+    const results = [
+      ...pipelines.addQueryWithCompanions(
+        'hash1',
+        'q1',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    // Companion rows come first (comment 10), then parent rows (issue 1).
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "scalar:q1:0",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "q1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+      ]
+    `);
+
+    // Both parent and companion queries are tracked.
+    expect([...pipelines.queries().keys()].sort()).toEqual([
+      'q1',
+      'scalar:q1:0',
+    ]);
+  });
+
+  test('removeQuery removes companions', () => {
+    pipelines.init(clientSchema);
+
+    [
+      ...pipelines.addQueryWithCompanions(
+        'hash1',
+        'q1',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    expect(pipelines.queries().size).toBe(2);
+
+    pipelines.removeQuery('q1');
+
+    expect(pipelines.queries().size).toBe(0);
+  });
+
+  test('companion change triggers parent re-resolution', () => {
+    pipelines.init(clientSchema);
+
+    [
+      ...pipelines.addQueryWithCompanions(
+        'hash1',
+        'q1',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    // Update comment 10's issueID from '1' to '2'.
+    replicator.processTransaction(
+      '134',
+      messages.update('comments', {id: '10', issueID: '2', upvotes: 0}),
+    );
+
+    const result = changes();
+
+    // The advance should include only re-hydration adds:
+    // - Companion re-hydration: add on comment 10 (with updated issueID)
+    // - Parent re-hydration: add on issue 2 (new scalar value)
+    // The incremental companion edit is suppressed to avoid double-counting
+    // in the CVR. Old rows (e.g. issue 1) are cleaned up by the CVR's
+    // deleteUnreferencedRows mechanism, not by explicit pipeline removes.
+    expect(result).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "scalar:q1:0",
+          "row": {
+            "_0_version": "134",
+            "id": "10",
+            "issueID": "2",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "q1",
+          "row": {
+            "_0_version": "123",
+            "closed": true,
+            "id": "2",
+          },
+          "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
+  test('disabled connections skip parent during advance', () => {
+    pipelines.init(clientSchema);
+
+    [
+      ...pipelines.addQueryWithCompanions(
+        'hash1',
+        'q1',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    // Insert a new issue AND update the companion in the SAME transaction.
+    replicator.processTransaction(
+      '134',
+      messages.update('comments', {id: '10', issueID: '2', upvotes: 0}),
+      messages.insert('issues', {id: '4', closed: 0}),
+    );
+
+    const result = changes();
+
+    // The parent pipeline is disabled during the push phase, so the new
+    // issue '4' insert does not produce a spurious add under 'q1'.
+    // After re-resolution, the parent hydrates with issueID='2',
+    // so only issue '2' appears — not issue '4'.
+    const parentAdds = result.filter(
+      c => c !== 'yield' && c.queryID === 'q1' && c.type === 'add',
+    );
+    expect(parentAdds).toHaveLength(1);
+    expect((parentAdds[0] as unknown as {row: {id: string}}).row.id).toBe('2');
+  });
+
+  test('scalar subquery with no matching row', () => {
+    pipelines.init(clientSchema);
+
+    const NO_MATCH_AST: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'scalarSubquery',
+        op: '=',
+        parentField: 'id',
+        childField: 'issueID',
+        subquery: {
+          table: 'comments',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: '999'},
+          },
+        },
+      },
+    };
+
+    const results = [
+      ...pipelines.addQueryWithCompanions(
+        'hash1',
+        'q1',
+        NO_MATCH_AST,
+        startTimer(),
+      ),
+    ];
+
+    // No companion rows (comment 999 doesn't exist), and no parent rows
+    // because the scalar subquery resolves to ALWAYS_FALSE (1=0).
+    expect(results).toEqual([]);
+  });
+
+  test('multiple scalar subqueries in one query', () => {
+    pipelines.init(clientSchema);
+
+    // issues WHERE id = scalar(comments WHERE id='10', issueID)
+    //        AND closed = scalar(comments WHERE id='20', upvotes)
+    // Comment 10: issueID='1', Comment 20: upvotes=1
+    // So: issues WHERE id='1' AND closed=1 → issue 1 has closed=false, so no match.
+    // But upvotes=1 and closed is boolean (0/1 in sqlite). Issue 2 has closed=true (1).
+    // Actually: id='1' AND closed=1 → issue 1 has closed=0, so no result.
+    // Let's use: issues WHERE id = scalar(comments WHERE id='10', issueID)
+    //        AND closed = scalar(comments WHERE id='20', upvotes)
+    // comment 10: issueID='1'; comment 20: upvotes=1
+    // → issues WHERE id='1' AND closed=1 → issue 1 has closed=0 → no rows.
+    // Let's pick a combination that returns a result:
+    // issues WHERE id = scalar(comments WHERE id='20', issueID)
+    //        AND closed = scalar(comments WHERE id='20', upvotes)
+    // comment 20: issueID='2', upvotes=1
+    // → issues WHERE id='2' AND closed=1 → issue 2 has closed=1 → returns issue 2.
+    const MULTI_SCALAR_AST: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'scalarSubquery',
+            op: '=',
+            parentField: 'id',
+            childField: 'issueID',
+            subquery: {
+              table: 'comments',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'id'},
+                right: {type: 'literal', value: '20'},
+              },
+            },
+          },
+          {
+            type: 'scalarSubquery',
+            op: '=',
+            parentField: 'closed',
+            childField: 'upvotes',
+            subquery: {
+              table: 'comments',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'id'},
+                right: {type: 'literal', value: '20'},
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const results = [
+      ...pipelines.addQueryWithCompanions(
+        'hash1',
+        'q1',
+        MULTI_SCALAR_AST,
+        startTimer(),
+      ),
+    ];
+
+    // Both companions are created.
+    expect([...pipelines.queries().keys()].sort()).toEqual([
+      'q1',
+      'scalar:q1:0',
+      'scalar:q1:1',
+    ]);
+
+    // Comment 20: issueID='2', upvotes=1
+    // → issues WHERE id='2' AND closed=1 → issue 2 (closed=true)
+    const parentRows = results.filter(r => r !== 'yield' && r.queryID === 'q1');
+    expect(parentRows).toHaveLength(1);
+    expect((parentRows[0] as unknown as {row: {id: string}}).row.id).toBe('2');
+  });
 });

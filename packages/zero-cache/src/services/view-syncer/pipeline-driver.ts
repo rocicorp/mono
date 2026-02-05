@@ -559,7 +559,10 @@ export class PipelineDriver {
    *         `changes` must be iterated over in their entirety in order to
    *         advance the database snapshot.
    */
-  advance(timer: Timer): {
+  advance(
+    timer: Timer,
+    onBeforeReResolve?: (queryIDs: string[]) => void,
+  ): {
     version: string;
     numChanges: number;
     changes: Iterable<RowChange | 'yield'>;
@@ -577,7 +580,7 @@ export class PipelineDriver {
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#advance(diff, timer, changes),
+      changes: this.#advance(diff, timer, changes, onBeforeReResolve),
     };
   }
 
@@ -585,6 +588,7 @@ export class PipelineDriver {
     diff: SnapshotDiff,
     timer: Timer,
     numChanges: number,
+    onBeforeReResolve?: (queryIDs: string[]) => void,
   ): Iterable<RowChange | 'yield'> {
     assert(
       this.#hydrateContext === null,
@@ -674,8 +678,13 @@ export class PipelineDriver {
       this.#ensureCostModelExistsIfEnabled(curr.db.db);
       this.#lc.debug?.(`Advanced to ${curr.version}`);
 
+      // The advance (diff processing) phase is complete. Clear the context
+      // before re-resolving companions, which hydrates new pipelines via
+      // addQueryWithCompanions (addQuery asserts advanceContext is null).
+      this.#advanceContext = null;
+
       // Re-resolve parent pipelines whose companion scalar values changed.
-      yield* this.#reResolveCompanions(timer);
+      yield* this.#reResolveCompanions(timer, onBeforeReResolve);
     } finally {
       this.#advanceContext = null;
     }
@@ -686,7 +695,10 @@ export class PipelineDriver {
    * received diffs during advancement. The set of affected parents is
    * populated by {@link #push} as it yields row changes.
    */
-  *#reResolveCompanions(timer: Timer): Iterable<RowChange | 'yield'> {
+  *#reResolveCompanions(
+    timer: Timer,
+    onBeforeReResolve?: (queryIDs: string[]) => void,
+  ): Iterable<RowChange | 'yield'> {
     if (this.#parentsToReResolve.size === 0) {
       return;
     }
@@ -695,6 +707,25 @@ export class PipelineDriver {
     // may push through companions that re-populate the set.
     const parentIDs = [...this.#parentsToReResolve];
     this.#parentsToReResolve.clear();
+
+    // Notify the caller of all query IDs being re-resolved so it can
+    // strip their old refCounts before re-hydration adds arrive.
+    if (onBeforeReResolve) {
+      const allQueryIDs: string[] = [];
+      for (const parentID of parentIDs) {
+        const parent = this.#pipelines.get(parentID);
+        if (!parent?.originalAST) {
+          continue;
+        }
+        allQueryIDs.push(parentID);
+        if (parent.companionQueryIDs) {
+          allQueryIDs.push(...parent.companionQueryIDs);
+        }
+      }
+      if (allQueryIDs.length > 0) {
+        onBeforeReResolve(allQueryIDs);
+      }
+    }
 
     for (const parentID of parentIDs) {
       const parent = this.#pipelines.get(parentID);
@@ -820,6 +851,11 @@ export class PipelineDriver {
                   }
                 }
               }
+              // Suppress companion changes: the companion will be torn
+              // down and re-hydrated in #reResolveCompanions, so yielding
+              // the incremental change would cause double-counting in the
+              // CVR.
+              continue;
             }
           }
           yield changeOrYield;
