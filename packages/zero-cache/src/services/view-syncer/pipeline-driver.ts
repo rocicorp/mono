@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
@@ -13,7 +13,12 @@ import {
 } from '../../../../zql/src/builder/debug-delegate.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
-import {type Input, type Storage} from '../../../../zql/src/ivm/operator.ts';
+import {
+  type Input,
+  skipYields,
+  type Storage,
+} from '../../../../zql/src/ivm/operator.ts';
+import {first} from '../../../../zql/src/ivm/stream.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -24,6 +29,7 @@ import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-conn
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
 import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import {resolveSimpleScalarSubqueries} from '../../../../zqlite/src/resolve-scalar-subqueries.ts';
 import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
@@ -308,6 +314,42 @@ export class PipelineDriver {
     return total;
   }
 
+  #resolveScalarSubqueries(ast: AST): AST {
+    const executor = (
+      subqueryAST: AST,
+      childField: string,
+    ): LiteralValue | null | undefined => {
+      const input = buildPipeline(
+        subqueryAST,
+        {
+          getSource: name => this.#getSource(name),
+          createStorage: () => this.#createStorage(),
+          decorateSourceInput: (input: SourceInput): Input => input,
+          decorateInput: input => input,
+          addEdge() {},
+          decorateFilterInput: input => input,
+        },
+        'scalar-subquery',
+      );
+      try {
+        const node = first(skipYields(input.fetch({})));
+        if (!node) {
+          return undefined;
+        }
+        return (node.row[childField] as LiteralValue) ?? null;
+      } finally {
+        input.destroy();
+      }
+    };
+
+    const {ast: resolved} = resolveSimpleScalarSubqueries(
+      ast,
+      this.#tableSpecs,
+      executor,
+    );
+    return resolved;
+  }
+
   /**
    * Adds a pipeline for the query. The method will hydrate the query using the
    * driver's current snapshot of the database and return a stream of results.
@@ -342,8 +384,10 @@ export class PipelineDriver {
       this.#snapshotter.current().db.db,
     );
 
+    const resolvedQuery = this.#resolveScalarSubqueries(query);
+
     const input = buildPipeline(
-      query,
+      resolvedQuery,
       {
         debug: debugDelegate,
         enableNotExists: true, // Server-side can handle NOT EXISTS
@@ -414,7 +458,7 @@ export class PipelineDriver {
     this.#pipelines.set(queryID, {
       input,
       hydrationTimeMs,
-      transformedAst: query,
+      transformedAst: resolvedQuery,
       transformationHash,
     });
   }
