@@ -14,6 +14,7 @@ import {
   type MessageEvent,
   type WebSocket,
 } from 'ws';
+import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -128,9 +129,13 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
   }
 
   // Incoming transform.
-  pipe(duplex, instream, chunk => {
-    const json = BigIntJSON.parse(chunk.toString());
-    return v.parse(json, inSchema, 'passthrough');
+  pipe({
+    source: duplex,
+    sink: instream,
+    parse: chunk => {
+      const json = BigIntJSON.parse(chunk.toString());
+      return v.parse(json, inSchema, 'passthrough');
+    },
   });
 
   sendPingsForLiveness(lc, ws, PING_INTERVAL_MS);
@@ -138,11 +143,18 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
   return {outstream, instream};
 }
 
-export function pipe<T>(
-  source: Readable,
-  sink: Subscription<T>,
-  parse: (buffer: Buffer) => T | null,
-) {
+type PipeOptions<T> = {
+  source: Readable;
+  sink: Subscription<T>;
+  parse: (buffer: Buffer) => T | null;
+  bufferMessages?: number;
+};
+
+export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
+  bufferMessages ??= 0;
+  assert(bufferMessages >= 0);
+  const pending: Promise<unknown>[] = [];
+
   pipeline(
     source,
     new Writable({
@@ -158,13 +170,25 @@ export function pipe<T>(
           callback(ensureError(err));
           return;
         }
+        // Inbound backpressure is exerted by unconsumed messages in the
+        // subscription. A buffer can be used to allow messages to queue up in
+        // in the Subscription object, which allows the consumer to "peek" at
+        // whether there are more messages immediately available
+        // (via {@link Subscription.queued}.
         const {result} = sink.push(msg);
-        // Inbound backpressure is exerted by unconsumed
-        // messages in the subscription.
-        void result.then(
-          () => callback(),
-          err => callback(ensureError(err)),
-        );
+        pending.push(result);
+        result.then(() => pending.shift());
+
+        if (pending.length <= bufferMessages) {
+          // immediately allow more messages
+          callback();
+        } else {
+          // wait for the oldest result in the pending queue
+          pending[0].then(
+            () => callback(),
+            err => callback(ensureError(err)),
+          );
+        }
       },
       destroy: (err, callback) => {
         if (err) {
