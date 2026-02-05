@@ -5674,6 +5674,236 @@ describe('view-syncer/cvr', () => {
         ],
       });
     });
+
+    test('overlap with push-phase row — re-resolution re-produces', async () => {
+      // Scenario: Row R exists with {queryB: 1}. Push phase produces R via
+      // queryA. markReExecuted strips queryB. Re-resolution re-produces R
+      // with queryB. Final result: {queryA: 1, queryB: 1}.
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: Date.UTC(2024, 3, 23),
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+          },
+        ],
+        queries: [],
+        desires: [],
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: {queryB: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      };
+
+      await setInitialState(cvrDb, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+      // Push phase: received() for queryA before markReExecuted.
+      // Merges existing {queryB: 1} with received {queryA: 1} → {queryB: 1, queryA: 1}
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {queryA: 1},
+              contents: {id: 'push-phase-row'},
+            },
+          ],
+        ]),
+      );
+
+      // markReExecuted strips queryB from #receivedRows and pending store.
+      updater.markReExecuted(lc, ['queryB']);
+
+      // Re-resolution re-produces R with queryB.
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {queryB: 1},
+              contents: {id: 'rehydration'},
+            },
+          ],
+        ]),
+      );
+
+      // Row still has refs from both queries — not deleted.
+      expect(await updater.deleteUnreferencedRows()).toEqual([]);
+
+      const {cvr: updated} = await updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
+        ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+      );
+
+      // Verify round tripping.
+      const cvrStore2 = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
+      expect(reloaded).toEqual(updated);
+
+      await expectState(cvrDb, {
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '04',
+            refCounts: {queryA: 1, queryB: 1},
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      });
+    });
+
+    test('overlap with push-phase row — re-resolution drops row', async () => {
+      // Scenario: Row R exists with {queryB: 1}. Push phase produces R via
+      // queryA. markReExecuted strips queryB. Re-resolution does NOT
+      // re-produce R. Final result: R should have {queryA: 1} only,
+      // NOT the stale {queryB: 1, queryA: 1}.
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: Date.UTC(2024, 3, 23),
+            ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+          },
+        ],
+        queries: [],
+        desires: [],
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: {queryB: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      };
+
+      await setInitialState(cvrDb, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+      // Push phase: received() for queryA before markReExecuted.
+      // Merges existing {queryB: 1} with received {queryA: 1} → {queryB: 1, queryA: 1}
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {queryA: 1},
+              contents: {id: 'push-phase-row'},
+            },
+          ],
+        ]),
+      );
+
+      // markReExecuted strips queryB from #receivedRows AND pending store.
+      updater.markReExecuted(lc, ['queryB']);
+
+      // Re-resolution does NOT re-produce R — queryB no longer references it.
+
+      // Row still has queryA ref — should NOT be deleted.
+      expect(await updater.deleteUnreferencedRows()).toEqual([]);
+
+      const {cvr: updated} = await updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
+        ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+      );
+
+      // Verify round tripping.
+      const cvrStore2 = new CVRStore(
+        lc,
+        cvrDb,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
+      expect(reloaded).toEqual(updated);
+
+      // KEY ASSERTION: R must have {queryA: 1} only, NOT {queryB: 1, queryA: 1}.
+      // Before the fix, the stale pending store entry would persist queryB.
+      await expectState(cvrDb, {
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '04',
+            refCounts: {queryA: 1},
+            patchVersion: '1ba',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      });
+    });
   });
 
   describe('markDesiredQueryAsInactive', () => {

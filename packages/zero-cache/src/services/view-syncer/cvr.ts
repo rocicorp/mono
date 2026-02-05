@@ -735,8 +735,17 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           changed = true;
         }
       }
-      if (changed && !Object.values(refCounts).some(v => v > 0)) {
-        this.#receivedRows.set(rowID, null);
+      if (changed) {
+        const corrected = Object.values(refCounts).some(v => v > 0)
+          ? refCounts
+          : null;
+        if (corrected === null) {
+          this.#receivedRows.set(rowID, null);
+        }
+        // Correct the pending store entry to match the stripped refCounts.
+        // received() already committed a putRowRecord with the pre-strip
+        // refCounts; this overwrites just the refCounts field.
+        this._cvrStore.updatePendingRowRefCounts(rowID, corrected);
       }
     }
 

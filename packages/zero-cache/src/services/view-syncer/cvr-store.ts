@@ -403,6 +403,22 @@ export class CVRStore {
   }
 
   /**
+   * Updates the refCounts of a pending row record. This is used by
+   * markReExecuted to correct pending entries that were committed by
+   * received() before the re-executed query IDs were known.
+   * No-op if there is no pending update for the given row.
+   */
+  updatePendingRowRefCounts(
+    id: RowID,
+    refCounts: RowRecord['refCounts'],
+  ): void {
+    const pending = this.#pendingRowRecordUpdates.get(id);
+    if (pending) {
+      this.#pendingRowRecordUpdates.set(id, {...pending, refCounts});
+    }
+  }
+
+  /**
    * Note: Removing a row from the CVR should be represented by a
    *       {@link putRowRecord()} with `refCounts: null` in order to properly
    *       produce the appropriate delete patch when catching up old clients.
