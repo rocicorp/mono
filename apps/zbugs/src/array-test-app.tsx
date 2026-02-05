@@ -1,17 +1,16 @@
-import {useVirtualizer} from '@rocicorp/react-virtual';
 import {useZero} from '@rocicorp/zero/react';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {useRows} from '../../../packages/zero-react/src/use-rows.js';
 import {queries, type IssueRowSort, type Issues} from '../shared/queries.js';
 import {ZERO_PROJECT_NAME} from '../shared/schema.js';
 import {LoginProvider} from './components/login-provider.js';
+import {useArrayVirtualizer} from './hooks/use-array-virtualizer.js';
 import {useLogin} from './hooks/use-login.js';
 import {ZeroInit} from './zero-init.js';
 
 type RowData = Issues[number];
 
 const DEFAULT_HEIGHT = 275;
-const PLACEHOLDER_HEIGHT = 50; //DEFAULT_HEIGHT / 2;
+const PLACEHOLDER_HEIGHT = 50;
 const PAGE_SIZE = 50;
 const UNIFORM_ROW_HEIGHT = 63;
 
@@ -24,6 +23,12 @@ const toStartRow = (row: {id: string; modified: number; created: number}) => ({
 function ArrayTestAppContent() {
   const z = useZero();
 
+  const [permalinkID, setPermalinkID] = useState<string | undefined>(undefined);
+  const [permalinkInput, setPermalinkInput] = useState('3130');
+  const [notFoundPermalink, setNotFoundPermalink] = useState<
+    string | undefined
+  >(undefined);
+
   const listContextParams = useMemo(
     () => ({
       projectName: ZERO_PROJECT_NAME.toLocaleLowerCase(),
@@ -34,440 +39,87 @@ function ArrayTestAppContent() {
       labels: [],
       open: null,
       textFilter: null,
-      permalinkID: null,
+      permalinkID: permalinkID ?? null,
     }),
-    [],
+    [permalinkID],
   );
 
-  const [anchorIndex, setAnchorIndex] = useState(0);
-  const [anchorKind, setAnchorKind] = useState<
-    'forward' | 'backward' | 'permalink'
-  >('permalink');
-  const [startRow, setStartRow] = useState<IssueRowSort | undefined>(undefined);
-  const [permalinkID, setPermalinkID] = useState<string | undefined>('3130');
-  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
-  const [debug, setDebug] = useState<boolean>(false);
-  const [autoPagingEnabled, setAutoPagingEnabled] = useState<boolean>(false);
   const [heightMode, setHeightMode] = useState<
     'dynamic' | 'uniform' | 'non-uniform'
   >('dynamic');
 
-  // Track if we've positioned the permalink
-  const hasPositionedPermalinkRef = useRef(false);
-
-  // Track if we're waiting for data to complete after an anchor shift
-  // This prevents ping-pong: shifts blocked until data loads and completes
-  const waitingForCompleteRef = useRef(false);
-  const hasSeenIncompleteRef = useRef(false); // Track if we've seen incomplete state after shift
-
-  const {
-    rowAt,
-    rowsLength,
-    complete,
-    rowsEmpty,
-    atStart,
-    atEnd,
-    firstRowIndex,
-    permalinkNotFound,
-  } = useRows<RowData, IssueRowSort>({
-    pageSize: PAGE_SIZE,
-    anchor:
-      anchorKind === 'permalink' && permalinkID
-        ? {
-            kind: 'permalink',
-            index: anchorIndex,
-            id: permalinkID,
-          }
-        : anchorKind === 'forward'
-          ? {
-              kind: 'forward',
-              index: anchorIndex,
-              startRow,
-            }
-          : anchorKind === 'backward' && startRow
-            ? {
-                kind: 'backward',
-                index: anchorIndex,
-                startRow,
-              }
-            : {
-                kind: 'forward',
-                index: anchorIndex,
-                startRow,
-              },
-    getPageQuery: useCallback(
-      (
-        limit: number,
-        start: IssueRowSort | null,
-        dir: 'forward' | 'backward',
-      ) =>
-        queries.issueListV2({
-          listContext: listContextParams,
-          userID: z.userID,
-          limit,
-          start,
-          dir,
-          inclusive: start === null,
-        }),
-      [listContextParams, z.userID],
-    ),
-    getSingleQuery: useCallback(
-      (id: string) => {
-        const isNumeric = /^\d+$/.test(id);
-        return queries.listIssueByID({
-          idField: isNumeric ? 'shortID' : 'id',
-          idValue: isNumeric ? parseInt(id, 10) : id,
-          listContext: listContextParams,
-        });
-      },
-      [listContextParams],
-    ),
-    toStartRow,
-  });
-
-  // The virtualizer uses indices 0, 1, 2, ... mapping directly to logical data indices
-  // rowAt will return undefined for indices outside the current data window
-
-  const endPlaceholder = atEnd ? 0 : 1;
-  const startPlaceholder = atStart ? 0 : 1;
-
-  // Convert virtualizer index to logical data index
-  // Virtualizer indices: [start placeholder] + [data] + [end placeholder]
-  // Need to account for start placeholder offset
-  const toLogicalIndex = useCallback(
-    (virtualizerIndex: number) => {
-      return firstRowIndex + (virtualizerIndex - startPlaceholder);
-    },
-    [firstRowIndex, startPlaceholder],
-  );
-
-  const rows = useMemo(() => {
-    const length = startPlaceholder + rowsLength + endPlaceholder;
-
-    return {
-      length,
-      get(index: number) {
-        if (index < 0) {
-          return undefined;
-        }
-
-        // Start placeholder
-        if (!atStart && index === 0) {
-          return undefined;
-        }
-        // End placeholder
-        if (!atEnd && index === length - 1) {
-          return undefined;
-        }
-        // Map virtualizer index to logical index, accounting for start placeholder
-        const logicalIndex = firstRowIndex + (index - startPlaceholder);
-        return rowAt(logicalIndex);
-      },
-    };
-  }, [
-    rowAt,
-    firstRowIndex,
-    rowsLength,
-    endPlaceholder,
-    atEnd,
-    atStart,
-    startPlaceholder,
-  ]);
-
   const parentRef = useRef<HTMLDivElement>(null);
 
-  const estimateSize = useCallback(
-    (index: number) => {
-      const row = rows.get(index);
-      if (!row) {
-        return PLACEHOLDER_HEIGHT;
-      }
-
-      if (heightMode === 'uniform') {
-        // Fixed uniform height
-        return UNIFORM_ROW_HEIGHT;
-      }
-
-      if (heightMode === 'non-uniform') {
-        // Fixed non-uniform height based on description length
-        const baseHeight = 120; // Base height without description
-        if (!row.description) {
-          return baseHeight;
-        }
-        // Add height based on description length (approximately 150 chars per line)
-        const descriptionLines = Math.ceil(row.description.length / 150);
-        const descriptionHeight = descriptionLines * 20;
-        return baseHeight + descriptionHeight;
-      }
-
-      // Dynamic height - virtualizer will measure
-      return DEFAULT_HEIGHT;
-    },
-    [rows, heightMode],
+  const getPageQuery = useCallback(
+    (limit: number, start: IssueRowSort | null, dir: 'forward' | 'backward') =>
+      queries.issueListV2({
+        listContext: listContextParams,
+        userID: z.userID,
+        limit,
+        start,
+        dir,
+        inclusive: start === null,
+      }),
+    [listContextParams, z.userID],
   );
 
-  const getScrollElement = useCallback(() => parentRef.current, []);
+  const getSingleQuery = useCallback(
+    (id: string) => {
+      const isNumeric = /^\d+$/.test(id);
+      return queries.listIssueByID({
+        idField: isNumeric ? 'shortID' : 'id',
+        idValue: isNumeric ? parseInt(id, 10) : id,
+        listContext: listContextParams,
+      });
+    },
+    [listContextParams],
+  );
 
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement,
-    estimateSize,
-    getItemKey: useCallback(
-      (index: number) => {
-        const row = rows.get(index);
-        if (row) {
-          return row.id;
-        }
-        // For placeholders, use a unique key based on position
-        if (!atStart && index === 0) {
-          return `placeholder-start`;
-        }
-        return `placeholder-end-${index}`;
-      },
-      [rows, atStart],
-    ),
-    overscan: 5,
-    debug,
-  });
+  const {virtualizer, rowAt, rowsEmpty, permalinkNotFound} =
+    useArrayVirtualizer<RowData, IssueRowSort>({
+      pageSize: PAGE_SIZE,
+      placeholderHeight: PLACEHOLDER_HEIGHT,
+      getPageQuery,
+      getSingleQuery,
+      toStartRow,
+      initialPermalinkID: permalinkID,
 
-  // Reset virtualizer measurements when height mode changes
+      estimateSize: useCallback(
+        (row: RowData | undefined) => {
+          if (!row) {
+            return PLACEHOLDER_HEIGHT;
+          }
+
+          if (heightMode === 'uniform') {
+            return UNIFORM_ROW_HEIGHT;
+          }
+
+          if (heightMode === 'non-uniform') {
+            const baseHeight = 120;
+            if (!row.description) {
+              return baseHeight;
+            }
+            const descriptionLines = Math.ceil(row.description.length / 150);
+            const descriptionHeight = descriptionLines * 20;
+            return baseHeight + descriptionHeight;
+          }
+
+          return DEFAULT_HEIGHT;
+        },
+        [heightMode],
+      ),
+      getScrollElement: useCallback(() => parentRef.current, []),
+    });
+
+  // Reset permalink if not found (but keep the input value)
   useEffect(() => {
-    virtualizer.measure();
-  }, [heightMode]);
+    if (permalinkNotFound && permalinkID) {
+      setNotFoundPermalink(permalinkID);
+      setPermalinkID(undefined);
+    }
+  }, [permalinkNotFound, permalinkID]);
 
   const virtualItems = virtualizer.getVirtualItems();
-  const totalSize = virtualizer.getTotalSize();
-
-  // Handle permalink positioning and enable auto-paging when ready
-  useEffect(() => {
-    // Reset positioning flag when switching modes
-    if (anchorKind !== 'permalink') {
-      hasPositionedPermalinkRef.current = false;
-      if (!autoPagingEnabled) {
-        setAutoPagingEnabled(true);
-      }
-      return;
-    }
-
-    // For permalink mode:
-    // 1. Once the permalink row is loaded (rowsLength > 0), scroll to position it
-    // 2. Once complete (before/after pages loaded), enable auto-paging
-
-    if (rowsLength === 0) {
-      // No data yet, keep auto-paging disabled
-      return;
-    }
-
-    // Permalink row is loaded - ensure it's at the correct scroll position
-    // Keep repositioning until data is complete to handle changing firstRowIndex
-    if (
-      (!hasPositionedPermalinkRef.current || !complete) &&
-      anchorIndex !== null
-    ) {
-      // The permalink is at logical index 0
-      // Convert to virtualizer index: virtualizerIndex = logicalIndex - firstRowIndex + startPlaceholder
-      const permalinkLogicalIndex = anchorIndex;
-      const targetVirtualIndex =
-        permalinkLogicalIndex - firstRowIndex + startPlaceholder;
-
-      // Scroll to the permalink row
-      virtualizer.scrollToIndex(targetVirtualIndex, {
-        align: 'start',
-      });
-
-      // Only mark as positioned once data is complete
-      if (complete) {
-        hasPositionedPermalinkRef.current = true;
-      }
-    }
-
-    // Once complete, enable auto-paging
-    if (complete && !autoPagingEnabled) {
-      setAutoPagingEnabled(true);
-    }
-  }, [
-    anchorKind,
-    rowsLength,
-    complete,
-    autoPagingEnabled,
-    anchorIndex,
-    startPlaceholder,
-    firstRowIndex,
-    virtualizer,
-  ]);
-
-  // Auto-shift anchor forward when scrolling near the end of the data window
-  useEffect(() => {
-    if (!autoPagingEnabled || virtualItems.length === 0 || atEnd) {
-      return;
-    }
-
-    // Prevent ping-pong: if we're waiting for data to complete after a shift, don't shift opposite direction
-    if (waitingForCompleteRef.current && !complete) {
-      hasSeenIncompleteRef.current = true;
-      return;
-    }
-
-    // Only reset waiting flag after we've seen incomplete → complete cycle
-    if (
-      waitingForCompleteRef.current &&
-      complete &&
-      hasSeenIncompleteRef.current
-    ) {
-      waitingForCompleteRef.current = false;
-      hasSeenIncompleteRef.current = false;
-    }
-
-    // Find last non-placeholder item
-    let lastItem = virtualItems[virtualItems.length - 1];
-    let lastRow = rows.get(lastItem.index);
-
-    if (!lastRow) {
-      // Try to find last non-placeholder item
-      for (let i = virtualItems.length - 2; i >= 0; i--) {
-        const item = virtualItems[i];
-        const row = rows.get(item.index);
-        if (row) {
-          lastItem = item;
-          lastRow = row;
-          break;
-        }
-      }
-
-      // Skip if no non-placeholder items found
-      if (!lastRow) {
-        return;
-      }
-    }
-
-    // Convert virtualizer index to logical index
-    const lastLogicalIndex = toLogicalIndex(lastItem.index);
-    const lastDataIndex = firstRowIndex + rowsLength - 1;
-
-    // How far is the last visible item from the end of our data window?
-    const distanceFromEnd = lastDataIndex - lastLogicalIndex;
-
-    // Threshold: shift anchor when we're within 10% of page size from the end
-    // (matches useZeroVirtualizer's getNearPageEdgeThreshold)
-    const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE * 0.1);
-
-    // Trigger when near end of data window
-    // (backward auto-anchor is disabled, so no ping-pong concern)
-    if (distanceFromEnd <= nearPageEdgeThreshold) {
-      // Shift anchor forward: position anchor so LAST visible item
-      // will be at ~60% into the new window (giving 40% buffer ahead)
-      const newAnchorIndex = lastLogicalIndex - Math.ceil(PAGE_SIZE * 0.6);
-      const newAnchorRow = rowAt(newAnchorIndex);
-
-      if (newAnchorRow && newAnchorIndex !== anchorIndex) {
-        waitingForCompleteRef.current = true; // Wait for data to load before allowing opposite shift
-        setAnchorKind('forward');
-        setAnchorIndex(newAnchorIndex);
-        setStartRow(toStartRow(newAnchorRow));
-        setPermalinkID(undefined);
-      }
-    }
-  }, [
-    virtualItems,
-    atEnd,
-    firstRowIndex,
-    rowsLength,
-    toLogicalIndex,
-    rowAt,
-    anchorIndex,
-    complete,
-    autoPagingEnabled,
-    rows,
-  ]);
-
-  // Auto-shift anchor backward when scrolling near the start of the data window
-  useEffect(() => {
-    if (
-      !autoPagingEnabled ||
-      virtualItems.length === 0 ||
-      atStart ||
-      anchorKind === 'permalink' // Permalink anchors naturally have firstRowIndex < 0
-    ) {
-      return;
-    }
-
-    // Prevent ping-pong: if we're waiting for data to complete after a shift, don't shift opposite direction
-    if (waitingForCompleteRef.current && !complete) {
-      hasSeenIncompleteRef.current = true;
-      return;
-    }
-
-    // Only reset waiting flag after we've seen incomplete → complete cycle
-    if (
-      waitingForCompleteRef.current &&
-      complete &&
-      hasSeenIncompleteRef.current
-    ) {
-      waitingForCompleteRef.current = false;
-      hasSeenIncompleteRef.current = false;
-    }
-
-    // Find first non-placeholder item
-    let firstItem = virtualItems[0];
-    let firstRow = rows.get(firstItem.index);
-
-    if (!firstRow) {
-      // Try to find first non-placeholder item
-      for (let i = 1; i < virtualItems.length; i++) {
-        const item = virtualItems[i];
-        const row = rows.get(item.index);
-        if (row) {
-          firstItem = item;
-          firstRow = row;
-          break;
-        }
-      }
-
-      // Skip if no non-placeholder items found
-      if (!firstRow) {
-        return;
-      }
-    }
-
-    // Convert virtualizer index to logical index
-    const firstLogicalIndex = toLogicalIndex(firstItem.index);
-
-    // How far is the first visible item from the start of our data window?
-    const distanceFromStart = firstLogicalIndex - firstRowIndex;
-
-    // Threshold: shift anchor when we're within 10% of page size from the edge
-    const nearPageEdgeThreshold = Math.ceil(PAGE_SIZE * 0.1);
-
-    // Trigger when near start of data window
-    if (distanceFromStart <= nearPageEdgeThreshold) {
-      // Shift anchor backward: position anchor so FIRST visible item
-      // will be at ~40% into the new window (giving 40% buffer behind)
-      // For backward anchor, data goes from (anchorIndex - rowsLength) to anchorIndex
-      // So newAnchorIndex = firstLogicalIndex + 60% of page size
-      const newAnchorIndex = firstLogicalIndex + Math.ceil(PAGE_SIZE * 0.6);
-      const newAnchorRow = rowAt(newAnchorIndex);
-
-      if (newAnchorRow && newAnchorIndex !== anchorIndex) {
-        waitingForCompleteRef.current = true; // Wait for data to load before allowing opposite shift
-        setAnchorKind('backward');
-        setAnchorIndex(newAnchorIndex);
-        setStartRow(toStartRow(newAnchorRow));
-        setPermalinkID(undefined);
-      }
-    }
-  }, [
-    virtualItems,
-    atStart,
-    firstRowIndex,
-    rowsLength,
-    toLogicalIndex,
-    rowAt,
-    anchorIndex,
-    complete,
-    autoPagingEnabled,
-    anchorKind,
-    rows,
-  ]);
 
   return (
     <div
@@ -492,7 +144,7 @@ function ArrayTestAppContent() {
           Array Virtualizer Test - {ZERO_PROJECT_NAME}
         </h1>
 
-        {/* Stats */}
+        {/* Height Mode Selector */}
         <div
           style={{
             marginBottom: '20px',
@@ -501,84 +153,35 @@ function ArrayTestAppContent() {
             borderRadius: '4px',
           }}
         >
-          <div style={{marginBottom: '8px'}}>
-            <label
-              style={{
-                fontSize: '12px',
-                fontWeight: 'bold',
-                marginBottom: '4px',
-                display: 'block',
-              }}
-            >
-              Row Height Mode:
-            </label>
-            <select
-              value={heightMode}
-              onChange={e =>
-                setHeightMode(
-                  e.target.value as 'dynamic' | 'uniform' | 'non-uniform',
-                )
-              }
-              style={{
-                width: '100%',
-                padding: '4px',
-                fontSize: '12px',
-                borderRadius: '3px',
-                border: '1px solid #ccc',
-              }}
-            >
-              <option value="dynamic">Dynamic (Measured)</option>
-              <option value="uniform">Fixed Uniform</option>
-              <option value="non-uniform">Fixed Non-Uniform</option>
-            </select>
-          </div>
-          <h3 style={{margin: '0 0 8px 0', fontSize: '14px'}}>Stats</h3>
-          <div style={{fontSize: '13px'}}>
-            <div>
-              rows.length: <strong>{rows.length}</strong>
-            </div>
-            <div>
-              Window Size (rowsLength): <strong>{rowsLength}</strong>
-            </div>
-            <div>
-              Virtual Items: <strong>{virtualItems.length}</strong>
-            </div>
-            <div>
-              Total Height: <strong>{Math.round(totalSize)}px</strong>
-            </div>
-            <div>
-              Scroll Offset: <strong>{virtualizer.scrollOffset ?? 0}px</strong>
-            </div>
-            <div>
-              Complete: <strong>{complete ? 'Yes' : 'No'}</strong>
-            </div>
-            <div>
-              Empty: <strong>{rowsEmpty ? 'Yes' : 'No'}</strong>
-            </div>
-            <div>
-              At Start: <strong>{atStart ? 'Yes' : 'No'}</strong>
-            </div>
-            <div>
-              At End: <strong>{atEnd ? 'Yes' : 'No'}</strong>
-            </div>
-            <div>
-              First Row Index: <strong>{firstRowIndex}</strong>
-            </div>
-            <div>
-              Anchor Index: <strong>{anchorIndex}</strong>
-            </div>
-            <div>
-              Anchor Kind: <strong>{anchorKind}</strong>
-            </div>
-            <div>
-              Selected Row: <strong>{selectedRowIndex ?? 'None'}</strong>
-            </div>
-            {permalinkNotFound && (
-              <div style={{color: '#d32f2f', fontWeight: 'bold'}}>
-                Permalink Not Found!
-              </div>
-            )}
-          </div>
+          <label
+            style={{
+              fontSize: '12px',
+              fontWeight: 'bold',
+              marginBottom: '4px',
+              display: 'block',
+            }}
+          >
+            Row Height Mode:
+          </label>
+          <select
+            value={heightMode}
+            onChange={e =>
+              setHeightMode(
+                e.target.value as 'dynamic' | 'uniform' | 'non-uniform',
+              )
+            }
+            style={{
+              width: '100%',
+              padding: '4px',
+              fontSize: '12px',
+              borderRadius: '3px',
+              border: '1px solid #ccc',
+            }}
+          >
+            <option value="dynamic">Dynamic (Measured)</option>
+            <option value="uniform">Fixed Uniform</option>
+            <option value="non-uniform">Fixed Non-Uniform</option>
+          </select>
         </div>
 
         {/* Window Navigation */}
@@ -593,145 +196,94 @@ function ArrayTestAppContent() {
           <h3 style={{margin: '0 0 8px 0', fontSize: '14px'}}>
             Window Navigation
           </h3>
-          <div style={{fontSize: '11px', color: '#666', marginBottom: '8px'}}>
-            Click a row to select it as anchor, then choose direction.
-          </div>
-          <div style={{marginBottom: '8px'}}>
-            <button
-              onClick={() => {
-                hasPositionedPermalinkRef.current = false;
-                setAutoPagingEnabled(false);
-                setAnchorKind('permalink');
-                setAnchorIndex(0);
-                setPermalinkID('3130');
-                setStartRow(undefined);
-                setSelectedRowIndex(null);
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              if (permalinkInput.trim()) {
+                setPermalinkID(permalinkInput);
+                setNotFoundPermalink(undefined);
+              }
+            }}
+            style={{marginBottom: '8px'}}
+          >
+            <label
+              style={{
+                fontSize: '12px',
+                fontWeight: 'bold',
+                marginBottom: '4px',
+                display: 'block',
               }}
+            >
+              Permalink ID:
+            </label>
+            <input
+              type="text"
+              value={permalinkInput}
+              onChange={e => setPermalinkInput(e.target.value)}
+              placeholder="Enter ID (e.g., 3130)"
               style={{
                 width: '100%',
                 padding: '8px',
                 fontSize: '13px',
-                backgroundColor: '#9c27b0',
-                color: '#fff',
-                border: 'none',
+                border: '1px solid #ccc',
                 borderRadius: '3px',
-                cursor: 'pointer',
                 marginBottom: '8px',
+                boxSizing: 'border-box',
               }}
-            >
-              Go to Permalink #3130
-            </button>
-            <button
-              onClick={() => {
-                setAnchorKind('forward');
-                setAnchorIndex(0);
-                setStartRow(undefined);
-                setPermalinkID(undefined);
-                setSelectedRowIndex(null);
-              }}
-              style={{
-                width: '100%',
-                padding: '8px',
-                fontSize: '13px',
-                backgroundColor: '#28a745',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '3px',
-                cursor: 'pointer',
-                marginBottom: '8px',
-              }}
-            >
-              Anchor at Top
-            </button>
-            <button
-              onClick={() => {
-                if (selectedRowIndex === null) return;
-                // Use the previous row as anchor since anchor is exclusive
-                const prevIndex = selectedRowIndex - 1;
-                const prevRow = rowAt(prevIndex);
-                setAnchorKind('forward');
-                setPermalinkID(undefined);
-                if (prevRow) {
-                  setAnchorIndex(prevIndex);
-                  setStartRow(toStartRow(prevRow));
-                } else {
-                  // No previous row means we're at the start
-                  setAnchorIndex(0);
-                  setStartRow(undefined);
-                }
-              }}
-              disabled={selectedRowIndex === null}
-              style={{
-                width: '100%',
-                padding: '8px',
-                fontSize: '13px',
-                backgroundColor: selectedRowIndex === null ? '#ccc' : '#0066cc',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '3px',
-                cursor: selectedRowIndex === null ? 'not-allowed' : 'pointer',
-                marginBottom: '8px',
-              }}
-            >
-              Anchor Forward from Selected
-            </button>
-            <button
-              onClick={() => {
-                if (selectedRowIndex === null) return;
-                // Use the next row as anchor since anchor is exclusive
-                const nextIndex = selectedRowIndex + 1;
-                const nextRow = rowAt(nextIndex);
-                if (nextRow) {
-                  setAnchorKind('backward');
+            />
+            <div style={{display: 'flex', gap: '8px', marginBottom: '8px'}}>
+              <button
+                type="submit"
+                disabled={!permalinkInput.trim()}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  fontSize: '13px',
+                  backgroundColor: permalinkInput.trim() ? '#9c27b0' : '#ccc',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: permalinkInput.trim() ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Go
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setPermalinkID(undefined);
-                  setAnchorIndex(nextIndex);
-                  setStartRow(toStartRow(nextRow));
-                }
-              }}
-              disabled={selectedRowIndex === null}
+                  setPermalinkInput('');
+                  setNotFoundPermalink(undefined);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  backgroundColor: '#666',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </form>
+          {notFoundPermalink && (
+            <div
               style={{
-                width: '100%',
+                marginTop: '8px',
                 padding: '8px',
-                fontSize: '13px',
-                backgroundColor: selectedRowIndex === null ? '#ccc' : '#0066cc',
-                color: '#fff',
-                border: 'none',
+                backgroundColor: '#fff3cd',
+                color: '#856404',
+                fontSize: '12px',
                 borderRadius: '3px',
-                cursor: selectedRowIndex === null ? 'not-allowed' : 'pointer',
-                marginBottom: '8px',
+                border: '1px solid #ffeaa7',
               }}
             >
-              Anchor Backward from Selected
-            </button>
-            <button
-              onClick={() => {
-                setAnchorKind('forward');
-                setAnchorIndex(0);
-                setStartRow(undefined);
-                setPermalinkID(undefined);
-                setSelectedRowIndex(null);
-              }}
-              disabled={anchorIndex === 0 && selectedRowIndex === null}
-              style={{
-                width: '100%',
-                padding: '8px',
-                fontSize: '13px',
-                backgroundColor:
-                  anchorIndex === 0 && selectedRowIndex === null
-                    ? '#ccc'
-                    : '#6c757d',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '3px',
-                cursor:
-                  anchorIndex === 0 && selectedRowIndex === null
-                    ? 'not-allowed'
-                    : 'pointer',
-              }}
-            >
-              Reset to Start
-            </button>
-          </div>
+              Permalink not found: {notFoundPermalink}
+            </div>
+          )}
         </div>
       </div>
 
@@ -745,17 +297,51 @@ function ArrayTestAppContent() {
             flexShrink: 0,
           }}
         >
-          <h2 style={{margin: 0, fontSize: '16px'}}>
-            Virtual List ({rowsLength} rows)
-          </h2>
+          <h2 style={{margin: 0, fontSize: '16px'}}>Virtual List</h2>
         </div>
+        {notFoundPermalink && (
+          <div
+            style={{
+              padding: '12px 16px',
+              backgroundColor: '#fff3cd',
+              color: '#856404',
+              borderBottom: '2px solid #ffc107',
+              fontSize: '14px',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>
+              ⚠️ Permalink not found: <strong>{notFoundPermalink}</strong>
+            </span>
+            <button
+              onClick={() => {
+                setPermalinkInput('');
+                setNotFoundPermalink(undefined);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#856404',
+                cursor: 'pointer',
+                fontSize: '18px',
+                padding: '0 4px',
+                lineHeight: 1,
+              }}
+              title="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
         <div
           ref={parentRef}
           style={{
             flex: 1,
             overflow: 'auto',
             position: 'relative',
-            // Disable browser scroll anchoring - virtualizer handles scroll stability
             overflowAnchor: 'none',
           }}
         >
@@ -774,7 +360,7 @@ function ArrayTestAppContent() {
           ) : (
             <div
               style={{
-                height: `${totalSize}px`,
+                height: `${virtualizer.getTotalSize()}px`,
                 width: '100%',
                 position: 'relative',
               }}
@@ -789,10 +375,7 @@ function ArrayTestAppContent() {
                 }}
               >
                 {virtualItems.map(virtualItem => {
-                  const issue = rows.get(virtualItem.index);
-                  const logicalIndex = toLogicalIndex(virtualItem.index);
-                  const isSelected = selectedRowIndex === logicalIndex;
-
+                  const issue = rowAt(virtualItem.index);
                   return (
                     <div
                       key={virtualItem.key}
@@ -802,15 +385,10 @@ function ArrayTestAppContent() {
                           ? virtualizer.measureElement
                           : undefined
                       }
-                      onClick={() => {
-                        if (issue) {
-                          setSelectedRowIndex(logicalIndex);
-                        }
-                      }}
                       style={{
                         padding: '8px 16px',
                         borderBottom: '1px solid #eee',
-                        backgroundColor: isSelected ? '#e3f2fd' : '#fff',
+                        backgroundColor: '#fff',
                         cursor: issue ? 'pointer' : 'default',
                         boxSizing: 'border-box',
                         ...(!issue

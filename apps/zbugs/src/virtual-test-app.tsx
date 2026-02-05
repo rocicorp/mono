@@ -120,7 +120,7 @@ function VirtualList() {
   const {virtualizer, rowAt, complete, rowsEmpty, permalinkNotFound, total} =
     useZeroVirtualizer({
       estimateSize,
-      getScrollElement: useCallback(() => listRef.current, [listRef.current]),
+      getScrollElement: useCallback(() => listRef.current, []),
 
       getRowKey,
 
