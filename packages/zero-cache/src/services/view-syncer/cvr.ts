@@ -719,6 +719,27 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     for (const id of queryIDs) {
       this.#removedOrExecutedQueryIDs.add(id);
     }
+
+    // Retroactively strip old refCounts for the newly-marked query IDs
+    // from rows already processed by received() during the push phase.
+    // Without this, the previouslyReceived path in received() would
+    // skip stripping, leaving stale refCounts that cause double-counting.
+    for (const [rowID, refCounts] of this.#receivedRows) {
+      if (refCounts === null) {
+        continue;
+      }
+      let changed = false;
+      for (const id of queryIDs) {
+        if (id in refCounts) {
+          delete refCounts[id];
+          changed = true;
+        }
+      }
+      if (changed && !Object.values(refCounts).some(v => v > 0)) {
+        this.#receivedRows.set(rowID, null);
+      }
+    }
+
     // Kick off async lookup of existing rows (awaited by deleteUnreferencedRows).
     this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
     void this.#existingRows.then(() => {});
