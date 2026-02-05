@@ -314,7 +314,12 @@ export class PipelineDriver {
     return total;
   }
 
-  #resolveScalarSubqueries(ast: AST): AST {
+  #resolveScalarSubqueries(ast: AST): {
+    ast: AST;
+    companionRows: {table: string; row: Row}[];
+  } {
+    const companionRows: {table: string; row: Row}[] = [];
+
     const executor = (
       subqueryAST: AST,
       childField: string,
@@ -336,6 +341,7 @@ export class PipelineDriver {
         if (!node) {
           return undefined;
         }
+        companionRows.push({table: subqueryAST.table, row: node.row as Row});
         return (node.row[childField] as LiteralValue) ?? null;
       } finally {
         input.destroy();
@@ -347,7 +353,7 @@ export class PipelineDriver {
       this.#tableSpecs,
       executor,
     );
-    return resolved;
+    return {ast: resolved, companionRows};
   }
 
   /**
@@ -392,7 +398,8 @@ export class PipelineDriver {
       timer,
     };
     try {
-      const resolvedQuery = this.#resolveScalarSubqueries(query);
+      const {ast: resolvedQuery, companionRows} =
+        this.#resolveScalarSubqueries(query);
 
       const input = buildPipeline(
         resolvedQuery,
@@ -426,6 +433,17 @@ export class PipelineDriver {
       });
 
       yield* hydrateInternal(input, queryID, must(this.#primaryKeys));
+
+      for (const {table, row} of companionRows) {
+        const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+        yield {
+          type: 'add',
+          queryID,
+          table,
+          rowKey: getRowKey(primaryKey, row),
+          row,
+        } as RowChange;
+      }
 
       const hydrationTimeMs = timer.totalElapsed();
       if (runtimeDebugFlags.trackRowCountsVended) {

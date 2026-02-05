@@ -1839,6 +1839,20 @@ describe('view-syncer/pipeline-driver', () => {
           "table": "issues",
           "type": "add",
         },
+        {
+          "queryID": "queryScalar",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
       ]
     `);
 
@@ -1936,6 +1950,20 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryScalarAnd",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
           "type": "add",
         },
       ]
