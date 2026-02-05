@@ -28,6 +28,8 @@ function ArrayTestAppContent() {
   const [notFoundPermalink, setNotFoundPermalink] = useState<
     string | undefined
   >(undefined);
+  const [capturedState, setCapturedState] = useState<string | null>(null);
+  const [restoreInput, setRestoreInput] = useState<string>('');
 
   const listContextParams = useMemo(
     () => ({
@@ -75,41 +77,47 @@ function ArrayTestAppContent() {
     [listContextParams],
   );
 
-  const {virtualizer, rowAt, rowsEmpty, permalinkNotFound} =
-    useArrayVirtualizer<RowData, IssueRowSort>({
-      pageSize: PAGE_SIZE,
-      placeholderHeight: PLACEHOLDER_HEIGHT,
-      getPageQuery,
-      getSingleQuery,
-      toStartRow,
-      initialPermalinkID: permalinkID,
+  const {
+    virtualizer,
+    rowAt,
+    rowsEmpty,
+    permalinkNotFound,
+    anchorState,
+    restoreAnchorState,
+  } = useArrayVirtualizer<RowData, IssueRowSort>({
+    pageSize: PAGE_SIZE,
+    placeholderHeight: PLACEHOLDER_HEIGHT,
+    getPageQuery,
+    getSingleQuery,
+    toStartRow,
+    initialPermalinkID: permalinkID,
 
-      estimateSize: useCallback(
-        (row: RowData | undefined) => {
-          if (!row) {
-            return PLACEHOLDER_HEIGHT;
+    estimateSize: useCallback(
+      (row: RowData | undefined) => {
+        if (!row) {
+          return PLACEHOLDER_HEIGHT;
+        }
+
+        if (heightMode === 'uniform') {
+          return UNIFORM_ROW_HEIGHT;
+        }
+
+        if (heightMode === 'non-uniform') {
+          const baseHeight = 120;
+          if (!row.description) {
+            return baseHeight;
           }
+          const descriptionLines = Math.ceil(row.description.length / 150);
+          const descriptionHeight = descriptionLines * 20;
+          return baseHeight + descriptionHeight;
+        }
 
-          if (heightMode === 'uniform') {
-            return UNIFORM_ROW_HEIGHT;
-          }
-
-          if (heightMode === 'non-uniform') {
-            const baseHeight = 120;
-            if (!row.description) {
-              return baseHeight;
-            }
-            const descriptionLines = Math.ceil(row.description.length / 150);
-            const descriptionHeight = descriptionLines * 20;
-            return baseHeight + descriptionHeight;
-          }
-
-          return DEFAULT_HEIGHT;
-        },
-        [heightMode],
-      ),
-      getScrollElement: useCallback(() => parentRef.current, []),
-    });
+        return DEFAULT_HEIGHT;
+      },
+      [heightMode],
+    ),
+    getScrollElement: useCallback(() => parentRef.current, []),
+  });
 
   // Reset permalink if not found (but keep the input value)
   useEffect(() => {
@@ -285,6 +293,169 @@ function ArrayTestAppContent() {
             </div>
           )}
         </div>
+
+        {/* Scroll Anchor State */}
+        <div
+          style={{
+            marginBottom: '20px',
+            padding: '12px',
+            backgroundColor: '#fff',
+            borderRadius: '4px',
+          }}
+        >
+          <h3 style={{margin: '0 0 8px 0', fontSize: '14px'}}>
+            Scroll Anchor State
+          </h3>
+          <div style={{fontSize: '12px', fontFamily: 'monospace'}}>
+            <div style={{marginBottom: '4px'}}>
+              <strong>anchorIndex:</strong> {anchorState.anchorIndex}
+            </div>
+            <div style={{marginBottom: '4px'}}>
+              <strong>anchorKind:</strong>{' '}
+              <span
+                style={{
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  backgroundColor:
+                    anchorState.anchorKind === 'permalink'
+                      ? '#9c27b0'
+                      : anchorState.anchorKind === 'forward'
+                        ? '#4caf50'
+                        : '#ff9800',
+                  color: '#fff',
+                  fontSize: '11px',
+                }}
+              >
+                {anchorState.anchorKind}
+              </span>
+            </div>
+            {anchorState.anchorKind === 'permalink' &&
+              anchorState.permalinkID && (
+                <div style={{marginBottom: '4px'}}>
+                  <strong>permalinkID:</strong> {anchorState.permalinkID}
+                </div>
+              )}
+            <div style={{marginBottom: '4px'}}>
+              <strong>startRow:</strong>{' '}
+              {anchorState.startRow
+                ? JSON.stringify(anchorState.startRow)
+                : 'null'}
+            </div>
+            <div style={{marginBottom: '4px'}}>
+              <strong>scrollOffset:</strong> {anchorState.scrollOffset}px
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const state = {
+                anchorIndex: anchorState.anchorIndex,
+                anchorKind: anchorState.anchorKind,
+                ...(anchorState.anchorKind === 'permalink' &&
+                anchorState.permalinkID
+                  ? {permalinkID: anchorState.permalinkID}
+                  : {}),
+                startRow: anchorState.startRow,
+                scrollOffset: anchorState.scrollOffset,
+              };
+              const stateStr = JSON.stringify(state, null, 2);
+              setCapturedState(stateStr);
+              setRestoreInput(stateStr);
+            }}
+            style={{
+              width: '100%',
+              padding: '8px',
+              fontSize: '13px',
+              backgroundColor: '#2196f3',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              marginTop: '8px',
+            }}
+          >
+            📋 Capture State
+          </button>
+          {capturedState && (
+            <div
+              style={{
+                marginTop: '8px',
+                padding: '8px',
+                backgroundColor: '#e8f5e9',
+                border: '1px solid #4caf50',
+                borderRadius: '3px',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                maxHeight: '150px',
+                overflowY: 'auto',
+              }}
+            >
+              {capturedState}
+            </div>
+          )}
+
+          {/* Restore State */}
+          <div
+            style={{
+              marginTop: '16px',
+              paddingTop: '16px',
+              borderTop: '1px solid #e0e0e0',
+            }}
+          >
+            <label
+              style={{
+                fontSize: '12px',
+                fontWeight: 'bold',
+                marginBottom: '4px',
+                display: 'block',
+              }}
+            >
+              Restore State:
+            </label>
+            <textarea
+              value={restoreInput}
+              onChange={e => setRestoreInput(e.target.value)}
+              placeholder="Paste captured state JSON here..."
+              style={{
+                width: '100%',
+                padding: '8px',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                border: '1px solid #ccc',
+                borderRadius: '3px',
+                marginBottom: '8px',
+                boxSizing: 'border-box',
+                minHeight: '80px',
+                resize: 'vertical',
+              }}
+            />
+            <button
+              onClick={() => {
+                try {
+                  const state = JSON.parse(restoreInput);
+                  restoreAnchorState(state);
+                  setCapturedState(null);
+                } catch (err) {
+                  alert('Invalid JSON: ' + (err as Error).message);
+                }
+              }}
+              disabled={!restoreInput.trim()}
+              style={{
+                width: '100%',
+                padding: '8px',
+                fontSize: '13px',
+                backgroundColor: restoreInput.trim() ? '#ff9800' : '#ccc',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: restoreInput.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              🔄 Restore State
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Virtual List */}
@@ -376,6 +547,12 @@ function ArrayTestAppContent() {
               >
                 {virtualItems.map(virtualItem => {
                   const issue = rowAt(virtualItem.index);
+                  const isPermalinkRow =
+                    permalinkID &&
+                    issue &&
+                    (issue.id === permalinkID ||
+                      (issue.shortID !== null &&
+                        issue.shortID.toString() === permalinkID));
                   return (
                     <div
                       key={virtualItem.key}
@@ -388,7 +565,7 @@ function ArrayTestAppContent() {
                       style={{
                         padding: '8px 16px',
                         borderBottom: '1px solid #eee',
-                        backgroundColor: '#fff',
+                        backgroundColor: isPermalinkRow ? '#e1bee7' : '#fff',
                         cursor: issue ? 'pointer' : 'default',
                         boxSizing: 'border-box',
                         ...(!issue
