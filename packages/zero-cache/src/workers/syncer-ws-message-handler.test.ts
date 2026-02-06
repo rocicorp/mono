@@ -293,6 +293,61 @@ describe('SyncerWsMessageHandler push auth handling', () => {
     );
   });
 
+  test('changeDesiredQueries clears auth when auth is null', async () => {
+    const connectionToken = 'opaque-connection-token';
+    const viewSyncerWithChange = {
+      changeDesiredQueries: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ViewSyncer;
+
+    const handler = new SyncerWsMessageHandler(
+      lc,
+      createConnectParams(),
+      {type: 'opaque', raw: connectionToken},
+      viewSyncerWithChange,
+      mutagen,
+      pusher,
+      undefined,
+    );
+
+    await handler.handleMessage([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [],
+        auth: null,
+      },
+    ]);
+
+    await handler.handleMessage([
+      'push',
+      {
+        clientGroupID: 'test-client-group',
+        mutations: [
+          {
+            type: 'custom',
+            id: 1,
+            clientID: 'test-client',
+            name: 'testMutation',
+            args: [],
+            timestamp: Date.now(),
+          },
+        ],
+        pushVersion: 1,
+        schemaVersion: 1,
+        timestamp: Date.now(),
+        requestID: 'req-1',
+      },
+    ]);
+
+    expect(viewSyncerWithChange.changeDesiredQueries).toHaveBeenCalledTimes(1);
+    expect(pusher.enqueuePush).toHaveBeenCalledWith(
+      'test-client',
+      expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
+    );
+  });
+
   test('changeDesiredQueries sets opaque auth when unauthenticated', async () => {
     const freshToken = 'opaque-refresh-token';
     const viewSyncerWithChange = {
@@ -358,6 +413,48 @@ describe('SyncerWsMessageHandler push auth handling', () => {
         },
       ]),
     ).rejects.toThrow('Only JWT auth is supported for CRUD mutations');
+  });
+
+  test('push clears auth when auth is null', async () => {
+    const handler = new SyncerWsMessageHandler(
+      lc,
+      createConnectParams(),
+      {type: 'opaque', raw: 'opaque-token'},
+      viewSyncer,
+      mutagen,
+      pusher,
+      undefined,
+    );
+
+    await handler.handleMessage([
+      'push',
+      {
+        clientGroupID: 'test-client-group',
+        mutations: [
+          {
+            type: 'custom',
+            id: 1,
+            clientID: 'test-client',
+            name: 'testMutation',
+            args: [],
+            timestamp: Date.now(),
+          },
+        ],
+        pushVersion: 1,
+        schemaVersion: 1,
+        timestamp: Date.now(),
+        requestID: 'req-1',
+        auth: null,
+      },
+    ]);
+
+    expect(pusher.enqueuePush).toHaveBeenCalledWith(
+      'test-client',
+      expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
+    );
   });
 
   test('changeDesiredQueries auth refresh updates push fallback token', async () => {

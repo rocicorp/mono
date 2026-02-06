@@ -1515,6 +1515,29 @@ describe('initConnection', () => {
     // changedDesiredQueries has been sent.
     expect(mockSocket.messages.length).toEqual(1);
   });
+
+  test('changeDesiredQueries sends auth null when auth is cleared', async () => {
+    const z = zeroForTest();
+    await z.triggerConnected();
+
+    const mockSocket = await z.socket;
+    mockSocket.messages.length = 0;
+
+    await z.connection.connect({auth: null});
+
+    expect(mockSocket.messages).toHaveLength(1);
+    const msg = valita.parse(
+      JSON.parse(mockSocket.messages[0]),
+      changeDesiredQueriesMessageSchema,
+    );
+    expect(msg).toEqual([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [],
+        auth: null,
+      },
+    ]);
+  });
 });
 
 test('pusher sends one mutation per push message', async () => {
