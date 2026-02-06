@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1769165482611,
+  "lastUpdate": 1770347985300,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55101,6 +55101,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31967,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "aaron@aaronboodman.com",
+            "name": "Aaron Boodman",
+            "username": "aboodman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ffd8fed9991622d3b56f8817ee4d689b311cfadc",
+          "message": "fix(replicache): prevent IDB collection from deleting active databases (#5499)\n\nSee https://discord.com/channels/830183651022471199/1466749773334974600\n\nSee also https://github.com/rocicorp/mono/pull/5321 which was related to\nthis same problem.\n\nThe IDB database garbage collector was using `lastOpenedTimestampMS` to\ndetermine if a database was stale enough to collect. However, this\ntimestamp was only set once when the database was opened, not updated\nduring the database's lifetime. For long-running tabs (>48 hours), the\ncollector would incorrectly mark the database as stale and attempt to\ndelete all its clients—including the currently active one—triggering\n\"cannot delete self in onClientsDeleted\" assertion failures.\n\nThe fix removes `lastOpenedTimestampMS` entirely and instead checks\nclient `heartbeatTimestampMs` to determine if a database has active\nclients. Since clients update their heartbeat every 60 seconds, this\nprovides an accurate and already-maintained signal for database\nactivity. This eliminates redundant state and makes the collection logic\nconsistent with how client GC already works.\n\n- Remove `lastOpenedTimestampMS` check from collection logic\n- Add heartbeat-based activity check in\n`canDatabaseBeCollectedAndGetDeletedClientIDs`\n- Deprecate `lastOpenedTimestampMS` field (kept for backwards compat)\n- Add regression test for the fix",
+          "timestamp": "2026-02-05T17:17:52-10:00",
+          "tree_id": "a42ec1a35db68cb04929387656dcdfb7a08620bc",
+          "url": "https://github.com/rocicorp/mono/commit/ffd8fed9991622d3b56f8817ee4d689b311cfadc"
+        },
+        "date": 1770347972704,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 304379,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54841,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111701,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31951,
             "unit": "bytes"
           }
         ]
