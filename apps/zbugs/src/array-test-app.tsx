@@ -1,15 +1,9 @@
 import {useZero} from '@rocicorp/zero/react';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {
-  queries,
-  type IssueRowSort,
-  type Issues,
-  type ListContextParams,
-} from '../shared/queries.js';
+import {queries, type IssueRowSort, type Issues} from '../shared/queries.js';
 import {ZERO_PROJECT_NAME} from '../shared/schema.js';
 import {LoginProvider} from './components/login-provider.js';
 import {useArrayVirtualizer} from './hooks/use-array-virtualizer.js';
-import {useHash} from './hooks/use-hash.ts';
 import {useLogin} from './hooks/use-login.js';
 import {ZeroInit} from './zero-init.js';
 
@@ -29,17 +23,13 @@ const toStartRow = (row: {id: string; modified: number; created: number}) => ({
 function ArrayTestAppContent() {
   const z = useZero();
 
-  const hash = useHash();
-
-  const permalinkID = useMemo(
-    () => (hash.startsWith('issue-') ? hash.slice(6) : null),
-    [hash],
-  );
-
+  const [permalinkID, setPermalinkID] = useState<string | undefined>(undefined);
   const [permalinkInput, setPermalinkInput] = useState('3130');
   const [notFoundPermalink, setNotFoundPermalink] = useState<
     string | undefined
   >(undefined);
+  const [capturedState, setCapturedState] = useState<string | null>(null);
+  const [restoreInput, setRestoreInput] = useState<string>('');
 
   const listContextParams = useMemo(
     () => ({
@@ -51,7 +41,7 @@ function ArrayTestAppContent() {
       labels: [],
       open: null,
       textFilter: null,
-      permalinkID,
+      permalinkID: permalinkID ?? null,
     }),
     [permalinkID],
   );
@@ -87,65 +77,53 @@ function ArrayTestAppContent() {
     [listContextParams],
   );
 
-  // const [historyScrollState, setHistoryScrollState] =
-  //   useArrayPermalinkState<IssueRowSort>();
+  const {
+    virtualizer,
+    rowAt,
+    rowsEmpty,
+    permalinkNotFound,
+    scrollState,
+    restoreScrollState,
+  } = useArrayVirtualizer<RowData, IssueRowSort>({
+    pageSize: PAGE_SIZE,
+    placeholderHeight: PLACEHOLDER_HEIGHT,
+    getPageQuery,
+    getSingleQuery,
+    toStartRow,
+    initialPermalinkID: permalinkID,
 
-  // console.log('ArrayTestAppContent render', {historyScrollState});
-  const {virtualizer, rowAt, rowsEmpty, permalinkNotFound} =
-    useArrayVirtualizer<RowData, IssueRowSort, ListContextParams>({
-      listContextParams: listContextParams,
-      pageSize: PAGE_SIZE,
-      placeholderHeight: PLACEHOLDER_HEIGHT,
-      getPageQuery,
-      getSingleQuery,
-      toStartRow,
-      permalinkID,
-      // scrollState: historyScrollState,
-      // onScrollStateChange: setHistoryScrollState,
+    estimateSize: useCallback(
+      (row: RowData | undefined) => {
+        if (!row) {
+          return PLACEHOLDER_HEIGHT;
+        }
 
-      estimateRowSize: useCallback(
-        (row: RowData | undefined) => {
-          if (!row) {
-            return PLACEHOLDER_HEIGHT;
+        if (heightMode === 'uniform') {
+          return UNIFORM_ROW_HEIGHT;
+        }
+
+        if (heightMode === 'non-uniform') {
+          const baseHeight = 120;
+          if (!row.description) {
+            return baseHeight;
           }
+          const descriptionLines = Math.ceil(row.description.length / 150);
+          const descriptionHeight = descriptionLines * 20;
+          return baseHeight + descriptionHeight;
+        }
 
-          if (heightMode === 'uniform') {
-            return UNIFORM_ROW_HEIGHT;
-          }
-
-          if (heightMode === 'non-uniform') {
-            const baseHeight = 120;
-            if (!row.description) {
-              return baseHeight;
-            }
-            const descriptionLines = Math.ceil(row.description.length / 150);
-            const descriptionHeight = descriptionLines * 20;
-            return baseHeight + descriptionHeight;
-          }
-
-          return DEFAULT_HEIGHT;
-        },
-        [heightMode],
-      ),
-      getScrollElement: useCallback(() => parentRef.current, []),
-    });
-
-  // Sync input field with hash changes
-  useEffect(() => {
-    if (permalinkID) {
-      setPermalinkInput(permalinkID);
-    }
-  }, [permalinkID]);
+        return DEFAULT_HEIGHT;
+      },
+      [heightMode],
+    ),
+    getScrollElement: useCallback(() => parentRef.current, []),
+  });
 
   // Reset permalink if not found (but keep the input value)
   useEffect(() => {
     if (permalinkNotFound && permalinkID) {
       setNotFoundPermalink(permalinkID);
-      window.history.replaceState(
-        null,
-        '',
-        window.location.pathname + window.location.search,
-      );
+      setPermalinkID(undefined);
     }
   }, [permalinkNotFound, permalinkID]);
 
@@ -230,7 +208,7 @@ function ArrayTestAppContent() {
             onSubmit={e => {
               e.preventDefault();
               if (permalinkInput.trim()) {
-                window.location.hash = `issue-${permalinkInput}`;
+                setPermalinkID(permalinkInput);
                 setNotFoundPermalink(undefined);
               }
             }}
@@ -281,11 +259,7 @@ function ArrayTestAppContent() {
               <button
                 type="button"
                 onClick={() => {
-                  window.history.replaceState(
-                    null,
-                    '',
-                    window.location.pathname + window.location.search,
-                  );
+                  setPermalinkID(undefined);
                   setPermalinkInput('');
                   setNotFoundPermalink(undefined);
                 }}
@@ -318,6 +292,162 @@ function ArrayTestAppContent() {
               Permalink not found: {notFoundPermalink}
             </div>
           )}
+        </div>
+
+        {/* Scroll Anchor State */}
+        <div
+          style={{
+            marginBottom: '20px',
+            padding: '12px',
+            backgroundColor: '#fff',
+            borderRadius: '4px',
+          }}
+        >
+          <h3 style={{margin: '0 0 8px 0', fontSize: '14px'}}>
+            Scroll Anchor State
+          </h3>
+          <div style={{fontSize: '12px', fontFamily: 'monospace'}}>
+            <div style={{marginBottom: '4px'}}>
+              <strong>anchor.index:</strong> {scrollState.anchor.index}
+            </div>
+            <div style={{marginBottom: '4px'}}>
+              <strong>anchor.kind:</strong>{' '}
+              <span
+                style={{
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  backgroundColor:
+                    scrollState.anchor.kind === 'permalink'
+                      ? '#9c27b0'
+                      : scrollState.anchor.kind === 'forward'
+                        ? '#4caf50'
+                        : '#ff9800',
+                  color: '#fff',
+                  fontSize: '11px',
+                }}
+              >
+                {scrollState.anchor.kind}
+              </span>
+            </div>
+            {scrollState.anchor.kind === 'permalink' && (
+              <div style={{marginBottom: '4px'}}>
+                <strong>anchor.permalinkID:</strong>{' '}
+                {scrollState.anchor.permalinkID}
+              </div>
+            )}
+            {(scrollState.anchor.kind === 'forward' ||
+              scrollState.anchor.kind === 'backward') && (
+              <div style={{marginBottom: '4px'}}>
+                <strong>anchor.startRow:</strong>{' '}
+                {scrollState.anchor.startRow
+                  ? JSON.stringify(scrollState.anchor.startRow)
+                  : 'null'}
+              </div>
+            )}
+            <div style={{marginBottom: '4px'}}>
+              <strong>scrollOffset:</strong> {scrollState.scrollOffset}px
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const stateStr = JSON.stringify(scrollState, null, 2);
+              setCapturedState(stateStr);
+              setRestoreInput(stateStr);
+            }}
+            style={{
+              width: '100%',
+              padding: '8px',
+              fontSize: '13px',
+              backgroundColor: '#2196f3',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              marginTop: '8px',
+            }}
+          >
+            📋 Capture State
+          </button>
+          {capturedState && (
+            <div
+              style={{
+                marginTop: '8px',
+                padding: '8px',
+                backgroundColor: '#e8f5e9',
+                border: '1px solid #4caf50',
+                borderRadius: '3px',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                maxHeight: '150px',
+                overflowY: 'auto',
+              }}
+            >
+              {capturedState}
+            </div>
+          )}
+
+          {/* Restore State */}
+          <div
+            style={{
+              marginTop: '16px',
+              paddingTop: '16px',
+              borderTop: '1px solid #e0e0e0',
+            }}
+          >
+            <label
+              style={{
+                fontSize: '12px',
+                fontWeight: 'bold',
+                marginBottom: '4px',
+                display: 'block',
+              }}
+            >
+              Restore State:
+            </label>
+            <textarea
+              value={restoreInput}
+              onChange={e => setRestoreInput(e.target.value)}
+              placeholder="Paste captured state JSON here..."
+              style={{
+                width: '100%',
+                padding: '8px',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                border: '1px solid #ccc',
+                borderRadius: '3px',
+                marginBottom: '8px',
+                boxSizing: 'border-box',
+                minHeight: '80px',
+                resize: 'vertical',
+              }}
+            />
+            <button
+              onClick={() => {
+                try {
+                  const state = JSON.parse(restoreInput);
+                  restoreScrollState(state);
+                  setCapturedState(null);
+                } catch (err) {
+                  alert('Invalid JSON: ' + (err as Error).message);
+                }
+              }}
+              disabled={!restoreInput.trim()}
+              style={{
+                width: '100%',
+                padding: '8px',
+                fontSize: '13px',
+                backgroundColor: restoreInput.trim() ? '#ff9800' : '#ccc',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: restoreInput.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              🔄 Restore State
+            </button>
+          </div>
         </div>
       </div>
 
