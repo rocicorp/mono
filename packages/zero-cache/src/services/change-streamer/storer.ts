@@ -375,6 +375,8 @@ export class Storer implements Service {
       // msgType === 'change'
       const [_, watermark, json, change] = msg;
       const tag = change?.tag;
+      this.#approximateQueuedBytes -= json.length;
+
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
         const {promise, resolve, reject} = resolver<ReplicationState>();
@@ -423,7 +425,6 @@ export class Storer implements Service {
         // very large transactions in order to avoid memory blowup.
         await processed;
       }
-      this.#approximateQueuedBytes -= json.length;
       this.#maybeReleaseBackPressure();
 
       if (tag === 'commit') {
