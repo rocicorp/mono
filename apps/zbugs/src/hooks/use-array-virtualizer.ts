@@ -2,21 +2,28 @@ import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   useRows,
+  type Anchor,
   type GetPageQuery,
   type GetSingleQuery,
 } from '../../../../packages/zero-react/src/use-rows.js';
 
-export interface UseArrayVirtualizerOptions<T, TSort> {
+export interface UseArrayVirtualizerOptions<T, TSort, TListContextParams> {
+  getScrollElement: () => HTMLElement | null;
+
+  debug?: boolean | undefined;
+  overscan?: number | undefined;
+
   pageSize: number;
   placeholderHeight: number;
-  estimateSize: (row: T | undefined, index: number) => number;
-  getScrollElement: () => HTMLElement | null;
+  estimateRowSize: (row: T | undefined, index: number) => number;
+  listContextParams: TListContextParams;
   getPageQuery: GetPageQuery<T, TSort>;
   getSingleQuery: GetSingleQuery<T>;
   toStartRow: (row: T) => TSort;
-  initialPermalinkID?: string | undefined;
-  debug?: boolean | undefined;
-  overscan?: number | undefined;
+  permalinkID?: string | undefined | null;
+  scrollState?: ScrollRestorationState<TSort> | null | undefined;
+  onScrollStateChange?: (state: ScrollRestorationState<TSort>) => void;
+  /** Parameters that define the list's query context (filters, sort order, etc.) */
 }
 
 export type ScrollRestorationState<TSort> = {
@@ -24,37 +31,14 @@ export type ScrollRestorationState<TSort> = {
   scrollOffset: number;
 };
 
-export interface UseArrayVirtualizerReturn<T, TSort> {
+export interface UseArrayVirtualizerReturn<T> {
   virtualizer: Virtualizer<HTMLElement, Element>;
   rowAt: (index: number) => T | undefined;
   rowsEmpty: boolean;
   permalinkNotFound: boolean;
-  scrollState: ScrollRestorationState<TSort>;
-  restoreScrollState: (state: ScrollRestorationState<TSort>) => void;
 }
 
-type ForwardAnchorState<TSort> = {
-  kind: 'forward';
-  index: number;
-  startRow: TSort | undefined;
-};
-
-type BackwardAnchorState<TSort> = {
-  kind: 'backward';
-  index: number;
-  startRow: TSort;
-};
-
-type PermalinkAnchorState = {
-  kind: 'permalink';
-  index: number;
-  permalinkID: string;
-};
-
-type AnchorState<TSort> =
-  | ForwardAnchorState<TSort>
-  | BackwardAnchorState<TSort>
-  | PermalinkAnchorState;
+type AnchorState<TSort> = Anchor<TSort>;
 
 const anchorsEqual = <TSort>(a: AnchorState<TSort>, b: AnchorState<TSort>) => {
   if (a.index !== b.index) {
@@ -62,7 +46,7 @@ const anchorsEqual = <TSort>(a: AnchorState<TSort>, b: AnchorState<TSort>) => {
   }
 
   if (a.kind === 'permalink' && b.kind === 'permalink') {
-    return a.permalinkID === b.permalinkID;
+    return a.id === b.id;
   }
 
   if (a.kind === 'forward' && b.kind === 'forward') {
@@ -80,40 +64,61 @@ const anchorsEqual = <TSort>(a: AnchorState<TSort>, b: AnchorState<TSort>) => {
 // Allows virtualItems to update after programmatic scroll.
 const POSITIONING_SETTLE_DELAY_MS = 50;
 
-export function useArrayVirtualizer<T, TSort>({
+export function useArrayVirtualizer<T, TSort, TListContextParams>({
+  listContextParams,
   pageSize,
   placeholderHeight,
-  estimateSize: estimateSizeCallback,
+  estimateRowSize: estimateSizeCallback,
   getScrollElement,
   getPageQuery,
   getSingleQuery,
   toStartRow,
-  initialPermalinkID,
+  permalinkID,
+  scrollState,
+  onScrollStateChange,
   debug = false,
   overscan = 5,
-}: UseArrayVirtualizerOptions<T, TSort>): UseArrayVirtualizerReturn<T, TSort> {
+}: UseArrayVirtualizerOptions<
+  T,
+  TSort,
+  TListContextParams
+>): UseArrayVirtualizerReturn<T> {
   const [anchor, setAnchor] = useState<AnchorState<TSort>>(() =>
-    initialPermalinkID
-      ? {
-          kind: 'permalink',
-          index: 0,
-          permalinkID: initialPermalinkID,
-        }
-      : {
-          kind: 'forward',
-          index: 0,
-          startRow: undefined,
-        },
+    scrollState
+      ? scrollState.anchor
+      : permalinkID
+        ? {
+            kind: 'permalink',
+            index: 0,
+            id: permalinkID,
+          }
+        : {
+            kind: 'forward',
+            index: 0,
+            startRow: undefined,
+          },
   );
 
   // Counter to force effect re-run when restoring same state
-  const [restoreTrigger, setRestoreTrigger] = useState(0);
+  // const [restoreTrigger, setRestoreTrigger] = useState(0);
 
   const scrollStateRef = useRef({
-    pendingScroll: null as number | null,
-    pendingScrollIsRelative: false,
+    pendingScroll: scrollState?.scrollOffset ?? null,
+    pendingScrollIsRelative: scrollState?.anchor.kind === 'permalink',
     scrollRetryCount: 0,
     positionedAt: 0,
+    listContext: listContextParams,
+  });
+
+  const isListContextCurrent =
+    scrollStateRef.current.listContext === listContextParams;
+
+  console.log('useArrayVirtualizer: render', {
+    permalinkID,
+    anchor,
+    scrollState,
+    'scrollStateRef.current': scrollStateRef.current,
+    isListContextCurrent,
   });
 
   const replaceAnchor = useCallback(
@@ -123,22 +128,31 @@ export function useArrayVirtualizer<T, TSort>({
   );
 
   useEffect(() => {
-    const nextAnchor: AnchorState<TSort> = initialPermalinkID
-      ? {
-          kind: 'permalink',
-          index: 0,
-          permalinkID: initialPermalinkID,
-        }
-      : {
-          kind: 'forward',
-          index: 0,
-          startRow: undefined,
-        };
+    // if (!isListContextCurrent) {
+    //   console.log(
+    //     'List context changed, resetting anchor to initial state',
+    //     listContextParams,
+    //   );
+    //   return;
+    // }
+    const nextAnchor: AnchorState<TSort> = scrollState
+      ? scrollState.anchor
+      : permalinkID
+        ? {
+            kind: 'permalink',
+            index: 0,
+            id: permalinkID,
+          }
+        : {
+            kind: 'forward',
+            index: 0,
+            startRow: undefined,
+          };
 
     replaceAnchor(nextAnchor);
     scrollStateRef.current.positionedAt = 0;
     scrollStateRef.current.scrollRetryCount = 0;
-  }, [initialPermalinkID, replaceAnchor]);
+  }, [permalinkID, replaceAnchor]);
 
   const {
     rowAt,
@@ -156,7 +170,7 @@ export function useArrayVirtualizer<T, TSort>({
         return {
           kind: 'permalink',
           index: anchor.index,
-          id: anchor.permalinkID,
+          id: anchor.id,
         };
       }
 
@@ -256,10 +270,20 @@ export function useArrayVirtualizer<T, TSort>({
     debug,
   });
 
+  useEffect(() => {
+    console.log('HERE', {
+      permalinkID,
+      scrollState,
+      isListContextCurrent,
+    });
+  }, [permalinkID, scrollState, isListContextCurrent]);
+
   // Force remeasurement when estimateSize function changes
   useEffect(() => {
-    virtualizer.measure();
-  }, [estimateSizeCallback, virtualizer]);
+    if (isListContextCurrent) {
+      virtualizer.measure();
+    }
+  }, [estimateSizeCallback, virtualizer, isListContextCurrent]);
 
   const virtualItems = virtualizer.getVirtualItems();
 
@@ -482,6 +506,34 @@ export function useArrayVirtualizer<T, TSort>({
       }
     };
 
+    console.log('useArrayVirtualizer: effect', {
+      anchor,
+      rowsLength,
+      complete,
+      startPlaceholder,
+      firstRowIndex,
+      virtualItems,
+      atEnd,
+      atStart,
+      rowAtVirtualIndex,
+      rowAt,
+      toLogicalIndex,
+      pageSize,
+      toStartRow,
+      replaceAnchor,
+      isListContextCurrent,
+      scrollStateRef,
+      scrollState,
+    });
+
+    if (!isListContextCurrent) {
+      console.log(
+        'List context not current, need to restore position after context updates',
+      );
+
+      return;
+    }
+
     if (restoreScrollIfNeeded()) {
       return;
     }
@@ -506,26 +558,12 @@ export function useArrayVirtualizer<T, TSort>({
     toLogicalIndex,
     pageSize,
     toStartRow,
-    restoreTrigger,
     replaceAnchor,
+    isListContextCurrent,
   ]);
 
-  const restoreAnchorState = useCallback(
-    (state: ScrollRestorationState<TSort>) => {
-      replaceAnchor(state.anchor);
-      scrollStateRef.current.positionedAt = 0;
-      scrollStateRef.current.scrollRetryCount = 0;
-      scrollStateRef.current.pendingScroll = state.scrollOffset;
-      scrollStateRef.current.pendingScrollIsRelative =
-        state.anchor.kind === 'permalink';
-      // Increment trigger to force re-render even if state values are identical
-      setRestoreTrigger(prev => prev + 1);
-    },
-    [replaceAnchor],
-  );
-
-  // Capture current anchor state for external save/restore
-  const captureAnchorState = useCallback((): ScrollRestorationState<TSort> => {
+  // Capture current scroll state
+  const captureCurrentState = useCallback((): ScrollRestorationState<TSort> => {
     const scrollOffset = virtualizer.scrollOffset ?? 0;
 
     if (anchor.kind === 'permalink') {
@@ -555,14 +593,28 @@ export function useArrayVirtualizer<T, TSort>({
     virtualizer.scrollOffset,
   ]);
 
-  const anchorState = captureAnchorState();
+  useEffect(() => {
+    if (isListContextCurrent && onScrollStateChange) {
+      const id = setTimeout(() => {
+        const state = captureCurrentState();
+        onScrollStateChange(state);
+      }, 100);
+
+      return () => clearTimeout(id);
+    }
+    return;
+  }, [
+    captureCurrentState,
+    onScrollStateChange,
+    isListContextCurrent,
+    complete,
+    scrollStateRef.current.scrollRetryCount,
+  ]);
 
   return {
     virtualizer,
     rowAt: rowAtVirtualIndex,
     rowsEmpty,
     permalinkNotFound,
-    scrollState: anchorState,
-    restoreScrollState: restoreAnchorState,
   };
 }
