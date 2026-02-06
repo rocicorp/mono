@@ -318,7 +318,7 @@ const schemaChanges = [
   backfillCompletedSchema,
 ] as const;
 
-// Note: keep in sync or the schema change tag test will fail
+// Note: keep in sync or the tag tests will fail
 const schemaChangeTags = [
   'create-table',
   'rename-table',
@@ -351,10 +351,23 @@ export const dataChangeSchema = v.union(
   backfillSchema,
 );
 
+// Note: keep in sync or the tag tests will fail
+const dataChangeTags = [
+  'insert',
+  'update',
+  'delete',
+  'truncate',
+  'backfill',
+] as const;
+
+const dataChangeTagsSchema = v.literalUnion(...dataChangeTags);
+
 export type DataChange = Satisfies<
   JSONObject, // guarantees serialization over IPC or network
   v.Infer<typeof dataChangeSchema>
 >;
+
+export type DataChangeTag = v.Infer<typeof dataChangeTagsSchema>;
 
 export type DataOrSchemaChange = DataChange | SchemaChange;
 
@@ -370,4 +383,10 @@ const schemaChangeTagSet = new Set<string>(schemaChangeTags);
 
 export function isSchemaChange(change: Change): change is SchemaChange {
   return schemaChangeTagSet.has(change.tag);
+}
+
+const dataChangeTagSet = new Set<string>(dataChangeTags);
+
+export function isDataChange(change: Change): change is DataChange {
+  return dataChangeTagSet.has(change.tag);
 }
