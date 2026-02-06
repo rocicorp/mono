@@ -91,6 +91,9 @@ export function useArrayVirtualizer<T, TSort>({
   // Ref: timestamp when positioning completed (for settling delay)
   const positionedAtRef = useRef<number>(0);
 
+  // Ref: retry count for custom scroll loop
+  const scrollRetryCountRef = useRef(0);
+
   useEffect(() => {
     if (initialPermalinkID) {
       setAnchorKind('permalink');
@@ -99,6 +102,7 @@ export function useArrayVirtualizer<T, TSort>({
       setStartRow(undefined);
       positionedRef.current = false;
       positionedAtRef.current = 0;
+      scrollRetryCountRef.current = 0;
     } else {
       setAnchorKind('forward');
       setAnchorIndex(0);
@@ -106,6 +110,7 @@ export function useArrayVirtualizer<T, TSort>({
       setStartRow(undefined);
       positionedRef.current = false;
       positionedAtRef.current = 0;
+      scrollRetryCountRef.current = 0;
     }
   }, [initialPermalinkID]);
 
@@ -226,6 +231,7 @@ export function useArrayVirtualizer<T, TSort>({
     // Phase 0: Scroll restoration (from restoreAnchorState)
     if (pendingScrollRef.current !== null && anchorKind !== 'permalink') {
       if (complete && rowsLength > 0) {
+        console.log('scrollToOffset for restoration', pendingScrollRef.current);
         virtualizer.scrollToOffset(pendingScrollRef.current);
         pendingScrollRef.current = null;
         positionedRef.current = true;
@@ -235,27 +241,96 @@ export function useArrayVirtualizer<T, TSort>({
       return;
     }
 
-    // Phase 1: Permalink positioning
+    // Phase 1: Permalink positioning with custom scroll loop
     if (anchorKind === 'permalink') {
       if (rowsLength === 0) {
         return;
       }
 
+      const targetVirtualIndex = anchorIndex - firstRowIndex + startPlaceholder;
+
       if (!positionedRef.current || !complete) {
-        const targetVirtualIndex =
-          anchorIndex - firstRowIndex + startPlaceholder;
+        // Get offset for target index using virtualizer's calculation
+        const offsetInfo = virtualizer.getOffsetForIndex(
+          targetVirtualIndex,
+          'start',
+        );
 
-        virtualizer.scrollToIndex(targetVirtualIndex, {
-          align: 'start',
-        });
+        if (!offsetInfo) {
+          // Target not yet measured, estimate position and scroll to it
+          let estimatedOffset = 0;
 
-        if (complete) {
-          positionedRef.current = true;
-          positionedAtRef.current = Date.now();
+          if (virtualItems.length > 0) {
+            const lastVisibleItem = virtualItems[virtualItems.length - 1];
+            if (lastVisibleItem.index < targetVirtualIndex) {
+              // Target is after visible items, extrapolate forward
+              const itemsToGo = targetVirtualIndex - lastVisibleItem.index;
+              const avgSize = lastVisibleItem.end / (lastVisibleItem.index + 1);
+              estimatedOffset = lastVisibleItem.end + avgSize * itemsToGo;
+            } else {
+              // Target is before visible items, extrapolate backward
+              const firstVisibleItem = virtualItems[0];
+              const itemsBack = firstVisibleItem.index - targetVirtualIndex;
+              const avgSize = firstVisibleItem.start / firstVisibleItem.index;
+              estimatedOffset = firstVisibleItem.start - avgSize * itemsBack;
+            }
+          } else {
+            // No items visible, use rough estimate
+            estimatedOffset = targetVirtualIndex * placeholderHeight;
+          }
+
+          console.log(
+            'scrollToOffset (target not measured)',
+            targetVirtualIndex,
+            estimatedOffset,
+          );
+          virtualizer.scrollToOffset(estimatedOffset);
+          return;
         }
 
-        // Don't auto-page until positioning is done — virtualItems
-        // still reflect the pre-scroll position this render.
+        // Target is measured, add any pending offset adjustment
+        const [baseOffset] = offsetInfo;
+        const desiredScrollOffset =
+          baseOffset + (pendingScrollRef.current ?? 0);
+        const currentScrollOffset = virtualizer.scrollOffset ?? 0;
+        const tolerance = 1; // 1px tolerance
+
+        if (Math.abs(currentScrollOffset - desiredScrollOffset) <= tolerance) {
+          // Position is correct, we're done
+          console.log(
+            'positioning complete',
+            currentScrollOffset,
+            desiredScrollOffset,
+          );
+          positionedRef.current = true;
+          positionedAtRef.current = Date.now();
+          pendingScrollRef.current = null;
+          scrollRetryCountRef.current = 0;
+          return;
+        }
+
+        // Position not correct yet, scroll and retry
+        const maxRetries = 10;
+        if (scrollRetryCountRef.current < maxRetries) {
+          console.log(
+            'scroll retry',
+            scrollRetryCountRef.current,
+            'current',
+            currentScrollOffset,
+            'desired',
+            desiredScrollOffset,
+          );
+          virtualizer.scrollToOffset(desiredScrollOffset);
+          scrollRetryCountRef.current++;
+        } else {
+          // Max retries reached, accept current position
+          console.log('max retries reached, accepting position');
+          positionedRef.current = true;
+          positionedAtRef.current = Date.now();
+          pendingScrollRef.current = null;
+          scrollRetryCountRef.current = 0;
+        }
+
         return;
       }
 
@@ -295,19 +370,6 @@ export function useArrayVirtualizer<T, TSort>({
       }
       return estimateSize(index);
     };
-
-    console.log('[AutoPage]', {
-      anchorKind,
-      anchorIndex,
-      firstRowIndex,
-      rowsLength,
-      positionedRef: positionedRef.current,
-      isScrolling: virtualizer.isScrolling,
-      viewportHeight,
-      thresholdDistance,
-      firstVisible: virtualItems[0]?.index,
-      lastVisible: virtualItems[virtualItems.length - 1]?.index,
-    });
 
     // Check forward boundary (near end of data window)
     if (!atEnd) {
@@ -435,11 +497,17 @@ export function useArrayVirtualizer<T, TSort>({
     }) => {
       setAnchorIndex(state.anchorIndex);
       setAnchorKind(state.anchorKind);
-      setPermalinkID(state.permalinkID);
+      // If we have firstVisibleItemID (captured from permalink mode),
+      // use it as the new permalinkID for restoration
+      setPermalinkID(state.firstVisibleItemID ?? state.permalinkID);
       setStartRow(state.startRow);
       positionedRef.current = false;
       positionedAtRef.current = 0;
-      pendingScrollRef.current = state.scrollOffset ?? null;
+      scrollRetryCountRef.current = 0;
+      // For permalinks with firstVisibleItemID, use scrollOffsetFromFirstVisible
+      // which will be applied after positioning. For others, use scrollOffset.
+      pendingScrollRef.current =
+        state.scrollOffsetFromFirstVisible ?? state.scrollOffset ?? null;
     },
     [],
   );
@@ -449,23 +517,21 @@ export function useArrayVirtualizer<T, TSort>({
     if (anchorKind === 'permalink') {
       const scrollOffset = virtualizer.scrollOffset ?? 0;
 
-      // Find the first visible (non-placeholder) item
-      let firstVisibleItem = virtualItems[0];
-      let firstVisibleRow = rowAtVirtualIndex(firstVisibleItem?.index);
-
-      if (!firstVisibleRow && virtualItems.length > 0) {
-        for (let i = 1; i < virtualItems.length; i++) {
-          const item = virtualItems[i];
-          const row = rowAtVirtualIndex(item.index);
-          if (row) {
-            firstVisibleItem = item;
-            firstVisibleRow = row;
-            break;
-          }
-        }
+      // Use virtualizer API to get the item at the current scroll position
+      const firstVisibleItem =
+        virtualizer.getVirtualItemForOffset(scrollOffset);
+      if (!firstVisibleItem) {
+        return {
+          anchorIndex,
+          anchorKind,
+          permalinkID,
+          startRow,
+          scrollOffset,
+        };
       }
 
-      if (!firstVisibleRow || !firstVisibleItem) {
+      const firstVisibleRow = rowAtVirtualIndex(firstVisibleItem.index);
+      if (!firstVisibleRow) {
         return {
           anchorIndex,
           anchorKind,
@@ -521,7 +587,6 @@ export function useArrayVirtualizer<T, TSort>({
     permalinkID,
     startRow,
     virtualizer,
-    virtualItems,
     rowAtVirtualIndex,
   ]);
 
