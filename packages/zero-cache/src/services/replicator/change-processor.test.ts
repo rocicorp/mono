@@ -3043,6 +3043,7 @@ describe('replicator/change-processor', () => {
               [45, 23, 67, 3000, 4000],
               [20, 10, 30, 5000, 6000],
               [200, 100, 300, 7000, 8000],
+              [2000, 1000, 3000, -1, -2],
             ],
           },
         ],
@@ -3051,16 +3052,13 @@ describe('replicator/change-processor', () => {
         [
           'data',
           {
-            tag: 'backfill',
+            tag: 'backfill-completed',
             relation: {
               schema: 'public',
               name: 'bff',
               rowKey: {columns: ['b', 'a', 'c']},
             },
-            watermark: '115',
             columns: ['d', 'e'],
-            rowValues: [[2000, 1000, 3000, -1, -2]],
-            completed: true,
           },
         ],
         ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
@@ -3258,16 +3256,13 @@ describe('replicator/change-processor', () => {
         [
           'data',
           {
-            tag: 'backfill',
+            tag: 'backfill-completed',
             relation: {
               schema: 'public',
               name: 'bff',
               rowKey: {columns: ['b', 'a', 'c']},
             },
-            watermark: '115',
             columns: ['d', 'e'],
-            rowValues: [],
-            completed: true,
           },
         ],
         ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
