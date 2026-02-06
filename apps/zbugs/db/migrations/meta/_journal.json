@@ -50,6 +50,13 @@
       "when": 1762890350511,
       "tag": "0006_exotic_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770409020281,
+      "tag": "0007_red_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }
