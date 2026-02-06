@@ -163,7 +163,7 @@ export async function initialSync(
         max: numWorkers,
         connection: {['application_name']: 'initial-sync-copy-worker'},
       },
-      'json-as-string',
+      {returnJsonAsString: true},
     );
     const copiers = startTableCopyWorkers(
       lc,
