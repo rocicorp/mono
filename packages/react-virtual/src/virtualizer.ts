@@ -455,11 +455,7 @@ export class Virtualizer<
       if (typeof value === 'undefined') delete (opts as any)[key];
     });
 
-    // Rocicorp: Capture anchor BEFORE options change to detect splices
-    // (unless disabled for external control)
-    if (!(opts as any)._disableAutoAnchor) {
-      this.captureAnchorBeforeOptionsChange(opts, opts.debug ?? false);
-    }
+    this.captureAnchorBeforeOptionsChange(opts, opts.debug ?? false);
 
     this.options = {
       debug: false,
