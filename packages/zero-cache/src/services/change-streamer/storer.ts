@@ -17,7 +17,7 @@ import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import type {
   BackfillID,
   BackfillRequest,
-  DataChange,
+  DataOrSchemaChange,
   Identifier,
   TableMetadata,
 } from '../change-source/protocol/current.ts';
@@ -528,7 +528,7 @@ export class Storer implements Service {
    * Returns the db statements necessary to track backfill and table metadata
    * presented in the `change`, if any.
    */
-  #trackBackfillMetadata(sql: PostgresTransaction, change: DataChange) {
+  #trackBackfillMetadata(sql: PostgresTransaction, change: DataOrSchemaChange) {
     const stmts: PendingQuery<Row[]>[] = [];
 
     switch (change.tag) {

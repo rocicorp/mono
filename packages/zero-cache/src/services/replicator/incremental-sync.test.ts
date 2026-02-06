@@ -625,7 +625,18 @@ describe('replicator/incremental-sync', () => {
           watermark: '110',
           columns: ['new_column'],
           rowValues: [[2, 'world']],
-          completed: true,
+        },
+      ],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {
+            schema: 'public',
+            name: 'issues',
+            rowKey: {columns: ['issueID']},
+          },
+          columns: ['new_column'],
         },
       ],
       ['commit', issues.commit(), {watermark: '110.02'}],

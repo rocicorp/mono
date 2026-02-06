@@ -12,7 +12,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {createChangeProcessor} from '../../replicator/test-utils.ts';
-import type {DataChange} from '../protocol/current/data.ts';
+import type {DataOrSchemaChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
 
@@ -107,8 +107,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     return queue;
   }
 
-  async function nextTransaction(): Promise<DataChange[]> {
-    const data: DataChange[] = [];
+  async function nextTransaction(): Promise<DataOrSchemaChange[]> {
+    const data: DataOrSchemaChange[] = [];
     for (;;) {
       const change = await downstream.dequeue('timeout', 2000);
       if (change === 'timeout') {
@@ -1625,7 +1625,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   ] satisfies [
     name: string,
     statements: string,
-    changes: Partial<DataChange>[],
+    changes: Partial<DataOrSchemaChange>[],
     expectedData: Record<string, JSONValue>,
     expectedTables: LiteTableSpec[],
     expectedIndexes: LiteIndexSpec[],

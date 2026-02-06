@@ -268,10 +268,18 @@ export const backfillSchema = v.object({
   // ]
   // ```
   rowValues: v.array(v.array(jsonValueSchema)),
+});
 
-  // Indicates that the backfill for the specified columns have
-  // been successfully backfilled and can be published to clients.
-  completed: v.boolean().optional(),
+// Indicates that the backfill for the specified columns have
+// been successfully backfilled and can be published to clients.
+export const backfillCompletedSchema = v.object({
+  tag: v.literal('backfill-completed'),
+
+  relation: newRelationSchema,
+
+  // The columns to be backfilled. `rowKey` columns are automatically excluded,
+  // which means that this field may be empty.
+  columns: v.array(v.string()),
 });
 
 export type MessageBegin = v.Infer<typeof beginSchema>;
@@ -295,12 +303,9 @@ export type ColumnDrop = v.Infer<typeof dropColumnSchema>;
 export type TableDrop = v.Infer<typeof dropTableSchema>;
 export type IndexCreate = v.Infer<typeof createIndexSchema>;
 export type IndexDrop = v.Infer<typeof dropIndexSchema>;
+export type BackfillCompleted = v.Infer<typeof backfillCompletedSchema>;
 
-export const dataChangeSchema = v.union(
-  insertSchema,
-  updateSchema,
-  deleteSchema,
-  truncateSchema,
+const schemaChanges = [
   createTableSchema,
   renameTableSchema,
   updateTableMetadataSchema,
@@ -310,6 +315,39 @@ export const dataChangeSchema = v.union(
   dropTableSchema,
   createIndexSchema,
   dropIndexSchema,
+  backfillCompletedSchema,
+] as const;
+
+// Note: keep in sync or the schema change tag test will fail
+const schemaChangeTags = [
+  'create-table',
+  'rename-table',
+  'update-table-metadata',
+  'add-column',
+  'update-column',
+  'drop-column',
+  'drop-table',
+  'create-index',
+  'drop-index',
+  'backfill-completed',
+] as const;
+
+export const schemaChangeSchema = v.union(...schemaChanges);
+
+const schemaChangeTagsSchema = v.literalUnion(...schemaChangeTags);
+
+export type SchemaChange = Satisfies<
+  JSONObject,
+  v.Infer<typeof schemaChangeSchema>
+>;
+
+export type SchemaChangeTag = v.Infer<typeof schemaChangeTagsSchema>;
+
+export const dataChangeSchema = v.union(
+  insertSchema,
+  updateSchema,
+  deleteSchema,
+  truncateSchema,
   backfillSchema,
 );
 
@@ -318,10 +356,18 @@ export type DataChange = Satisfies<
   v.Infer<typeof dataChangeSchema>
 >;
 
+export type DataOrSchemaChange = DataChange | SchemaChange;
+
 export type Change =
   | MessageBegin
-  | DataChange
+  | DataOrSchemaChange
   | MessageCommit
   | MessageRollback;
 
 export type ChangeTag = Change['tag'];
+
+const schemaChangeTagSet = new Set<string>(schemaChangeTags);
+
+export function isSchemaChange(change: Change): change is SchemaChange {
+  return schemaChangeTagSet.has(change.tag);
+}

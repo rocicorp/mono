@@ -34,6 +34,7 @@ import {
 import {liteTableName} from '../../types/names.ts';
 import {id} from '../../types/sql.ts';
 import type {
+  BackfillCompleted,
   Change,
   ColumnAdd,
   ColumnDrop,
@@ -278,6 +279,9 @@ export class ChangeProcessor {
         break;
       case 'backfill':
         tx.processBackfill(msg);
+        break;
+      case 'backfill-completed':
+        tx.processBackfillCompleted(msg);
         break;
       default:
         unreachable(msg);
@@ -790,13 +794,7 @@ class TransactionProcessor {
     this.#reloadTableSpecs();
   }
 
-  processBackfill({
-    relation,
-    watermark,
-    columns,
-    rowValues,
-    completed,
-  }: MessageBackfill) {
+  processBackfill({relation, watermark, columns, rowValues}: MessageBackfill) {
     const tableName = liteTableName(relation);
     const tableSpec = must(this.#tableSpecs.get(tableName));
     const rowKeyCols = relation.rowKey.columns;
@@ -848,27 +846,31 @@ class TransactionProcessor {
     this.#lc.debug?.(
       `backfilled ${backfilled} rows (skipped ${skipped}) into ${tableName}`,
     );
+  }
 
-    if (completed) {
-      const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
-      for (const col of cols) {
-        columnMetadata.clearBackfilling(tableName, col);
-      }
-      // Given that new columns are being exposed for every row in the table, bump the
-      // row version for all rows.
-      this.#bumpVersions(tableName);
-      this.#lc.info?.(`finished backfilling ${tableName}`);
+  processBackfillCompleted({relation, columns}: BackfillCompleted) {
+    const tableName = liteTableName(relation);
+    const rowKeyCols = relation.rowKey.columns;
+    const cols = [...rowKeyCols, ...columns];
 
-      // Note that there is no need to clear the backfillingColumnVersions values
-      // in the changeLog. It could theoretically be done for clarity but:
-      // (1) it could be non-trivial in terms of latency introduced and
-      // (2) the data must be preserved if _other_ columns are in the process
-      //     of being backfilled
-      //
-      // Thus, for speed and simplicity, the values are left as is. (Note that
-      // subsequent replicated changes to those rows will clear the values if
-      // no backfills are in progress).
+    const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
+    for (const col of cols) {
+      columnMetadata.clearBackfilling(tableName, col);
     }
+    // Given that new columns are being exposed for every row in the table, bump the
+    // row version for all rows.
+    this.#bumpVersions(tableName);
+    this.#lc.info?.(`finished backfilling ${tableName}`);
+
+    // Note that there is no need to clear the backfillingColumnVersions values
+    // in the changeLog. It could theoretically be done for clarity but:
+    // (1) it could be non-trivial in terms of latency introduced and
+    // (2) the data must be preserved if _other_ columns are in the process
+    //     of being backfilled
+    //
+    // Thus, for speed and simplicity, the values are left as is. (Note that
+    // subsequent replicated changes to those rows will clear the values if
+    // no backfills are in progress).
   }
 
   processCommit(
