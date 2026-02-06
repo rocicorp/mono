@@ -1,5 +1,5 @@
-import { useVirtualizer, type Virtualizer } from '@rocicorp/react-virtual';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   useRows,
   type GetPageQuery,
@@ -21,24 +21,21 @@ export interface UseArrayVirtualizerOptions<T, TSort> {
 
 export type ScrollRestorationState<TSort> =
   | {
-      anchorIndex: number;
       anchorKind: 'forward';
-      permalinkID?: string | undefined;
+      anchorIndex: number;
       startRow: TSort | undefined;
       scrollOffset: number;
     }
   | {
-      anchorIndex: number;
       anchorKind: 'backward';
-      permalinkID?: string | undefined;
+      anchorIndex: number;
       startRow: TSort;
       scrollOffset: number;
     }
   | {
-      anchorIndex: number;
       anchorKind: 'permalink';
+      anchorIndex: number;
       permalinkID: string;
-      startRow: undefined;
       scrollOffset: number;
     };
 
@@ -55,20 +52,17 @@ type ForwardAnchorState<TSort> = {
   kind: 'forward';
   index: number;
   startRow: TSort | undefined;
-  permalinkID?: string | undefined;
 };
 
 type BackwardAnchorState<TSort> = {
   kind: 'backward';
   index: number;
   startRow: TSort;
-  permalinkID?: string | undefined;
 };
 
 type PermalinkAnchorState = {
   kind: 'permalink';
   index: number;
-  startRow: undefined;
   permalinkID: string;
 };
 
@@ -81,30 +75,41 @@ type RestoreAnchorState<TSort> =
   | {
       anchorKind: 'forward';
       anchorIndex: number;
-      permalinkID?: string | undefined;
-      startRow: TSort | undefined;
       scrollOffset?: number;
+      startRow: TSort | undefined;
     }
   | {
       anchorKind: 'backward';
       anchorIndex: number;
-      permalinkID?: string | undefined;
-      startRow: TSort;
       scrollOffset?: number;
+      startRow: TSort;
     }
   | {
       anchorKind: 'permalink';
       anchorIndex: number;
-      permalinkID: string;
-      startRow: undefined;
       scrollOffset?: number;
+      permalinkID: string;
     };
 
-const anchorsEqual = <TSort>(a: AnchorState<TSort>, b: AnchorState<TSort>) =>
-  a.kind === b.kind &&
-  a.index === b.index &&
-  a.permalinkID === b.permalinkID &&
-  a.startRow === b.startRow;
+const anchorsEqual = <TSort>(a: AnchorState<TSort>, b: AnchorState<TSort>) => {
+  if (a.index !== b.index) {
+    return false;
+  }
+
+  if (a.kind === 'permalink' && b.kind === 'permalink') {
+    return a.permalinkID === b.permalinkID;
+  }
+
+  if (a.kind === 'forward' && b.kind === 'forward') {
+    return a.startRow === b.startRow;
+  }
+
+  if (a.kind === 'backward' && b.kind === 'backward') {
+    return a.startRow === b.startRow;
+  }
+
+  return false;
+};
 
 // Delay after positioning before enabling auto-paging.
 // Allows virtualItems to update after programmatic scroll.
@@ -160,14 +165,12 @@ export function useArrayVirtualizer<T, TSort>({
       ? {
           kind: 'permalink',
           index: 0,
-          startRow: undefined,
           permalinkID: initialPermalinkID,
         }
       : {
           kind: 'forward',
           index: 0,
           startRow: undefined,
-          permalinkID: undefined,
         };
 
     replaceAnchor(nextAnchor);
@@ -188,9 +191,9 @@ export function useArrayVirtualizer<T, TSort>({
   } = useRows<T, TSort>({
     pageSize,
     anchor: useMemo(() => {
-      if (anchor.kind === 'permalink' && anchor.permalinkID) {
+      if (anchor.kind === 'permalink') {
         return {
-          kind: 'permalink' as const,
+          kind: 'permalink',
           index: anchor.index,
           id: anchor.permalinkID,
         };
@@ -198,22 +201,15 @@ export function useArrayVirtualizer<T, TSort>({
 
       if (anchor.kind === 'forward') {
         return {
-          kind: 'forward' as const,
+          kind: 'forward',
           index: anchor.index,
           startRow: anchor.startRow,
         };
       }
 
-      if (anchor.kind === 'backward' && anchor.startRow) {
-        return {
-          kind: 'backward' as const,
-          index: anchor.index,
-          startRow: anchor.startRow,
-        };
-      }
-
+      anchor.kind satisfies 'backward';
       return {
-        kind: 'forward' as const,
+        kind: 'backward',
         index: anchor.index,
         startRow: anchor.startRow,
       };
@@ -471,7 +467,6 @@ export function useArrayVirtualizer<T, TSort>({
                 kind: 'forward',
                 index: newAnchorIndex,
                 startRow: toStartRow(newAnchorRow),
-                permalinkID: anchor.permalinkID,
               });
               return;
             }
@@ -522,7 +517,6 @@ export function useArrayVirtualizer<T, TSort>({
                 kind: 'backward',
                 index: newAnchorIndex,
                 startRow: toStartRow(newAnchorRow),
-                permalinkID: anchor.permalinkID,
               });
               return;
             }
@@ -567,20 +561,17 @@ export function useArrayVirtualizer<T, TSort>({
               kind: 'backward',
               index: state.anchorIndex,
               startRow: state.startRow,
-              permalinkID: state.permalinkID,
             }
           : state.anchorKind === 'permalink'
             ? {
                 kind: 'permalink',
                 index: state.anchorIndex,
-                startRow: undefined,
                 permalinkID: state.permalinkID,
               }
             : {
                 kind: 'forward',
                 index: state.anchorIndex,
                 startRow: state.startRow,
-                permalinkID: state.permalinkID,
               };
 
       replaceAnchor(nextAnchor);
@@ -610,30 +601,27 @@ export function useArrayVirtualizer<T, TSort>({
       const itemStart = offsetInfo ? offsetInfo[0] : scrollOffset;
 
       return {
-        anchorIndex: anchor.index,
         anchorKind: 'permalink',
-        permalinkID: anchor.permalinkID,
-        startRow: undefined,
+        anchorIndex: anchor.index,
         scrollOffset: scrollOffset - itemStart,
+        permalinkID: anchor.permalinkID,
       };
     }
 
     if (anchor.kind === 'backward') {
       return {
-        anchorIndex: anchor.index,
         anchorKind: 'backward',
-        permalinkID: anchor.permalinkID,
-        startRow: anchor.startRow,
+        anchorIndex: anchor.index,
         scrollOffset,
+        startRow: anchor.startRow,
       };
     }
 
     return {
-      anchorIndex: anchor.index,
       anchorKind: 'forward',
-      permalinkID: anchor.permalinkID,
-      startRow: anchor.startRow,
+      anchorIndex: anchor.index,
       scrollOffset,
+      startRow: anchor.startRow,
     };
   }, [
     anchor,
