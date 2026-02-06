@@ -305,6 +305,32 @@ export type IndexCreate = v.Infer<typeof createIndexSchema>;
 export type IndexDrop = v.Infer<typeof dropIndexSchema>;
 export type BackfillCompleted = v.Infer<typeof backfillCompletedSchema>;
 
+export const dataChangeSchema = v.union(
+  insertSchema,
+  updateSchema,
+  deleteSchema,
+  truncateSchema,
+  backfillSchema,
+);
+
+// Note: keep in sync or the tag tests will fail
+const dataChangeTags = [
+  'insert',
+  'update',
+  'delete',
+  'truncate',
+  'backfill',
+] as const;
+
+const dataChangeTagsSchema = v.literalUnion(...dataChangeTags);
+
+export type DataChange = Satisfies<
+  JSONObject, // guarantees serialization over IPC or network
+  v.Infer<typeof dataChangeSchema>
+>;
+
+export type DataChangeTag = v.Infer<typeof dataChangeTagsSchema>;
+
 const schemaChanges = [
   createTableSchema,
   renameTableSchema,
@@ -342,32 +368,6 @@ export type SchemaChange = Satisfies<
 >;
 
 export type SchemaChangeTag = v.Infer<typeof schemaChangeTagsSchema>;
-
-export const dataChangeSchema = v.union(
-  insertSchema,
-  updateSchema,
-  deleteSchema,
-  truncateSchema,
-  backfillSchema,
-);
-
-// Note: keep in sync or the tag tests will fail
-const dataChangeTags = [
-  'insert',
-  'update',
-  'delete',
-  'truncate',
-  'backfill',
-] as const;
-
-const dataChangeTagsSchema = v.literalUnion(...dataChangeTags);
-
-export type DataChange = Satisfies<
-  JSONObject, // guarantees serialization over IPC or network
-  v.Infer<typeof dataChangeSchema>
->;
-
-export type DataChangeTag = v.Infer<typeof dataChangeTagsSchema>;
 
 export type DataOrSchemaChange = DataChange | SchemaChange;
 
