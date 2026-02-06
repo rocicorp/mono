@@ -1,5 +1,5 @@
-import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import { useVirtualizer, type Virtualizer } from '@rocicorp/react-virtual';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   useRows,
   type GetPageQuery,
@@ -25,8 +25,6 @@ export interface ScrollRestorationState<TSort> {
   permalinkID?: string | undefined;
   startRow: TSort | undefined;
   scrollOffset: number;
-  firstVisibleItemID?: string | undefined;
-  scrollOffsetFromFirstVisible?: number | undefined;
 }
 
 export interface UseArrayVirtualizerReturn<T, TSort> {
@@ -40,8 +38,6 @@ export interface UseArrayVirtualizerReturn<T, TSort> {
     permalinkID: string | undefined;
     startRow: TSort | undefined;
     scrollOffset: number;
-    firstVisibleItemID?: string | undefined;
-    scrollOffsetFromFirstVisible?: number | undefined;
   };
   restoreAnchorState: (state: {
     anchorIndex: number;
@@ -49,8 +45,6 @@ export interface UseArrayVirtualizerReturn<T, TSort> {
     permalinkID?: string | undefined;
     startRow: TSort | undefined;
     scrollOffset?: number;
-    firstVisibleItemID?: string | undefined;
-    scrollOffsetFromFirstVisible?: number | undefined;
   }) => void;
 }
 
@@ -109,6 +103,7 @@ export function useArrayVirtualizer<T, TSort>({
 
   // Ref: pending scroll offset to restore (set by restoreAnchorState)
   const pendingScrollRef = useRef<number | null>(null);
+  const pendingScrollIsRelativeRef = useRef(false);
 
   // Ref: prevents rapid-fire anchor shifts while waiting for data
   const waitingForDataRef = useRef(false);
@@ -319,39 +314,28 @@ export function useArrayVirtualizer<T, TSort>({
           return true;
         }
 
-        const offsetInfo = virtualizer.getOffsetForIndex(
+        const baseOffset = virtualizer.getOffsetForIndex(
           targetVirtualIndex,
           'start',
         );
 
-        if (!offsetInfo) {
+        if (pendingScrollIsRelativeRef.current && !baseOffset) {
           scrollRetryCountRef.current = 0;
           return true;
         }
 
-        const [offset, align] = offsetInfo;
-        const adjustment = pendingScrollRef.current;
-        const targetOffset = offset + adjustment;
-
+        const targetOffset = pendingScrollIsRelativeRef.current
+          ? baseOffset![0] + pendingScrollRef.current
+          : pendingScrollRef.current;
         virtualizer.scrollToOffset(targetOffset);
 
         const currentScrollOffset = virtualizer.scrollOffset ?? 0;
-        const afterInfo = virtualizer.getOffsetForIndex(
-          targetVirtualIndex,
-          align,
-        );
 
-        if (!afterInfo) {
-          scrollRetryCountRef.current = 0;
-          return true;
-        }
-
-        const targetAfterAdjustment = afterInfo[0] + adjustment;
-
-        if (Math.abs(currentScrollOffset - targetAfterAdjustment) <= 1) {
+        if (Math.abs(currentScrollOffset - targetOffset) <= 1) {
           positionedRef.current = true;
           positionedAtRef.current = Date.now();
           pendingScrollRef.current = null;
+          pendingScrollIsRelativeRef.current = false;
           scrollRetryCountRef.current = 0;
           return true;
         }
@@ -363,6 +347,7 @@ export function useArrayVirtualizer<T, TSort>({
           positionedRef.current = true;
           positionedAtRef.current = Date.now();
           pendingScrollRef.current = null;
+          pendingScrollIsRelativeRef.current = false;
           scrollRetryCountRef.current = 0;
         }
 
@@ -539,22 +524,18 @@ export function useArrayVirtualizer<T, TSort>({
       permalinkID?: string | undefined;
       startRow: TSort | undefined;
       scrollOffset?: number;
-      firstVisibleItemID?: string | undefined;
-      scrollOffsetFromFirstVisible?: number | undefined;
     }) => {
       replaceAnchor({
         kind: state.anchorKind,
         index: state.anchorIndex,
         startRow: state.startRow,
-        permalinkID: state.firstVisibleItemID ?? state.permalinkID,
+        permalinkID: state.permalinkID,
       });
       positionedRef.current = false;
       positionedAtRef.current = 0;
       scrollRetryCountRef.current = 0;
-      // For permalinks with firstVisibleItemID, use scrollOffsetFromFirstVisible
-      // which will be applied after positioning. For others, use scrollOffset.
-      pendingScrollRef.current =
-        state.scrollOffsetFromFirstVisible ?? state.scrollOffset ?? null;
+      pendingScrollRef.current = state.scrollOffset ?? null;
+      pendingScrollIsRelativeRef.current = state.anchorKind === 'permalink';
       // Increment trigger to force re-render even if state values are identical
       setRestoreTrigger(prev => prev + 1);
     },
@@ -563,62 +544,23 @@ export function useArrayVirtualizer<T, TSort>({
 
   // Capture current anchor state for external save/restore
   const captureAnchorState = useCallback(() => {
+    const scrollOffset = virtualizer.scrollOffset ?? 0;
+
     if (anchor.kind === 'permalink') {
-      const scrollOffset = virtualizer.scrollOffset ?? 0;
-      const firstVisibleItem =
-        virtualizer.getVirtualItemForOffset(scrollOffset);
-
-      if (!firstVisibleItem) {
-        return {
-          anchorIndex: anchor.index,
-          anchorKind: anchor.kind,
-          permalinkID: anchor.permalinkID,
-          startRow: anchor.startRow,
-          scrollOffset,
-        };
-      }
-
-      const firstVisibleRow = rowAtVirtualIndex(firstVisibleItem.index);
-      if (!firstVisibleRow) {
-        return {
-          anchorIndex: anchor.index,
-          anchorKind: anchor.kind,
-          permalinkID: anchor.permalinkID,
-          startRow: anchor.startRow,
-          scrollOffset,
-        };
-      }
-
-      const firstVisibleItemID =
-        typeof firstVisibleRow === 'object' &&
-        firstVisibleRow !== null &&
-        'id' in firstVisibleRow
-          ? String(firstVisibleRow.id)
-          : undefined;
-
-      if (!firstVisibleItemID) {
-        return {
-          anchorIndex: anchor.index,
-          anchorKind: anchor.kind,
-          permalinkID: anchor.permalinkID,
-          startRow: anchor.startRow,
-          scrollOffset,
-        };
-      }
-
-      const scrollOffsetFromFirstVisible = Math.max(
-        0,
-        scrollOffset - firstVisibleItem.start,
+      const targetVirtualIndex =
+        anchor.index - firstRowIndex + startPlaceholder;
+      const offsetInfo = virtualizer.getOffsetForIndex(
+        targetVirtualIndex,
+        'start',
       );
+      const itemStart = offsetInfo ? offsetInfo[0] : scrollOffset;
 
       return {
-        anchorIndex: 0,
-        anchorKind: 'permalink' as const,
-        permalinkID: firstVisibleItemID,
-        startRow: undefined,
-        scrollOffset: scrollOffsetFromFirstVisible,
-        firstVisibleItemID,
-        scrollOffsetFromFirstVisible,
+        anchorIndex: anchor.index,
+        anchorKind: anchor.kind,
+        permalinkID: anchor.permalinkID,
+        startRow: anchor.startRow,
+        scrollOffset: scrollOffset - itemStart,
       };
     }
 
@@ -627,11 +569,20 @@ export function useArrayVirtualizer<T, TSort>({
       anchorKind: anchor.kind,
       permalinkID: anchor.permalinkID,
       startRow: anchor.startRow,
-      scrollOffset: virtualizer.scrollOffset ?? 0,
+      scrollOffset,
     };
-  }, [anchor, virtualizer, rowAtVirtualIndex]);
+  }, [
+    anchor.index,
+    anchor.kind,
+    anchor.permalinkID,
+    anchor.startRow,
+    firstRowIndex,
+    startPlaceholder,
+    virtualizer,
+    virtualizer.scrollOffset,
+  ]);
 
-  const anchorState = useMemo(() => captureAnchorState(), [captureAnchorState]);
+  const anchorState = captureAnchorState();
 
   return {
     virtualizer,
