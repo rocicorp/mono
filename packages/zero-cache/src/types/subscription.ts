@@ -173,7 +173,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return this.#sentinel === undefined;
   }
 
-  /** The number messages waiting to be consumed. This is largely for testing. */
+  /** The number messages waiting to be consumed. */
   get queued(): number {
     return this.#messages.length;
   }
