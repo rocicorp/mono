@@ -1,5 +1,6 @@
-import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
-import {useCallback, useEffect, useRef, useState} from 'react';
+import { useVirtualizer, type Virtualizer } from '@rocicorp/react-virtual';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { assert } from 'shared/src/asserts.ts';
 import {
   useRows,
   type GetPageQuery,
@@ -85,6 +86,24 @@ export function useArrayVirtualizer<T, TSort>({
   const waitingForCompleteRef = useRef(false);
   const hasSeenIncompleteRef = useRef(false);
 
+  // Track scroll stability to prevent auto-paging during positioning/restoration
+  const lastScrollOffsetRef = useRef<number | null>(null);
+  const scrollStableCountRef = useRef(0);
+  const STABLE_SCROLL_THRESHOLD = 2; // Scroll offset must be unchanged for N renders
+  const PERMALINK_SCROLL_THRESHOLD = 2;
+  const permalinkScrollOffsetRef = useRef<number | null>(null);
+  const hasScrolledFromPermalinkRef = useRef(false);
+
+  const resetScrollStability = useCallback(() => {
+    lastScrollOffsetRef.current = null;
+    scrollStableCountRef.current = 0;
+  }, []);
+
+  const resetPermalinkScrollTracking = useCallback(() => {
+    permalinkScrollOffsetRef.current = null;
+    hasScrolledFromPermalinkRef.current = false;
+  }, []);
+
   // Track scroll offset to restore after state change
   const [restoreScrollOffset, setRestoreScrollOffset] = useState<number | null>(
     null,
@@ -101,22 +120,27 @@ export function useArrayVirtualizer<T, TSort>({
 
   useEffect(() => {
     if (initialPermalinkID) {
+      console.log('Setting anchorKind to permalink: initial permalink ID provided', {initialPermalinkID});
       setAnchorKind('permalink');
       setAnchorIndex(0);
       setPermalinkID(initialPermalinkID);
       setStartRow(undefined);
       setAutoPagingEnabled(false);
+      resetPermalinkScrollTracking();
       hasPositionedPermalinkRef.current = false;
     } else {
       // Reset to top when permalink is cleared
+      console.log('Setting anchorKind to forward: permalink cleared, resetting to top');
       setAnchorKind('forward');
       setAnchorIndex(0);
       setPermalinkID(undefined);
       setStartRow(undefined);
-      setAutoPagingEnabled(true);
+      setAutoPagingEnabled(false); // Will be enabled once scroll is stable
+      resetScrollStability();
+      resetPermalinkScrollTracking();
       hasPositionedPermalinkRef.current = false;
     }
-  }, [initialPermalinkID]);
+  }, [initialPermalinkID, resetPermalinkScrollTracking, resetScrollStability]);
 
   const {
     rowAt,
@@ -224,6 +248,26 @@ export function useArrayVirtualizer<T, TSort>({
     debug,
   });
 
+  // Helper to check if scroll position is stable (defined after virtualizer)
+  const isScrollStable = useCallback(() => {
+    const currentOffset = virtualizer.scrollOffset ?? 0;
+    
+    if (lastScrollOffsetRef.current === null) {
+      lastScrollOffsetRef.current = currentOffset;
+      scrollStableCountRef.current = 0;
+      return false;
+    }
+    
+    if (Math.abs(currentOffset - lastScrollOffsetRef.current) < 1) {
+      scrollStableCountRef.current++;
+    } else {
+      scrollStableCountRef.current = 0;
+    }
+    
+    lastScrollOffsetRef.current = currentOffset;
+    return scrollStableCountRef.current >= STABLE_SCROLL_THRESHOLD;
+  }, [virtualizer]);
+
   // Force remeasurement when estimateSize function changes (e.g., heightMode changes)
   useEffect(() => {
     virtualizer.measure();
@@ -245,12 +289,57 @@ export function useArrayVirtualizer<T, TSort>({
 
   const virtualItems = virtualizer.getVirtualItems();
 
+  // Track when the user scrolls away from the permalink position.
+  useEffect(() => {
+    if (anchorKind !== 'permalink') {
+      resetPermalinkScrollTracking();
+      return;
+    }
+
+    if (
+      permalinkScrollOffsetRef.current === null &&
+      complete &&
+      isScrollStable()
+    ) {
+      permalinkScrollOffsetRef.current = virtualizer.scrollOffset ?? 0;
+      hasScrolledFromPermalinkRef.current = false;
+    }
+
+    if (
+      !autoPagingEnabled &&
+      permalinkScrollOffsetRef.current !== null &&
+      !hasScrolledFromPermalinkRef.current
+    ) {
+      const delta = Math.abs(
+        (virtualizer.scrollOffset ?? 0) - permalinkScrollOffsetRef.current,
+      );
+      if (delta > PERMALINK_SCROLL_THRESHOLD) {
+        hasScrolledFromPermalinkRef.current = true;
+        setAutoPagingEnabled(true);
+      }
+    }
+  }, [
+    anchorKind,
+    autoPagingEnabled,
+    complete,
+    isScrollStable,
+    resetPermalinkScrollTracking,
+    virtualItems,
+    virtualizer,
+  ]);
+
   // Handle permalink positioning and enable auto-paging when ready
   useEffect(() => {
     // Reset positioning flag when switching modes
     if (anchorKind !== 'permalink' && restoreScrollOffset === null) {
       hasPositionedPermalinkRef.current = false;
-      if (!autoPagingEnabled) {
+      if (!autoPagingEnabled && isScrollStable()) {
+        console.log('Enabling auto-paging: scroll is stable', {
+          anchorKind,
+          anchorIndex,
+          permalinkID,
+          startRow,
+        }); // Debug log
         setAutoPagingEnabled(true);
       }
       return;
@@ -262,19 +351,25 @@ export function useArrayVirtualizer<T, TSort>({
 
     // Restore scroll offset when data is complete
     if (
+      anchorKind !== 'permalink' &&
       restoreScrollOffset !== null &&
       complete &&
       !hasPositionedPermalinkRef.current
     ) {
-      console.log(
-        'Restoring scroll offset using scrollToOffset:',
+      assert(
+        anchorKind !== 'permalink',
+        'Do not scroll to offset with permalink',
+      );
+      console.log('Restoring scroll offset using scrollToOffset:', {
         restoreScrollOffset,
-        'hasPositionedPermalinkRef.current:',
-        hasPositionedPermalinkRef.current,
-        'complete:',
+        'hasPositionedPermalinkRef.current': hasPositionedPermalinkRef.current,
         complete,
-      ); // Debug log
-      debugger;
+        permalinkID,
+        anchorKind,
+        anchorIndex,
+        startRow,
+      }); // Debug log
+
       virtualizer.scrollToOffset(restoreScrollOffset);
       setRestoreScrollOffset(null);
       hasPositionedPermalinkRef.current = true;
@@ -286,14 +381,19 @@ export function useArrayVirtualizer<T, TSort>({
       (!hasPositionedPermalinkRef.current || !complete) &&
       anchorIndex !== null
     ) {
+      assert(
+        anchorKind === 'permalink',
+        'Only restore by index with permalink',
+      );
       const permalinkLogicalIndex = anchorIndex;
       const targetVirtualIndex =
         permalinkLogicalIndex - firstRowIndex + startPlaceholder;
 
-      console.log(
-        'Positioning permalink at virtual index:',
+      console.log('Positioning permalink at virtual index:', {
         targetVirtualIndex,
-      ); // Debug log
+        complete,
+      }); // Debug log
+
       virtualizer.scrollToIndex(targetVirtualIndex, {
         align: 'start',
       });
@@ -303,8 +403,14 @@ export function useArrayVirtualizer<T, TSort>({
       }
     }
 
-    // Once complete, enable auto-paging
-    if (complete && !autoPagingEnabled) {
+    // Once complete and scroll is stable, enable auto-paging (non-permalink only)
+    if (
+      anchorKind !== 'permalink' &&
+      complete &&
+      !autoPagingEnabled &&
+      isScrollStable()
+    ) {
+      console.log('Enabling auto-paging: data complete and scroll stable');
       setAutoPagingEnabled(true);
     }
   }, [
@@ -320,11 +426,16 @@ export function useArrayVirtualizer<T, TSort>({
     restoreFirstVisibleItemID,
     restoreScrollOffsetFromFirstVisible,
     rowAt,
+    isScrollStable,
   ]);
 
   // Auto-shift anchor forward when scrolling near the end of the data window
   useEffect(() => {
     if (!autoPagingEnabled || virtualItems.length === 0 || atEnd) {
+      return;
+    }
+
+    if (anchorKind === 'permalink' && !hasScrolledFromPermalinkRef.current) {
       return;
     }
 
@@ -373,9 +484,11 @@ export function useArrayVirtualizer<T, TSort>({
 
       if (newAnchorRow && newAnchorIndex !== anchorIndex) {
         waitingForCompleteRef.current = true;
+        console.log('Setting anchorKind to forward: auto-paging forward near end of window', {newAnchorIndex, distanceFromEnd, nearPageEdgeThreshold});
         setAnchorKind('forward');
         setAnchorIndex(newAnchorIndex);
         setStartRow(toStartRow(newAnchorRow));
+        // Keep auto-paging enabled during continuous user scrolls
       }
     }
   }, [
@@ -396,6 +509,10 @@ export function useArrayVirtualizer<T, TSort>({
   // Auto-shift anchor backward when scrolling near the start of the data window
   useEffect(() => {
     if (!autoPagingEnabled || virtualItems.length === 0 || atStart) {
+      return;
+    }
+
+    if (anchorKind === 'permalink' && !hasScrolledFromPermalinkRef.current) {
       return;
     }
 
@@ -443,9 +560,11 @@ export function useArrayVirtualizer<T, TSort>({
 
       if (newAnchorRow && newAnchorIndex !== anchorIndex) {
         waitingForCompleteRef.current = true;
+        console.log('Setting anchorKind to backward: auto-paging backward near start of window', {newAnchorIndex, distanceFromStart, nearPageEdgeThreshold});
         setAnchorKind('backward');
         setAnchorIndex(newAnchorIndex);
         setStartRow(toStartRow(newAnchorRow));
+        // Keep auto-paging enabled during continuous user scrolls
         // TODO(arv): Remove
         // setPermalinkID(undefined);
       }
@@ -476,6 +595,7 @@ export function useArrayVirtualizer<T, TSort>({
       firstVisibleItemID?: string | undefined;
       scrollOffsetFromFirstVisible?: number | undefined;
     }) => {
+      console.log('Setting anchorKind via restoreAnchorState:', {anchorKind: state.anchorKind, anchorIndex: state.anchorIndex, permalinkID: state.permalinkID});
       setAnchorIndex(state.anchorIndex);
       setAnchorKind(state.anchorKind);
       setPermalinkID(state.permalinkID);
