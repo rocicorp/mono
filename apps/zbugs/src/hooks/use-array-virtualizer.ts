@@ -1,5 +1,5 @@
-import { useVirtualizer, type Virtualizer } from '@rocicorp/react-virtual';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   useRows,
   type GetPageQuery,
@@ -54,6 +54,21 @@ export interface UseArrayVirtualizerReturn<T, TSort> {
   }) => void;
 }
 
+type AnchorKind = 'forward' | 'backward' | 'permalink';
+
+type AnchorState<TSort> = {
+  kind: AnchorKind;
+  index: number;
+  startRow: TSort | undefined;
+  permalinkID?: string | undefined;
+};
+
+const anchorsEqual = <TSort>(a: AnchorState<TSort>, b: AnchorState<TSort>) =>
+  a.kind === b.kind &&
+  a.index === b.index &&
+  a.permalinkID === b.permalinkID &&
+  a.startRow === b.startRow;
+
 // Delay after positioning before enabling auto-paging.
 // Allows virtualItems to update after programmatic scroll.
 const POSITIONING_SETTLE_DELAY_MS = 500;
@@ -70,13 +85,20 @@ export function useArrayVirtualizer<T, TSort>({
   debug = false,
   overscan = 5,
 }: UseArrayVirtualizerOptions<T, TSort>): UseArrayVirtualizerReturn<T, TSort> {
-  const [anchorIndex, setAnchorIndex] = useState(0);
-  const [anchorKind, setAnchorKind] = useState<
-    'forward' | 'backward' | 'permalink'
-  >(initialPermalinkID ? 'permalink' : 'forward');
-  const [startRow, setStartRow] = useState<TSort | undefined>(undefined);
-  const [permalinkID, setPermalinkID] = useState<string | undefined>(
-    initialPermalinkID,
+  const [anchor, setAnchor] = useState<AnchorState<TSort>>(() =>
+    initialPermalinkID
+      ? {
+          kind: 'permalink',
+          index: 0,
+          startRow: undefined,
+          permalinkID: initialPermalinkID,
+        }
+      : {
+          kind: 'forward',
+          index: 0,
+          startRow: undefined,
+          permalinkID: undefined,
+        },
   );
 
   // Counter to force effect re-run when restoring same state
@@ -97,25 +119,32 @@ export function useArrayVirtualizer<T, TSort>({
   // Ref: retry count for custom scroll loop
   const scrollRetryCountRef = useRef(0);
 
+  const replaceAnchor = useCallback(
+    (next: AnchorState<TSort>) =>
+      setAnchor(prev => (anchorsEqual(prev, next) ? prev : next)),
+    [],
+  );
+
   useEffect(() => {
-    if (initialPermalinkID) {
-      setAnchorKind('permalink');
-      setAnchorIndex(0);
-      setPermalinkID(initialPermalinkID);
-      setStartRow(undefined);
-      positionedRef.current = false;
-      positionedAtRef.current = 0;
-      scrollRetryCountRef.current = 0;
-    } else {
-      setAnchorKind('forward');
-      setAnchorIndex(0);
-      setPermalinkID(undefined);
-      setStartRow(undefined);
-      positionedRef.current = false;
-      positionedAtRef.current = 0;
-      scrollRetryCountRef.current = 0;
-    }
-  }, [initialPermalinkID]);
+    const nextAnchor = initialPermalinkID
+      ? {
+          kind: 'permalink' as AnchorKind,
+          index: 0,
+          startRow: undefined,
+          permalinkID: initialPermalinkID,
+        }
+      : {
+          kind: 'forward' as AnchorKind,
+          index: 0,
+          startRow: undefined,
+          permalinkID: undefined,
+        };
+
+    replaceAnchor(nextAnchor);
+    positionedRef.current = false;
+    positionedAtRef.current = 0;
+    scrollRetryCountRef.current = 0;
+  }, [initialPermalinkID, replaceAnchor]);
 
   const {
     rowAt,
@@ -128,30 +157,37 @@ export function useArrayVirtualizer<T, TSort>({
     permalinkNotFound,
   } = useRows<T, TSort>({
     pageSize,
-    anchor:
-      anchorKind === 'permalink' && permalinkID
-        ? {
-            kind: 'permalink',
-            index: anchorIndex,
-            id: permalinkID,
-          }
-        : anchorKind === 'forward'
-          ? {
-              kind: 'forward',
-              index: anchorIndex,
-              startRow,
-            }
-          : anchorKind === 'backward' && startRow
-            ? {
-                kind: 'backward',
-                index: anchorIndex,
-                startRow,
-              }
-            : {
-                kind: 'forward',
-                index: anchorIndex,
-                startRow,
-              },
+    anchor: useMemo(() => {
+      if (anchor.kind === 'permalink' && anchor.permalinkID) {
+        return {
+          kind: 'permalink' as const,
+          index: anchor.index,
+          id: anchor.permalinkID,
+        };
+      }
+
+      if (anchor.kind === 'forward') {
+        return {
+          kind: 'forward' as const,
+          index: anchor.index,
+          startRow: anchor.startRow,
+        };
+      }
+
+      if (anchor.kind === 'backward' && anchor.startRow) {
+        return {
+          kind: 'backward' as const,
+          index: anchor.index,
+          startRow: anchor.startRow,
+        };
+      }
+
+      return {
+        kind: 'forward' as const,
+        index: anchor.index,
+        startRow: anchor.startRow,
+      };
+    }, [anchor]),
     getPageQuery,
     getSingleQuery,
     toStartRow,
@@ -159,6 +195,21 @@ export function useArrayVirtualizer<T, TSort>({
 
   const endPlaceholder = atEnd ? 0 : 1;
   const startPlaceholder = atStart ? 0 : 1;
+
+  const placeholderForIndex = useCallback(
+    (index: number) => {
+      if (!atStart && index === 0) {
+        return 'start';
+      }
+
+      if (!atEnd && index === startPlaceholder + rowsLength) {
+        return 'end';
+      }
+
+      return null;
+    },
+    [atEnd, atStart, rowsLength, startPlaceholder],
+  );
 
   // Convert virtualizer index to logical data index
   const toLogicalIndex = useCallback(
@@ -175,19 +226,14 @@ export function useArrayVirtualizer<T, TSort>({
         return undefined;
       }
 
-      // Start placeholder
-      if (!atStart && index === 0) {
+      if (placeholderForIndex(index)) {
         return undefined;
       }
-      // End placeholder
-      if (!atEnd && index === virtualizerCount - 1) {
-        return undefined;
-      }
-      // Map virtualizer index to logical index, accounting for start placeholder
+
       const logicalIndex = firstRowIndex + (index - startPlaceholder);
       return rowAt(logicalIndex);
     },
-    [rowAt, firstRowIndex, virtualizerCount, atEnd, atStart, startPlaceholder],
+    [placeholderForIndex, rowAt, firstRowIndex, startPlaceholder],
   );
 
   const estimateSize = useCallback(
@@ -211,12 +257,13 @@ export function useArrayVirtualizer<T, TSort>({
         if (row && typeof row === 'object' && 'id' in row) {
           return (row as {id: string}).id;
         }
-        if (!atStart && index === 0) {
-          return `placeholder-start`;
+        const placeholder = placeholderForIndex(index);
+        if (placeholder) {
+          return `placeholder-${placeholder}-${index}`;
         }
         return `placeholder-end-${index}`;
       },
-      [rowAtVirtualIndex, atStart],
+      [rowAtVirtualIndex, placeholderForIndex],
     ),
     overscan,
     debug,
@@ -231,30 +278,34 @@ export function useArrayVirtualizer<T, TSort>({
 
   // ---- Single unified effect: positioning + auto-paging ----
   useEffect(() => {
-    // Phase 0: Scroll restoration (from restoreAnchorState)
-    if (pendingScrollRef.current !== null && anchorKind !== 'permalink') {
+    const restoreScrollIfNeeded = () => {
+      if (pendingScrollRef.current === null || anchor.kind === 'permalink') {
+        return false;
+      }
+
       if (complete && rowsLength > 0) {
         virtualizer.scrollToOffset(pendingScrollRef.current);
         pendingScrollRef.current = null;
         positionedRef.current = true;
         positionedAtRef.current = Date.now();
       }
-      // Don't auto-page until restoration is done
-      return;
-    }
 
-    // Phase 1: Permalink positioning (mimics scrollToIndex with pixel adjustment)
-    if (anchorKind === 'permalink') {
-      if (rowsLength === 0) {
-        return;
+      return true;
+    };
+
+    const positionPermalinkIfNeeded = () => {
+      if (anchor.kind !== 'permalink') {
+        return false;
       }
 
-      // Calculate target virtualizer index
-      // (same formula for both initial navigation and restoration)
-      const targetVirtualIndex = anchorIndex - firstRowIndex + startPlaceholder;
+      if (rowsLength === 0) {
+        return true;
+      }
+
+      const targetVirtualIndex =
+        anchor.index - firstRowIndex + startPlaceholder;
 
       if (!positionedRef.current || !complete) {
-        // For initial navigation (no pixel offset), use scrollToIndex
         if (pendingScrollRef.current === null) {
           virtualizer.scrollToIndex(targetVirtualIndex, {
             align: 'start',
@@ -265,32 +316,25 @@ export function useArrayVirtualizer<T, TSort>({
             positionedAtRef.current = Date.now();
           }
 
-          // Don't auto-page until positioning is done
-          return;
+          return true;
         }
 
-        // For restoration with pixel offset, use custom scroll loop
         const offsetInfo = virtualizer.getOffsetForIndex(
           targetVirtualIndex,
           'start',
         );
 
         if (!offsetInfo) {
-          // Target not yet measured, give up this frame
           scrollRetryCountRef.current = 0;
-          return;
+          return true;
         }
 
         const [offset, align] = offsetInfo;
-
-        // Apply pixel adjustment
         const adjustment = pendingScrollRef.current;
         const targetOffset = offset + adjustment;
 
-        // Scroll to target position
         virtualizer.scrollToOffset(targetOffset);
 
-        // Verify position after scroll
         const currentScrollOffset = virtualizer.scrollOffset ?? 0;
         const afterInfo = virtualizer.getOffsetForIndex(
           targetVirtualIndex,
@@ -299,172 +343,178 @@ export function useArrayVirtualizer<T, TSort>({
 
         if (!afterInfo) {
           scrollRetryCountRef.current = 0;
-          return;
+          return true;
         }
 
         const targetAfterAdjustment = afterInfo[0] + adjustment;
 
-        // Check if we're at the correct position (1px tolerance)
         if (Math.abs(currentScrollOffset - targetAfterAdjustment) <= 1) {
-          // Position is correct, we're done
           positionedRef.current = true;
           positionedAtRef.current = Date.now();
           pendingScrollRef.current = null;
           scrollRetryCountRef.current = 0;
-          return;
+          return true;
         }
 
-        // Position not correct yet, retry
         const maxRetries = 10;
         if (scrollRetryCountRef.current < maxRetries) {
           scrollRetryCountRef.current++;
         } else {
-          // Max retries reached, accept current position
           positionedRef.current = true;
           positionedAtRef.current = Date.now();
           pendingScrollRef.current = null;
           scrollRetryCountRef.current = 0;
         }
 
+        return true;
+      }
+
+      return false;
+    };
+
+    const maybeAutoPage = () => {
+      if (virtualItems.length === 0 || !complete) {
         return;
       }
 
-      // Positioned and complete — fall through to Phase 2 for auto-paging.
-    }
-
-    // Phase 2: Auto-paging (forward/backward modes only)
-    if (virtualItems.length === 0 || !complete) {
-      return;
-    }
-
-    // Don't auto-page for 500ms after positioning completes.
-    // virtualItems take time to update after scrollToIndex(), so we need
-    // a settling period to avoid checking boundaries with stale positions.
-    if (Date.now() - positionedAtRef.current < POSITIONING_SETTLE_DELAY_MS) {
-      return;
-    }
-
-    // Clear the waiting flag once data has loaded
-    if (waitingForDataRef.current) {
-      waitingForDataRef.current = false;
-    }
-
-    const viewportHeight = virtualizer.scrollRect?.height ?? 0;
-    const thresholdDistance = viewportHeight * 2;
-
-    // Build map of measured sizes from virtualItems
-    const measuredSizes = new Map<number, number>();
-    for (const item of virtualItems) {
-      measuredSizes.set(item.index, item.size);
-    }
-
-    const getSizeForIndex = (index: number): number => {
-      const measured = measuredSizes.get(index);
-      if (measured !== undefined) {
-        return measured;
+      if (Date.now() - positionedAtRef.current < POSITIONING_SETTLE_DELAY_MS) {
+        return;
       }
-      return estimateSize(index);
+
+      if (waitingForDataRef.current) {
+        waitingForDataRef.current = false;
+      }
+
+      const viewportHeight = virtualizer.scrollRect?.height ?? 0;
+      const thresholdDistance = viewportHeight * 2;
+
+      const measuredSizes = new Map<number, number>();
+      for (const item of virtualItems) {
+        measuredSizes.set(item.index, item.size);
+      }
+
+      const getSizeForIndex = (index: number): number => {
+        const measured = measuredSizes.get(index);
+        if (measured !== undefined) {
+          return measured;
+        }
+        return estimateSize(index);
+      };
+
+      if (!atEnd) {
+        let lastItem = virtualItems[virtualItems.length - 1];
+        let lastRow = rowAtVirtualIndex(lastItem.index);
+
+        if (!lastRow) {
+          for (let i = virtualItems.length - 2; i >= 0; i--) {
+            const item = virtualItems[i];
+            const row = rowAtVirtualIndex(item.index);
+            if (row) {
+              lastItem = item;
+              lastRow = row;
+              break;
+            }
+          }
+        }
+
+        if (lastRow) {
+          const lastLogicalIndex = toLogicalIndex(lastItem.index);
+          const lastDataIndex = firstRowIndex + rowsLength - 1;
+
+          const remainingRowCount = lastDataIndex - lastLogicalIndex;
+          let estimatedDistanceToEnd = 0;
+
+          for (let i = 0; i < remainingRowCount && i < 20; i++) {
+            estimatedDistanceToEnd += getSizeForIndex(lastItem.index + i + 1);
+          }
+
+          if (remainingRowCount > 20) {
+            const avgSize = estimatedDistanceToEnd / 20;
+            estimatedDistanceToEnd += avgSize * (remainingRowCount - 20);
+          }
+
+          if (estimatedDistanceToEnd < thresholdDistance) {
+            const newAnchorIndex = lastLogicalIndex - Math.ceil(pageSize * 0.6);
+            const newAnchorRow = rowAt(newAnchorIndex);
+
+            if (newAnchorRow && newAnchorIndex !== anchor.index) {
+              waitingForDataRef.current = true;
+              replaceAnchor({
+                kind: 'forward',
+                index: newAnchorIndex,
+                startRow: toStartRow(newAnchorRow),
+                permalinkID: anchor.permalinkID,
+              });
+              return;
+            }
+          }
+        }
+      }
+
+      if (!atStart) {
+        let firstItem = virtualItems[0];
+        let firstRow = rowAtVirtualIndex(firstItem.index);
+
+        if (!firstRow) {
+          for (let i = 1; i < virtualItems.length; i++) {
+            const item = virtualItems[i];
+            const row = rowAtVirtualIndex(item.index);
+            if (row) {
+              firstItem = item;
+              firstRow = row;
+              break;
+            }
+          }
+        }
+
+        if (firstRow) {
+          const firstLogicalIndex = toLogicalIndex(firstItem.index);
+
+          const precedingRowCount = firstLogicalIndex - firstRowIndex;
+          let estimatedDistanceToStart = 0;
+
+          for (let i = 0; i < precedingRowCount && i < 20; i++) {
+            estimatedDistanceToStart += getSizeForIndex(
+              firstItem.index - i - 1,
+            );
+          }
+
+          if (precedingRowCount > 20) {
+            const avgSize = estimatedDistanceToStart / 20;
+            estimatedDistanceToStart += avgSize * (precedingRowCount - 20);
+          }
+
+          if (estimatedDistanceToStart < thresholdDistance) {
+            const newAnchorIndex =
+              firstLogicalIndex + Math.ceil(pageSize * 0.6);
+            const newAnchorRow = rowAt(newAnchorIndex);
+
+            if (newAnchorRow && newAnchorIndex !== anchor.index) {
+              waitingForDataRef.current = true;
+              replaceAnchor({
+                kind: 'backward',
+                index: newAnchorIndex,
+                startRow: toStartRow(newAnchorRow),
+                permalinkID: anchor.permalinkID,
+              });
+              return;
+            }
+          }
+        }
+      }
     };
 
-    // Check forward boundary (near end of data window)
-    if (!atEnd) {
-      let lastItem = virtualItems[virtualItems.length - 1];
-      let lastRow = rowAtVirtualIndex(lastItem.index);
-
-      if (!lastRow) {
-        for (let i = virtualItems.length - 2; i >= 0; i--) {
-          const item = virtualItems[i];
-          const row = rowAtVirtualIndex(item.index);
-          if (row) {
-            lastItem = item;
-            lastRow = row;
-            break;
-          }
-        }
-      }
-
-      if (lastRow) {
-        const lastLogicalIndex = toLogicalIndex(lastItem.index);
-        const lastDataIndex = firstRowIndex + rowsLength - 1;
-
-        // Calculate actual distance: sum measured/estimated sizes of remaining items
-        const remainingRowCount = lastDataIndex - lastLogicalIndex;
-        let estimatedDistanceToEnd = 0;
-
-        for (let i = 0; i < remainingRowCount && i < 20; i++) {
-          estimatedDistanceToEnd += getSizeForIndex(lastItem.index + i + 1);
-        }
-
-        if (remainingRowCount > 20) {
-          const avgSize = estimatedDistanceToEnd / 20;
-          estimatedDistanceToEnd += avgSize * (remainingRowCount - 20);
-        }
-
-        if (estimatedDistanceToEnd < thresholdDistance) {
-          const newAnchorIndex = lastLogicalIndex - Math.ceil(pageSize * 0.6);
-          const newAnchorRow = rowAt(newAnchorIndex);
-
-          if (newAnchorRow && newAnchorIndex !== anchorIndex) {
-            waitingForDataRef.current = true;
-            setAnchorKind('forward');
-            setAnchorIndex(newAnchorIndex);
-            setStartRow(toStartRow(newAnchorRow));
-            return;
-          }
-        }
-      }
+    if (restoreScrollIfNeeded()) {
+      return;
     }
 
-    // Check backward boundary (near start of data window)
-    if (!atStart) {
-      let firstItem = virtualItems[0];
-      let firstRow = rowAtVirtualIndex(firstItem.index);
-
-      if (!firstRow) {
-        for (let i = 1; i < virtualItems.length; i++) {
-          const item = virtualItems[i];
-          const row = rowAtVirtualIndex(item.index);
-          if (row) {
-            firstItem = item;
-            firstRow = row;
-            break;
-          }
-        }
-      }
-
-      if (firstRow) {
-        const firstLogicalIndex = toLogicalIndex(firstItem.index);
-
-        // Calculate actual distance: sum measured/estimated sizes of preceding items
-        const precedingRowCount = firstLogicalIndex - firstRowIndex;
-        let estimatedDistanceToStart = 0;
-
-        for (let i = 0; i < precedingRowCount && i < 20; i++) {
-          estimatedDistanceToStart += getSizeForIndex(firstItem.index - i - 1);
-        }
-
-        if (precedingRowCount > 20) {
-          const avgSize = estimatedDistanceToStart / 20;
-          estimatedDistanceToStart += avgSize * (precedingRowCount - 20);
-        }
-
-        if (estimatedDistanceToStart < thresholdDistance) {
-          const newAnchorIndex = firstLogicalIndex + Math.ceil(pageSize * 0.6);
-          const newAnchorRow = rowAt(newAnchorIndex);
-
-          if (newAnchorRow && newAnchorIndex !== anchorIndex) {
-            waitingForDataRef.current = true;
-            setAnchorKind('backward');
-            setAnchorIndex(newAnchorIndex);
-            setStartRow(toStartRow(newAnchorRow));
-            return;
-          }
-        }
-      }
+    if (positionPermalinkIfNeeded()) {
+      return;
     }
+
+    maybeAutoPage();
   }, [
-    anchorKind,
-    anchorIndex,
+    anchor,
     rowsLength,
     complete,
     startPlaceholder,
@@ -479,6 +529,7 @@ export function useArrayVirtualizer<T, TSort>({
     pageSize,
     toStartRow,
     restoreTrigger,
+    replaceAnchor,
   ]);
 
   const restoreAnchorState = useCallback(
@@ -491,12 +542,12 @@ export function useArrayVirtualizer<T, TSort>({
       firstVisibleItemID?: string | undefined;
       scrollOffsetFromFirstVisible?: number | undefined;
     }) => {
-      setAnchorIndex(state.anchorIndex);
-      setAnchorKind(state.anchorKind);
-      // If we have firstVisibleItemID (captured from permalink mode),
-      // use it as the new permalinkID for restoration
-      setPermalinkID(state.firstVisibleItemID ?? state.permalinkID);
-      setStartRow(state.startRow);
+      replaceAnchor({
+        kind: state.anchorKind,
+        index: state.anchorIndex,
+        startRow: state.startRow,
+        permalinkID: state.firstVisibleItemID ?? state.permalinkID,
+      });
       positionedRef.current = false;
       positionedAtRef.current = 0;
       scrollRetryCountRef.current = 0;
@@ -507,23 +558,22 @@ export function useArrayVirtualizer<T, TSort>({
       // Increment trigger to force re-render even if state values are identical
       setRestoreTrigger(prev => prev + 1);
     },
-    [],
+    [replaceAnchor],
   );
 
   // Capture current anchor state for external save/restore
   const captureAnchorState = useCallback(() => {
-    if (anchorKind === 'permalink') {
+    if (anchor.kind === 'permalink') {
       const scrollOffset = virtualizer.scrollOffset ?? 0;
-
-      // Use virtualizer API to get the item at the current scroll position
       const firstVisibleItem =
         virtualizer.getVirtualItemForOffset(scrollOffset);
+
       if (!firstVisibleItem) {
         return {
-          anchorIndex,
-          anchorKind,
-          permalinkID,
-          startRow,
+          anchorIndex: anchor.index,
+          anchorKind: anchor.kind,
+          permalinkID: anchor.permalinkID,
+          startRow: anchor.startRow,
           scrollOffset,
         };
       }
@@ -531,10 +581,10 @@ export function useArrayVirtualizer<T, TSort>({
       const firstVisibleRow = rowAtVirtualIndex(firstVisibleItem.index);
       if (!firstVisibleRow) {
         return {
-          anchorIndex,
-          anchorKind,
-          permalinkID,
-          startRow,
+          anchorIndex: anchor.index,
+          anchorKind: anchor.kind,
+          permalinkID: anchor.permalinkID,
+          startRow: anchor.startRow,
           scrollOffset,
         };
       }
@@ -548,10 +598,10 @@ export function useArrayVirtualizer<T, TSort>({
 
       if (!firstVisibleItemID) {
         return {
-          anchorIndex,
-          anchorKind,
-          permalinkID,
-          startRow,
+          anchorIndex: anchor.index,
+          anchorKind: anchor.kind,
+          permalinkID: anchor.permalinkID,
+          startRow: anchor.startRow,
           scrollOffset,
         };
       }
@@ -573,27 +623,22 @@ export function useArrayVirtualizer<T, TSort>({
     }
 
     return {
-      anchorIndex,
-      anchorKind,
-      permalinkID,
-      startRow,
+      anchorIndex: anchor.index,
+      anchorKind: anchor.kind,
+      permalinkID: anchor.permalinkID,
+      startRow: anchor.startRow,
       scrollOffset: virtualizer.scrollOffset ?? 0,
     };
-  }, [
-    anchorKind,
-    anchorIndex,
-    permalinkID,
-    startRow,
-    virtualizer,
-    rowAtVirtualIndex,
-  ]);
+  }, [anchor, virtualizer, rowAtVirtualIndex]);
+
+  const anchorState = useMemo(() => captureAnchorState(), [captureAnchorState]);
 
   return {
     virtualizer,
     rowAt: rowAtVirtualIndex,
     rowsEmpty,
     permalinkNotFound,
-    anchorState: captureAnchorState(),
+    anchorState,
     restoreAnchorState,
   };
 }
