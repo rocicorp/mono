@@ -833,7 +833,7 @@ describe('createSocket', () => {
               activeClients: [...activeClients],
             },
           ],
-          auth ?? undefined,
+          auth === null ? undefined : auth,
         ),
       );
       expect(queriesPatch).toEqual(new Map());
@@ -864,7 +864,7 @@ describe('createSocket', () => {
       );
       expect(`${mockSocket.url}`).toBe(expectedURL);
       expect(mockSocket2.protocol).toBe(
-        encodeSecProtocols(undefined, auth ?? undefined),
+        encodeSecProtocols(undefined, auth === null ? undefined : auth),
       );
       // if we did not encode queries into the sec-protocol header, we should not have a queriesPatch
       expect(queriesPatch2).toBeUndefined();
@@ -1764,6 +1764,43 @@ test('pusher sends one mutation per push message', async () => {
       expectedPushMessages: 3,
     },
   ]);
+});
+
+test('pusher sends auth null after auth is cleared', async () => {
+  const z = zeroForTest();
+  await z.triggerConnected();
+
+  await z.connection.connect({auth: null});
+
+  const mockSocket = await z.socket;
+  mockSocket.messages.length = 0;
+
+  const mutations: Mutation[] = [
+    {
+      type: MutationType.Custom,
+      clientID: 'c1',
+      id: 1,
+      name: 'mut1',
+      args: [{d: 1}],
+      timestamp: 1,
+    },
+  ];
+  const pushReq: PushRequest = {
+    profileID: 'p1',
+    clientGroupID: await z.clientGroupID,
+    pushVersion: 1,
+    schemaVersion: '1',
+    mutations,
+  };
+
+  await z.pusher(pushReq, 'test-request-id');
+
+  expect(mockSocket.messages).toHaveLength(1);
+  const msg = valita.parse(
+    JSON.parse(mockSocket.messages[0]),
+    pushMessageSchema,
+  );
+  expect(msg[1].auth).toBeNull();
 });
 
 test('pusher maps CRUD mutation names', async () => {
