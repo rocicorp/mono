@@ -96,6 +96,21 @@ function resolveCondition(
       }
       return {type: condition.type, conditions: resolved};
     }
+    case 'correlatedSubquery': {
+      const resolvedSubquery = resolveASTRecursive(
+        condition.related.subquery,
+        tableSpecs,
+        execute,
+        companions,
+      );
+      if (resolvedSubquery !== condition.related.subquery) {
+        return {
+          ...condition,
+          related: {...condition.related, subquery: resolvedSubquery},
+        };
+      }
+      return condition;
+    }
     default:
       return condition;
   }
@@ -151,8 +166,11 @@ const ALWAYS_FALSE: SimpleCondition = {
 };
 
 /**
- * Checks if the subquery has at least one unique index whose columns
- * are all equality-constrained by literal values.
+ * Checks if the subquery is guaranteed to return at most one deterministic row.
+ *
+ * This is true when all columns of at least one unique index on the subquery
+ * table are equality-constrained by literal values in the WHERE clause
+ * (using only AND conjunctions).
  */
 export function isSimpleSubquery(
   subquery: AST,
