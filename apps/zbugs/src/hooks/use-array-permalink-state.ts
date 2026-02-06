@@ -1,6 +1,9 @@
 import {useRef} from 'react';
 import {useHistoryState} from 'wouter/use-browser-location';
-import {deepEqual} from '../../../../packages/shared/src/json.ts';
+import {
+  deepEqual,
+  type ReadonlyJSONValue,
+} from '../../../../packages/shared/src/json.ts';
 import type {ScrollRestorationState} from './use-array-virtualizer.ts';
 
 /**
@@ -26,9 +29,12 @@ export function useArrayPermalinkState<TStartRow>(): [
       !prevStateRef.current ||
       rawScrollState.anchorIndex !== prevStateRef.current.anchorIndex ||
       rawScrollState.anchorKind !== prevStateRef.current.anchorKind ||
-      !deepEqual(rawScrollState.startRow, prevStateRef.current.startRow) ||
+      !deepEqual(
+        rawScrollState.startRow as ReadonlyJSONValue | undefined,
+        prevStateRef.current.startRow as ReadonlyJSONValue | undefined,
+      ) ||
       rawScrollState.permalinkID !== prevStateRef.current.permalinkID ||
-      rawScrollState.scrollTop !== prevStateRef.current.scrollTop
+      rawScrollState.scrollOffset !== prevStateRef.current.scrollOffset
     ) {
       // Values differ, update the ref
       prevStateRef.current = rawScrollState;
@@ -39,6 +45,5 @@ export function useArrayPermalinkState<TStartRow>(): [
 }
 
 function setScrollState<TStartRow>(state: ScrollRestorationState<TStartRow>) {
-  console.log('Setting scroll state:', state);
   window.history.replaceState(state, '', window.location.href);
 }
