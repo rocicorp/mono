@@ -704,7 +704,7 @@ describe('createSocket', () => {
       baseCookie: null,
       clientID: 'clientID',
       userID: 'userID',
-      auth: undefined,
+      auth: null,
       lmid: 123,
       debugPerf: false,
       now: 0,
@@ -776,7 +776,7 @@ describe('createSocket', () => {
     baseCookie: NullableVersion;
     clientID: string;
     userID: string;
-    auth: string | undefined;
+    auth: string | null;
     lmid: number;
     debugPerf: boolean;
     now: number;
@@ -833,7 +833,7 @@ describe('createSocket', () => {
               activeClients: [...activeClients],
             },
           ],
-          auth,
+          auth ?? undefined,
         ),
       );
       expect(queriesPatch).toEqual(new Map());
@@ -863,7 +863,9 @@ describe('createSocket', () => {
         0, // do not put any extra information into headers
       );
       expect(`${mockSocket.url}`).toBe(expectedURL);
-      expect(mockSocket2.protocol).toBe(encodeSecProtocols(undefined, auth));
+      expect(mockSocket2.protocol).toBe(
+        encodeSecProtocols(undefined, auth ?? undefined),
+      );
       // if we did not encode queries into the sec-protocol header, we should not have a queriesPatch
       expect(queriesPatch2).toBeUndefined();
       expect(deletedClients2?.clientIDs).toEqual(['old-deleted-client']);
