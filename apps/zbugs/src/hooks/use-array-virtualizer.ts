@@ -249,12 +249,27 @@ export function useArrayVirtualizer<T, TSort>({
         return;
       }
 
-      // Permalink item is at logical index (firstRowIndex + anchorIndex)
-      // In virtualizer coordinates: anchorIndex + startPlaceholder
-      const targetVirtualIndex = anchorIndex + startPlaceholder;
+      // Calculate target virtualizer index
+      // (same formula for both initial navigation and restoration)
+      const targetVirtualIndex = anchorIndex - firstRowIndex + startPlaceholder;
 
       if (!positionedRef.current || !complete) {
-        // Get offset for target index with 'start' alignment (same as scrollToIndex)
+        // For initial navigation (no pixel offset), use scrollToIndex
+        if (pendingScrollRef.current === null) {
+          virtualizer.scrollToIndex(targetVirtualIndex, {
+            align: 'start',
+          });
+
+          if (complete) {
+            positionedRef.current = true;
+            positionedAtRef.current = Date.now();
+          }
+
+          // Don't auto-page until positioning is done
+          return;
+        }
+
+        // For restoration with pixel offset, use custom scroll loop
         const offsetInfo = virtualizer.getOffsetForIndex(
           targetVirtualIndex,
           'start',
@@ -268,14 +283,14 @@ export function useArrayVirtualizer<T, TSort>({
 
         const [offset, align] = offsetInfo;
 
-        // Apply pixel adjustment if provided (for scroll restoration)
-        const adjustment = pendingScrollRef.current ?? 0;
+        // Apply pixel adjustment
+        const adjustment = pendingScrollRef.current;
         const targetOffset = offset + adjustment;
 
         // Scroll to target position
         virtualizer.scrollToOffset(targetOffset);
 
-        // Verify position after scroll (same logic as scrollToIndex)
+        // Verify position after scroll
         const currentScrollOffset = virtualizer.scrollOffset ?? 0;
         const afterInfo = virtualizer.getOffsetForIndex(
           targetVirtualIndex,
@@ -289,7 +304,7 @@ export function useArrayVirtualizer<T, TSort>({
 
         const targetAfterAdjustment = afterInfo[0] + adjustment;
 
-        // Check if we're at the correct position (1px tolerance like approxEqual)
+        // Check if we're at the correct position (1px tolerance)
         if (Math.abs(currentScrollOffset - targetAfterAdjustment) <= 1) {
           // Position is correct, we're done
           positionedRef.current = true;
