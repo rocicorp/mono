@@ -763,13 +763,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       msg,
       (lc, clientID, msg: Partial<InitConnectionBody>, cvr) => {
         let customQueryTransformMode: CustomQueryTransformMode = 'missing';
-        // we don't re-transform when auth is not provided
+        // we re-transform when auth is null, but not undefined
         //
-        // this is because the client will change the user ID (e.g. to 'anon'), which will
-        // cause a reconnection and a full re-transform at that time
-        //
-        // also, for backwards compatibility, since older clients will not include auth in the
-        // changeDesiredQueries message
+        // for backwards compatibility we use null, older clients will always
+        // send undefined auth in the changeDesiredQueries message
         if (ctx.auth !== undefined) {
           const previousAuth = this.#auth;
           const nextAuth = pickToken(lc, previousAuth, ctx.auth);
