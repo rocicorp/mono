@@ -34,7 +34,6 @@ import {
   majorVersionToString,
 } from '../../../types/state-version.ts';
 import type {Sink} from '../../../types/streams.ts';
-import {Subscription, type PendingResult} from '../../../types/subscription.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
   getSubscriptionState,
@@ -53,6 +52,7 @@ import type {
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
+import {ChangeStreamMultiplexer} from './change-stream-multiplexer.ts';
 import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
   Message,
@@ -205,6 +205,9 @@ async function checkAndUpdateUpstream(
   return upstreamReplica;
 }
 
+// Parameterize this if necessary. In practice starvation may never happen.
+const MAX_LOW_PRIORITY_DELAY_MS = 1000;
+
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.
@@ -266,9 +269,15 @@ class PostgresChangeSource implements ChangeSource {
       clientStart,
     );
 
-    const changes = Subscription.create<ChangeStreamMessage>({
-      cleanup: () => messages.cancel(),
-    });
+    // At the moment the replication stream is the only producer of changes,
+    // so the ChangeStreamMultiplexer is largely a no-op, but these is where
+    // backfill streams will enter the picture.
+    const changes = new ChangeStreamMultiplexer(
+      this.#lc,
+      clientWatermark,
+      [messages],
+      [],
+    );
     const acker = new Acker(acks);
 
     const changeMaker = new ChangeMaker(
@@ -281,22 +290,48 @@ class PostgresChangeSource implements ChangeSource {
 
     void (async function () {
       try {
+        let reserved = false;
+
         for await (const [lsn, msg] of messages) {
+          // Note: no reservation is needed for pushStatus().
           if (msg.tag === 'keepalive') {
-            changes.push([
+            changes.pushStatus([
               'status',
               msg,
               {watermark: majorVersionToString(lsn)},
             ]);
             continue;
           }
-          let last: PendingResult | undefined;
-          for (const change of await changeMaker.makeChanges(lsn, msg)) {
-            last = changes.push(change);
+
+          if (!reserved) {
+            const res = changes.reserve('replication');
+            typeof res === 'string' || (await res); // awaits should be uncommon
+            reserved = true;
           }
-          await last?.result; // Allow the change-streamer to push back.
+
+          let lastChange: ChangeStreamMessage | undefined;
+          for (const change of await changeMaker.makeChanges(lsn, msg)) {
+            await changes.push(change); // Allow the change-streamer to push back.
+            lastChange = change;
+          }
+
+          if (
+            lastChange?.[0] === 'commit' &&
+            (messages.queued === 0 ||
+              changes.waiterDelay() > MAX_LOW_PRIORITY_DELAY_MS)
+          ) {
+            // After each transaction, release the reservation:
+            // - if there are no pending upstream messages
+            // - or if a low priority request has been waiting for longer
+            //   than MAX_LOW_PRIORITY_DELAY_MS. This is to prevent
+            //   (backfill) starvation on very active upstreams.
+            changes.release(lastChange[2].watermark);
+            reserved = false;
+          }
         }
       } catch (e) {
+        // Note: no need to worry about reservations here since downstream
+        //       is being completely canceled.
         changes.fail(translateError(e));
       }
     })();
@@ -308,7 +343,7 @@ class PostgresChangeSource implements ChangeSource {
     );
 
     return {
-      changes,
+      changes: changes.asSource(),
       acks: {push: status => acker.ack(status[2].watermark)},
     };
   }
