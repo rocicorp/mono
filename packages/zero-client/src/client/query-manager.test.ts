@@ -76,23 +76,20 @@ test('add', () => {
   queryManager.addLegacy(ast, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '12hwg3ihkijhm',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '12hwg3ihkijhm',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   queryManager.addLegacy(ast, 'forever');
   queryManager.flushBatch();
@@ -125,20 +122,17 @@ test('add and remove a custom query', () => {
   );
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '2l1ig6e3tnu0a',
-          name: 'customQuery',
-          args: [1],
-          ttl: 60000,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '2l1ig6e3tnu0a',
+        name: 'customQuery',
+        args: [1],
+        ttl: 60000,
+      },
+    ],
+  });
 
   const rm2 = queryManager.addCustom(
     ast,
@@ -173,20 +167,17 @@ test('add and remove a custom query', () => {
   queryManager.flushBatch();
   // update event sent
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '2l1ig6e3tnu0a',
-          name: 'customQuery',
-          args: [1],
-          ttl: 120000,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '2l1ig6e3tnu0a',
+        name: 'customQuery',
+        args: [1],
+        ttl: 120000,
+      },
+    ],
+  });
 
   queryManager.updateCustom({name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
@@ -267,108 +258,105 @@ test('add renamed fields', () => {
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
   expect(send.mock.calls[0][0]).toMatchInlineSnapshot(`
-    [
-      "changeDesiredQueries",
-      {
-        "desiredQueriesPatch": [
-          {
-            "args": undefined,
-            "ast": {
-              "alias": undefined,
-              "limit": undefined,
-              "orderBy": [
-                [
-                  "owner_id",
-                  "desc",
-                ],
-                [
-                  "id",
-                  "asc",
-                ],
+    {
+      "desiredQueriesPatch": [
+        {
+          "args": undefined,
+          "ast": {
+            "alias": undefined,
+            "limit": undefined,
+            "orderBy": [
+              [
+                "owner_id",
+                "desc",
               ],
-              "related": [
-                {
-                  "correlation": {
-                    "childField": [
-                      "id",
-                    ],
-                    "parentField": [
-                      "owner_id",
-                    ],
-                  },
-                  "hidden": undefined,
-                  "subquery": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": undefined,
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "users",
-                    "where": undefined,
-                  },
-                  "system": undefined,
-                },
+              [
+                "id",
+                "asc",
               ],
-              "schema": undefined,
-              "start": {
-                "exclusive": false,
-                "row": {
-                  "id": "123",
-                  "owner_id": "foobar",
+            ],
+            "related": [
+              {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "owner_id",
+                  ],
                 },
+                "hidden": undefined,
+                "subquery": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "users",
+                  "where": undefined,
+                },
+                "system": undefined,
               },
-              "table": "issues",
-              "where": {
-                "conditions": [
-                  {
-                    "left": {
-                      "name": "owner_id",
-                      "type": "column",
-                    },
-                    "op": "IS NOT",
-                    "right": {
-                      "type": "literal",
-                      "value": "null",
-                    },
-                    "type": "simple",
-                  },
-                  {
-                    "op": "EXISTS",
-                    "related": {
-                      "correlation": {
-                        "childField": [
-                          "issue_id",
-                        ],
-                        "parentField": [
-                          "id",
-                        ],
-                      },
-                      "subquery": {
-                        "alias": undefined,
-                        "limit": undefined,
-                        "orderBy": undefined,
-                        "related": undefined,
-                        "schema": undefined,
-                        "start": undefined,
-                        "table": "comments",
-                        "where": undefined,
-                      },
-                    },
-                    "type": "correlatedSubquery",
-                  },
-                ],
-                "type": "and",
+            ],
+            "schema": undefined,
+            "start": {
+              "exclusive": false,
+              "row": {
+                "id": "123",
+                "owner_id": "foobar",
               },
             },
-            "hash": "2courpv3kf7et",
-            "name": undefined,
-            "op": "put",
-            "ttl": 600000,
+            "table": "issues",
+            "where": {
+              "conditions": [
+                {
+                  "left": {
+                    "name": "owner_id",
+                    "type": "column",
+                  },
+                  "op": "IS NOT",
+                  "right": {
+                    "type": "literal",
+                    "value": "null",
+                  },
+                  "type": "simple",
+                },
+                {
+                  "op": "EXISTS",
+                  "related": {
+                    "correlation": {
+                      "childField": [
+                        "issue_id",
+                      ],
+                      "parentField": [
+                        "id",
+                      ],
+                    },
+                    "subquery": {
+                      "alias": undefined,
+                      "limit": undefined,
+                      "orderBy": undefined,
+                      "related": undefined,
+                      "schema": undefined,
+                      "start": undefined,
+                      "table": "comments",
+                      "where": undefined,
+                    },
+                  },
+                  "type": "correlatedSubquery",
+                },
+              ],
+              "type": "and",
+            },
           },
-        ],
-      },
-    ]
+          "hash": "2courpv3kf7et",
+          "name": undefined,
+          "op": "put",
+          "ttl": 600000,
+        },
+      ],
+    }
   `);
 });
 
@@ -396,23 +384,20 @@ test('remove, recent queries max size 0', () => {
   const remove1 = queryManager.addLegacy(ast, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '12hwg3ihkijhm',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '12hwg3ihkijhm',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const remove2 = queryManager.addLegacy(ast, 'forever');
   queryManager.flushBatch();
@@ -424,17 +409,14 @@ test('remove, recent queries max size 0', () => {
   remove2();
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(2);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '12hwg3ihkijhm',
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '12hwg3ihkijhm',
+      },
+    ],
+  });
 
   remove2();
   queryManager.flushBatch();
@@ -480,23 +462,20 @@ test('remove, max recent queries size 2', () => {
   const remove1Ast1 = queryManager.addLegacy(ast1, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '12hwg3ihkijhm',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '12hwg3ihkijhm',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const remove2Ast1 = queryManager.addLegacy(ast1, 'forever');
   queryManager.flushBatch();
@@ -505,65 +484,56 @@ test('remove, max recent queries size 2', () => {
   const removeAst2 = queryManager.addLegacy(ast2, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(2);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '1hydj1t7t5yv4',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '1hydj1t7t5yv4',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'desc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst3 = queryManager.addLegacy(ast3, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(3);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '3c5d3uiyypuxu',
-          ast: {
-            table: 'users',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '3c5d3uiyypuxu',
+        ast: {
+          table: 'users',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst4 = queryManager.addLegacy(ast4, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(4);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '2q7cds8pild5w',
-          ast: {
-            table: 'users',
-            where: undefined,
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '2q7cds8pild5w',
+        ast: {
+          table: 'users',
+          where: undefined,
+          orderBy: [['id', 'desc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   remove1Ast1();
   queryManager.flushBatch();
@@ -579,32 +549,26 @@ test('remove, max recent queries size 2', () => {
   removeAst3();
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(5);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '12hwg3ihkijhm',
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '12hwg3ihkijhm',
+      },
+    ],
+  });
 
   removeAst4();
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(6);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '1hydj1t7t5yv4',
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '1hydj1t7t5yv4',
+      },
+    ],
+  });
 });
 
 test('add/remove/add/remove changes lru order max recent queries size 2', () => {
@@ -646,86 +610,74 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
   const remove1Ast1 = queryManager.addLegacy(ast1, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '12hwg3ihkijhm',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '12hwg3ihkijhm',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst2 = queryManager.addLegacy(ast2, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(2);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '1hydj1t7t5yv4',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '1hydj1t7t5yv4',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'desc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst3 = queryManager.addLegacy(ast3, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(3);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '3c5d3uiyypuxu',
-          ast: {
-            table: 'users',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '3c5d3uiyypuxu',
+        ast: {
+          table: 'users',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst4 = queryManager.addLegacy(ast4, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(4);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '2q7cds8pild5w',
-          ast: {
-            table: 'users',
-            where: undefined,
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '2q7cds8pild5w',
+        ast: {
+          table: 'users',
+          where: undefined,
+          orderBy: [['id', 'desc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   remove1Ast1();
   queryManager.flushBatch();
@@ -747,32 +699,26 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
   queryManager.flushBatch();
 
   expect(send).toBeCalledTimes(5);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '1hydj1t7t5yv4',
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '1hydj1t7t5yv4',
+      },
+    ],
+  });
 
   removeAst4();
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(6);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '12hwg3ihkijhm',
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '12hwg3ihkijhm',
+      },
+    ],
+  });
 });
 
 function getTestScanAsyncIterator(
@@ -935,35 +881,32 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
         [
-          [
-            "changeDesiredQueries",
-            {
-              "desiredQueriesPatch": [
-                {
-                  "args": undefined,
-                  "ast": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": [
-                      [
-                        "id",
-                        "desc",
-                      ],
+          {
+            "desiredQueriesPatch": [
+              {
+                "args": undefined,
+                "ast": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
                     ],
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "issues",
-                    "where": undefined,
-                  },
-                  "hash": "1hydj1t7t5yv4",
-                  "name": undefined,
-                  "op": "put",
-                  "ttl": 1000,
+                  ],
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "issues",
+                  "where": undefined,
                 },
-              ],
-            },
-          ],
+                "hash": "1hydj1t7t5yv4",
+                "name": undefined,
+                "op": "put",
+                "ttl": 1000,
+              },
+            ],
+          },
         ]
       `);
 
@@ -972,35 +915,32 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
         [
-          [
-            "changeDesiredQueries",
-            {
-              "desiredQueriesPatch": [
-                {
-                  "args": undefined,
-                  "ast": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": [
-                      [
-                        "id",
-                        "desc",
-                      ],
+          {
+            "desiredQueriesPatch": [
+              {
+                "args": undefined,
+                "ast": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
                     ],
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "issues",
-                    "where": undefined,
-                  },
-                  "hash": "1hydj1t7t5yv4",
-                  "name": undefined,
-                  "op": "put",
-                  "ttl": 2000,
+                  ],
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "issues",
+                  "where": undefined,
                 },
-              ],
-            },
-          ],
+                "hash": "1hydj1t7t5yv4",
+                "name": undefined,
+                "op": "put",
+                "ttl": 2000,
+              },
+            ],
+          },
         ]
       `);
 
@@ -1017,9 +957,7 @@ describe('getQueriesPatch', () => {
       expect(await add('none')).toBe(0);
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
-      [
         [
-          "changeDesiredQueries",
           {
             "desiredQueriesPatch": [
               {
@@ -1046,9 +984,8 @@ describe('getQueriesPatch', () => {
               },
             ],
           },
-        ],
-      ]
-    `);
+        ]
+      `);
 
       send.mockClear();
       expect(await add('none')).toBe(0);
@@ -1059,35 +996,32 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
         [
-          [
-            "changeDesiredQueries",
-            {
-              "desiredQueriesPatch": [
-                {
-                  "args": undefined,
-                  "ast": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": [
-                      [
-                        "id",
-                        "desc",
-                      ],
+          {
+            "desiredQueriesPatch": [
+              {
+                "args": undefined,
+                "ast": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
                     ],
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "issues",
-                    "where": undefined,
-                  },
-                  "hash": "1hydj1t7t5yv4",
-                  "name": undefined,
-                  "op": "put",
-                  "ttl": 1000,
+                  ],
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "issues",
+                  "where": undefined,
                 },
-              ],
-            },
-          ],
+                "hash": "1hydj1t7t5yv4",
+                "name": undefined,
+                "op": "put",
+                "ttl": 1000,
+              },
+            ],
+          },
         ]
       `);
 
@@ -1304,28 +1238,25 @@ test('gotCallback, query already got', () => {
   queryManager.addLegacy(ast, ttl, gotCallback1);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            alias: undefined,
-            where: undefined,
-            related: undefined,
-            start: undefined,
-            orderBy: [['id', 'asc']],
-            limit: undefined,
-            schema: undefined,
-          } satisfies AST,
-          ttl,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          alias: undefined,
+          where: undefined,
+          related: undefined,
+          start: undefined,
+          orderBy: [['id', 'asc']],
+          limit: undefined,
+          schema: undefined,
+        } satisfies AST,
+        ttl,
+      },
+    ],
+  });
 
   expect(gotCallback1).nthCalledWith(1, true);
 
@@ -1369,28 +1300,25 @@ test('gotCallback, query got after add', () => {
   queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            alias: undefined,
-            where: undefined,
-            related: undefined,
-            start: undefined,
-            orderBy: [['id', 'asc']],
-            limit: undefined,
-            schema: undefined,
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          alias: undefined,
+          where: undefined,
+          related: undefined,
+          start: undefined,
+          orderBy: [['id', 'asc']],
+          limit: undefined,
+          schema: undefined,
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   expect(gotCalback1).nthCalledWith(1, false);
 
@@ -1436,28 +1364,25 @@ test('gotCallback, query got after add then removed', () => {
   queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            alias: undefined,
-            where: undefined,
-            related: undefined,
-            start: undefined,
-            orderBy: [['id', 'asc']],
-            limit: undefined,
-            schema: undefined,
-          } satisfies AST,
-          ttl,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          alias: undefined,
+          where: undefined,
+          related: undefined,
+          start: undefined,
+          orderBy: [['id', 'asc']],
+          limit: undefined,
+          schema: undefined,
+        } satisfies AST,
+        ttl,
+      },
+    ],
+  });
 
   expect(gotCalback1).nthCalledWith(1, false);
 
@@ -1513,28 +1438,25 @@ test('gotCallback, query got after subscription removed', () => {
   const remove = queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            alias: undefined,
-            where: undefined,
-            related: undefined,
-            start: undefined,
-            orderBy: [['id', 'asc']],
-            limit: undefined,
-            schema: undefined,
-          } satisfies AST,
-          ttl,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          alias: undefined,
+          where: undefined,
+          related: undefined,
+          start: undefined,
+          orderBy: [['id', 'asc']],
+          limit: undefined,
+          schema: undefined,
+        } satisfies AST,
+        ttl,
+      },
+    ],
+  });
 
   expect(gotCalback1).nthCalledWith(1, false);
 
@@ -1954,23 +1876,20 @@ test('gotCallback, add same got callback twice', () => {
   gotCallback.mockClear();
 
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            orderBy: [['id', 'asc']],
-            ...normalizingFields,
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          orderBy: [['id', 'asc']],
+          ...normalizingFields,
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   watchCallback([
     {
@@ -2254,23 +2173,20 @@ describe('update clamps TTL correctly', () => {
     queryManager.flushBatch();
 
     expect(send).toBeCalledTimes(2);
-    expect(send).toHaveBeenLastCalledWith([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {
-            op: 'put',
-            hash: '12hwg3ihkijhm',
-            ast: {
-              table: 'issues',
-              where: undefined,
-              orderBy: [['id', 'asc']],
-            } satisfies AST,
-            ttl: 120000, // Clamped TTL value
-          },
-        ],
-      },
-    ]);
+    expect(send).toHaveBeenLastCalledWith({
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '12hwg3ihkijhm',
+          ast: {
+            table: 'issues',
+            where: undefined,
+            orderBy: [['id', 'asc']],
+          } satisfies AST,
+          ttl: 120000, // Clamped TTL value
+        },
+      ],
+    });
   });
 
   test('updateCustom', () => {
@@ -2286,20 +2202,17 @@ describe('update clamps TTL correctly', () => {
     queryManager.flushBatch();
 
     expect(send).toBeCalledTimes(2);
-    expect(send).toHaveBeenLastCalledWith([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {
-            op: 'put',
-            hash: '2l1ig6e3tnu0a',
-            name: 'customQuery',
-            args: [1],
-            ttl: 120000, // Clamped TTL value
-          },
-        ],
-      },
-    ]);
+    expect(send).toHaveBeenLastCalledWith({
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '2l1ig6e3tnu0a',
+          name: 'customQuery',
+          args: [1],
+          ttl: 120000, // Clamped TTL value
+        },
+      ],
+    });
   });
 
   test('updateLegacy does not send when TTL is already at max', () => {
@@ -2318,23 +2231,20 @@ describe('update clamps TTL correctly', () => {
 
     // Only one send should happen (the initial add)
     expect(send).toBeCalledTimes(1);
-    expect(send).toHaveBeenLastCalledWith([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {
-            op: 'put',
-            hash: '12hwg3ihkijhm',
-            ast: {
-              table: 'issues',
-              where: undefined,
-              orderBy: [['id', 'asc']],
-            } satisfies AST,
-            ttl: MAX_TTL_MS, // Already at max TTL
-          },
-        ],
-      },
-    ]);
+    expect(send).toHaveBeenLastCalledWith({
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '12hwg3ihkijhm',
+          ast: {
+            table: 'issues',
+            where: undefined,
+            orderBy: [['id', 'asc']],
+          } satisfies AST,
+          ttl: MAX_TTL_MS, // Already at max TTL
+        },
+      ],
+    });
   });
 
   test('updateCustom does not send when TTL is already at max', () => {
@@ -2354,20 +2264,17 @@ describe('update clamps TTL correctly', () => {
 
     // Only one send should happen (the initial add)
     expect(send).toBeCalledTimes(1);
-    expect(send).toHaveBeenLastCalledWith([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {
-            op: 'put',
-            hash: '2l1ig6e3tnu0a',
-            name: 'customQuery',
-            args: [1],
-            ttl: MAX_TTL_MS, // Already at max TTL
-          },
-        ],
-      },
-    ]);
+    expect(send).toHaveBeenLastCalledWith({
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '2l1ig6e3tnu0a',
+          name: 'customQuery',
+          args: [1],
+          ttl: MAX_TTL_MS, // Already at max TTL
+        },
+      ],
+    });
   });
 });
 
