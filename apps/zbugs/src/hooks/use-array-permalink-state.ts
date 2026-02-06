@@ -27,13 +27,20 @@ export function useArrayPermalinkState<TStartRow>(): [
     if (
       !rawScrollState ||
       !prevStateRef.current ||
-      rawScrollState.anchorIndex !== prevStateRef.current.anchorIndex ||
-      rawScrollState.anchorKind !== prevStateRef.current.anchorKind ||
-      !deepEqual(
-        rawScrollState.startRow as ReadonlyJSONValue | undefined,
-        prevStateRef.current.startRow as ReadonlyJSONValue | undefined,
-      ) ||
-      rawScrollState.permalinkID !== prevStateRef.current.permalinkID ||
+      rawScrollState.anchor.index !== prevStateRef.current.anchor.index ||
+      rawScrollState.anchor.kind !== prevStateRef.current.anchor.kind ||
+      (rawScrollState.anchor.kind === 'permalink' &&
+        prevStateRef.current.anchor.kind === 'permalink' &&
+        rawScrollState.anchor.permalinkID !==
+          prevStateRef.current.anchor.permalinkID) ||
+      ((rawScrollState.anchor.kind === 'forward' ||
+        rawScrollState.anchor.kind === 'backward') &&
+        (prevStateRef.current.anchor.kind === 'forward' ||
+          prevStateRef.current.anchor.kind === 'backward') &&
+        !deepEqual(
+          rawScrollState.anchor.startRow as ReadonlyJSONValue | undefined,
+          prevStateRef.current.anchor.startRow as ReadonlyJSONValue | undefined,
+        )) ||
       rawScrollState.scrollOffset !== prevStateRef.current.scrollOffset
     ) {
       // Values differ, update the ref

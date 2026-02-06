@@ -82,8 +82,8 @@ function ArrayTestAppContent() {
     rowAt,
     rowsEmpty,
     permalinkNotFound,
-    anchorState,
-    restoreAnchorState,
+    scrollState,
+    restoreScrollState,
   } = useArrayVirtualizer<RowData, IssueRowSort>({
     pageSize: PAGE_SIZE,
     placeholderHeight: PLACEHOLDER_HEIGHT,
@@ -308,56 +308,49 @@ function ArrayTestAppContent() {
           </h3>
           <div style={{fontSize: '12px', fontFamily: 'monospace'}}>
             <div style={{marginBottom: '4px'}}>
-              <strong>anchorIndex:</strong> {anchorState.anchorIndex}
+              <strong>anchor.index:</strong> {scrollState.anchor.index}
             </div>
             <div style={{marginBottom: '4px'}}>
-              <strong>anchorKind:</strong>{' '}
+              <strong>anchor.kind:</strong>{' '}
               <span
                 style={{
                   padding: '2px 6px',
                   borderRadius: '3px',
                   backgroundColor:
-                    anchorState.anchorKind === 'permalink'
+                    scrollState.anchor.kind === 'permalink'
                       ? '#9c27b0'
-                      : anchorState.anchorKind === 'forward'
+                      : scrollState.anchor.kind === 'forward'
                         ? '#4caf50'
                         : '#ff9800',
                   color: '#fff',
                   fontSize: '11px',
                 }}
               >
-                {anchorState.anchorKind}
+                {scrollState.anchor.kind}
               </span>
             </div>
-            {anchorState.anchorKind === 'permalink' &&
-              anchorState.permalinkID && (
-                <div style={{marginBottom: '4px'}}>
-                  <strong>permalinkID:</strong> {anchorState.permalinkID}
-                </div>
-              )}
+            {scrollState.anchor.kind === 'permalink' && (
+              <div style={{marginBottom: '4px'}}>
+                <strong>anchor.permalinkID:</strong>{' '}
+                {scrollState.anchor.permalinkID}
+              </div>
+            )}
+            {(scrollState.anchor.kind === 'forward' ||
+              scrollState.anchor.kind === 'backward') && (
+              <div style={{marginBottom: '4px'}}>
+                <strong>anchor.startRow:</strong>{' '}
+                {scrollState.anchor.startRow
+                  ? JSON.stringify(scrollState.anchor.startRow)
+                  : 'null'}
+              </div>
+            )}
             <div style={{marginBottom: '4px'}}>
-              <strong>startRow:</strong>{' '}
-              {anchorState.startRow
-                ? JSON.stringify(anchorState.startRow)
-                : 'null'}
-            </div>
-            <div style={{marginBottom: '4px'}}>
-              <strong>scrollOffset:</strong> {anchorState.scrollOffset}px
+              <strong>scrollOffset:</strong> {scrollState.scrollOffset}px
             </div>
           </div>
           <button
             onClick={() => {
-              const state = {
-                anchorIndex: anchorState.anchorIndex,
-                anchorKind: anchorState.anchorKind,
-                ...(anchorState.anchorKind === 'permalink' &&
-                anchorState.permalinkID
-                  ? {permalinkID: anchorState.permalinkID}
-                  : {}),
-                startRow: anchorState.startRow,
-                scrollOffset: anchorState.scrollOffset,
-              };
-              const stateStr = JSON.stringify(state, null, 2);
+              const stateStr = JSON.stringify(scrollState, null, 2);
               setCapturedState(stateStr);
               setRestoreInput(stateStr);
             }}
@@ -434,7 +427,7 @@ function ArrayTestAppContent() {
               onClick={() => {
                 try {
                   const state = JSON.parse(restoreInput);
-                  restoreAnchorState(state);
+                  restoreScrollState(state);
                   setCapturedState(null);
                 } catch (err) {
                   alert('Invalid JSON: ' + (err as Error).message);
