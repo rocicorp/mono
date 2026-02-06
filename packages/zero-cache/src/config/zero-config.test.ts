@@ -330,14 +330,6 @@ test('zero-cache --help', () => {
                                                                    is received during this interval, the delay will be canceled and the takeover will happen                             
                                                                    immediately, since the incoming request indicates that the task is registered as a target.                            
                                                                                                                                                                                          
-     --change-streamer-back-pressure-threshold number              default: 100000                                                                                                       
-       ZERO_CHANGE_STREAMER_BACK_PRESSURE_THRESHOLD env                                                                                                                                  
-                                                                   The maximum number of queued changes before back pressure is applied to the                                           
-                                                                   change source. When the queue exceeds this threshold, the change-streamer pauses                                      
-                                                                   consumption from upstream until the queue drops to 90% of the threshold.                                              
-                                                                                                                                                                                         
-                                                                   Increasing this value may improve throughput at the cost of higher memory usage.                                      
-                                                                                                                                                                                         
      --task-id string                                              optional                                                                                                              
        ZERO_TASK_ID env                                                                                                                                                                  
                                                                    Globally unique identifier for the zero-cache instance.                                                               

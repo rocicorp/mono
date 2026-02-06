@@ -2,8 +2,8 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import {timingSafeEqual} from 'node:crypto';
 import type {LogContext} from '@rocicorp/logger';
+import {timingSafeEqual} from 'node:crypto';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
   flagToEnv,
@@ -28,20 +28,6 @@ import {
 export type {LogConfig} from '../../../otel/src/log-options.ts';
 
 export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
-
-// Technically, any threshold is fine because the point of back pressure
-// is to adjust the rate of incoming messages, and the size of the pending
-// work queue does not affect that mechanism.
-//
-// However, it is theoretically possible to exceed the available memory if
-// the size of changes is very large. This threshold can be improved by
-// roughly measuring the size of the enqueued contents and setting the
-// threshold based on available memory.
-//
-// TODO: switch to a message size-based thresholding when migrating over
-// to stringified JSON messages, which will bound the computation involved
-// in measuring the size of row messages.
-export const DEFAULT_BACK_PRESSURE_THRESHOLD = 100_000;
 
 export const appOptions = {
   id: {
@@ -566,17 +552,6 @@ export const zeroOptions = {
         `the task as healthy based on healthcheck parameters. Note that if a change stream request`,
         `is received during this interval, the delay will be canceled and the takeover will happen`,
         `immediately, since the incoming request indicates that the task is registered as a target.`,
-      ],
-    },
-
-    backPressureThreshold: {
-      type: v.number().default(DEFAULT_BACK_PRESSURE_THRESHOLD),
-      desc: [
-        `The maximum number of queued changes before back pressure is applied to the`,
-        `change source. When the queue exceeds this threshold, the change-streamer pauses`,
-        `consumption from upstream until the queue drops to 90% of the threshold.`,
-        ``,
-        `Increasing this value may improve throughput at the cost of higher memory usage.`,
       ],
     },
   },
