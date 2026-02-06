@@ -1,5 +1,5 @@
-import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import { useVirtualizer, type Virtualizer } from '@rocicorp/react-virtual';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   useRows,
   type GetPageQuery,
@@ -141,21 +141,13 @@ export function useArrayVirtualizer<T, TSort>({
   // Counter to force effect re-run when restoring same state
   const [restoreTrigger, setRestoreTrigger] = useState(0);
 
-  // Ref: has the permalink/restore scroll been positioned?
-  const positionedRef = useRef(false);
-
-  // Ref: pending scroll offset to restore (set by restoreAnchorState)
-  const pendingScrollRef = useRef<number | null>(null);
-  const pendingScrollIsRelativeRef = useRef(false);
-
-  // Ref: prevents rapid-fire anchor shifts while waiting for data
-  const waitingForDataRef = useRef(false);
-
-  // Ref: timestamp when positioning completed (for settling delay)
-  const positionedAtRef = useRef<number>(0);
-
-  // Ref: retry count for custom scroll loop
-  const scrollRetryCountRef = useRef(0);
+  const scrollStateRef = useRef({
+    positioned: false,
+    pendingScroll: null as number | null,
+    pendingScrollIsRelative: false,
+    positionedAt: 0,
+    scrollRetryCount: 0,
+  });
 
   const replaceAnchor = useCallback(
     (next: AnchorState<TSort>) =>
@@ -179,9 +171,9 @@ export function useArrayVirtualizer<T, TSort>({
         };
 
     replaceAnchor(nextAnchor);
-    positionedRef.current = false;
-    positionedAtRef.current = 0;
-    scrollRetryCountRef.current = 0;
+    scrollStateRef.current.positioned = false;
+    scrollStateRef.current.positionedAt = 0;
+    scrollStateRef.current.scrollRetryCount = 0;
   }, [initialPermalinkID, replaceAnchor]);
 
   const {
@@ -317,15 +309,17 @@ export function useArrayVirtualizer<T, TSort>({
   // ---- Single unified effect: positioning + auto-paging ----
   useEffect(() => {
     const restoreScrollIfNeeded = () => {
-      if (pendingScrollRef.current === null || anchor.kind === 'permalink') {
+      const state = scrollStateRef.current;
+
+      if (state.pendingScroll === null || anchor.kind === 'permalink') {
         return false;
       }
 
       if (complete && rowsLength > 0) {
-        virtualizer.scrollToOffset(pendingScrollRef.current);
-        pendingScrollRef.current = null;
-        positionedRef.current = true;
-        positionedAtRef.current = Date.now();
+        virtualizer.scrollToOffset(state.pendingScroll);
+        state.pendingScroll = null;
+        state.positioned = true;
+        state.positionedAt = Date.now();
       }
 
       return true;
@@ -343,15 +337,17 @@ export function useArrayVirtualizer<T, TSort>({
       const targetVirtualIndex =
         anchor.index - firstRowIndex + startPlaceholder;
 
-      if (!positionedRef.current || !complete) {
-        if (pendingScrollRef.current === null) {
+      const state = scrollStateRef.current;
+
+      if (!state.positioned || !complete) {
+        if (state.pendingScroll === null) {
           virtualizer.scrollToIndex(targetVirtualIndex, {
             align: 'start',
           });
 
           if (complete) {
-            positionedRef.current = true;
-            positionedAtRef.current = Date.now();
+            state.positioned = true;
+            state.positionedAt = Date.now();
           }
 
           return true;
@@ -362,43 +358,43 @@ export function useArrayVirtualizer<T, TSort>({
           'start',
         );
 
-        if (pendingScrollIsRelativeRef.current && !baseOffset) {
-          scrollRetryCountRef.current = 0;
+        if (state.pendingScrollIsRelative && !baseOffset) {
+          state.scrollRetryCount = 0;
           return true;
         }
 
-        let targetOffset = pendingScrollRef.current;
+        let targetOffset = state.pendingScroll;
 
-        if (pendingScrollIsRelativeRef.current) {
+        if (state.pendingScrollIsRelative) {
           if (!baseOffset) {
-            scrollRetryCountRef.current = 0;
+            state.scrollRetryCount = 0;
             return true;
           }
 
-          targetOffset = baseOffset[0] + pendingScrollRef.current;
+          targetOffset = baseOffset[0] + state.pendingScroll;
         }
         virtualizer.scrollToOffset(targetOffset);
 
         const currentScrollOffset = virtualizer.scrollOffset ?? 0;
 
         if (Math.abs(currentScrollOffset - targetOffset) <= 1) {
-          positionedRef.current = true;
-          positionedAtRef.current = Date.now();
-          pendingScrollRef.current = null;
-          pendingScrollIsRelativeRef.current = false;
-          scrollRetryCountRef.current = 0;
+          state.positioned = true;
+          state.positionedAt = Date.now();
+          state.pendingScroll = null;
+          state.pendingScrollIsRelative = false;
+          state.scrollRetryCount = 0;
           return true;
         }
 
         const maxRetries = 10;
-        if (scrollRetryCountRef.current < maxRetries) {
-          scrollRetryCountRef.current++;
+        if (state.scrollRetryCount < maxRetries) {
+          state.scrollRetryCount++;
         } else {
-          positionedRef.current = true;
-          positionedAtRef.current = Date.now();
-          pendingScrollRef.current = null;
-          pendingScrollIsRelativeRef.current = false;
-          scrollRetryCountRef.current = 0;
+          state.positioned = true;
+          state.positionedAt = Date.now();
+          state.pendingScroll = null;
+          state.pendingScrollIsRelative = false;
+          state.scrollRetryCount = 0;
         }
 
         return true;
@@ -412,12 +408,10 @@ export function useArrayVirtualizer<T, TSort>({
         return;
       }
 
-      if (Date.now() - positionedAtRef.current < POSITIONING_SETTLE_DELAY_MS) {
-        return;
-      }
+      const state = scrollStateRef.current;
 
-      if (waitingForDataRef.current) {
-        waitingForDataRef.current = false;
+      if (Date.now() - state.positionedAt < POSITIONING_SETTLE_DELAY_MS) {
+        return;
       }
 
       const viewportHeight = virtualizer.scrollRect?.height ?? 0;
@@ -473,7 +467,6 @@ export function useArrayVirtualizer<T, TSort>({
             const newAnchorRow = rowAt(newAnchorIndex);
 
             if (newAnchorRow && newAnchorIndex !== anchor.index) {
-              waitingForDataRef.current = true;
               replaceAnchor({
                 kind: 'forward',
                 index: newAnchorIndex,
@@ -525,7 +518,6 @@ export function useArrayVirtualizer<T, TSort>({
             const newAnchorRow = rowAt(newAnchorIndex);
 
             if (newAnchorRow && newAnchorIndex !== anchor.index) {
-              waitingForDataRef.current = true;
               replaceAnchor({
                 kind: 'backward',
                 index: newAnchorIndex,
@@ -592,11 +584,12 @@ export function useArrayVirtualizer<T, TSort>({
               };
 
       replaceAnchor(nextAnchor);
-      positionedRef.current = false;
-      positionedAtRef.current = 0;
-      scrollRetryCountRef.current = 0;
-      pendingScrollRef.current = state.scrollOffset ?? null;
-      pendingScrollIsRelativeRef.current = state.anchorKind === 'permalink';
+      scrollStateRef.current.positioned = false;
+      scrollStateRef.current.positionedAt = 0;
+      scrollStateRef.current.scrollRetryCount = 0;
+      scrollStateRef.current.pendingScroll = state.scrollOffset ?? null;
+      scrollStateRef.current.pendingScrollIsRelative =
+        state.anchorKind === 'permalink';
       // Increment trigger to force re-render even if state values are identical
       setRestoreTrigger(prev => prev + 1);
     },
