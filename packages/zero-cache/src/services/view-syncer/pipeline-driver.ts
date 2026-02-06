@@ -561,7 +561,8 @@ export class PipelineDriver {
         if (this.#shouldAdvanceYieldMaybeAbortAdvance()) {
           yield 'yield';
         }
-        const start = performance.now();
+        const start = timer.totalElapsed();
+
         let type;
         try {
           const tableSource = this.#tables.get(table);
@@ -608,7 +609,7 @@ export class PipelineDriver {
           this.#advanceContext.pos++;
         }
 
-        const elapsed = performance.now() - start;
+        const elapsed = timer.totalElapsed() - start;
         this.#advanceTime.record(elapsed / 1000, {
           table,
           type,
