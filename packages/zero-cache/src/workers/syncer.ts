@@ -137,7 +137,7 @@ export class Syncer implements SingletonService {
     recordConnectionAttempted();
     const {clientID, clientGroupID, auth: authRaw, userID} = params;
 
-    const tokenOptions = tokenConfigOptions(this.#config.auth);
+    const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
 
     const hasPushOrMutate =
       this.#config?.push?.url !== undefined ||
@@ -149,7 +149,7 @@ export class Syncer implements SingletonService {
     // must either have one of the token options set or have custom mutations & queries enabled
     const hasExactlyOneTokenOption = tokenOptions.length === 1;
     const hasCustomEndpoints = hasPushOrMutate && hasQueries;
-    if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+    if (authRaw && !hasExactlyOneTokenOption && !hasCustomEndpoints) {
       throw new Error(
         'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
           JSON.stringify(tokenOptions) +
