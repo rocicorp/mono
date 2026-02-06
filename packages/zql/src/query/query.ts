@@ -275,6 +275,28 @@ export interface Query<
     options?: ExistsOptions,
   ): Query<TTable, TSchema, TReturn>;
 
+  /**
+   * EXPERIMENTAL: Support for scalar subqueries in WHERE clauses.
+   * Do not use unless you know what you are doing.
+   * API is unstable and has different reactivity semantics than `EXISTS`.
+   * Use at your own risk.
+   */
+  whereScalar(
+    relationship: AvailableRelationships<TTable, TSchema>,
+  ): Query<TTable, TSchema, TReturn>;
+  /**
+   * EXPERIMENTAL: Support for scalar subqueries in WHERE clauses.
+   * Do not use unless you know what you are doing.
+   * API is unstable and has different reactivity semantics than `EXISTS`.
+   * Use at your own risk.
+   */
+  whereScalar<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+    cb: (
+      q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
+    ) => Query<string, TSchema>,
+  ): Query<TTable, TSchema, TReturn>;
+
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
