@@ -36,6 +36,7 @@ import type {ClientErrorKind} from './client-error-kind.ts';
 import type {ClientError} from './error.ts';
 import {type ZeroError} from './error.ts';
 import type {InspectorDelegate} from './inspector/inspector.ts';
+import type {ZeroQueryHooks} from './options.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -80,6 +81,7 @@ export class QueryManager implements InspectorDelegate {
   readonly #metrics: ClientMetric = newMetrics();
   readonly #queryMetrics: Map<string, ClientMetric> = new Map();
   readonly #slowMaterializeThreshold: number;
+  readonly #hooks: ZeroQueryHooks | undefined;
   #closedError: ZeroError | undefined;
 
   constructor(
@@ -93,6 +95,7 @@ export class QueryManager implements InspectorDelegate {
     queryChangeThrottleMs: number,
     slowMaterializeThreshold: number,
     onFatalError: (error: ZeroError) => void,
+    hooks?: ZeroQueryHooks | undefined,
   ) {
     this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
@@ -104,6 +107,7 @@ export class QueryManager implements InspectorDelegate {
     this.#queryChangeThrottleMs = queryChangeThrottleMs;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.#onFatalError = onFatalError;
+    this.#hooks = hooks;
     this.#mutationTracker.onAllMutationsApplied(() => {
       if (this.#pendingRemovals.length === 0) {
         return;
@@ -486,6 +490,18 @@ export class QueryManager implements InspectorDelegate {
           ast,
           value,
         );
+      }
+
+      try {
+        const entry = this.#queries.get(queryID);
+        this.#hooks?.onQueryMaterialize?.({
+          id: queryID,
+          ast: ast!,
+          durationMs: value,
+          name: entry?.name,
+        });
+      } catch {
+        // Consumer hook errors must not break query execution.
       }
     }
 

@@ -745,6 +745,7 @@ export class Zero<
       error => {
         this.#disconnect(lc, error);
       },
+      options.hooks,
     );
 
     this.#clientToServer = clientToServer(schema.tables);
