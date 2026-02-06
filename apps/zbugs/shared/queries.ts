@@ -55,14 +55,8 @@ function labelsOrderByName({
     orderBy?: 'asc' | 'desc' | undefined;
   };
 }) {
-  let q = builder.label.where(({cmp, scalar}) =>
-    cmp(
-      'projectID',
-      scalar(
-        builder.project.where('lowerCaseName', projectName.toLocaleLowerCase()),
-        'id',
-      ),
-    ),
+  let q = builder.label.whereExists('project', q =>
+    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
   );
   if (orderBy !== undefined) {
     q = q.orderBy('name', orderBy);
@@ -109,17 +103,8 @@ export const queries = defineQueries({
     ({ctx: auth, args: {userID, projectName}}) =>
       applyIssuePermissions(
         builder.issue
-          .where(({cmp, scalar}) =>
-            cmp(
-              'projectID',
-              scalar(
-                builder.project.where(
-                  'lowerCaseName',
-                  projectName.toLocaleLowerCase(),
-                ),
-                'id',
-              ),
-            ),
+          .whereExists('project', p =>
+            p.where('lowerCaseName', projectName.toLocaleLowerCase()),
           )
           .related('labels')
           .related('viewState', q => q.where('userID', userID))
@@ -162,32 +147,14 @@ export const queries = defineQueries({
           );
         } else if (filter === 'creators') {
           q = q.whereExists('createdIssues', i =>
-            i.where(({cmp, scalar}) =>
-              cmp(
-                'projectID',
-                scalar(
-                  builder.project.where(
-                    'lowerCaseName',
-                    projectName.toLocaleLowerCase(),
-                  ),
-                  'id',
-                ),
-              ),
+            i.whereExists('project', p =>
+              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
             ),
           );
         } else if (filter === 'assignees') {
           q = q.whereExists('assignedIssues', i =>
-            i.where(({cmp, scalar}) =>
-              cmp(
-                'projectID',
-                scalar(
-                  builder.project.where(
-                    'lowerCaseName',
-                    projectName.toLocaleLowerCase(),
-                  ),
-                  'id',
-                ),
-              ),
+            i.whereExists('project', p =>
+              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
             ),
           );
         } else {
@@ -423,14 +390,8 @@ export function buildListQuery(args: ListQueryArgs) {
 
   const {projectName = ZERO_PROJECT_NAME} = listContext;
 
-  q = q.where(({cmp, scalar}) =>
-    cmp(
-      'projectID',
-      scalar(
-        builder.project.where('lowerCaseName', projectName.toLocaleLowerCase()),
-        'id',
-      ),
-    ),
+  q = q.whereExists('project', q =>
+    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
   );
 
   const {sortField, sortDirection} = listContext;
@@ -450,15 +411,13 @@ export function buildListQuery(args: ListQueryArgs) {
   }
 
   const {open, creator, assignee, labels, textFilter} = listContext;
-  q = q.where(({and, cmp, exists, or, scalar}) =>
+  q = q.where(({and, cmp, exists, or}) =>
     and(
       // oxlint-disable-next-line eqeqeq
       open != null ? cmp('open', open) : undefined,
-      creator
-        ? cmp('creatorID', scalar(builder.user.where('login', creator), 'id'))
-        : undefined,
+      creator ? exists('creator', q => q.where('login', creator)) : undefined,
       assignee
-        ? cmp('assigneeID', scalar(builder.user.where('login', assignee), 'id'))
+        ? exists('assignee', q => q.where('login', assignee))
         : undefined,
       textFilter
         ? or(
@@ -470,11 +429,7 @@ export function buildListQuery(args: ListQueryArgs) {
           )
         : undefined,
       ...(labels ?? []).map(label =>
-        exists('issueLabels', q =>
-          q.where(({cmp: c, scalar: s}) =>
-            c('labelID', s(builder.label.where('name', label), 'id')),
-          ),
-        ),
+        exists('labels', q => q.where('name', label)),
       ),
     ),
   );
