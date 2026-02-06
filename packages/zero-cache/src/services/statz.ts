@@ -3,7 +3,6 @@ import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import fs from 'fs';
 import os from 'os';
-import type {Writable} from 'stream';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
@@ -221,23 +220,31 @@ async function changeLogStats(lc: LogContext, config: ZeroConfig) {
 
 function replicaStats(lc: LogContext, config: ZeroConfig) {
   const db = new Database(lc, config.replica.file);
-  return Object.fromEntries([
-    ['wal checkpoint', pick(first(db.pragma('WAL_CHECKPOINT')))],
-    ['page count', pick(first(db.pragma('PAGE_COUNT')))],
-    ['page size', pick(first(db.pragma('PAGE_SIZE')))],
-    ['journal mode', pick(first(db.pragma('JOURNAL_MODE')))],
-    ['synchronous', pick(first(db.pragma('SYNCHRONOUS')))],
-    ['cache size', pick(first(db.pragma('CACHE_SIZE')))],
-    ['auto vacuum', pick(first(db.pragma('AUTO_VACUUM')))],
-    ['freelist count', pick(first(db.pragma('FREELIST_COUNT')))],
-    ['wal autocheckpoint', pick(first(db.pragma('WAL_AUTOCHECKPOINT')))],
-    ['db file stats', fs.statSync(config.replica.file)],
-  ] as const);
+  try {
+    return Object.fromEntries([
+      ['wal checkpoint', pick(first(db.pragma('WAL_CHECKPOINT')))],
+      ['page count', pick(first(db.pragma('PAGE_COUNT')))],
+      ['page size', pick(first(db.pragma('PAGE_SIZE')))],
+      ['journal mode', pick(first(db.pragma('JOURNAL_MODE')))],
+      ['synchronous', pick(first(db.pragma('SYNCHRONOUS')))],
+      ['cache size', pick(first(db.pragma('CACHE_SIZE')))],
+      ['auto vacuum', pick(first(db.pragma('AUTO_VACUUM')))],
+      ['freelist count', pick(first(db.pragma('FREELIST_COUNT')))],
+      ['wal autocheckpoint', pick(first(db.pragma('WAL_AUTOCHECKPOINT')))],
+      ['db file stats', fs.statSync(config.replica.file)],
+    ] as const);
+  } finally {
+    db.close();
+  }
 }
 
 function replicationStats(lc: LogContext, config: ZeroConfig) {
   const db = new Database(lc, config.replica.file);
-  return getReplicationStats(db);
+  try {
+    return getReplicationStats(db);
+  } finally {
+    db.close();
+  }
 }
 
 function getReplicationStats(db: Database) {
@@ -257,7 +264,6 @@ function osStats() {
     ['platform', os.platform()],
     ['arch', os.arch()],
     ['release', os.release()],
-    ['uptime', os.uptime()],
   ] as const);
 }
 
@@ -275,13 +281,13 @@ async function getPgStats(
 
 type StatsObject = Record<string, unknown>;
 
-function printStats(group: string, statsObject: StatsObject, out: Writable) {
-  const queries = Object.entries(statsObject);
-  out.write('\n' + header(group));
-  for (const [name, result] of queries) {
-    out.write('\n' + name + ': ' + BigIntJSON.stringify(result, null, 2));
+function printStats(group: string, statsObject: StatsObject): string {
+  const lines: string[] = ['\n' + header(group)];
+  for (const [name, result] of Object.entries(statsObject)) {
+    lines.push('\n' + name + ': ' + BigIntJSON.stringify(result, null, 2));
   }
-  out.write('\n');
+  lines.push('\n');
+  return lines.join('');
 }
 
 /**
@@ -342,13 +348,13 @@ export async function handleStatzRequest(
     await res
       .header('Content-Type', 'application/json')
       .send(BigIntJSON.stringify(Object.fromEntries(stats), null, indent));
+    return;
   } else {
-    for (const [group, statsObject] of stats) {
-      printStats(group, statsObject, res.raw);
-    }
+    const body = stats
+      .map(([group, statsObject]) => printStats(group, statsObject))
+      .join('');
+    await res.header('Content-Type', 'text/plain; charset=utf-8').send(body);
   }
-
-  res.raw.end();
 }
 
 function first(x: object[]): object {
