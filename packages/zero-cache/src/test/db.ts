@@ -10,7 +10,11 @@ import {
 } from 'vitest';
 import {must} from '../../../shared/src/must.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
-import {type PostgresDB, postgresTypeConfig} from '../types/pg.ts';
+import {
+  type PostgresDB,
+  postgresTypeConfig,
+  type TypeOptions,
+} from '../types/pg.ts';
 
 declare module 'vitest' {
   export interface ProvidedContext {
@@ -50,7 +54,7 @@ export class TestDBs {
   async create(
     database: string,
     onNotice?: OnNoticeFn,
-    useTypeConfig = true,
+    typeOpts: TypeOptions | false = {},
   ): Promise<PostgresDB> {
     const exists = this.#dbs[database];
     if (exists !== undefined) {
@@ -73,7 +77,7 @@ export class TestDBs {
         onNotice?.(n);
         defaultOnNotice(n);
       },
-      ...(useTypeConfig ? postgresTypeConfig() : {}),
+      ...(typeOpts ? postgresTypeConfig(typeOpts) : {}),
     });
     this.#dbs[database] = db;
     return db;

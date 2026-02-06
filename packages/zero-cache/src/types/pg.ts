@@ -184,9 +184,17 @@ function dateToUTCMidnight(date: string): number {
  */
 export type PostgresValueType = JSONValue | Uint8Array;
 
-type TypeOptions = {
+export type TypeOptions = {
   /** Returns JSON values as raw JSON strings (i.e. unparsed). */
   returnJsonAsString?: boolean;
+
+  /**
+   * Sends strings directly as JSON values (i.e. without JSON stringification).
+   * The application is responsible for ensuring that string inputs for JSON
+   * columns are already stringified. Other data types (e.g. objects) will
+   * still be stringified by the pg client.
+   */
+  sendStringAsJson?: boolean;
 };
 
 /**
@@ -194,7 +202,10 @@ type TypeOptions = {
  *
  * @param jsonAsString Keep JSON / JSONB values as strings instead of parsing.
  */
-export const postgresTypeConfig = ({returnJsonAsString}: TypeOptions = {}) => ({
+export const postgresTypeConfig = ({
+  returnJsonAsString,
+  sendStringAsJson,
+}: TypeOptions = {}) => ({
   // Type the type IDs as `number` so that Typescript doesn't complain about
   // referencing external types during type inference.
   types: {
@@ -202,7 +213,9 @@ export const postgresTypeConfig = ({returnJsonAsString}: TypeOptions = {}) => ({
     json: {
       to: JSON,
       from: [JSON, JSONB],
-      serialize: BigIntJSON.stringify,
+      serialize: sendStringAsJson
+        ? (x: unknown) => (typeof x === 'string' ? x : BigIntJSON.stringify(x))
+        : BigIntJSON.stringify,
       parse: returnJsonAsString ? (x: string) => x : BigIntJSON.parse,
     },
     // Timestamps are converted to PreciseDate objects.
