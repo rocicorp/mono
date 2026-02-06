@@ -19,43 +19,86 @@ export interface UseArrayVirtualizerOptions<T, TSort> {
   overscan?: number | undefined;
 }
 
-export interface ScrollRestorationState<TSort> {
-  anchorIndex: number;
-  anchorKind: 'forward' | 'backward' | 'permalink';
-  permalinkID?: string | undefined;
-  startRow: TSort | undefined;
-  scrollOffset: number;
-}
+export type ScrollRestorationState<TSort> =
+  | {
+      anchorIndex: number;
+      anchorKind: 'forward';
+      permalinkID?: string | undefined;
+      startRow: TSort | undefined;
+      scrollOffset: number;
+    }
+  | {
+      anchorIndex: number;
+      anchorKind: 'backward';
+      permalinkID?: string | undefined;
+      startRow: TSort;
+      scrollOffset: number;
+    }
+  | {
+      anchorIndex: number;
+      anchorKind: 'permalink';
+      permalinkID: string;
+      startRow: undefined;
+      scrollOffset: number;
+    };
 
 export interface UseArrayVirtualizerReturn<T, TSort> {
   virtualizer: Virtualizer<HTMLElement, Element>;
   rowAt: (index: number) => T | undefined;
   rowsEmpty: boolean;
   permalinkNotFound: boolean;
-  anchorState: {
-    anchorIndex: number;
-    anchorKind: 'forward' | 'backward' | 'permalink';
-    permalinkID: string | undefined;
-    startRow: TSort | undefined;
-    scrollOffset: number;
-  };
-  restoreAnchorState: (state: {
-    anchorIndex: number;
-    anchorKind: 'forward' | 'backward' | 'permalink';
-    permalinkID?: string | undefined;
-    startRow: TSort | undefined;
-    scrollOffset?: number;
-  }) => void;
+  anchorState: ScrollRestorationState<TSort>;
+  restoreAnchorState: (state: RestoreAnchorState<TSort>) => void;
 }
 
-type AnchorKind = 'forward' | 'backward' | 'permalink';
-
-type AnchorState<TSort> = {
-  kind: AnchorKind;
+type ForwardAnchorState<TSort> = {
+  kind: 'forward';
   index: number;
   startRow: TSort | undefined;
   permalinkID?: string | undefined;
 };
+
+type BackwardAnchorState<TSort> = {
+  kind: 'backward';
+  index: number;
+  startRow: TSort;
+  permalinkID?: string | undefined;
+};
+
+type PermalinkAnchorState = {
+  kind: 'permalink';
+  index: number;
+  startRow: undefined;
+  permalinkID: string;
+};
+
+type AnchorState<TSort> =
+  | ForwardAnchorState<TSort>
+  | BackwardAnchorState<TSort>
+  | PermalinkAnchorState;
+
+type RestoreAnchorState<TSort> =
+  | {
+      anchorKind: 'forward';
+      anchorIndex: number;
+      permalinkID?: string | undefined;
+      startRow: TSort | undefined;
+      scrollOffset?: number;
+    }
+  | {
+      anchorKind: 'backward';
+      anchorIndex: number;
+      permalinkID?: string | undefined;
+      startRow: TSort;
+      scrollOffset?: number;
+    }
+  | {
+      anchorKind: 'permalink';
+      anchorIndex: number;
+      permalinkID: string;
+      startRow: undefined;
+      scrollOffset?: number;
+    };
 
 const anchorsEqual = <TSort>(a: AnchorState<TSort>, b: AnchorState<TSort>) =>
   a.kind === b.kind &&
@@ -121,15 +164,15 @@ export function useArrayVirtualizer<T, TSort>({
   );
 
   useEffect(() => {
-    const nextAnchor = initialPermalinkID
+    const nextAnchor: AnchorState<TSort> = initialPermalinkID
       ? {
-          kind: 'permalink' as AnchorKind,
+          kind: 'permalink',
           index: 0,
           startRow: undefined,
           permalinkID: initialPermalinkID,
         }
       : {
-          kind: 'forward' as AnchorKind,
+          kind: 'forward',
           index: 0,
           startRow: undefined,
           permalinkID: undefined,
@@ -324,9 +367,16 @@ export function useArrayVirtualizer<T, TSort>({
           return true;
         }
 
-        const targetOffset = pendingScrollIsRelativeRef.current
-          ? baseOffset![0] + pendingScrollRef.current
-          : pendingScrollRef.current;
+        let targetOffset = pendingScrollRef.current;
+
+        if (pendingScrollIsRelativeRef.current) {
+          if (!baseOffset) {
+            scrollRetryCountRef.current = 0;
+            return true;
+          }
+
+          targetOffset = baseOffset[0] + pendingScrollRef.current;
+        }
         virtualizer.scrollToOffset(targetOffset);
 
         const currentScrollOffset = virtualizer.scrollOffset ?? 0;
@@ -518,19 +568,30 @@ export function useArrayVirtualizer<T, TSort>({
   ]);
 
   const restoreAnchorState = useCallback(
-    (state: {
-      anchorIndex: number;
-      anchorKind: 'forward' | 'backward' | 'permalink';
-      permalinkID?: string | undefined;
-      startRow: TSort | undefined;
-      scrollOffset?: number;
-    }) => {
-      replaceAnchor({
-        kind: state.anchorKind,
-        index: state.anchorIndex,
-        startRow: state.startRow,
-        permalinkID: state.permalinkID,
-      });
+    (state: RestoreAnchorState<TSort>) => {
+      const nextAnchor: AnchorState<TSort> =
+        state.anchorKind === 'backward'
+          ? {
+              kind: 'backward',
+              index: state.anchorIndex,
+              startRow: state.startRow,
+              permalinkID: state.permalinkID,
+            }
+          : state.anchorKind === 'permalink'
+            ? {
+                kind: 'permalink',
+                index: state.anchorIndex,
+                startRow: undefined,
+                permalinkID: state.permalinkID,
+              }
+            : {
+                kind: 'forward',
+                index: state.anchorIndex,
+                startRow: state.startRow,
+                permalinkID: state.permalinkID,
+              };
+
+      replaceAnchor(nextAnchor);
       positionedRef.current = false;
       positionedAtRef.current = 0;
       scrollRetryCountRef.current = 0;
@@ -543,15 +604,8 @@ export function useArrayVirtualizer<T, TSort>({
   );
 
   // Capture current anchor state for external save/restore
-  const captureAnchorState = useCallback(() => {
+  const captureAnchorState = useCallback((): ScrollRestorationState<TSort> => {
     const scrollOffset = virtualizer.scrollOffset ?? 0;
-
-    const base = {
-      anchorIndex: anchor.index,
-      anchorKind: anchor.kind,
-      permalinkID: anchor.permalinkID,
-      startRow: anchor.startRow,
-    } as const;
 
     if (anchor.kind === 'permalink') {
       const targetVirtualIndex =
@@ -563,13 +617,29 @@ export function useArrayVirtualizer<T, TSort>({
       const itemStart = offsetInfo ? offsetInfo[0] : scrollOffset;
 
       return {
-        ...base,
+        anchorIndex: anchor.index,
+        anchorKind: 'permalink',
+        permalinkID: anchor.permalinkID,
+        startRow: undefined,
         scrollOffset: scrollOffset - itemStart,
       };
     }
 
+    if (anchor.kind === 'backward') {
+      return {
+        anchorIndex: anchor.index,
+        anchorKind: 'backward',
+        permalinkID: anchor.permalinkID,
+        startRow: anchor.startRow,
+        scrollOffset,
+      };
+    }
+
     return {
-      ...base,
+      anchorIndex: anchor.index,
+      anchorKind: 'forward',
+      permalinkID: anchor.permalinkID,
+      startRow: anchor.startRow,
       scrollOffset,
     };
   }, [
