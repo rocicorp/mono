@@ -545,6 +545,217 @@ test('returns original AST when nothing to resolve', () => {
   expect(companions).toHaveLength(0);
 });
 
+test('resolves scalar subqueries inside correlatedSubquery (EXISTS) conditions', () => {
+  const specs = makeTableSpecs({
+    label: [['id']],
+  });
+
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'issueLabel',
+          where: {
+            type: 'scalarSubquery',
+            op: '=',
+            parentField: 'labelID',
+            childField: 'id',
+            subquery: {
+              table: 'label',
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'id'},
+                right: {type: 'literal', value: 'label-001'},
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
+    ast,
+    specs,
+    () => 'resolved-label-id',
+  );
+
+  // The correlatedSubquery condition should still be present, but its inner
+  // subquery's WHERE should be resolved from scalarSubquery to simple.
+  expect(resolved.where).toEqual({
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'issueLabel',
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'labelID'},
+          right: {type: 'literal', value: 'resolved-label-id'},
+        },
+      },
+    },
+  });
+  expect(companions).toHaveLength(1);
+  expect(companions[0].ast.table).toBe('label');
+});
+
+test('resolves scalar subqueries inside AND of correlatedSubquery conditions', () => {
+  const specs = makeTableSpecs({
+    label: [['id']],
+  });
+
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['issueID'],
+            },
+            subquery: {
+              table: 'issueLabel',
+              where: {
+                type: 'scalarSubquery',
+                op: '=',
+                parentField: 'labelID',
+                childField: 'id',
+                subquery: {
+                  table: 'label',
+                  where: {
+                    type: 'simple',
+                    op: '=',
+                    left: {type: 'column', name: 'id'},
+                    right: {type: 'literal', value: 'label-bug'},
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['issueID'],
+            },
+            subquery: {
+              table: 'issueLabel',
+              where: {
+                type: 'scalarSubquery',
+                op: '=',
+                parentField: 'labelID',
+                childField: 'id',
+                subquery: {
+                  table: 'label',
+                  where: {
+                    type: 'simple',
+                    op: '=',
+                    left: {type: 'column', name: 'id'},
+                    right: {type: 'literal', value: 'label-software'},
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  };
+
+  const values: Record<string, string> = {
+    'label-bug': 'bug-id',
+    'label-software': 'software-id',
+  };
+  let callCount = 0;
+
+  const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
+    ast,
+    specs,
+    (subAST, _field) => {
+      callCount++;
+      const idValue = (subAST.where as SimpleCondition).right as {
+        type: 'literal';
+        value: string;
+      };
+      return values[idValue.value];
+    },
+  );
+
+  expect(callCount).toBe(2);
+  expect(companions).toHaveLength(2);
+
+  // Both correlatedSubquery conditions should have resolved inner WHERE
+  const andCond = resolved.where as {type: 'and'; conditions: Condition[]};
+  expect(andCond.type).toBe('and');
+
+  for (const cond of andCond.conditions) {
+    expect(cond.type).toBe('correlatedSubquery');
+    if (cond.type === 'correlatedSubquery') {
+      expect(cond.related.subquery.where?.type).toBe('simple');
+    }
+  }
+});
+
+test('leaves correlatedSubquery unchanged when inner subquery has no scalar subqueries', () => {
+  const specs = makeTableSpecs({});
+
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'issueLabel',
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'labelID'},
+            right: {type: 'literal', value: 'some-id'},
+          },
+        },
+      },
+    },
+  };
+
+  const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
+    ast,
+    specs,
+    () => {
+      throw new Error('should not be called');
+    },
+  );
+
+  // Should return the original AST object (identity check)
+  expect(resolved).toBe(ast);
+  expect(companions).toHaveLength(0);
+});
+
 test('resolves nested scalar subqueries in subquery where clause', () => {
   const specs = makeTableSpecs({
     config: [['key']],
