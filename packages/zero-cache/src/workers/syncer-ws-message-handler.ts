@@ -157,19 +157,19 @@ export class SyncerWsMessageHandler implements MessageHandler {
             const ret = await this.#mutationLock.withLock(async () => {
               const errors: ErrorBody[] = [];
               for (const mutation of mutations) {
-                if (this.#auth) {
-                  assert(
-                    this.#auth.type === 'jwt',
-                    'Only JWT auth is supported for mutations',
-                  );
-                }
-
                 const authErrorResult = await this.#maybeUpdateAuth(
                   msg[1].auth,
                 );
 
                 if (authErrorResult) {
                   return authErrorResult;
+                }
+
+                if (this.#auth) {
+                  assert(
+                    this.#auth.type === 'jwt',
+                    'Only JWT auth is supported for mutations',
+                  );
                 }
 
                 const maybeError = await this.#mutagen.processMutation(

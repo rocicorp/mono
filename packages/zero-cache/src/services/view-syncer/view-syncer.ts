@@ -771,9 +771,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // also, for backwards compatibility, since older clients will not include auth in the
         // changeDesiredQueries message
         if (ctx.auth !== undefined) {
-          const nextAuth = pickToken(lc, this.#auth, ctx.auth);
+          const previousAuth = this.#auth;
+          const nextAuth = pickToken(lc, previousAuth, ctx.auth);
           // if the auth has changed, we need to re-transform all queries
-          const authChanged = nextAuth !== this.#auth;
+          const authChanged = previousAuth?.raw !== nextAuth?.raw;
+
           this.#auth = nextAuth;
           if (authChanged) {
             customQueryTransformMode = 'all';

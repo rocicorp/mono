@@ -947,7 +947,7 @@ function runReadQueryWithPermissions(
       },
     ),
     {
-      authData: authData,
+      authData,
       preMutationRow: undefined,
     },
   );

@@ -73,7 +73,7 @@ import {
   TASK_ID,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
-import type {JWTAuth, ViewSyncerService} from './view-syncer.ts';
+import type {OpaqueAuth, ViewSyncerService} from './view-syncer.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
@@ -2472,41 +2472,7 @@ describe('view-syncer/service', () => {
       `);
     });
 
-    test('opaque auth is forwarded to custom query transforms', async () => {
-      using transformSpy = vi
-        .spyOn(customQueryTransformer!, 'transform')
-        .mockResolvedValue([
-          {
-            id: 'custom-opaque',
-            transformedAst: ISSUES_QUERY,
-            transformationHash: 'hash-opaque',
-          },
-        ]);
-
-      const client = connect(
-        {
-          ...SYNC_CONTEXT,
-          auth: {type: 'opaque', raw: 'opaque-token'},
-        },
-        [
-          {
-            op: 'put',
-            hash: 'custom-opaque',
-            name: 'named-query-opaque',
-            args: ['thing'],
-          },
-        ],
-      );
-
-      await nextPoke(client);
-      stateChanges.push({state: 'version-ready'});
-      await nextPoke(client);
-
-      expect(transformSpy).toHaveBeenCalledTimes(1);
-      expect(transformSpy.mock.calls[0][0].token).toBe('opaque-token');
-    });
-
-    test('retransforms custom queries when auth refreshes', async () => {
+    test('retransforms custom queries when opaque auth refreshes', async () => {
       using transformSpy = vi
         .spyOn(customQueryTransformer!, 'transform')
         .mockResolvedValueOnce([
@@ -2524,15 +2490,13 @@ describe('view-syncer/service', () => {
           },
         ]);
 
-      const token1: JWTAuth = {
-        type: 'jwt',
+      const token1: OpaqueAuth = {
+        type: 'opaque',
         raw: 'token-1',
-        decoded: {sub: 'user-1', iat: 1},
       };
-      const token2: JWTAuth = {
-        type: 'jwt',
+      const token2: OpaqueAuth = {
+        type: 'opaque',
         raw: 'token-2',
-        decoded: {sub: 'user-1', iat: 2},
       };
 
       const client = connect({...SYNC_CONTEXT, auth: token1}, [
