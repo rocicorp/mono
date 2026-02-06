@@ -18,6 +18,7 @@ import {
   skipYields,
   type Storage,
 } from '../../../../zql/src/ivm/operator.ts';
+import {first} from '../../../../zql/src/ivm/stream.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -336,13 +337,7 @@ export class PipelineDriver {
         'scalar-subquery',
       );
       try {
-        // Consume the full stream rather than using first() to avoid
-        // triggering early return on Take's #initialFetch assertion.
-        // The subquery AST already has limit: 1, so at most one row is produced.
-        let node: Node | undefined;
-        for (const n of skipYields(input.fetch({}))) {
-          node ??= n;
-        }
+        const node = first(skipYields(input.fetch({})));
         if (!node) {
           return undefined;
         }
