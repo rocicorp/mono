@@ -1,4 +1,4 @@
-import {deepEqual} from '../../shared/src/json.ts';
+import {deepEqual, type ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Anchor} from './use-rows.ts';
 
 type QueryAnchor<TListContextParams, TStartRow> = {
@@ -61,7 +61,9 @@ export function pagingReducer<TListContextParams, TStartRow>(
           anchor: action.anchor,
         },
       };
-      if (deepEqual(state, newState)) {
+      if (
+        deepEqual(state as ReadonlyJSONValue, newState as ReadonlyJSONValue)
+      ) {
         return state;
       }
       return newState;
