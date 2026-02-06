@@ -34,7 +34,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #validateLegacyToken:
     | ((token: string) => Promise<JWTAuth>)
     | undefined;
-  #auth: Auth | undefined;
+  #auth: Auth | null | undefined;
 
   constructor(
     lc: LogContext,
@@ -280,14 +280,18 @@ export class SyncerWsMessageHandler implements MessageHandler {
 
       // if the client is explicitly sending null, this is a signal to clear auth
       if (newAuth === null) {
-        this.#auth = undefined;
+        this.#auth = null;
         return undefined;
       }
 
       if (this.#validateLegacyToken !== undefined) {
         const verifiedToken = await this.#validateLegacyToken(newAuth);
 
-        this.#auth = pickToken(this.#lc, this.#auth, verifiedToken);
+        this.#auth = pickToken(
+          this.#lc,
+          this.#auth ?? undefined,
+          verifiedToken,
+        );
       } else {
         assert(
           this.#auth?.type !== 'jwt',

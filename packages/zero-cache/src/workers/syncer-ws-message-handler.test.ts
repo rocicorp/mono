@@ -317,6 +317,13 @@ describe('SyncerWsMessageHandler push auth handling', () => {
       },
     ]);
 
+    const [ctx] = (
+      viewSyncerWithChange.changeDesiredQueries as unknown as {
+        mock: {calls: [SyncContext][]};
+      }
+    ).mock.calls[0];
+    expect(ctx.auth).toBeNull();
+
     await handler.handleMessage([
       'push',
       {
