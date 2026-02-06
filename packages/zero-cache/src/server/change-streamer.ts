@@ -36,13 +36,7 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const {
     taskID,
-    changeStreamer: {
-      port,
-      address,
-      protocol,
-      startupDelayMs,
-      backPressureThreshold,
-    },
+    changeStreamer: {port, address, protocol, startupDelayMs},
     upstream,
     change,
     replica,
@@ -55,10 +49,15 @@ export default async function runWorker(
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
-  const changeDB = pgClient(lc, change.db, {
-    max: change.maxConns,
-    connection: {['application_name']: 'zero-change-streamer'},
-  });
+  const changeDB = pgClient(
+    lc,
+    change.db,
+    {
+      max: change.maxConns,
+      connection: {['application_name']: 'zero-change-streamer'},
+    },
+    {sendStringAsJson: true},
+  );
   void warmupConnections(lc, changeDB, 'change');
 
   const {autoReset} = config;
@@ -95,7 +94,6 @@ export default async function runWorker(
         changeSource,
         subscriptionState,
         autoReset ?? false,
-        backPressureThreshold,
         setTimeout,
       );
       break;

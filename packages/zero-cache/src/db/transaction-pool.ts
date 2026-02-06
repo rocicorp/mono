@@ -3,7 +3,6 @@ import {type Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {AbortError} from '../../../shared/src/abort-error.ts';
 import {assert} from '../../../shared/src/asserts.ts';
-import {stringify} from '../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
@@ -318,13 +317,11 @@ export class TransactionPool {
               .execute()
               .then(() => {
                 if (++this.#stmts % 1000 === 0) {
+                  const log = this.#stmts % 10000 === 0 ? 'info' : 'debug';
                   const q = stmt as unknown as Query;
-                  lc.debug?.(
+                  lc[log]?.(
                     `executed ${this.#stmts}th statement (${(performance.now() - this.#start).toFixed(3)} ms)`,
-                    {
-                      statement: q.string,
-                      params: stringify(q.parameters),
-                    },
+                    {statement: q.string},
                   );
                 }
               })
