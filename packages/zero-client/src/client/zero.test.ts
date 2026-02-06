@@ -1403,6 +1403,7 @@ describe('initConnection', () => {
               ttl: 300000,
             },
           ],
+          auth: 'test-auth',
         },
       ]);
       expect(z.connectionStatus).toEqual(ConnectionStatus.Connecting);
@@ -1500,6 +1501,7 @@ describe('initConnection', () => {
               op: 'del',
             },
           ],
+          auth: 'test-auth',
         },
       ]);
     });
@@ -1558,6 +1560,7 @@ test('pusher sends one mutation per push message', async () => {
         );
         expect(msg[1].mutations).toHaveLength(1);
         expect(msg[1].requestID).toBe(requestID);
+        expect(msg[1].auth).toBe('test-auth');
       }
     }
   };

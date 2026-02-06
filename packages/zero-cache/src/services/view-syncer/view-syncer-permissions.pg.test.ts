@@ -41,7 +41,8 @@ describe('permissions', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    tokenData: {
+    auth: {
+      type: 'jwt',
       raw: '',
       decoded: {sub: 'foo', role: 'user', iat: 0},
     },
@@ -118,7 +119,8 @@ describe('permissions', () => {
       {
         ...SYNC_CONTEXT,
         clientID: 'bar',
-        tokenData: {
+        auth: {
+          type: 'jwt',
           raw: '',
           decoded: {sub: 'foo', role: 'admin', iat: 1},
         },
@@ -420,7 +422,8 @@ describe('permissions', () => {
     const client = connect(
       {
         ...SYNC_CONTEXT,
-        tokenData: {
+        auth: {
+          type: 'jwt',
           raw: '',
           decoded: {sub: 'foo', role: 'admin', iat: 1},
         },

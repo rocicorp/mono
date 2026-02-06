@@ -11,7 +11,7 @@ import {
   normalizeAST,
   type AST,
 } from '../../../zero-protocol/src/ast.ts';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {ChangeDesiredQueriesBody} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -65,7 +65,7 @@ export class QueryManager implements InspectorDelegate {
   readonly #clientID: ClientID;
   readonly #clientToServer: NameMapper;
   readonly #serverToClient: NameMapper;
-  readonly #send: (change: ChangeDesiredQueriesMessage) => void;
+  readonly #changeDesiredQueries: (change: ChangeDesiredQueriesBody) => void;
   readonly #onFatalError: (error: ZeroError) => void;
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
@@ -87,7 +87,7 @@ export class QueryManager implements InspectorDelegate {
     mutationTracker: MutationTracker,
     clientID: ClientID,
     tables: Record<string, TableSchema>,
-    send: (change: ChangeDesiredQueriesMessage) => void,
+    changeDesiredQueries: (change: ChangeDesiredQueriesBody) => void,
     experimentalWatch: ReplicacheImpl['experimentalWatch'],
     recentQueriesMaxSize: number,
     queryChangeThrottleMs: number,
@@ -99,7 +99,7 @@ export class QueryManager implements InspectorDelegate {
     this.#clientToServer = clientToServer(tables);
     this.#serverToClient = serverToClient(tables);
     this.#recentQueriesMaxSize = recentQueriesMaxSize;
-    this.#send = send;
+    this.#changeDesiredQueries = changeDesiredQueries;
     this.#mutationTracker = mutationTracker;
     this.#queryChangeThrottleMs = queryChangeThrottleMs;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
@@ -414,12 +414,9 @@ export class QueryManager implements InspectorDelegate {
       this.#batchTimer = undefined;
     }
     if (this.#pendingQueryChanges.length > 0) {
-      this.#send([
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [...this.#pendingQueryChanges],
-        },
-      ]);
+      this.#changeDesiredQueries({
+        desiredQueriesPatch: [...this.#pendingQueryChanges],
+      });
       this.#pendingQueryChanges.length = 0;
     }
   }

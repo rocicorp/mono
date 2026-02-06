@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {type JWTPayload} from 'jose';
 import {pid} from 'node:process';
 import type {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
+import {assert} from '../../../shared/src/asserts.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -24,7 +24,11 @@ import type {
   SingletonService,
 } from '../services/service.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
-import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
+import type {
+  Auth,
+  JWTAuth,
+  ViewSyncer,
+} from '../services/view-syncer/view-syncer.ts';
 import type {Worker} from '../types/processes.ts';
 import type {Subscription} from '../types/subscription.ts';
 import {installWebSocketReceiver} from '../types/websocket-handoff.ts';
@@ -131,46 +135,64 @@ export class Syncer implements SingletonService {
       params.clientID,
     );
     recordConnectionAttempted();
-    const {clientID, clientGroupID, auth, userID} = params;
+    const {clientID, clientGroupID, auth: authRaw, userID} = params;
+
+    const tokenOptions = tokenConfigOptions(this.#config.auth);
+
+    const hasPushOrMutate =
+      this.#config?.push?.url !== undefined ||
+      this.#config?.mutate?.url !== undefined;
+    const hasQueries =
+      this.#config?.query?.url !== undefined ||
+      this.#config?.getQueries?.url !== undefined;
+
+    // must either have one of the token options set or have custom mutations & queries enabled
+    const hasExactlyOneTokenOption = tokenOptions.length === 1;
+    const hasCustomEndpoints = hasPushOrMutate && hasQueries;
+    if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+      throw new Error(
+        'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+          JSON.stringify(tokenOptions) +
+          '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
+      );
+    }
+
+    const shouldValidateLegacyToken = tokenOptions.length > 0;
+
+    /** @deprecated */
+    const validateLegacyToken = async (token: string): Promise<JWTAuth> => {
+      assert(
+        shouldValidateLegacyToken,
+        'validateLegacyToken should not be called when no token validation options are set',
+      );
+
+      const decoded = await verifyToken(this.#config.auth, token, {
+        subject: userID,
+        ...(this.#config.auth.issuer && {
+          issuer: this.#config.auth.issuer,
+        }),
+        ...(this.#config.auth.audience && {
+          audience: this.#config.auth.audience,
+        }),
+      });
+      this.#lc.debug?.(
+        `Received auth token [redacted...${token.slice(-8)}] for clientID ${clientID}`,
+      );
+
+      return {
+        type: 'jwt',
+        raw: token,
+        decoded,
+      } as const;
+    };
 
     // Verify JWT BEFORE touching existing connections - prevents unauthenticated
     // attackers from force-disconnecting legitimate users via DoS
-    let decodedToken: JWTPayload | undefined;
-    if (auth) {
-      const tokenOptions = tokenConfigOptions(this.#config.auth);
-
-      const hasPushOrMutate =
-        this.#config?.push?.url !== undefined ||
-        this.#config?.mutate?.url !== undefined;
-      const hasQueries =
-        this.#config?.query?.url !== undefined ||
-        this.#config?.getQueries?.url !== undefined;
-
-      // must either have one of the token options set or have custom mutations & queries enabled
-      const hasExactlyOneTokenOption = tokenOptions.length === 1;
-      const hasCustomEndpoints = hasPushOrMutate && hasQueries;
-      if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
-        throw new Error(
-          'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
-            JSON.stringify(tokenOptions) +
-            '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
-        );
-      }
-
-      if (tokenOptions.length > 0) {
+    let auth: Auth | undefined;
+    if (authRaw) {
+      if (shouldValidateLegacyToken) {
         try {
-          decodedToken = await verifyToken(this.#config.auth, auth, {
-            subject: userID,
-            ...(this.#config.auth.issuer && {
-              issuer: this.#config.auth.issuer,
-            }),
-            ...(this.#config.auth.audience && {
-              audience: this.#config.auth.audience,
-            }),
-          });
-          this.#lc.debug?.(
-            `Received auth token [redacted...${auth.slice(-8)}] for clientID ${clientID}`,
-          );
+          auth = await validateLegacyToken(authRaw);
         } catch (e) {
           sendError(
             this.#lc,
@@ -185,9 +207,12 @@ export class Syncer implements SingletonService {
           ws.close(3000, 'Failed to decode JWT');
           return;
         }
+      } else {
+        auth = {
+          type: 'opaque',
+          raw: authRaw,
+        };
       }
-    } else {
-      this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
     }
 
     // Only check for and close existing connections AFTER auth is validated
@@ -214,15 +239,11 @@ export class Syncer implements SingletonService {
         new SyncerWsMessageHandler(
           this.#lc,
           params,
-          auth
-            ? {
-                raw: auth,
-                decoded: decodedToken ?? {},
-              }
-            : undefined,
+          auth,
           this.#viewSyncers.getService(clientGroupID),
           mutagen,
           pusher,
+          shouldValidateLegacyToken ? validateLegacyToken : undefined,
         ),
         () => {
           if (this.#connections.get(clientID) === connection) {

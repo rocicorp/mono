@@ -37,6 +37,7 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
+import type {ChangeDesiredQueriesBody} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -737,7 +738,7 @@ export class Zero<
       this.#mutationTracker,
       rep.clientID,
       schema.tables,
-      msg => this.#send(msg),
+      msg => this.#sendChangeDesiredQueries(msg),
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
       options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
@@ -861,6 +862,17 @@ export class Zero<
     ) {
       send(this.#socket, msg);
     }
+  }
+
+  #sendChangeDesiredQueries(body: ChangeDesiredQueriesBody): void {
+    const auth = this.#currentAuthToken();
+    const payload: ChangeDesiredQueriesBody =
+      auth === undefined ? body : {...body, auth};
+    this.#send(['changeDesiredQueries', payload]);
+  }
+
+  #currentAuthToken(): string | undefined {
+    return fromReplicacheAuthToken(this.#rep.auth);
   }
 
   #createLogOptions(options: {
@@ -1485,12 +1497,9 @@ export class Zero<
 
     if (queriesPatch.size > 0 && this.#initConnectionQueries !== undefined) {
       maybeSendDeletedClients();
-      send(socket, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [...queriesPatch.values()],
-        },
-      ]);
+      this.#sendChangeDesiredQueries({
+        desiredQueriesPatch: [...queriesPatch.values()],
+      });
     } else if (this.#initConnectionQueries === undefined) {
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
@@ -1609,7 +1618,7 @@ export class Zero<
       await this.clientGroupID,
       this.#clientSchema,
       this.userID,
-      fromReplicacheAuthToken(this.#rep.auth),
+      this.#currentAuthToken(),
       this.#lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
@@ -1858,7 +1867,7 @@ export class Zero<
           pushVersion: req.pushVersion,
           requestID,
           // include fresh auth with each push to avoid stale token issues
-          auth: fromReplicacheAuthToken(this.#rep.auth),
+          auth: this.#currentAuthToken(),
         },
       ];
       send(socket, msg);
@@ -2234,7 +2243,21 @@ export class Zero<
    * @param auth - The authentication token to set.
    */
   #setAuth(auth: string | undefined | null): void {
-    this.#rep.auth = toReplicacheAuthToken(auth);
+    const nextAuth = toReplicacheAuthToken(auth);
+    if (this.#rep.auth === nextAuth) {
+      return;
+    }
+
+    this.#rep.auth = nextAuth;
+
+    // TODO(0xcadams): should this always be sent so that auth is cleared on the server
+    // and queries are 1-1 with client auth?
+    const authToken = this.#currentAuthToken();
+    if (authToken !== undefined) {
+      this.#sendChangeDesiredQueries({
+        desiredQueriesPatch: [],
+      });
+    }
   }
 
   /**

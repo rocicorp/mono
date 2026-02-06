@@ -52,7 +52,7 @@ describe('view-syncer/yield-during-advance', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    tokenData: undefined,
+    auth: undefined,
     httpCookie: undefined,
     origin: undefined,
   };
