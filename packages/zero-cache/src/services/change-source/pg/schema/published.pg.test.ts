@@ -1460,10 +1460,11 @@ describe('tables/published', () => {
         `
       CREATE SCHEMA test;
       CREATE TABLE test.issues (
-        issue_id INTEGER NOT NULL,
+        issue_id INTEGER UNIQUE NOT NULL,
         org_id INTEGER NOT NULL,
         component_id INTEGER,
-        foo_bar TEXT
+        foo_bar TEXT,
+        PRIMARY KEY(org_id, issue_id)
       );
       ALTER TABLE test.issues REPLICA IDENTITY FULL;
       CREATE PUBLICATION zero_data FOR TABLE test.issues;`,
@@ -1484,12 +1485,7 @@ describe('tables/published', () => {
               schemaOID: expect.any(Number),
               name: 'issues',
               replicaIdentity: 'f',
-              replicaIdentityColumns: [
-                'component_id',
-                'foo_bar',
-                'issue_id',
-                'org_id',
-              ],
+              replicaIdentityColumns: ['issue_id'],
               columns: {
                 ['issue_id']: {
                   pos: 1,
@@ -1528,13 +1524,41 @@ describe('tables/published', () => {
                   dflt: null,
                 },
               },
-              primaryKey: [],
+              primaryKey: ['org_id', 'issue_id'],
               publications: {['zero_data']: {rowFilter: null}},
             },
           ],
         },
       )
-    ).toMatchInlineSnapshot(`"[]"`);
+    ).toMatchInlineSnapshot(`
+      "[
+        {
+          "schema": "test",
+          "tableName": "issues",
+          "name": "issues_issue_id_key",
+          "unique": true,
+          "isPrimaryKey": false,
+          "isReplicaIdentity": false,
+          "isImmediate": true,
+          "columns": {
+            "issue_id": "ASC"
+          }
+        },
+        {
+          "schema": "test",
+          "tableName": "issues",
+          "name": "issues_pkey",
+          "unique": true,
+          "isPrimaryKey": true,
+          "isReplicaIdentity": false,
+          "isImmediate": true,
+          "columns": {
+            "org_id": "ASC",
+            "issue_id": "ASC"
+          }
+        }
+      ]"
+    `);
   });
 
   test('compound indexes', async () => {

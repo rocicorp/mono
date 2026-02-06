@@ -41,7 +41,7 @@ import {id} from '../../../types/sql.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
-import {toLexiVersion} from './lsn.ts';
+import {toStateVersionString} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
 import {
@@ -128,7 +128,7 @@ export async function initialSync(
       }
     }
     const {snapshot_name: snapshot, consistent_point: lsn} = slot;
-    const initialVersion = toLexiVersion(lsn);
+    const initialVersion = toStateVersionString(lsn);
 
     initReplicationState(tx, publications, initialVersion);
 
@@ -163,7 +163,7 @@ export async function initialSync(
         max: numWorkers,
         connection: {['application_name']: 'initial-sync-copy-worker'},
       },
-      'json-as-string',
+      {returnJsonAsString: true},
     );
     const copiers = startTableCopyWorkers(
       lc,

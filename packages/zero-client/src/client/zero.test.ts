@@ -4175,6 +4175,7 @@ test('custom mutations get pushed', async () => {
     [
       'push',
       {
+        auth: 'test-auth',
         timestamp: 1678829450000,
         clientGroupID: await z.clientGroupID,
         mutations: [
@@ -4193,6 +4194,7 @@ test('custom mutations get pushed', async () => {
     [
       'push',
       {
+        auth: 'test-auth',
         timestamp: 1678829450000,
         clientGroupID: await z.clientGroupID,
         mutations: [
@@ -4211,6 +4213,7 @@ test('custom mutations get pushed', async () => {
     [
       'push',
       {
+        auth: 'test-auth',
         timestamp: 1678829450000,
         clientGroupID: await z.clientGroupID,
         mutations: [

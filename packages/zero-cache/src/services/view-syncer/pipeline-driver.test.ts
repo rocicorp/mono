@@ -16,9 +16,11 @@ import {
 } from '../../../../zqlite/src/database-storage.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {listTables} from '../../db/lite-tables.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
+import {populateFromExistingTables} from '../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   fakeReplicator,
@@ -85,6 +87,7 @@ describe('view-syncer/pipeline-driver', () => {
         issueID TEXT,
         upvotes INTEGER,
         ignored BYTEA,
+        stillBeingBackfilled TEXT,
          _0_version TEXT NOT NULL);
       CREATE TABLE "issueLabels" (
         issueID TEXT,
@@ -122,6 +125,18 @@ describe('view-syncer/pipeline-driver', () => {
       INSERT INTO "uniques" (id, name, _0_version) VALUES ('foo', 'bar', '123');
       INSERT INTO "uniques" (id, name, _0_version) VALUES ('boo', 'dar', '123');
       `);
+
+    // Initialize ColumnMetadata and mark a column as being backfilled,
+    // to verify that it does not appear in the pipeline results.
+    populateFromExistingTables(db, listTables(db, false));
+    db.prepare(
+      /*sql*/ `
+      UPDATE "_zero.column_metadata" 
+        SET backfill = '{"upstreamID":123}'
+        WHERE table_name = 'comments' 
+         AND column_name = 'stillBeingBackfilled'
+      `,
+    ).run();
     replicator = fakeReplicator(lc, db);
   });
 
@@ -344,6 +359,48 @@ describe('view-syncer/pipeline-driver', () => {
   const UNIQUES_QUERY: AST = {
     table: 'uniques',
     orderBy: [['id', 'desc']],
+  };
+
+  const ISSUES_WITH_SCALAR_SUBQUERY: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'scalarSubquery',
+      op: '=',
+      parentField: 'id',
+      childField: 'issueID',
+      subquery: {
+        table: 'comments',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: '10'},
+        },
+      },
+    },
+  };
+
+  const ISSUES_WITH_NONEXISTENT_SCALAR_SUBQUERY: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'scalarSubquery',
+      op: '=',
+      parentField: 'id',
+      childField: 'issueID',
+      subquery: {
+        table: 'comments',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: 'nonexistent'},
+        },
+      },
+    },
   };
 
   const messages = new ReplicationMessages({
@@ -1752,5 +1809,225 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     expect(() => changes()).toThrowError();
+  });
+
+  test('scalar subquery resolves to literal', () => {
+    pipelines.init(clientSchema);
+
+    // Comment '10' has issueID='1', so the subquery resolves to id = '1'
+    const results = [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalar",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryScalar",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
+
+    // The transformedAst should have the scalar subquery resolved to a simple condition
+    expect(
+      pipelines.queries().get('queryScalar')?.transformedAst.where,
+    ).toEqual({
+      type: 'simple',
+      op: '=',
+      left: {type: 'column', name: 'id'},
+      right: {type: 'literal', value: '1'},
+    });
+  });
+
+  test('scalar subquery with no matching rows', () => {
+    pipelines.init(clientSchema);
+
+    const results = [
+      ...pipelines.addQuery(
+        'hash-scalar-none',
+        'queryScalarNone',
+        ISSUES_WITH_NONEXISTENT_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    expect(results).toEqual([]);
+
+    // The transformedAst should have ALWAYS_FALSE
+    expect(
+      pipelines.queries().get('queryScalarNone')?.transformedAst.where,
+    ).toEqual({
+      type: 'simple',
+      op: '=',
+      left: {type: 'literal', value: 1},
+      right: {type: 'literal', value: 0},
+    });
+  });
+
+  test('scalar subquery in AND with other conditions', () => {
+    pipelines.init(clientSchema);
+
+    const queryWithAnd: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'closed'},
+            right: {type: 'literal', value: false},
+          },
+          {
+            type: 'scalarSubquery',
+            op: '=',
+            parentField: 'id',
+            childField: 'issueID',
+            subquery: {
+              table: 'comments',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'id'},
+                right: {type: 'literal', value: '10'},
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const results = [
+      ...pipelines.addQuery(
+        'hash-scalar-and',
+        'queryScalarAnd',
+        queryWithAnd,
+        startTimer(),
+      ),
+    ];
+
+    // Issue '1' is not closed and matches the subquery
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalarAnd",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryScalarAnd",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
+
+    // The transformedAst should have the scalar subquery resolved within the AND
+    expect(
+      pipelines.queries().get('queryScalarAnd')?.transformedAst.where,
+    ).toEqual({
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'closed'},
+          right: {type: 'literal', value: false},
+        },
+        {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: '1'},
+        },
+      ],
+    });
+  });
+
+  test('advancement after scalar subquery resolution', () => {
+    pipelines.init(clientSchema);
+
+    // This resolves to `issues WHERE id = '1'`
+    [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      messages.insert('issues', {id: '5', closed: 0}),
+      messages.update('issues', {id: '1', closed: 1}),
+    );
+
+    // Only the edit to issue '1' should appear (it matches the resolved filter),
+    // NOT the insert of issue '5' (which doesn't match id = '1').
+    expect(changes()).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalar",
+          "row": {
+            "_0_version": "134",
+            "closed": true,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "edit",
+        },
+      ]
+    `);
   });
 });

@@ -184,12 +184,17 @@ function dateToUTCMidnight(date: string): number {
  */
 export type PostgresValueType = JSONValue | Uint8Array;
 
+type TypeOptions = {
+  /** Returns JSON values as raw JSON strings (i.e. unparsed). */
+  returnJsonAsString?: boolean;
+};
+
 /**
  * Configures types for the Postgres.js client library (`postgres`).
  *
  * @param jsonAsString Keep JSON / JSONB values as strings instead of parsing.
  */
-export const postgresTypeConfig = (jsonAsString?: 'json-as-string') => ({
+export const postgresTypeConfig = ({returnJsonAsString}: TypeOptions = {}) => ({
   // Type the type IDs as `number` so that Typescript doesn't complain about
   // referencing external types during type inference.
   types: {
@@ -198,7 +203,7 @@ export const postgresTypeConfig = (jsonAsString?: 'json-as-string') => ({
       to: JSON,
       from: [JSON, JSONB],
       serialize: BigIntJSON.stringify,
-      parse: jsonAsString ? (x: string) => x : BigIntJSON.parse,
+      parse: returnJsonAsString ? (x: string) => x : BigIntJSON.parse,
     },
     // Timestamps are converted to PreciseDate objects.
     timestamp: {
@@ -260,7 +265,7 @@ export function pgClient(
     bigint: PostgresType<bigint>;
     json: PostgresType<JSONValue>;
   }>,
-  jsonAsString?: 'json-as-string',
+  opts?: TypeOptions,
 ): PostgresDB {
   const onnotice = (n: Notice) => {
     // https://www.postgresql.org/docs/current/plpgsql-errors-and-messages.html#PLPGSQL-STATEMENTS-RAISE
@@ -297,7 +302,7 @@ export function pgClient(
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
 
   return postgres(connectionURI, {
-    ...postgresTypeConfig(jsonAsString),
+    ...postgresTypeConfig(opts),
     onnotice,
     ['max_lifetime']: maxLifetimeSeconds,
     ssl,

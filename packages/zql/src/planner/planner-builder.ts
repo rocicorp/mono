@@ -107,6 +107,7 @@ function processCondition(
 ): Exclude<PlannerNode, PlannerTerminus> {
   switch (condition.type) {
     case 'simple':
+    case 'scalarSubquery':
       return input;
     case 'and':
       return processAnd(condition, input, graph, model, parentTable, getPlanId);
@@ -286,6 +287,7 @@ function hasCorrelatedSubquery(condition: Condition): boolean {
   if (condition.type === 'and' || condition.type === 'or') {
     return condition.conditions.some(hasCorrelatedSubquery);
   }
+  // simple and scalarSubquery don't contain correlated subqueries
   return false;
 }
 
@@ -322,7 +324,7 @@ function applyToCondition(
   condition: Condition,
   flippedIds: Set<number>,
 ): Condition {
-  if (condition.type === 'simple') {
+  if (condition.type === 'simple' || condition.type === 'scalarSubquery') {
     return condition;
   }
 

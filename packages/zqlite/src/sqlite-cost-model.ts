@@ -104,7 +104,8 @@ function removeCorrelatedSubqueries(
 ): NoSubqueryCondition | undefined {
   switch (condition.type) {
     case 'correlatedSubquery':
-      // Remove correlated subqueries - we can't estimate their cost via scanstatus
+    case 'scalarSubquery':
+      // Remove subqueries - we can't estimate their cost via scanstatus
       return undefined;
     case 'simple':
       return condition;
