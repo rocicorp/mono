@@ -622,7 +622,7 @@ describe('change-streamer/storer', () => {
         }
       `);
 
-      // Drop the other backfilling column.
+      // Set the other backfilling column to completed
       storer.store([
         '110',
         ['begin', messages.begin(), {commitWatermark: '110'}],
@@ -632,12 +632,13 @@ describe('change-streamer/storer', () => {
         [
           'data',
           {
-            tag: 'drop-column',
-            table: {
+            tag: 'backfill-completed',
+            relation: {
               schema: 'your',
               name: 'bar',
+              rowKey: {columns: ['a']},
             },
-            column: 'a',
+            columns: [],
           },
         ],
       ]);

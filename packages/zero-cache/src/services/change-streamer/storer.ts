@@ -616,7 +616,18 @@ export class Storer implements Service {
                 WHERE "schema" = ${schema} AND "table" = ${name} AND "column" = ${column}`,
         );
         break;
-        break;
+      }
+
+      case 'backfill-completed': {
+        const {
+          relation: {schema, name: table, rowKey},
+          columns,
+        } = change;
+        const cols = [...rowKey.columns, columns];
+        stmts.push(
+          sql`DELETE FROM ${this.#cdc('backfilling')}
+                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" IN ${sql(cols)}`,
+        );
       }
     }
     return stmts;
