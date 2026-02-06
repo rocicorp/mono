@@ -23,6 +23,12 @@ describe('pickToken', () => {
     });
   });
 
+  test('opaque tokens when previous undefined', () => {
+    expect(pickToken(lc, undefined, {type: 'opaque', raw: 'opaque-1'})).toEqual(
+      {type: 'opaque', raw: 'opaque-1'},
+    );
+  });
+
   test('opaque tokens allow replacement', () => {
     expect(
       pickToken(

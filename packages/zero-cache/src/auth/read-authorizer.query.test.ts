@@ -931,7 +931,7 @@ describe('issue permissions', () => {
 });
 
 function runReadQueryWithPermissions(
-  auth: AuthData,
+  authData: AuthData,
   query: Query<string, ZeroSchema>,
   queryDelegate: QueryDelegate,
 ) {
@@ -943,11 +943,11 @@ function runReadQueryWithPermissions(
       {
         type: 'jwt',
         raw: '',
-        decoded: auth,
+        decoded: authData,
       },
     ),
     {
-      authData: auth,
+      authData: authData,
       preMutationRow: undefined,
     },
   );
