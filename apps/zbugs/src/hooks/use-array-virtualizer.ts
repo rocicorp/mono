@@ -1,5 +1,5 @@
-import { useVirtualizer, type Virtualizer } from '@rocicorp/react-virtual';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   useRows,
   type GetPageQuery,
@@ -546,6 +546,13 @@ export function useArrayVirtualizer<T, TSort>({
   const captureAnchorState = useCallback(() => {
     const scrollOffset = virtualizer.scrollOffset ?? 0;
 
+    const base = {
+      anchorIndex: anchor.index,
+      anchorKind: anchor.kind,
+      permalinkID: anchor.permalinkID,
+      startRow: anchor.startRow,
+    } as const;
+
     if (anchor.kind === 'permalink') {
       const targetVirtualIndex =
         anchor.index - firstRowIndex + startPlaceholder;
@@ -556,26 +563,17 @@ export function useArrayVirtualizer<T, TSort>({
       const itemStart = offsetInfo ? offsetInfo[0] : scrollOffset;
 
       return {
-        anchorIndex: anchor.index,
-        anchorKind: anchor.kind,
-        permalinkID: anchor.permalinkID,
-        startRow: anchor.startRow,
+        ...base,
         scrollOffset: scrollOffset - itemStart,
       };
     }
 
     return {
-      anchorIndex: anchor.index,
-      anchorKind: anchor.kind,
-      permalinkID: anchor.permalinkID,
-      startRow: anchor.startRow,
+      ...base,
       scrollOffset,
     };
   }, [
-    anchor.index,
-    anchor.kind,
-    anchor.permalinkID,
-    anchor.startRow,
+    anchor,
     firstRowIndex,
     startPlaceholder,
     virtualizer,
