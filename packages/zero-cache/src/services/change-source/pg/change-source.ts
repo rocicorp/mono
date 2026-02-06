@@ -42,9 +42,9 @@ import {
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
-  DataChange,
   Identifier,
   MessageRelation,
+  SchemaChange,
   TableMetadata,
 } from '../protocol/current/data.ts';
 import type {
@@ -707,11 +707,11 @@ class ChangeMaker {
   #makeSchemaChanges(
     preSchema: PublishedSchema,
     update: DdlUpdateEvent,
-  ): DataChange[] {
+  ): SchemaChange[] {
     try {
       const [prevTbl, prevIdx] = specsByID(preSchema);
       const [nextTbl, nextIdx] = specsByID(update.schema);
-      const changes: DataChange[] = [];
+      const changes: SchemaChange[] = [];
 
       // Validate the new table schemas
       for (const table of nextTbl.values()) {
@@ -765,8 +765,8 @@ class ChangeMaker {
   #getTableChanges(
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
-  ): DataChange[] {
-    const changes: DataChange[] = [];
+  ): SchemaChange[] {
+    const changes: SchemaChange[] = [];
     if (
       oldTable.schema !== newTable.schema ||
       oldTable.name !== newTable.name

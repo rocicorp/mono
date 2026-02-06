@@ -5,6 +5,7 @@ import {
   commitSchema,
   dataChangeSchema,
   rollbackSchema,
+  schemaChangeSchema,
 } from './data.ts';
 import {statusMessageSchema} from './status.ts';
 
@@ -13,7 +14,10 @@ const begin = v.tuple([
   beginSchema,
   v.object({commitWatermark: v.string()}),
 ]);
-const data = v.tuple([v.literal('data'), dataChangeSchema]);
+const data = v.tuple([
+  v.literal('data'),
+  v.union(dataChangeSchema, schemaChangeSchema),
+]);
 const commit = v.tuple([
   v.literal('commit'),
   commitSchema,
