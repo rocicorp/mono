@@ -127,7 +127,7 @@ export const pushBodySchema = v.object({
   requestID: v.string(),
   // Fresh auth token sent with each push - used instead of cached connection token
   // to avoid expired token issues when pushing to upstream API
-  auth: v.string().optional(),
+  auth: v.string().nullable().optional(),
 });
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);

@@ -168,7 +168,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 if (this.#auth) {
                   assert(
                     this.#auth.type === 'jwt',
-                    'Only JWT auth is supported for mutations',
+                    'Only JWT auth is supported for CRUD mutations',
                   );
                 }
 
@@ -194,7 +194,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           },
         );
       }
-      case 'changeDesiredQueries':
+      case 'changeDesiredQueries': {
         const authErrorResult = await this.#maybeUpdateAuth(msg[1].auth);
 
         if (authErrorResult) {
@@ -205,6 +205,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           viewSyncer.changeDesiredQueries(this.#getSyncContext(), msg),
         );
         break;
+      }
       case 'deleteClients': {
         const deletedClientIDs = await startAsyncSpan(
           tracer,
@@ -270,10 +271,16 @@ export class SyncerWsMessageHandler implements MessageHandler {
   }
 
   async #maybeUpdateAuth(
-    newAuth: string | undefined,
+    newAuth: string | null | undefined,
   ): Promise<HandlerResult | undefined> {
     try {
-      if (!newAuth) {
+      if (newAuth === undefined || newAuth === '') {
+        return undefined;
+      }
+
+      // if the client is explicitly sending null, this is a signal to clear auth
+      if (newAuth === null) {
+        this.#auth = undefined;
         return undefined;
       }
 

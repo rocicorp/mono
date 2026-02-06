@@ -122,7 +122,7 @@ export type SyncContext = {
   readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
-  readonly auth: Auth | undefined;
+  readonly auth: Auth | null | undefined;
   readonly httpCookie: string | undefined;
   readonly origin: string | undefined;
 };
@@ -2135,8 +2135,12 @@ function checkClientAndCVRVersions(
 export function pickToken(
   lc: LogContext,
   previousToken: Auth | undefined,
-  newToken: Auth | undefined,
+  newToken: Auth | undefined | null,
 ) {
+  if (newToken === null) {
+    return undefined;
+  }
+
   if (
     previousToken?.type &&
     newToken?.type &&

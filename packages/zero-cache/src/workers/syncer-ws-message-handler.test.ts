@@ -357,7 +357,7 @@ describe('SyncerWsMessageHandler push auth handling', () => {
           requestID: 'req-1',
         },
       ]),
-    ).rejects.toThrow('Only JWT auth is supported for mutations');
+    ).rejects.toThrow('Only JWT auth is supported for CRUD mutations');
   });
 
   test('changeDesiredQueries auth refresh updates push fallback token', async () => {

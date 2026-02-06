@@ -866,13 +866,14 @@ export class Zero<
 
   #sendChangeDesiredQueries(body: ChangeDesiredQueriesBody): void {
     const auth = this.#currentAuthToken();
-    const payload: ChangeDesiredQueriesBody =
-      auth === undefined ? body : {...body, auth};
+    const payload: ChangeDesiredQueriesBody = {...body, auth};
     this.#send(['changeDesiredQueries', payload]);
   }
 
-  #currentAuthToken(): string | undefined {
-    return fromReplicacheAuthToken(this.#rep.auth);
+  #currentAuthToken(): string | null {
+    const token = fromReplicacheAuthToken(this.#rep.auth);
+    // we coerce an undefined auth token to null to mean "clear auth token"
+    return token === undefined ? null : token;
   }
 
   #createLogOptions(options: {
@@ -1866,7 +1867,6 @@ export class Zero<
           mutations: [zeroM],
           pushVersion: req.pushVersion,
           requestID,
-          // include fresh auth with each push to avoid stale token issues
           auth: this.#currentAuthToken(),
         },
       ];
@@ -2250,14 +2250,10 @@ export class Zero<
 
     this.#rep.auth = nextAuth;
 
-    // TODO(0xcadams): should this always be sent so that auth is cleared on the server
-    // and queries are 1-1 with client auth?
-    const authToken = this.#currentAuthToken();
-    if (authToken !== undefined) {
-      this.#sendChangeDesiredQueries({
-        desiredQueriesPatch: [],
-      });
-    }
+    this.#sendChangeDesiredQueries({
+      desiredQueriesPatch: [],
+      auth: this.#currentAuthToken(),
+    });
   }
 
   /**
@@ -2446,7 +2442,7 @@ export async function createSocket(
   clientGroupID: string,
   clientSchema: ClientSchema,
   userID: string,
-  auth: string | undefined,
+  auth: string | null,
   lmid: number,
   wsid: string,
   debugPerf: boolean,
@@ -2509,10 +2505,10 @@ export async function createSocket(
         activeClients: [...activeClients],
       },
     ],
-    auth,
+    auth ?? undefined,
   );
   if (secProtocol.length > maxHeaderLength) {
-    secProtocol = encodeSecProtocols(undefined, auth);
+    secProtocol = encodeSecProtocols(undefined, auth ?? undefined);
     if (secProtocol.length > maxHeaderLength) {
       lc.warn?.(
         `Encoded auth token length (${secProtocol.length}) exceeds ` +
