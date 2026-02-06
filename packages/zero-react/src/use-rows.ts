@@ -8,18 +8,18 @@ import {useQuery, type UseQueryOptions} from './use-query.tsx';
 
 export type Anchor<TStartRow> =
   | Readonly<{
-      index: number;
       kind: 'forward';
+      index: number;
       startRow?: TStartRow | undefined;
     }>
   | Readonly<{
-      index: number;
       kind: 'backward';
+      index: number;
       startRow: TStartRow;
     }>
   | Readonly<{
-      index: number;
       kind: 'permalink';
+      index: number;
       id: string;
     }>;
 
