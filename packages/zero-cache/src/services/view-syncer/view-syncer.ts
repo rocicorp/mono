@@ -1973,11 +1973,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Signal clients to commit.
       await pokers.end(finalVersion);
 
-      const elapsed = performance.now() - start;
+      const wallTime = performance.now() - start;
+      const totalProcessTime = timer.totalElapsed();
       lc.info?.(
-        `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
+        `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
       );
-      this.#transactionAdvanceTime.record(elapsed / 1000);
+      this.#transactionAdvanceTime.record(totalProcessTime / 1000);
       return 'success';
     });
   }
