@@ -11,7 +11,7 @@ type RowData = Issues[number];
 
 const DEFAULT_HEIGHT = 275;
 const PLACEHOLDER_HEIGHT = 50;
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 const UNIFORM_ROW_HEIGHT = 63;
 
 const toStartRow = (row: {id: string; modified: number; created: number}) => ({
