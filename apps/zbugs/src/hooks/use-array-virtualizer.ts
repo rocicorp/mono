@@ -1,5 +1,5 @@
-import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
-import {useCallback, useEffect, useRef, useState} from 'react';
+import { useVirtualizer, type Virtualizer } from '@rocicorp/react-virtual';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useRows,
   type GetPageQuery,
@@ -78,6 +78,9 @@ export function useArrayVirtualizer<T, TSort>({
   const [permalinkID, setPermalinkID] = useState<string | undefined>(
     initialPermalinkID,
   );
+
+  // Counter to force effect re-run when restoring same state
+  const [restoreTrigger, setRestoreTrigger] = useState(0);
 
   // Ref: has the permalink/restore scroll been positioned?
   const positionedRef = useRef(false);
@@ -231,7 +234,6 @@ export function useArrayVirtualizer<T, TSort>({
     // Phase 0: Scroll restoration (from restoreAnchorState)
     if (pendingScrollRef.current !== null && anchorKind !== 'permalink') {
       if (complete && rowsLength > 0) {
-        console.log('scrollToOffset for restoration', pendingScrollRef.current);
         virtualizer.scrollToOffset(pendingScrollRef.current);
         pendingScrollRef.current = null;
         positionedRef.current = true;
@@ -241,67 +243,55 @@ export function useArrayVirtualizer<T, TSort>({
       return;
     }
 
-    // Phase 1: Permalink positioning with custom scroll loop
+    // Phase 1: Permalink positioning (mimics scrollToIndex with pixel adjustment)
     if (anchorKind === 'permalink') {
       if (rowsLength === 0) {
         return;
       }
 
-      const targetVirtualIndex = anchorIndex - firstRowIndex + startPlaceholder;
+      // Permalink item is at logical index (firstRowIndex + anchorIndex)
+      // In virtualizer coordinates: anchorIndex + startPlaceholder
+      const targetVirtualIndex = anchorIndex + startPlaceholder;
 
       if (!positionedRef.current || !complete) {
-        // Get offset for target index using virtualizer's calculation
+        // Get offset for target index with 'start' alignment (same as scrollToIndex)
         const offsetInfo = virtualizer.getOffsetForIndex(
           targetVirtualIndex,
           'start',
         );
 
         if (!offsetInfo) {
-          // Target not yet measured, estimate position and scroll to it
-          let estimatedOffset = 0;
-
-          if (virtualItems.length > 0) {
-            const lastVisibleItem = virtualItems[virtualItems.length - 1];
-            if (lastVisibleItem.index < targetVirtualIndex) {
-              // Target is after visible items, extrapolate forward
-              const itemsToGo = targetVirtualIndex - lastVisibleItem.index;
-              const avgSize = lastVisibleItem.end / (lastVisibleItem.index + 1);
-              estimatedOffset = lastVisibleItem.end + avgSize * itemsToGo;
-            } else {
-              // Target is before visible items, extrapolate backward
-              const firstVisibleItem = virtualItems[0];
-              const itemsBack = firstVisibleItem.index - targetVirtualIndex;
-              const avgSize = firstVisibleItem.start / firstVisibleItem.index;
-              estimatedOffset = firstVisibleItem.start - avgSize * itemsBack;
-            }
-          } else {
-            // No items visible, use rough estimate
-            estimatedOffset = targetVirtualIndex * placeholderHeight;
-          }
-
-          console.log(
-            'scrollToOffset (target not measured)',
-            targetVirtualIndex,
-            estimatedOffset,
-          );
-          virtualizer.scrollToOffset(estimatedOffset);
+          // Target not yet measured, give up this frame
+          scrollRetryCountRef.current = 0;
           return;
         }
 
-        // Target is measured, add any pending offset adjustment
-        const [baseOffset] = offsetInfo;
-        const desiredScrollOffset =
-          baseOffset + (pendingScrollRef.current ?? 0);
-        const currentScrollOffset = virtualizer.scrollOffset ?? 0;
-        const tolerance = 1; // 1px tolerance
+        const [offset, align] = offsetInfo;
 
-        if (Math.abs(currentScrollOffset - desiredScrollOffset) <= tolerance) {
+        // Apply pixel adjustment if provided (for scroll restoration)
+        const adjustment = pendingScrollRef.current ?? 0;
+        const targetOffset = offset + adjustment;
+
+        // Scroll to target position
+        virtualizer.scrollToOffset(targetOffset);
+
+        // Verify position after scroll (same logic as scrollToIndex)
+        const currentScrollOffset = virtualizer.scrollOffset ?? 0;
+        const afterInfo = virtualizer.getOffsetForIndex(
+          targetVirtualIndex,
+          align,
+        );
+
+        if (!afterInfo) {
+          scrollRetryCountRef.current = 0;
+          return;
+        }
+
+        const targetAfterAdjustment = afterInfo[0] + adjustment;
+
+        // Check if we're at the correct position (1px tolerance like approxEqual)
+        if (Math.abs(currentScrollOffset - targetAfterAdjustment) <= 1) {
           // Position is correct, we're done
-          console.log(
-            'positioning complete',
-            currentScrollOffset,
-            desiredScrollOffset,
-          );
           positionedRef.current = true;
           positionedAtRef.current = Date.now();
           pendingScrollRef.current = null;
@@ -309,22 +299,12 @@ export function useArrayVirtualizer<T, TSort>({
           return;
         }
 
-        // Position not correct yet, scroll and retry
+        // Position not correct yet, retry
         const maxRetries = 10;
         if (scrollRetryCountRef.current < maxRetries) {
-          console.log(
-            'scroll retry',
-            scrollRetryCountRef.current,
-            'current',
-            currentScrollOffset,
-            'desired',
-            desiredScrollOffset,
-          );
-          virtualizer.scrollToOffset(desiredScrollOffset);
           scrollRetryCountRef.current++;
         } else {
           // Max retries reached, accept current position
-          console.log('max retries reached, accepting position');
           positionedRef.current = true;
           positionedAtRef.current = Date.now();
           pendingScrollRef.current = null;
@@ -483,6 +463,7 @@ export function useArrayVirtualizer<T, TSort>({
     toLogicalIndex,
     pageSize,
     toStartRow,
+    restoreTrigger,
   ]);
 
   const restoreAnchorState = useCallback(
@@ -508,6 +489,8 @@ export function useArrayVirtualizer<T, TSort>({
       // which will be applied after positioning. For others, use scrollOffset.
       pendingScrollRef.current =
         state.scrollOffsetFromFirstVisible ?? state.scrollOffset ?? null;
+      // Increment trigger to force re-render even if state values are identical
+      setRestoreTrigger(prev => prev + 1);
     },
     [],
   );
