@@ -864,10 +864,20 @@ export class Zero<
     }
   }
 
-  #sendChangeDesiredQueries(body: ChangeDesiredQueriesBody): void {
+  #sendChangeDesiredQueries(
+    body: ChangeDesiredQueriesBody,
+    sendOnNotConnected = false,
+  ): void {
     const auth = this.#currentAuthToken();
     const payload: ChangeDesiredQueriesBody = {...body, auth};
-    this.#send(['changeDesiredQueries', payload]);
+    if (this.#socket) {
+      if (
+        sendOnNotConnected ||
+        this.#connectionManager.is(ConnectionStatus.Connected)
+      ) {
+        send(this.#socket, ['changeDesiredQueries', payload]);
+      }
+    }
   }
 
   #currentAuthToken(): string | null {
@@ -1498,9 +1508,12 @@ export class Zero<
 
     if (queriesPatch.size > 0 && this.#initConnectionQueries !== undefined) {
       maybeSendDeletedClients();
-      this.#sendChangeDesiredQueries({
-        desiredQueriesPatch: [...queriesPatch.values()],
-      });
+      this.#sendChangeDesiredQueries(
+        {
+          desiredQueriesPatch: [...queriesPatch.values()],
+        },
+        true,
+      );
     } else if (this.#initConnectionQueries === undefined) {
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
