@@ -5,8 +5,6 @@ import {
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
-import {areEqual} from '../../../../../shared/src/arrays.ts';
-import {unreachable} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
@@ -45,13 +43,13 @@ import type {
   Identifier,
   MessageRelation,
   SchemaChange,
-  TableMetadata,
 } from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
+import type {TableMetadata} from './backfill-metadata.ts';
 import {ChangeStreamMultiplexer} from './change-stream-multiplexer.ts';
 import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
@@ -777,18 +775,14 @@ class ChangeMaker {
         new: {schema: newTable.schema, name: newTable.name},
       });
     }
-    if (
-      oldTable.replicaIdentity !== newTable.replicaIdentity ||
-      !areEqual(
-        oldTable.replicaIdentityColumns,
-        newTable.replicaIdentityColumns,
-      )
-    ) {
+    const oldMetadata = getMetadata(oldTable);
+    const newMetadata = getMetadata(newTable);
+    if (!deepEqual(oldMetadata, newMetadata)) {
       changes.push({
         tag: 'update-table-metadata',
         table: {schema: newTable.schema, name: newTable.name},
-        old: getMetadata(oldTable),
-        new: getMetadata(newTable),
+        old: oldMetadata,
+        new: newMetadata,
       });
     }
     const table = {schema: newTable.schema, name: newTable.name};
@@ -1014,30 +1008,16 @@ function columnsByID(
 }
 
 function getMetadata(table: PublishedTableWithReplicaIdentity): TableMetadata {
-  const metadata: TableMetadata = {
-    rowKey: {
-      columns: table.replicaIdentityColumns,
-    },
+  return {
+    schemaOID: must(table.schemaOID),
+    relationOID: table.oid,
+    rowKey: Object.fromEntries(
+      table.replicaIdentityColumns.map(k => [
+        k,
+        {attNum: table.columns[k].pos},
+      ]),
+    ),
   };
-  switch (table.replicaIdentity) {
-    case 'd':
-      metadata.rowKey.type = 'default';
-      break;
-    case 'i':
-      metadata.rowKey.type = 'index';
-      break;
-    case 'f':
-      metadata.rowKey.type = 'full';
-      break;
-    case 'n':
-      metadata.rowKey.type = 'nothing';
-      break;
-    case undefined:
-      break;
-    default:
-      unreachable(table.replicaIdentity);
-  }
-  return metadata;
 }
 
 // Avoid sending the `columns` from the Postgres MessageRelation message.
