@@ -90,7 +90,7 @@ export const newRelationSchema = v.object({
 // actual data in the table, but rather how the table's change messages are
 // handled. The is an opaque object that clients must track (and update) based
 // on `create-table`, `add-column`, and `table-update-metadata` messages, and
-// passed back in BackfillRequests when there are columns to be backfilled.
+// pass in BackfillRequests when there are columns to be backfilled.
 export const tableMetadataSchema = jsonObjectSchema;
 
 export type TableMetadata = v.Infer<typeof tableMetadataSchema>;
