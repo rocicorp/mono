@@ -147,10 +147,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'create-table',
           metadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
         {tag: 'create-index'},
@@ -230,10 +229,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
       ],
@@ -356,32 +354,28 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'update-table-metadata',
           table: {schema: 'my', name: 'bar'},
           old: {
-            rowKey: {
-              columns: ['id'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
           new: {
-            rowKey: {
-              columns: [],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {},
           },
         },
         {
           tag: 'update-table-metadata',
           table: {schema: 'my', name: 'bar'},
           old: {
-            rowKey: {
-              columns: [],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {},
           },
           new: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
         {
@@ -444,10 +438,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
         {tag: 'create-index'},
@@ -702,19 +695,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
       ],
@@ -776,10 +767,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
       ],
@@ -945,10 +935,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
           tableMetadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'index',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
       ],
@@ -993,20 +982,18 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
           tableMetadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'index',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
         {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
           tableMetadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'index',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
       ],
@@ -1076,10 +1063,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'create-table',
           metadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
         {tag: 'create-index'},
@@ -1411,10 +1397,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'create-table',
           metadata: {
-            rowKey: {
-              columns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            // Note: This means is will be replicated to SQLite but not synced to clients.
+            rowKey: {},
           },
         },
         {
@@ -1489,9 +1475,11 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'create-table',
           metadata: {
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
             rowKey: {
-              columns: ['a', 'b'],
-              type: 'default',
+              a: {attNum: 1},
+              b: {attNum: 2},
             },
           },
         },
@@ -1500,10 +1488,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'create-table',
           metadata: {
-            rowKey: {
-              columns: ['a'], // computes the shortest eligible key
-              type: 'full',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {a: {attNum: 1}}, // computes the shortest eligible key
           },
         },
         {tag: 'create-index'},
@@ -1605,16 +1592,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'update-table-metadata',
           table: {schema: 'public', name: 'existing'},
           old: {
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
             rowKey: {
-              columns: ['a', 'b'],
-              type: 'default',
+              a: {attNum: 1},
+              b: {attNum: 2},
             },
           },
           new: {
-            rowKey: {
-              columns: ['a'], // computes the shortest eligible key
-              type: 'full',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {a: {attNum: 1}}, // computes the shortest eligible key
           },
         },
       ],

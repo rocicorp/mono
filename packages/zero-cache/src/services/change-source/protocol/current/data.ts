@@ -12,6 +12,7 @@ import {must} from '../../../../../../shared/src/must.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.ts';
 import type {Satisfies} from '../../../../types/satisfies.ts';
+import {jsonObjectSchema} from './json.ts';
 
 export const beginSchema = v.object({
   tag: v.literal('begin'),
@@ -87,14 +88,10 @@ export const newRelationSchema = v.object({
 
 // TableMetadata contains table-related configuration that does not affect the
 // actual data in the table, but rather how the table's change messages are
-// handled.
-//
-// Changes to the metadata are sent in an `table-update-metadata` change.
-export const tableMetadataSchema = v.object({
-  // The rowKey is the same object sent in the `relation` message of
-  // `insert`, `update`, and `delete` messages.
-  rowKey: rowKeySchema,
-});
+// handled. The is an opaque object that clients must track (and update) based
+// on `create-table`, `add-column`, and `table-update-metadata` messages, and
+// passed back in BackfillRequests when there are columns to be backfilled.
+export const tableMetadataSchema = jsonObjectSchema;
 
 export type TableMetadata = v.Infer<typeof tableMetadataSchema>;
 
@@ -145,7 +142,7 @@ export type Identifier = v.Infer<typeof identifierSchema>;
 // The change-streamer stores these IDs as opaque values while a column is
 // being backfilled, and initiates new change-source streams with the IDs
 // in order to restart backfills that did not complete in previous sessions.
-export const backfillIDSchema = v.record(v.union(v.number(), v.string()));
+export const backfillIDSchema = jsonObjectSchema;
 
 export type BackfillID = v.Infer<typeof backfillIDSchema>;
 
