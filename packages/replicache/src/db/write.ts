@@ -84,6 +84,32 @@ export class Write extends Read {
     await this.map.put(key, value);
   }
 
+  /**
+   * Efficiently insert multiple entries. Uses BTreeWrite.putMany which
+   * automatically uses fromEntries for empty trees or multiPut for existing
+   * trees. Entries must be sorted by key and frozen.
+   */
+  async putMany(
+    lc: LogContext,
+    entries: ReadonlyArray<readonly [string, FrozenJSONValue]>,
+  ): Promise<void> {
+    if (entries.length === 0) {
+      return;
+    }
+
+    // Update indexes for all entries
+    if (this.indexes.size > 0) {
+      // TODO(arv): Indexes can use the optimizePatch pattern too.
+      for (const [key, value] of entries) {
+        const oldVal = lazy(() => this.map.get(key));
+        await updateIndexes(lc, this.indexes, key, oldVal, value);
+      }
+    }
+
+    // BTreeWrite.putMany handles both empty and non-empty trees optimally
+    await this.map.putMany(entries);
+  }
+
   getMutationID(): Promise<number> {
     return getMutationID(this.#clientID, this.#dagWrite, this.#meta);
   }
