@@ -17,7 +17,7 @@ import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
 import {runAst} from './run-ast.ts';
-import {TimeSliceTimer, type TokenData} from './view-syncer/view-syncer.ts';
+import {TimeSliceTimer, type JWTAuth} from './view-syncer/view-syncer.ts';
 
 const TIME_SLICE_LAP_THRESHOLD_MS = 200;
 
@@ -29,7 +29,7 @@ export async function analyzeQuery(
   syncedRows = true,
   vendedRows = false,
   permissions?: PermissionsConfig,
-  authData?: TokenData,
+  auth?: JWTAuth,
   joinPlans = false,
 ): Promise<AnalyzeQueryResult> {
   using db = new Database(lc, config.replica.file);
@@ -61,7 +61,7 @@ export async function analyzeQuery(
       applyPermissions: permissions !== undefined,
       syncedRows,
       vendedRows,
-      authData,
+      auth,
       db,
       tableSpecs,
       permissions,

@@ -1,3 +1,4 @@
+import {resolver} from '@rocicorp/resolver';
 import {
   afterEach,
   beforeEach,
@@ -7,7 +8,6 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
-import {resolver} from '@rocicorp/resolver';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
@@ -43,9 +43,11 @@ import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
+import {ClientHandler} from './client-handler.ts';
 import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
+import {PipelineDriver} from './pipeline-driver.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   app2Messages,
@@ -71,9 +73,7 @@ import {
   TASK_ID,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
-import type {ViewSyncerService} from './view-syncer.ts';
-import {ClientHandler} from './client-handler.ts';
-import {PipelineDriver} from './pipeline-driver.ts';
+import type {OpaqueAuth, ViewSyncerService} from './view-syncer.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
@@ -126,7 +126,7 @@ describe('view-syncer/service', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    tokenData: undefined,
+    auth: undefined,
     httpCookie: undefined,
     origin: undefined,
   };
@@ -569,6 +569,29 @@ describe('view-syncer/service', () => {
       });
     }
 
+    function mockFetchImplWithHeaders(
+      queryResponses: TransformResponseBody,
+      expectedHeaders: Record<string, string>,
+    ) {
+      mockFetch.mockImplementation((url, init) => {
+        if (
+          url ===
+          'http://my-pull-endpoint.dev/api/zero/pull?schema=this_app_2&appID=this_app'
+        ) {
+          expect(init?.headers).toMatchObject(expectedHeaders);
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([
+                'transformed',
+                queryResponses,
+              ] satisfies TransformResponseMessage),
+            ),
+          );
+        }
+        return Promise.reject(new Error('Unexpected fetch call ' + url));
+      });
+    }
+
     test('initial hydration of a custom query', async () => {
       mockFetchImpl([
         {
@@ -769,6 +792,43 @@ describe('view-syncer/service', () => {
             },
           ]
         `);
+    });
+
+    test('custom query transform forwards opaque auth to fetch', async () => {
+      const token = 'opaque-token';
+      mockFetchImplWithHeaders(
+        [
+          {
+            ast: ISSUES_QUERY,
+            id: 'custom-opaque',
+            name: 'named-query-opaque',
+          },
+        ],
+        {
+          Authorization: `Bearer ${token}`,
+        },
+      );
+
+      const client = connect(
+        {
+          ...SYNC_CONTEXT,
+          auth: {type: 'opaque', raw: token},
+        },
+        [
+          {
+            op: 'put',
+            hash: 'custom-opaque',
+            name: 'named-query-opaque',
+            args: ['thing'],
+          },
+        ],
+      );
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     test('removing one of two queries with shared transformation hash does not remove pipeline', async () => {
@@ -2410,6 +2470,56 @@ describe('view-syncer/service', () => {
           undefined,
         ]
       `);
+    });
+
+    test('retransforms custom queries when opaque auth refreshes', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValueOnce([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-1',
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-2',
+          },
+        ]);
+
+      const token1: OpaqueAuth = {
+        type: 'opaque',
+        raw: 'token-1',
+      };
+      const token2: OpaqueAuth = {
+        type: 'opaque',
+        raw: 'token-2',
+      };
+
+      const client = connect({...SYNC_CONTEXT, auth: token1}, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy.mock.calls[0][0].token).toBe('token-1');
+
+      await vs.changeDesiredQueries({...SYNC_CONTEXT, auth: token2}, [
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [],
+          auth: 'token-2',
+        },
+      ]);
+
+      expect(transformSpy).toHaveBeenCalledTimes(2);
+      expect(transformSpy.mock.calls[1][0].token).toBe('token-2');
     });
 
     // test cases where custom query transforms fail
@@ -4183,7 +4293,7 @@ describe('view-syncer/service', () => {
         wsID: '9382',
         baseCookie: preAdvancement.cookie,
         protocolVersion: PROTOCOL_VERSION,
-        tokenData: undefined,
+        auth: undefined,
         httpCookie: undefined,
         origin: undefined,
       },

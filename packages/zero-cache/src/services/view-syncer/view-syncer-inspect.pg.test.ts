@@ -58,7 +58,7 @@ describe('view-syncer/service', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    tokenData: undefined,
+    auth: undefined,
     httpCookie: undefined,
     origin: undefined,
   };
@@ -733,7 +733,8 @@ describe('view-syncer/service', () => {
       // Create a sync context with tokenData that includes role='admin'
       const ADMIN_SYNC_CONTEXT: SyncContext = {
         ...SYNC_CONTEXT,
-        tokenData: {
+        auth: {
+          type: 'jwt',
           raw: JSON.stringify({
             sub: 'user-123',
             role: 'admin',

@@ -3,6 +3,7 @@ import {upQueriesPatchSchema} from './queries-patch.ts';
 
 const changeDesiredQueriesBodySchema = v.object({
   desiredQueriesPatch: upQueriesPatchSchema,
+  auth: v.string().nullable().optional(),
 });
 
 export const changeDesiredQueriesMessageSchema = v.tuple([

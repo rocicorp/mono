@@ -26,7 +26,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {ChangeDesiredQueriesBody} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
@@ -54,7 +54,7 @@ const onFatalError = () => {};
 const queryChangeThrottleMs = 10;
 const lc = createSilentLogContext();
 test('add', () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -76,23 +76,20 @@ test('add', () => {
   queryManager.addLegacy(ast, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '12hwg3ihkijhm',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '12hwg3ihkijhm',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   queryManager.addLegacy(ast, 'forever');
   queryManager.flushBatch();
@@ -100,7 +97,7 @@ test('add', () => {
 });
 
 test('add and remove a custom query', () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -125,20 +122,17 @@ test('add and remove a custom query', () => {
   );
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '2l1ig6e3tnu0a',
-          name: 'customQuery',
-          args: [1],
-          ttl: 60000,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '2l1ig6e3tnu0a',
+        name: 'customQuery',
+        args: [1],
+        ttl: 60000,
+      },
+    ],
+  });
 
   const rm2 = queryManager.addCustom(
     ast,
@@ -173,20 +167,17 @@ test('add and remove a custom query', () => {
   queryManager.flushBatch();
   // update event sent
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '2l1ig6e3tnu0a',
-          name: 'customQuery',
-          args: [1],
-          ttl: 120000,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '2l1ig6e3tnu0a',
+        name: 'customQuery',
+        args: [1],
+        ttl: 120000,
+      },
+    ],
+  });
 
   queryManager.updateCustom({name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
@@ -195,7 +186,7 @@ test('add and remove a custom query', () => {
 });
 
 test('add renamed fields', () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -267,113 +258,110 @@ test('add renamed fields', () => {
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
   expect(send.mock.calls[0][0]).toMatchInlineSnapshot(`
-    [
-      "changeDesiredQueries",
-      {
-        "desiredQueriesPatch": [
-          {
-            "args": undefined,
-            "ast": {
-              "alias": undefined,
-              "limit": undefined,
-              "orderBy": [
-                [
-                  "owner_id",
-                  "desc",
-                ],
-                [
-                  "id",
-                  "asc",
-                ],
+    {
+      "desiredQueriesPatch": [
+        {
+          "args": undefined,
+          "ast": {
+            "alias": undefined,
+            "limit": undefined,
+            "orderBy": [
+              [
+                "owner_id",
+                "desc",
               ],
-              "related": [
-                {
-                  "correlation": {
-                    "childField": [
-                      "id",
-                    ],
-                    "parentField": [
-                      "owner_id",
-                    ],
-                  },
-                  "hidden": undefined,
-                  "subquery": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": undefined,
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "users",
-                    "where": undefined,
-                  },
-                  "system": undefined,
-                },
+              [
+                "id",
+                "asc",
               ],
-              "schema": undefined,
-              "start": {
-                "exclusive": false,
-                "row": {
-                  "id": "123",
-                  "owner_id": "foobar",
+            ],
+            "related": [
+              {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "owner_id",
+                  ],
                 },
+                "hidden": undefined,
+                "subquery": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": undefined,
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "users",
+                  "where": undefined,
+                },
+                "system": undefined,
               },
-              "table": "issues",
-              "where": {
-                "conditions": [
-                  {
-                    "left": {
-                      "name": "owner_id",
-                      "type": "column",
-                    },
-                    "op": "IS NOT",
-                    "right": {
-                      "type": "literal",
-                      "value": "null",
-                    },
-                    "type": "simple",
-                  },
-                  {
-                    "op": "EXISTS",
-                    "related": {
-                      "correlation": {
-                        "childField": [
-                          "issue_id",
-                        ],
-                        "parentField": [
-                          "id",
-                        ],
-                      },
-                      "subquery": {
-                        "alias": undefined,
-                        "limit": undefined,
-                        "orderBy": undefined,
-                        "related": undefined,
-                        "schema": undefined,
-                        "start": undefined,
-                        "table": "comments",
-                        "where": undefined,
-                      },
-                    },
-                    "type": "correlatedSubquery",
-                  },
-                ],
-                "type": "and",
+            ],
+            "schema": undefined,
+            "start": {
+              "exclusive": false,
+              "row": {
+                "id": "123",
+                "owner_id": "foobar",
               },
             },
-            "hash": "2courpv3kf7et",
-            "name": undefined,
-            "op": "put",
-            "ttl": 600000,
+            "table": "issues",
+            "where": {
+              "conditions": [
+                {
+                  "left": {
+                    "name": "owner_id",
+                    "type": "column",
+                  },
+                  "op": "IS NOT",
+                  "right": {
+                    "type": "literal",
+                    "value": "null",
+                  },
+                  "type": "simple",
+                },
+                {
+                  "op": "EXISTS",
+                  "related": {
+                    "correlation": {
+                      "childField": [
+                        "issue_id",
+                      ],
+                      "parentField": [
+                        "id",
+                      ],
+                    },
+                    "subquery": {
+                      "alias": undefined,
+                      "limit": undefined,
+                      "orderBy": undefined,
+                      "related": undefined,
+                      "schema": undefined,
+                      "start": undefined,
+                      "table": "comments",
+                      "where": undefined,
+                    },
+                  },
+                  "type": "correlatedSubquery",
+                },
+              ],
+              "type": "and",
+            },
           },
-        ],
-      },
-    ]
+          "hash": "2courpv3kf7et",
+          "name": undefined,
+          "op": "put",
+          "ttl": 600000,
+        },
+      ],
+    }
   `);
 });
 
 test('remove, recent queries max size 0', () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -396,23 +384,20 @@ test('remove, recent queries max size 0', () => {
   const remove1 = queryManager.addLegacy(ast, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '12hwg3ihkijhm',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '12hwg3ihkijhm',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const remove2 = queryManager.addLegacy(ast, 'forever');
   queryManager.flushBatch();
@@ -424,17 +409,14 @@ test('remove, recent queries max size 0', () => {
   remove2();
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(2);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '12hwg3ihkijhm',
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '12hwg3ihkijhm',
+      },
+    ],
+  });
 
   remove2();
   queryManager.flushBatch();
@@ -442,7 +424,7 @@ test('remove, recent queries max size 0', () => {
 });
 
 test('remove, max recent queries size 2', () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 2;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -480,23 +462,20 @@ test('remove, max recent queries size 2', () => {
   const remove1Ast1 = queryManager.addLegacy(ast1, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '12hwg3ihkijhm',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '12hwg3ihkijhm',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const remove2Ast1 = queryManager.addLegacy(ast1, 'forever');
   queryManager.flushBatch();
@@ -505,65 +484,56 @@ test('remove, max recent queries size 2', () => {
   const removeAst2 = queryManager.addLegacy(ast2, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(2);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '1hydj1t7t5yv4',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '1hydj1t7t5yv4',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'desc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst3 = queryManager.addLegacy(ast3, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(3);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '3c5d3uiyypuxu',
-          ast: {
-            table: 'users',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '3c5d3uiyypuxu',
+        ast: {
+          table: 'users',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst4 = queryManager.addLegacy(ast4, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(4);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '2q7cds8pild5w',
-          ast: {
-            table: 'users',
-            where: undefined,
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '2q7cds8pild5w',
+        ast: {
+          table: 'users',
+          where: undefined,
+          orderBy: [['id', 'desc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   remove1Ast1();
   queryManager.flushBatch();
@@ -579,36 +549,30 @@ test('remove, max recent queries size 2', () => {
   removeAst3();
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(5);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '12hwg3ihkijhm',
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '12hwg3ihkijhm',
+      },
+    ],
+  });
 
   removeAst4();
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(6);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '1hydj1t7t5yv4',
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '1hydj1t7t5yv4',
+      },
+    ],
+  });
 });
 
 test('add/remove/add/remove changes lru order max recent queries size 2', () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 2;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -646,86 +610,74 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
   const remove1Ast1 = queryManager.addLegacy(ast1, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '12hwg3ihkijhm',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '12hwg3ihkijhm',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst2 = queryManager.addLegacy(ast2, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(2);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '1hydj1t7t5yv4',
-          ast: {
-            table: 'issues',
-            where: undefined,
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '1hydj1t7t5yv4',
+        ast: {
+          table: 'issues',
+          where: undefined,
+          orderBy: [['id', 'desc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst3 = queryManager.addLegacy(ast3, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(3);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '3c5d3uiyypuxu',
-          ast: {
-            table: 'users',
-            where: undefined,
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '3c5d3uiyypuxu',
+        ast: {
+          table: 'users',
+          where: undefined,
+          orderBy: [['id', 'asc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   const removeAst4 = queryManager.addLegacy(ast4, 'forever');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(4);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: '2q7cds8pild5w',
-          ast: {
-            table: 'users',
-            where: undefined,
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: '2q7cds8pild5w',
+        ast: {
+          table: 'users',
+          where: undefined,
+          orderBy: [['id', 'desc']],
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   remove1Ast1();
   queryManager.flushBatch();
@@ -747,32 +699,26 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
   queryManager.flushBatch();
 
   expect(send).toBeCalledTimes(5);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '1hydj1t7t5yv4',
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '1hydj1t7t5yv4',
+      },
+    ],
+  });
 
   removeAst4();
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(6);
-  expect(send).toHaveBeenLastCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'del',
-          hash: '12hwg3ihkijhm',
-        },
-      ],
-    },
-  ]);
+  expect(send).toHaveBeenLastCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'del',
+        hash: '12hwg3ihkijhm',
+      },
+    ],
+  });
 });
 
 function getTestScanAsyncIterator(
@@ -827,7 +773,7 @@ class TestTransaction implements ReadTransaction {
 
 describe('getQueriesPatch', () => {
   test('basics', async () => {
-    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+    const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
     const maxRecentQueriesSize = 0;
     const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
     const queryManager = new QueryManager(
@@ -887,11 +833,11 @@ describe('getQueriesPatch', () => {
   });
 
   describe('add a second query with same hash', () => {
-    let send: Mock<(arg: ChangeDesiredQueriesMessage) => void>;
+    let send: Mock<(arg: ChangeDesiredQueriesBody) => void>;
     let queryManager: QueryManager;
 
     beforeEach(() => {
-      send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+      send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
       const maxRecentQueriesSize = 0;
       const mutationTracker = new MutationTracker(
         lc,
@@ -935,35 +881,32 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
         [
-          [
-            "changeDesiredQueries",
-            {
-              "desiredQueriesPatch": [
-                {
-                  "args": undefined,
-                  "ast": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": [
-                      [
-                        "id",
-                        "desc",
-                      ],
+          {
+            "desiredQueriesPatch": [
+              {
+                "args": undefined,
+                "ast": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
                     ],
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "issues",
-                    "where": undefined,
-                  },
-                  "hash": "1hydj1t7t5yv4",
-                  "name": undefined,
-                  "op": "put",
-                  "ttl": 1000,
+                  ],
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "issues",
+                  "where": undefined,
                 },
-              ],
-            },
-          ],
+                "hash": "1hydj1t7t5yv4",
+                "name": undefined,
+                "op": "put",
+                "ttl": 1000,
+              },
+            ],
+          },
         ]
       `);
 
@@ -972,35 +915,32 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
         [
-          [
-            "changeDesiredQueries",
-            {
-              "desiredQueriesPatch": [
-                {
-                  "args": undefined,
-                  "ast": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": [
-                      [
-                        "id",
-                        "desc",
-                      ],
+          {
+            "desiredQueriesPatch": [
+              {
+                "args": undefined,
+                "ast": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
                     ],
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "issues",
-                    "where": undefined,
-                  },
-                  "hash": "1hydj1t7t5yv4",
-                  "name": undefined,
-                  "op": "put",
-                  "ttl": 2000,
+                  ],
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "issues",
+                  "where": undefined,
                 },
-              ],
-            },
-          ],
+                "hash": "1hydj1t7t5yv4",
+                "name": undefined,
+                "op": "put",
+                "ttl": 2000,
+              },
+            ],
+          },
         ]
       `);
 
@@ -1017,9 +957,7 @@ describe('getQueriesPatch', () => {
       expect(await add('none')).toBe(0);
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
-      [
         [
-          "changeDesiredQueries",
           {
             "desiredQueriesPatch": [
               {
@@ -1046,9 +984,8 @@ describe('getQueriesPatch', () => {
               },
             ],
           },
-        ],
-      ]
-    `);
+        ]
+      `);
 
       send.mockClear();
       expect(await add('none')).toBe(0);
@@ -1059,35 +996,32 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
         [
-          [
-            "changeDesiredQueries",
-            {
-              "desiredQueriesPatch": [
-                {
-                  "args": undefined,
-                  "ast": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": [
-                      [
-                        "id",
-                        "desc",
-                      ],
+          {
+            "desiredQueriesPatch": [
+              {
+                "args": undefined,
+                "ast": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
                     ],
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "issues",
-                    "where": undefined,
-                  },
-                  "hash": "1hydj1t7t5yv4",
-                  "name": undefined,
-                  "op": "put",
-                  "ttl": 1000,
+                  ],
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "issues",
+                  "where": undefined,
                 },
-              ],
-            },
-          ],
+                "hash": "1hydj1t7t5yv4",
+                "name": undefined,
+                "op": "put",
+                "ttl": 1000,
+              },
+            ],
+          },
         ]
       `);
 
@@ -1098,7 +1032,7 @@ describe('getQueriesPatch', () => {
   });
 
   test('getQueriesPatch includes recent queries in desired', async () => {
-    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+    const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
     const maxRecentQueriesSize = 2;
     const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
     const queryManager = new QueryManager(
@@ -1217,7 +1151,7 @@ describe('getQueriesPatch', () => {
 
 test('handleClosed marks queries as errored exactly once', () => {
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -1268,7 +1202,7 @@ test('handleClosed marks queries as errored exactly once', () => {
 test('gotCallback, query already got', () => {
   const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
 
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
@@ -1304,28 +1238,25 @@ test('gotCallback, query already got', () => {
   queryManager.addLegacy(ast, ttl, gotCallback1);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            alias: undefined,
-            where: undefined,
-            related: undefined,
-            start: undefined,
-            orderBy: [['id', 'asc']],
-            limit: undefined,
-            schema: undefined,
-          } satisfies AST,
-          ttl,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          alias: undefined,
+          where: undefined,
+          related: undefined,
+          start: undefined,
+          orderBy: [['id', 'asc']],
+          limit: undefined,
+          schema: undefined,
+        } satisfies AST,
+        ttl,
+      },
+    ],
+  });
 
   expect(gotCallback1).nthCalledWith(1, true);
 
@@ -1341,7 +1272,7 @@ test('gotCallback, query already got', () => {
 test('gotCallback, query got after add', () => {
   const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -1369,28 +1300,25 @@ test('gotCallback, query got after add', () => {
   queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            alias: undefined,
-            where: undefined,
-            related: undefined,
-            start: undefined,
-            orderBy: [['id', 'asc']],
-            limit: undefined,
-            schema: undefined,
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          alias: undefined,
+          where: undefined,
+          related: undefined,
+          start: undefined,
+          orderBy: [['id', 'asc']],
+          limit: undefined,
+          schema: undefined,
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   expect(gotCalback1).nthCalledWith(1, false);
 
@@ -1408,7 +1336,7 @@ test('gotCallback, query got after add', () => {
 test('gotCallback, query got after add then removed', () => {
   const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -1436,28 +1364,25 @@ test('gotCallback, query got after add then removed', () => {
   queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            alias: undefined,
-            where: undefined,
-            related: undefined,
-            start: undefined,
-            orderBy: [['id', 'asc']],
-            limit: undefined,
-            schema: undefined,
-          } satisfies AST,
-          ttl,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          alias: undefined,
+          where: undefined,
+          related: undefined,
+          start: undefined,
+          orderBy: [['id', 'asc']],
+          limit: undefined,
+          schema: undefined,
+        } satisfies AST,
+        ttl,
+      },
+    ],
+  });
 
   expect(gotCalback1).nthCalledWith(1, false);
 
@@ -1485,7 +1410,7 @@ test('gotCallback, query got after add then removed', () => {
 test('gotCallback, query got after subscription removed', () => {
   const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<(q: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(q: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -1513,28 +1438,25 @@ test('gotCallback, query got after subscription removed', () => {
   const remove = queryManager.addLegacy(ast, ttl, gotCalback1);
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            alias: undefined,
-            where: undefined,
-            related: undefined,
-            start: undefined,
-            orderBy: [['id', 'asc']],
-            limit: undefined,
-            schema: undefined,
-          } satisfies AST,
-          ttl,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          alias: undefined,
+          where: undefined,
+          related: undefined,
+          start: undefined,
+          orderBy: [['id', 'asc']],
+          limit: undefined,
+          schema: undefined,
+        } satisfies AST,
+        ttl,
+      },
+    ],
+  });
 
   expect(gotCalback1).nthCalledWith(1, false);
 
@@ -1564,9 +1486,7 @@ const normalizingFields = {
 
 describe('queriesPatch with lastPatch', () => {
   test('returns the normal set if no lastPatch is provided', async () => {
-    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => boolean>(
-      () => false,
-    );
+    const send = vi.fn<(arg: ChangeDesiredQueriesBody) => boolean>(() => false);
     const maxRecentQueriesSize = 0;
     const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
     const queryManager = new QueryManager(
@@ -1606,9 +1526,7 @@ describe('queriesPatch with lastPatch', () => {
   });
 
   test('removes entries from the patch that are in lastPatch', async () => {
-    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => boolean>(
-      () => false,
-    );
+    const send = vi.fn<(arg: ChangeDesiredQueriesBody) => boolean>(() => false);
     const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
     const queryManager = new QueryManager(
       lc,
@@ -1692,7 +1610,7 @@ describe('query transform errors', () => {
 
     const queryHash = hashOfNameAndArgs(nameAndArgs.name, nameAndArgs.args);
     const experimentalWatch = createExperimentalWatchMock();
-    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
     const maxRecentQueriesSize = 0;
     const mutationTracker = new MutationTracker(
       lc,
@@ -1761,7 +1679,7 @@ describe('query transform errors', () => {
 
     const queryHash = hashOfNameAndArgs(nameAndArgs.name, nameAndArgs.args);
     const experimentalWatch = createExperimentalWatchMock();
-    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
     const maxRecentQueriesSize = 0;
     const mutationTracker = new MutationTracker(
       lc,
@@ -1811,7 +1729,7 @@ describe('query transform errors', () => {
   test('calls onFatalError for non-app errors', () => {
     const onFatalErrorMock = vi.fn();
     const experimentalWatch = createExperimentalWatchMock();
-    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
     const maxRecentQueriesSize = 0;
     const mutationTracker = new MutationTracker(
       lc,
@@ -1859,7 +1777,7 @@ describe('query transform errors', () => {
   test('calls onFatalError for each non-app error in batch', () => {
     const onFatalErrorMock = vi.fn();
     const experimentalWatch = createExperimentalWatchMock();
-    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
     const maxRecentQueriesSize = 0;
     const mutationTracker = new MutationTracker(
       lc,
@@ -1921,7 +1839,7 @@ describe('query transform errors', () => {
 test('gotCallback, add same got callback twice', () => {
   const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
-  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -1958,23 +1876,20 @@ test('gotCallback, add same got callback twice', () => {
   gotCallback.mockClear();
 
   expect(send).toBeCalledTimes(1);
-  expect(send).toBeCalledWith([
-    'changeDesiredQueries',
-    {
-      desiredQueriesPatch: [
-        {
-          op: 'put',
-          hash: queryHash,
-          ast: {
-            table: 'issues',
-            orderBy: [['id', 'asc']],
-            ...normalizingFields,
-          } satisfies AST,
-          ttl: MAX_TTL_MS,
-        },
-      ],
-    },
-  ]);
+  expect(send).toBeCalledWith({
+    desiredQueriesPatch: [
+      {
+        op: 'put',
+        hash: queryHash,
+        ast: {
+          table: 'issues',
+          orderBy: [['id', 'asc']],
+          ...normalizingFields,
+        } satisfies AST,
+        ttl: MAX_TTL_MS,
+      },
+    ],
+  });
 
   watchCallback([
     {
@@ -1993,7 +1908,7 @@ test('gotCallback, add same got callback twice', () => {
 });
 
 test('batching multiple operations in same microtask', () => {
-  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -2024,13 +1939,12 @@ test('batching multiple operations in same microtask', () => {
   // All 4 operations should be batched into 1 message with 4 operations
   expect(send).toBeCalledTimes(1);
   const call = send.mock.calls[0][0];
-  expect(call[0]).toBe('changeDesiredQueries');
-  expect(call[1].desiredQueriesPatch).toHaveLength(4);
-  expect(call[1].desiredQueriesPatch.every(op => op.op === 'put')).toBe(true);
+  expect(call.desiredQueriesPatch).toHaveLength(4);
+  expect(call.desiredQueriesPatch.every(op => op.op === 'put')).toBe(true);
 });
 
 describe('query manager & mutator interaction', () => {
-  let send: (msg: ChangeDesiredQueriesMessage) => void;
+  let send: (msg: ChangeDesiredQueriesBody) => void;
   let mutationTracker: MutationTracker;
   let queryManager: QueryManager;
   const ast1: AST = {
@@ -2044,7 +1958,7 @@ describe('query manager & mutator interaction', () => {
   };
 
   beforeEach(() => {
-    send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
     mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
     mutationTracker.setClientIDAndWatch('cid', () => () => {});
     queryManager = new QueryManager(
@@ -2119,7 +2033,7 @@ describe('query manager & mutator interaction', () => {
 
 describe('Adding a query with TTL too large should warn', () => {
   const context = {['QueryManager']: undefined} as const;
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
   const logSink = {
     log: vi.fn<LogSink['log']>(),
   };
@@ -2224,7 +2138,7 @@ describe('Adding a query with TTL too large should warn', () => {
 });
 
 describe('update clamps TTL correctly', () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(arg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(
@@ -2259,23 +2173,20 @@ describe('update clamps TTL correctly', () => {
     queryManager.flushBatch();
 
     expect(send).toBeCalledTimes(2);
-    expect(send).toHaveBeenLastCalledWith([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {
-            op: 'put',
-            hash: '12hwg3ihkijhm',
-            ast: {
-              table: 'issues',
-              where: undefined,
-              orderBy: [['id', 'asc']],
-            } satisfies AST,
-            ttl: 120000, // Clamped TTL value
-          },
-        ],
-      },
-    ]);
+    expect(send).toHaveBeenLastCalledWith({
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '12hwg3ihkijhm',
+          ast: {
+            table: 'issues',
+            where: undefined,
+            orderBy: [['id', 'asc']],
+          } satisfies AST,
+          ttl: 120000, // Clamped TTL value
+        },
+      ],
+    });
   });
 
   test('updateCustom', () => {
@@ -2291,20 +2202,17 @@ describe('update clamps TTL correctly', () => {
     queryManager.flushBatch();
 
     expect(send).toBeCalledTimes(2);
-    expect(send).toHaveBeenLastCalledWith([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {
-            op: 'put',
-            hash: '2l1ig6e3tnu0a',
-            name: 'customQuery',
-            args: [1],
-            ttl: 120000, // Clamped TTL value
-          },
-        ],
-      },
-    ]);
+    expect(send).toHaveBeenLastCalledWith({
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '2l1ig6e3tnu0a',
+          name: 'customQuery',
+          args: [1],
+          ttl: 120000, // Clamped TTL value
+        },
+      ],
+    });
   });
 
   test('updateLegacy does not send when TTL is already at max', () => {
@@ -2323,23 +2231,20 @@ describe('update clamps TTL correctly', () => {
 
     // Only one send should happen (the initial add)
     expect(send).toBeCalledTimes(1);
-    expect(send).toHaveBeenLastCalledWith([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {
-            op: 'put',
-            hash: '12hwg3ihkijhm',
-            ast: {
-              table: 'issues',
-              where: undefined,
-              orderBy: [['id', 'asc']],
-            } satisfies AST,
-            ttl: MAX_TTL_MS, // Already at max TTL
-          },
-        ],
-      },
-    ]);
+    expect(send).toHaveBeenLastCalledWith({
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '12hwg3ihkijhm',
+          ast: {
+            table: 'issues',
+            where: undefined,
+            orderBy: [['id', 'asc']],
+          } satisfies AST,
+          ttl: MAX_TTL_MS, // Already at max TTL
+        },
+      ],
+    });
   });
 
   test('updateCustom does not send when TTL is already at max', () => {
@@ -2359,25 +2264,22 @@ describe('update clamps TTL correctly', () => {
 
     // Only one send should happen (the initial add)
     expect(send).toBeCalledTimes(1);
-    expect(send).toHaveBeenLastCalledWith([
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [
-          {
-            op: 'put',
-            hash: '2l1ig6e3tnu0a',
-            name: 'customQuery',
-            args: [1],
-            ttl: MAX_TTL_MS, // Already at max TTL
-          },
-        ],
-      },
-    ]);
+    expect(send).toHaveBeenLastCalledWith({
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '2l1ig6e3tnu0a',
+          name: 'customQuery',
+          args: [1],
+          ttl: MAX_TTL_MS, // Already at max TTL
+        },
+      ],
+    });
   });
 });
 
 test('Getting the AST of custom query', () => {
-  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const send = vi.fn<(msg: ChangeDesiredQueriesBody) => void>();
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
   const queryManager = new QueryManager(

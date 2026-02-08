@@ -37,6 +37,7 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
+import type {ChangeDesiredQueriesBody} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -737,7 +738,7 @@ export class Zero<
       this.#mutationTracker,
       rep.clientID,
       schema.tables,
-      msg => this.#send(msg),
+      msg => this.#sendChangeDesiredQueries(msg),
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
       options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
@@ -861,6 +862,28 @@ export class Zero<
     ) {
       send(this.#socket, msg);
     }
+  }
+
+  #sendChangeDesiredQueries(
+    body: ChangeDesiredQueriesBody,
+    sendOnNotConnected = false,
+  ): void {
+    const auth = this.#currentAuthToken();
+    const payload: ChangeDesiredQueriesBody = {...body, auth};
+    if (this.#socket) {
+      if (
+        sendOnNotConnected ||
+        this.#connectionManager.is(ConnectionStatus.Connected)
+      ) {
+        send(this.#socket, ['changeDesiredQueries', payload]);
+      }
+    }
+  }
+
+  #currentAuthToken(): string | null {
+    const token = fromReplicacheAuthToken(this.#rep.auth);
+    // we coerce an undefined auth token to null to mean "clear auth token"
+    return token === undefined ? null : token;
   }
 
   #createLogOptions(options: {
@@ -1485,12 +1508,12 @@ export class Zero<
 
     if (queriesPatch.size > 0 && this.#initConnectionQueries !== undefined) {
       maybeSendDeletedClients();
-      send(socket, [
-        'changeDesiredQueries',
+      this.#sendChangeDesiredQueries(
         {
           desiredQueriesPatch: [...queriesPatch.values()],
         },
-      ]);
+        true,
+      );
     } else if (this.#initConnectionQueries === undefined) {
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
@@ -1609,7 +1632,7 @@ export class Zero<
       await this.clientGroupID,
       this.#clientSchema,
       this.userID,
-      fromReplicacheAuthToken(this.#rep.auth),
+      this.#currentAuthToken(),
       this.#lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
@@ -1857,8 +1880,7 @@ export class Zero<
           mutations: [zeroM],
           pushVersion: req.pushVersion,
           requestID,
-          // include fresh auth with each push to avoid stale token issues
-          auth: fromReplicacheAuthToken(this.#rep.auth),
+          auth: this.#currentAuthToken(),
         },
       ];
       send(socket, msg);
@@ -2234,7 +2256,17 @@ export class Zero<
    * @param auth - The authentication token to set.
    */
   #setAuth(auth: string | undefined | null): void {
-    this.#rep.auth = toReplicacheAuthToken(auth);
+    const nextAuth = toReplicacheAuthToken(auth);
+    if (this.#rep.auth === nextAuth) {
+      return;
+    }
+
+    this.#rep.auth = nextAuth;
+
+    this.#sendChangeDesiredQueries({
+      desiredQueriesPatch: [],
+      auth: this.#currentAuthToken(),
+    });
   }
 
   /**
@@ -2423,7 +2455,7 @@ export async function createSocket(
   clientGroupID: string,
   clientSchema: ClientSchema,
   userID: string,
-  auth: string | undefined,
+  auth: string | null,
   lmid: number,
   wsid: string,
   debugPerf: boolean,
@@ -2486,10 +2518,10 @@ export async function createSocket(
         activeClients: [...activeClients],
       },
     ],
-    auth,
+    auth ?? undefined,
   );
   if (secProtocol.length > maxHeaderLength) {
-    secProtocol = encodeSecProtocols(undefined, auth);
+    secProtocol = encodeSecProtocols(undefined, auth ?? undefined);
     if (secProtocol.length > maxHeaderLength) {
       lc.warn?.(
         `Encoded auth token length (${secProtocol.length}) exceeds ` +

@@ -704,7 +704,7 @@ describe('createSocket', () => {
       baseCookie: null,
       clientID: 'clientID',
       userID: 'userID',
-      auth: undefined,
+      auth: null,
       lmid: 123,
       debugPerf: false,
       now: 0,
@@ -776,7 +776,7 @@ describe('createSocket', () => {
     baseCookie: NullableVersion;
     clientID: string;
     userID: string;
-    auth: string | undefined;
+    auth: string | null;
     lmid: number;
     debugPerf: boolean;
     now: number;
@@ -833,7 +833,7 @@ describe('createSocket', () => {
               activeClients: [...activeClients],
             },
           ],
-          auth,
+          auth === null ? undefined : auth,
         ),
       );
       expect(queriesPatch).toEqual(new Map());
@@ -863,7 +863,9 @@ describe('createSocket', () => {
         0, // do not put any extra information into headers
       );
       expect(`${mockSocket.url}`).toBe(expectedURL);
-      expect(mockSocket2.protocol).toBe(encodeSecProtocols(undefined, auth));
+      expect(mockSocket2.protocol).toBe(
+        encodeSecProtocols(undefined, auth === null ? undefined : auth),
+      );
       // if we did not encode queries into the sec-protocol header, we should not have a queriesPatch
       expect(queriesPatch2).toBeUndefined();
       expect(deletedClients2?.clientIDs).toEqual(['old-deleted-client']);
@@ -1403,6 +1405,7 @@ describe('initConnection', () => {
               ttl: 300000,
             },
           ],
+          auth: 'test-auth',
         },
       ]);
       expect(z.connectionStatus).toEqual(ConnectionStatus.Connecting);
@@ -1500,6 +1503,7 @@ describe('initConnection', () => {
               op: 'del',
             },
           ],
+          auth: 'test-auth',
         },
       ]);
     });
@@ -1512,6 +1516,29 @@ describe('initConnection', () => {
     await z.triggerConnected();
     // changedDesiredQueries has been sent.
     expect(mockSocket.messages.length).toEqual(1);
+  });
+
+  test('changeDesiredQueries sends auth null when auth is cleared', async () => {
+    const z = zeroForTest();
+    await z.triggerConnected();
+
+    const mockSocket = await z.socket;
+    mockSocket.messages.length = 0;
+
+    await z.connection.connect({auth: null});
+
+    expect(mockSocket.messages).toHaveLength(1);
+    const msg = valita.parse(
+      JSON.parse(mockSocket.messages[0]),
+      changeDesiredQueriesMessageSchema,
+    );
+    expect(msg).toEqual([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [],
+        auth: null,
+      },
+    ]);
   });
 });
 
@@ -1558,6 +1585,7 @@ test('pusher sends one mutation per push message', async () => {
         );
         expect(msg[1].mutations).toHaveLength(1);
         expect(msg[1].requestID).toBe(requestID);
+        expect(msg[1].auth).toBe('test-auth');
       }
     }
   };
@@ -1736,6 +1764,43 @@ test('pusher sends one mutation per push message', async () => {
       expectedPushMessages: 3,
     },
   ]);
+});
+
+test('pusher sends auth null after auth is cleared', async () => {
+  const z = zeroForTest();
+  await z.triggerConnected();
+
+  await z.connection.connect({auth: null});
+
+  const mockSocket = await z.socket;
+  mockSocket.messages.length = 0;
+
+  const mutations: Mutation[] = [
+    {
+      type: MutationType.Custom,
+      clientID: 'c1',
+      id: 1,
+      name: 'mut1',
+      args: [{d: 1}],
+      timestamp: 1,
+    },
+  ];
+  const pushReq: PushRequest = {
+    profileID: 'p1',
+    clientGroupID: await z.clientGroupID,
+    pushVersion: 1,
+    schemaVersion: '1',
+    mutations,
+  };
+
+  await z.pusher(pushReq, 'test-request-id');
+
+  expect(mockSocket.messages).toHaveLength(1);
+  const msg = valita.parse(
+    JSON.parse(mockSocket.messages[0]),
+    pushMessageSchema,
+  );
+  expect(msg[1].auth).toBeNull();
 });
 
 test('pusher maps CRUD mutation names', async () => {

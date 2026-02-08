@@ -1,7 +1,6 @@
 import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import type {JWTPayload} from 'jose';
 import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
 import {version} from '../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
@@ -11,10 +10,12 @@ import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
-import type {
-  SyncContext,
-  TokenData,
-  ViewSyncer,
+import {
+  pickToken,
+  type Auth,
+  type JWTAuth,
+  type SyncContext,
+  type ViewSyncer,
 } from '../services/view-syncer/view-syncer.ts';
 import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
@@ -26,20 +27,23 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #mutagen: Mutagen;
   readonly #mutationLock: Lock;
   readonly #lc: LogContext;
-  readonly #authData: JWTPayload | undefined;
   readonly #clientGroupID: string;
-  readonly #syncContext: SyncContext;
+  readonly #syncContextBase: Omit<SyncContext, 'auth'>;
   readonly #pusher: Pusher | undefined;
-  // Fallback token from connection time - prefer auth from push message
-  readonly #token: string | undefined;
+  /** @deprecated only used for CRUD auth */
+  readonly #validateLegacyToken:
+    | ((token: string) => Promise<JWTAuth>)
+    | undefined;
+  #auth: Auth | null | undefined;
 
   constructor(
     lc: LogContext,
     connectParams: ConnectParams,
-    tokenData: TokenData | undefined,
+    initialAuth: Auth | undefined,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
     pusher: Pusher | undefined,
+    validateLegacyToken: ((token: string) => Promise<JWTAuth>) | undefined,
   ) {
     const {
       clientGroupID,
@@ -59,19 +63,25 @@ export class SyncerWsMessageHandler implements MessageHandler {
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
-    this.#authData = tokenData?.decoded;
-    this.#token = tokenData?.raw;
+    this.#auth = initialAuth;
+    this.#validateLegacyToken = validateLegacyToken;
     this.#clientGroupID = clientGroupID;
     this.#pusher = pusher;
-    this.#syncContext = {
+    this.#syncContextBase = {
       clientID,
       profileID,
       wsID,
       baseCookie,
       protocolVersion,
-      tokenData,
       httpCookie,
       origin,
+    };
+  }
+
+  #getSyncContext(): SyncContext {
+    return {
+      ...this.#syncContextBase,
+      auth: this.#auth,
     };
   }
 
@@ -123,15 +133,20 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 this.#pusher,
                 'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
               );
-              // prefer fresh auth from push message over cached connection token
-              const authToken = msg[1].auth ?? this.#token;
+
+              const authErrorResult = await this.#maybeUpdateAuth(msg[1].auth);
+
+              if (authErrorResult) {
+                return [authErrorResult];
+              }
+
               return [
                 this.#pusher.enqueuePush(
-                  this.#syncContext.clientID,
+                  this.#syncContextBase.clientID,
                   msg[1],
-                  authToken,
-                  this.#syncContext.httpCookie,
-                  this.#syncContext.origin,
+                  this.#auth?.raw,
+                  this.#syncContextBase.httpCookie,
+                  this.#syncContextBase.origin,
                 ),
               ];
             }
@@ -142,9 +157,24 @@ export class SyncerWsMessageHandler implements MessageHandler {
             const ret = await this.#mutationLock.withLock(async () => {
               const errors: ErrorBody[] = [];
               for (const mutation of mutations) {
+                const authErrorResult = await this.#maybeUpdateAuth(
+                  msg[1].auth,
+                );
+
+                if (authErrorResult) {
+                  return authErrorResult;
+                }
+
+                if (this.#auth) {
+                  assert(
+                    this.#auth.type === 'jwt',
+                    'Only JWT auth is supported for CRUD mutations',
+                  );
+                }
+
                 const maybeError = await this.#mutagen.processMutation(
                   mutation,
-                  this.#authData,
+                  this.#auth?.decoded,
                   this.#pusher !== undefined,
                 );
                 if (maybeError !== undefined) {
@@ -164,16 +194,23 @@ export class SyncerWsMessageHandler implements MessageHandler {
           },
         );
       }
-      case 'changeDesiredQueries':
+      case 'changeDesiredQueries': {
+        const authErrorResult = await this.#maybeUpdateAuth(msg[1].auth);
+
+        if (authErrorResult) {
+          return [authErrorResult];
+        }
+
         await startAsyncSpan(tracer, 'connection.changeDesiredQueries', () =>
-          viewSyncer.changeDesiredQueries(this.#syncContext, msg),
+          viewSyncer.changeDesiredQueries(this.#getSyncContext(), msg),
         );
         break;
+      }
       case 'deleteClients': {
         const deletedClientIDs = await startAsyncSpan(
           tracer,
           'connection.deleteClients',
-          () => viewSyncer.deleteClients(this.#syncContext, msg),
+          () => viewSyncer.deleteClients(this.#getSyncContext(), msg),
         );
         if (this.#pusher && deletedClientIDs.length > 0) {
           await this.#pusher.deleteClientMutations(deletedClientIDs);
@@ -186,7 +223,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
             type: 'stream',
             source: 'viewSyncer',
             stream: startSpan(tracer, 'connection.initConnection', () =>
-              viewSyncer.initConnection(this.#syncContext, msg),
+              viewSyncer.initConnection(this.#getSyncContext(), msg),
             ),
           },
         ];
@@ -200,8 +237,8 @@ export class SyncerWsMessageHandler implements MessageHandler {
             type: 'stream',
             source: 'pusher',
             stream: this.#pusher.initConnection(
-              this.#syncContext.clientID,
-              this.#syncContext.wsID,
+              this.#syncContextBase.clientID,
+              this.#syncContextBase.wsID,
               msg[1].userPushURL,
               msg[1].userPushHeaders,
             ),
@@ -216,7 +253,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
 
       case 'inspect':
         await startAsyncSpan(tracer, 'connection.inspect', () =>
-          viewSyncer.inspect(this.#syncContext, msg),
+          viewSyncer.inspect(this.#getSyncContext(), msg),
         );
         break;
 
@@ -231,5 +268,51 @@ export class SyncerWsMessageHandler implements MessageHandler {
     }
 
     return [{type: 'ok'}];
+  }
+
+  async #maybeUpdateAuth(
+    newAuth: string | null | undefined,
+  ): Promise<HandlerResult | undefined> {
+    try {
+      if (newAuth === undefined || newAuth === '') {
+        return undefined;
+      }
+
+      // if the client is explicitly sending null, this is a signal to clear auth
+      if (newAuth === null) {
+        this.#auth = null;
+        return undefined;
+      }
+
+      if (this.#validateLegacyToken !== undefined) {
+        const verifiedToken = await this.#validateLegacyToken(newAuth);
+
+        this.#auth = pickToken(
+          this.#lc,
+          this.#auth ?? undefined,
+          verifiedToken,
+        );
+      } else {
+        assert(
+          this.#auth?.type !== 'jwt',
+          'Cannot change auth type from legacy to opaque token',
+        );
+        this.#auth = {
+          type: 'opaque',
+          raw: newAuth,
+        };
+      }
+    } catch (e) {
+      return {
+        type: 'fatal',
+        error: {
+          kind: ErrorKind.AuthInvalidated,
+          message: `Failed to decode auth token: ${String(e)}`,
+          origin: ErrorOrigin.ZeroCache,
+        },
+      } satisfies HandlerResult;
+    }
+
+    return undefined;
   }
 }

@@ -167,7 +167,11 @@ describe('cleanup', () => {
   let mutagens: MutagenService[];
   let pushers: PusherService[];
   beforeEach(() => {
-    const env = setupSyncer(lc, {} as ZeroConfig);
+    const env = setupSyncer(lc, {
+      auth: {
+        secret: 'test-secret',
+      },
+    } as ZeroConfig);
     syncer = env.syncer;
     mutagens = env.mutagens;
     pushers = env.pushers;
@@ -247,7 +251,11 @@ describe('connection telemetry', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const env = setupSyncer(lc, {} as ZeroConfig);
+    const env = setupSyncer(lc, {
+      auth: {
+        secret: 'test-secret',
+      },
+    } as ZeroConfig);
     syncer = env.syncer;
   });
 
@@ -408,6 +416,19 @@ describe('jwt auth missing options and missing endpoints', () => {
 
   afterEach(async () => {
     await syncer.stop();
+  });
+
+  test('succeeds when no auth token is provided', () => {
+    const ws = openConnection(1);
+
+    expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
+
+    expect((ws as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
+    expect(mutagens.length).toBe(1);
+    expect(pushers.length).toBe(1);
   });
 
   test('fails when no JWT options and no custom endpoints are set', async () => {

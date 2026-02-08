@@ -102,11 +102,19 @@ import {
   type TTLClock,
 } from './ttl-clock.ts';
 
-export type TokenData = {
+/** @deprecated */
+export type JWTAuth = {
+  readonly type: 'jwt';
   readonly raw: string;
-  /** @deprecated */
   readonly decoded: JWTPayload;
 };
+
+export type OpaqueAuth = {
+  readonly type: 'opaque';
+  readonly raw: string;
+};
+
+export type Auth = OpaqueAuth | JWTAuth;
 
 export type SyncContext = {
   readonly clientID: string;
@@ -114,7 +122,7 @@ export type SyncContext = {
   readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
-  readonly tokenData: TokenData | undefined;
+  readonly auth: Auth | null | undefined;
   readonly httpCookie: string | undefined;
   readonly origin: string | undefined;
 };
@@ -226,9 +234,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
-  // DEPRECATED: remove `authData` in favor of forwarding
-  // auth and cookie headers directly
-  #authData: TokenData | undefined;
+  #auth: Auth | undefined;
 
   #httpCookie: string | undefined;
   #origin: string | undefined;
@@ -354,7 +360,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       apiKey: this.#queryConfig.apiKey,
       customHeaders: this.userQueryHeaders,
       allowedClientHeaders: this.#queryConfig.allowedClientHeaders,
-      token: this.#authData?.raw,
+      token: this.#auth?.raw,
       cookie: forwardCookie ? this.#httpCookie : undefined,
       origin: this.#origin,
     };
@@ -634,12 +640,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         profileID,
         wsID,
         baseCookie,
-        tokenData,
+        auth,
         httpCookie,
         origin,
         protocolVersion,
       } = ctx;
-      this.#authData = pickToken(this.#lc, this.#authData, tokenData);
+      this.#auth = pickToken(this.#lc, this.#auth, auth);
       this.#lc.debug?.(`Picked auth token for clientGroupID`);
       this.#httpCookie = httpCookie;
       this.#origin = origin;
@@ -755,8 +761,32 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#runInLockForClient(
       ctx,
       msg,
-      (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
-        this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
+      (lc, clientID, msg: Partial<InitConnectionBody>, cvr) => {
+        let customQueryTransformMode: CustomQueryTransformMode = 'missing';
+        // we re-transform when auth is null, but not undefined
+        //
+        // for backwards compatibility we use null, older clients will always
+        // send undefined auth in the changeDesiredQueries message
+        if (ctx.auth !== undefined) {
+          const previousAuth = this.#auth;
+          const nextAuth = pickToken(lc, previousAuth, ctx.auth);
+          // if the auth has changed, we need to re-transform all queries
+          const authChanged = previousAuth?.raw !== nextAuth?.raw;
+
+          this.#auth = nextAuth;
+          if (authChanged) {
+            customQueryTransformMode = 'all';
+          }
+        }
+
+        return this.#handleConfigUpdate(
+          lc,
+          clientID,
+          msg,
+          cvr,
+          customQueryTransformMode,
+        );
+      },
     );
   }
 
@@ -1218,7 +1248,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         must(this.#pipelines.currentPermissions()).permissions ?? {
           tables: {},
         },
-        this.#authData?.decoded,
+        this.#auth?.type === 'jwt' ? this.#auth : undefined,
         q.type === 'internal',
       );
       if (transformed.transformationHash === q.transformationHash) {
@@ -1412,7 +1442,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           must(this.#pipelines.currentPermissions()).permissions ?? {
             tables: {},
           },
-          this.#authData?.decoded,
+          this.#auth?.type === 'jwt' ? this.#auth : undefined,
           origQuery.type === 'internal',
         );
         transformedQueries.push({
@@ -2006,7 +2036,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#config,
       this.#getHeaderOptions(this.#queryConfig.forwardCookies ?? false),
       this.userQueryURL,
-      this.#authData,
+      this.#auth?.type === 'jwt' ? this.#auth : undefined,
     );
   };
 
@@ -2098,14 +2128,45 @@ function checkClientAndCVRVersions(
   }
 }
 
+/** @deprecated used only in old JWT validation/rotation auth */
 export function pickToken(
   lc: LogContext,
-  previousToken: TokenData | undefined,
-  newToken: TokenData | undefined,
+  previousToken: Auth | undefined,
+  newToken: Auth | undefined | null,
 ) {
+  if (newToken === null) {
+    return undefined;
+  }
+
+  if (
+    previousToken?.type &&
+    newToken?.type &&
+    previousToken?.type !== newToken?.type
+  ) {
+    throw new ProtocolError({
+      kind: ErrorKind.Unauthorized,
+      message:
+        'Token type cannot change. Client groups are pinned to a single token type.',
+      origin: ErrorOrigin.ZeroCache,
+    });
+  }
+
   if (previousToken === undefined) {
     lc.debug?.(`No previous token, using new token`);
     return newToken;
+  }
+
+  if (newToken?.type === 'opaque') {
+    return newToken;
+  }
+
+  if (previousToken.type === 'opaque') {
+    throw new ProtocolError({
+      kind: ErrorKind.Unauthorized,
+      message:
+        'Token type cannot change from opaque to JWT. Client groups are pinned to a single token type.',
+      origin: ErrorOrigin.ZeroCache,
+    });
   }
 
   if (newToken) {

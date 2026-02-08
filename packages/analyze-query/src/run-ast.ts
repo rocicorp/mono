@@ -6,6 +6,7 @@ import {must} from '../../shared/src/must.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
+import type {JWTAuth} from '../../zero-cache/src/services/view-syncer/view-syncer.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import {mapAST} from '../../zero-protocol/src/ast.ts';
@@ -67,6 +68,7 @@ export async function runAst(
         'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
       );
     }
+    const auth: JWTAuth = {type: 'jwt', raw: '', decoded: authData};
     ast = transformAndHashQuery(
       lc,
       'clientGroupIDForAnalyze',
@@ -75,7 +77,7 @@ export async function runAst(
         permissions,
         'Permissions are required when applyPermissions is true',
       ),
-      authData,
+      auth,
       false,
     ).transformedAst;
     result.afterPermissions = await formatOutput(ast.table + astToZQL(ast));
