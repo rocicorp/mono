@@ -38,6 +38,7 @@ import {
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
+import {ChangeStreamMultiplexer} from '../common/change-stream-multiplexer.ts';
 import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
   Identifier,
@@ -50,7 +51,6 @@ import type {
   Data,
 } from '../protocol/current/downstream.ts';
 import type {TableMetadata} from './backfill-metadata.ts';
-import {ChangeStreamMultiplexer} from './change-stream-multiplexer.ts';
 import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
   Message,

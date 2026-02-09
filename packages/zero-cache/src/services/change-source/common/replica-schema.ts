@@ -1,19 +1,19 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
-import type {Database} from '../../../../zqlite/src/db.ts';
-import {listTables} from '../../db/lite-tables.ts';
+import type {Database} from '../../../../../zqlite/src/db.ts';
+import {listTables} from '../../../db/lite-tables.ts';
 import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
-} from '../../db/migration-lite.ts';
-import {AutoResetSignal} from '../change-streamer/schema/tables.ts';
-import {populateFromExistingTables} from '../replicator/schema/column-metadata.ts';
+} from '../../../db/migration-lite.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
   recordEvent,
-} from '../replicator/schema/replication-state.ts';
-import {CREATE_TABLE_METADATA_TABLE} from '../replicator/schema/table-metadata.ts';
+} from '../../replicator/schema/replication-state.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../../replicator/schema/table-metadata.ts';
 
 export async function initReplica(
   log: LogContext,
