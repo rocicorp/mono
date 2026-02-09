@@ -33,7 +33,8 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
       json JSON,
       num NUMERIC,
       ints INT4[],
-      times TIMESTAMPTZ[]
+      times TIMESTAMPTZ[],
+      jsons JSON[]
     );
     CREATE PUBLICATION foo_pub FOR TABLE foo;
 
@@ -112,7 +113,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
 
     await db.unsafe(`
     -- tag: "insert"
-    INSERT INTO foo (id, int, big, flt, bool, date, time, json, num, ints, times)
+    INSERT INTO foo (id, int, big, flt, bool, date, time, json, num, ints, times, jsons)
       VALUES (
         'bar', 
         123, 
@@ -124,7 +125,8 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         '{"zoo":"dar"}',
         '12345.678909876',
         ARRAY[1, 2, 3],
-        ARRAY['2019-01-12T00:30:35.654321Z'::timestamptz, '2019-01-12T00:30:35.123456Z'::timestamptz]
+        ARRAY['2019-01-12T00:30:35.654321Z'::timestamptz, '2019-01-12T00:30:35.123456Z'::timestamptz],
+        ARRAY['1'::json, '"2"'::json, '{"a":123}'::json]
         );
 
     -- tag: "update"
@@ -162,11 +164,12 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         flt: 456.789,
         id: 'bar',
         int: 123,
-        json: {zoo: 'dar'},
+        json: '{"zoo":"dar"}',
         num: 12345.678909876,
         time: 1547253035381.101,
         ints: [1, 2, 3],
         times: [1547253035654.321, 1547253035123.456],
+        jsons: [1, '2', {a: 123}],
       },
     });
     expect(await msgs.dequeue()).toMatchObject({
@@ -180,9 +183,10 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         flt: 456.789,
         id: 'bar',
         int: 123,
-        json: {zoo: 'dar'},
+        json: '{"zoo":"dar"}',
         num: 12345.678909876,
         time: 1547253035381.101,
+        jsons: [1, '2', {a: 123}],
       },
       old: null,
     });

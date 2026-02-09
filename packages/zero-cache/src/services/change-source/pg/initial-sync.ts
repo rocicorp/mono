@@ -156,15 +156,10 @@ export async function initialSync(
         ? numTables
         : Math.min(tableCopyWorkers, numTables);
 
-    const copyPool = pgClient(
-      lc,
-      upstreamURI,
-      {
-        max: numWorkers,
-        connection: {['application_name']: 'initial-sync-copy-worker'},
-      },
-      {returnJsonAsString: true},
-    );
+    const copyPool = pgClient(lc, upstreamURI, {
+      max: numWorkers,
+      connection: {['application_name']: 'initial-sync-copy-worker'},
+    });
     const copiers = startTableCopyWorkers(
       lc,
       copyPool,
@@ -335,7 +330,7 @@ type ReplicationSlot = {
 // Note: The replication connection does not support the extended query protocol,
 //       so all commands must be sent using sql.unsafe(). This is technically safe
 //       because all placeholder values are under our control (i.e. "slotName").
-async function createReplicationSlot(
+export async function createReplicationSlot(
   lc: LogContext,
   session: postgres.Sql,
   slotName: string,
@@ -463,7 +458,7 @@ async function copy(
   }
 
   lc.info?.(`Starting copy stream of ${tableName}:`, selectStmt);
-  const pgParsers = await getTypeParsers(dbClient);
+  const pgParsers = await getTypeParsers(dbClient, {returnJsonAsString: true});
   const parsers = columnSpecs.map(c => {
     const pgParse = pgParsers.getTypeParser(c.typeOID);
     return (val: string) =>
