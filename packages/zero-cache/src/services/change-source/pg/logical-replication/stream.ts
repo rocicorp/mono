@@ -101,7 +101,7 @@ export async function subscribe(
   }, manualKeepaliveTimeout / 5);
 
   let destroyed = false;
-  const typeParsers = await getTypeParsers(db);
+  const typeParsers = await getTypeParsers(db, {returnJsonAsString: true});
   const parser = new PgoutputParser(typeParsers);
   const messages = Subscription.create<StreamMessage>({
     cleanup: () => {

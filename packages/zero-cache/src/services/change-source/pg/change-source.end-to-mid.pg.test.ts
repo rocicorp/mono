@@ -58,8 +58,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       jsonb JSONB,
       numz ENUMZ,
       uuid UUID,
-      intarr INT4[]
-      
+      intarr INT4[],
+      jsons JSON[],
+      jsonbs JSONB[]
     );
 
     CREATE SCHEMA IF NOT EXISTS my;
@@ -1207,9 +1208,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'data types',
       `
       ALTER PUBLICATION zero_some_public SET TABLE foo (
-        id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr);
+        id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr, jsons, jsonbs);
 
-      INSERT INTO foo (id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr)
+      INSERT INTO foo (id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr, jsons, jsonbs)
          VALUES (
           'abc',
           -2,
@@ -1222,10 +1223,14 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           '{"far": 456, "boo" : {"baz": 123}}',
           '2',
           'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11',
-          ARRAY[1,2,3,4,5]
+          ARRAY[1,2,3,4,5],
+          ARRAY['1'::json,'"2"'::json,'{"a":123}'::json],
+          ARRAY['4'::json,'"5"'::json,'{"b":678}'::json]
         );
       `,
       [
+        {tag: 'add-column'},
+        {tag: 'add-column'},
         {tag: 'add-column'},
         {tag: 'add-column'},
         {tag: 'add-column'},
@@ -1250,6 +1255,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             numz: '2',
             uuid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
             intarr: [1, 2, 3, 4, 5],
+            jsons: [1, '2', {a: 123}],
+            jsonbs: [4, '5', {b: 678}],
           },
         },
       ],
@@ -1268,6 +1275,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             numz: '2', // Verifies TEXT affinity
             uuid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
             intarr: '[1,2,3,4,5]',
+            jsons: '[1,"2",{"a":123}]',
+            jsonbs: '[4,"5",{"b":678}]',
             ['_0_version']: expect.stringMatching(/[a-z0-9]+/),
           },
         ],
@@ -1348,13 +1357,29 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               notNull: false,
               pos: 10,
             },
+            jsonbs: {
+              characterMaximumLength: null,
+              dataType: 'jsonb[]|TEXT_ARRAY',
+              elemPgTypeClass: 'b',
+              dflt: null,
+              notNull: false,
+              pos: 11,
+            },
+            jsons: {
+              characterMaximumLength: null,
+              dataType: 'json[]|TEXT_ARRAY',
+              elemPgTypeClass: 'b',
+              dflt: null,
+              notNull: false,
+              pos: 12,
+            },
             numz: {
               characterMaximumLength: null,
               dataType: 'enumz|TEXT_ENUM',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 11,
+              pos: 13,
             },
             timea: {
               characterMaximumLength: null,
@@ -1362,7 +1387,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 12,
+              pos: 14,
             },
             uuid: {
               characterMaximumLength: null,
@@ -1370,7 +1395,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 13,
+              pos: 15,
             },
 
             ['_0_version']: {
