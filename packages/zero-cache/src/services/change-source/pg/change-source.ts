@@ -235,12 +235,7 @@ class PostgresChangeSource implements ChangeSource {
     if (backfillRequests.length) {
       throw new Error('not implemented yet');
     }
-    const db = pgClient(
-      this.#lc,
-      this.#upstreamUri,
-      {},
-      {returnJsonAsString: true},
-    );
+    const db = pgClient(this.#lc, this.#upstreamUri);
     const {slot} = this.#replica;
 
     let cleanup = promiseVoid;
