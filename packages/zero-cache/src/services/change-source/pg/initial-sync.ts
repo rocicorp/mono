@@ -330,7 +330,7 @@ type ReplicationSlot = {
 // Note: The replication connection does not support the extended query protocol,
 //       so all commands must be sent using sql.unsafe(). This is technically safe
 //       because all placeholder values are under our control (i.e. "slotName").
-async function createReplicationSlot(
+export async function createReplicationSlot(
   lc: LogContext,
   session: postgres.Sql,
   slotName: string,
@@ -377,6 +377,22 @@ const MB = 1024 * 1024;
 const MAX_BUFFERED_ROWS = 10_000;
 const BUFFERED_SIZE_THRESHOLD = 8 * MB;
 
+export function makeSelectPublishedStmt(
+  table: PublishedTableSpec,
+  columns: string[],
+) {
+  const filterConditions = Object.values(table.publications)
+    .map(({rowFilter}) => rowFilter)
+    .filter(f => !!f); // remove nulls
+  return (
+    /*sql*/ `
+    SELECT ${columns.map(id).join(',')} FROM ${id(table.schema)}.${id(table.name)}` +
+    (filterConditions.length === 0
+      ? ''
+      : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`)
+  );
+}
+
 async function copy(
   lc: LogContext,
   table: PublishedTableSpec,
@@ -391,16 +407,13 @@ async function copy(
   const tableName = liteTableName(table);
   const orderedColumns = Object.entries(table.columns);
 
+  const columnNames = orderedColumns.map(([c]) => c);
   const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
-  const selectColumns = orderedColumns.map(([c]) => id(c)).join(',');
-  const insertColumns = orderedColumns.map(([c]) => c);
-  const insertColumnList = insertColumns.map(c => id(c)).join(',');
+  const insertColumnList = columnNames.map(c => id(c)).join(',');
 
   // (?,?,?,?,?)
   const valuesSql =
-    insertColumns.length > 0
-      ? `(${'?,'.repeat(insertColumns.length - 1)}?)`
-      : '()';
+    columnNames.length > 0 ? `(${'?,'.repeat(columnNames.length - 1)}?)` : '()';
   const insertSql = /*sql*/ `
     INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
   const insertStmt = to.prepare(insertSql);
@@ -409,16 +422,7 @@ async function copy(
     insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
   );
 
-  const filterConditions = Object.values(table.publications)
-    .map(({rowFilter}) => rowFilter)
-    .filter(f => !!f); // remove nulls
-  const selectStmt =
-    /*sql*/ `
-    SELECT ${selectColumns} FROM ${id(table.schema)}.${id(table.name)}` +
-    (filterConditions.length === 0
-      ? ''
-      : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`);
-
+  const selectStmt = makeSelectPublishedStmt(table, columnNames);
   const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 
