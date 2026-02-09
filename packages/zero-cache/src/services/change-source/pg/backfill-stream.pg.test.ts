@@ -239,7 +239,7 @@ describe('backfill-stream', () => {
       results.push(msg);
     }
     // Columns should deduped and ordered: [id2, id1, a, c, b]
-    expect(results).toMatchInlineSnapshot([
+    expect(results).toMatchObject([
       {
         tag: 'backfill',
         watermark: expect.any(String),
