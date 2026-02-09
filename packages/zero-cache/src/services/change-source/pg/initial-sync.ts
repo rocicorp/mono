@@ -330,7 +330,7 @@ type ReplicationSlot = {
 // Note: The replication connection does not support the extended query protocol,
 //       so all commands must be sent using sql.unsafe(). This is technically safe
 //       because all placeholder values are under our control (i.e. "slotName").
-export async function createReplicationSlot(
+async function createReplicationSlot(
   lc: LogContext,
   session: postgres.Sql,
   slotName: string,
