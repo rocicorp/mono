@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../../shared/src/must.ts';
 import {getConnectionURI, type PgTest, test} from '../../../test/db.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {BackfillRequest} from '../protocol/current.ts';
@@ -59,7 +60,7 @@ describe('backfill-stream', () => {
         schema: 'public',
         name: 'foo',
         metadata: {
-          schemaOID: tableSpec.schemaOID,
+          schemaOID: must(tableSpec.schemaOID),
           relationOID: tableSpec.oid,
           rowKey: {
             id1: {attNum: tableSpec.columns.id1.pos},
@@ -78,7 +79,7 @@ describe('backfill-stream', () => {
         schema: 'public',
         name: 'foo',
         metadata: {
-          schemaOID: tableSpec.schemaOID,
+          schemaOID: must(tableSpec.schemaOID),
           relationOID: tableSpec.oid,
           rowKey: {
             id2: {attNum: tableSpec.columns.id2.pos},
