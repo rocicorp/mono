@@ -44,6 +44,8 @@ export interface UseArrayVirtualizerReturn<T> {
   rowAt: (index: number) => T | undefined;
   rowsEmpty: boolean;
   permalinkNotFound: boolean;
+  estimatedTotal: number;
+  total: number | undefined;
 }
 
 type ForwardAnchorState<TSort> = {
@@ -137,6 +139,12 @@ export function useArrayVirtualizer<T, TSort>({
           startRow: undefined,
         },
   );
+
+  // Track min/max indices seen to calculate total counts
+  const [minIndexSeen, setMinIndexSeen] = useState<number | null>(null);
+  const [maxIndexSeen, setMaxIndexSeen] = useState<number | null>(null);
+  const [hasReachedStart, setHasReachedStart] = useState(false);
+  const [hasReachedEnd, setHasReachedEnd] = useState(false);
 
   const scrollInternalRef = useRef({
     pendingScroll: null as number | null,
@@ -319,6 +327,37 @@ export function useArrayVirtualizer<T, TSort>({
 
   const endPlaceholder = atEnd ? 0 : 1;
   const startPlaceholder = atStart ? 0 : 1;
+
+  // Track min/max indices seen so far
+  useEffect(() => {
+    if (rowsLength === 0) {
+      return;
+    }
+
+    const currentMin = firstRowIndex;
+    const currentMax = firstRowIndex + rowsLength - 1;
+
+    if (minIndexSeen === null || currentMin < minIndexSeen) {
+      setMinIndexSeen(currentMin);
+    }
+
+    if (maxIndexSeen === null || currentMax > maxIndexSeen) {
+      setMaxIndexSeen(currentMax);
+    }
+  }, [firstRowIndex, rowsLength, minIndexSeen, maxIndexSeen]);
+
+  // Track when we reach the boundaries
+  useEffect(() => {
+    if (atStart && !hasReachedStart) {
+      setHasReachedStart(true);
+    }
+  }, [atStart, hasReachedStart]);
+
+  useEffect(() => {
+    if (atEnd && !hasReachedEnd) {
+      setHasReachedEnd(true);
+    }
+  }, [atEnd, hasReachedEnd]);
 
   const placeholderForIndex = useCallback(
     (index: number) => {
@@ -690,10 +729,9 @@ export function useArrayVirtualizer<T, TSort>({
   // virtual items to find the first fully visible row).
   const currentScrollState = useMemo((): ScrollRestorationState | undefined => {
     const scrollOffset = virtualizer.scrollOffset ?? 0;
-    const items = virtualizer.getVirtualItems();
 
     // Find the first fully visible item (start >= scrollOffset)
-    for (const item of items) {
+    for (const item of virtualItems) {
       if (item.start < scrollOffset) {
         continue;
       }
@@ -708,7 +746,6 @@ export function useArrayVirtualizer<T, TSort>({
     }
 
     return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     virtualizer.scrollOffset,
     virtualItems,
@@ -733,10 +770,19 @@ export function useArrayVirtualizer<T, TSort>({
     }
   }, [currentScrollState]);
 
+  // Calculate totals from min/max indices seen
+  const estimatedTotal =
+    minIndexSeen !== null && maxIndexSeen !== null
+      ? maxIndexSeen - minIndexSeen + 1
+      : rowsLength;
+  const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
+
   return {
     virtualizer,
     rowAt: rowAtVirtualIndex,
     rowsEmpty,
     permalinkNotFound,
+    estimatedTotal,
+    total,
   };
 }

@@ -170,43 +170,49 @@ function ArrayTestAppContent() {
     return () => nav.removeEventListener('currententrychange', onEntryChange);
   }, []);
 
-  const {virtualizer, rowAt, rowsEmpty, permalinkNotFound} =
-    useArrayVirtualizer<RowData, IssueRowSort>({
-      pageSize: PAGE_SIZE,
-      placeholderHeight: PLACEHOLDER_HEIGHT,
-      getPageQuery,
-      getSingleQuery,
-      toStartRow,
-      initialPermalinkID: permalinkID,
-      scrollState,
-      onScrollStateChange,
+  const {
+    virtualizer,
+    rowAt,
+    rowsEmpty,
+    permalinkNotFound,
+    estimatedTotal,
+    total,
+  } = useArrayVirtualizer<RowData, IssueRowSort>({
+    pageSize: PAGE_SIZE,
+    placeholderHeight: PLACEHOLDER_HEIGHT,
+    getPageQuery,
+    getSingleQuery,
+    toStartRow,
+    initialPermalinkID: permalinkID,
+    scrollState,
+    onScrollStateChange,
 
-      estimateSize: useCallback(
-        (row: RowData | undefined) => {
-          if (!row) {
-            return PLACEHOLDER_HEIGHT;
+    estimateSize: useCallback(
+      (row: RowData | undefined) => {
+        if (!row) {
+          return PLACEHOLDER_HEIGHT;
+        }
+
+        if (heightMode === 'uniform') {
+          return UNIFORM_ROW_HEIGHT;
+        }
+
+        if (heightMode === 'non-uniform') {
+          const baseHeight = 120;
+          if (!row.description) {
+            return baseHeight;
           }
+          const descriptionLines = Math.ceil(row.description.length / 150);
+          const descriptionHeight = descriptionLines * 20;
+          return baseHeight + descriptionHeight;
+        }
 
-          if (heightMode === 'uniform') {
-            return UNIFORM_ROW_HEIGHT;
-          }
-
-          if (heightMode === 'non-uniform') {
-            const baseHeight = 120;
-            if (!row.description) {
-              return baseHeight;
-            }
-            const descriptionLines = Math.ceil(row.description.length / 150);
-            const descriptionHeight = descriptionLines * 20;
-            return baseHeight + descriptionHeight;
-          }
-
-          return DEFAULT_HEIGHT;
-        },
-        [heightMode],
-      ),
-      getScrollElement: useCallback(() => parentRef.current, []),
-    });
+        return DEFAULT_HEIGHT;
+      },
+      [heightMode],
+    ),
+    getScrollElement: useCallback(() => parentRef.current, []),
+  });
 
   // Use a ref so setPermalinkHash is stable (doesn't recreate on every
   // scroll-state change).
@@ -260,6 +266,19 @@ function ArrayTestAppContent() {
         <h1 style={{margin: '0 0 20px 0', fontSize: '18px'}}>
           Array Virtualizer Test - {ZERO_PROJECT_NAME}
         </h1>
+        <div
+          style={{
+            marginBottom: '20px',
+            padding: '12px',
+            backgroundColor: '#fff',
+            borderRadius: '4px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+          }}
+        >
+          {total ?? `${estimatedTotal}+`} rows
+        </div>
 
         {/* Height Mode Selector */}
         <div
