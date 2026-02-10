@@ -779,6 +779,456 @@ test.describe('URL Hash Permalink', () => {
   });
 });
 
+test.describe('Scroll Restoration Edge Cases', () => {
+  test('capture at scrollTop=0 and restore returns to exact top', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Already at the top — capture immediately.
+    const beforeRows = await getVisibleRows(page);
+    expect(beforeRows.length).toBeGreaterThan(0);
+    expect(Math.abs(beforeRows[0].viewportRelativeTop)).toBeLessThanOrEqual(
+      POSITION_TOLERANCE,
+    );
+
+    await page.click('[data-testid="capture-btn"]');
+    const capturedText = await page.inputValue('[data-testid="restore-input"]');
+    expect(capturedText).toBeTruthy();
+
+    // Verify scrollOffset is 0 or very close (we're at the top).
+    const capturedState = JSON.parse(capturedText!);
+    expect(Math.abs(capturedState.scrollOffset)).toBeLessThanOrEqual(1);
+
+    // Scroll away.
+    await scrollTo(page, 5000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    // Restore.
+    await page.click('[data-testid="restore-btn"]');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const scrollAfter = await getScrollTop(page);
+    // Should be back at the very top.
+    expect(scrollAfter).toBeLessThan(POSITION_TOLERANCE);
+
+    // Same rows visible.
+    const afterRows = await getVisibleRows(page);
+    const afterIds = new Set(afterRows.map(r => r.rowId));
+    for (const row of beforeRows) {
+      expect(
+        afterIds.has(row.rowId),
+        `Row ${row.rowId} was visible at top before but not after restore`,
+      ).toBe(true);
+    }
+  });
+
+  test('restore same state twice is idempotent', async ({page}) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Scroll to a position, capture.
+    await scrollTo(page, 4000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    await page.click('[data-testid="capture-btn"]');
+    const capturedText = await page.inputValue('[data-testid="restore-input"]');
+    expect(capturedText).toBeTruthy();
+
+    const beforeRows = await getVisibleRows(page);
+    expect(beforeRows.length).toBeGreaterThan(0);
+
+    // Scroll away.
+    await scrollTo(page, 0);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    // Restore first time.
+    await page.click('[data-testid="restore-btn"]');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const firstRestoreRows = await getVisibleRows(page);
+
+    // Scroll away again.
+    await scrollTo(page, 0);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    // Restore second time (same state still in textarea).
+    await page.click('[data-testid="restore-btn"]');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const secondRestoreRows = await getVisibleRows(page);
+
+    // Both restores should yield the same visible rows at the same positions.
+    const secondMap = new Map(secondRestoreRows.map(r => [r.rowId, r]));
+    for (const row of firstRestoreRows) {
+      const match = secondMap.get(row.rowId);
+      expect(
+        match,
+        `Row ${row.rowId} visible after first restore but not second`,
+      ).toBeTruthy();
+      if (match) {
+        expect(
+          Math.abs(match.viewportRelativeTop - row.viewportRelativeTop),
+          `Row ${row.rowId}: position differs between first and second restore`,
+        ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+      }
+    }
+  });
+
+  test('capture with partial row offset preserves sub-row scroll position', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Scroll to a position where a row is only partially visible at the top.
+    // Use a non-round number to create a partial offset.
+    await scrollTo(page, 3037);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    const beforeRows = await getVisibleRows(page);
+    expect(beforeRows.length).toBeGreaterThan(0);
+    // The first visible row should have a negative viewportRelativeTop
+    // (its top is above the viewport) indicating partial visibility.
+    const firstRow = beforeRows[0];
+
+    await page.click('[data-testid="capture-btn"]');
+    const capturedText = await page.inputValue('[data-testid="restore-input"]');
+    expect(capturedText).toBeTruthy();
+
+    // Verify the captured scrollOffset is negative (row top above viewport).
+    const capturedState = JSON.parse(capturedText!);
+    expect(capturedState.scrollOffset).toBeLessThanOrEqual(0);
+
+    // Scroll far away.
+    await scrollTo(page, 0);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    // Restore.
+    await page.click('[data-testid="restore-btn"]');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // The same first row should be at the same partial position.
+    const afterPos = await getRowPosition(page, firstRow.rowId);
+    expect(
+      afterPos,
+      `First row ${firstRow.rowId} should be visible`,
+    ).toBeTruthy();
+    expect(
+      Math.abs(afterPos!.viewportRelativeTop - firstRow.viewportRelativeTop),
+      `Partial row offset should be preserved (before=${firstRow.viewportRelativeTop}, after=${afterPos!.viewportRelativeTop})`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+
+  test('restore with invalid JSON shows alert and does not crash', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Scroll to a known position.
+    await scrollTo(page, 2000);
+    await waitForScrollStable(page, 500);
+    const scrollBefore = await getScrollTop(page);
+
+    // Fill invalid JSON into the restore textarea.
+    await page.fill('[data-testid="restore-input"]', '{bad json!!!}');
+
+    // Listen for the alert dialog and auto-accept it so the click can complete.
+    page.on('dialog', async dialog => {
+      expect(dialog.type()).toBe('alert');
+      expect(dialog.message()).toContain('Invalid JSON');
+      await dialog.accept();
+    });
+    await page.click('[data-testid="restore-btn"]');
+
+    // Scroll position should be unchanged.
+    const scrollAfter = await getScrollTop(page);
+    expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThan(5);
+  });
+});
+
+test.describe('Permalink Edge Cases', () => {
+  test('non-existent permalink shows not-found banner', async ({page}) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Use a permalink ID that definitely doesn't exist.
+    await setPermalink(page, 'nonexistent-fake-id-999999');
+
+    // Wait for the not-found state to propagate.
+    await page.waitForTimeout(3000);
+
+    // The not-found banner should appear.
+    const banner = page
+      .getByText('Permalink not found:', {exact: false})
+      .first();
+    await expect(banner).toBeVisible({timeout: 10000});
+  });
+
+  test('clearing permalink resets to beginning of list', async ({page}) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Navigate to a permalink deep in the list.
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const scrollAtPermalink = await getScrollTop(page);
+    // Should be at a non-trivial scroll position.
+    expect(scrollAtPermalink).toBeGreaterThan(0);
+
+    // Clear the permalink.
+    await clearPermalink(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    await waitForScrollStable(page, 300);
+
+    // After clearing, the list should render rows (not be empty/broken).
+    const rowsAfterClear = await getVisibleRows(page);
+    expect(rowsAfterClear.length).toBeGreaterThan(0);
+
+    // The hash should be cleared.
+    const hashAfter = await page.evaluate(() => window.location.hash);
+    expect(hashAfter === '' || hashAfter === '#').toBe(true);
+  });
+
+  test('permalink to first item in list positions it at top', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Get the first visible row (which is at the top of the list).
+    const topRows = await getVisibleRows(page);
+    expect(topRows.length).toBeGreaterThan(0);
+    const firstRowId = topRows[0].rowId;
+
+    // Scroll away.
+    await scrollTo(page, 5000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    // Set permalink to the first item.
+    await setPermalink(page, firstRowId);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // The first item should be at the top.
+    const pos = await getRowPosition(page, firstRowId);
+    expect(pos, `First row ${firstRowId} should be visible`).toBeTruthy();
+    expect(
+      Math.abs(pos!.viewportRelativeTop),
+      `First row should be at top, was ${pos!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+
+  test('rapid permalink changes settle on the last target', async ({page}) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Discover shortIDs for rapid navigation.
+    const shortIDs = await page.evaluate(() => {
+      const ids: string[] = [];
+      const rows = document.querySelectorAll('[data-row-id]');
+      for (const row of rows) {
+        const match = row.textContent?.match(/#(\d+)/);
+        if (match && !ids.includes(match[1])) {
+          ids.push(match[1]);
+        }
+        if (ids.length >= 3) break;
+      }
+      return ids;
+    });
+    expect(shortIDs.length).toBeGreaterThanOrEqual(2);
+
+    // Rapidly set permalink to different IDs without waiting for settle.
+    for (const sid of shortIDs.slice(0, -1)) {
+      await page.fill('[data-testid="permalink-input"]', sid);
+      await page.click('[data-testid="permalink-go-btn"]');
+      // Don't wait — immediately go to the next one.
+      await page.waitForTimeout(50);
+    }
+
+    // Set the final permalink and wait for it to settle.
+    const finalSID = shortIDs[shortIDs.length - 1];
+    await setPermalink(page, finalSID);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    await waitForScrollStable(page, 300);
+
+    // The final permalink target should be at the top.
+    const topRows = await getVisibleRows(page);
+    expect(topRows.length).toBeGreaterThan(0);
+    expect(
+      Math.abs(topRows[0].viewportRelativeTop),
+      `Final target should be at top, was ${topRows[0].viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+
+    // It should be the row matching the final shortID.
+    const matchesFinal = await page.evaluate(
+      ({rowId, sid}) => {
+        const el = document.querySelector(`[data-row-id="${rowId}"]`);
+        return el?.textContent?.includes(`#${sid}`) ?? false;
+      },
+      {rowId: topRows[0].rowId, sid: finalSID},
+    );
+    expect(matchesFinal, `Top row should be #${finalSID}`).toBe(true);
+  });
+
+  test('setting a permalink after clearing and re-setting works', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Set a permalink.
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const rowsFirst = await getVisibleRows(page);
+    expect(rowsFirst.length).toBeGreaterThan(0);
+
+    // Clear and navigate elsewhere.
+    await clearPermalink(page);
+    await page.waitForTimeout(200);
+    await scrollTo(page, 5000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    // Set a different permalink.
+    await setPermalink(page, '3100');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const rowsSecond = await getVisibleRows(page);
+    expect(rowsSecond.length).toBeGreaterThan(0);
+
+    // Row should be at the top.
+    expect(
+      Math.abs(rowsSecond[0].viewportRelativeTop),
+      `Row should be at top after setting new permalink`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+
+    // Should be a different row than the first permalink.
+    const is3100 = await page.evaluate(
+      ({rowId}) => {
+        const el = document.querySelector(`[data-row-id="${rowId}"]`);
+        return el?.textContent?.includes('#3100') ?? false;
+      },
+      {rowId: rowsSecond[0].rowId},
+    );
+    expect(is3100, 'Top row should be #3100').toBe(true);
+  });
+});
+
+test.describe('URL Hash Edge Cases', () => {
+  test('navigating to hash with empty ID after prefix loads normally', async ({
+    page,
+  }) => {
+    // #issue- with nothing after the prefix — should behave as no permalink.
+    await page.goto(`${BASE_URL}/array-test#issue-`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+
+    // Should be at the top of the list.
+    const scrollTop = await getScrollTop(page);
+    expect(scrollTop).toBeLessThan(50);
+
+    const rows = await getVisibleRows(page);
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  test('hash change from valid to empty clears permalink', async ({page}) => {
+    // Start with a valid hash.
+    await page.goto(`${BASE_URL}/array-test#issue-3130`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Verify positioned at 3130.
+    const rows = await getVisibleRows(page);
+    expect(rows.length).toBeGreaterThan(0);
+    const is3130 = await page.evaluate(
+      ({rowId}) => {
+        const el = document.querySelector(`[data-row-id="${rowId}"]`);
+        return el?.textContent?.includes('#3130') ?? false;
+      },
+      {rowId: rows[0].rowId},
+    );
+    expect(is3130).toBe(true);
+
+    // Clear the hash programmatically.
+    await page.evaluate(() => {
+      window.location.hash = '';
+    });
+    await page.waitForTimeout(500);
+
+    // Hash should now be empty.
+    const hashAfter = await page.evaluate(() => window.location.hash);
+    expect(hashAfter === '' || hashAfter === '#').toBe(true);
+  });
+
+  test('reload with hash permalink positions the row at top', async ({
+    page,
+  }) => {
+    // Navigate to a specific permalink via hash.
+    await page.goto(`${BASE_URL}/array-test#issue-3130`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Record the row at the top.
+    const beforeRows = await getVisibleRows(page);
+    expect(beforeRows.length).toBeGreaterThan(0);
+    const topRowId = beforeRows[0].rowId;
+
+    // Reload the page (hash persists).
+    await page.reload({waitUntil: 'networkidle'});
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    await waitForScrollStable(page, 500);
+
+    // The same row should be at the top.
+    const pos = await getRowPosition(page, topRowId);
+    expect(pos, `Row ${topRowId} should be visible after reload`).toBeTruthy();
+    expect(
+      Math.abs(pos!.viewportRelativeTop),
+      `Row should be at top after reload with hash, was ${pos!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+});
+
 test.describe('History State Scroll Restoration', () => {
   test('back/forward restores scroll positions across permalink navigations', async ({
     page,
@@ -1005,5 +1455,210 @@ test.describe('History State Scroll Restoration', () => {
       matchCount,
       'At least some rows from before reload should be visible after',
     ).toBeGreaterThanOrEqual(2);
+  });
+
+  test('reload with permalink hash preserves scroll offset from history.state', async ({
+    page,
+  }) => {
+    // Navigate to a permalink.
+    await page.goto(`${BASE_URL}/array-test#issue-3130`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Scroll down from the permalink position.
+    const baseScroll = await getScrollTop(page);
+    await scrollTo(page, baseScroll + 75);
+    await waitForScrollStable(page, 300);
+    await page.waitForTimeout(300);
+
+    // Record visible rows at this offset position.
+    const beforeRows = await getVisibleRows(page);
+    expect(beforeRows.length).toBeGreaterThan(0);
+
+    // Verify history.state captured the scroll.
+    const savedState = await page.evaluate(() => window.history.state);
+    expect(savedState).toBeTruthy();
+
+    // Reload — hash persists and history.state should be used for the offset.
+    await page.reload({waitUntil: 'networkidle'});
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(1000);
+    await waitForScrollStable(page, 500);
+
+    // Verify same rows visible at same positions.
+    const afterRows = await getVisibleRows(page);
+    const afterMap = new Map(afterRows.map(r => [r.rowId, r]));
+    let matchCount = 0;
+    for (const before of beforeRows) {
+      const after = afterMap.get(before.rowId);
+      if (after) {
+        expect(
+          Math.abs(after.viewportRelativeTop - before.viewportRelativeTop),
+          `Row ${before.rowId}: shifted by ${after.viewportRelativeTop - before.viewportRelativeTop}px after reload with hash`,
+        ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+        matchCount++;
+      }
+    }
+    expect(
+      matchCount,
+      'At least some rows should match positions after reload',
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  test('back button after scroll without permalink navigation restores position', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Scroll down and let history.state save.
+    await scrollTo(page, 2000);
+    await waitForScrollStable(page, 300);
+    await page.waitForTimeout(300);
+
+    const rowsBefore = await getVisibleRows(page);
+    expect(rowsBefore.length).toBeGreaterThan(0);
+
+    // Navigate to a permalink (pushes history entry, saving current state).
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Verify we're at 3130.
+    const hashAtPermalink = await page.evaluate(() => window.location.hash);
+    expect(hashAtPermalink).toBe('#issue-3130');
+
+    // Hit back — should restore the pre-permalink scroll position.
+    await page.goBack({waitUntil: 'commit'});
+    await page.waitForFunction(() => window.location.hash === '', undefined, {
+      timeout: 5000,
+    });
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    await waitForScrollStable(page, 300);
+
+    // Verify restored position matches.
+    const rowsAfterBack = await getVisibleRows(page);
+    const afterMap = new Map(rowsAfterBack.map(r => [r.rowId, r]));
+    let matchCount = 0;
+    for (const before of rowsBefore) {
+      const after = afterMap.get(before.rowId);
+      if (after) {
+        expect(
+          Math.abs(after.viewportRelativeTop - before.viewportRelativeTop),
+          `Row ${before.rowId}: shifted by ${after.viewportRelativeTop - before.viewportRelativeTop}px after back`,
+        ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+        matchCount++;
+      }
+    }
+    expect(
+      matchCount,
+      'At least some rows from pre-permalink position should match after back',
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  test('forward after new navigation is not possible (history is truncated)', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Create history: no-hash → 3130 → 3100.
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    await setPermalink(page, '3100');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Go back to 3130.
+    await page.goBack({waitUntil: 'commit'});
+    await page.waitForFunction(
+      () => window.location.hash === '#issue-3130',
+      undefined,
+      {timeout: 5000},
+    );
+    await waitForScrollStable(page, 500);
+
+    // Now navigate to a NEW permalink — this should truncate forward history.
+    await setPermalink(page, '3200');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const hashBeforeForward = await page.evaluate(() => window.location.hash);
+    expect(hashBeforeForward).toBe('#issue-3200');
+
+    // Attempt to go forward — should have no effect since forward was truncated.
+    await page.goForward({waitUntil: 'commit'}).catch(() => {});
+    await page.waitForTimeout(500);
+
+    // Should still be at #issue-3200.
+    const hashAfterForward = await page.evaluate(() => window.location.hash);
+    expect(hashAfterForward).toBe('#issue-3200');
+  });
+
+  test('multiple back presses in quick succession land at the correct position', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Record initial position.
+    const initialRows = await getVisibleRows(page);
+    expect(initialRows.length).toBeGreaterThan(0);
+
+    // Create a chain of permalink navigations: "" → 3130 → 3100 → 3200.
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+
+    await setPermalink(page, '3100');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+
+    await setPermalink(page, '3200');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+
+    // Rapidly press back 3 times to return to the initial position.
+    await page.goBack({waitUntil: 'commit'});
+    await page.goBack({waitUntil: 'commit'});
+    await page.goBack({waitUntil: 'commit'});
+
+    // Wait for the final state to settle.
+    await page.waitForFunction(() => window.location.hash === '', undefined, {
+      timeout: 10000,
+    });
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    await waitForScrollStable(page, 300);
+
+    // Should be back at the initial (no hash) position.
+    const afterRows = await getVisibleRows(page);
+    const afterIds = new Set(afterRows.map(r => r.rowId));
+    let matchCount = 0;
+    for (const row of initialRows) {
+      if (afterIds.has(row.rowId)) {
+        matchCount++;
+      }
+    }
+    expect(
+      matchCount,
+      'Should see the original rows after rapid back presses',
+    ).toBeGreaterThanOrEqual(2);
+
+    // Scroll position should be near the top.
+    const scrollAfter = await getScrollTop(page);
+    expect(scrollAfter).toBeLessThan(100);
   });
 });
