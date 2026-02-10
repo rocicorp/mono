@@ -38,6 +38,7 @@ export interface UseArrayVirtualizerReturn<T> {
   rowsEmpty: boolean;
   permalinkNotFound: boolean;
   scrollState: ScrollRestorationState | undefined;
+  captureScrollState: () => ScrollRestorationState | undefined;
   restoreScrollState: (state: ScrollRestorationState | undefined) => void;
 }
 
@@ -630,6 +631,7 @@ export function useArrayVirtualizer<T, TSort>({
     rowsEmpty,
     permalinkNotFound,
     scrollState: anchorState,
+    captureScrollState: captureAnchorState,
     restoreScrollState: restoreAnchorState,
   };
 }

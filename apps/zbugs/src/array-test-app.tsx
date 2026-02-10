@@ -118,8 +118,6 @@ function ArrayTestAppContent() {
   const getScrollRestoreState = useCallback(() => {
     const state = window.history.state;
     if (isScrollRestorationState(state)) {
-      // Clear so it's only consumed once per navigation.
-      window.history.replaceState(null, '');
       return state as ScrollRestorationState;
     }
     return undefined;
@@ -131,6 +129,7 @@ function ArrayTestAppContent() {
     rowsEmpty,
     permalinkNotFound,
     scrollState,
+    captureScrollState,
     restoreScrollState,
   } = useArrayVirtualizer<RowData, IssueRowSort>({
     pageSize: PAGE_SIZE,
@@ -168,21 +167,19 @@ function ArrayTestAppContent() {
     getScrollElement: useCallback(() => parentRef.current, []),
   });
 
-  // Ref to track latest scroll state for saving to history.state.
-  const scrollStateForSaveRef = useRef<ScrollRestorationState | undefined>(
-    undefined,
-  );
-  scrollStateForSaveRef.current = scrollState;
+  // Ref to track captureScrollState for use in event handlers.
+  const captureScrollStateRef = useRef(captureScrollState);
+  captureScrollStateRef.current = captureScrollState;
 
-  // Timer ref for debounced scroll state saving.
+  // Timer ref for throttled scroll state saving.
   const saveStateTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Navigate to a permalink (or clear it). Saves the current scroll state
   // to the current history entry before pushing a new entry.
   const setPermalinkHash = useCallback((id: string | undefined) => {
-    // Flush any pending debounced save and save immediately.
+    // Flush any pending throttled save and save immediately.
     clearTimeout(saveStateTimerRef.current);
-    const currentState = scrollStateForSaveRef.current;
+    const currentState = captureScrollStateRef.current();
     if (currentState) {
       window.history.replaceState(currentState, '');
     }
@@ -202,7 +199,7 @@ function ArrayTestAppContent() {
 
     const saveState = () => {
       clearTimeout(saveStateTimerRef.current);
-      const state = scrollStateForSaveRef.current;
+      const state = captureScrollStateRef.current();
       if (state) {
         window.history.replaceState(state, '');
       }

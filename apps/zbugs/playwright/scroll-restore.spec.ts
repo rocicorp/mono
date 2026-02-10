@@ -958,4 +958,52 @@ test.describe('History State Scroll Restoration', () => {
       'At least some rows from the no-hash+50 position should be visible after back twice',
     ).toBeGreaterThanOrEqual(2);
   });
+
+  test('reload without permalink preserves scroll position via history.state', async ({
+    page,
+  }) => {
+    // Load page with no hash.
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Scroll down 25px (small scroll where anchor row stays near top).
+    await scrollTo(page, 25);
+    await waitForScrollStable(page, 300);
+    await page.waitForTimeout(200);
+
+    // Record visible rows.
+    const beforeRows = await getVisibleRows(page);
+    expect(beforeRows.length).toBeGreaterThan(0);
+
+    // Verify history.state was saved.
+    const savedState = await page.evaluate(() => window.history.state);
+    expect(savedState).toBeTruthy();
+
+    // Reload the page.
+    await page.reload({waitUntil: 'networkidle'});
+
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(1000);
+    await waitForScrollStable(page, 500);
+
+    // Verify same rows visible at same viewport-relative positions.
+    const afterRows = await getVisibleRows(page);
+    const afterMap = new Map(afterRows.map(r => [r.rowId, r]));
+    let matchCount = 0;
+    for (const before of beforeRows) {
+      const after = afterMap.get(before.rowId);
+      if (after) {
+        expect(
+          Math.abs(after.viewportRelativeTop - before.viewportRelativeTop),
+          `Row ${before.rowId}: position shifted by ${after.viewportRelativeTop - before.viewportRelativeTop}px after reload`,
+        ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+        matchCount++;
+      }
+    }
+    expect(
+      matchCount,
+      'At least some rows from before reload should be visible after',
+    ).toBeGreaterThanOrEqual(2);
+  });
 });
