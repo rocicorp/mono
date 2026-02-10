@@ -131,11 +131,11 @@ test.describe('Scroll Restoration', () => {
 
     // Verify the captured state has the expected structure.
     const capturedState = JSON.parse(capturedText!);
-    expect(capturedState).toHaveProperty('permalinkID');
+    expect(capturedState).toHaveProperty('scrollAnchorID');
     expect(capturedState).toHaveProperty('index');
     expect(capturedState).toHaveProperty('scrollOffset');
-    expect(typeof capturedState.permalinkID).toBe('string');
-    expect(capturedState.permalinkID.length).toBeGreaterThan(0);
+    expect(typeof capturedState.scrollAnchorID).toBe('string');
+    expect(capturedState.scrollAnchorID.length).toBeGreaterThan(0);
 
     // Scroll far away to a completely different position.
     await scrollTo(page, 0);

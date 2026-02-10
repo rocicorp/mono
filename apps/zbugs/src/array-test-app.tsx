@@ -33,13 +33,21 @@ function isScrollRestorationState(
   return (
     state !== null &&
     typeof state === 'object' &&
-    'permalinkID' in state &&
-    typeof (state as Record<string, unknown>).permalinkID === 'string' &&
+    'scrollAnchorID' in state &&
+    typeof (state as Record<string, unknown>).scrollAnchorID === 'string' &&
     'index' in state &&
     typeof (state as Record<string, unknown>).index === 'number' &&
     'scrollOffset' in state &&
     typeof (state as Record<string, unknown>).scrollOffset === 'number'
   );
+}
+
+function readHistoryScrollState(): ScrollRestorationState | undefined {
+  const state = window.history.state;
+  if (isScrollRestorationState(state)) {
+    return state;
+  }
+  return undefined;
 }
 
 const toStartRow = (row: {id: string; modified: number; created: number}) => ({
@@ -79,9 +87,8 @@ function ArrayTestAppContent() {
       labels: [],
       open: null,
       textFilter: null,
-      permalinkID: permalinkID ?? null,
     }),
-    [permalinkID],
+    [],
   );
 
   const [heightMode, setHeightMode] = useState<
@@ -115,71 +122,103 @@ function ArrayTestAppContent() {
     [listContextParams],
   );
 
-  const getScrollRestoreState = useCallback(() => {
-    const state = window.history.state;
-    if (isScrollRestorationState(state)) {
-      return state as ScrollRestorationState;
-    }
-    return undefined;
+  // ---- Controlled scroll state ----
+  // Initialized from history.state on mount (for reload / back-forward).
+  const [scrollState, setScrollState] = useState<
+    ScrollRestorationState | undefined
+  >(readHistoryScrollState);
+
+  // Timer ref for throttled history.state saving.
+  const saveStateTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const onScrollStateChange = useCallback((state: ScrollRestorationState) => {
+    setScrollState(state);
+
+    // Throttled save to history.state.
+    clearTimeout(saveStateTimerRef.current);
+    saveStateTimerRef.current = setTimeout(() => {
+      window.history.replaceState(state, '');
+    }, 50);
   }, []);
 
-  const {
-    virtualizer,
-    rowAt,
-    rowsEmpty,
-    permalinkNotFound,
-    scrollState,
-    captureScrollState,
-    restoreScrollState,
-  } = useArrayVirtualizer<RowData, IssueRowSort>({
-    pageSize: PAGE_SIZE,
-    placeholderHeight: PLACEHOLDER_HEIGHT,
-    getPageQuery,
-    getSingleQuery,
-    toStartRow,
-    initialPermalinkID: permalinkID,
-    getScrollRestoreState,
+  // Clean up timer on unmount.
+  useEffect(() => () => clearTimeout(saveStateTimerRef.current), []);
 
-    estimateSize: useCallback(
-      (row: RowData | undefined) => {
-        if (!row) {
-          return PLACEHOLDER_HEIGHT;
-        }
+  // Listen for back/forward navigations via the Navigation API.
+  // Using `currententrychange` with `navigationType === 'traverse'` instead
+  // of the raw `popstate` event avoids a subtle bug: Chrome fires `popstate`
+  // as a side-effect of hash-only navigations (e.g. `location.hash = ...` or
+  // fragment-only page.goto), which would clobber scrollState to `undefined`
+  // mid-permalink-positioning.  The Navigation API only fires `traverse` for
+  // genuine back/forward navigations.
+  useEffect(() => {
+    const nav = window.navigation;
+    if (!nav) {
+      // Fallback for environments without Navigation API.
+      const onPopState = () => {
+        setScrollState(readHistoryScrollState());
+      };
+      window.addEventListener('popstate', onPopState);
+      return () => window.removeEventListener('popstate', onPopState);
+    }
+    const onEntryChange = (event: NavigationCurrentEntryChangeEvent) => {
+      if (event.navigationType === 'traverse') {
+        setScrollState(readHistoryScrollState());
+      }
+    };
+    nav.addEventListener('currententrychange', onEntryChange);
+    return () => nav.removeEventListener('currententrychange', onEntryChange);
+  }, []);
 
-        if (heightMode === 'uniform') {
-          return UNIFORM_ROW_HEIGHT;
-        }
+  const {virtualizer, rowAt, rowsEmpty, permalinkNotFound} =
+    useArrayVirtualizer<RowData, IssueRowSort>({
+      pageSize: PAGE_SIZE,
+      placeholderHeight: PLACEHOLDER_HEIGHT,
+      getPageQuery,
+      getSingleQuery,
+      toStartRow,
+      initialPermalinkID: permalinkID,
+      scrollState,
+      onScrollStateChange,
 
-        if (heightMode === 'non-uniform') {
-          const baseHeight = 120;
-          if (!row.description) {
-            return baseHeight;
+      estimateSize: useCallback(
+        (row: RowData | undefined) => {
+          if (!row) {
+            return PLACEHOLDER_HEIGHT;
           }
-          const descriptionLines = Math.ceil(row.description.length / 150);
-          const descriptionHeight = descriptionLines * 20;
-          return baseHeight + descriptionHeight;
-        }
 
-        return DEFAULT_HEIGHT;
-      },
-      [heightMode],
-    ),
-    getScrollElement: useCallback(() => parentRef.current, []),
-  });
+          if (heightMode === 'uniform') {
+            return UNIFORM_ROW_HEIGHT;
+          }
 
-  // Ref to track captureScrollState for use in event handlers.
-  const captureScrollStateRef = useRef(captureScrollState);
-  captureScrollStateRef.current = captureScrollState;
+          if (heightMode === 'non-uniform') {
+            const baseHeight = 120;
+            if (!row.description) {
+              return baseHeight;
+            }
+            const descriptionLines = Math.ceil(row.description.length / 150);
+            const descriptionHeight = descriptionLines * 20;
+            return baseHeight + descriptionHeight;
+          }
 
-  // Timer ref for throttled scroll state saving.
-  const saveStateTimerRef = useRef<ReturnType<typeof setTimeout>>();
+          return DEFAULT_HEIGHT;
+        },
+        [heightMode],
+      ),
+      getScrollElement: useCallback(() => parentRef.current, []),
+    });
+
+  // Use a ref so setPermalinkHash is stable (doesn't recreate on every
+  // scroll-state change).
+  const scrollStateRef = useRef(scrollState);
+  scrollStateRef.current = scrollState;
 
   // Navigate to a permalink (or clear it). Saves the current scroll state
   // to the current history entry before pushing a new entry.
   const setPermalinkHash = useCallback((id: string | undefined) => {
     // Flush any pending throttled save and save immediately.
     clearTimeout(saveStateTimerRef.current);
-    const currentState = captureScrollStateRef.current();
+    const currentState = scrollStateRef.current;
     if (currentState) {
       window.history.replaceState(currentState, '');
     }
@@ -187,44 +226,6 @@ function ArrayTestAppContent() {
     const url = new URL(location.href);
     url.hash = id ? `${HASH_PREFIX}${id}` : '';
     window.history.pushState(null, '', url);
-  }, []);
-
-  // Save scroll state to history.state via replaceState, throttled on scroll.
-  useEffect(() => {
-    const scrollEl = parentRef.current;
-    if (!scrollEl) return;
-
-    let lastSaveTime = 0;
-    const THROTTLE_MS = 50;
-
-    const saveState = () => {
-      clearTimeout(saveStateTimerRef.current);
-      const state = captureScrollStateRef.current();
-      if (state) {
-        window.history.replaceState(state, '');
-      }
-      lastSaveTime = Date.now();
-    };
-
-    const onScroll = () => {
-      const elapsed = Date.now() - lastSaveTime;
-      if (elapsed >= THROTTLE_MS) {
-        saveState();
-      } else {
-        // Schedule a trailing save so the final position is always stored.
-        clearTimeout(saveStateTimerRef.current);
-        saveStateTimerRef.current = setTimeout(
-          saveState,
-          THROTTLE_MS - elapsed,
-        );
-      }
-    };
-
-    scrollEl.addEventListener('scroll', onScroll, {passive: true});
-    return () => {
-      scrollEl.removeEventListener('scroll', onScroll);
-      clearTimeout(saveStateTimerRef.current);
-    };
   }, []);
 
   // Reset permalink if not found (but keep the input value)
@@ -421,7 +422,7 @@ function ArrayTestAppContent() {
             {scrollState ? (
               <>
                 <div style={{marginBottom: '4px'}}>
-                  <strong>permalinkID:</strong> {scrollState.permalinkID}
+                  <strong>scrollAnchorID:</strong> {scrollState.scrollAnchorID}
                 </div>
                 <div style={{marginBottom: '4px'}}>
                   <strong>index:</strong> {scrollState.index}
@@ -453,7 +454,7 @@ function ArrayTestAppContent() {
               marginTop: '8px',
             }}
           >
-            📋 Capture State
+            Capture State
           </button>
 
           {/* Restore State */}
@@ -496,8 +497,9 @@ function ArrayTestAppContent() {
               data-testid="restore-btn"
               onClick={() => {
                 try {
-                  const state = JSON.parse(restoreInput);
-                  restoreScrollState(state);
+                  const parsed = JSON.parse(restoreInput);
+                  // null/falsy → undefined (scroll to top)
+                  setScrollState(parsed || undefined);
                 } catch (err) {
                   alert('Invalid JSON: ' + (err as Error).message);
                 }
@@ -514,7 +516,7 @@ function ArrayTestAppContent() {
                 cursor: restoreInput.trim() ? 'pointer' : 'not-allowed',
               }}
             >
-              🔄 Restore State
+              Restore State
             </button>
           </div>
         </div>

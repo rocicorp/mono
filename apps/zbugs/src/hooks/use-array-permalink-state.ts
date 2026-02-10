@@ -20,7 +20,7 @@ export function useArrayPermalinkState(): [
     if (
       !rawScrollState ||
       !prevStateRef.current ||
-      rawScrollState.permalinkID !== prevStateRef.current.permalinkID ||
+      rawScrollState.scrollAnchorID !== prevStateRef.current.scrollAnchorID ||
       rawScrollState.index !== prevStateRef.current.index ||
       rawScrollState.scrollOffset !== prevStateRef.current.scrollOffset
     ) {

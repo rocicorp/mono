@@ -15,19 +15,26 @@ export interface UseArrayVirtualizerOptions<T, TSort> {
   getSingleQuery: GetSingleQuery<T>;
   toStartRow: (row: T) => TSort;
   initialPermalinkID?: string | undefined;
-  /** Called when initialPermalinkID changes.  If it returns a state,
-   *  that state is restored (with scroll offset) instead of the default
-   *  align-to-top positioning.  Useful for back/forward scroll restoration
-   *  driven by history.state. */
-  getScrollRestoreState?:
-    | (() => ScrollRestorationState | undefined)
-    | undefined;
+  /**
+   * Controlled scroll state. When the consumer provides a new value that
+   * differs from what the hook last reported via `onScrollStateChange`, the
+   * virtualizer will restore to that position.
+   *
+   * Setting `undefined` scrolls to the top.
+   */
+  scrollState?: ScrollRestorationState | undefined;
+  /**
+   * Called whenever the current scroll position changes (every render where
+   * the anchor row or offset changed). The consumer can store this in React
+   * state, `history.state`, or anywhere else.
+   */
+  onScrollStateChange?: ((state: ScrollRestorationState) => void) | undefined;
   debug?: boolean | undefined;
   overscan?: number | undefined;
 }
 
 export type ScrollRestorationState = {
-  permalinkID: string;
+  scrollAnchorID: string;
   index: number;
   scrollOffset: number;
 };
@@ -37,9 +44,6 @@ export interface UseArrayVirtualizerReturn<T> {
   rowAt: (index: number) => T | undefined;
   rowsEmpty: boolean;
   permalinkNotFound: boolean;
-  scrollState: ScrollRestorationState | undefined;
-  captureScrollState: () => ScrollRestorationState | undefined;
-  restoreScrollState: (state: ScrollRestorationState | undefined) => void;
 }
 
 type ForwardAnchorState<TSort> = {
@@ -85,6 +89,23 @@ const anchorsEqual = <TSort>(a: AnchorState<TSort>, b: AnchorState<TSort>) => {
   return false;
 };
 
+const scrollStatesEqual = (
+  a: ScrollRestorationState | undefined,
+  b: ScrollRestorationState | undefined,
+): boolean => {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return (
+    a.scrollAnchorID === b.scrollAnchorID &&
+    a.index === b.index &&
+    a.scrollOffset === b.scrollOffset
+  );
+};
+
 // Delay after positioning before enabling auto-paging.
 // Allows virtualItems to update after programmatic scroll.
 const POSITIONING_SETTLE_DELAY_MS = 50;
@@ -98,7 +119,8 @@ export function useArrayVirtualizer<T, TSort>({
   getSingleQuery,
   toStartRow,
   initialPermalinkID,
-  getScrollRestoreState,
+  scrollState: externalScrollState,
+  onScrollStateChange,
   debug = false,
   overscan = 5,
 }: UseArrayVirtualizerOptions<T, TSort>): UseArrayVirtualizerReturn<T> {
@@ -116,16 +138,28 @@ export function useArrayVirtualizer<T, TSort>({
         },
   );
 
-  // Counter to force effect re-run when restoring same state
-  const [restoreTrigger, setRestoreTrigger] = useState(0);
-
-  const scrollStateRef = useRef({
+  const scrollInternalRef = useRef({
     pendingScroll: null as number | null,
     pendingScrollIsRelative: false,
     scrollRetryCount: 0,
-    positionedAt: 0,
+    // When there is an initial permalink, start at 0 so the positioning
+    // loop activates and emission is suppressed until positioning completes.
+    // Otherwise use Date.now() so emission (and auto-paging) starts
+    // immediately.
+    positionedAt: initialPermalinkID ? 0 : Date.now(),
     lastTargetOffset: null as number | null,
+    // The anchor that the merged effect has requested.  Used by the
+    // positioning effect to skip stale positioning when the React state
+    // update from replaceAnchor hasn't committed yet.
+    expectedAnchorID: initialPermalinkID ?? (null as string | null),
   });
+
+  // Track the last state we emitted via onScrollStateChange so we can
+  // distinguish "consumer reflected back what we told them" (no-op) from
+  // "consumer set a new position externally" (trigger restore).
+  const lastEmittedStateRef = useRef<ScrollRestorationState | undefined>(
+    undefined,
+  );
 
   const replaceAnchor = useCallback(
     (next: AnchorState<TSort>) =>
@@ -133,23 +167,76 @@ export function useArrayVirtualizer<T, TSort>({
     [],
   );
 
+  // Track previous values so we can detect actual changes inside a
+  // single unified effect.  `prevExternalStateRef` starts as `undefined`
+  // (not the initial prop) so that a mount-time value from history.state
+  // is treated as an external change and triggers a restore.
+  const prevExternalStateRef = useRef<ScrollRestorationState | undefined>(
+    undefined,
+  );
+  const prevPermalinkIDRef = useRef(initialPermalinkID);
+
+  // ---- Unified effect: external scroll state + permalink changes ----
+  // External scroll-state changes take priority over URL-hash changes so
+  // that back/forward (which update both simultaneously) restores the
+  // offset instead of re-positioning to the top of the permalink.
   useEffect(() => {
-    // If the consumer provides a scroll-restore callback (e.g. reading
-    // history.state on back/forward), use that instead of the default
-    // align-to-top positioning.
-    const restoreState = getScrollRestoreState?.();
-    if (restoreState) {
+    const externalChanged = !scrollStatesEqual(
+      externalScrollState,
+      prevExternalStateRef.current,
+    );
+    const permalinkChanged = initialPermalinkID !== prevPermalinkIDRef.current;
+
+    prevExternalStateRef.current = externalScrollState;
+    prevPermalinkIDRef.current = initialPermalinkID;
+
+    // --- External scroll state (restore from history.state, etc.) ---
+    // When both external state and permalink changed simultaneously and
+    // the external state is undefined, it means we traversed to a history
+    // entry where scroll state was never saved (e.g. the user navigated
+    // away before the throttled save fired).  Prefer the permalink branch
+    // so we position to the hash rather than scroll to top.
+    if (
+      externalChanged &&
+      !scrollStatesEqual(externalScrollState, lastEmittedStateRef.current) &&
+      !(externalScrollState === undefined && permalinkChanged)
+    ) {
+      if (!externalScrollState) {
+        // undefined → scroll to top
+        replaceAnchor({
+          kind: 'forward',
+          index: 0,
+          startRow: undefined,
+        });
+        scrollInternalRef.current.positionedAt = 0;
+        scrollInternalRef.current.scrollRetryCount = 0;
+        scrollInternalRef.current.pendingScroll = 0;
+        scrollInternalRef.current.pendingScrollIsRelative = false;
+        scrollInternalRef.current.lastTargetOffset = null;
+        scrollInternalRef.current.expectedAnchorID = null;
+        lastEmittedStateRef.current = undefined;
+        return;
+      }
+
       replaceAnchor({
         kind: 'permalink',
-        index: restoreState.index,
-        permalinkID: restoreState.permalinkID,
+        index: externalScrollState.index,
+        permalinkID: externalScrollState.scrollAnchorID,
       });
-      scrollStateRef.current.positionedAt = 0;
-      scrollStateRef.current.scrollRetryCount = 0;
-      scrollStateRef.current.pendingScroll = restoreState.scrollOffset;
-      scrollStateRef.current.pendingScrollIsRelative = true;
-      scrollStateRef.current.lastTargetOffset = null;
-      setRestoreTrigger(prev => prev + 1);
+      scrollInternalRef.current.positionedAt = 0;
+      scrollInternalRef.current.scrollRetryCount = 0;
+      scrollInternalRef.current.pendingScroll =
+        externalScrollState.scrollOffset;
+      scrollInternalRef.current.pendingScrollIsRelative = true;
+      scrollInternalRef.current.lastTargetOffset = null;
+      scrollInternalRef.current.expectedAnchorID =
+        externalScrollState.scrollAnchorID;
+      lastEmittedStateRef.current = externalScrollState;
+      return;
+    }
+
+    // --- URL hash navigation (initialPermalinkID changed) ---
+    if (!permalinkChanged) {
       return;
     }
 
@@ -166,10 +253,29 @@ export function useArrayVirtualizer<T, TSort>({
         };
 
     replaceAnchor(nextAnchor);
-    scrollStateRef.current.positionedAt = 0;
-    scrollStateRef.current.scrollRetryCount = 0;
-    scrollStateRef.current.lastTargetOffset = null;
-  }, [initialPermalinkID, replaceAnchor, getScrollRestoreState]);
+    scrollInternalRef.current.scrollRetryCount = 0;
+    scrollInternalRef.current.lastTargetOffset = null;
+
+    if (initialPermalinkID) {
+      // Navigating TO a permalink — activate the positioning loop.
+      scrollInternalRef.current.positionedAt = 0;
+      scrollInternalRef.current.expectedAnchorID = initialPermalinkID;
+      scrollInternalRef.current.pendingScroll = null;
+      scrollInternalRef.current.pendingScrollIsRelative = false;
+    } else {
+      // Permalink cleared (hash removed).  Queue a scroll-to-top via
+      // pendingScroll but do NOT reset positionedAt or expectedAnchorID.
+      // When going back/forward, both hash and scrollState change at the
+      // same time.  If they arrive in separate renders (Wouter fires the
+      // hash change first), resetting positionedAt would reactivate the
+      // positioning loop for the stale anchor.  By leaving positionedAt
+      // untouched the stale anchor is ignored, and the external-state
+      // branch (which fires on the next render) overwrites pendingScroll
+      // with the correct restore position.
+      scrollInternalRef.current.pendingScroll = 0;
+      scrollInternalRef.current.pendingScrollIsRelative = false;
+    }
+  }, [initialPermalinkID, externalScrollState, replaceAnchor]);
 
   const {
     rowAt,
@@ -297,10 +403,17 @@ export function useArrayVirtualizer<T, TSort>({
   // ---- Single unified effect: positioning + auto-paging ----
   useEffect(() => {
     const restoreScrollIfNeeded = () => {
-      const state = scrollStateRef.current;
+      const state = scrollInternalRef.current;
 
       if (state.pendingScroll === null || anchor.kind === 'permalink') {
         return false;
+      }
+
+      // Relative restores are handled by positionPermalinkIfNeeded once
+      // the anchor updates to permalink mode.  Return true to suppress
+      // auto-paging while we wait for the anchor state update.
+      if (state.pendingScrollIsRelative) {
+        return true;
       }
 
       if (complete && rowsLength > 0) {
@@ -317,14 +430,24 @@ export function useArrayVirtualizer<T, TSort>({
         return false;
       }
 
+      // The merged effect sets expectedAnchorID when it calls
+      // replaceAnchor.  If the current anchor doesn't match, the
+      // React state update hasn't committed yet — skip to avoid
+      // positioning for a stale anchor.
+      const state = scrollInternalRef.current;
+      if (
+        state.expectedAnchorID !== null &&
+        anchor.permalinkID !== state.expectedAnchorID
+      ) {
+        return true; // suppress auto-paging while waiting
+      }
+
       if (rowsLength === 0) {
         return true;
       }
 
       const targetVirtualIndex =
         anchor.index - firstRowIndex + startPlaceholder;
-
-      const state = scrollStateRef.current;
 
       if (state.positionedAt === 0 || !complete) {
         if (state.pendingScroll === null) {
@@ -410,7 +533,7 @@ export function useArrayVirtualizer<T, TSort>({
         return;
       }
 
-      const state = scrollStateRef.current;
+      const state = scrollInternalRef.current;
 
       if (Date.now() - state.positionedAt < POSITIONING_SETTLE_DELAY_MS) {
         return;
@@ -555,48 +678,17 @@ export function useArrayVirtualizer<T, TSort>({
     toLogicalIndex,
     pageSize,
     toStartRow,
-    restoreTrigger,
     replaceAnchor,
+    estimateSize,
   ]);
 
-  const restoreAnchorState = useCallback(
-    (state: ScrollRestorationState | undefined) => {
-      if (!state) {
-        replaceAnchor({
-          kind: 'forward',
-          index: 0,
-          startRow: undefined,
-        });
-        scrollStateRef.current.positionedAt = 0;
-        scrollStateRef.current.scrollRetryCount = 0;
-        scrollStateRef.current.pendingScroll = 0;
-        scrollStateRef.current.pendingScrollIsRelative = false;
-        scrollStateRef.current.lastTargetOffset = null;
-        setRestoreTrigger(prev => prev + 1);
-        return;
-      }
-      replaceAnchor({
-        kind: 'permalink',
-        index: state.index,
-        permalinkID: state.permalinkID,
-      });
-      scrollStateRef.current.positionedAt = 0;
-      scrollStateRef.current.scrollRetryCount = 0;
-      scrollStateRef.current.pendingScroll = state.scrollOffset;
-      scrollStateRef.current.pendingScrollIsRelative = true;
-      scrollStateRef.current.lastTargetOffset = null;
-      // Increment trigger to force re-render even if state values are identical
-      setRestoreTrigger(prev => prev + 1);
-    },
-    [replaceAnchor],
-  );
+  // ---- Emit scroll state changes via onScrollStateChange ----
+  const onScrollStateChangeRef = useRef(onScrollStateChange);
+  onScrollStateChangeRef.current = onScrollStateChange;
 
-  // Capture current scroll state as a permalink-based snapshot.
-  // Finds the first fully visible row in the viewport and stores
-  // the scroll offset relative to that row's top.
-  const captureAnchorState = useCallback(():
-    | ScrollRestorationState
-    | undefined => {
+  // Compute current scroll state each render (cheap — just iterates
+  // virtual items to find the first fully visible row).
+  const currentScrollState = useMemo((): ScrollRestorationState | undefined => {
     const scrollOffset = virtualizer.scrollOffset ?? 0;
     const items = virtualizer.getVirtualItems();
 
@@ -608,7 +700,7 @@ export function useArrayVirtualizer<T, TSort>({
       const row = rowAtVirtualIndex(item.index);
       if (row && typeof row === 'object' && 'id' in row) {
         return {
-          permalinkID: (row as {id: string}).id,
+          scrollAnchorID: (row as {id: string}).id,
           index: toLogicalIndex(item.index),
           scrollOffset: scrollOffset - item.start,
         };
@@ -616,22 +708,35 @@ export function useArrayVirtualizer<T, TSort>({
     }
 
     return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    virtualizer,
     virtualizer.scrollOffset,
+    virtualItems,
     rowAtVirtualIndex,
     toLogicalIndex,
   ]);
 
-  const anchorState = captureAnchorState();
+  useEffect(() => {
+    // Don't emit while actively positioning (positionedAt === 0).
+    // For the non-permalink initial case, positionedAt is initialized to
+    // Date.now() so emission starts immediately.
+    if (scrollInternalRef.current.positionedAt === 0) {
+      return;
+    }
+
+    if (
+      currentScrollState &&
+      !scrollStatesEqual(currentScrollState, lastEmittedStateRef.current)
+    ) {
+      lastEmittedStateRef.current = currentScrollState;
+      onScrollStateChangeRef.current?.(currentScrollState);
+    }
+  }, [currentScrollState]);
 
   return {
     virtualizer,
     rowAt: rowAtVirtualIndex,
     rowsEmpty,
     permalinkNotFound,
-    scrollState: anchorState,
-    captureScrollState: captureAnchorState,
-    restoreScrollState: restoreAnchorState,
   };
 }
