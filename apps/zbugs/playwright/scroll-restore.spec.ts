@@ -543,3 +543,238 @@ test.describe('Initial Permalink Positioning', () => {
     );
   });
 });
+
+test.describe('URL Hash Permalink', () => {
+  test('navigating to a URL with #issue-<shortID> positions the row at top', async ({
+    page,
+  }) => {
+    // First load the page normally to discover a shortID.
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    const shortID = await page.evaluate(() => {
+      const rows = document.querySelectorAll('[data-row-id]');
+      for (const row of rows) {
+        const text = row.textContent ?? '';
+        const match = text.match(/#(\d+)/);
+        if (match) {
+          return match[1];
+        }
+      }
+      return null;
+    });
+    expect(shortID, 'Should find a shortID in the rendered rows').toBeTruthy();
+
+    // Navigate to the page with the hash fragment.
+    await page.goto(`${BASE_URL}/array-test#issue-${shortID}`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // The first visible row should be at the top and match the shortID.
+    const topRows = await getVisibleRows(page);
+    expect(topRows.length).toBeGreaterThan(0);
+    expect(
+      Math.abs(topRows[0].viewportRelativeTop),
+      `First visible row should be at the top, but was at ${topRows[0].viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+
+    const matchesShortID = await page.evaluate(
+      ({rowId, sid}) => {
+        const el = document.querySelector(`[data-row-id="${rowId}"]`);
+        return el?.textContent?.includes(`#${sid}`) ?? false;
+      },
+      {rowId: topRows[0].rowId, sid: shortID!},
+    );
+    expect(matchesShortID, `Top row should contain shortID #${shortID}`).toBe(
+      true,
+    );
+  });
+
+  test('navigating to a URL with #issue-<UUID> positions the row at top', async ({
+    page,
+  }) => {
+    // First load to discover a UUID.
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Scroll down to get a non-top-of-list row.
+    await scrollTo(page, 2000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    const rows = await getVisibleRows(page);
+    expect(rows.length).toBeGreaterThan(0);
+    const targetUUID = rows[1].rowId;
+
+    // Navigate with the UUID hash.
+    await page.goto(`${BASE_URL}/array-test#issue-${targetUUID}`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForRows(page);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Verify the target row is at the top.
+    const pos = await getRowPosition(page, targetUUID);
+    expect(pos, `Target row ${targetUUID} should be visible`).toBeTruthy();
+    expect(
+      Math.abs(pos!.viewportRelativeTop),
+      `Target row should be at the top, but was at ${pos!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+
+  test('changing the hash programmatically repositions to the new target', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Pick two different rows.
+    await scrollTo(page, 2000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    const rowsA = await getVisibleRows(page);
+    const targetA = rowsA[0];
+
+    await scrollTo(page, 5000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    const rowsB = await getVisibleRows(page);
+    const targetB = rowsB.find(r => r.rowId !== targetA.rowId) ?? rowsB[0];
+    expect(targetB.rowId).not.toBe(targetA.rowId);
+
+    // Set hash to row A via location.hash (triggers hashchange picked up by wouter).
+    await page.evaluate(id => {
+      window.location.hash = `issue-${id}`;
+    }, targetA.rowId);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const posA = await getRowPosition(page, targetA.rowId);
+    expect(posA).toBeTruthy();
+    expect(
+      Math.abs(posA!.viewportRelativeTop),
+      `Row A should be at top after hash change, was ${posA!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+
+    // Change hash to row B.
+    await page.evaluate(id => {
+      window.location.hash = `issue-${id}`;
+    }, targetB.rowId);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const posB = await getRowPosition(page, targetB.rowId);
+    expect(posB).toBeTruthy();
+    expect(
+      Math.abs(posB!.viewportRelativeTop),
+      `Row B should be at top after hash change, was ${posB!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+
+  test('the Go button updates the URL hash', async ({page}) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Initially no hash.
+    const initialHash = await page.evaluate(() => window.location.hash);
+    expect(initialHash).toBe('');
+
+    // Set a permalink via the Go button.
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+
+    // Hash should now contain #issue-3130.
+    const hashAfterGo = await page.evaluate(() => window.location.hash);
+    expect(hashAfterGo).toBe('#issue-3130');
+
+    // Clear — hash should be removed.
+    await clearPermalink(page);
+    await page.waitForTimeout(200);
+
+    const hashAfterClear = await page.evaluate(() => window.location.hash);
+    expect(hashAfterClear).toBe('');
+  });
+
+  test('page loaded with hash initializes the permalink input', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test#issue-3130`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForRows(page);
+
+    // The permalink input should be pre-filled with the hash value.
+    const inputValue = await page.inputValue('[data-testid="permalink-input"]');
+    expect(inputValue).toBe('3130');
+  });
+
+  test('browser back navigates to previous permalink', async ({page}) => {
+    // Use well-known shortIDs to keep things simple.
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Navigate to shortID 3130 via the Go button (pushes history entry).
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Verify first row matches 3130.
+    const rowsAfterA = await getVisibleRows(page);
+    expect(rowsAfterA.length).toBeGreaterThan(0);
+    expect(Math.abs(rowsAfterA[0].viewportRelativeTop)).toBeLessThanOrEqual(
+      POSITION_TOLERANCE,
+    );
+    const rowA_id = rowsAfterA[0].rowId;
+
+    // Navigate to shortID 3100 via the Go button (pushes another history entry).
+    await setPermalink(page, '3100');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    const rowsAfterB = await getVisibleRows(page);
+    expect(rowsAfterB.length).toBeGreaterThan(0);
+    expect(Math.abs(rowsAfterB[0].viewportRelativeTop)).toBeLessThanOrEqual(
+      POSITION_TOLERANCE,
+    );
+
+    // Verify hash is now #issue-3100.
+    const hashB = await page.evaluate(() => window.location.hash);
+    expect(hashB).toBe('#issue-3100');
+
+    // Press browser back — should go back to #issue-3130.
+    await page.goBack({waitUntil: 'commit'});
+
+    // Wait for React to pick up the hash change.
+    await page.waitForFunction(
+      () => window.location.hash === '#issue-3130',
+      undefined,
+      {timeout: 5000},
+    );
+
+    // Wait for the row to appear and positioning to settle.
+    await page.waitForSelector(`[data-row-id="${rowA_id}"]`, {
+      timeout: 15000,
+    });
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Row A (3130) should be at the top.
+    const posA = await getRowPosition(page, rowA_id);
+    expect(posA, `Row 3130 should be visible after back`).toBeTruthy();
+    expect(
+      Math.abs(posA!.viewportRelativeTop),
+      `Row 3130 should be at top after back, was ${posA!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+});

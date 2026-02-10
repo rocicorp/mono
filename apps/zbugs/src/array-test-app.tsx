@@ -4,6 +4,7 @@ import {queries, type IssueRowSort, type Issues} from '../shared/queries.js';
 import {ZERO_PROJECT_NAME} from '../shared/schema.js';
 import {LoginProvider} from './components/login-provider.js';
 import {useArrayVirtualizer} from './hooks/use-array-virtualizer.js';
+import {useHash} from './hooks/use-hash.js';
 import {ZeroInit} from './zero-init.js';
 
 type RowData = Issues[number];
@@ -12,6 +13,22 @@ const DEFAULT_HEIGHT = 275;
 const PLACEHOLDER_HEIGHT = 50;
 const PAGE_SIZE = 100;
 const UNIFORM_ROW_HEIGHT = 63;
+
+const HASH_PREFIX = 'issue-';
+
+function parsePermalinkFromHash(hash: string): string | undefined {
+  if (hash.startsWith(HASH_PREFIX)) {
+    const id = hash.slice(HASH_PREFIX.length);
+    return id || undefined;
+  }
+  return undefined;
+}
+
+function setPermalinkHash(id: string | undefined) {
+  const url = new URL(location.href);
+  url.hash = id ? `${HASH_PREFIX}${id}` : '';
+  window.history.pushState(null, '', url);
+}
 
 const toStartRow = (row: {id: string; modified: number; created: number}) => ({
   id: row.id,
@@ -22,8 +39,19 @@ const toStartRow = (row: {id: string; modified: number; created: number}) => ({
 function ArrayTestAppContent() {
   const z = useZero();
 
-  const [permalinkID, setPermalinkID] = useState<string | undefined>(undefined);
-  const [permalinkInput, setPermalinkInput] = useState('3130');
+  const hash = useHash();
+  const permalinkID = useMemo(() => parsePermalinkFromHash(hash), [hash]);
+  const [permalinkInput, setPermalinkInput] = useState(
+    () => parsePermalinkFromHash(window.location.hash.slice(1)) ?? '3130',
+  );
+
+  // Keep input in sync when hash changes externally.
+  useEffect(() => {
+    if (permalinkID) {
+      setPermalinkInput(permalinkID);
+    }
+  }, [permalinkID]);
+
   const [notFoundPermalink, setNotFoundPermalink] = useState<
     string | undefined
   >(undefined);
@@ -121,7 +149,7 @@ function ArrayTestAppContent() {
   useEffect(() => {
     if (permalinkNotFound && permalinkID) {
       setNotFoundPermalink(permalinkID);
-      setPermalinkID(undefined);
+      setPermalinkHash(undefined);
     }
   }, [permalinkNotFound, permalinkID]);
 
@@ -206,7 +234,7 @@ function ArrayTestAppContent() {
             onSubmit={e => {
               e.preventDefault();
               if (permalinkInput.trim()) {
-                setPermalinkID(permalinkInput);
+                setPermalinkHash(permalinkInput.trim());
                 setNotFoundPermalink(undefined);
               }
             }}
@@ -259,7 +287,7 @@ function ArrayTestAppContent() {
               <button
                 type="button"
                 onClick={() => {
-                  setPermalinkID(undefined);
+                  setPermalinkHash(undefined);
                   setPermalinkInput('');
                   setNotFoundPermalink(undefined);
                 }}
