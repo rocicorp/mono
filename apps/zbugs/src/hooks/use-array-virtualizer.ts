@@ -19,18 +19,19 @@ export interface UseArrayVirtualizerOptions<T, TSort> {
   overscan?: number | undefined;
 }
 
-export type ScrollRestorationState<TSort> = {
-  anchor: AnchorState<TSort>;
+export type ScrollRestorationState = {
+  permalinkID: string;
+  index: number;
   scrollOffset: number;
 };
 
-export interface UseArrayVirtualizerReturn<T, TSort> {
+export interface UseArrayVirtualizerReturn<T> {
   virtualizer: Virtualizer<HTMLElement, Element>;
   rowAt: (index: number) => T | undefined;
   rowsEmpty: boolean;
   permalinkNotFound: boolean;
-  scrollState: ScrollRestorationState<TSort>;
-  restoreScrollState: (state: ScrollRestorationState<TSort>) => void;
+  scrollState: ScrollRestorationState | undefined;
+  restoreScrollState: (state: ScrollRestorationState | undefined) => void;
 }
 
 type ForwardAnchorState<TSort> = {
@@ -91,7 +92,7 @@ export function useArrayVirtualizer<T, TSort>({
   initialPermalinkID,
   debug = false,
   overscan = 5,
-}: UseArrayVirtualizerOptions<T, TSort>): UseArrayVirtualizerReturn<T, TSort> {
+}: UseArrayVirtualizerOptions<T, TSort>): UseArrayVirtualizerReturn<T> {
   const [anchor, setAnchor] = useState<AnchorState<TSort>>(() =>
     initialPermalinkID
       ? {
@@ -114,6 +115,7 @@ export function useArrayVirtualizer<T, TSort>({
     pendingScrollIsRelative: false,
     scrollRetryCount: 0,
     positionedAt: 0,
+    lastTargetOffset: null as number | null,
   });
 
   const replaceAnchor = useCallback(
@@ -138,6 +140,7 @@ export function useArrayVirtualizer<T, TSort>({
     replaceAnchor(nextAnchor);
     scrollStateRef.current.positionedAt = 0;
     scrollStateRef.current.scrollRetryCount = 0;
+    scrollStateRef.current.lastTargetOffset = null;
   }, [initialPermalinkID, replaceAnchor]);
 
   const {
@@ -333,11 +336,28 @@ export function useArrayVirtualizer<T, TSort>({
         const currentScrollOffset = virtualizer.scrollOffset ?? 0;
 
         if (Math.abs(currentScrollOffset - targetOffset) <= 1) {
-          state.positionedAt = Date.now();
-          state.pendingScroll = null;
-          state.pendingScrollIsRelative = false;
-          state.scrollRetryCount = 0;
-          return true;
+          // Scroll position matches target. Verify that the
+          // computed targetOffset has stabilized across effect
+          // runs — this ensures item measurements have settled
+          // (e.g. after a page reload clears the measurement
+          // cache and estimates differ from actual sizes).
+          if (
+            state.lastTargetOffset !== null &&
+            Math.abs(targetOffset - state.lastTargetOffset) <= 1
+          ) {
+            state.positionedAt = Date.now();
+            state.pendingScroll = null;
+            state.pendingScrollIsRelative = false;
+            state.scrollRetryCount = 0;
+            state.lastTargetOffset = null;
+            return true;
+          }
+          // Save current target for comparison on next run.
+          state.lastTargetOffset = targetOffset;
+        } else {
+          // Scroll didn't land where expected — reset stability
+          // tracking so we require a fresh pair of matching runs.
+          state.lastTargetOffset = null;
         }
 
         const maxRetries = 10;
@@ -348,6 +368,7 @@ export function useArrayVirtualizer<T, TSort>({
           state.pendingScroll = null;
           state.pendingScrollIsRelative = false;
           state.scrollRetryCount = 0;
+          state.lastTargetOffset = null;
         }
 
         return true;
@@ -511,48 +532,67 @@ export function useArrayVirtualizer<T, TSort>({
   ]);
 
   const restoreAnchorState = useCallback(
-    (state: ScrollRestorationState<TSort>) => {
-      replaceAnchor(state.anchor);
+    (state: ScrollRestorationState | undefined) => {
+      if (!state) {
+        replaceAnchor({
+          kind: 'forward',
+          index: 0,
+          startRow: undefined,
+        });
+        scrollStateRef.current.positionedAt = 0;
+        scrollStateRef.current.scrollRetryCount = 0;
+        scrollStateRef.current.pendingScroll = 0;
+        scrollStateRef.current.pendingScrollIsRelative = false;
+        scrollStateRef.current.lastTargetOffset = null;
+        setRestoreTrigger(prev => prev + 1);
+        return;
+      }
+      replaceAnchor({
+        kind: 'permalink',
+        index: state.index,
+        permalinkID: state.permalinkID,
+      });
       scrollStateRef.current.positionedAt = 0;
       scrollStateRef.current.scrollRetryCount = 0;
       scrollStateRef.current.pendingScroll = state.scrollOffset;
-      scrollStateRef.current.pendingScrollIsRelative =
-        state.anchor.kind === 'permalink';
+      scrollStateRef.current.pendingScrollIsRelative = true;
+      scrollStateRef.current.lastTargetOffset = null;
       // Increment trigger to force re-render even if state values are identical
       setRestoreTrigger(prev => prev + 1);
     },
     [replaceAnchor],
   );
 
-  // Capture current anchor state for external save/restore
-  const captureAnchorState = useCallback((): ScrollRestorationState<TSort> => {
+  // Capture current scroll state as a permalink-based snapshot.
+  // Finds the first fully visible row in the viewport and stores
+  // the scroll offset relative to that row's top.
+  const captureAnchorState = useCallback(():
+    | ScrollRestorationState
+    | undefined => {
     const scrollOffset = virtualizer.scrollOffset ?? 0;
+    const items = virtualizer.getVirtualItems();
 
-    if (anchor.kind === 'permalink') {
-      const targetVirtualIndex =
-        anchor.index - firstRowIndex + startPlaceholder;
-      const offsetInfo = virtualizer.getOffsetForIndex(
-        targetVirtualIndex,
-        'start',
-      );
-      const itemStart = offsetInfo ? offsetInfo[0] : scrollOffset;
-
-      return {
-        anchor,
-        scrollOffset: scrollOffset - itemStart,
-      };
+    // Find the first fully visible item (start >= scrollOffset)
+    for (const item of items) {
+      if (item.start < scrollOffset) {
+        continue;
+      }
+      const row = rowAtVirtualIndex(item.index);
+      if (row && typeof row === 'object' && 'id' in row) {
+        return {
+          permalinkID: (row as {id: string}).id,
+          index: toLogicalIndex(item.index),
+          scrollOffset: scrollOffset - item.start,
+        };
+      }
     }
 
-    return {
-      anchor,
-      scrollOffset,
-    };
+    return undefined;
   }, [
-    anchor,
-    firstRowIndex,
-    startPlaceholder,
     virtualizer,
     virtualizer.scrollOffset,
+    rowAtVirtualIndex,
+    toLogicalIndex,
   ]);
 
   const anchorState = captureAnchorState();

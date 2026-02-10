@@ -4,7 +4,6 @@ import {queries, type IssueRowSort, type Issues} from '../shared/queries.js';
 import {ZERO_PROJECT_NAME} from '../shared/schema.js';
 import {LoginProvider} from './components/login-provider.js';
 import {useArrayVirtualizer} from './hooks/use-array-virtualizer.js';
-import {useLogin} from './hooks/use-login.js';
 import {ZeroInit} from './zero-init.js';
 
 type RowData = Issues[number];
@@ -28,7 +27,6 @@ function ArrayTestAppContent() {
   const [notFoundPermalink, setNotFoundPermalink] = useState<
     string | undefined
   >(undefined);
-  const [capturedState, setCapturedState] = useState<string | null>(null);
   const [restoreInput, setRestoreInput] = useState<string>('');
 
   const listContextParams = useMemo(
@@ -307,86 +305,43 @@ function ArrayTestAppContent() {
             Scroll Anchor State
           </h3>
           <div style={{fontSize: '12px', fontFamily: 'monospace'}}>
-            <div style={{marginBottom: '4px'}}>
-              <strong>anchor.index:</strong> {scrollState.anchor.index}
-            </div>
-            <div style={{marginBottom: '4px'}}>
-              <strong>anchor.kind:</strong>{' '}
-              <span
-                style={{
-                  padding: '2px 6px',
-                  borderRadius: '3px',
-                  backgroundColor:
-                    scrollState.anchor.kind === 'permalink'
-                      ? '#9c27b0'
-                      : scrollState.anchor.kind === 'forward'
-                        ? '#4caf50'
-                        : '#ff9800',
-                  color: '#fff',
-                  fontSize: '11px',
-                }}
-              >
-                {scrollState.anchor.kind}
-              </span>
-            </div>
-            {scrollState.anchor.kind === 'permalink' && (
-              <div style={{marginBottom: '4px'}}>
-                <strong>anchor.permalinkID:</strong>{' '}
-                {scrollState.anchor.permalinkID}
-              </div>
+            {scrollState ? (
+              <>
+                <div style={{marginBottom: '4px'}}>
+                  <strong>permalinkID:</strong> {scrollState.permalinkID}
+                </div>
+                <div style={{marginBottom: '4px'}}>
+                  <strong>index:</strong> {scrollState.index}
+                </div>
+                <div style={{marginBottom: '4px'}}>
+                  <strong>scrollOffset:</strong> {scrollState.scrollOffset}px
+                </div>
+              </>
+            ) : (
+              <div style={{color: '#999'}}>No visible rows</div>
             )}
-            {(scrollState.anchor.kind === 'forward' ||
-              scrollState.anchor.kind === 'backward') && (
-              <div style={{marginBottom: '4px'}}>
-                <strong>anchor.startRow:</strong>{' '}
-                {scrollState.anchor.startRow
-                  ? JSON.stringify(scrollState.anchor.startRow)
-                  : 'null'}
-              </div>
-            )}
-            <div style={{marginBottom: '4px'}}>
-              <strong>scrollOffset:</strong> {scrollState.scrollOffset}px
-            </div>
           </div>
           <button
+            data-testid="capture-btn"
             onClick={() => {
               const stateStr = JSON.stringify(scrollState, null, 2);
-              setCapturedState(stateStr);
               setRestoreInput(stateStr);
             }}
+            disabled={!scrollState}
             style={{
               width: '100%',
               padding: '8px',
               fontSize: '13px',
-              backgroundColor: '#2196f3',
+              backgroundColor: scrollState ? '#2196f3' : '#ccc',
               color: '#fff',
               border: 'none',
               borderRadius: '3px',
-              cursor: 'pointer',
+              cursor: scrollState ? 'pointer' : 'not-allowed',
               marginTop: '8px',
             }}
           >
             📋 Capture State
           </button>
-          {capturedState && (
-            <div
-              style={{
-                marginTop: '8px',
-                padding: '8px',
-                backgroundColor: '#e8f5e9',
-                border: '1px solid #4caf50',
-                borderRadius: '3px',
-                fontSize: '11px',
-                fontFamily: 'monospace',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                maxHeight: '150px',
-                overflowY: 'auto',
-              }}
-            >
-              {capturedState}
-            </div>
-          )}
 
           {/* Restore State */}
           <div
@@ -407,6 +362,7 @@ function ArrayTestAppContent() {
               Restore State:
             </label>
             <textarea
+              data-testid="restore-input"
               value={restoreInput}
               onChange={e => setRestoreInput(e.target.value)}
               placeholder="Paste captured state JSON here..."
@@ -424,11 +380,11 @@ function ArrayTestAppContent() {
               }}
             />
             <button
+              data-testid="restore-btn"
               onClick={() => {
                 try {
                   const state = JSON.parse(restoreInput);
                   restoreScrollState(state);
-                  setCapturedState(null);
                 } catch (err) {
                   alert('Invalid JSON: ' + (err as Error).message);
                 }
@@ -550,6 +506,7 @@ function ArrayTestAppContent() {
                     <div
                       key={virtualItem.key}
                       data-index={virtualItem.index}
+                      data-row-id={issue ? issue.id : undefined}
                       ref={
                         heightMode === 'dynamic'
                           ? virtualizer.measureElement
@@ -627,25 +584,6 @@ function ArrayTestAppContent() {
 }
 
 function AppContent() {
-  const login = useLogin();
-
-  if (!login.loginState) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-        }}
-      >
-        <div>
-          <h2>Loading...</h2>
-        </div>
-      </div>
-    );
-  }
-
   return <ArrayTestAppContent />;
 }
 
