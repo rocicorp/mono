@@ -36,8 +36,12 @@ const CONNECTION_URI = mustInject('pgConnectionString');
 
 export type OnNoticeFn = (n: postgres.Notice) => void;
 
+const IGNORE_LEVELS = new Set(['DEBUG', 'INFO', 'NOTICE']);
+
 const defaultOnNotice: OnNoticeFn = n => {
-  n.severity !== 'NOTICE' && console.log(n);
+  if (!IGNORE_LEVELS.has(n.severity)) {
+    console.log(n);
+  }
 };
 
 export class TestDBs {
