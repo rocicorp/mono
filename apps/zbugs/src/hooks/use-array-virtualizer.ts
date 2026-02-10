@@ -13,12 +13,48 @@ function makeEven(n: number) {
   return n % 2 === 0 ? n : n + 1;
 }
 
-export interface UseArrayVirtualizerOptions<T, TSort> {
-  estimateSize: (row: T | undefined, index: number) => number;
-  getScrollElement: () => HTMLElement | null;
-  getPageQuery: GetPageQuery<T, TSort>;
-  getSingleQuery: GetSingleQuery<T>;
-  toStartRow: (row: T) => TSort;
+type TanstackUseVirtualizerOptions<
+  TScrollElement extends Element,
+  TItemElement extends Element,
+> = Parameters<typeof useVirtualizer<TScrollElement, TItemElement>>[0];
+
+/**
+ * Options for configuring the array virtualizer.
+ * Extends Tanstack Virtual's options with bidirectional pagination and state management.
+ *
+ * @typeParam TRow - The type of row data returned from queries
+ * @typeParam TSort - The type of data needed to anchor pagination (typically a subset of T)
+ * @typeParam TScrollElement - The type of the scrollable container element
+ * @typeParam TItemElement - The type of the individual item elements
+ */
+export interface UseArrayVirtualizerOptions<
+  TRow,
+  TSort,
+  TScrollElement extends Element = HTMLElement,
+  TItemElement extends Element = Element,
+> extends Omit<
+    TanstackUseVirtualizerOptions<TScrollElement, TItemElement>,
+    // count is managed by useArrayVirtualizer
+    | 'count'
+    // estimateSize is a required param (we call it estimateRowSize)
+    | 'estimateSize'
+    // getItemKey - we have our own logic based on row.id
+    | 'getItemKey'
+    // Only support vertical lists for now
+    | 'horizontal'
+  > {
+  /**
+   * Function to estimate the height of a row. Called with the row data (or undefined for placeholders)
+   * and the virtualizer index. Should return the estimated height in pixels.
+   */
+  estimateRowSize: (row: TRow | undefined, index: number) => number;
+  /** Function that returns a query for fetching a page of rows */
+  getPageQuery: GetPageQuery<TRow, TSort>;
+  /** Function that returns a query for fetching a single row by ID */
+  getSingleQuery: GetSingleQuery<TRow>;
+  /** Function to extract the sort/cursor data from a full row (for pagination anchoring) */
+  toStartRow: (row: TRow) => TSort;
+  /** Optional ID to highlight/scroll to a specific row (permalink functionality) */
   initialPermalinkID?: string | undefined;
   /**
    * Controlled scroll state. When the consumer provides a new value that
@@ -34,23 +70,46 @@ export interface UseArrayVirtualizerOptions<T, TSort> {
    * state, `history.state`, or anywhere else.
    */
   onScrollStateChange?: ((state: ScrollRestorationState) => void) | undefined;
-  debug?: boolean | undefined;
-  overscan?: number | undefined;
 }
 
+/**
+ * Scroll state that can be persisted and restored.
+ * Uses a relative offset from a specific row ID for reliable restoration.
+ */
 export type ScrollRestorationState = {
+  /** The ID of the anchor row */
   scrollAnchorID: string;
+  /** The logical index of the anchor row */
   index: number;
+  /** The scroll offset (in pixels) relative to the anchor row's top edge */
   scrollOffset: number;
 };
 
-export interface UseArrayVirtualizerReturn<T> {
-  virtualizer: Virtualizer<HTMLElement, Element>;
+/**
+ * Return type of the useArrayVirtualizer hook.
+ *
+ * @template T - Row data type
+ * @template TScrollElement - Scroll container element type (Window or Element)
+ * @template TItemElement - Item element type (must extend Element)
+ */
+export interface UseArrayVirtualizerReturn<
+  T,
+  TScrollElement extends Element,
+  TItemElement extends Element,
+> {
+  /** The Tanstack virtualizer instance with virtualization measurements and items */
+  virtualizer: Virtualizer<TScrollElement, TItemElement>;
+  /** Function to get the row data at a specific virtual index (may return undefined for placeholders) */
   rowAt: (index: number) => T | undefined;
+  /** Whether all rows are loaded (pagination complete) */
   complete: boolean;
+  /** Whether the rows array is empty (no data loaded yet or truly empty) */
   rowsEmpty: boolean;
+  /** Whether the initial permalink row was not found after loading completed */
   permalinkNotFound: boolean;
+  /** Estimated total number of items (based on current data) */
   estimatedTotal: number;
+  /** Actual total number of items (only available when pagination is complete) */
   total: number | undefined;
 }
 
@@ -118,8 +177,45 @@ const scrollStatesEqual = (
 // Allows virtualItems to update after programmatic scroll.
 const POSITIONING_SETTLE_DELAY_MS = 50;
 
-export function useArrayVirtualizer<T, TSort>({
-  estimateSize: estimateSizeCallback,
+/**
+ * A React hook that provides efficient virtualization for large arrays with bidirectional
+ * pagination, scroll restoration, and permalink support.
+ *
+ * Features:
+ * - Bidirectional pagination: fetches data pages forward and backward as needed
+ * - Scroll restoration: maintains scroll position across navigation using relative anchoring
+ * - Permalink support: scrolls to and highlights a specific row by ID
+ * - Automatic page size calculation based on viewport height
+ * - Integration with Tanstack Virtual for efficient rendering
+ *
+ * @template T - Row data type
+ * @template TSort - Sort/cursor data type for pagination anchoring
+ * @template TScrollElement - Scroll container element type (Window or HTMLElement)
+ * @template TItemElement - Item element type (must extend Element)
+ *
+ * @param options - Configuration options for the virtualizer
+ * @returns Object containing the virtualizer instance and state information
+ *
+ * @example
+ * ```tsx
+ * const { virtualizer, complete } = useArrayVirtualizer({
+ *   estimateRowSize: (row, index) => row ? 50 : 48,
+ *   getScrollElement: () => document.getElementById('scroll-container'),
+ *   getPageQuery: (anchor) => usePageQuery(anchor),
+ *   getSingleQuery: (id) => useSingleQuery(id),
+ *   toStartRow: (row) => row.id,
+ *   scrollState: historyState.scrollState,
+ *   onScrollStateChange: (state) => updateHistory({ scrollState: state }),
+ * });
+ * ```
+ */
+export function useArrayVirtualizer<
+  T,
+  TSort,
+  TScrollElement extends Element = HTMLElement,
+  TItemElement extends Element = Element,
+>({
+  estimateRowSize: estimateSizeCallback,
   getScrollElement,
   getPageQuery,
   getSingleQuery,
@@ -129,7 +225,13 @@ export function useArrayVirtualizer<T, TSort>({
   onScrollStateChange,
   debug = false,
   overscan = 5,
-}: UseArrayVirtualizerOptions<T, TSort>): UseArrayVirtualizerReturn<T> {
+  ...restVirtualizerOptions
+}: UseArrayVirtualizerOptions<
+  T,
+  TSort,
+  TScrollElement,
+  TItemElement
+>): UseArrayVirtualizerReturn<T, TScrollElement, TItemElement> {
   const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
   const [anchor, setAnchor] = useState<AnchorState<TSort>>(() =>
     initialPermalinkID
@@ -412,7 +514,8 @@ export function useArrayVirtualizer<T, TSort>({
     [rowAtVirtualIndex, estimateSizeCallback],
   );
 
-  const virtualizer = useVirtualizer({
+  const virtualizer = useVirtualizer<TScrollElement, TItemElement>({
+    ...restVirtualizerOptions,
     count: virtualizerCount,
     getScrollElement,
     estimateSize,
@@ -432,6 +535,7 @@ export function useArrayVirtualizer<T, TSort>({
     ),
     overscan,
     debug,
+    horizontal: false,
   });
 
   // Force remeasurement when estimateSize function changes

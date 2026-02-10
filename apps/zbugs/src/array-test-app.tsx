@@ -184,7 +184,7 @@ function ArrayTestAppContent() {
     scrollState,
     onScrollStateChange,
 
-    estimateSize: useCallback(
+    estimateRowSize: useCallback(
       (row: RowData | undefined) => {
         if (!row) {
           return PLACEHOLDER_HEIGHT;
