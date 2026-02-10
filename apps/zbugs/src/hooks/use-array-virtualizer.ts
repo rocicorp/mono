@@ -6,8 +6,14 @@ import {
   type GetSingleQuery,
 } from '../../../../packages/zero-react/src/use-rows.js';
 
+// Make sure this is even since we half it for permalink loading
+const MIN_PAGE_SIZE = 100;
+
+function makeEven(n: number) {
+  return n % 2 === 0 ? n : n + 1;
+}
+
 export interface UseArrayVirtualizerOptions<T, TSort> {
-  pageSize: number;
   estimateSize: (row: T | undefined, index: number) => number;
   getScrollElement: () => HTMLElement | null;
   getPageQuery: GetPageQuery<T, TSort>;
@@ -113,7 +119,6 @@ const scrollStatesEqual = (
 const POSITIONING_SETTLE_DELAY_MS = 50;
 
 export function useArrayVirtualizer<T, TSort>({
-  pageSize,
   estimateSize: estimateSizeCallback,
   getScrollElement,
   getPageQuery,
@@ -125,6 +130,7 @@ export function useArrayVirtualizer<T, TSort>({
   debug = false,
   overscan = 5,
 }: UseArrayVirtualizerOptions<T, TSort>): UseArrayVirtualizerReturn<T> {
+  const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
   const [anchor, setAnchor] = useState<AnchorState<TSort>>(() =>
     initialPermalinkID
       ? {
@@ -432,6 +438,27 @@ export function useArrayVirtualizer<T, TSort>({
   useEffect(() => {
     virtualizer.measure();
   }, [estimateSizeCallback, virtualizer]);
+
+  // Automatically adjust page size based on viewport height
+  useEffect(() => {
+    // Make sure page size is enough to fill the scroll element at least
+    // 3 times. Don't shrink page size.
+    const newPageSize = virtualizer.scrollRect
+      ? Math.max(
+          MIN_PAGE_SIZE,
+          makeEven(
+            Math.ceil(
+              virtualizer.scrollRect.height /
+                // Use first row's estimated size as a proxy
+                estimateSize(0),
+            ) * 3,
+          ),
+        )
+      : MIN_PAGE_SIZE;
+    if (newPageSize > pageSize) {
+      setPageSize(newPageSize);
+    }
+  }, [pageSize, virtualizer.scrollRect, estimateSize]);
 
   const virtualItems = virtualizer.getVirtualItems();
 

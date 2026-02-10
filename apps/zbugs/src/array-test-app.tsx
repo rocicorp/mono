@@ -14,7 +14,6 @@ type RowData = Issues[number];
 
 const DEFAULT_HEIGHT = 275;
 const PLACEHOLDER_HEIGHT = 50;
-const PAGE_SIZE = 100;
 const UNIFORM_ROW_HEIGHT = 63;
 
 const HASH_PREFIX = 'issue-';
@@ -178,7 +177,6 @@ function ArrayTestAppContent() {
     estimatedTotal,
     total,
   } = useArrayVirtualizer<RowData, IssueRowSort>({
-    pageSize: PAGE_SIZE,
     getPageQuery,
     getSingleQuery,
     toStartRow,
