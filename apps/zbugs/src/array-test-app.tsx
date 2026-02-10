@@ -227,6 +227,7 @@ function ArrayTestAppContent() {
               value={permalinkInput}
               onChange={e => setPermalinkInput(e.target.value)}
               placeholder="Enter ID (e.g., 3130)"
+              data-testid="permalink-input"
               style={{
                 width: '100%',
                 padding: '8px',
@@ -241,6 +242,7 @@ function ArrayTestAppContent() {
               <button
                 type="submit"
                 disabled={!permalinkInput.trim()}
+                data-testid="permalink-go-btn"
                 style={{
                   flex: 1,
                   padding: '8px',
@@ -261,6 +263,7 @@ function ArrayTestAppContent() {
                   setPermalinkInput('');
                   setNotFoundPermalink(undefined);
                 }}
+                data-testid="permalink-clear-btn"
                 style={{
                   padding: '8px 16px',
                   fontSize: '13px',

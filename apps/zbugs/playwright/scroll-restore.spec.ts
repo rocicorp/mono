@@ -126,9 +126,7 @@ test.describe('Scroll Restoration', () => {
 
     // Capture the scroll state.
     await page.click('[data-testid="capture-btn"]');
-    const capturedText = await page.inputValue(
-      '[data-testid="restore-input"]',
-    );
+    const capturedText = await page.inputValue('[data-testid="restore-input"]');
     expect(capturedText).toBeTruthy();
 
     // Verify the captured state has the expected structure.
@@ -215,9 +213,7 @@ test.describe('Scroll Restoration', () => {
     expect(beforeRows.length).toBeGreaterThan(0);
 
     await page.click('[data-testid="capture-btn"]');
-    const capturedText = await page.inputValue(
-      '[data-testid="restore-input"]',
-    );
+    const capturedText = await page.inputValue('[data-testid="restore-input"]');
     expect(capturedText).toBeTruthy();
 
     // Scroll to a very different location.
@@ -311,9 +307,7 @@ test.describe('Scroll Restoration', () => {
 
     // Capture the scroll state.
     await page.click('[data-testid="capture-btn"]');
-    const capturedText = await page.inputValue(
-      '[data-testid="restore-input"]',
-    );
+    const capturedText = await page.inputValue('[data-testid="restore-input"]');
     expect(capturedText).toBeTruthy();
 
     // Reload the page — this clears the virtualizer's measurement cache.
@@ -355,5 +349,197 @@ test.describe('Scroll Restoration', () => {
         `Row ${beforeRow.rowId}: position shifted by ${afterRow.viewportRelativeTop - beforeRow.viewportRelativeTop}px (before=${beforeRow.viewportRelativeTop}, after=${afterRow.viewportRelativeTop})`,
       ).toBeLessThanOrEqual(POSITION_TOLERANCE);
     }
+  });
+});
+
+// Helper: set the permalink ID in the input and submit.
+async function setPermalink(page: Page, id: string) {
+  await page.fill('[data-testid="permalink-input"]', id);
+  await page.click('[data-testid="permalink-go-btn"]');
+}
+
+// Helper: clear the permalink.
+async function clearPermalink(page: Page) {
+  await page.click('[data-testid="permalink-clear-btn"]');
+}
+
+// Helper: get the viewport-relative position of a specific row by its ID.
+// Returns undefined if the row is not in the DOM or not visible.
+function getRowPosition(
+  page: Page,
+  rowId: string,
+): Promise<{viewportRelativeTop: number} | undefined> {
+  return page.evaluate(id => {
+    const container = document.querySelector(
+      'div[style*="overflow: auto"][style*="position: relative"]',
+    ) as HTMLElement | null;
+    if (!container) {
+      return undefined;
+    }
+    const el = container.querySelector(`[data-row-id="${id}"]`);
+    if (!el) {
+      return undefined;
+    }
+    const containerRect = container.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    return {viewportRelativeTop: rect.top - containerRect.top};
+  }, rowId);
+}
+
+test.describe('Initial Permalink Positioning', () => {
+  test('initialPermalinkID positions target row at top of viewport', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Scroll down to reveal rows that aren't near the top of the data set.
+    await scrollTo(page, 3000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    // Pick a visible row to use as our permalink target.
+    const rows = await getVisibleRows(page);
+    expect(rows.length).toBeGreaterThan(2);
+    const targetRow = rows[2]; // Use the 3rd visible row.
+
+    // Now set that row as the permalink — this changes initialPermalinkID
+    // which triggers data re-fetching centered on the target and positions
+    // it at the top of the viewport.
+    await setPermalink(page, targetRow.rowId);
+
+    // Wait for the permalink positioning to complete.
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Verify: the target row is now at the top of the viewport.
+    const pos = await getRowPosition(page, targetRow.rowId);
+    expect(pos, `Target row ${targetRow.rowId} should be visible`).toBeTruthy();
+    expect(
+      Math.abs(pos!.viewportRelativeTop),
+      `Target row should be at the top of the viewport, but was at ${pos!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+  });
+
+  test('changing initialPermalinkID repositions to the new target', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Scroll down, pick a row, set permalink.
+    await scrollTo(page, 2000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    const rowsA = await getVisibleRows(page);
+    expect(rowsA.length).toBeGreaterThan(0);
+    const targetA = rowsA[0];
+
+    await setPermalink(page, targetA.rowId);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Verify row A is at the top.
+    const posA = await getRowPosition(page, targetA.rowId);
+    expect(posA, `Row A (${targetA.rowId}) should be visible`).toBeTruthy();
+    expect(
+      Math.abs(posA!.viewportRelativeTop),
+      `Row A should be at the top, but was at ${posA!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+
+    // Clear permalink, scroll to a different area, then pick a different row.
+    await clearPermalink(page);
+    await page.waitForTimeout(200);
+    await scrollTo(page, 5000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    const rowsB = await getVisibleRows(page);
+    expect(rowsB.length).toBeGreaterThan(0);
+    // Find a row that's different from targetA.
+    const targetB = rowsB.find(r => r.rowId !== targetA.rowId) ?? rowsB[0];
+    expect(targetB.rowId).not.toBe(targetA.rowId);
+
+    // Set the new permalink.
+    await setPermalink(page, targetB.rowId);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Verify row B is now at the top.
+    const posB = await getRowPosition(page, targetB.rowId);
+    expect(posB, `Row B (${targetB.rowId}) should be visible`).toBeTruthy();
+    expect(
+      Math.abs(posB!.viewportRelativeTop),
+      `Row B should be at the top, but was at ${posB!.viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+
+    // Verify row A is NOT at the top anymore (it may or may not be visible
+    // depending on how far apart A and B are).
+    const posAAfter = await getRowPosition(page, targetA.rowId);
+    if (posAAfter) {
+      expect(
+        Math.abs(posAAfter.viewportRelativeTop),
+        `Row A should no longer be at the top`,
+      ).toBeGreaterThan(POSITION_TOLERANCE);
+    }
+  });
+
+  test('initialPermalinkID works with shortID', async ({page}) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // Get a shortID from a visible row. The app renders shortIDs in the UI.
+    // We'll extract one from the rendered DOM.
+    const shortID = await page.evaluate(() => {
+      const rows = document.querySelectorAll('[data-row-id]');
+      for (const row of rows) {
+        // Look for the shortID display — it's rendered as "#<number>" in a
+        // span or text node inside the row.
+        const text = row.textContent ?? '';
+        const match = text.match(/#(\d+)/);
+        if (match) {
+          return match[1];
+        }
+      }
+      return null;
+    });
+    expect(shortID, 'Should find a shortID in the rendered rows').toBeTruthy();
+
+    // Scroll away from the top.
+    await scrollTo(page, 4000);
+    await waitForScrollStable(page, 500);
+
+    // Set the shortID as the permalink.
+    await setPermalink(page, shortID!);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // The row with that shortID should now be at the top of the viewport.
+    // We need to find it by its UUID since data-row-id uses UUIDs.
+    const topRows = await getVisibleRows(page);
+    expect(topRows.length).toBeGreaterThan(0);
+    // The first visible row should be the permalink target. Its
+    // viewportRelativeTop should be near 0.
+    expect(
+      Math.abs(topRows[0].viewportRelativeTop),
+      `First visible row should be at the top, but was at ${topRows[0].viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+
+    // Verify this row is actually the one with the matching shortID by
+    // checking the text content.
+    const matchesShortID = await page.evaluate(
+      ({rowId, sid}) => {
+        const el = document.querySelector(`[data-row-id="${rowId}"]`);
+        return el?.textContent?.includes(`#${sid}`) ?? false;
+      },
+      {rowId: topRows[0].rowId, sid: shortID!},
+    );
+    expect(matchesShortID, `Top row should contain shortID #${shortID}`).toBe(
+      true,
+    );
   });
 });
