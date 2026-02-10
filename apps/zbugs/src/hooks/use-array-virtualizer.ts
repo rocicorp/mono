@@ -55,7 +55,7 @@ export interface UseArrayVirtualizerOptions<
   /** Function to extract the sort/cursor data from a full row (for pagination anchoring) */
   toStartRow: (row: TRow) => TSort;
   /** Optional ID to highlight/scroll to a specific row (permalink functionality) */
-  initialPermalinkID?: string | undefined;
+  permalinkID?: string | undefined;
   /**
    * Controlled scroll state. When the consumer provides a new value that
    * differs from what the hook last reported via `onScrollStateChange`, the
@@ -220,7 +220,7 @@ export function useArrayVirtualizer<
   getPageQuery,
   getSingleQuery,
   toStartRow,
-  initialPermalinkID,
+  permalinkID,
   scrollState: externalScrollState,
   onScrollStateChange,
   debug = false,
@@ -234,11 +234,11 @@ export function useArrayVirtualizer<
 >): UseArrayVirtualizerReturn<T, TScrollElement, TItemElement> {
   const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
   const [anchor, setAnchor] = useState<AnchorState<TSort>>(() =>
-    initialPermalinkID
+    permalinkID
       ? {
           kind: 'permalink',
           index: 0,
-          permalinkID: initialPermalinkID,
+          permalinkID,
         }
       : {
           kind: 'forward',
@@ -261,12 +261,12 @@ export function useArrayVirtualizer<
     // loop activates and emission is suppressed until positioning completes.
     // Otherwise use Date.now() so emission (and auto-paging) starts
     // immediately.
-    positionedAt: initialPermalinkID ? 0 : Date.now(),
+    positionedAt: permalinkID ? 0 : Date.now(),
     lastTargetOffset: null as number | null,
     // The anchor that the merged effect has requested.  Used by the
     // positioning effect to skip stale positioning when the React state
     // update from replaceAnchor hasn't committed yet.
-    expectedAnchorID: initialPermalinkID ?? (null as string | null),
+    expectedAnchorID: permalinkID ?? (null as string | null),
   });
 
   // Track the last state we emitted via onScrollStateChange so we can
@@ -289,7 +289,7 @@ export function useArrayVirtualizer<
   const prevExternalStateRef = useRef<ScrollRestorationState | undefined>(
     undefined,
   );
-  const prevPermalinkIDRef = useRef(initialPermalinkID);
+  const prevPermalinkIDRef = useRef(permalinkID);
 
   // ---- Unified effect: external scroll state + permalink changes ----
   // External scroll-state changes take priority over URL-hash changes so
@@ -300,10 +300,10 @@ export function useArrayVirtualizer<
       externalScrollState,
       prevExternalStateRef.current,
     );
-    const permalinkChanged = initialPermalinkID !== prevPermalinkIDRef.current;
+    const permalinkChanged = permalinkID !== prevPermalinkIDRef.current;
 
     prevExternalStateRef.current = externalScrollState;
-    prevPermalinkIDRef.current = initialPermalinkID;
+    prevPermalinkIDRef.current = permalinkID;
 
     // --- External scroll state (restore from history.state, etc.) ---
     // When both external state and permalink changed simultaneously and
@@ -350,16 +350,16 @@ export function useArrayVirtualizer<
       return;
     }
 
-    // --- URL hash navigation (initialPermalinkID changed) ---
+    // --- URL hash navigation (permalinkID changed) ---
     if (!permalinkChanged) {
       return;
     }
 
-    const nextAnchor: AnchorState<TSort> = initialPermalinkID
+    const nextAnchor: AnchorState<TSort> = permalinkID
       ? {
           kind: 'permalink',
           index: 0,
-          permalinkID: initialPermalinkID,
+          permalinkID,
         }
       : {
           kind: 'forward',
@@ -371,10 +371,10 @@ export function useArrayVirtualizer<
     scrollInternalRef.current.scrollRetryCount = 0;
     scrollInternalRef.current.lastTargetOffset = null;
 
-    if (initialPermalinkID) {
+    if (permalinkID) {
       // Navigating TO a permalink — activate the positioning loop.
       scrollInternalRef.current.positionedAt = 0;
-      scrollInternalRef.current.expectedAnchorID = initialPermalinkID;
+      scrollInternalRef.current.expectedAnchorID = permalinkID;
       scrollInternalRef.current.pendingScroll = null;
       scrollInternalRef.current.pendingScrollIsRelative = false;
     } else {
@@ -390,7 +390,7 @@ export function useArrayVirtualizer<
       scrollInternalRef.current.pendingScroll = 0;
       scrollInternalRef.current.pendingScrollIsRelative = false;
     }
-  }, [initialPermalinkID, externalScrollState, replaceAnchor]);
+  }, [permalinkID, externalScrollState, replaceAnchor]);
 
   const {
     rowAt,

@@ -180,7 +180,7 @@ function ArrayTestAppContent() {
     getPageQuery,
     getSingleQuery,
     toStartRow,
-    initialPermalinkID: permalinkID,
+    permalinkID,
     scrollState,
     onScrollStateChange,
 
