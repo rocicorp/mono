@@ -3,7 +3,10 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {queries, type IssueRowSort, type Issues} from '../shared/queries.js';
 import {ZERO_PROJECT_NAME} from '../shared/schema.js';
 import {LoginProvider} from './components/login-provider.js';
-import {useArrayVirtualizer} from './hooks/use-array-virtualizer.js';
+import {
+  useArrayVirtualizer,
+  type ScrollRestorationState,
+} from './hooks/use-array-virtualizer.js';
 import {useHash} from './hooks/use-hash.js';
 import {ZeroInit} from './zero-init.js';
 
@@ -24,10 +27,19 @@ function parsePermalinkFromHash(hash: string): string | undefined {
   return undefined;
 }
 
-function setPermalinkHash(id: string | undefined) {
-  const url = new URL(location.href);
-  url.hash = id ? `${HASH_PREFIX}${id}` : '';
-  window.history.pushState(null, '', url);
+function isScrollRestorationState(
+  state: unknown,
+): state is ScrollRestorationState {
+  return (
+    state !== null &&
+    typeof state === 'object' &&
+    'permalinkID' in state &&
+    typeof (state as Record<string, unknown>).permalinkID === 'string' &&
+    'index' in state &&
+    typeof (state as Record<string, unknown>).index === 'number' &&
+    'scrollOffset' in state &&
+    typeof (state as Record<string, unknown>).scrollOffset === 'number'
+  );
 }
 
 const toStartRow = (row: {id: string; modified: number; created: number}) => ({
@@ -103,6 +115,16 @@ function ArrayTestAppContent() {
     [listContextParams],
   );
 
+  const getScrollRestoreState = useCallback(() => {
+    const state = window.history.state;
+    if (isScrollRestorationState(state)) {
+      // Clear so it's only consumed once per navigation.
+      window.history.replaceState(null, '');
+      return state as ScrollRestorationState;
+    }
+    return undefined;
+  }, []);
+
   const {
     virtualizer,
     rowAt,
@@ -117,6 +139,7 @@ function ArrayTestAppContent() {
     getSingleQuery,
     toStartRow,
     initialPermalinkID: permalinkID,
+    getScrollRestoreState,
 
     estimateSize: useCallback(
       (row: RowData | undefined) => {
@@ -145,13 +168,75 @@ function ArrayTestAppContent() {
     getScrollElement: useCallback(() => parentRef.current, []),
   });
 
+  // Ref to track latest scroll state for saving to history.state.
+  const scrollStateForSaveRef = useRef<ScrollRestorationState | undefined>(
+    undefined,
+  );
+  scrollStateForSaveRef.current = scrollState;
+
+  // Timer ref for debounced scroll state saving.
+  const saveStateTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Navigate to a permalink (or clear it). Saves the current scroll state
+  // to the current history entry before pushing a new entry.
+  const setPermalinkHash = useCallback((id: string | undefined) => {
+    // Flush any pending debounced save and save immediately.
+    clearTimeout(saveStateTimerRef.current);
+    const currentState = scrollStateForSaveRef.current;
+    if (currentState) {
+      window.history.replaceState(currentState, '');
+    }
+
+    const url = new URL(location.href);
+    url.hash = id ? `${HASH_PREFIX}${id}` : '';
+    window.history.pushState(null, '', url);
+  }, []);
+
+  // Save scroll state to history.state via replaceState, throttled on scroll.
+  useEffect(() => {
+    const scrollEl = parentRef.current;
+    if (!scrollEl) return;
+
+    let lastSaveTime = 0;
+    const THROTTLE_MS = 50;
+
+    const saveState = () => {
+      clearTimeout(saveStateTimerRef.current);
+      const state = scrollStateForSaveRef.current;
+      if (state) {
+        window.history.replaceState(state, '');
+      }
+      lastSaveTime = Date.now();
+    };
+
+    const onScroll = () => {
+      const elapsed = Date.now() - lastSaveTime;
+      if (elapsed >= THROTTLE_MS) {
+        saveState();
+      } else {
+        // Schedule a trailing save so the final position is always stored.
+        clearTimeout(saveStateTimerRef.current);
+        saveStateTimerRef.current = setTimeout(
+          saveState,
+          THROTTLE_MS - elapsed,
+        );
+      }
+    };
+
+    scrollEl.addEventListener('scroll', onScroll, {passive: true});
+    return () => {
+      scrollEl.removeEventListener('scroll', onScroll);
+      clearTimeout(saveStateTimerRef.current);
+    };
+  }, []);
+
   // Reset permalink if not found (but keep the input value)
   useEffect(() => {
     if (permalinkNotFound && permalinkID) {
       setNotFoundPermalink(permalinkID);
       setPermalinkHash(undefined);
     }
-  }, [permalinkNotFound, permalinkID]);
+  }, [permalinkNotFound, permalinkID, setPermalinkHash]);
 
   const virtualItems = virtualizer.getVirtualItems();
 

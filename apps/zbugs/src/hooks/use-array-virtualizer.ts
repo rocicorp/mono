@@ -15,6 +15,13 @@ export interface UseArrayVirtualizerOptions<T, TSort> {
   getSingleQuery: GetSingleQuery<T>;
   toStartRow: (row: T) => TSort;
   initialPermalinkID?: string | undefined;
+  /** Called when initialPermalinkID changes.  If it returns a state,
+   *  that state is restored (with scroll offset) instead of the default
+   *  align-to-top positioning.  Useful for back/forward scroll restoration
+   *  driven by history.state. */
+  getScrollRestoreState?:
+    | (() => ScrollRestorationState | undefined)
+    | undefined;
   debug?: boolean | undefined;
   overscan?: number | undefined;
 }
@@ -90,6 +97,7 @@ export function useArrayVirtualizer<T, TSort>({
   getSingleQuery,
   toStartRow,
   initialPermalinkID,
+  getScrollRestoreState,
   debug = false,
   overscan = 5,
 }: UseArrayVirtualizerOptions<T, TSort>): UseArrayVirtualizerReturn<T> {
@@ -125,6 +133,25 @@ export function useArrayVirtualizer<T, TSort>({
   );
 
   useEffect(() => {
+    // If the consumer provides a scroll-restore callback (e.g. reading
+    // history.state on back/forward), use that instead of the default
+    // align-to-top positioning.
+    const restoreState = getScrollRestoreState?.();
+    if (restoreState) {
+      replaceAnchor({
+        kind: 'permalink',
+        index: restoreState.index,
+        permalinkID: restoreState.permalinkID,
+      });
+      scrollStateRef.current.positionedAt = 0;
+      scrollStateRef.current.scrollRetryCount = 0;
+      scrollStateRef.current.pendingScroll = restoreState.scrollOffset;
+      scrollStateRef.current.pendingScrollIsRelative = true;
+      scrollStateRef.current.lastTargetOffset = null;
+      setRestoreTrigger(prev => prev + 1);
+      return;
+    }
+
     const nextAnchor: AnchorState<TSort> = initialPermalinkID
       ? {
           kind: 'permalink',
@@ -141,7 +168,7 @@ export function useArrayVirtualizer<T, TSort>({
     scrollStateRef.current.positionedAt = 0;
     scrollStateRef.current.scrollRetryCount = 0;
     scrollStateRef.current.lastTargetOffset = null;
-  }, [initialPermalinkID, replaceAnchor]);
+  }, [initialPermalinkID, replaceAnchor, getScrollRestoreState]);
 
   const {
     rowAt,

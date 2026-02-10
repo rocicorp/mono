@@ -778,3 +778,184 @@ test.describe('URL Hash Permalink', () => {
     ).toBeLessThanOrEqual(POSITION_TOLERANCE);
   });
 });
+
+test.describe('History State Scroll Restoration', () => {
+  test('back/forward restores scroll positions across permalink navigations', async ({
+    page,
+  }) => {
+    // 1. Navigate to "" (no permalink).
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+
+    // 2. Check that first row is at top of viewport.
+    const initialRows = await getVisibleRows(page);
+    expect(initialRows.length).toBeGreaterThan(0);
+    expect(
+      Math.abs(initialRows[0].viewportRelativeTop),
+      `First row should be at top, was ${initialRows[0].viewportRelativeTop}px`,
+    ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+
+    // 3. Scroll down 50px.
+    await scrollTo(page, 50);
+    await waitForScrollStable(page, 300);
+    await page.waitForTimeout(300);
+    // Record visible rows at this position for later verification.
+    const rowsAtNoHash50 = await getVisibleRows(page);
+
+    // 4. Navigate to 3130.
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // 5. Check that 3130 is at 0 in the viewport.
+    const rows3130 = await getVisibleRows(page);
+    expect(rows3130.length).toBeGreaterThan(0);
+    const is3130 = await page.evaluate(
+      ({rowId}) => {
+        const el = document.querySelector(`[data-row-id="${rowId}"]`);
+        return el?.textContent?.includes('#3130') ?? false;
+      },
+      {rowId: rows3130[0].rowId},
+    );
+    expect(is3130, 'First visible row should be #3130').toBe(true);
+    expect(Math.abs(rows3130[0].viewportRelativeTop)).toBeLessThanOrEqual(
+      POSITION_TOLERANCE,
+    );
+    const base3130 = await getScrollTop(page);
+
+    // 6. Scroll down 100px from 3130-at-top.
+    await scrollTo(page, base3130 + 100);
+    await waitForScrollStable(page, 300);
+    await page.waitForTimeout(300);
+    // Record visible rows at this position.
+    const rowsAt3130Plus100 = await getVisibleRows(page);
+
+    // 7. Navigate to 3230.
+    await setPermalink(page, '3230');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // 8. Check that 3230 is at 0 in the viewport.
+    const rows3230 = await getVisibleRows(page);
+    expect(rows3230.length).toBeGreaterThan(0);
+    const is3230 = await page.evaluate(
+      ({rowId}) => {
+        const el = document.querySelector(`[data-row-id="${rowId}"]`);
+        return el?.textContent?.includes('#3230') ?? false;
+      },
+      {rowId: rows3230[0].rowId},
+    );
+    expect(is3230, 'First visible row should be #3230').toBe(true);
+    expect(Math.abs(rows3230[0].viewportRelativeTop)).toBeLessThanOrEqual(
+      POSITION_TOLERANCE,
+    );
+    const base3230 = await getScrollTop(page);
+
+    // 9. Scroll down 150px from 3230-at-top.
+    await scrollTo(page, base3230 + 150);
+    await waitForScrollStable(page, 300);
+    await page.waitForTimeout(300);
+    // Record visible rows at this position.
+    const rowsAt3230Plus150 = await getVisibleRows(page);
+
+    // 10. Hit back → should restore 3130 + 100px scroll.
+    await page.goBack({waitUntil: 'commit'});
+    await page.waitForFunction(
+      () => window.location.hash === '#issue-3130',
+      undefined,
+      {timeout: 5000},
+    );
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    await waitForScrollStable(page, 300);
+
+    // 11. Verify same rows visible at same viewport-relative positions.
+    const rowsAfterBack1 = await getVisibleRows(page);
+    const afterBack1Map = new Map(rowsAfterBack1.map(r => [r.rowId, r]));
+    let matchCount1 = 0;
+    for (const before of rowsAt3130Plus100) {
+      const after = afterBack1Map.get(before.rowId);
+      if (after) {
+        expect(
+          Math.abs(after.viewportRelativeTop - before.viewportRelativeTop),
+          `Row ${before.rowId}: position shifted by ${after.viewportRelativeTop - before.viewportRelativeTop}px after back to 3130`,
+        ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+        matchCount1++;
+      }
+    }
+    expect(
+      matchCount1,
+      'At least some rows from the 3130+100 position should be visible after back',
+    ).toBeGreaterThanOrEqual(2);
+
+    // 12. Hit forward → should restore 3230 + 150px scroll.
+    await page.goForward({waitUntil: 'commit'});
+    await page.waitForFunction(
+      () => window.location.hash === '#issue-3230',
+      undefined,
+      {timeout: 5000},
+    );
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    await waitForScrollStable(page, 300);
+
+    // 13. Verify same rows visible at same viewport-relative positions.
+    const rowsAfterForward = await getVisibleRows(page);
+    const afterForwardMap = new Map(rowsAfterForward.map(r => [r.rowId, r]));
+    let matchCount2 = 0;
+    for (const before of rowsAt3230Plus150) {
+      const after = afterForwardMap.get(before.rowId);
+      if (after) {
+        expect(
+          Math.abs(after.viewportRelativeTop - before.viewportRelativeTop),
+          `Row ${before.rowId}: position shifted by ${after.viewportRelativeTop - before.viewportRelativeTop}px after forward to 3230`,
+        ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+        matchCount2++;
+      }
+    }
+    expect(
+      matchCount2,
+      'At least some rows from the 3230+150 position should be visible after forward',
+    ).toBeGreaterThanOrEqual(2);
+
+    // 14. Hit back twice → 3230 → 3130 → no-hash (scrollTop 50).
+    await page.goBack({waitUntil: 'commit'});
+    await page.waitForFunction(
+      () => window.location.hash === '#issue-3130',
+      undefined,
+      {timeout: 5000},
+    );
+    await waitForScrollStable(page, 300);
+
+    await page.goBack({waitUntil: 'commit'});
+    await page.waitForFunction(() => window.location.hash === '', undefined, {
+      timeout: 5000,
+    });
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+    await waitForScrollStable(page, 300);
+
+    // 15. Verify same rows visible at same viewport-relative positions.
+    const rowsAfterBackTwice = await getVisibleRows(page);
+    const afterBackTwiceMap = new Map(
+      rowsAfterBackTwice.map(r => [r.rowId, r]),
+    );
+    let matchCount3 = 0;
+    for (const before of rowsAtNoHash50) {
+      const after = afterBackTwiceMap.get(before.rowId);
+      if (after) {
+        expect(
+          Math.abs(after.viewportRelativeTop - before.viewportRelativeTop),
+          `Row ${before.rowId}: position shifted by ${after.viewportRelativeTop - before.viewportRelativeTop}px after back to no-hash`,
+        ).toBeLessThanOrEqual(POSITION_TOLERANCE);
+        matchCount3++;
+      }
+    }
+    expect(
+      matchCount3,
+      'At least some rows from the no-hash+50 position should be visible after back twice',
+    ).toBeGreaterThanOrEqual(2);
+  });
+});
