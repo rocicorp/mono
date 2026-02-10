@@ -1,4 +1,4 @@
-import {useQuery, useZero, useZeroVirtualizer} from '@rocicorp/zero/react';
+import {useQuery, useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
 import React, {
@@ -13,6 +13,7 @@ import React, {
 import {toast} from 'react-toastify';
 import {useDebouncedCallback} from 'use-debounce';
 import {useParams, useSearch} from 'wouter';
+import {useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {
   queries,
@@ -26,16 +27,18 @@ import {IssueLink} from '../../components/issue-link.tsx';
 import {Link} from '../../components/link.tsx';
 import {OnboardingModal} from '../../components/onboarding-modal.tsx';
 import {RelativeTime} from '../../components/relative-time.tsx';
+import {
+  useArrayVirtualizer,
+  type ScrollRestorationState,
+} from '../../hooks/use-array-virtualizer.ts';
 import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
 import {useHash} from '../../hooks/use-hash.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useWouterPermalinkState} from '../../hooks/use-wouter-permalink-state.ts';
 import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
-import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {isGigabugs, links, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 import {getIDFromString} from '../issue/get-id.tsx';
@@ -109,7 +112,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
         labels,
         open,
         textFilter,
-        permalinkID,
       }) as const,
     [
       projectName,
@@ -120,7 +122,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       open,
       textFilter,
       labels,
-      permalinkID,
     ],
   );
 
@@ -162,8 +163,63 @@ export function ListPage({onReady}: {onReady: () => void}) {
     navigate(`#issue-${id}`);
   };
 
-  const [permalinkState, setPermalinkState] =
-    useWouterPermalinkState<IssueRowSort>();
+  const scrollStateFromHistory =
+    useHistoryState<ScrollRestorationState | null>();
+
+  const scrollState = useMemo(
+    () => scrollStateFromHistory,
+    [
+      scrollStateFromHistory?.scrollAnchorID,
+      scrollStateFromHistory?.index,
+      scrollStateFromHistory?.scrollOffset,
+    ],
+  );
+
+  const handleScrollStateChange = useCallback(
+    (state: ScrollRestorationState) => {
+      window.history.replaceState(state, '', window.location.href);
+    },
+    [],
+  );
+
+  const estimateRowSize = useCallback(() => ITEM_SIZE, []);
+
+  const getScrollElement = useCallback(() => listRef.current, []);
+
+  const getPageQuery = useCallback(
+    (limit: number, start: IssueRowSort | null, dir: 'forward' | 'backward') =>
+      queries.issueListV2({
+        listContext: listContextParams,
+        userID: z.userID,
+        limit,
+        start,
+        dir,
+        inclusive: start === null,
+      }),
+    [listContextParams, z.userID],
+  );
+
+  const getSingleQuery = useCallback(
+    (id: string) => {
+      // Allow short ID too.
+      const {idField, idValue} = getIDFromString(id);
+      return queries.listIssueByID({
+        idField,
+        idValue,
+        listContext: listContextParams,
+      });
+    },
+    [listContextParams],
+  );
+
+  const toStartRow = useCallback(
+    (row: {id: string; modified: number; created: number}) => ({
+      id: row.id,
+      modified: row.modified,
+      created: row.created,
+    }),
+    [],
+  );
 
   const {
     virtualizer,
@@ -173,48 +229,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
     permalinkNotFound,
     estimatedTotal,
     total,
-  } = useZeroVirtualizer({
-    estimateSize: () => ITEM_SIZE,
-    getScrollElement: () => listRef.current,
-    getRowKey: row => row.id,
-
+  } = useArrayVirtualizer({
+    estimateRowSize,
+    getScrollElement,
+    permalinkID: permalinkID ?? undefined,
     listContextParams,
-    permalinkID,
-
-    getPageQuery: (
-      limit: number,
-      start: IssueRowSort | null,
-      dir: 'forward' | 'backward',
-    ) =>
-      queries.issueListV2({
-        listContext: listContextParams,
-        userID: z.userID,
-        limit,
-        start,
-        dir,
-        inclusive: start === null,
-      }),
-
-    getSingleQuery: (id: string) => {
-      // Allow short ID too.
-      const {idField, idValue} = getIDFromString(id);
-      return queries.listIssueByID({
-        idField,
-        idValue,
-        listContext: listContextParams,
-      });
-    },
-
-    toStartRow: row => ({
-      id: row.id,
-      modified: row.modified,
-      created: row.created,
-    }),
-
-    options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
-
-    permalinkState,
-    onPermalinkStateChange: setPermalinkState,
+    getPageQuery,
+    getSingleQuery,
+    toStartRow,
+    scrollState: scrollState ?? undefined,
+    onScrollStateChange: handleScrollStateChange,
   });
 
   useEffect(() => {

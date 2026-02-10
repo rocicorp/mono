@@ -176,11 +176,12 @@ function ArrayTestAppContent() {
     permalinkNotFound,
     estimatedTotal,
     total,
-  } = useArrayVirtualizer<RowData, IssueRowSort>({
+  } = useArrayVirtualizer<RowData, IssueRowSort, string>({
     getPageQuery,
     getSingleQuery,
     toStartRow,
     permalinkID,
+    listContextParams: 'test-list',
     scrollState,
     onScrollStateChange,
 

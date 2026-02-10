@@ -24,12 +24,14 @@ type TanstackUseVirtualizerOptions<
  *
  * @typeParam TRow - The type of row data returned from queries
  * @typeParam TSort - The type of data needed to anchor pagination (typically a subset of T)
+ * @typeParam TListContextParams - The type of parameters that define the list's query context
  * @typeParam TScrollElement - The type of the scrollable container element
  * @typeParam TItemElement - The type of the individual item elements
  */
 export interface UseArrayVirtualizerOptions<
   TRow,
   TSort,
+  TListContextParams,
   TScrollElement extends Element = HTMLElement,
   TItemElement extends Element = Element,
 > extends Omit<
@@ -56,6 +58,8 @@ export interface UseArrayVirtualizerOptions<
   toStartRow: (row: TRow) => TSort;
   /** Optional ID to highlight/scroll to a specific row (permalink functionality) */
   permalinkID?: string | undefined;
+  /** Parameters that define the list's query context (filters, sort order, etc.) */
+  listContextParams: TListContextParams;
   /**
    * Controlled scroll state. When the consumer provides a new value that
    * differs from what the hook last reported via `onScrollStateChange`, the
@@ -212,6 +216,7 @@ const POSITIONING_SETTLE_DELAY_MS = 50;
 export function useArrayVirtualizer<
   T,
   TSort,
+  TListContextParams,
   TScrollElement extends Element = HTMLElement,
   TItemElement extends Element = Element,
 >({
@@ -221,6 +226,7 @@ export function useArrayVirtualizer<
   getSingleQuery,
   toStartRow,
   permalinkID,
+  listContextParams,
   scrollState: externalScrollState,
   onScrollStateChange,
   debug = false,
@@ -229,6 +235,7 @@ export function useArrayVirtualizer<
 }: UseArrayVirtualizerOptions<
   T,
   TSort,
+  TListContextParams,
   TScrollElement,
   TItemElement
 >): UseArrayVirtualizerReturn<T, TScrollElement, TItemElement> {
@@ -252,6 +259,22 @@ export function useArrayVirtualizer<
   const [maxIndexSeen, setMaxIndexSeen] = useState<number | null>(null);
   const [hasReachedStart, setHasReachedStart] = useState(false);
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
+
+  // Track the last listContextParams to detect context changes
+  const prevListContextParamsRef = useRef(listContextParams);
+  const isListContextCurrent =
+    prevListContextParamsRef.current === listContextParams;
+
+  // Reset pagination state when list context changes
+  useEffect(() => {
+    if (!isListContextCurrent) {
+      prevListContextParamsRef.current = listContextParams;
+      setMinIndexSeen(null);
+      setMaxIndexSeen(null);
+      setHasReachedStart(false);
+      setHasReachedEnd(false);
+    }
+  }, [isListContextCurrent, listContextParams]);
 
   const scrollInternalRef = useRef({
     pendingScroll: null as number | null,
