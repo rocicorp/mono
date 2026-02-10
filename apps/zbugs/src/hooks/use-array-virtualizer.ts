@@ -8,7 +8,6 @@ import {
 
 export interface UseArrayVirtualizerOptions<T, TSort> {
   pageSize: number;
-  placeholderHeight: number;
   estimateSize: (row: T | undefined, index: number) => number;
   getScrollElement: () => HTMLElement | null;
   getPageQuery: GetPageQuery<T, TSort>;
@@ -42,6 +41,7 @@ export type ScrollRestorationState = {
 export interface UseArrayVirtualizerReturn<T> {
   virtualizer: Virtualizer<HTMLElement, Element>;
   rowAt: (index: number) => T | undefined;
+  complete: boolean;
   rowsEmpty: boolean;
   permalinkNotFound: boolean;
   estimatedTotal: number;
@@ -114,7 +114,6 @@ const POSITIONING_SETTLE_DELAY_MS = 50;
 
 export function useArrayVirtualizer<T, TSort>({
   pageSize,
-  placeholderHeight,
   estimateSize: estimateSizeCallback,
   getScrollElement,
   getPageQuery,
@@ -402,12 +401,9 @@ export function useArrayVirtualizer<T, TSort>({
   const estimateSize = useCallback(
     (index: number) => {
       const row = rowAtVirtualIndex(index);
-      if (!row) {
-        return placeholderHeight;
-      }
       return estimateSizeCallback(row, index);
     },
-    [rowAtVirtualIndex, placeholderHeight, estimateSizeCallback],
+    [rowAtVirtualIndex, estimateSizeCallback],
   );
 
   const virtualizer = useVirtualizer({
@@ -780,6 +776,7 @@ export function useArrayVirtualizer<T, TSort>({
   return {
     virtualizer,
     rowAt: rowAtVirtualIndex,
+    complete,
     rowsEmpty,
     permalinkNotFound,
     estimatedTotal,

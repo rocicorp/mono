@@ -179,7 +179,6 @@ function ArrayTestAppContent() {
     total,
   } = useArrayVirtualizer<RowData, IssueRowSort>({
     pageSize: PAGE_SIZE,
-    placeholderHeight: PLACEHOLDER_HEIGHT,
     getPageQuery,
     getSingleQuery,
     toStartRow,
