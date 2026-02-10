@@ -651,8 +651,9 @@ class ChangeMaker {
     ).map(change => ['data', change] satisfies Data);
 
     this.#lc
+      .withContext('tag', event.event.tag)
       .withContext('query', event.context.query)
-      .info?.(`${changes.length} schema change(s)`, changes);
+      .info?.(`${changes.length} schema change(s)`, {changes});
 
     const replicaIdentities = replicaIdentitiesForTablesWithoutPrimaryKeys(
       event.schema,

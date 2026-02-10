@@ -1492,8 +1492,11 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       INSERT INTO existing_full (a, b) VALUES ('e', 'f');
 
       ALTER PUBLICATION zero_some_public ADD TABLE existing;
-      ALTER PUBLICATION zero_some_public ADD TABLE existing_full;
+      ALTER TABLE existing REPLICA IDENTITY FULL;
       UPDATE existing SET a = a;
+      ALTER TABLE existing REPLICA IDENTITY DEFAULT;
+
+      ALTER PUBLICATION zero_some_public ADD TABLE existing_full;
       UPDATE existing_full SET a = a;
       `,
       [
@@ -1510,6 +1513,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         },
         {tag: 'create-index'},
         {tag: 'create-index'},
+        {tag: 'update-table-metadata'},
+        {tag: 'update'},
+        {tag: 'update'},
+        {tag: 'update-table-metadata'},
         {
           tag: 'create-table',
           metadata: {
@@ -1519,8 +1526,6 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           },
         },
         {tag: 'create-index'},
-        {tag: 'update'},
-        {tag: 'update'},
         {tag: 'update'},
         {tag: 'update'},
       ],
