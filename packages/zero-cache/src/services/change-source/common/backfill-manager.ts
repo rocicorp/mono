@@ -36,6 +36,9 @@ type RunningBackfillState = {
   minMajorVersion: string;
 };
 
+const MIN_BACKOFF_INTERVAL_MS = 2_000;
+const MAX_BACKOFF_INTERVAL_MS = 60_000;
+
 /**
  * The BackfillManager initiates backfills for BackfillRequests from the
  * change-streamer (i.e. unfinished backfills from previous sessions)
@@ -80,10 +83,15 @@ export class BackfillManager implements Cancelable, Listener {
     lc: LogContext,
     changeStreamer: ChangeStreamMultiplexer,
     backfillStreamer: BackfillStreamer,
+    minBackoffMs = MIN_BACKOFF_INTERVAL_MS,
+    maxBackoffMs = MAX_BACKOFF_INTERVAL_MS,
   ) {
     this.#lc = lc.withContext('component', 'backfill-manager');
     this.#changeStreamer = changeStreamer;
     this.#backfillStreamer = backfillStreamer;
+    this.#minBackoffMs = minBackoffMs;
+    this.#maxBackoffMs = maxBackoffMs;
+    this.#retryDelayMs = minBackoffMs;
   }
 
   run(lastWatermark: string, initialRequests: BackfillRequest[]) {
@@ -94,11 +102,13 @@ export class BackfillManager implements Cancelable, Listener {
     this.#checkAndStartBackfill();
   }
 
-  // TODO: This currently starts pending backfills immediately. Consider adding
-  //       backoff logic in case of pathological scenarios where requests
-  //       continually fail.
+  readonly #minBackoffMs: number;
+  readonly #maxBackoffMs: number;
+  #retryDelayMs: number;
+  #backfillRetryTimer: NodeJS.Timeout | undefined;
+
   #checkAndStartBackfill() {
-    if (this.#runningBackfill === null) {
+    if (!this.#backfillRetryTimer && !this.#runningBackfill) {
       // Use the iterator to pick the first request.
       for (const first of this.#requiredBackfills.values()) {
         const state = {request: first, minMajorVersion: ''};
@@ -106,11 +116,33 @@ export class BackfillManager implements Cancelable, Listener {
 
         this.#runningBackfill = state;
         void this.#runBackfill(lc, state)
-          .then(() => this.#stopRunningBackfill('backfill exited', state))
-          .catch(e => this.#stopRunningBackfill(String(e), state));
+          .then(() => {
+            this.#stopRunningBackfill('backfill exited', state);
+            this.#retryDelayMs = this.#minBackoffMs; // reset on success
+          })
+          // For unexpected errors (e.g. upstream replication slot
+          // unavailability), retry with exponential backoff.
+          .catch(e => {
+            this.#stopRunningBackfill(String(e), state);
+            this.#retryBackfillWithBackoff(e);
+          });
         return;
       }
     }
+  }
+
+  #retryBackfillWithBackoff(e: unknown) {
+    const log = this.#retryDelayMs === this.#maxBackoffMs ? 'error' : 'warn';
+    this.#lc[log]?.(
+      `Error running backfill. Retrying in ${this.#retryDelayMs} ms`,
+      e,
+    );
+    this.#backfillRetryTimer = setTimeout(() => {
+      this.#backfillRetryTimer = undefined;
+      this.#checkAndStartBackfill();
+    }, this.#retryDelayMs);
+
+    this.#retryDelayMs = Math.min(this.#retryDelayMs * 2, this.#maxBackoffMs);
   }
 
   async #runBackfill(lc: LogContext, state: RunningBackfillState) {
@@ -435,5 +467,6 @@ export class BackfillManager implements Cancelable, Listener {
 
   cancel(): void {
     this.#stopRunningBackfill(`change stream canceled`);
+    clearTimeout(this.#backfillRetryTimer);
   }
 }

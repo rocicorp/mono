@@ -1,4 +1,4 @@
-import type {LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../../shared/src/must.ts';
@@ -21,14 +21,20 @@ describe('backfill-manager', () => {
   let backfillManager: BackfillManager;
   let changeStream: ChangeStreamMultiplexer;
   let backfillRequests: BackfillRequest[];
-  let testStreams: (MessageBackfill | BackfillCompleted)[][];
+  let testStreams: ((MessageBackfill | BackfillCompleted)[] | Error)[];
   let changes: Queue<ChangeStreamMessage>;
   let lc: LogContext;
 
   beforeEach(() => {
     lc = createSilentLogContext();
     changeStream = new ChangeStreamMultiplexer(lc, '123');
-    backfillManager = new BackfillManager(lc, changeStream, backfillStreamer);
+    backfillManager = new BackfillManager(
+      lc,
+      changeStream,
+      backfillStreamer,
+      10,
+      50,
+    );
     changeStream.addProducers(backfillManager).addListeners(backfillManager);
     backfillRequests = [];
     testStreams = [];
@@ -51,6 +57,11 @@ describe('backfill-manager', () => {
       testStreams.shift(),
       `No more testStreams configured by test`,
     );
+
+    if (stream instanceof Error) {
+      throw stream; // For testing backfill errors
+    }
+
     for (const msg of stream) {
       yield msg;
     }
@@ -1255,6 +1266,80 @@ describe('backfill-manager', () => {
     ]);
   });
 
+  test('backfill retried on stream error', async () => {
+    testStreams.push(
+      new Error('failure 1'),
+      new Error('failure 2'),
+      new Error('failure 3'),
+      [
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          columns: ['b'],
+        },
+      ],
+    );
+
+    void backfillManager.run('123', [
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {
+          metadata: {rowKey: {a: 123}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+    ]);
+
+    expect(await drainChanges(3)).toMatchObject([
+      ['begin', {tag: 'begin'}, {commitWatermark: '123.01'}],
+      [
+        'data',
+        {
+          columns: ['b'],
+          relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
+          tag: 'backfill-completed',
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+    ] satisfies ChangeStreamMessage[]);
+
+    expect(backfillRequests).toMatchObject([
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {
+          metadata: {rowKey: {a: 123}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {
+          metadata: {rowKey: {a: 123}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {
+          metadata: {rowKey: {a: 123}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+      {
+        columns: {a: {id: '123'}, b: {id: '234'}},
+        table: {
+          metadata: {rowKey: {a: 123}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+    ]);
+  });
+
   test('backfill stream yields to other stream reservations', async () => {
     testStreams.push([
       {
@@ -1307,7 +1392,8 @@ describe('backfill-manager', () => {
 
     // Repeatedly reserve and hold the reservation for 2 ms.
     void (async function () {
-      for (let ver = majorVersionFromString('140'); ; ver++) {
+      let ver = majorVersionFromString('140');
+      for (let i = 0; i < 6; i++, ver++) {
         changeStream.release(majorVersionToString(ver));
         await changeStream.reserve('main');
         await sleep(50);
