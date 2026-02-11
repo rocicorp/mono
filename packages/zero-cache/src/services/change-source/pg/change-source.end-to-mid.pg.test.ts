@@ -12,7 +12,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {createChangeProcessor} from '../../replicator/test-utils.ts';
-import type {DataChange} from '../protocol/current/data.ts';
+import type {DataOrSchemaChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
 
@@ -58,8 +58,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       jsonb JSONB,
       numz ENUMZ,
       uuid UUID,
-      intarr INT4[]
-      
+      intarr INT4[],
+      jsons JSON[],
+      jsonbs JSONB[]
     );
 
     CREATE SCHEMA IF NOT EXISTS my;
@@ -107,8 +108,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     return queue;
   }
 
-  async function nextTransaction(): Promise<DataChange[]> {
-    const data: DataChange[] = [];
+  async function nextTransaction(): Promise<DataOrSchemaChange[]> {
+    const data: DataOrSchemaChange[] = [];
     for (;;) {
       const change = await downstream.dequeue('timeout', 2000);
       if (change === 'timeout') {
@@ -147,10 +148,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'create-table',
           metadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
         {tag: 'create-index'},
@@ -230,10 +230,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
       ],
@@ -356,32 +355,28 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'update-table-metadata',
           table: {schema: 'my', name: 'bar'},
           old: {
-            rowKey: {
-              columns: ['id'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
           new: {
-            rowKey: {
-              columns: [],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {},
           },
         },
         {
           tag: 'update-table-metadata',
           table: {schema: 'my', name: 'bar'},
           old: {
-            rowKey: {
-              columns: [],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {},
           },
           new: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
         {
@@ -444,10 +439,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
         {tag: 'create-index'},
@@ -702,19 +696,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
       ],
@@ -776,10 +768,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'add-column',
           tableMetadata: {
-            rowKey: {
-              columns: ['handle'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {handle: {attNum: 3}},
           },
         },
       ],
@@ -945,10 +936,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
           tableMetadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'index',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
       ],
@@ -993,20 +983,18 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
           tableMetadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'index',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
         {
           tag: 'add-column',
           table: {schema: 'public', name: 'foo'},
           tableMetadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'index',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
       ],
@@ -1076,10 +1064,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'create-table',
           metadata: {
-            rowKey: {
-              columns: ['id'],
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {id: {attNum: 1}},
           },
         },
         {tag: 'create-index'},
@@ -1221,9 +1208,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'data types',
       `
       ALTER PUBLICATION zero_some_public SET TABLE foo (
-        id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr);
+        id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr, jsons, jsonbs);
 
-      INSERT INTO foo (id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr)
+      INSERT INTO foo (id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr, jsons, jsonbs)
          VALUES (
           'abc',
           -2,
@@ -1236,10 +1223,14 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           '{"far": 456, "boo" : {"baz": 123}}',
           '2',
           'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11',
-          ARRAY[1,2,3,4,5]
+          ARRAY[1,2,3,4,5],
+          ARRAY['1'::json,'"2"'::json,'{"a":123}'::json],
+          ARRAY['4'::json,'"5"'::json,'{"b":678}'::json]
         );
       `,
       [
+        {tag: 'add-column'},
+        {tag: 'add-column'},
         {tag: 'add-column'},
         {tag: 'add-column'},
         {tag: 'add-column'},
@@ -1264,6 +1255,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             numz: '2',
             uuid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
             intarr: [1, 2, 3, 4, 5],
+            jsons: [1, '2', {a: 123}],
+            jsonbs: [4, '5', {b: 678}],
           },
         },
       ],
@@ -1282,6 +1275,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
             numz: '2', // Verifies TEXT affinity
             uuid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
             intarr: '[1,2,3,4,5]',
+            jsons: '[1,"2",{"a":123}]',
+            jsonbs: '[4,"5",{"b":678}]',
             ['_0_version']: expect.stringMatching(/[a-z0-9]+/),
           },
         ],
@@ -1362,13 +1357,29 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               notNull: false,
               pos: 10,
             },
+            jsonbs: {
+              characterMaximumLength: null,
+              dataType: 'jsonb[]|TEXT_ARRAY',
+              elemPgTypeClass: 'b',
+              dflt: null,
+              notNull: false,
+              pos: 11,
+            },
+            jsons: {
+              characterMaximumLength: null,
+              dataType: 'json[]|TEXT_ARRAY',
+              elemPgTypeClass: 'b',
+              dflt: null,
+              notNull: false,
+              pos: 12,
+            },
             numz: {
               characterMaximumLength: null,
               dataType: 'enumz|TEXT_ENUM',
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 11,
+              pos: 13,
             },
             timea: {
               characterMaximumLength: null,
@@ -1376,7 +1387,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 12,
+              pos: 14,
             },
             uuid: {
               characterMaximumLength: null,
@@ -1384,7 +1395,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 13,
+              pos: 15,
             },
 
             ['_0_version']: {
@@ -1411,10 +1422,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         {
           tag: 'create-table',
           metadata: {
-            rowKey: {
-              columns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
-              type: 'default',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            // Note: This means is will be replicated to SQLite but not synced to clients.
+            rowKey: {},
           },
         },
         {
@@ -1481,34 +1492,40 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       INSERT INTO existing_full (a, b) VALUES ('e', 'f');
 
       ALTER PUBLICATION zero_some_public ADD TABLE existing;
-      ALTER PUBLICATION zero_some_public ADD TABLE existing_full;
+      ALTER TABLE existing REPLICA IDENTITY FULL;
       UPDATE existing SET a = a;
+      ALTER TABLE existing REPLICA IDENTITY DEFAULT;
+
+      ALTER PUBLICATION zero_some_public ADD TABLE existing_full;
       UPDATE existing_full SET a = a;
       `,
       [
         {
           tag: 'create-table',
           metadata: {
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
             rowKey: {
-              columns: ['a', 'b'],
-              type: 'default',
+              a: {attNum: 1},
+              b: {attNum: 2},
             },
           },
         },
         {tag: 'create-index'},
         {tag: 'create-index'},
+        {tag: 'update-table-metadata'},
+        {tag: 'update'},
+        {tag: 'update'},
+        {tag: 'update-table-metadata'},
         {
           tag: 'create-table',
           metadata: {
-            rowKey: {
-              columns: ['a'], // computes the shortest eligible key
-              type: 'full',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {a: {attNum: 1}}, // computes the shortest eligible key
           },
         },
         {tag: 'create-index'},
-        {tag: 'update'},
-        {tag: 'update'},
         {tag: 'update'},
         {tag: 'update'},
       ],
@@ -1605,16 +1622,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           tag: 'update-table-metadata',
           table: {schema: 'public', name: 'existing'},
           old: {
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
             rowKey: {
-              columns: ['a', 'b'],
-              type: 'default',
+              a: {attNum: 1},
+              b: {attNum: 2},
             },
           },
           new: {
-            rowKey: {
-              columns: ['a'], // computes the shortest eligible key
-              type: 'full',
-            },
+            schemaOID: expect.any(Number),
+            relationOID: expect.any(Number),
+            rowKey: {a: {attNum: 1}}, // computes the shortest eligible key
           },
         },
       ],
@@ -1625,7 +1643,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   ] satisfies [
     name: string,
     statements: string,
-    changes: Partial<DataChange>[],
+    changes: Partial<DataOrSchemaChange>[],
     expectedData: Record<string, JSONValue>,
     expectedTables: LiteTableSpec[],
     expectedIndexes: LiteIndexSpec[],

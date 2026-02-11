@@ -12,6 +12,7 @@ import {must} from '../../../../../../shared/src/must.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.ts';
 import type {Satisfies} from '../../../../types/satisfies.ts';
+import {jsonObjectSchema} from './json.ts';
 
 export const beginSchema = v.object({
   tag: v.literal('begin'),
@@ -77,16 +78,25 @@ export const relationSchema = v
     };
   });
 
-// TableMetadata contains table-related configuration that does not affect the
-// actual data in the table, but rather how the table's change messages are
-// handled.
-//
-// Changes to the metadata are sent in an `table-update-metadata` change.
-export const tableMetadataSchema = v.object({
-  // The rowKey is the same object sent in the `relation` message of
-  // `insert`, `update`, and `delete` messages.
+// The eventual fate of relationSchema
+export const newRelationSchema = v.object({
+  schema: v.string(),
+  name: v.string(),
+
   rowKey: rowKeySchema,
 });
+
+// TableMetadata contains table-related configuration that does not affect the
+// actual data in the table, but rather how the table's change messages are
+// handled. The is an opaque object that clients must track (and update) based
+// on `create-table`, `add-column`, and `table-update-metadata` messages, and
+// pass in BackfillRequests when there are columns to be backfilled.
+//
+// Note that the backfill-related change-source implementation does, however,
+// rely on the rowKey (columns) being specified in the message.
+export const tableMetadataSchema = v
+  .object({rowKey: v.record(jsonValueSchema)})
+  .rest(jsonValueSchema);
 
 export type TableMetadata = v.Infer<typeof tableMetadataSchema>;
 
@@ -137,7 +147,7 @@ export type Identifier = v.Infer<typeof identifierSchema>;
 // The change-streamer stores these IDs as opaque values while a column is
 // being backfilled, and initiates new change-source streams with the IDs
 // in order to restart backfills that did not complete in previous sessions.
-export const backfillIDSchema = v.record(v.union(v.number(), v.string()));
+export const backfillIDSchema = jsonObjectSchema;
 
 export type BackfillID = v.Infer<typeof backfillIDSchema>;
 
@@ -232,6 +242,48 @@ export const dropIndexSchema = v.object({
   id: identifierSchema,
 });
 
+// A batch of rows from a single table containing column values
+// to be backfilled.
+export const backfillSchema = v.object({
+  tag: v.literal('backfill'),
+
+  relation: newRelationSchema,
+
+  // The columns to be backfilled. `rowKey` columns are automatically excluded,
+  // which means that this field may be empty.
+  columns: v.array(v.string()),
+
+  // The watermark at which the backfill data was queried. Note that this
+  // generally will be different from the commit watermarks of the main change
+  // stream, and in particular, the commit watermark of the backfill change's
+  // enclosing transaction.
+  watermark: v.string(),
+
+  // A batch of row values, each row consisting of the `rowKey`
+  // values, followed by the `column` values, in the same order in which
+  // the column names appear in their respective fields, e.g.
+  //
+  // ```
+  // [
+  //   [...rowKeyValues, ...columnValues],  // row 1
+  //   [...rowKeyValues, ...columnValues],  // row 2
+  // ]
+  // ```
+  rowValues: v.array(v.array(jsonValueSchema)),
+});
+
+// Indicates that the backfill for the specified columns have
+// been successfully backfilled and can be published to clients.
+export const backfillCompletedSchema = v.object({
+  tag: v.literal('backfill-completed'),
+
+  relation: newRelationSchema,
+
+  // The columns to be backfilled. `rowKey` columns are automatically excluded,
+  // which means that this field may be empty.
+  columns: v.array(v.string()),
+});
+
 export type MessageBegin = v.Infer<typeof beginSchema>;
 export type MessageCommit = v.Infer<typeof commitSchema>;
 export type MessageRollback = v.Infer<typeof rollbackSchema>;
@@ -242,6 +294,8 @@ export type MessageUpdate = v.Infer<typeof updateSchema>;
 export type MessageDelete = v.Infer<typeof deleteSchema>;
 export type MessageTruncate = v.Infer<typeof truncateSchema>;
 
+export type MessageBackfill = v.Infer<typeof backfillSchema>;
+
 export type TableCreate = v.Infer<typeof createTableSchema>;
 export type TableRename = v.Infer<typeof renameTableSchema>;
 export type TableUpdateMetadata = v.Infer<typeof updateTableMetadataSchema>;
@@ -251,12 +305,35 @@ export type ColumnDrop = v.Infer<typeof dropColumnSchema>;
 export type TableDrop = v.Infer<typeof dropTableSchema>;
 export type IndexCreate = v.Infer<typeof createIndexSchema>;
 export type IndexDrop = v.Infer<typeof dropIndexSchema>;
+export type BackfillCompleted = v.Infer<typeof backfillCompletedSchema>;
 
 export const dataChangeSchema = v.union(
   insertSchema,
   updateSchema,
   deleteSchema,
   truncateSchema,
+  backfillSchema,
+);
+
+// Note: keep in sync or the tag tests will fail
+const dataChangeTags = [
+  'insert',
+  'update',
+  'delete',
+  'truncate',
+  'backfill',
+] as const;
+
+const dataChangeTagsSchema = v.literalUnion(...dataChangeTags);
+
+export type DataChange = Satisfies<
+  JSONObject, // guarantees serialization over IPC or network
+  v.Infer<typeof dataChangeSchema>
+>;
+
+export type DataChangeTag = v.Infer<typeof dataChangeTagsSchema>;
+
+const schemaChanges = [
   createTableSchema,
   renameTableSchema,
   updateTableMetadataSchema,
@@ -266,17 +343,52 @@ export const dataChangeSchema = v.union(
   dropTableSchema,
   createIndexSchema,
   dropIndexSchema,
-);
+  backfillCompletedSchema,
+] as const;
 
-export type DataChange = Satisfies<
-  JSONObject, // guarantees serialization over IPC or network
-  v.Infer<typeof dataChangeSchema>
+// Note: keep in sync or the tag tests will fail
+const schemaChangeTags = [
+  'create-table',
+  'rename-table',
+  'update-table-metadata',
+  'add-column',
+  'update-column',
+  'drop-column',
+  'drop-table',
+  'create-index',
+  'drop-index',
+  'backfill-completed',
+] as const;
+
+export const schemaChangeSchema = v.union(...schemaChanges);
+
+const schemaChangeTagsSchema = v.literalUnion(...schemaChangeTags);
+
+export type SchemaChange = Satisfies<
+  JSONObject,
+  v.Infer<typeof schemaChangeSchema>
 >;
+
+export type SchemaChangeTag = v.Infer<typeof schemaChangeTagsSchema>;
+
+export type DataOrSchemaChange = DataChange | SchemaChange;
 
 export type Change =
   | MessageBegin
-  | DataChange
+  | DataOrSchemaChange
   | MessageCommit
   | MessageRollback;
 
 export type ChangeTag = Change['tag'];
+
+const schemaChangeTagSet = new Set<string>(schemaChangeTags);
+
+export function isSchemaChange(change: Change): change is SchemaChange {
+  return schemaChangeTagSet.has(change.tag);
+}
+
+const dataChangeTagSet = new Set<string>(dataChangeTags);
+
+export function isDataChange(change: Change): change is DataChange {
+  return dataChangeTagSet.has(change.tag);
+}

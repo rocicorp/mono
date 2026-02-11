@@ -6,6 +6,8 @@ import {type AnyQuery} from './query.ts';
 import {newStaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
+const userQuery = newQuery(schema, 'user');
+
 function ast(q: AnyQuery) {
   return asQueryInternals(q).ast;
 }
@@ -2121,5 +2123,211 @@ test('one in schema should not imply limit 1 in the ast -- the user needs to get
         subquery: expect.toSatisfy(sq => !('limit' in sq)),
       },
     ],
+  });
+});
+
+describe('scalar subquery via cmp + scalar', () => {
+  test('scalar with default = op', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.where(({cmp, scalar}) =>
+          cmp('ownerId', scalar(userQuery, 'id')),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "childField": "id",
+          "op": "=",
+          "parentField": "ownerId",
+          "subquery": {
+            "alias": "zsubq_scalar_user",
+            "limit": 1,
+            "table": "user",
+          },
+          "type": "scalarSubquery",
+        },
+      }
+    `);
+  });
+
+  test('scalar with IS NOT op', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.where(({cmp, scalar}) =>
+          cmp('ownerId', 'IS NOT', scalar(userQuery, 'id')),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "childField": "id",
+          "op": "IS NOT",
+          "parentField": "ownerId",
+          "subquery": {
+            "alias": "zsubq_scalar_user",
+            "limit": 1,
+            "table": "user",
+          },
+          "type": "scalarSubquery",
+        },
+      }
+    `);
+  });
+
+  test('scalar with where condition on subquery', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.where(({cmp, scalar}) =>
+          cmp('ownerId', scalar(userQuery.where('name', 'Alice'), 'id')),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "childField": "id",
+          "op": "=",
+          "parentField": "ownerId",
+          "subquery": {
+            "alias": "zsubq_scalar_user",
+            "limit": 1,
+            "table": "user",
+            "where": {
+              "left": {
+                "name": "name",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "Alice",
+              },
+              "type": "simple",
+            },
+          },
+          "type": "scalarSubquery",
+        },
+      }
+    `);
+  });
+
+  test('scalar with IS NOT and where condition', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.where(({cmp, scalar}) =>
+          cmp(
+            'ownerId',
+            'IS NOT',
+            scalar(userQuery.where('name', 'Alice'), 'id'),
+          ),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "childField": "id",
+          "op": "IS NOT",
+          "parentField": "ownerId",
+          "subquery": {
+            "alias": "zsubq_scalar_user",
+            "limit": 1,
+            "table": "user",
+            "where": {
+              "left": {
+                "name": "name",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "Alice",
+              },
+              "type": "simple",
+            },
+          },
+          "type": "scalarSubquery",
+        },
+      }
+    `);
+  });
+
+  test('scalar in and combinator', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.where(({and, cmp, scalar}) =>
+          and(
+            cmp('ownerId', scalar(userQuery.where('name', 'Alice'), 'id')),
+            cmp('title', 'LIKE', '%bug%'),
+          ),
+        ),
+      ).where,
+    ).toMatchObject({
+      type: 'and',
+      conditions: [
+        {
+          type: 'scalarSubquery',
+          op: '=',
+          parentField: 'ownerId',
+          childField: 'id',
+        },
+        {
+          type: 'simple',
+          op: 'LIKE',
+        },
+      ],
+    });
+  });
+
+  test('not(cmp(..., scalar(...)))', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.where(({not, cmp, scalar}) =>
+          not(cmp('ownerId', scalar(userQuery.where('name', 'Alice'), 'id'))),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "childField": "id",
+          "op": "IS NOT",
+          "parentField": "ownerId",
+          "subquery": {
+            "alias": "zsubq_scalar_user",
+            "limit": 1,
+            "table": "user",
+            "where": {
+              "left": {
+                "name": "name",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "Alice",
+              },
+              "type": "simple",
+            },
+          },
+          "type": "scalarSubquery",
+        },
+      }
+    `);
   });
 });

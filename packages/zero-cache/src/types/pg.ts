@@ -12,6 +12,7 @@ import {
   TIME,
   TIMESTAMP,
   TIMESTAMPTZ,
+  TIMETZ,
 } from './pg-types.ts';
 
 // exported for testing.
@@ -99,7 +100,7 @@ export function millisecondsToPostgresTime(milliseconds: number): string {
   const seconds = totalSeconds % 60;
   const ms = milliseconds % 1000;
 
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}+00`;
 }
 
 export function postgresTimeToMilliseconds(timeString: string): number {
@@ -108,13 +109,15 @@ export function postgresTimeToMilliseconds(timeString: string): number {
     throw new Error('Invalid time string: must be a non-empty string');
   }
 
-  // Regular expression to match HH:MM:SS or HH:MM:SS.mmm format
-  const timeRegex = /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/;
+  // Regular expression to match HH:MM:SS, HH:MM:SS.mmm, or HH:MM:SS+00 / HH:MM:SS.mmm+00
+  // Supports optional timezone offset
+  const timeRegex =
+    /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(?:([+-])(\d{1,2})(?::(\d{2}))?)?$/;
   const match = timeString.match(timeRegex);
 
   if (!match) {
     throw new Error(
-      `Invalid time format: "${timeString}". Expected HH:MM:SS or HH:MM:SS.mmm`,
+      `Invalid time format: "${timeString}". Expected HH:MM:SS[.mmm][+|-HH[:MM]]`,
     );
   }
 
@@ -161,8 +164,25 @@ export function postgresTimeToMilliseconds(timeString: string): number {
   }
 
   // Calculate total milliseconds
-  const totalMs =
+  let totalMs =
     hours * 3600000 + minutes * 60000 + seconds * 1000 + milliseconds;
+
+  // Timezone Offset
+  if (match[5]) {
+    const sign = match[5] === '+' ? 1 : -1;
+    const tzHours = parseInt(match[6], 10);
+    const tzMinutes = match[7] ? parseInt(match[7], 10) : 0;
+    const offsetMs = sign * (tzHours * 3600000 + tzMinutes * 60000);
+    totalMs -= offsetMs;
+  }
+
+  // Normalize to 0-24h only if outside valid range
+  if (totalMs > MILLISECONDS_PER_DAY || totalMs < 0) {
+    return (
+      ((totalMs % MILLISECONDS_PER_DAY) + MILLISECONDS_PER_DAY) %
+      MILLISECONDS_PER_DAY
+    );
+  }
 
   return totalMs;
 }
@@ -184,12 +204,22 @@ function dateToUTCMidnight(date: string): number {
  */
 export type PostgresValueType = JSONValue | Uint8Array;
 
+export type TypeOptions = {
+  /**
+   * Sends strings directly as JSON values (i.e. without JSON stringification).
+   * The application is responsible for ensuring that string inputs for JSON
+   * columns are already stringified. Other data types (e.g. objects) will
+   * still be stringified by the pg client.
+   */
+  sendStringAsJson?: boolean;
+};
+
 /**
  * Configures types for the Postgres.js client library (`postgres`).
  *
  * @param jsonAsString Keep JSON / JSONB values as strings instead of parsing.
  */
-export const postgresTypeConfig = (jsonAsString?: 'json-as-string') => ({
+export const postgresTypeConfig = ({sendStringAsJson}: TypeOptions = {}) => ({
   // Type the type IDs as `number` so that Typescript doesn't complain about
   // referencing external types during type inference.
   types: {
@@ -197,8 +227,10 @@ export const postgresTypeConfig = (jsonAsString?: 'json-as-string') => ({
     json: {
       to: JSON,
       from: [JSON, JSONB],
-      serialize: BigIntJSON.stringify,
-      parse: jsonAsString ? (x: string) => x : BigIntJSON.parse,
+      serialize: sendStringAsJson
+        ? (x: unknown) => (typeof x === 'string' ? x : BigIntJSON.stringify(x))
+        : BigIntJSON.stringify,
+      parse: BigIntJSON.parse,
     },
     // Timestamps are converted to PreciseDate objects.
     timestamp: {
@@ -210,7 +242,7 @@ export const postgresTypeConfig = (jsonAsString?: 'json-as-string') => ({
     // Times are converted as strings
     time: {
       to: TIME,
-      from: [TIME],
+      from: [TIME, TIMETZ],
       serialize: (x: unknown) => {
         switch (typeof x) {
           case 'string':
@@ -260,7 +292,7 @@ export function pgClient(
     bigint: PostgresType<bigint>;
     json: PostgresType<JSONValue>;
   }>,
-  jsonAsString?: 'json-as-string',
+  opts?: TypeOptions,
 ): PostgresDB {
   const onnotice = (n: Notice) => {
     // https://www.postgresql.org/docs/current/plpgsql-errors-and-messages.html#PLPGSQL-STATEMENTS-RAISE
@@ -297,7 +329,7 @@ export function pgClient(
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
 
   return postgres(connectionURI, {
-    ...postgresTypeConfig(jsonAsString),
+    ...postgresTypeConfig(opts),
     onnotice,
     ['max_lifetime']: maxLifetimeSeconds,
     ssl,

@@ -1,10 +1,10 @@
 import {beforeEach, describe, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {
   DbFile,
   expectMatchingObjectsInTables,
   initDB as initLiteDB,
-} from '../../test/lite.ts';
+} from '../../../test/lite.ts';
 import {
   CREATE_V6_COLUMN_METADATA_TABLE,
   CREATE_V7_CHANGE_LOG,

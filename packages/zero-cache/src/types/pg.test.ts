@@ -29,31 +29,31 @@ describe('timestampToFpMillis', () => {
 describe('millisecondsToPostgresTime', () => {
   describe('valid inputs', () => {
     test.each([
-      ['0 milliseconds', 0, '00:00:00.000'],
-      ['1 second (1000ms)', 1000, '00:00:01.000'],
-      ['1 minute (60000ms)', 60000, '00:01:00.000'],
-      ['1 hour (3600000ms)', 3600000, '01:00:00.000'],
-      ['1 millisecond', 1, '00:00:00.001'],
-      ['123 milliseconds', 123, '00:00:00.123'],
-      ['999 milliseconds', 999, '00:00:00.999'],
+      ['0 milliseconds', 0, '00:00:00.000+00'],
+      ['1 second (1000ms)', 1000, '00:00:01.000+00'],
+      ['1 minute (60000ms)', 60000, '00:01:00.000+00'],
+      ['1 hour (3600000ms)', 3600000, '01:00:00.000+00'],
+      ['1 millisecond', 1, '00:00:00.001+00'],
+      ['123 milliseconds', 123, '00:00:00.123+00'],
+      ['999 milliseconds', 999, '00:00:00.999+00'],
       [
         'complex time 12:34:56.789',
         12 * 3600000 + 34 * 60000 + 56 * 1000 + 789,
-        '12:34:56.789',
+        '12:34:56.789+00',
       ],
       [
         'maximum valid time (23:59:59.999)',
         24 * 60 * 60 * 1000 - 1,
-        '23:59:59.999',
+        '23:59:59.999+00',
       ],
       [
         'single digit padding (01:02:03.004)',
         1 * 3600000 + 2 * 60000 + 3 * 1000 + 4,
-        '01:02:03.004',
+        '01:02:03.004+00',
       ],
-      ['millisecond padding - 1000ms', 1000, '00:00:01.000'],
-      ['millisecond padding - 1010ms', 1010, '00:00:01.010'],
-      ['millisecond padding - 1100ms', 1100, '00:00:01.100'],
+      ['millisecond padding - 1000ms', 1000, '00:00:01.000+00'],
+      ['millisecond padding - 1010ms', 1010, '00:00:01.010+00'],
+      ['millisecond padding - 1100ms', 1100, '00:00:01.100+00'],
     ])('should convert %s correctly to %s', (_caseName, input, expected) => {
       expect(millisecondsToPostgresTime(input)).toBe(expected);
     });
@@ -64,12 +64,12 @@ describe('millisecondsToPostgresTime', () => {
       [
         'last millisecond of day',
         23 * 3600000 + 59 * 60000 + 59 * 1000 + 999,
-        '23:59:59.999',
+        '23:59:59.999+00',
       ],
-      ['noon exactly', 12 * 3600000, '12:00:00.000'],
-      ['10 seconds', 10000, '00:00:10.000'],
-      ['100 seconds', 100000, '00:01:40.000'],
-      ['1000 seconds', 1000000, '00:16:40.000'],
+      ['noon exactly', 12 * 3600000, '12:00:00.000+00'],
+      ['10 seconds', 10000, '00:00:10.000+00'],
+      ['100 seconds', 100000, '00:01:40.000+00'],
+      ['1000 seconds', 1000000, '00:16:40.000+00'],
     ])('should handle %s', (_caseName, input, expected) => {
       expect(millisecondsToPostgresTime(input)).toBe(expected);
     });
@@ -98,11 +98,11 @@ describe('millisecondsToPostgresTime', () => {
 
   describe('precision and formatting', () => {
     test.each([
-      ['zero', 0, '00:00:00.000'],
-      ['1 second exact', 1000, '00:00:01.000'],
-      ['1 second + 1ms', 1001, '00:00:01.001'],
-      ['1 second + 10ms', 1010, '00:00:01.010'],
-      ['1 second + 100ms', 1100, '00:00:01.100'],
+      ['zero', 0, '00:00:00.000+00'],
+      ['1 second exact', 1000, '00:00:01.000+00'],
+      ['1 second + 1ms', 1001, '00:00:01.001+00'],
+      ['1 second + 10ms', 1010, '00:00:01.010+00'],
+      ['1 second + 100ms', 1100, '00:00:01.100+00'],
     ])(
       'should include three decimal places for %s',
       (_caseName, input, expected) => {
@@ -119,18 +119,18 @@ describe('millisecondsToPostgresTime', () => {
       'should maintain consistent format length for %s',
       (_caseName, input) => {
         const result = millisecondsToPostgresTime(input);
-        expect(result.length).toBe(12); // HH:MM:SS.mmm = 12 characters
-        expect(result).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+        expect(result.length).toBe(15); // HH:MM:SS.mmm+00 = 15 characters
+        expect(result).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}\+00$/);
       },
     );
   });
 
   describe('mathematical accuracy', () => {
     test.each([
-      ['midnight', 0, 0, 0, 0, '00:00:00.000'],
-      ['all ones', 1, 1, 1, 1, '01:01:01.001'],
-      ['random time', 10, 30, 45, 500, '10:30:45.500'],
-      ['end of day', 23, 59, 59, 999, '23:59:59.999'],
+      ['midnight', 0, 0, 0, 0, '00:00:00.000+00'],
+      ['all ones', 1, 1, 1, 1, '01:01:01.001+00'],
+      ['random time', 10, 30, 45, 500, '10:30:45.500+00'],
+      ['end of day', 23, 59, 59, 999, '23:59:59.999+00'],
     ])(
       'should convert %s accurately',
       (_caseName, hours, minutes, seconds, ms, expected) => {
@@ -140,9 +140,9 @@ describe('millisecondsToPostgresTime', () => {
     );
 
     test.each([
-      ['0.1ms rounds down', 0.1, '00:00:00.000'],
-      ['999.9ms rounds down', 999.9, '00:00:00.999'],
-      ['1000.1ms rounds down', 1000.1, '00:00:01.000'],
+      ['0.1ms rounds down', 0.1, '00:00:00.000+00'],
+      ['999.9ms rounds down', 999.9, '00:00:00.999+00'],
+      ['1000.1ms rounds down', 1000.1, '00:00:01.000+00'],
     ])(
       'should handle floating point precision: %s',
       (_caseName, input, expected) => {
@@ -220,6 +220,9 @@ describe('postgresTimeToMilliseconds', () => {
       ['24:00:00 exactly', '24:00:00', 86400000],
       ['24:00:00 with zero milliseconds', '24:00:00.000', 86400000],
       ['24:00:00 with zero microseconds', '24:00:00.000000', 86400000],
+      ['24:00:00 with UTC timezone', '24:00:00+00', 86400000],
+      ['24:00:00 with positive timezone offset', '24:00:00+02', 79200000],
+      ['24:00:00 with negative timezone (wraps)', '24:00:00-05', 18000000],
     ])('should handle %s', (_caseName, input, expected) => {
       expect(postgresTimeToMilliseconds(input)).toBe(expected);
     });

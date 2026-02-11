@@ -2,7 +2,6 @@ import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {DEFAULT_BACK_PRESSURE_THRESHOLD} from '../../config/zero-config.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
@@ -29,7 +28,9 @@ describe('change-streamer/storer', () => {
   const SHARD_NUM = 5;
 
   beforeEach<PgTest>(async ({testDBs}) => {
-    db = await testDBs.create('change_streamer_storer');
+    db = await testDBs.create('change_streamer_storer', undefined, {
+      sendStringAsJson: true,
+    });
     shard = {appID: APP_ID, shardNum: SHARD_NUM};
     await db.begin(tx => setupCDCTables(lc, tx, shard));
     await ensureReplicationConfig(
@@ -97,7 +98,6 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
-        DEFAULT_BACK_PRESSURE_THRESHOLD,
       );
       await storer.assumeOwnership();
       done = storer.run();
@@ -622,7 +622,7 @@ describe('change-streamer/storer', () => {
         }
       `);
 
-      // Drop the other backfilling column.
+      // Set the other backfilling column to completed
       storer.store([
         '110',
         ['begin', messages.begin(), {commitWatermark: '110'}],
@@ -632,12 +632,13 @@ describe('change-streamer/storer', () => {
         [
           'data',
           {
-            tag: 'drop-column',
-            table: {
+            tag: 'backfill-completed',
+            relation: {
               schema: 'your',
               name: 'bar',
+              rowKey: {columns: ['a']},
             },
-            column: 'a',
+            columns: [],
           },
         ],
       ]);
@@ -1509,7 +1510,6 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
-        DEFAULT_BACK_PRESSURE_THRESHOLD,
       );
       await storer.assumeOwnership();
       done = storer.run();

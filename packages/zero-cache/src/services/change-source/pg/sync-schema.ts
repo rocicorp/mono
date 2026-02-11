@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ShardConfig} from '../../../types/shards.ts';
-import {initReplica} from '../replica-schema.ts';
+import {initReplica} from '../common/replica-schema.ts';
 import {initialSync, type InitialSyncOptions} from './initial-sync.ts';
 
 export async function initSyncSchema(

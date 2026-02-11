@@ -637,6 +637,124 @@ test('EXISTS with order', () => {
   );
 });
 
+test('scalar subquery with = operator', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'scalarSubquery',
+      op: '=',
+      parentField: 'ownerId',
+      subquery: {
+        table: 'user',
+      },
+      childField: 'id',
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({cmp, scalar}) => cmp('ownerId', scalar(q => q, 'id')))"`,
+  );
+});
+
+test('scalar subquery with IS NOT operator', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'scalarSubquery',
+      op: 'IS NOT',
+      parentField: 'ownerId',
+      subquery: {
+        table: 'user',
+      },
+      childField: 'id',
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({cmp, scalar}) => cmp('ownerId', 'IS NOT', scalar(q => q, 'id')))"`,
+  );
+});
+
+test('scalar subquery with where clause in subquery', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'scalarSubquery',
+      op: '=',
+      parentField: 'ownerId',
+      subquery: {
+        table: 'user',
+        where: {
+          type: 'simple',
+          left: {type: 'column', name: 'name'},
+          op: '=',
+          right: {type: 'literal', value: 'Alice'},
+        },
+      },
+      childField: 'id',
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({cmp, scalar}) => cmp('ownerId', scalar(q => q.where('name', 'Alice'), 'id')))"`,
+  );
+});
+
+test('scalar subquery inside AND combinator', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'status'},
+          op: '=',
+          right: {type: 'literal', value: 'open'},
+        },
+        {
+          type: 'scalarSubquery',
+          op: '=',
+          parentField: 'ownerId',
+          subquery: {
+            table: 'user',
+          },
+          childField: 'id',
+        },
+      ],
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where('status', 'open').where(({cmp, scalar}) => cmp('ownerId', scalar(q => q, 'id')))"`,
+  );
+});
+
+test('scalar subquery inside OR combinator', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'or',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'status'},
+          op: '=',
+          right: {type: 'literal', value: 'open'},
+        },
+        {
+          type: 'scalarSubquery',
+          op: '=',
+          parentField: 'ownerId',
+          subquery: {
+            table: 'user',
+          },
+          childField: 'id',
+        },
+      ],
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({cmp, or, scalar}) => or(cmp('status', 'open'), cmp('ownerId', scalar(q => q, 'id'))))"`,
+  );
+});
+
 test('round trip', () => {
   const randomizer = generateMersenne53Randomizer(42);
   const rng = () => randomizer.next();

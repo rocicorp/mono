@@ -5,8 +5,6 @@ import {
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
-import {areEqual} from '../../../../../shared/src/arrays.ts';
-import {unreachable} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
@@ -34,25 +32,25 @@ import {
   majorVersionToString,
 } from '../../../types/state-version.ts';
 import type {Sink} from '../../../types/streams.ts';
-import {Subscription, type PendingResult} from '../../../types/subscription.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
   getSubscriptionState,
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
+import {ChangeStreamMultiplexer} from '../common/change-stream-multiplexer.ts';
 import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
-  DataChange,
   Identifier,
   MessageRelation,
-  TableMetadata,
+  SchemaChange,
 } from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
+import type {TableMetadata} from './backfill-metadata.ts';
 import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
   Message,
@@ -205,6 +203,9 @@ async function checkAndUpdateUpstream(
   return upstreamReplica;
 }
 
+// Parameterize this if necessary. In practice starvation may never happen.
+const MAX_LOW_PRIORITY_DELAY_MS = 1000;
+
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.
@@ -234,7 +235,7 @@ class PostgresChangeSource implements ChangeSource {
     if (backfillRequests.length) {
       throw new Error('not implemented yet');
     }
-    const db = pgClient(this.#lc, this.#upstreamUri, {}, 'json-as-string');
+    const db = pgClient(this.#lc, this.#upstreamUri);
     const {slot} = this.#replica;
 
     let cleanup = promiseVoid;
@@ -266,9 +267,15 @@ class PostgresChangeSource implements ChangeSource {
       clientStart,
     );
 
-    const changes = Subscription.create<ChangeStreamMessage>({
-      cleanup: () => messages.cancel(),
-    });
+    // At the moment the replication stream is the only producer of changes,
+    // so the ChangeStreamMultiplexer is largely a no-op, but these is where
+    // backfill streams will enter the picture.
+    const changes = new ChangeStreamMultiplexer(
+      this.#lc,
+      clientWatermark,
+      [messages],
+      [],
+    );
     const acker = new Acker(acks);
 
     const changeMaker = new ChangeMaker(
@@ -281,22 +288,48 @@ class PostgresChangeSource implements ChangeSource {
 
     void (async function () {
       try {
+        let reserved = false;
+
         for await (const [lsn, msg] of messages) {
+          // Note: no reservation is needed for pushStatus().
           if (msg.tag === 'keepalive') {
-            changes.push([
+            changes.pushStatus([
               'status',
               msg,
               {watermark: majorVersionToString(lsn)},
             ]);
             continue;
           }
-          let last: PendingResult | undefined;
-          for (const change of await changeMaker.makeChanges(lsn, msg)) {
-            last = changes.push(change);
+
+          if (!reserved) {
+            const res = changes.reserve('replication');
+            typeof res === 'string' || (await res); // awaits should be uncommon
+            reserved = true;
           }
-          await last?.result; // Allow the change-streamer to push back.
+
+          let lastChange: ChangeStreamMessage | undefined;
+          for (const change of await changeMaker.makeChanges(lsn, msg)) {
+            await changes.push(change); // Allow the change-streamer to push back.
+            lastChange = change;
+          }
+
+          if (
+            lastChange?.[0] === 'commit' &&
+            (messages.queued === 0 ||
+              changes.waiterDelay() > MAX_LOW_PRIORITY_DELAY_MS)
+          ) {
+            // After each transaction, release the reservation:
+            // - if there are no pending upstream messages
+            // - or if a low priority request has been waiting for longer
+            //   than MAX_LOW_PRIORITY_DELAY_MS. This is to prevent
+            //   (backfill) starvation on very active upstreams.
+            changes.release(lastChange[2].watermark);
+            reserved = false;
+          }
         }
       } catch (e) {
+        // Note: no need to worry about reservations here since downstream
+        //       is being completely canceled.
         changes.fail(translateError(e));
       }
     })();
@@ -308,7 +341,7 @@ class PostgresChangeSource implements ChangeSource {
     );
 
     return {
-      changes,
+      changes: changes.asSource(),
       acks: {push: status => acker.ack(status[2].watermark)},
     };
   }
@@ -618,8 +651,9 @@ class ChangeMaker {
     ).map(change => ['data', change] satisfies Data);
 
     this.#lc
+      .withContext('tag', event.event.tag)
       .withContext('query', event.context.query)
-      .info?.(`${changes.length} schema change(s)`, changes);
+      .info?.(`${changes.length} schema change(s)`, {changes});
 
     const replicaIdentities = replicaIdentitiesForTablesWithoutPrimaryKeys(
       event.schema,
@@ -667,11 +701,11 @@ class ChangeMaker {
   #makeSchemaChanges(
     preSchema: PublishedSchema,
     update: DdlUpdateEvent,
-  ): DataChange[] {
+  ): SchemaChange[] {
     try {
       const [prevTbl, prevIdx] = specsByID(preSchema);
       const [nextTbl, nextIdx] = specsByID(update.schema);
-      const changes: DataChange[] = [];
+      const changes: SchemaChange[] = [];
 
       // Validate the new table schemas
       for (const table of nextTbl.values()) {
@@ -725,8 +759,8 @@ class ChangeMaker {
   #getTableChanges(
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
-  ): DataChange[] {
-    const changes: DataChange[] = [];
+  ): SchemaChange[] {
+    const changes: SchemaChange[] = [];
     if (
       oldTable.schema !== newTable.schema ||
       oldTable.name !== newTable.name
@@ -737,18 +771,14 @@ class ChangeMaker {
         new: {schema: newTable.schema, name: newTable.name},
       });
     }
-    if (
-      oldTable.replicaIdentity !== newTable.replicaIdentity ||
-      !areEqual(
-        oldTable.replicaIdentityColumns,
-        newTable.replicaIdentityColumns,
-      )
-    ) {
+    const oldMetadata = getMetadata(oldTable);
+    const newMetadata = getMetadata(newTable);
+    if (!deepEqual(oldMetadata, newMetadata)) {
       changes.push({
         tag: 'update-table-metadata',
         table: {schema: newTable.schema, name: newTable.name},
-        old: getMetadata(oldTable),
-        new: getMetadata(newTable),
+        old: oldMetadata,
+        new: newMetadata,
       });
     }
     const table = {schema: newTable.schema, name: newTable.name};
@@ -974,30 +1004,16 @@ function columnsByID(
 }
 
 function getMetadata(table: PublishedTableWithReplicaIdentity): TableMetadata {
-  const metadata: TableMetadata = {
-    rowKey: {
-      columns: table.replicaIdentityColumns,
-    },
+  return {
+    schemaOID: must(table.schemaOID),
+    relationOID: table.oid,
+    rowKey: Object.fromEntries(
+      table.replicaIdentityColumns.map(k => [
+        k,
+        {attNum: table.columns[k].pos},
+      ]),
+    ),
   };
-  switch (table.replicaIdentity) {
-    case 'd':
-      metadata.rowKey.type = 'default';
-      break;
-    case 'i':
-      metadata.rowKey.type = 'index';
-      break;
-    case 'f':
-      metadata.rowKey.type = 'full';
-      break;
-    case 'n':
-      metadata.rowKey.type = 'nothing';
-      break;
-    case undefined:
-      break;
-    default:
-      unreachable(table.replicaIdentity);
-  }
-  return metadata;
 }
 
 // Avoid sending the `columns` from the Postgres MessageRelation message.
