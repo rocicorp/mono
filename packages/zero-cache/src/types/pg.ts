@@ -176,11 +176,15 @@ export function postgresTimeToMilliseconds(timeString: string): number {
     totalMs -= offsetMs;
   }
 
-  // Normalize to 0-24h
-  return (
-    ((totalMs % MILLISECONDS_PER_DAY) + MILLISECONDS_PER_DAY) %
-    MILLISECONDS_PER_DAY
-  );
+  // Normalize to 0-24h only if outside valid range
+  if (totalMs > MILLISECONDS_PER_DAY || totalMs < 0) {
+    return (
+      ((totalMs % MILLISECONDS_PER_DAY) + MILLISECONDS_PER_DAY) %
+      MILLISECONDS_PER_DAY
+    );
+  }
+
+  return totalMs;
 }
 
 function dateToUTCMidnight(date: string): number {

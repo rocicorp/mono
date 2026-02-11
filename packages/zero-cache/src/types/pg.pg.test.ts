@@ -115,7 +115,7 @@ describe('types/pg', () => {
     ['00:00', 0, 0],
     ['09:15:32', 33332000, 33332000],
     ['14:15:10.1234564', 51310123, 51310123], // default precision of postgres is 6 fractional digits -> rounded down
-    ['24:00', 0, 0], // 24:00 is stored as 00:00:00 by Postgres
+    ['24:00', 86400000, 86400000], // PostgreSQL allows 24:00 as a special case representing midnight at the end of the day, which is equivalent to 00:00 of the next day. This is represented as 86400000 milliseconds, which is the total number of milliseconds in a day.
 
     // Timezone tests
     ['12:00:00+00', 43200000, 43200000],
