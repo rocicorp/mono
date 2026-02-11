@@ -1,5 +1,6 @@
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
 import {sleep} from '../../../../../shared/src/sleep.ts';
@@ -25,7 +26,7 @@ describe('backfill-manager', () => {
   let lc: LogContext;
 
   beforeEach(() => {
-    lc = new LogContext('debug', {}, consoleLogSink);
+    lc = createSilentLogContext();
     changeStream = new ChangeStreamMultiplexer(lc, '123');
     backfillManager = new BackfillManager(lc, changeStream, backfillStreamer);
     changeStream.addProducers(backfillManager).addListeners(backfillManager);
