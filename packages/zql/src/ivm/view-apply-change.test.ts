@@ -12,6 +12,9 @@ import type {Entry, Format} from './view.ts';
 const entries = (e: Entry, key: string): Entry[] => e[key] as Entry[];
 const at = (e: Entry, key: string, i: number): Entry => entries(e, key)[i];
 
+const NO_MUTATE = 0 as const;
+const WITH_IDS = 'withIDs' as const;
+
 describe('applyChange', () => {
   const relationship = '';
   const schema: SourceSchema = {
@@ -83,7 +86,15 @@ describe('applyChange', () => {
         relationships: {athletes: {relationships: {}, singular: false}},
       };
       const apply = (change: ViewChange) => {
-        root = applyChange(root, change, schema, relationship, format, true);
+        root = applyChange(
+          root,
+          change,
+          schema,
+          relationship,
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
       };
 
       {
@@ -332,7 +343,15 @@ describe('applyChange', () => {
         },
       };
       const apply = (change: ViewChange) => {
-        root = applyChange(root, change, schema, relationship, format, true);
+        root = applyChange(
+          root,
+          change,
+          schema,
+          relationship,
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
       };
 
       {
@@ -586,7 +605,15 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) => {
-        root = applyChange(root, change, schema, '', format, true);
+        root = applyChange(
+          root,
+          change,
+          schema,
+          '',
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
       };
 
       apply({
@@ -733,7 +760,15 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) => {
-        root = applyChange(root, change, schema, relationship, format, true);
+        root = applyChange(
+          root,
+          change,
+          schema,
+          relationship,
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
       };
 
       apply({
@@ -892,7 +927,15 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) => {
-        root = applyChange(root, change, schema, '', format, true);
+        root = applyChange(
+          root,
+          change,
+          schema,
+          '',
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
       };
 
       apply({
@@ -1021,7 +1064,15 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) => {
-        root = applyChange(root, change, schema, '', format, true);
+        root = applyChange(
+          root,
+          change,
+          schema,
+          '',
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
       };
 
       apply({
@@ -1199,7 +1250,15 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) => {
-        root = applyChange(root, change, schema, '', format, true);
+        root = applyChange(
+          root,
+          change,
+          schema,
+          '',
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
       };
 
       apply({
@@ -1318,7 +1377,15 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) => {
-        root = applyChange(root, change, schema, '', format, true);
+        root = applyChange(
+          root,
+          change,
+          schema,
+          '',
+          format,
+          WITH_IDS,
+          NO_MUTATE,
+        );
       };
 
       apply({
@@ -1428,7 +1495,6 @@ describe('applyChange', () => {
   //                         └──────────────────────┘
   // ═══════════════════════════════════════════════════════════════════════════
   describe('add with initialized relationships', () => {
-
     const schemaWithChildren: SourceSchema = {
       tableName: 'parent',
       columns: {id: {type: 'string'}, name: {type: 'string'}},
@@ -1459,7 +1525,15 @@ describe('applyChange', () => {
     };
 
     const apply = (root: Entry, change: ViewChange) =>
-      applyChange(root, change, schemaWithChildren, '', formatWithChildren, true);
+      applyChange(
+        root,
+        change,
+        schemaWithChildren,
+        '',
+        formatWithChildren,
+        WITH_IDS,
+        NO_MUTATE,
+      );
 
     test('entry with children is placed at correct position', () => {
       let root: Entry = {'': []};
@@ -1470,7 +1544,9 @@ describe('applyChange', () => {
         node: {
           row: {id: 'b', name: 'Bob'},
           relationships: {
-            children: () => [{row: {id: 'c1', parentId: 'b'}, relationships: {}}],
+            children: () => [
+              {row: {id: 'c1', parentId: 'b'}, relationships: {}},
+            ],
           },
         },
       });
@@ -1480,7 +1556,9 @@ describe('applyChange', () => {
         node: {
           row: {id: 'd', name: 'Dave'},
           relationships: {
-            children: () => [{row: {id: 'c2', parentId: 'd'}, relationships: {}}],
+            children: () => [
+              {row: {id: 'c2', parentId: 'd'}, relationships: {}},
+            ],
           },
         },
       });
@@ -1492,7 +1570,9 @@ describe('applyChange', () => {
         node: {
           row: {id: 'a', name: 'Alice'},
           relationships: {
-            children: () => [{row: {id: 'c3', parentId: 'a'}, relationships: {}}],
+            children: () => [
+              {row: {id: 'c3', parentId: 'a'}, relationships: {}},
+            ],
           },
         },
       });
@@ -1633,7 +1713,7 @@ describe('applyChange', () => {
 
     // Helper to reduce boilerplate in tests
     const apply = (root: Entry, change: ViewChange) =>
-      applyChange(root, change, simpleSchema, '', format, true);
+      applyChange(root, change, simpleSchema, '', format, WITH_IDS, NO_MUTATE);
 
     //   [A]  ──add B──►  [A, B]
     //    ↑                 ↑
@@ -1797,7 +1877,15 @@ describe('applyChange', () => {
       };
 
       const apply = (entry: Entry, change: ViewChange) =>
-        applyChange(entry, change, schemaWithRelationship, '', formatWithRelationship, true);
+        applyChange(
+          entry,
+          change,
+          schemaWithRelationship,
+          '',
+          formatWithRelationship,
+          WITH_IDS,
+          NO_MUTATE,
+        );
 
       let root: Entry = {'': []};
 
@@ -1915,7 +2003,15 @@ describe('applyChange', () => {
       };
 
       const apply = (entry: Entry, change: ViewChange) =>
-        applyChange(entry, change, schemaWithRelationship, '', formatWithRelationship, true);
+        applyChange(
+          entry,
+          change,
+          schemaWithRelationship,
+          '',
+          formatWithRelationship,
+          WITH_IDS,
+          NO_MUTATE,
+        );
 
       let root: Entry = {'': []};
 
@@ -1925,7 +2021,9 @@ describe('applyChange', () => {
         node: {
           row: {id: 'p1', name: 'Parent1'},
           relationships: {
-            children: () => [{row: {id: 'c1', parentId: 'p1'}, relationships: {}}],
+            children: () => [
+              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
+            ],
           },
         },
       });
@@ -1935,7 +2033,9 @@ describe('applyChange', () => {
         node: {
           row: {id: 'p2', name: 'Parent2'},
           relationships: {
-            children: () => [{row: {id: 'c2', parentId: 'p2'}, relationships: {}}],
+            children: () => [
+              {row: {id: 'c2', parentId: 'p2'}, relationships: {}},
+            ],
           },
         },
       });
@@ -1963,6 +2063,520 @@ describe('applyChange', () => {
       expect(at(root, '', 1)).toBe(parent2Ref);
       // Parent2's children should keep same reference
       expect(at(root, '', 1)['children']).toBe(parent2ChildrenRef);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IN-PLACE MUTATION TESTS (mutate = true)
+  // Verify that with mutate=true, containers are mutated in place but rows
+  // remain immutable and views remain isolated.
+  //
+  // Key invariants:
+  // 1. Multiple views never share object instances
+  // 2. Row objects never mutate (always get new references when changed)
+  // 3. Within a view: root and arrays ARE mutated in place
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe('In-place mutation (mutate = true)', () => {
+    const MUTATE = 1 as const;
+
+    // Deep freeze helper to catch bugs where we mutate inputs
+    function deepFreeze<T>(obj: T): T {
+      Object.freeze(obj);
+      for (const prop of Object.getOwnPropertyNames(obj)) {
+        // oxlint-disable-next-line no-explicit-any
+        const val = (obj as any)[prop];
+        if (val && typeof val === 'object' && !Object.isFrozen(val)) {
+          deepFreeze(val);
+        }
+      }
+
+      return obj;
+    }
+
+    const simpleSchema = {
+      tableName: 'item',
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      primaryKey: ['id'],
+      sort: [['id', 'asc']],
+      system: 'client',
+      relationships: {},
+      isHidden: false,
+      compareRows: makeComparator([['id', 'asc']]),
+    } as const;
+
+    const format: Format = {singular: false, relationships: {}};
+
+    // Helper to reduce boilerplate in tests
+    const apply = (root: Entry, change: ViewChange) =>
+      applyChange(
+        root,
+        // we freeze here to catch potential bugs where applyChange mutates the
+        // input change object (it shouldn't)
+        deepFreeze(change),
+        simpleSchema,
+        '',
+        format,
+        WITH_IDS,
+        MUTATE,
+      );
+
+    //   root/[A]  ──add B──►  root/[A, B]
+    //     ↑   ↑                 ↑   ↑
+    //     └───┴─ same refs ─────┴───┘
+    test('root and array keep their reference when adding a new row', () => {
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const firstRowRef = at(root, '', 0);
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(entries(root, '')).toBe(listRef);
+      // First row should keep same reference (unchanged)
+      expect(at(root, '', 0)).toBe(firstRowRef);
+      expect(entries(root, '')).toHaveLength(2);
+    });
+
+    test('root and array keep their reference when removing a row', () => {
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      const firstRowRef = at(root, '', 0);
+
+      root = apply(root, {
+        type: 'remove',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(entries(root, '')).toBe(listRef);
+      // First row should keep same reference (unchanged)
+      expect(at(root, '', 0)).toBe(firstRowRef);
+      expect(entries(root, '')).toHaveLength(1);
+    });
+
+    test('root, array and entries keep reference when editing a row', () => {
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      const firstRowRef = at(root, '', 0);
+      const secondRowRef = at(root, '', 1);
+      // Verify secondRowRef data before edit
+      expect(secondRowRef).toEqual(
+        expect.objectContaining({id: '2', name: 'Bob'}),
+      );
+
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: '2', name: 'Bob'}},
+        node: {row: {id: '2', name: 'Bobby'}},
+      });
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(entries(root, '')).toBe(listRef);
+      // First row should keep same reference (unchanged)
+      expect(at(root, '', 0)).toBe(firstRowRef);
+      expect(at(root, '', 1)).toBe(secondRowRef);
+    });
+
+    //   [A]  ──edit A──►  [A']
+    //    ↑                  │
+    //  same ref       different ref
+    //  (array)            (row)
+    test('edited row keeps reference', () => {
+      // TODO(arv): Mutate element if compare === 0
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const originalRef = at(root, '', 0);
+      // Verify original data before edit
+      expect(originalRef).toEqual(
+        expect.objectContaining({id: '1', name: 'Alice'}),
+      );
+
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: '1', name: 'Alice'}},
+        node: {row: {id: '1', name: 'Alicia'}},
+      });
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(entries(root, '')).toBe(listRef);
+      expect(at(root, '', 0)).toBe(originalRef);
+      expect(at(root, '', 0)).toEqual(
+        expect.objectContaining({id: '1', name: 'Alicia'}),
+      );
+    });
+
+    test('root and list keep same reference on any mutation', () => {
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(root['']).toBe(listRef);
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '2', name: 'Bob'}, relationships: {}},
+      });
+
+      // Root and list should still keep same reference
+      expect(root).toBe(rootRef);
+      expect(root['']).toBe(listRef);
+    });
+
+    // Root, parent, and children arrays all mutate in place; unchanged child rows keep refs:
+    //
+    //   P1 ─┬─ [C1, C2]    add C3     P1 ─┬─ [C1, C2, C3]
+    //    ↑  │                ────►      ↑  │   ↑   ↑
+    //    │  └─ same refs ───────────────┘  └───┴─ same refs
+    //    └────────────────────────────────────┘
+    test('parent and child arrays mutated in place, child rows preserved', () => {
+      const schemaWithRelationship: SourceSchema = {
+        tableName: 'parent',
+        columns: {id: {type: 'string'}, name: {type: 'string'}},
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {
+          children: {
+            tableName: 'child',
+            columns: {id: {type: 'string'}, parentId: {type: 'string'}},
+            primaryKey: ['id'],
+            sort: [['id', 'asc']],
+            system: 'client',
+            relationships: {},
+            isHidden: false,
+            compareRows: makeComparator([['id', 'asc']]),
+          },
+        },
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      };
+
+      const formatWithRelationship: Format = {
+        singular: false,
+        relationships: {
+          children: {
+            singular: false,
+            relationships: {},
+          },
+        },
+      };
+
+      const apply = (entry: Entry, change: ViewChange) =>
+        applyChange(
+          entry,
+          // we freeze here to catch potential bugs where applyChange mutates the
+          // input change object (it shouldn't)
+          deepFreeze(change),
+          schemaWithRelationship,
+          '',
+          formatWithRelationship,
+          WITH_IDS,
+          MUTATE,
+        );
+
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      // Add parent with children
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p1', name: 'Parent1'},
+          relationships: {
+            children: () => [
+              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
+              {row: {id: 'c2', parentId: 'p1'}, relationships: {}},
+            ],
+          },
+        },
+      });
+
+      const parent1 = at(root, '', 0);
+      const childrenArrayRef = entries(parent1, 'children');
+      const child1Ref = at(parent1, 'children', 0);
+      const child2Ref = at(parent1, 'children', 1);
+
+      // Add a new child to the parent
+      root = apply(root, {
+        type: 'child',
+        node: {row: {id: 'p1', name: 'Parent1'}},
+        child: {
+          relationshipName: 'children',
+          change: {
+            type: 'add',
+            node: {row: {id: 'c3', parentId: 'p1'}, relationships: {}},
+          },
+        },
+      });
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(entries(root, '')).toBe(listRef);
+      // Parent should keep same reference (mutated in place)
+      expect(at(root, '', 0)).toBe(parent1);
+      // Children array should keep same reference (mutated in place)
+      expect(entries(at(root, '', 0), 'children')).toBe(childrenArrayRef);
+      // Existing children should keep their references
+      expect(at(at(root, '', 0), 'children', 0)).toBe(child1Ref);
+      expect(at(at(root, '', 0), 'children', 1)).toBe(child2Ref);
+      // New child is added
+      expect(entries(at(root, '', 0), 'children')).toHaveLength(3);
+    });
+
+    //   [A:rc=1]  ──add A──►  [A:rc=2]
+    //       ↑                     │
+    //   same array          same array ref
+    test('refCount increment mutates entry', () => {
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const originalRef = at(root, '', 0);
+      const originalRefCount = (originalRef as {[refCountSymbol]: number})[
+        refCountSymbol
+      ];
+      expect(originalRefCount).toBe(1);
+
+      // Add same row again (should increment refCount)
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alicia'}, relationships: {}},
+      });
+
+      const newRef = at(root, '', 0);
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(entries(root, '')).toBe(listRef);
+      expect(newRef).toBe(originalRef);
+      // RefCount should be incremented
+      expect((newRef as {[refCountSymbol]: number})[refCountSymbol]).toBe(
+        originalRefCount + 1,
+      );
+    });
+
+    // Sibling parents are independent. Changing P1's children doesn't touch P2:
+    //
+    //   [P1─[C1], P2─[C2]]    add C3 to P1    [P1─[C1,C3], P2─[C2]]
+    //    ↑   ↑      ↑          ────►           ↑   ↑        ↑
+    //    └───┴──────┴───────── all same refs ─┴───┴────────┘
+    test('child change on one parent does not affect other parents', () => {
+      const schemaWithRelationship: SourceSchema = {
+        tableName: 'parent',
+        columns: {id: {type: 'string'}, name: {type: 'string'}},
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {
+          children: {
+            tableName: 'child',
+            columns: {id: {type: 'string'}, parentId: {type: 'string'}},
+            primaryKey: ['id'],
+            sort: [['id', 'asc']],
+            system: 'client',
+            relationships: {},
+            isHidden: false,
+            compareRows: makeComparator([['id', 'asc']]),
+          },
+        },
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      };
+
+      const formatWithRelationship: Format = {
+        singular: false,
+        relationships: {
+          children: {
+            singular: false,
+            relationships: {},
+          },
+        },
+      };
+
+      const apply = (entry: Entry, change: ViewChange) =>
+        applyChange(
+          entry,
+          // we freeze here to catch potential bugs where applyChange mutates the
+          // input change object (it shouldn't)
+          deepFreeze(change),
+          schemaWithRelationship,
+          '',
+          formatWithRelationship,
+          WITH_IDS,
+          MUTATE,
+        );
+
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      // Add two parents with children
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p1', name: 'Parent1'},
+          relationships: {
+            children: () => [
+              {row: {id: 'c1', parentId: 'p1'}, relationships: {}},
+            ],
+          },
+        },
+      });
+
+      root = apply(root, {
+        type: 'add',
+        node: {
+          row: {id: 'p2', name: 'Parent2'},
+          relationships: {
+            children: () => [
+              {row: {id: 'c2', parentId: 'p2'}, relationships: {}},
+            ],
+          },
+        },
+      });
+
+      const parent1Ref = at(root, '', 0);
+      const parent2Ref = at(root, '', 1);
+      const parent2ChildrenRef = entries(parent2Ref, 'children');
+
+      // Add a child to parent1 only
+      root = apply(root, {
+        type: 'child',
+        node: {row: {id: 'p1', name: 'Parent1'}},
+        child: {
+          relationshipName: 'children',
+          change: {
+            type: 'add',
+            node: {row: {id: 'c3', parentId: 'p1'}, relationships: {}},
+          },
+        },
+      });
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(entries(root, '')).toBe(listRef);
+      // Both parents should keep same reference (mutated in place)
+      expect(at(root, '', 0)).toBe(parent1Ref);
+      expect(at(root, '', 1)).toBe(parent2Ref);
+      // Parent2's children should keep same reference
+      expect(at(root, '', 1)['children']).toBe(parent2ChildrenRef);
+    });
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // VIEW ISOLATION TESTS
+    // Verify that different views never share object instances
+    // ═════════════════════════════════════════════════════════════════════════
+    test('different views never share row instances', () => {
+      let view1: Entry = {'': []};
+      let view2: Entry = {'': []};
+
+      // Add same row to both views
+      view1 = apply(view1, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      view2 = apply(view2, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      // Views should be different objects
+      expect(view1).not.toBe(view2);
+      expect(entries(view1, '')).not.toBe(entries(view2, ''));
+      // Row instances should be different (no sharing between views)
+      expect(at(view1, '', 0)).not.toBe(at(view2, '', 0));
+    });
+
+    test('editing a row in one view does not affect other views', () => {
+      let view1: Entry = {'': []};
+      let view2: Entry = {'': []};
+
+      // Add same row to both views
+      view1 = apply(view1, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      view2 = apply(view2, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const view2RowRef = at(view2, '', 0);
+
+      // Edit row in view1
+      view1 = apply(view1, {
+        type: 'edit',
+        oldNode: {row: {id: '1', name: 'Alice'}},
+        node: {row: {id: '1', name: 'Alicia'}},
+      });
+
+      // View1 should have updated data
+      expect(at(view1, '', 0)).toEqual(
+        expect.objectContaining({id: '1', name: 'Alicia'}),
+      );
+      // View2 should be completely unchanged (same reference, same data)
+      expect(at(view2, '', 0)).toBe(view2RowRef);
+      expect(at(view2, '', 0)).toEqual(
+        expect.objectContaining({id: '1', name: 'Alice'}),
+      );
     });
   });
 });

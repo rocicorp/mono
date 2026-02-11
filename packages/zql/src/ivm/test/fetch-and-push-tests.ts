@@ -101,10 +101,7 @@ export function runPushTest(t: PushTest) {
   });
 
   let data;
-  const {
-    finalOutput: view,
-    actualStorage: actualStorage2,
-  } = innerTest(j => {
+  const {finalOutput: view, actualStorage: actualStorage2} = innerTest(j => {
     const view = new ArrayView(j, t.format, true, () => {});
     data = view.data;
     return view;
@@ -188,10 +185,7 @@ export function runFetchTest(t: FetchTest) {
   });
 
   let data;
-  const {
-    finalOutput: view,
-    actualStorage: actualStorage2,
-  } = innerTest(j => {
+  const {finalOutput: view, actualStorage: actualStorage2} = innerTest(j => {
     const view = new ArrayView(j, t.format, true, () => {});
     data = view.data;
     return view;

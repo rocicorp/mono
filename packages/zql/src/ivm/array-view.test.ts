@@ -2103,7 +2103,9 @@ test('O(N + K) batching: multiple changes applied efficiently', () => {
 
   // Verify the data is correctly sorted (by 'a' ascending)
   const sortedA = data.map(d => (d as {a: number}).a);
-  expect(sortedA).toEqual([0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90]);
+  expect(sortedA).toEqual([
+    0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90,
+  ]);
 
   // Verify UNCHANGED items preserve reference identity
   // Original items at indices 0, 1 (a=0, a=10) should still be the same references
