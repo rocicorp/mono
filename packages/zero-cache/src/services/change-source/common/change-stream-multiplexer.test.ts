@@ -26,12 +26,9 @@ describe('change-stream-multiplexer', () => {
     listenFn1 = vi.fn();
     listenFn2 = vi.fn();
 
-    stream = new ChangeStreamMultiplexer(
-      createSilentLogContext(),
-      '123',
-      [{cancel: cancelFn1}, {cancel: cancelFn2}],
-      [{onChange: listenFn1}, {onChange: listenFn2}],
-    );
+    stream = new ChangeStreamMultiplexer(createSilentLogContext(), '123')
+      .addProducers({cancel: cancelFn1}, {cancel: cancelFn2})
+      .addListeners({onChange: listenFn1}, {onChange: listenFn2});
   });
 
   test('reservations', async () => {

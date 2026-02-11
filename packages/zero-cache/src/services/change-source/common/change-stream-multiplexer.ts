@@ -5,11 +5,11 @@ import type {Source} from '../../../types/streams.ts';
 import {Subscription} from '../../../types/subscription.ts';
 import type {ChangeStreamMessage, StatusMessage} from '../protocol/current.ts';
 
-type Cancelable = {
+export type Cancelable = {
   cancel(): void;
 };
 
-type Listener = {
+export type Listener = {
   onChange(change: ChangeStreamMessage): void;
 };
 
@@ -26,7 +26,8 @@ type Waiter = {
 export class ChangeStreamMultiplexer {
   readonly #lc: LogContext;
   readonly #sub: Subscription<ChangeStreamMessage>;
-  readonly #listeners: Listener[];
+  readonly #producers: Cancelable[] = [];
+  readonly #listeners: Listener[] = [];
 
   /**
    * The `#lastWatermark` tracks the watermark of the last transaction
@@ -41,18 +42,22 @@ export class ChangeStreamMultiplexer {
    */
   readonly #waiters: Waiter[] = [];
 
-  constructor(
-    lc: LogContext,
-    lastWatermark: string,
-    producers: Cancelable[],
-    listeners: Listener[],
-  ) {
+  constructor(lc: LogContext, lastWatermark: string) {
     this.#lc = lc;
     this.#sub = Subscription.create<ChangeStreamMessage>({
-      cleanup: () => producers.forEach(p => p.cancel()),
+      cleanup: () => this.#producers.forEach(p => p.cancel()),
     });
-    this.#listeners = listeners;
     this.#lastWatermark = lastWatermark;
+  }
+
+  addProducers(...p: Cancelable[]): this {
+    this.#producers.push(...p);
+    return this;
+  }
+
+  addListeners(...l: Listener[]): this {
+    this.#listeners.push(...l);
+    return this;
   }
 
   /**
