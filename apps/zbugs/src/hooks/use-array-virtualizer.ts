@@ -1,5 +1,6 @@
 import {useVirtualizer, type Virtualizer} from '@rocicorp/react-virtual';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {type UseQueryOptions} from '../../../../packages/zero-react/src/use-query.tsx';
 import {
   useRows,
   type GetPageQuery,
@@ -74,6 +75,10 @@ export interface UseArrayVirtualizerOptions<
    * state, `history.state`, or anywhere else.
    */
   onScrollStateChange?: ((state: ScrollRestorationState) => void) | undefined;
+  /**
+   * Options to pass to the underlying useQuery calls (e.g., cache policy)
+   */
+  options?: UseQueryOptions | undefined;
 }
 
 /**
@@ -229,6 +234,7 @@ export function useArrayVirtualizer<
   listContextParams,
   scrollState: externalScrollState,
   onScrollStateChange,
+  options,
   debug = false,
   overscan = 5,
   ...restVirtualizerOptions
@@ -469,6 +475,7 @@ export function useArrayVirtualizer<
         startRow: anchor.startRow,
       };
     }, [anchor]),
+    options,
     getPageQuery,
     getSingleQuery,
     toStartRow,

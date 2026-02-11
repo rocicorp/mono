@@ -39,6 +39,7 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
+import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {isGigabugs, links, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 import {getIDFromString} from '../issue/get-id.tsx';
@@ -239,6 +240,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     toStartRow,
     scrollState: scrollState ?? undefined,
     onScrollStateChange: handleScrollStateChange,
+    options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   });
 
   useEffect(() => {
