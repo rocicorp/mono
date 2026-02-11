@@ -20,23 +20,14 @@ describe('backfill-manager', () => {
   let backfillManager: BackfillManager;
   let changeStream: ChangeStreamMultiplexer;
   let backfillRequests: BackfillRequest[];
-  let testStreams: (
-    | MessageBackfill
-    | BackfillCompleted
-    | 'reserve'
-    | ChangeStreamMessage
-  )[][];
+  let testStreams: (MessageBackfill | BackfillCompleted)[][];
   let changes: Queue<ChangeStreamMessage>;
   let lc: LogContext;
 
   beforeEach(() => {
     lc = new LogContext('debug', {}, consoleLogSink);
     changeStream = new ChangeStreamMultiplexer(lc, '123');
-    backfillManager = new BackfillManager(
-      lc,
-      changeStream,
-      testBackfillStreamer,
-    );
+    backfillManager = new BackfillManager(lc, changeStream, backfillStreamer);
     changeStream.addProducers(backfillManager).addListeners(backfillManager);
     backfillRequests = [];
     testStreams = [];
@@ -50,35 +41,17 @@ describe('backfill-manager', () => {
     })();
   });
 
-  async function* testBackfillStreamer(
+  async function* backfillStreamer(
     req: BackfillRequest,
   ): AsyncGenerator<MessageBackfill | BackfillCompleted> {
     lc.debug?.(`starting test backfill stream for`, req);
     backfillRequests.push(req);
-    let reserving: string | Promise<string> | null = null;
     const stream = must(
       testStreams.shift(),
       `No more testStreams configured by test`,
     );
     for (const msg of stream) {
-      if (msg === 'reserve') {
-        reserving = changeStream.reserve('main');
-        continue;
-      }
-      if (!Array.isArray(msg)) {
-        // Yield the `backfill` or `backfill-completed` message
-        yield msg;
-        continue;
-      }
-      // Main stream
-      if (reserving instanceof Promise) {
-        await reserving;
-      }
-      reserving = null;
-      void changeStream.push(msg);
-      if (msg[0] === 'commit') {
-        changeStream.release(msg[2].watermark);
-      }
+      yield msg;
     }
   }
 
