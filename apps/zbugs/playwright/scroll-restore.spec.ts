@@ -1661,4 +1661,60 @@ test.describe('History State Scroll Restoration', () => {
     const scrollAfter = await getScrollTop(page);
     expect(scrollAfter).toBeLessThan(100);
   });
+
+  test('auto-paging with uniform height after back from permalink does not show loading placeholder', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/array-test`, {waitUntil: 'networkidle'});
+    await waitForRows(page);
+    await waitForScrollStable(page, 300);
+
+    // Switch to uniform height mode
+    await page.selectOption('select', 'uniform');
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Navigate to a permalink
+    await setPermalink(page, '3130');
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+    await waitForScrollStable(page, 300);
+
+    // Go back to no-hash state
+    await page.goBack({waitUntil: 'commit'});
+    await page.waitForFunction(() => window.location.hash === '', undefined, {
+      timeout: 5000,
+    });
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(300);
+
+    // Scroll down to trigger auto-paging
+    const initialScroll = await getScrollTop(page);
+    await scrollTo(page, initialScroll + 2000);
+    await waitForScrollStable(page, 500);
+    await page.waitForTimeout(500);
+
+    // Verify no loading placeholder is visible
+    // Without the fix, newAnchorIndex could be negative and rowAt() would return undefined,
+    // causing loading placeholders to appear
+    const hasLoadingPlaceholder = await page.evaluate(() => {
+      const container = document.querySelector(
+        'div[style*="overflow: auto"][style*="position: relative"]',
+      );
+      if (!container) return false;
+      return container.textContent?.includes('Loading row') ?? false;
+    });
+
+    expect(
+      hasLoadingPlaceholder,
+      'Should not show loading placeholder after auto-paging',
+    ).toBe(false);
+
+    // Verify we actually have rows visible (not stuck)
+    const visibleRows = await getVisibleRows(page);
+    expect(
+      visibleRows.length,
+      'Should have visible rows after scrolling',
+    ).toBeGreaterThan(5);
+  });
 });

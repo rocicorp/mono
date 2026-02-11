@@ -1,6 +1,11 @@
 import {useZero} from '@rocicorp/zero/react';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {queries, type IssueRowSort, type Issues} from '../shared/queries.js';
+import {
+  queries,
+  type IssueRowSort,
+  type Issues,
+  type ListContextParams,
+} from '../shared/queries.js';
 import {ZERO_PROJECT_NAME} from '../shared/schema.js';
 import {LoginProvider} from './components/login-provider.js';
 import {
@@ -76,7 +81,7 @@ function ArrayTestAppContent() {
   >(undefined);
   const [restoreInput, setRestoreInput] = useState<string>('');
 
-  const listContextParams = useMemo(
+  const listContextParams: ListContextParams = useMemo(
     () => ({
       projectName: ZERO_PROJECT_NAME.toLocaleLowerCase(),
       sortDirection: 'desc' as const,
@@ -176,12 +181,12 @@ function ArrayTestAppContent() {
     permalinkNotFound,
     estimatedTotal,
     total,
-  } = useArrayVirtualizer<RowData, IssueRowSort, string>({
+  } = useArrayVirtualizer<RowData, IssueRowSort, ListContextParams>({
     getPageQuery,
     getSingleQuery,
     toStartRow,
     permalinkID,
-    listContextParams: 'test-list',
+    listContextParams,
     scrollState,
     onScrollStateChange,
 

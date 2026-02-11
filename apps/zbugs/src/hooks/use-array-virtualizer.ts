@@ -254,9 +254,8 @@ export function useArrayVirtualizer<
         },
   );
 
-  // Track min/max indices seen to calculate total counts
-  const [minIndexSeen, setMinIndexSeen] = useState<number | null>(null);
-  const [maxIndexSeen, setMaxIndexSeen] = useState<number | null>(null);
+  // Track pagination boundaries and estimated total
+  const [estimatedTotalState, setEstimatedTotalState] = useState(0);
   const [hasReachedStart, setHasReachedStart] = useState(false);
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
 
@@ -264,17 +263,6 @@ export function useArrayVirtualizer<
   const prevListContextParamsRef = useRef(listContextParams);
   const isListContextCurrent =
     prevListContextParamsRef.current === listContextParams;
-
-  // Reset pagination state when list context changes
-  useEffect(() => {
-    if (!isListContextCurrent) {
-      prevListContextParamsRef.current = listContextParams;
-      setMinIndexSeen(null);
-      setMaxIndexSeen(null);
-      setHasReachedStart(false);
-      setHasReachedEnd(false);
-    }
-  }, [isListContextCurrent, listContextParams]);
 
   const scrollInternalRef = useRef({
     pendingScroll: null as number | null,
@@ -304,6 +292,37 @@ export function useArrayVirtualizer<
       setAnchor(prev => (anchorsEqual(prev, next) ? prev : next)),
     [],
   );
+
+  // Reset pagination state AND anchor when list context changes
+  useEffect(() => {
+    if (!isListContextCurrent) {
+      prevListContextParamsRef.current = listContextParams;
+      setEstimatedTotalState(0);
+      setHasReachedEnd(false);
+
+      // Reset anchor to top (unless we have a permalinkID)
+      if (permalinkID) {
+        replaceAnchor({
+          kind: 'permalink',
+          index: 0,
+          permalinkID,
+        });
+        scrollInternalRef.current.positionedAt = 0;
+        scrollInternalRef.current.expectedAnchorID = permalinkID;
+        setHasReachedStart(false);
+      } else {
+        replaceAnchor({
+          kind: 'forward',
+          index: 0,
+          startRow: undefined,
+        });
+        scrollInternalRef.current.pendingScroll = 0;
+        scrollInternalRef.current.pendingScrollIsRelative = false;
+        scrollInternalRef.current.positionedAt = Date.now();
+        setHasReachedStart(true); // Starting from the top means we're at the start
+      }
+    }
+  }, [isListContextCurrent, listContextParams, permalinkID, replaceAnchor]);
 
   // Track previous values so we can detect actual changes inside a
   // single unified effect.  `prevExternalStateRef` starts as `undefined`
@@ -401,17 +420,19 @@ export function useArrayVirtualizer<
       scrollInternalRef.current.pendingScroll = null;
       scrollInternalRef.current.pendingScrollIsRelative = false;
     } else {
-      // Permalink cleared (hash removed).  Queue a scroll-to-top via
-      // pendingScroll but do NOT reset positionedAt or expectedAnchorID.
-      // When going back/forward, both hash and scrollState change at the
-      // same time.  If they arrive in separate renders (Wouter fires the
-      // hash change first), resetting positionedAt would reactivate the
-      // positioning loop for the stale anchor.  By leaving positionedAt
-      // untouched the stale anchor is ignored, and the external-state
-      // branch (which fires on the next render) overwrites pendingScroll
-      // with the correct restore position.
-      scrollInternalRef.current.pendingScroll = 0;
-      scrollInternalRef.current.pendingScrollIsRelative = false;
+      // Permalink cleared (hash removed).
+      // If there's an external scroll state defined, this is likely a back/forward
+      // navigation and the external state will be processed in a subsequent render.
+      // Don't scroll to top; keep the current position.  The external state handler
+      // will restore the correct position when it runs.
+      // Only scroll to top if there's no external state (direct "Clear" action).
+      if (!externalScrollState) {
+        scrollInternalRef.current.positionedAt = 0;
+        scrollInternalRef.current.expectedAnchorID = null;
+        scrollInternalRef.current.pendingScroll = 0;
+        scrollInternalRef.current.pendingScrollIsRelative = false;
+      }
+      // else: Don't modify scroll state - let the external state handler (next render) restore
     }
   }, [permalinkID, externalScrollState, replaceAnchor]);
 
@@ -434,7 +455,6 @@ export function useArrayVirtualizer<
           id: anchor.permalinkID,
         };
       }
-
       if (anchor.kind === 'forward') {
         return {
           kind: 'forward',
@@ -442,7 +462,6 @@ export function useArrayVirtualizer<
           startRow: anchor.startRow,
         };
       }
-
       anchor.kind satisfies 'backward';
       return {
         kind: 'backward',
@@ -458,23 +477,15 @@ export function useArrayVirtualizer<
   const endPlaceholder = atEnd ? 0 : 1;
   const startPlaceholder = atStart ? 0 : 1;
 
-  // Track min/max indices seen so far
+  // Calculate estimated total from current data window
+  const newEstimatedTotal = firstRowIndex + rowsLength;
+
+  // Update estimated total (only increase, never decrease)
   useEffect(() => {
-    if (rowsLength === 0) {
-      return;
+    if (complete && newEstimatedTotal > estimatedTotalState) {
+      setEstimatedTotalState(newEstimatedTotal);
     }
-
-    const currentMin = firstRowIndex;
-    const currentMax = firstRowIndex + rowsLength - 1;
-
-    if (minIndexSeen === null || currentMin < minIndexSeen) {
-      setMinIndexSeen(currentMin);
-    }
-
-    if (maxIndexSeen === null || currentMax > maxIndexSeen) {
-      setMaxIndexSeen(currentMax);
-    }
-  }, [firstRowIndex, rowsLength, minIndexSeen, maxIndexSeen]);
+  }, [complete, newEstimatedTotal, estimatedTotalState]);
 
   // Track when we reach the boundaries
   useEffect(() => {
@@ -777,10 +788,17 @@ export function useArrayVirtualizer<
           }
 
           if (estimatedDistanceToEnd < thresholdDistance) {
-            const newAnchorIndex = lastLogicalIndex - Math.ceil(pageSize * 0.6);
+            // Clamp to ensure we don't go before the start of the data window
+            const newAnchorIndex = Math.max(
+              firstRowIndex,
+              lastLogicalIndex - Math.ceil(pageSize * 0.6),
+            );
             const newAnchorRow = rowAt(newAnchorIndex);
 
-            if (newAnchorRow && newAnchorIndex !== anchor.index) {
+            if (
+              newAnchorRow &&
+              (anchor.kind !== 'forward' || newAnchorIndex !== anchor.index)
+            ) {
               replaceAnchor({
                 kind: 'forward',
                 index: newAnchorIndex,
@@ -826,11 +844,17 @@ export function useArrayVirtualizer<
           }
 
           if (estimatedDistanceToStart < thresholdDistance) {
-            const newAnchorIndex =
-              firstLogicalIndex + Math.ceil(pageSize * 0.6);
+            // Clamp to ensure we don't go beyond the end of the data window
+            const newAnchorIndex = Math.min(
+              firstRowIndex + rowsLength - 1,
+              firstLogicalIndex + Math.ceil(pageSize * 0.6),
+            );
             const newAnchorRow = rowAt(newAnchorIndex);
 
-            if (newAnchorRow && newAnchorIndex !== anchor.index) {
+            if (
+              newAnchorRow &&
+              (anchor.kind !== 'backward' || newAnchorIndex !== anchor.index)
+            ) {
               replaceAnchor({
                 kind: 'backward',
                 index: newAnchorIndex,
@@ -920,11 +944,8 @@ export function useArrayVirtualizer<
     }
   }, [currentScrollState]);
 
-  // Calculate totals from min/max indices seen
-  const estimatedTotal =
-    minIndexSeen !== null && maxIndexSeen !== null
-      ? maxIndexSeen - minIndexSeen + 1
-      : rowsLength;
+  // Use the higher of current window or tracked state for estimated total
+  const estimatedTotal = Math.max(estimatedTotalState, newEstimatedTotal);
   const total = hasReachedStart && hasReachedEnd ? estimatedTotal : undefined;
 
   return {
