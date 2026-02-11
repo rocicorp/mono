@@ -193,10 +193,9 @@ async function main() {
     }
     first = false;
     assert(browser !== 'all');
-    const context = await playwright[browser].launchPersistentContext(
-      userDataDir,
-      {devtools: options.devtools ?? false},
-    );
+
+    const context =
+      await playwright[browser].launchPersistentContext(userDataDir);
     const page = await context.newPage();
 
     // The perf test should only import out/replicache.
