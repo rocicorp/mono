@@ -1047,8 +1047,7 @@ describe('backfill-manager', () => {
     }
     changeStream.release('125');
 
-    // The first request is canceled and only the changes from
-    // the updated request are streamed.
+    // The backfill request is canceled
     expect(await drainChanges(3)).toMatchObject([
       ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
       [
