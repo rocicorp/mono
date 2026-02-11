@@ -999,6 +999,106 @@ describe('pusher errors', () => {
     );
   });
 
+  test('invokes auth failure handler on 401 push failure', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.HTTP,
+          status: 401,
+          bodyPreview: 'Unauthorized access',
+          message: 'Fetch from API server returned non-OK status 401',
+          mutationIDs: [{clientID, id: 1}],
+        } satisfies PushResponse),
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    const onAuthFailure = vi.fn();
+    const stream = pusher.initConnection(
+      clientID,
+      wsID,
+      undefined,
+      undefined,
+      onAuthFailure,
+    );
+
+    pusher.enqueuePush(
+      clientID,
+      makePush(1, clientID),
+      'jwt',
+      undefined,
+      undefined,
+    );
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
+      ProtocolErrorWithLevel,
+    );
+    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not invoke auth failure handler on non-auth push failure', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.HTTP,
+          status: 500,
+          bodyPreview: 'Internal Server Error',
+          message: 'Fetch from API server returned non-OK status 500',
+          mutationIDs: [{clientID, id: 1}],
+        } satisfies PushResponse),
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    const onAuthFailure = vi.fn();
+    const stream = pusher.initConnection(
+      clientID,
+      wsID,
+      undefined,
+      undefined,
+      onAuthFailure,
+    );
+
+    pusher.enqueuePush(
+      clientID,
+      makePush(1, clientID),
+      'jwt',
+      undefined,
+      undefined,
+    );
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
+      ProtocolErrorWithLevel,
+    );
+    expect(onAuthFailure).not.toHaveBeenCalled();
+  });
+
   test('emits error message with legacy http error format', async () => {
     await expectPushErrorResponse(
       {

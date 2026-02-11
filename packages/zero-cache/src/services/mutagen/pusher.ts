@@ -24,11 +24,11 @@ import {type ZeroConfig} from '../../config/zero-config.ts';
 import {compileUrlPattern, fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
+import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
-import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 
 export interface Pusher extends RefCountedService {
   readonly pushURL: string | undefined;
@@ -38,6 +38,7 @@ export interface Pusher extends RefCountedService {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
+    onAuthFailure?: (() => void) | undefined,
   ): Source<Downstream>;
   enqueuePush(
     clientID: string,
@@ -108,12 +109,14 @@ export class PusherService implements Service, Pusher {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
+    onAuthFailure?: (() => void) | undefined,
   ) {
     return this.#pusher.initConnection(
       clientID,
       wsID,
       userPushURL,
       userPushHeaders,
+      onAuthFailure,
     );
   }
 
@@ -292,6 +295,7 @@ class PushWorker {
     {
       wsID: string;
       downstream: Subscription<Downstream>;
+      onAuthFailure: (() => void) | undefined;
     }
   >;
   #userPushURL?: string | undefined;
@@ -339,6 +343,7 @@ class PushWorker {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
+    onAuthFailure?: (() => void) | undefined,
   ) {
     const existing = this.#clients.get(clientID);
     if (existing && existing.wsID === wsID) {
@@ -375,7 +380,7 @@ class PushWorker {
         this.#clients.delete(clientID);
       },
     });
-    this.#clients.set(clientID, {wsID, downstream});
+    this.#clients.set(clientID, {wsID, downstream, onAuthFailure});
     return downstream;
   }
 
@@ -457,8 +462,14 @@ class PushWorker {
                   };
 
           this.#failDownstream(client.downstream, pushFailedBody);
+          if (isPushAuthFailure(pushFailedBody)) {
+            client.onAuthFailure?.();
+          }
         } else if ('kind' in response) {
           this.#failDownstream(client.downstream, response);
+          if (isPushAuthFailure(response)) {
+            client.onAuthFailure?.();
+          }
         } else {
           unreachable(response);
         }
@@ -593,6 +604,13 @@ class PushWorker {
   ): void {
     downstream.fail(new ProtocolErrorWithLevel(errorBody, 'warn'));
   }
+}
+
+function isPushAuthFailure(errorBody: PushFailedBody): boolean {
+  return (
+    errorBody.reason === ErrorReason.HTTP &&
+    (errorBody.status === 401 || errorBody.status === 403)
+  );
 }
 
 /**

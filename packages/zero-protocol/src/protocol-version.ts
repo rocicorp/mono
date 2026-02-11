@@ -53,7 +53,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 45 adds userPushHeaders and userQueryHeaders to initConnection (0.25)
 // -- version 46 adds scalarSubquery condition type to AST
 // -- version 47 adds optional auth token to push body
-export const PROTOCOL_VERSION = 47;
+// -- version 48 adds updateAuth
+export const PROTOCOL_VERSION = 48;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

@@ -13,6 +13,7 @@ import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
+import type {Auth} from './auth.ts';
 import {transformQuery} from './read-authorizer.ts';
 
 const lc = createSilentLogContext();
@@ -128,10 +129,15 @@ type AuthData = {
   role: string;
 };
 
-const authData: AuthData = {
-  sub: '001',
-  role: 'user',
-};
+const authData = {
+  type: 'jwt',
+  raw: '',
+  decoded: {
+    sub: '001',
+    role: 'user',
+  },
+} as const satisfies Auth;
+
 const permissionRules = must(
   await definePermissions<AuthData, Schema>(schema, () => ({
     readable: {

@@ -10,6 +10,7 @@ import type {
 } from '../../../../zero-protocol/src/inspect-down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {AuthSession, ValidateLegacyJWT} from '../../auth/auth.ts';
 import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
@@ -58,9 +59,9 @@ describe('view-syncer/service', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    tokenData: undefined,
     httpCookie: undefined,
     origin: undefined,
+    userID: 'user-123',
   };
 
   let delegate: InspectorDelegate;
@@ -633,6 +634,7 @@ describe('view-syncer/service', () => {
     let restrictiveUpstreamDb: PostgresDB;
     let restrictiveStateChanges: Subscription<ReplicaState>;
     let restrictiveVs: ViewSyncerService;
+    let restrictiveAuthSession: AuthSession;
     let restrictiveViewSyncerDone: Promise<void>;
     let restrictiveConnectWithQueueAndSource: (
       ctx: SyncContext,
@@ -646,12 +648,28 @@ describe('view-syncer/service', () => {
     let restrictiveDelegate: InspectorDelegate;
 
     beforeEach<PgTest>(async ({testDBs}) => {
+      const validateLegacyJWT: ValidateLegacyJWT = token => {
+        if (token === 'jwt-admin-token') {
+          return Promise.resolve({
+            type: 'jwt',
+            raw: token,
+            decoded: {
+              sub: 'user-123',
+              role: 'admin',
+              iat: Date.now(),
+            },
+          });
+        }
+        return Promise.reject(new Error(`Unexpected test token: ${token}`));
+      };
+
       ({
         replicaDbFile: restrictiveReplicaDbFile,
         cvrDB: restrictiveCvrDB,
         upstreamDb: restrictiveUpstreamDb,
         stateChanges: restrictiveStateChanges,
         vs: restrictiveVs,
+        authSession: restrictiveAuthSession,
         viewSyncerDone: restrictiveViewSyncerDone,
         connectWithQueueAndSource: restrictiveConnectWithQueueAndSource,
         inspectorDelegate: restrictiveDelegate,
@@ -659,6 +677,7 @@ describe('view-syncer/service', () => {
         testDBs,
         'view_syncer_restrictive_permissions_test',
         permissions,
+        validateLegacyJWT,
       ));
 
       restrictiveDelegate.setAuthenticated(serviceID);
@@ -730,25 +749,14 @@ describe('view-syncer/service', () => {
     });
 
     test('permission filter with auth data substitutes actual values', async () => {
-      // Create a sync context with tokenData that includes role='admin'
-      const ADMIN_SYNC_CONTEXT: SyncContext = {
-        ...SYNC_CONTEXT,
-        tokenData: {
-          raw: JSON.stringify({
-            sub: 'user-123',
-            role: 'admin',
-            iat: Date.now(),
-          }),
-          decoded: {
-            sub: 'user-123',
-            role: 'admin',
-            iat: Date.now(),
-          },
-        },
-      };
+      expect(
+        await restrictiveAuthSession.update('admin', 'jwt-admin-token'),
+      ).toEqual({
+        ok: true,
+      });
 
       const {queue: client} = restrictiveConnectWithQueueAndSource(
-        ADMIN_SYNC_CONTEXT,
+        SYNC_CONTEXT,
         [],
       );
 
@@ -759,7 +767,7 @@ describe('view-syncer/service', () => {
 
       const inspectId = 'test-restrictive-permissions-with-auth';
 
-      await restrictiveVs.inspect(ADMIN_SYNC_CONTEXT, [
+      await restrictiveVs.inspect(SYNC_CONTEXT, [
         'inspect',
         {
           op: 'analyze-query',
