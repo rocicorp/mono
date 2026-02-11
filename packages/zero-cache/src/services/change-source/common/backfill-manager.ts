@@ -40,7 +40,7 @@ type RunningBackfillState = {
  * The BackfillManager initiates backfills for BackfillRequests from the
  * change-streamer (i.e. unfinished backfills from previous sessions)
  * or for new backfills signaled by `create-table` or `add-column` messages
- * in the from the change-source.
+ * from the change-source.
  *
  * The BackfillManager registers itself as a change stream listener in order
  * to track necessary backfills, and potentially invalidate the in-progress
@@ -54,14 +54,27 @@ type RunningBackfillState = {
  */
 export class BackfillManager implements Cancelable, Listener {
   readonly #lc: LogContext;
+
+  /**
+   * Tracks the metadata of required backfills based on schema changes
+   * and initial backfill requests.
+   */
   readonly #requiredBackfills = new CustomKeyMap<Identifier, BackfillRequest>(
     tableKey,
   );
   readonly #changeStreamer: ChangeStreamMultiplexer;
   readonly #backfillStreamer: BackfillStreamer;
 
-  #changeStreamWatermark: StateVersion | null = null;
+  /**
+   * The current running backfill. The backfill request is always also in
+   * `#requiredBackfills` (technically, it can be a subset of what's in
+   * `#requiredBackfills`); the request is removed from `#requiredBackfills`
+   * upon completion.
+   */
   #runningBackfill: RunningBackfillState | null = null;
+
+  /** The last seen watermark in the change stream. */
+  #changeStreamWatermark: StateVersion | null = null;
 
   constructor(
     lc: LogContext,
@@ -81,6 +94,9 @@ export class BackfillManager implements Cancelable, Listener {
     this.#checkAndStartBackfill();
   }
 
+  // TODO: This currently starts pending backfills immediately. Consider adding
+  //       backoff logic in case of pathological scenarios where requests
+  //       continually fail.
   #checkAndStartBackfill() {
     if (this.#runningBackfill === null) {
       // Use the iterator to pick the first request.
@@ -185,6 +201,12 @@ export class BackfillManager implements Cancelable, Listener {
       : null;
   }
 
+  /**
+   * Stops the running backfill for the specified `reason`. If `instance` is
+   * specified, the running backfill is stopped only if it is that instance.
+   * This allows the running backfill itself to clear backfill state without
+   * accidentally stopping a different (e.g. subsequent) backfill.
+   */
   #stopRunningBackfill(reason?: string, instance?: RunningBackfillState) {
     const backfill = this.#runningBackfill;
     if (backfill && backfill === (instance ?? backfill)) {
@@ -210,6 +232,10 @@ export class BackfillManager implements Cancelable, Listener {
     }
   }
 
+  /**
+   * Implements {@link Listener.onChange()}, invoked by the
+   * {@link ChangeStreamMultiplexer}.
+   */
   onChange(message: ChangeStreamMessage): void {
     if (message[0] === 'begin') {
       this.#changeStreamWatermark = stateVersionFromString(
