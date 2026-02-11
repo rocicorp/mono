@@ -38,6 +38,7 @@ import {
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
+import {BackfillManager} from '../common/backfill-manager.ts';
 import {ChangeStreamMultiplexer} from '../common/change-stream-multiplexer.ts';
 import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
@@ -51,6 +52,7 @@ import type {
   Data,
 } from '../protocol/current/downstream.ts';
 import type {TableMetadata} from './backfill-metadata.ts';
+import {streamBackfill} from './backfill-stream.ts';
 import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
   Message,
@@ -232,9 +234,6 @@ class PostgresChangeSource implements ChangeSource {
     clientWatermark: string,
     backfillRequests: BackfillRequest[] = [],
   ): Promise<ChangeStream> {
-    if (backfillRequests.length) {
-      throw new Error('not implemented yet');
-    }
     const db = pgClient(this.#lc, this.#upstreamUri);
     const {slot} = this.#replica;
 
@@ -246,7 +245,13 @@ class PostgresChangeSource implements ChangeSource {
       ));
       const config = await getInternalShardConfig(db, this.#shard);
       this.#lc.info?.(`starting replication stream@${slot}`);
-      return await this.#startStream(db, slot, clientWatermark, config);
+      return await this.#startStream(
+        db,
+        slot,
+        clientWatermark,
+        config,
+        backfillRequests,
+      );
     } finally {
       void cleanup.then(() => db.end());
     }
@@ -257,6 +262,7 @@ class PostgresChangeSource implements ChangeSource {
     slot: string,
     clientWatermark: string,
     shardConfig: InternalShardConfig,
+    backfillRequests: BackfillRequest[],
   ): Promise<ChangeStream> {
     const clientStart = majorVersionFromString(clientWatermark) + 1n;
     const {messages, acks} = await subscribe(
@@ -267,15 +273,18 @@ class PostgresChangeSource implements ChangeSource {
       clientStart,
     );
 
-    // At the moment the replication stream is the only producer of changes,
-    // so the ChangeStreamMultiplexer is largely a no-op, but these is where
-    // backfill streams will enter the picture.
-    const changes = new ChangeStreamMultiplexer(
-      this.#lc,
-      clientWatermark,
-      [messages],
-      [],
+    // The ChangeStreamMultiplexer facilitates cooperative streaming from
+    // the main replication stream and backfill streams initiated by the
+    // BackfillManager.
+    const changes = new ChangeStreamMultiplexer(this.#lc, clientWatermark);
+    const backfillManager = new BackfillManager(this.#lc, changes, req =>
+      streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req),
     );
+    changes
+      .addProducers(messages, backfillManager)
+      .addListeners(backfillManager);
+    backfillManager.run(clientWatermark, backfillRequests);
+
     const acker = new Acker(acks);
 
     const changeMaker = new ChangeMaker(
