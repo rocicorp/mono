@@ -3,48 +3,40 @@ import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import fs from 'fs';
 import os from 'os';
-import type {Writable} from 'stream';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
 import {isAdminPasswordValid} from '../config/zero-config.ts';
+import {StatementRunner} from '../db/statements.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
+import {fromStateVersionString} from './change-source/pg/lsn.ts';
+import {getReplicationState} from './replicator/schema/replication-state.ts';
 
-async function upstreamStats(
-  lc: LogContext,
-  config: ZeroConfig,
-  out: Writable,
-) {
+async function upstreamStats(lc: LogContext, config: ZeroConfig) {
   const schema = upstreamSchema(getShardID(config));
   const sql = pgClient(lc, config.upstream.db);
-
-  out.write(header('Upstream'));
-
-  await printPgStats(
-    [
+  try {
+    return await getPgStats([
       [
-        'num replicas',
+        'numReplicas',
         sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."replicas"`,
       ],
       [
-        'num clients with mutations',
+        'numClientsWithMutations',
         sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."clients"`,
       ],
       [
-        'num mutations processed',
+        'numMutationsProcessed',
         sql`SELECT SUM("lastMutationID") as "c" FROM ${sql(schema)}."clients"`,
       ],
-    ],
-    out,
-  );
-
-  await sql.end();
+    ]);
+  } finally {
+    await sql.end();
+  }
 }
 
-async function cvrStats(lc: LogContext, config: ZeroConfig, out: Writable) {
-  out.write(header('CVR'));
-
+async function cvrStats(lc: LogContext, config: ZeroConfig) {
   const schema = upstreamSchema(getShardID(config)) + '/cvr';
   const sql = pgClient(lc, config.cvr.db);
 
@@ -82,32 +74,32 @@ async function cvrStats(lc: LogContext, config: ZeroConfig, out: Writable) {
     ORDER BY g.num_queries DESC;`;
   }
 
-  await printPgStats(
-    [
+  try {
+    return await getPgStats([
       [
-        'total num queries',
+        'totalNumQueries',
         sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires"`,
       ],
       [
-        'num unique query hashes',
+        'numUniqueQueryHashes',
         sql`SELECT COUNT(DISTINCT "queryHash") as "c" FROM ${sql(
           schema,
         )}."desires"`,
       ],
       [
-        'num active queries',
+        'numActiveQueries',
         sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivatedAt" IS NULL AND "deleted" = false`,
       ],
       [
-        'num inactive queries',
+        'numInactiveQueries',
         sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivatedAt" IS NOT NULL AND ("inactivatedAt" + "ttl") > NOW()`,
       ],
       [
-        'num deleted queries',
+        'numDeletedQueries',
         sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "deleted" = true`,
       ],
       [
-        'fresh queries percentiles',
+        'freshQueriesPercentiles',
         sql`WITH client_group_counts AS (
         -- Count inactive desires per clientGroupID
         SELECT
@@ -133,7 +125,7 @@ async function cvrStats(lc: LogContext, config: ZeroConfig, out: Writable) {
       FROM client_group_counts;`,
       ],
       [
-        'rows per client group percentiles',
+        'rowsPerClientGroupPercentiles',
         sql`WITH client_group_counts AS (
         -- Count inactive desires per clientGroupID
         SELECT
@@ -155,7 +147,7 @@ async function cvrStats(lc: LogContext, config: ZeroConfig, out: Writable) {
       ],
       [
         // check for AST blowup due to DNF conversion.
-        'ast sizes',
+        'astSizes',
         sql`SELECT
         percentile_cont(0.25) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "25th_percentile",
         percentile_cont(0.5) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "50th_percentile",
@@ -171,28 +163,28 @@ async function cvrStats(lc: LogContext, config: ZeroConfig, out: Writable) {
       ],
       [
         // output the hash of the largest AST
-        'biggest ast hash',
+        'biggestAstHash',
         sql`SELECT "queryHash", length("clientAST"::text) AS "ast_length"
       FROM ${sql(schema)}."queries"
       ORDER BY length("clientAST"::text) DESC
       LIMIT 1;`,
       ],
       [
-        'total active queries per client and client group',
+        'totalActiveQueriesPerClientAndClientGroup',
         numQueriesPerClientGroup(true),
       ],
       [
-        'total inactive queries per client and client group',
+        'totalInactiveQueriesPerClientAndClientGroup',
         numQueriesPerClientGroup(false),
       ],
       [
-        'total rows per client group',
+        'totalRowsPerClientGroup',
         sql`SELECT "clientGroupID", COUNT(*) as "c" FROM ${sql(
           schema,
         )}."rows" GROUP BY "clientGroupID" ORDER BY "c" DESC`,
       ],
       [
-        'num rows per query',
+        'numRowsPerQuery',
         sql`SELECT
         k.key AS "queryHash",
         COUNT(*) AS row_count
@@ -204,40 +196,32 @@ async function cvrStats(lc: LogContext, config: ZeroConfig, out: Writable) {
     ] satisfies [
       name: string,
       query: ReturnType<ReturnType<typeof pgClient>>,
-    ][],
-    out,
-  );
-
-  await sql.end();
+    ][]);
+  } finally {
+    await sql.end();
+  }
 }
 
-async function changelogStats(
-  lc: LogContext,
-  config: ZeroConfig,
-  out: Writable,
-) {
-  out.write(header('Change DB'));
+async function changeLogStats(lc: LogContext, config: ZeroConfig) {
   const schema = upstreamSchema(getShardID(config)) + '/cdc';
   const sql = pgClient(lc, config.change.db);
 
-  await printPgStats(
-    [
+  try {
+    return await getPgStats([
       [
-        'change log size',
+        'changeLogSize',
         sql`SELECT COUNT(*) as "change_log_size" FROM ${sql(schema)}."changeLog"`,
       ],
-    ],
-    out,
-  );
-  await sql.end();
+    ]);
+  } finally {
+    await sql.end();
+  }
 }
 
-function replicaStats(lc: LogContext, config: ZeroConfig, out: Writable) {
-  out.write(header('Replica'));
+function replicaStats(lc: LogContext, config: ZeroConfig) {
   const db = new Database(lc, config.replica.file);
-  printStats(
-    'replica',
-    [
+  try {
+    return Object.fromEntries([
       ['wal checkpoint', pick(first(db.pragma('WAL_CHECKPOINT')))],
       ['page count', pick(first(db.pragma('PAGE_COUNT')))],
       ['page size', pick(first(db.pragma('PAGE_SIZE')))],
@@ -248,59 +232,70 @@ function replicaStats(lc: LogContext, config: ZeroConfig, out: Writable) {
       ['freelist count', pick(first(db.pragma('FREELIST_COUNT')))],
       ['wal autocheckpoint', pick(first(db.pragma('WAL_AUTOCHECKPOINT')))],
       ['db file stats', fs.statSync(config.replica.file)],
-    ] as const,
-    out,
-  );
+    ] as const);
+  } finally {
+    db.close();
+  }
 }
 
-function osStats(out: Writable) {
-  printStats(
-    'os',
-    [
-      ['load avg', os.loadavg()],
-      ['uptime', os.uptime()],
-      ['total mem', os.totalmem()],
-      ['free mem', os.freemem()],
-      ['cpus', os.cpus().length],
-      ['available parallelism', os.availableParallelism()],
-      ['platform', os.platform()],
-      ['arch', os.arch()],
-      ['release', os.release()],
-      ['uptime', os.uptime()],
-    ] as const,
-    out,
-  );
+function replicationStats(lc: LogContext, config: ZeroConfig) {
+  const db = new Database(lc, config.replica.file);
+  try {
+    return getReplicationStats(db);
+  } finally {
+    db.close();
+  }
 }
 
-async function printPgStats(
+function getReplicationStats(db: Database) {
+  const {stateVersion} = getReplicationState(new StatementRunner(db));
+  const lsn = fromStateVersionString(stateVersion);
+  return {lsn};
+}
+
+function osStats() {
+  return Object.fromEntries([
+    ['load avg', os.loadavg()],
+    ['uptime', os.uptime()],
+    ['total mem', os.totalmem()],
+    ['free mem', os.freemem()],
+    ['cpus', os.cpus().length],
+    ['available parallelism', os.availableParallelism()],
+    ['platform', os.platform()],
+    ['arch', os.arch()],
+    ['release', os.release()],
+  ] as const);
+}
+
+async function getPgStats(
   pendingQueries: [
     name: string,
     query: ReturnType<ReturnType<typeof pgClient>>,
   ][],
-  out: Writable,
 ) {
   const results = await Promise.all(
-    pendingQueries.map(async ([name, query]) => [name, await query]),
+    pendingQueries.map(async ([name, query]) => [name, await query] as const),
   );
-  for (const [name, data] of results) {
-    out.write('\n');
-    out.write(name);
-    out.write('\n');
-    out.write(BigIntJSON.stringify(data, null, 2));
-  }
+  return Object.fromEntries(results);
 }
 
-function printStats(
-  group: string,
-  queries: readonly [name: string, result: unknown][],
-  out: Writable,
-) {
-  out.write('\n' + header(group));
-  for (const [name, result] of queries) {
-    out.write('\n' + name + BigIntJSON.stringify(result, null, 2));
+type StatsObject = Record<string, unknown>;
+
+function printStats(group: string, statsObject: StatsObject): string {
+  const lines: string[] = ['\n' + header(group)];
+  for (const [name, result] of Object.entries(statsObject)) {
+    lines.push('\n' + name + ': ' + BigIntJSON.stringify(result, null, 2));
   }
+  lines.push('\n');
+  return lines.join('');
 }
 
+/**
+ * HTTP query parameters:
+ * * `group`: restricts the groups for which stats are computed
+ * * `format=json`: returns the stats as a JSON object
+ * * `pretty`: formats the JSON object with indentation
+ */
 export async function handleStatzRequest(
   lc: LogContext,
   config: ZeroConfig,
@@ -316,16 +311,50 @@ export async function handleStatzRequest(
     return;
   }
 
-  await upstreamStats(lc, config, res.raw);
-  res.raw.write('\n\n');
-  await cvrStats(lc, config, res.raw);
-  res.raw.write('\n\n');
-  await changelogStats(lc, config, res.raw);
-  res.raw.write('\n\n');
-  replicaStats(lc, config, res.raw);
-  res.raw.write('\n\n');
-  osStats(res.raw);
-  res.raw.end();
+  const statsFns: Record<string, () => Promise<StatsObject> | StatsObject> = {
+    upstream: () => upstreamStats(lc, config),
+    cvr: () => cvrStats(lc, config),
+    changeLog: () => changeLogStats(lc, config),
+    replica: () => replicaStats(lc, config),
+    replication: () => replicationStats(lc, config),
+    os: () => osStats(),
+  };
+
+  async function computeStats(group: string): Promise<[string, StatsObject]> {
+    try {
+      return [group, await statsFns[group]()];
+    } catch (e) {
+      lc.error?.(`error computing ${group} stats`, e);
+      return [group, {error: String(e)}];
+    }
+  }
+
+  const query = req.query as Record<string, unknown>;
+  const groups =
+    typeof query.group === 'string'
+      ? query.group.split(',')
+      : Array.isArray(query.group)
+        ? query.group
+        : undefined;
+
+  const stats = await Promise.all(
+    groups
+      ? groups.filter(g => g in statsFns).map(computeStats)
+      : Object.keys(statsFns).map(computeStats),
+  );
+
+  if (query.format === 'json') {
+    const indent = query.pretty !== undefined ? 2 : undefined;
+    await res
+      .header('Content-Type', 'application/json')
+      .send(BigIntJSON.stringify(Object.fromEntries(stats), null, indent));
+    return;
+  } else {
+    const body = stats
+      .map(([group, statsObject]) => printStats(group, statsObject))
+      .join('');
+    await res.header('Content-Type', 'text/plain; charset=utf-8').send(body);
+  }
 }
 
 function first(x: object[]): object {

@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
@@ -13,7 +13,12 @@ import {
 } from '../../../../zql/src/builder/debug-delegate.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
-import {type Input, type Storage} from '../../../../zql/src/ivm/operator.ts';
+import {
+  type Input,
+  skipYields,
+  type Storage,
+} from '../../../../zql/src/ivm/operator.ts';
+import {first} from '../../../../zql/src/ivm/stream.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -24,13 +29,14 @@ import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-conn
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
 import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import {resolveSimpleScalarSubqueries} from '../../../../zqlite/src/resolve-scalar-subqueries.ts';
 import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
   reloadPermissionsIfChanged,
   type LoadedPermissions,
 } from '../../auth/load-permissions.ts';
-import type {LogConfig} from '../../config/zero-config.ts';
+import type {LogConfig, ZeroConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {
@@ -47,7 +53,7 @@ import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
 export type RowAdd = {
   readonly type: 'add';
-  readonly queryHash: string;
+  readonly queryID: string;
   readonly table: string;
   readonly rowKey: Row;
   readonly row: Row;
@@ -55,7 +61,7 @@ export type RowAdd = {
 
 export type RowRemove = {
   readonly type: 'remove';
-  readonly queryHash: string;
+  readonly queryID: string;
   readonly table: string;
   readonly rowKey: Row;
   readonly row: undefined;
@@ -63,7 +69,7 @@ export type RowRemove = {
 
 export type RowEdit = {
   readonly type: 'edit';
-  readonly queryHash: string;
+  readonly queryID: string;
   readonly table: string;
   readonly rowKey: Row;
   readonly row: Row;
@@ -74,9 +80,13 @@ export type RowChange = RowAdd | RowRemove | RowEdit;
 type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
-  readonly originalHash: string;
-  readonly transformedAst: AST; // Optional, only set after hydration
-  readonly transformationHash: string; // The hash of the transformed AST
+  readonly transformedAst: AST;
+  readonly transformationHash: string;
+};
+
+type QueryInfo = {
+  readonly transformedAst: AST;
+  readonly transformationHash: string;
 };
 
 type AdvanceContext = {
@@ -106,9 +116,7 @@ const MIN_ADVANCEMENT_TIME_LIMIT_MS = 50;
  */
 export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
-  // We probs need the original query hash
-  // so we can decide not to re-transform a custom query
-  // that is already hydrated.
+  // Query id to pipeline
   readonly #pipelines = new Map<string, Pipeline>();
 
   readonly #lc: LogContext;
@@ -116,6 +124,7 @@ export class PipelineDriver {
   readonly #storage: ClientGroupStorage;
   readonly #shardID: ShardID;
   readonly #logConfig: LogConfig;
+  readonly #config: ZeroConfig | undefined;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   readonly #yieldThresholdMs: () => number;
@@ -149,13 +158,15 @@ export class PipelineDriver {
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
     yieldThresholdMs: () => number,
-    enablePlanner?: boolean,
+    enablePlanner?: boolean | undefined,
+    config?: ZeroConfig | undefined,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
     this.#shardID = shardID;
     this.#logConfig = logConfig;
+    this.#config = config;
     this.#inspectorDelegate = inspectorDelegate;
     this.#costModels = enablePlanner ? new WeakMap() : undefined;
     this.#yieldThresholdMs = yieldThresholdMs;
@@ -197,7 +208,13 @@ export class PipelineDriver {
   #initAndResetCommon(clientSchema: ClientSchema) {
     const {db} = this.#snapshotter.current();
     const fullTables = new Map<string, LiteTableSpec>();
-    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
+    computeZqlSpecs(
+      this.#lc,
+      db.db,
+      {includeBackfillingColumns: false},
+      this.#tableSpecs,
+      fullTables,
+    );
     checkClientSchema(
       this.#shardID,
       clientSchema,
@@ -242,6 +259,7 @@ export class PipelineDriver {
       this.#snapshotter.current().db,
       this.#shardID.appID,
       this.#permissions,
+      this.#config,
     );
     if (res.changed) {
       this.#permissions = res.permissions;
@@ -283,33 +301,9 @@ export class PipelineDriver {
     this.#snapshotter.destroy();
   }
 
-  /** @return The Set of query hashes for all added queries. */
-  addedQueries(): [
-    transformationHashes: Set<string>,
-    byOriginalHash: Map<
-      string,
-      {
-        transformationHash: string;
-        transformedAst: AST;
-      }[]
-    >,
-  ] {
-    const byOriginalHash = new Map<
-      string,
-      {transformationHash: string; transformedAst: AST}[]
-    >();
-    for (const pipeline of this.#pipelines.values()) {
-      const {originalHash, transformedAst, transformationHash} = pipeline;
-
-      if (!byOriginalHash.has(originalHash)) {
-        byOriginalHash.set(originalHash, []);
-      }
-      byOriginalHash.get(originalHash)!.push({
-        transformationHash,
-        transformedAst,
-      });
-    }
-    return [new Set(this.#pipelines.keys()), byOriginalHash];
+  /** @return Map from query ID to PipelineInfo for all added queries. */
+  queries(): ReadonlyMap<string, QueryInfo> {
+    return this.#pipelines;
   }
 
   totalHydrationTimeMs(): number {
@@ -320,6 +314,48 @@ export class PipelineDriver {
     return total;
   }
 
+  #resolveScalarSubqueries(ast: AST): {
+    ast: AST;
+    companionRows: {table: string; row: Row}[];
+  } {
+    const companionRows: {table: string; row: Row}[] = [];
+
+    const executor = (
+      subqueryAST: AST,
+      childField: string,
+    ): LiteralValue | null | undefined => {
+      const input = buildPipeline(
+        subqueryAST,
+        {
+          getSource: name => this.#getSource(name),
+          createStorage: () => this.#createStorage(),
+          decorateSourceInput: (input: SourceInput): Input => input,
+          decorateInput: input => input,
+          addEdge() {},
+          decorateFilterInput: input => input,
+        },
+        'scalar-subquery',
+      );
+      try {
+        const node = first(skipYields(input.fetch({})));
+        if (!node) {
+          return undefined;
+        }
+        companionRows.push({table: subqueryAST.table, row: node.row as Row});
+        return (node.row[childField] as LiteralValue) ?? null;
+      } finally {
+        input.destroy();
+      }
+    };
+
+    const {ast: resolved} = resolveSimpleScalarSubqueries(
+      ast,
+      this.#tableSpecs,
+      executor,
+    );
+    return {ast: resolved, companionRows};
+  }
+
   /**
    * Adds a pipeline for the query. The method will hydrate the query using the
    * driver's current snapshot of the database and return a stream of results.
@@ -327,8 +363,8 @@ export class PipelineDriver {
    * {@link advance}d. The query and its pipeline can be removed with
    * {@link removeQuery()}.
    *
-   * If a query with an identical hash has already been added, this method is a
-   * no-op and no RowChanges are generated.
+   * If a query with the same queryID is already added, the existing pipeline
+   * will be removed and destroyed before adding the new pipeline.
    *
    * @param timer The caller-controlled {@link Timer} used to determine the
    *        final hydration time. (The caller may pause and resume the timer
@@ -345,11 +381,7 @@ export class PipelineDriver {
       this.initialized(),
       'Pipeline driver must be initialized before adding queries',
     );
-    this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
-    if (this.#pipelines.has(transformationHash)) {
-      this.#lc.info?.(`query ${transformationHash} already added`, query);
-      return;
-    }
+    this.removeQuery(queryID);
     const debugDelegate = runtimeDebugFlags.trackRowsVended
       ? new Debug()
       : undefined;
@@ -357,37 +389,6 @@ export class PipelineDriver {
     const costModel = this.#ensureCostModelExistsIfEnabled(
       this.#snapshotter.current().db.db,
     );
-
-    const input = buildPipeline(
-      query,
-      {
-        debug: debugDelegate,
-        enableNotExists: true, // Server-side can handle NOT EXISTS
-        getSource: name => this.#getSource(name),
-        createStorage: () => this.#createStorage(),
-        decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
-          new MeasurePushOperator(
-            input,
-            transformationHash,
-            this.#inspectorDelegate,
-            'query-update-server',
-          ),
-        decorateInput: input => input,
-        addEdge() {},
-        decorateFilterInput: input => input,
-      },
-      queryID,
-      costModel,
-    );
-    const schema = input.getSchema();
-    input.setOutput({
-      push: change => {
-        const streamer = this.#streamer;
-        assert(streamer, 'must #startAccumulating() before pushing changes');
-        streamer.accumulate(transformationHash, schema, [change]);
-        return [];
-      },
-    });
 
     assert(
       this.#advanceContext === null,
@@ -397,57 +398,97 @@ export class PipelineDriver {
       timer,
     };
     try {
-      yield* hydrateInternal(
-        input,
-        transformationHash,
-        must(this.#primaryKeys),
+      const {ast: resolvedQuery, companionRows} =
+        this.#resolveScalarSubqueries(query);
+
+      const input = buildPipeline(
+        resolvedQuery,
+        {
+          debug: debugDelegate,
+          enableNotExists: true, // Server-side can handle NOT EXISTS
+          getSource: name => this.#getSource(name),
+          createStorage: () => this.#createStorage(),
+          decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
+            new MeasurePushOperator(
+              input,
+              queryID,
+              this.#inspectorDelegate,
+              'query-update-server',
+            ),
+          decorateInput: input => input,
+          addEdge() {},
+          decorateFilterInput: input => input,
+        },
+        queryID,
+        costModel,
       );
+      const schema = input.getSchema();
+      input.setOutput({
+        push: change => {
+          const streamer = this.#streamer;
+          assert(streamer, 'must #startAccumulating() before pushing changes');
+          streamer.accumulate(queryID, schema, [change]);
+          return [];
+        },
+      });
+
+      yield* hydrateInternal(input, queryID, must(this.#primaryKeys));
+
+      for (const {table, row} of companionRows) {
+        const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+        yield {
+          type: 'add',
+          queryID,
+          table,
+          rowKey: getRowKey(primaryKey, row),
+          row,
+        } as RowChange;
+      }
+
+      const hydrationTimeMs = timer.totalElapsed();
+      if (runtimeDebugFlags.trackRowCountsVended) {
+        if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
+          let totalRowsConsidered = 0;
+          const lc = this.#lc
+            .withContext('queryID', queryID)
+            .withContext('hydrationTimeMs', hydrationTimeMs);
+          for (const tableName of this.#tables.keys()) {
+            const entries = Object.entries(
+              debugDelegate?.getVendedRowCounts()[tableName] ?? {},
+            );
+            totalRowsConsidered += entries.reduce(
+              (acc, entry) => acc + entry[1],
+              0,
+            );
+            lc.info?.(tableName + ' VENDED: ', entries);
+          }
+          lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
+        }
+      }
+      debugDelegate?.reset();
+
+      // Note: This hydrationTime is a wall-clock overestimate, as it does
+      // not take time slicing into account. The view-syncer resets this
+      // to a more precise processing-time measurement with setHydrationTime().
+      this.#pipelines.set(queryID, {
+        input,
+        hydrationTimeMs,
+        transformedAst: resolvedQuery,
+        transformationHash,
+      });
     } finally {
       this.#hydrateContext = null;
     }
-
-    const hydrationTimeMs = timer.totalElapsed();
-    if (runtimeDebugFlags.trackRowCountsVended) {
-      if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
-        let totalRowsConsidered = 0;
-        const lc = this.#lc
-          .withContext('hash', transformationHash)
-          .withContext('hydrationTimeMs', hydrationTimeMs);
-        for (const tableName of this.#tables.keys()) {
-          const entries = Object.entries(
-            debugDelegate?.getVendedRowCounts()[tableName] ?? {},
-          );
-          totalRowsConsidered += entries.reduce(
-            (acc, entry) => acc + entry[1],
-            0,
-          );
-          lc.info?.(tableName + ' VENDED: ', entries);
-        }
-        lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
-      }
-    }
-    debugDelegate?.reset();
-
-    // Note: This hydrationTime is a wall-clock overestimate, as it does
-    // not take time slicing into account. The view-syncer resets this
-    // to a more precise processing-time measurement with setHydrationTime().
-    this.#pipelines.set(transformationHash, {
-      input,
-      hydrationTimeMs,
-      originalHash: queryID,
-      transformedAst: query,
-      transformationHash,
-    });
   }
 
   /**
    * Removes the pipeline for the query. This is a no-op if the query
    * was not added.
    */
-  removeQuery(hash: string) {
-    const pipeline = this.#pipelines.get(hash);
+  removeQuery(queryID: string) {
+    const pipeline = this.#pipelines.get(queryID);
     if (pipeline) {
-      this.#pipelines.delete(hash);
+      this.#pipelines.delete(queryID);
       pipeline.input.destroy();
     }
   }
@@ -520,7 +561,8 @@ export class PipelineDriver {
         if (this.#shouldAdvanceYieldMaybeAbortAdvance()) {
           yield 'yield';
         }
-        const start = performance.now();
+        const start = timer.totalElapsed();
+
         let type;
         try {
           const tableSource = this.#tables.get(table);
@@ -567,7 +609,7 @@ export class PipelineDriver {
           this.#advanceContext.pos++;
         }
 
-        const elapsed = performance.now() - start;
+        const elapsed = timer.totalElapsed() - start;
         this.#advanceTime.record(elapsed / 1000, {
           table,
           type,
@@ -704,28 +746,28 @@ class Streamer {
   }
 
   readonly #changes: [
-    hash: string,
+    queryID: string,
     schema: SourceSchema,
     changes: Iterable<Change | 'yield'>,
   ][] = [];
 
   accumulate(
-    hash: string,
+    queryID: string,
     schema: SourceSchema,
     changes: Iterable<Change | 'yield'>,
   ): this {
-    this.#changes.push([hash, schema, changes]);
+    this.#changes.push([queryID, schema, changes]);
     return this;
   }
 
   *stream(): Iterable<RowChange | 'yield'> {
-    for (const [hash, schema, changes] of this.#changes) {
-      yield* this.#streamChanges(hash, schema, changes);
+    for (const [queryID, schema, changes] of this.#changes) {
+      yield* this.#streamChanges(queryID, schema, changes);
     }
   }
 
   *#streamChanges(
-    queryHash: string,
+    queryID: string,
     schema: SourceSchema,
     changes: Iterable<Change | 'yield'>,
   ): Iterable<RowChange | 'yield'> {
@@ -745,9 +787,7 @@ class Streamer {
       switch (type) {
         case 'add':
         case 'remove': {
-          yield* this.#streamNodes(queryHash, schema, type, () => [
-            change.node,
-          ]);
+          yield* this.#streamNodes(queryID, schema, type, () => [change.node]);
           break;
         }
         case 'child': {
@@ -756,11 +796,11 @@ class Streamer {
             schema.relationships[child.relationshipName],
           );
 
-          yield* this.#streamChanges(queryHash, childSchema, [child.change]);
+          yield* this.#streamChanges(queryID, childSchema, [child.change]);
           break;
         }
         case 'edit':
-          yield* this.#streamNodes(queryHash, schema, type, () => [
+          yield* this.#streamNodes(queryID, schema, type, () => [
             {row: change.node.row, relationships: {}},
           ]);
           break;
@@ -771,7 +811,7 @@ class Streamer {
   }
 
   *#streamNodes(
-    queryHash: string,
+    queryID: string,
     schema: SourceSchema,
     op: 'add' | 'remove' | 'edit',
     nodes: () => Iterable<Node | 'yield'>,
@@ -796,7 +836,7 @@ class Streamer {
 
       yield {
         type: op,
-        queryHash,
+        queryID,
         table,
         rowKey,
         row: op === 'remove' ? undefined : row,
@@ -804,7 +844,7 @@ class Streamer {
 
       for (const [relationship, children] of Object.entries(relationships)) {
         const childSchema = must(schema.relationships[relationship]);
-        yield* this.#streamNodes(queryHash, childSchema, op, children);
+        yield* this.#streamNodes(queryID, childSchema, op, children);
       }
     }
   }

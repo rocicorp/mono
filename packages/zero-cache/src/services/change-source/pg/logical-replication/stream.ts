@@ -9,6 +9,7 @@ import postgres, {type Options, type PostgresType} from 'postgres';
 import {sleep} from '../../../../../../shared/src/sleep.ts';
 import {getTypeParsers} from '../../../../db/pg-type-parser.ts';
 import {type PostgresDB} from '../../../../types/pg.ts';
+import {id, lit} from '../../../../types/sql.ts';
 import {pipe, type Sink, type Source} from '../../../../types/streams.ts';
 import {Subscription} from '../../../../types/subscription.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
@@ -20,6 +21,13 @@ const DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE = 5;
 
 export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
 
+// Expose the `queued` variable of the Subscription to allow
+// the change-source to determine if there are more messages
+// immediately available.
+type SourceWithPendingQueue<T> = Source<T> & {
+  queued: number;
+};
+
 export async function subscribe(
   lc: LogContext,
   db: PostgresDB,
@@ -28,7 +36,10 @@ export async function subscribe(
   lsn: bigint,
   retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
   applicationName = 'zero-replicator',
-): Promise<{messages: Source<StreamMessage>; acks: Sink<bigint>}> {
+): Promise<{
+  messages: SourceWithPendingQueue<StreamMessage>;
+  acks: Sink<bigint>;
+}> {
   const session = postgres(
     defu(
       {
@@ -90,7 +101,7 @@ export async function subscribe(
   }, manualKeepaliveTimeout / 5);
 
   let destroyed = false;
-  const typeParsers = await getTypeParsers(db);
+  const typeParsers = await getTypeParsers(db, {returnJsonAsString: true});
   const parser = new PgoutputParser(typeParsers);
   const messages = Subscription.create<StreamMessage>({
     cleanup: () => {
@@ -116,12 +127,31 @@ export async function subscribe(
       lc.error?.(`error from ${db.options.host}`, e),
   );
 
-  pipe(readable, messages, buffer => parseStreamMessage(lc, buffer, parser));
+  pipe({
+    source: readable,
+    sink: messages,
+    parse: buffer => parseStreamMessage(lc, buffer, parser),
+    // Allow a small buffer of messages to be queued in the subscription so
+    // that the change-source loop can check the queue to determine if more
+    // messages are immediately available.
+    bufferMessages: 5,
+  });
 
   return {
     messages,
     acks: {push: sendAck},
   };
+}
+
+/**
+ * Formats publication names for the START_REPLICATION command.
+ * The replication protocol expects format: publication_names 'pub1,pub2'
+ * Each name is escaped to handle any quotes that may have passed validation.
+ */
+function formatPublicationNames(publications: string[]): string {
+  // lit() returns 'escaped_name' with surrounding quotes
+  // We strip the quotes since the outer quotes are in the template
+  return publications.map(p => lit(p).slice(1, -1)).join(',');
 }
 
 async function startReplicationStream(
@@ -136,9 +166,9 @@ async function startReplicationStream(
     try {
       const stream = session
         .unsafe(
-          `START_REPLICATION SLOT "${slot}" LOGICAL ${fromBigInt(lsn)} (
-        proto_version '1', 
-        publication_names '${publications}',
+          `START_REPLICATION SLOT ${id(slot)} LOGICAL ${fromBigInt(lsn)} (
+        proto_version '1',
+        publication_names '${formatPublicationNames(publications)}',
         messages 'true'
       )`,
         )
@@ -190,7 +220,6 @@ function parseStreamMessage(
   }
   if (buffer.readInt8(17)) {
     // Primary keepalive message: shouldRespond
-    lc.debug?.(`pg keepalive (shouldRespond: true) ${lsn}`);
     return [lsn, {tag: 'keepalive'}];
   }
   return null;

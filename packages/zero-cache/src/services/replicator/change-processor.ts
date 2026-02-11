@@ -13,6 +13,7 @@ import {
   computeZqlSpecs,
   listIndexes,
   listTables,
+  type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
 import {
   mapPostgresToLite,
@@ -32,14 +33,15 @@ import {
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
 import {id} from '../../types/sql.ts';
-import {ColumnMetadataStore} from '../change-source/column-metadata.ts';
 import type {
+  BackfillCompleted,
   Change,
   ColumnAdd,
   ColumnDrop,
   ColumnUpdate,
   IndexCreate,
   IndexDrop,
+  MessageBackfill,
   MessageCommit,
   MessageDelete,
   MessageInsert,
@@ -49,25 +51,24 @@ import type {
   TableCreate,
   TableDrop,
   TableRename,
+  TableUpdateMetadata,
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
-import {
-  logDeleteOp,
-  logResetOp,
-  logSetOp,
-  logTruncateOp,
-} from './schema/change-log.ts';
+import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
+import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
   updateReplicationWatermark,
 } from './schema/replication-state.ts';
+import {TableMetadataTracker} from './schema/table-metadata.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
 export type CommitResult = {
   watermark: string;
   schemaUpdated: boolean;
+  changeLogUpdated: boolean;
 };
 
 /**
@@ -83,6 +84,8 @@ export type CommitResult = {
  */
 export class ChangeProcessor {
   readonly #db: StatementRunner;
+  readonly #changeLog: ChangeLog;
+  readonly #tableMetadata: TableMetadataTracker;
   readonly #mode: ChangeProcessorMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
@@ -101,6 +104,8 @@ export class ChangeProcessor {
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#db = db;
+    this.#changeLog = new ChangeLog(db.db);
+    this.#tableMetadata = new TableMetadataTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
   }
@@ -167,6 +172,8 @@ export class ChangeProcessor {
           lc,
           this.#db,
           this.#mode,
+          this.#changeLog,
+          this.#tableMetadata,
           this.#tableSpecs,
           commitVersion,
           jsonFormat,
@@ -217,8 +224,11 @@ export class ChangeProcessor {
       this.#currentTx = null;
 
       assert(watermark, 'watermark is required for commit messages');
-      const schemaUpdated = tx.processCommit(msg, watermark);
-      return {watermark, schemaUpdated};
+      const {schemaUpdated, changeLogUpdated} = tx.processCommit(
+        msg,
+        watermark,
+      );
+      return {watermark, schemaUpdated, changeLogUpdated};
     }
 
     if (msg.tag === 'rollback') {
@@ -246,6 +256,9 @@ export class ChangeProcessor {
       case 'rename-table':
         tx.processRenameTable(msg);
         break;
+      case 'update-table-metadata':
+        tx.processTableMetadata(msg);
+        break;
       case 'add-column':
         tx.processAddColumn(msg);
         break;
@@ -263,6 +276,12 @@ export class ChangeProcessor {
         break;
       case 'drop-index':
         tx.processDropIndex(msg);
+        break;
+      case 'backfill':
+        tx.processBackfill(msg);
+        break;
+      case 'backfill-completed':
+        tx.processBackfillCompleted(msg);
         break;
       default:
         unreachable(msg);
@@ -299,17 +318,23 @@ class TransactionProcessor {
   readonly #db: StatementRunner;
   readonly #mode: ChangeProcessorMode;
   readonly #version: LexiVersion;
-  readonly #tableSpecs: Map<string, LiteTableSpec>;
+  readonly #changeLog: ChangeLog;
+  readonly #tableMetadata: TableMetadataTracker;
+  readonly #tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>;
   readonly #jsonFormat: JSONFormat;
+  readonly #columnMetadata: ColumnMetadataStore;
 
   #pos = 0;
   #schemaChanged = false;
+  #numChangeLogEntries = 0;
 
   constructor(
     lc: LogContext,
     db: StatementRunner,
     mode: ChangeProcessorMode,
-    tableSpecs: Map<string, LiteTableSpec>,
+    changeLog: ChangeLog,
+    tableMetadata: TableMetadataTracker,
+    tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
   ) {
@@ -345,7 +370,12 @@ class TransactionProcessor {
     this.#db = db;
     this.#version = commitVersion;
     this.#lc = lc.withContext('version', commitVersion);
+    this.#changeLog = changeLog;
+    this.#tableMetadata = tableMetadata;
     this.#tableSpecs = tableSpecs;
+    // The column_metadata table is guaranteed to exist since the
+    // replica-schema.ts migration to v8.
+    this.#columnMetadata = must(ColumnMetadataStore.getInstance(db.db));
 
     if (this.#tableSpecs.size === 0) {
       this.#reloadTableSpecs();
@@ -355,7 +385,9 @@ class TransactionProcessor {
   #reloadTableSpecs() {
     this.#tableSpecs.clear();
     // zqlSpecs include the primary key derived from unique indexes
-    const zqlSpecs = computeZqlSpecs(this.#lc, this.#db.db);
+    const zqlSpecs = computeZqlSpecs(this.#lc, this.#db.db, {
+      includeBackfillingColumns: true,
+    });
     for (let spec of listTables(this.#db.db)) {
       if (!spec.primaryKey) {
         spec = {
@@ -378,8 +410,8 @@ class TransactionProcessor {
     {relation}: {relation: MessageRelation},
   ): LiteRowKey {
     const keyColumns =
-      relation.replicaIdentity !== 'full'
-        ? relation.keyColumns // already a suitable key
+      relation.rowKey.type !== 'full'
+        ? relation.rowKey.columns // already a suitable key
         : this.#tableSpec(liteTableName(relation)).primaryKey;
     if (!keyColumns?.length) {
       throw new Error(
@@ -400,18 +432,15 @@ class TransactionProcessor {
 
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
-    const newRow = liteRow(
-      insert.new,
-      this.#tableSpec(table),
-      this.#jsonFormat,
-    );
+    const tableSpec = this.#tableSpec(table);
+    const newRow = liteRow(insert.new, tableSpec, this.#jsonFormat);
 
     this.#upsert(table, {
       ...newRow.row,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     });
 
-    if (insert.relation.keyColumns.length === 0) {
+    if (insert.relation.rowKey.columns.length === 0) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
       // UNIQUE INDEX. These are written to the replica but not recorded
       // in the changeLog, because these rows cannot participate in IVM.
@@ -422,7 +451,7 @@ class TransactionProcessor {
       return;
     }
     const key = this.#getKey(newRow, insert);
-    this.#logSetOp(table, key);
+    this.#logSetOp(table, key, getBackfilledColumns(newRow.row, tableSpec));
   }
 
   #upsert(table: string, row: LiteRow) {
@@ -443,21 +472,15 @@ class TransactionProcessor {
   // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-TUPLEDATA
   //
   // However, in certain cases an UPDATE may be received for a row that
-  // was not initially synced, such as when:
-  // (1) an existing table is added to the app's publication, or
-  // (2) a new sharding key is added to a shard during resharding.
+  // was not initially synced, such as when, an existing table is added
+  // to the app's publication.
   //
   // In order to facilitate "resumptive" replication, the logic falls back to
   // an INSERT if the update did not change any rows.
-  // TODO: Figure out a solution for resumptive replication of rows
-  //       with TOASTed values.
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
-    const newRow = liteRow(
-      update.new,
-      this.#tableSpec(table),
-      this.#jsonFormat,
-    );
+    const tableSpec = this.#tableSpec(table);
+    const newRow = liteRow(update.new, tableSpec, this.#jsonFormat);
     const row = {...newRow.row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
 
     // update.key is set with the old values if the key has changed.
@@ -470,9 +493,9 @@ class TransactionProcessor {
     const newKey = this.#getKey(newRow, update);
 
     if (oldKey) {
-      this.#logDeleteOp(table, oldKey);
+      this.#logDeleteOp(table, oldKey, tableSpec.backfilling);
     }
-    this.#logSetOp(table, newKey);
+    this.#logSetOp(table, newKey, getBackfilledColumns(newRow.row, tableSpec));
 
     const currKey = oldKey ?? newKey;
     const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
@@ -496,16 +519,14 @@ class TransactionProcessor {
 
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
+    const tableSpec = this.#tableSpec(table);
     const rowKey = this.#getKey(
-      liteRow(del.key, this.#tableSpec(table), this.#jsonFormat),
+      liteRow(del.key, tableSpec, this.#jsonFormat),
       del,
     );
 
     this.#delete(table, rowKey);
-
-    if (this.#mode === 'serving') {
-      this.#logDeleteOp(table, rowKey);
-    }
+    this.#logDeleteOp(table, rowKey, tableSpec.backfilling);
   }
 
   #delete(table: string, rowKey: LiteRowKey) {
@@ -526,32 +547,51 @@ class TransactionProcessor {
       this.#logTruncateOp(table);
     }
   }
+
   processCreateTable(create: TableCreate) {
+    if (create.metadata) {
+      this.#tableMetadata.set(create.spec, create.metadata);
+    }
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createLiteTableStatement(table));
 
     // Write to metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      for (const [colName, colSpec] of Object.entries(create.spec.columns)) {
-        store.insert(table.name, colName, colSpec);
-      }
+    for (const [colName, colSpec] of Object.entries(create.spec.columns)) {
+      this.#columnMetadata.insert(
+        table.name,
+        colName,
+        colSpec,
+        create.backfill?.[colName],
+      );
     }
 
-    this.#logResetOp(table.name);
+    if (
+      Object.keys(create.backfill ?? {}).length ===
+      Object.keys(create.spec.columns).length
+    ) {
+      this.#reloadTableSpecs();
+    } else {
+      // Make the table visible immediately unless all of the columns are
+      // being backfilled. In the backfill case, the version bump will happen
+      // with the backfill is complete.
+      this.#logResetOp(table.name);
+    }
     this.#lc.info?.(create.tag, table.name);
   }
 
+  processTableMetadata(msg: TableUpdateMetadata) {
+    this.#tableMetadata.set(msg.table, msg.new);
+  }
+
   processRenameTable(rename: TableRename) {
+    this.#tableMetadata.rename(rename.old, rename.new);
+
     const oldName = liteTableName(rename.old);
     const newName = liteTableName(rename.new);
     this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
 
     // Rename in metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.renameTable(oldName, newName);
-    }
+    this.#columnMetadata.renameTable(oldName, newName);
 
     this.#bumpVersions(newName);
     this.#logResetOp(oldName);
@@ -559,6 +599,9 @@ class TransactionProcessor {
   }
 
   processAddColumn(msg: ColumnAdd) {
+    if (msg.tableMetadata) {
+      this.#tableMetadata.set(msg.table, msg.tableMetadata);
+    }
     const table = liteTableName(msg.table);
     const {name} = msg.column;
     const spec = mapPostgresToLiteColumn(table, msg.column);
@@ -567,12 +610,15 @@ class TransactionProcessor {
     );
 
     // Write to metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.insert(table, name, msg.column.spec);
-    }
+    this.#columnMetadata.insert(table, name, msg.column.spec, msg.backfill);
 
-    this.#bumpVersions(table);
+    if (msg.backfill) {
+      this.#reloadTableSpecs();
+    } else {
+      // Make the new column visible immediately if it's not being backfilled.
+      // Otherwise, the version bump will happen with the backfill is complete.
+      this.#bumpVersions(table);
+    }
     this.#lc.info?.(msg.tag, table, msg.column);
   }
 
@@ -629,10 +675,12 @@ class TransactionProcessor {
     }
 
     // Update metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.update(table, msg.old.name, msg.new.name, msg.new.spec);
-    }
+    this.#columnMetadata.update(
+      table,
+      msg.old.name,
+      msg.new.name,
+      msg.new.spec,
+    );
 
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, msg.new);
@@ -644,24 +692,20 @@ class TransactionProcessor {
     this.#db.db.exec(`ALTER TABLE ${id(table)} DROP ${id(column)}`);
 
     // Delete from metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.deleteColumn(table, column);
-    }
+    this.#columnMetadata.deleteColumn(table, column);
 
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, column);
   }
 
   processDropTable(drop: TableDrop) {
+    this.#tableMetadata.drop(drop.id);
+
     const name = liteTableName(drop.id);
     this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
 
     // Delete from metadata table
-    const store = ColumnMetadataStore.getInstance(this.#db.db);
-    if (store) {
-      store.deleteTable(name);
-    }
+    this.#columnMetadata.deleteTable(name);
 
     this.#logResetOp(name);
     this.#lc.info?.(drop.tag, name);
@@ -673,7 +717,17 @@ class TransactionProcessor {
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
     // having a unique index), so reset pipelines to refresh table schemas.
-    this.#logResetOp(index.tableName);
+    // However, the reset is not necessary if the index is for a table
+    // that is not yet visible due to backfilling.
+    const tableSpec = must(this.#tableSpecs.get(index.tableName));
+    if (
+      (tableSpec.backfilling ?? []).length ===
+      Object.entries(tableSpec.columns).length - 1 // don't count _0_version
+    ) {
+      this.#reloadTableSpecs();
+    } else {
+      this.#logResetOp(index.tableName);
+    }
     this.#lc.info?.(create.tag, index.name);
   }
 
@@ -691,34 +745,138 @@ class TransactionProcessor {
     this.#logResetOp(table);
   }
 
-  #logSetOp(table: string, key: LiteRowKey) {
-    if (this.#mode === 'serving') {
-      logSetOp(this.#db, this.#version, this.#pos++, table, key);
+  /**
+   * @param backfilledColumns `backfilling` columns for which values were set
+   */
+  #logSetOp(
+    table: string,
+    key: LiteRowKey,
+    backfilledColumns: string[] | undefined,
+  ) {
+    // The "serving" replicator always writes to the change-log (for IVM).
+    // The "backup" replicator only needs to write to the change log
+    // when writing columns that are being backfilled.
+    if (this.#mode === 'serving' || backfilledColumns !== undefined) {
+      this.#changeLog.logSetOp(
+        this.#version,
+        this.#pos++,
+        table,
+        key,
+        backfilledColumns,
+      );
+      this.#numChangeLogEntries++;
     }
   }
 
-  #logDeleteOp(table: string, key: LiteRowKey) {
-    if (this.#mode === 'serving') {
-      logDeleteOp(this.#db, this.#version, this.#pos++, table, key);
+  #logDeleteOp(table: string, key: LiteRowKey, backfilling?: string[]) {
+    // The "serving" replicator always writes to the change-log (for IVM).
+    // The "backup" replicator only needs to write to the change log
+    // when writing columns that are being backfilled.
+    if (this.#mode === 'serving' || backfilling?.length) {
+      this.#changeLog.logDeleteOp(this.#version, this.#pos++, table, key);
+      this.#numChangeLogEntries++;
     }
   }
 
   #logTruncateOp(table: string) {
     if (this.#mode === 'serving') {
-      logTruncateOp(this.#db, this.#version, table);
+      this.#changeLog.logTruncateOp(this.#version, table);
+      this.#numChangeLogEntries++;
     }
   }
 
   #logResetOp(table: string) {
     this.#schemaChanged = true;
     if (this.#mode === 'serving') {
-      logResetOp(this.#db, this.#version, table);
+      this.#changeLog.logResetOp(this.#version, table);
+      this.#numChangeLogEntries++;
     }
     this.#reloadTableSpecs();
   }
 
-  /** @returns `true` if the schema was updated. */
-  processCommit(commit: MessageCommit, watermark: string): boolean {
+  processBackfill({relation, watermark, columns, rowValues}: MessageBackfill) {
+    const tableName = liteTableName(relation);
+    const tableSpec = must(this.#tableSpecs.get(tableName));
+    const rowKeyCols = relation.rowKey.columns;
+    const cols = [...rowKeyCols, ...columns];
+
+    // Common parts of the INSERT sql statement.
+    const insertColsStr = [...cols, ZERO_VERSION_COLUMN_NAME].map(id).join(',');
+    const qMarks = Array.from({length: cols.length + 1}, () => '?').join(',');
+    const rowKeyColsStr = rowKeyCols.map(id).join(',');
+
+    let backfilled = 0;
+    let skipped = 0;
+    for (const v of rowValues) {
+      const row = liteRow(
+        Object.fromEntries(cols.map((c, i) => [c, v[i]])),
+        tableSpec,
+        this.#jsonFormat,
+      );
+      const rowKey = this.#getKey(row, {relation});
+      const rowOp = this.#changeLog.getLatestRowOp(tableName, rowKey);
+      if (rowOp?.op === DEL_OP && rowOp.stateVersion > watermark) {
+        skipped++;
+        continue; // the row was deleted after the backfill snapshot
+      }
+      const updates =
+        rowOp?.op === SET_OP
+          ? columns.filter(
+              c => (rowOp.backfillingColumnVersions[c] ?? '') <= watermark,
+            )
+          : columns;
+      if (updates.length === 0) {
+        // row already has newer values for all backfilling columns.
+        skipped++;
+        continue;
+      }
+      const updateStmts = updates.map(col => `${id(col)}=excluded.${id(col)}`);
+      this.#db.run(
+        /*sql*/ `
+        INSERT INTO ${id(tableName)} (${insertColsStr}) VALUES (${qMarks})
+          ON CONFLICT (${rowKeyColsStr})
+          DO UPDATE SET ${updateStmts.join(',')};
+      `,
+        ...Object.values(row.row),
+        watermark, // the _0_version for new rows (i.e. table backfill)
+      );
+      backfilled++;
+    }
+
+    this.#lc.debug?.(
+      `backfilled ${backfilled} rows (skipped ${skipped}) into ${tableName}`,
+    );
+  }
+
+  processBackfillCompleted({relation, columns}: BackfillCompleted) {
+    const tableName = liteTableName(relation);
+    const rowKeyCols = relation.rowKey.columns;
+    const cols = [...rowKeyCols, ...columns];
+
+    const columnMetadata = must(ColumnMetadataStore.getInstance(this.#db.db));
+    for (const col of cols) {
+      columnMetadata.clearBackfilling(tableName, col);
+    }
+    // Given that new columns are being exposed for every row in the table, bump the
+    // row version for all rows.
+    this.#bumpVersions(tableName);
+    this.#lc.info?.(`finished backfilling ${tableName}`);
+
+    // Note that there is no need to clear the backfillingColumnVersions values
+    // in the changeLog. It could theoretically be done for clarity but:
+    // (1) it could be non-trivial in terms of latency introduced and
+    // (2) the data must be preserved if _other_ columns are in the process
+    //     of being backfilled
+    //
+    // Thus, for speed and simplicity, the values are left as is. (Note that
+    // subsequent replicated changes to those rows will clear the values if
+    // no backfills are in progress).
+  }
+
+  processCommit(
+    commit: MessageCommit,
+    watermark: string,
+  ): {schemaUpdated: boolean; changeLogUpdated: boolean} {
     if (watermark !== this.#version) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
@@ -743,13 +901,26 @@ class TransactionProcessor {
     const elapsedMs = Date.now() - this.#startMs;
     this.#lc.debug?.(`Committed tx@${this.#version} (${elapsedMs} ms)`);
 
-    return this.#schemaChanged;
+    return {
+      schemaUpdated: this.#schemaChanged,
+      changeLogUpdated: this.#numChangeLogEntries > 0,
+    };
   }
 
   abort(lc: LogContext) {
     lc.info?.(`aborting transaction ${this.#version}`);
     this.#db.rollback();
   }
+}
+
+function getBackfilledColumns(
+  row: LiteRow,
+  {backfilling}: LiteTableSpecWithReplicationStatus,
+): string[] | undefined {
+  if (!backfilling?.length) {
+    return undefined; // common case
+  }
+  return backfilling.filter(col => col in row);
 }
 
 function ensureError(err: unknown): Error {

@@ -2,6 +2,7 @@ import classNames from 'classnames';
 import type {ReactNode} from 'react';
 import {useCallback, useState} from 'react';
 import {useDropzone, type FileRejection} from 'react-dropzone';
+import {ALLOWED_CONTENT_TYPES} from '../../shared/consts.ts';
 import {useLogin} from '../hooks/use-login.tsx';
 import {Button} from './button.tsx';
 import styles from './image-upload-area.module.css';
@@ -24,9 +25,8 @@ type ImageUploadAreaProps = {
 
 // Image upload logic (from use-image-upload.ts)
 const validateFile = (file: File): string | null => {
-  const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  if (!validTypes.includes(file.type)) {
-    return 'Invalid file type. Please select a JPG, PNG, WEBP, or GIF image.';
+  if (!ALLOWED_CONTENT_TYPES.includes(file.type)) {
+    return `Invalid file type. Allowed types: ${ALLOWED_CONTENT_TYPES.join(', ')}`;
   }
 
   if (file.size > 10 * 1024 * 1024) {
@@ -190,12 +190,7 @@ export function ImageUploadArea({
   );
 
   const {getRootProps, getInputProps, isDragActive, open} = useDropzone({
-    accept: {
-      'image/jpeg': [],
-      'image/png': [],
-      'image/webp': [],
-      'image/gif': [],
-    },
+    accept: Object.fromEntries(ALLOWED_CONTENT_TYPES.map(t => [t, []])),
     multiple: true,
     maxSize: 10 * 1024 * 1024,
     noClick: true,

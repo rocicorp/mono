@@ -89,6 +89,14 @@ test('zero-cache --help', () => {
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  
                                                                                                                                                                                          
+     --mutate-allowed-client-headers string[]                      optional                                                                                                              
+       ZERO_MUTATE_ALLOWED_CLIENT_HEADERS env                                                                                                                                            
+                                                                   A list of header names that clients are allowed to set via custom headers.                                            
+                                                                   If specified, only headers in this list will be forwarded to the push URL.                                            
+                                                                   Header names are case-insensitive.                                                                                    
+                                                                   If not specified, no client-provided headers are forwarded (secure by default).                                       
+                                                                   Example: ZERO_MUTATE_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id                                             
+                                                                                                                                                                                         
      --query-url string[]                                          optional                                                                                                              
        ZERO_QUERY_URL env                                                                                                                                                                
                                                                    The URL of the API server to which zero-cache will send synced queries.                                               
@@ -135,6 +143,14 @@ test('zero-cache --help', () => {
                                                                    If true, zero-cache will forward cookies from the request.                                                            
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  
+                                                                                                                                                                                         
+     --query-allowed-client-headers string[]                       optional                                                                                                              
+       ZERO_QUERY_ALLOWED_CLIENT_HEADERS env                                                                                                                                             
+                                                                   A list of header names that clients are allowed to set via custom headers.                                            
+                                                                   If specified, only headers in this list will be forwarded to the query URL.                                           
+                                                                   Header names are case-insensitive.                                                                                    
+                                                                   If not specified, no client-provided headers are forwarded (secure by default).                                       
+                                                                   Example: ZERO_QUERY_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id                                              
                                                                                                                                                                                          
      --cvr-db string                                               optional                                                                                                              
        ZERO_CVR_DB env                                                                                                                                                                   
@@ -314,14 +330,6 @@ test('zero-cache --help', () => {
                                                                    is received during this interval, the delay will be canceled and the takeover will happen                             
                                                                    immediately, since the incoming request indicates that the task is registered as a target.                            
                                                                                                                                                                                          
-     --change-streamer-back-pressure-threshold number              default: 100000                                                                                                       
-       ZERO_CHANGE_STREAMER_BACK_PRESSURE_THRESHOLD env                                                                                                                                  
-                                                                   The maximum number of queued changes before back pressure is applied to the                                           
-                                                                   change source. When the queue exceeds this threshold, the change-streamer pauses                                      
-                                                                   consumption from upstream until the queue drops to 90% of the threshold.                                              
-                                                                                                                                                                                         
-                                                                   Increasing this value may improve throughput at the cost of higher memory usage.                                      
-                                                                                                                                                                                         
      --task-id string                                              optional                                                                                                              
        ZERO_TASK_ID env                                                                                                                                                                  
                                                                    Globally unique identifier for the zero-cache instance.                                                               
@@ -385,6 +393,13 @@ test('zero-cache --help', () => {
                                                                    Example: {"zlibDeflateOptions":{"level":3},"threshold":1024}                                                          
                                                                                                                                                                                          
                                                                    See https://github.com/websockets/ws/blob/master/doc/ws.md#new-websocketserveroptions-callback for available options. 
+                                                                                                                                                                                         
+     --websocket-max-payload-bytes number                          default: 10485760                                                                                                     
+       ZERO_WEBSOCKET_MAX_PAYLOAD_BYTES env                                                                                                                                              
+                                                                   Maximum size of incoming WebSocket messages in bytes.                                                                 
+                                                                                                                                                                                         
+                                                                   Messages exceeding this limit are rejected before parsing.                                                            
+                                                                   Default: 10MB (10 * 1024 * 1024 = 10485760)                                                                           
                                                                                                                                                                                          
      --litestream-executable string                                optional                                                                                                              
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                                                    

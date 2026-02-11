@@ -46,6 +46,7 @@ describe('permissions', () => {
       decoded: {sub: 'foo', role: 'user', iat: 0},
     },
     httpCookie: undefined,
+    origin: undefined,
   };
 
   beforeEach<PgTest>(async ({testDBs}) => {

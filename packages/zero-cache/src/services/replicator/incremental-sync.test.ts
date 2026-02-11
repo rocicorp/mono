@@ -16,13 +16,13 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {initEventSinkForTesting} from '../../observability/events.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import {Subscription} from '../../types/subscription.ts';
+import {orTimeoutWith} from '../../types/timeout.ts';
 import {
   PROTOCOL_VERSION,
   type Downstream,
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
-import {initChangeLog} from './schema/change-log.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 
@@ -67,7 +67,6 @@ describe('replicator/incremental-sync', () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 
     initReplicationState(replica, ['zero_data'], '02');
-    initChangeLog(replica);
 
     initDB(
       replica,
@@ -214,6 +213,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":123}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '06',
@@ -221,6 +221,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":456}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -228,6 +229,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -235,6 +237,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":987}',
+            backfillingColumnVersions: '{}',
           },
           {
             stateVersion: '0b',
@@ -242,6 +245,7 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":234}',
+            backfillingColumnVersions: '{}',
           },
         ],
       },
@@ -271,7 +275,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 40960,
+            "replicaSize": 57344,
             "tables": [
               {
                 "columns": [
@@ -347,7 +351,6 @@ describe('replicator/incremental-sync', () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 
     initReplicationState(replica, ['zero_data'], '09');
-    initChangeLog(replica);
 
     initDB(
       replica,
@@ -414,7 +417,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 40960,
+            "replicaSize": 57344,
             "tables": [
               {
                 "columns": [
@@ -468,7 +471,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 49152,
+            "replicaSize": 65536,
             "tables": [
               {
                 "columns": [
@@ -508,6 +511,159 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
+  });
+
+  async function noNotification(
+    notification: Promise<IteratorResult<unknown>>,
+  ) {
+    expect(await orTimeoutWith(notification, 50, 'timed-out')).toBe(
+      'timed-out',
+    );
+  }
+
+  test('does not notify on incomplete backfills', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID']});
+
+    initReplicationState(replica, ['zero_data'], '09');
+
+    initDB(
+      replica,
+      /*sql*/ `
+    CREATE TABLE issues(
+      issueID INTEGER PRIMARY KEY,
+      big INTEGER,
+      _0_version TEXT
+    );
+    CREATE UNIQUE INDEX issues_pkey ON issues ("issueID");
+
+    INSERT INTO issues ("issueID", big, _0_version) VALUES (1, 2, '100');
+    INSERT INTO issues ("issueID", big, _0_version) VALUES (2, 3, '100');
+      `,
+    );
+
+    void syncer.run(lc);
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+    expect(subscribeFn.mock.calls[0][0]).toEqual({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'incremental_sync_test_id',
+      mode: 'serving',
+      replicaVersion: '09',
+      watermark: '09',
+      initial: true,
+    });
+
+    const next = versionReady.next();
+
+    for (const change of [
+      ['status', {tag: 'status'}],
+      ['begin', issues.begin(), {commitWatermark: '110'}],
+      [
+        'data',
+        issues.addColumn(
+          'issues',
+          'new_column',
+          {pos: 4, dataType: 'text'},
+          {backfill: {id: 123}},
+        ),
+      ],
+      ['commit', issues.commit(), {watermark: '110'}],
+      ['begin', issues.begin(), {commitWatermark: '110.01'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation: {
+            schema: 'public',
+            name: 'issues',
+            rowKey: {columns: ['issueID']},
+          },
+          watermark: '110',
+          columns: ['new_column'],
+          rowValues: [[1, 'hello']],
+        },
+      ],
+      ['commit', issues.commit(), {watermark: '110.01'}],
+    ] satisfies Downstream[]) {
+      downstream.push(change);
+    }
+
+    // Ensure no notifications have been published.
+    await noNotification(next);
+
+    // And that row versions have not changed, even for backfilled rows.
+    const issuesDump = replica.prepare(/*sql*/ `SELECT * FROM issues`);
+    expect(issuesDump.all()).toEqual([
+      {
+        _0_version: '100',
+        big: 2,
+        issueID: 1,
+        new_column: 'hello',
+      },
+      {
+        _0_version: '100',
+        big: 3,
+        issueID: 2,
+        new_column: null,
+      },
+    ]);
+
+    // Complete the backfill.
+    for (const change of [
+      ['begin', issues.begin(), {commitWatermark: '110.02'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation: {
+            schema: 'public',
+            name: 'issues',
+            rowKey: {columns: ['issueID']},
+          },
+          watermark: '110',
+          columns: ['new_column'],
+          rowValues: [[2, 'world']],
+        },
+      ],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {
+            schema: 'public',
+            name: 'issues',
+            rowKey: {columns: ['issueID']},
+          },
+          columns: ['new_column'],
+        },
+      ],
+      ['commit', issues.commit(), {watermark: '110.02'}],
+    ] satisfies Downstream[]) {
+      downstream.push(change);
+    }
+
+    // Now there should be a notification.
+    expect(
+      await orTimeoutWith(next, 5000, new Error('timed-out')),
+    ).not.toBeInstanceOf(Error);
+
+    // And row versions should be bumped.
+    expect(issuesDump.all()).toEqual([
+      {
+        _0_version: '110.02',
+        big: 2,
+        issueID: 1,
+        new_column: 'hello',
+      },
+      {
+        _0_version: '110.02',
+        big: 3,
+        issueID: 2,
+        new_column: 'world',
+      },
+    ]);
   });
 
   test('retry on initial change-streamer connection failure', async () => {

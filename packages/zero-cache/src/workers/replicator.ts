@@ -3,7 +3,7 @@ import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
-import {upgradeReplica} from '../services/change-source/replica-schema.ts';
+import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
 import {Notifier} from '../services/replicator/notifier.ts';
 import type {
   ReplicaState,

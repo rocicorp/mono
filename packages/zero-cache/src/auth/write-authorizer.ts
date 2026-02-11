@@ -64,6 +64,12 @@ export interface WriteAuthorizer {
   ): Promise<boolean>;
   reloadPermissions(): void;
   normalizeOps(ops: CRUDOp[]): Exclude<CRUDOp, UpsertOp>[];
+
+  /**
+   * Validates that all table names in the operations exist in the schema.
+   * @throws Error if any table name is invalid
+   */
+  validateTableNames(ops: CRUDOp[]): void;
 }
 
 export class WriteAuthorizerImpl implements WriteAuthorizer {
@@ -104,7 +110,9 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       addEdge() {},
       decorateFilterInput: input => input,
     };
-    this.#tableSpecs = computeZqlSpecs(this.#lc, replica);
+    this.#tableSpecs = computeZqlSpecs(this.#lc, replica, {
+      includeBackfillingColumns: false,
+    });
     this.#statementRunner = new StatementRunner(replica);
     this.reloadPermissions();
   }
@@ -237,6 +245,14 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       }
       return op;
     });
+  }
+
+  validateTableNames(ops: CRUDOp[]): void {
+    for (const op of ops) {
+      if (!this.#tableSpecs.has(op.tableName)) {
+        throw new Error(`Table '${op.tableName}' is not a valid table.`);
+      }
+    }
   }
 
   #canInsert(phase: Phase, authData: JWTPayload | undefined, op: InsertOp) {

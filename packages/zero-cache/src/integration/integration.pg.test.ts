@@ -132,6 +132,11 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
           j4: {pos: 6, dataType: 'json'},
         },
       },
+      metadata: {
+        rowKey: {
+          columns: ['id'],
+        },
+      },
     },
   ],
   [
@@ -154,7 +159,9 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
       relation: {
         schema: 'public',
         name: 'foo',
-        keyColumns: ['id'],
+        rowKey: {
+          columns: ['id'],
+        },
       },
       new: {
         id: 'bar',
@@ -176,6 +183,11 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         name: 'far',
         columns: {
           id: {pos: 0, dataType: 'text', notNull: true},
+        },
+      },
+      metadata: {
+        rowKey: {
+          columns: ['id'],
         },
       },
     },
@@ -200,7 +212,9 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
       relation: {
         schema: 'boo',
         name: 'far',
-        keyColumns: ['id'],
+        rowKey: {
+          columns: ['id'],
+        },
       },
       new: {
         id: 'baz',
@@ -219,6 +233,11 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
           val: {pos: 1, dataType: 'text'},
         },
       },
+      metadata: {
+        rowKey: {
+          columns: [],
+        },
+      },
     },
   ],
   [
@@ -228,7 +247,9 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
       relation: {
         schema: 'public',
         name: 'nopk',
-        keyColumns: [],
+        rowKey: {
+          columns: [],
+        },
       },
       new: {
         id: 'foo',
@@ -250,6 +271,11 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
           clientID: {pos: 1, dataType: 'text', notNull: true},
           lastMutationID: {pos: 2, dataType: 'bigint'},
           userID: {pos: 3, dataType: 'text'},
+        },
+      },
+      metadata: {
+        rowKey: {
+          columns: ['clientGroupID', 'clientID'],
         },
       },
     },
@@ -285,6 +311,11 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
           mutation: {pos: 3, dataType: 'json'},
         },
       },
+      metadata: {
+        rowKey: {
+          columns: ['clientGroupID', 'clientID', 'mutationID'],
+        },
+      },
     },
   ],
   [
@@ -318,6 +349,11 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
           hash: {pos: 2, dataType: 'text'},
         },
       },
+      metadata: {
+        rowKey: {
+          columns: ['lock'],
+        },
+      },
     },
   ],
   [
@@ -340,7 +376,9 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
       relation: {
         schema: '123',
         name: 'permissions',
-        keyColumns: ['lock'],
+        rowKey: {
+          columns: ['lock'],
+        },
       },
       new: {
         lock: true,
@@ -728,7 +766,9 @@ describe('integration', {timeout: 30000}, () => {
               relation: {
                 schema: 'public',
                 name: 'foo',
-                keyColumns: ['id'],
+                rowKey: {
+                  columns: ['id'],
+                },
               },
               new: {
                 id: 'voo',
@@ -748,7 +788,9 @@ describe('integration', {timeout: 30000}, () => {
               relation: {
                 schema: 'public',
                 name: 'foo',
-                keyColumns: ['id'],
+                rowKey: {
+                  columns: ['id'],
+                },
               },
               new: {
                 id: 'bar',
@@ -831,7 +873,9 @@ describe('integration', {timeout: 30000}, () => {
                 {
                   schema: 'public',
                   name: 'foo',
-                  keyColumns: ['id'],
+                  rowKey: {
+                    columns: ['id'],
+                  },
                 },
               ],
             },
@@ -883,7 +927,9 @@ describe('integration', {timeout: 30000}, () => {
               relation: {
                 schema: 'public',
                 name: 'nopk',
-                keyColumns: [],
+                rowKey: {
+                  columns: [],
+                },
               },
               new: {
                 id: 'bar',

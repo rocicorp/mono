@@ -36,11 +36,7 @@ import {createLogContext} from './logging.ts';
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
   writeMutationResult: (result: MutationResponse) => Promise<void>;
-  deleteMutationResults: (
-    clientGroupID: string,
-    clientID: string,
-    upToMutationID: number,
-  ) => Promise<void>;
+  deleteMutationResults: (args: CleanupResultsArg) => Promise<void>;
 }
 
 export interface TransactionProviderInput {
@@ -277,7 +273,6 @@ export async function handleMutateRequest<
       assert(m.type === 'custom', 'Expected custom mutation');
       lc.debug?.(
         `Processing mutation '${m.name}' (id=${m.id}, clientID=${m.clientID})`,
-        m.args,
       );
 
       let mutationPhase: MutationPhase = 'preTransaction';
@@ -608,19 +603,22 @@ async function processCleanupResultsMutation<
   }
   const args: CleanupResultsArg = parseResult.value;
 
-  // Run in a transaction, using the hook for DB-specific operation
+  // Determine clientID for transaction input based on cleanup type
+  // Note: legacy format without type field is treated as single
+  const clientID =
+    'type' in args && args.type === 'bulk' ? args.clientIDs[0] : args.clientID;
+
+  // Run in a transaction, using the hook for DB-specific operation.
+  // Note: only upstreamSchema is used by deleteMutationResults; the other
+  // fields are required by the interface but ignored for this operation.
   await dbProvider.transaction(
     async (_, hooks) => {
-      await hooks.deleteMutationResults(
-        args.clientGroupID,
-        args.clientID,
-        args.upToMutationID,
-      );
+      await hooks.deleteMutationResults(args);
     },
     {
       upstreamSchema: queryParams.schema,
       clientGroupID: args.clientGroupID,
-      clientID: args.clientID,
+      clientID,
       mutationID: 0,
     },
   );

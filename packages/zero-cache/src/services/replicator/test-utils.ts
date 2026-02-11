@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import type {ColumnSpec, IndexSpec, TableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
@@ -8,7 +9,7 @@ import type {
   ColumnAdd,
   ColumnDrop,
   ColumnUpdate,
-  DataChange,
+  DataOrSchemaChange,
   IndexCreate,
   IndexDrop,
   MessageBegin,
@@ -26,7 +27,10 @@ import type {
 import {ChangeProcessor} from './change-processor.ts';
 
 export interface FakeReplicator {
-  processTransaction(finalWatermark: string, ...msgs: DataChange[]): void;
+  processTransaction(
+    finalWatermark: string,
+    ...msgs: DataOrSchemaChange[]
+  ): void;
 }
 
 export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
@@ -75,8 +79,10 @@ export class ReplicationMessages<
         tag: 'relation',
         schema,
         name: table,
-        replicaIdentity,
-        keyColumns: keys,
+        rowKey: {
+          type: replicaIdentity,
+          columns: keys,
+        },
       } as const;
       this.#tables.set(table, relation);
     }
@@ -134,8 +140,21 @@ export class ReplicationMessages<
     };
   }
 
-  createTable(spec: TableSpec): TableCreate {
-    return {tag: 'create-table', spec};
+  createTable(
+    spec: TableSpec,
+    tableCreate?: Pick<TableCreate, 'metadata' | 'backfill'>,
+  ): TableCreate {
+    return {
+      tag: 'create-table',
+      spec,
+      metadata: {
+        rowKey: {
+          columns: must(spec.primaryKey),
+          type: 'default',
+        },
+      },
+      ...tableCreate,
+    };
   }
 
   renameTable<TableName extends string & keyof TablesAndKeys>(
@@ -153,11 +172,18 @@ export class ReplicationMessages<
     table: TableName,
     column: string,
     spec: ColumnSpec,
+    columnAdd?: Pick<ColumnAdd, 'tableMetadata' | 'backfill'>,
   ): ColumnAdd {
     return {
       tag: 'add-column',
       table: {schema: 'public', name: table},
       column: {name: column, spec},
+      tableMetadata: {
+        rowKey: {
+          columns: ['not-mocked-for-the-test'],
+        },
+      },
+      ...columnAdd,
     };
   }
 

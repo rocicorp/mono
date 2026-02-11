@@ -31,7 +31,7 @@ function normalizeFlipFlags(ast: AST): AST {
 }
 
 function normalizeConditionFlipFlags(condition: Condition): Condition {
-  if (condition.type === 'simple') {
+  if (condition.type === 'simple' || condition.type === 'scalarSubquery') {
     return condition;
   }
 

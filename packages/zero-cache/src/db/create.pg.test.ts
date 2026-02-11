@@ -3,16 +3,19 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {Database} from '../../../zqlite/src/db.ts';
 import {test} from '../test/db.ts';
 import {createLiteTableStatement} from './create.ts';
-import {listTables} from './lite-tables.ts';
+import {
+  listTables,
+  type LiteTableSpecWithReplicationStatus,
+} from './lite-tables.ts';
 import {mapPostgresToLite} from './pg-to-lite.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
-import {type LiteTableSpec, type TableSpec} from './specs.ts';
+import {type TableSpec} from './specs.ts';
 
 describe('tables/create', () => {
   type Case = {
     name: string;
     createStatement: string;
-    liteTableSpec: LiteTableSpec;
+    liteTableSpec: LiteTableSpecWithReplicationStatus;
     dstTableSpec: TableSpec;
   };
 
@@ -76,6 +79,7 @@ describe('tables/create', () => {
             elemPgTypeClass: null,
           },
         },
+        backfilling: [],
       },
     },
     {
@@ -137,6 +141,7 @@ describe('tables/create', () => {
             pos: 3,
           },
         },
+        backfilling: [],
       },
     },
     {
@@ -267,6 +272,7 @@ describe('tables/create', () => {
             pos: 7,
           },
         },
+        backfilling: [],
       },
     },
     {
@@ -362,6 +368,7 @@ describe('tables/create', () => {
             elemPgTypeClass: null,
           },
         },
+        backfilling: [],
       },
     },
     {
@@ -457,6 +464,7 @@ describe('tables/create', () => {
             elemPgTypeClass: null,
           },
         },
+        backfilling: [],
       },
     },
   ];

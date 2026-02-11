@@ -49,7 +49,7 @@ function makeCVR(clients: Record<string, QueryDef[]>): CVR {
         inactivatedAt,
         ttl,
         version: {
-          minorVersion: 1,
+          configVersion: 1,
           stateVersion: '1a9',
         },
       };

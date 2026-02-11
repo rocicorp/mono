@@ -200,12 +200,22 @@ function dateToUTCMidnight(date: string): number {
  */
 export type PostgresValueType = JSONValue | Uint8Array;
 
+export type TypeOptions = {
+  /**
+   * Sends strings directly as JSON values (i.e. without JSON stringification).
+   * The application is responsible for ensuring that string inputs for JSON
+   * columns are already stringified. Other data types (e.g. objects) will
+   * still be stringified by the pg client.
+   */
+  sendStringAsJson?: boolean;
+};
+
 /**
  * Configures types for the Postgres.js client library (`postgres`).
  *
  * @param jsonAsString Keep JSON / JSONB values as strings instead of parsing.
  */
-export const postgresTypeConfig = (jsonAsString?: 'json-as-string') => ({
+export const postgresTypeConfig = ({sendStringAsJson}: TypeOptions = {}) => ({
   // Type the type IDs as `number` so that Typescript doesn't complain about
   // referencing external types during type inference.
   types: {
@@ -213,8 +223,10 @@ export const postgresTypeConfig = (jsonAsString?: 'json-as-string') => ({
     json: {
       to: JSON,
       from: [JSON, JSONB],
-      serialize: BigIntJSON.stringify,
-      parse: jsonAsString ? (x: string) => x : BigIntJSON.parse,
+      serialize: sendStringAsJson
+        ? (x: unknown) => (typeof x === 'string' ? x : BigIntJSON.stringify(x))
+        : BigIntJSON.stringify,
+      parse: BigIntJSON.parse,
     },
     // Timestamps are converted to PreciseDate objects.
     timestamp: {
@@ -276,7 +288,7 @@ export function pgClient(
     bigint: PostgresType<bigint>;
     json: PostgresType<JSONValue>;
   }>,
-  jsonAsString?: 'json-as-string',
+  opts?: TypeOptions,
 ): PostgresDB {
   const onnotice = (n: Notice) => {
     // https://www.postgresql.org/docs/current/plpgsql-errors-and-messages.html#PLPGSQL-STATEMENTS-RAISE
@@ -313,7 +325,7 @@ export function pgClient(
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
 
   return postgres(connectionURI, {
-    ...postgresTypeConfig(jsonAsString),
+    ...postgresTypeConfig(opts),
     onnotice,
     ['max_lifetime']: maxLifetimeSeconds,
     ssl,

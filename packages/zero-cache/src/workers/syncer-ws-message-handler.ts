@@ -30,9 +30,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #pusher: Pusher | undefined;
-  // DEPRECATED: remove #token
-  // and forward auth and cookie headers that were
-  // sent with the push.
+  // Fallback token from connection time - prefer auth from push message
   readonly #token: string | undefined;
 
   constructor(
@@ -51,6 +49,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       baseCookie,
       protocolVersion,
       httpCookie,
+      origin,
     } = connectParams;
     this.#viewSyncer = viewSyncer;
     this.#mutagen = mutagen;
@@ -72,6 +71,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       protocolVersion,
       tokenData,
       httpCookie,
+      origin,
     };
   }
 
@@ -123,12 +123,15 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 this.#pusher,
                 'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
               );
+              // prefer fresh auth from push message over cached connection token
+              const authToken = msg[1].auth ?? this.#token;
               return [
                 this.#pusher.enqueuePush(
                   this.#syncContext.clientID,
                   msg[1],
-                  this.#token,
+                  authToken,
                   this.#syncContext.httpCookie,
+                  this.#syncContext.origin,
                 ),
               ];
             }
@@ -166,11 +169,17 @@ export class SyncerWsMessageHandler implements MessageHandler {
           viewSyncer.changeDesiredQueries(this.#syncContext, msg),
         );
         break;
-      case 'deleteClients':
-        await startAsyncSpan(tracer, 'connection.deleteClients', () =>
-          viewSyncer.deleteClients(this.#syncContext, msg),
+      case 'deleteClients': {
+        const deletedClientIDs = await startAsyncSpan(
+          tracer,
+          'connection.deleteClients',
+          () => viewSyncer.deleteClients(this.#syncContext, msg),
         );
+        if (this.#pusher && deletedClientIDs.length > 0) {
+          await this.#pusher.deleteClientMutations(deletedClientIDs);
+        }
         break;
+      }
       case 'initConnection': {
         const ret: HandlerResult[] = [
           {
@@ -194,6 +203,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
               this.#syncContext.clientID,
               this.#syncContext.wsID,
               msg[1].userPushURL,
+              msg[1].userPushHeaders,
             ),
           });
         }

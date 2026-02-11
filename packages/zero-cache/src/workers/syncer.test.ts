@@ -384,15 +384,6 @@ describe('jwt auth without options', () => {
     const first = JSON.parse(messages[0]);
     expect(first[0]).toBe('connected');
 
-    // check that we logged a warning that the auth token must be manually verified by the user
-    expect(logSink.messages).toContainEqual([
-      'warn',
-      {},
-      [
-        'One of jwk, secret, or jwksUrl is not configured - the `authorization` header must be manually verified by the user',
-      ],
-    ]);
-
     // Services should be instantiated for successful connection
     expect(mutagens.length).toBe(1);
     expect(pushers.length).toBe(1);
@@ -440,6 +431,117 @@ describe('jwt auth missing options and missing endpoints', () => {
 
     expect(mutagens.length).toBe(0);
     expect(pushers.length).toBe(0);
+  });
+});
+
+describe('connection hijacking prevention', () => {
+  let syncer: Syncer;
+  let verifySpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    verifySpy = vi.spyOn(jwt, 'verifyToken');
+    const env = setupSyncer(lc, {
+      auth: {
+        secret: 'test-secret',
+      },
+    } as ZeroConfig);
+    syncer = env.syncer;
+  });
+
+  afterEach(async () => {
+    await syncer.stop();
+  });
+
+  test('invalid auth does not close existing connection', async () => {
+    // First, establish a legitimate connection (no auth required for initial connection)
+    const existingWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      existingWs,
+      {
+        clientGroupID: '1',
+        clientID: 'target-client',
+        userID: 'legit-user',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+        // No auth token - simulates an existing open connection
+      },
+      {} as any,
+    );
+    expect((existingWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
+
+    // Now, attacker tries to connect with same clientID but invalid token
+    verifySpy.mockRejectedValueOnce(new Error('Invalid token'));
+    const attackerWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      attackerWs,
+      {
+        clientGroupID: '1',
+        clientID: 'target-client', // Same clientID as existing connection
+        userID: 'attacker',
+        wsID: 'ws-2',
+        protocolVersion: 30,
+        auth: 'invalid-token',
+      },
+      {} as any,
+    );
+
+    // The existing connection should NOT have been closed
+    expect((existingWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
+
+    // The attacker's connection should be closed due to invalid auth
+    expect((attackerWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.CLOSED,
+    );
+  });
+
+  test('valid auth can replace existing connection', async () => {
+    // First, establish an existing connection
+    const existingWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      existingWs,
+      {
+        clientGroupID: '1',
+        clientID: 'client-1',
+        userID: 'user-1',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+      },
+      {} as any,
+    );
+    expect((existingWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
+
+    // Same user reconnects with valid auth
+    verifySpy.mockResolvedValueOnce({sub: 'user-1'});
+    const newWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      newWs,
+      {
+        clientGroupID: '1',
+        clientID: 'client-1', // Same clientID
+        userID: 'user-1',
+        wsID: 'ws-2',
+        protocolVersion: 30,
+        auth: 'valid-token',
+      },
+      {} as any,
+    );
+
+    // The existing connection should be closed (replaced)
+    expect((existingWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.CLOSED,
+    );
+
+    // The new connection should be open
+    expect((newWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
   });
 });
 

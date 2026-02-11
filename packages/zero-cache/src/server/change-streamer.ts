@@ -4,7 +4,7 @@ import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
-import {initEventSink} from '../observability/events.ts';
+import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
@@ -14,6 +14,7 @@ import type {ChangeStreamerService} from '../services/change-streamer/change-str
 import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {replicationStatusError} from '../services/replicator/replication-status.ts';
 import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -35,13 +36,7 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const {
     taskID,
-    changeStreamer: {
-      port,
-      address,
-      protocol,
-      startupDelayMs,
-      backPressureThreshold,
-    },
+    changeStreamer: {port, address, protocol, startupDelayMs},
     upstream,
     change,
     replica,
@@ -54,10 +49,15 @@ export default async function runWorker(
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
-  const changeDB = pgClient(lc, change.db, {
-    max: change.maxConns,
-    connection: {['application_name']: 'zero-change-streamer'},
-  });
+  const changeDB = pgClient(
+    lc,
+    change.db,
+    {
+      max: change.maxConns,
+      connection: {['application_name']: 'zero-change-streamer'},
+    },
+    {sendStringAsJson: true},
+  );
   void warmupConnections(lc, changeDB, 'change');
 
   const {autoReset} = config;
@@ -94,7 +94,6 @@ export default async function runWorker(
         changeSource,
         subscriptionState,
         autoReset ?? false,
-        backPressureThreshold,
         setTimeout,
       );
       break;
@@ -106,6 +105,10 @@ export default async function runWorker(
         deleteLiteDB(replica.file);
         continue; // execute again with a fresh initial-sync
       }
+      await publishCriticalEvent(
+        lc,
+        replicationStatusError(lc, 'Initializing', e),
+      );
       if (e instanceof DatabaseInitError) {
         throw new Error(
           `Cannot open ZERO_REPLICA_FILE at "${replica.file}". Please check that the path is valid.`,

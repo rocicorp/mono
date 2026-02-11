@@ -9,6 +9,7 @@ import {getKVStoreProvider} from '../get-kv-store-provider.ts';
 import {fakeHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
 import {hasMemStore} from '../kv/mem-store.ts';
+import type {CreateStore} from '../kv/store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
@@ -46,13 +47,11 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
 
   const makeIndexedDBDatabase = ({
     name,
-    lastOpenedTimestampMS = Date.now(),
     replicacheFormatVersion = FormatVersion.Latest,
     schemaVersion = 'schemaVersion-' + name,
     replicacheName = 'replicacheName-' + name,
   }: {
     name: string;
-    lastOpenedTimestampMS?: number;
     replicacheFormatVersion?: number;
     schemaVersion?: string;
     replicacheName?: string;
@@ -61,7 +60,6 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
     replicacheFormatVersion,
     schemaVersion,
     replicacheName,
-    lastOpenedTimestampMS,
   });
 
   const t = ({
@@ -83,7 +81,6 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   }) => {
     test(name + ' > time ' + now, async () => {
       const store = new IDBDatabasesStore(_ => new TestMemStore());
-      const dropStore = (name: string) => store.deleteDatabases([name]);
       const clientDagStores = new Map<IndexedDBName, Store>();
       for (const [
         db,
@@ -151,10 +148,15 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         }
       }
 
-      const newDagStore = (name: string) => {
+      const newDagStore = (name: string, _kvCreateStore: CreateStore) => {
         const dagStore = clientDagStores.get(name);
         assertNotUndefined(dagStore);
         return dagStore;
+      };
+
+      const kvStoreProvider = {
+        create: (_name: string) => new TestMemStore(),
+        drop: (name: string) => store.deleteDatabases([name]),
       };
 
       const maxAge = 1000;
@@ -165,7 +167,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         store,
         now,
         maxAge,
-        dropStore,
+        kvStoreProvider,
         enableMutationRecovery,
         onClientsDeleted,
         newDagStore,
@@ -187,7 +189,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       // Make sure that all remaining databases have correct deleted clients head.
       if (expectedDatabases.length > 0) {
         for (const name of expectedDatabases) {
-          const dagStore = newDagStore(name);
+          const dagStore = newDagStore(name, kvStoreProvider.create);
           expect(
             await withRead(dagStore, read => getDeletedClients(read)),
           ).toEqual(expectedDeletedClients);
@@ -201,7 +203,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   {
     const entries: Entries = [
       [
-        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeIndexedDBDatabase({name: 'a'}),
         makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
@@ -235,7 +237,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   {
     const entries: Entries = [
       [
-        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeIndexedDBDatabase({name: 'a'}),
         makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
@@ -244,7 +246,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         }),
       ],
       [
-        makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 1000}),
+        makeIndexedDBDatabase({name: 'b'}),
         makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
@@ -283,7 +285,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   {
     const entries: Entries = [
       [
-        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 2000}),
+        makeIndexedDBDatabase({name: 'a'}),
         makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
@@ -298,7 +300,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         }),
       ],
       [
-        makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 1000}),
+        makeIndexedDBDatabase({name: 'b'}),
         makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
@@ -345,7 +347,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   {
     const entries: Entries = [
       [
-        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 3000}),
+        makeIndexedDBDatabase({name: 'a'}),
         makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
@@ -363,7 +365,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         }),
       ],
       [
-        makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 4000}),
+        makeIndexedDBDatabase({name: 'b'}),
         makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
@@ -425,7 +427,6 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       [
         makeIndexedDBDatabase({
           name: 'a',
-          lastOpenedTimestampMS: 0,
           replicacheFormatVersion: FormatVersion.Latest + 1,
         }),
         makeClientMap({
@@ -468,7 +469,6 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       [
         makeIndexedDBDatabase({
           name: 'a',
-          lastOpenedTimestampMS: 0,
           replicacheFormatVersion: FormatVersion.V6,
         }),
         makeClientMap({
@@ -530,7 +530,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   {
     const entries: Entries = [
       [
-        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeIndexedDBDatabase({name: 'a'}),
         makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
@@ -566,7 +566,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   {
     const entries: Entries = [
       [
-        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeIndexedDBDatabase({name: 'a'}),
         makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
@@ -610,7 +610,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   {
     const entries: Entries = [
       [
-        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeIndexedDBDatabase({name: 'a'}),
         makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
@@ -631,7 +631,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         }),
       ],
       [
-        makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 0}),
+        makeIndexedDBDatabase({name: 'b'}),
         makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
@@ -668,7 +668,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
   {
     const entries: Entries = [
       [
-        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeIndexedDBDatabase({name: 'a'}),
         makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
@@ -689,7 +689,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         }),
       ],
       [
-        makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 0}),
+        makeIndexedDBDatabase({name: 'b'}),
         makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
@@ -768,6 +768,64 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       });
     }
   }
+});
+
+test('should not collect database with actively heartbeating client', async () => {
+  const store = new IDBDatabasesStore(_ => new TestMemStore());
+
+  // Simulate a database with an active client - should not be collected
+  const currentDbName = 'current-db';
+  const currentClientID = 'current-client';
+  const currentClientGroupID = 'current-client-group';
+
+  const db: IndexedDBDatabase = {
+    name: currentDbName,
+    replicacheName: 'my-app',
+    replicacheFormatVersion: FormatVersion.Latest,
+    schemaVersion: '1',
+  };
+
+  const dagStore = new TestStore();
+  await store.putDatabaseForTesting(db);
+  await setClientsForTesting(
+    makeClientMap({
+      [currentClientID]: {
+        headHash: fakeHash('current'),
+        heartbeatTimestampMs: 5000, // Client is still heartbeating!
+        clientGroupID: currentClientGroupID,
+      },
+    }),
+    dagStore,
+  );
+
+  const newDagStore = (name: string, _kvCreateStore: CreateStore) => {
+    expect(name).toBe(currentDbName);
+    return dagStore;
+  };
+
+  const kvStoreProvider = {
+    create: (_name: string) => new TestMemStore(),
+    drop: (name: string) => store.deleteDatabases([name]),
+  };
+
+  const maxAge = 1000;
+  const now = 5000; // Client heartbeat is within maxAge
+
+  const onClientsDeleted = vi.fn();
+
+  await collectIDBDatabases(
+    store,
+    now,
+    maxAge,
+    kvStoreProvider,
+    true, // enableMutationRecovery
+    onClientsDeleted,
+    newDagStore,
+  );
+
+  // Database should NOT be collected because it has an actively heartbeating client
+  expect(Object.keys(await store.getDatabases())).toEqual([currentDbName]);
+  expect(onClientsDeleted).not.toHaveBeenCalled();
 });
 
 test('dropDatabases mem', async () => {

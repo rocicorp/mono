@@ -8,7 +8,6 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {DEFAULT_BACK_PRESSURE_THRESHOLD} from '../../config/zero-config.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -29,11 +28,7 @@ import {
   type Downstream,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
-import {
-  AutoResetSignal,
-  ensureReplicationConfig,
-  type ChangeLogEntry,
-} from './schema/tables.ts';
+import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
 
 describe('change-streamer/service', () => {
   let lc: LogContext;
@@ -54,7 +49,9 @@ describe('change-streamer/service', () => {
   beforeEach<PgTest>(async ({testDBs}) => {
     lc = createSilentLogContext();
 
-    sql = await testDBs.create('change_streamer_test_change_db');
+    sql = await testDBs.create('change_streamer_test_change_db', undefined, {
+      sendStringAsJson: true,
+    });
 
     const replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
@@ -81,7 +78,6 @@ describe('change-streamer/service', () => {
       },
       replicaConfig,
       true,
-      DEFAULT_BACK_PRESSURE_THRESHOLD,
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
@@ -172,15 +168,28 @@ describe('change-streamer/service', () => {
     // Await the ACK for the single commit, then the status message.
     await expectAcks('09', '0b');
 
-    const logEntries = await sql<
-      ChangeLogEntry[]
-    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
-    expect(logEntries.map(e => e.change.tag)).toEqual([
-      'begin',
-      'insert',
-      'insert',
-      'commit',
-    ]);
+    expect(
+      await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toMatchInlineSnapshot(`
+      Result [
+        [
+          "09",
+          "begin",
+        ],
+        [
+          "09",
+          "insert",
+        ],
+        [
+          "09",
+          "insert",
+        ],
+        [
+          "09",
+          "commit",
+        ],
+      ]
+    `);
     await expectTables(sql, {
       ['zoro_3/cdc.replicationState']: [
         {
@@ -257,18 +266,40 @@ describe('change-streamer/service', () => {
     // Two commits with intervening status messages
     await expectAcks('09', '0a', '0b', '0d');
 
-    const logEntries = await sql<
-      ChangeLogEntry[]
-    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
-    expect(logEntries.map(e => e.change.tag)).toEqual([
-      'begin',
-      'insert',
-      'insert',
-      'commit',
-      'begin',
-      'delete',
-      'commit',
-    ]);
+    expect(
+      await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toMatchInlineSnapshot(`
+      Result [
+        [
+          "09",
+          "begin",
+        ],
+        [
+          "09",
+          "insert",
+        ],
+        [
+          "09",
+          "insert",
+        ],
+        [
+          "09",
+          "commit",
+        ],
+        [
+          "0b",
+          "begin",
+        ],
+        [
+          "0b",
+          "delete",
+        ],
+        [
+          "0b",
+          "commit",
+        ],
+      ]
+    `);
     await expectTables(sql, {
       ['zoro_3/cdc.replicationState']: [
         {
@@ -337,15 +368,28 @@ describe('change-streamer/service', () => {
     await expectAcks('09', '0d');
 
     // Only the changes for the committed (i.e. first) transaction are persisted.
-    const logEntries = await sql<
-      ChangeLogEntry[]
-    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
-    expect(logEntries.map(e => e.change.tag)).toEqual([
-      'begin',
-      'insert',
-      'insert',
-      'commit',
-    ]);
+    expect(
+      await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toMatchInlineSnapshot(`
+      Result [
+        [
+          "09",
+          "begin",
+        ],
+        [
+          "09",
+          "insert",
+        ],
+        [
+          "09",
+          "insert",
+        ],
+        [
+          "09",
+          "commit",
+        ],
+      ]
+    `);
     await expectTables(sql, {
       ['zoro_3/cdc.replicationState']: [
         {
@@ -414,21 +458,52 @@ describe('change-streamer/service', () => {
     await expectAcks('09', '0b', '0c');
 
     // Only the changes for the committed (i.e. first) transaction are persisted.
-    const logEntries = await sql<
-      ChangeLogEntry[]
-    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
-    expect(logEntries.map(e => e.change.tag)).toEqual([
-      'begin',
-      'insert',
-      'insert',
-      'commit',
-      'begin',
-      'delete',
-      'commit',
-      'begin',
-      'insert',
-      'commit',
-    ]);
+    expect(
+      await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toMatchInlineSnapshot(`
+      Result [
+        [
+          "09",
+          "begin",
+        ],
+        [
+          "09",
+          "insert",
+        ],
+        [
+          "09",
+          "insert",
+        ],
+        [
+          "09",
+          "commit",
+        ],
+        [
+          "0b",
+          "begin",
+        ],
+        [
+          "0b",
+          "delete",
+        ],
+        [
+          "0b",
+          "commit",
+        ],
+        [
+          "0c",
+          "begin",
+        ],
+        [
+          "0c",
+          "insert",
+        ],
+        [
+          "0c",
+          "commit",
+        ],
+      ]
+    `);
     await expectTables(sql, {
       ['zoro_3/cdc.replicationState']: [
         {
@@ -489,23 +564,49 @@ describe('change-streamer/service', () => {
 
     await expectAcks('09');
 
-    const logEntries = await sql<
-      ChangeLogEntry[]
-    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
-    expect(logEntries.map(e => e.change.tag)).toEqual([
-      'begin',
-      'insert',
-      'commit',
-    ]);
-    const insert = logEntries[1].change;
-    assert(insert.tag === 'insert');
-    expect(insert.new).toEqual({
-      id: 'hello',
-      int: 123456789,
-      big: 987654321987654321n,
-      flt: 123.456,
-      bool: true,
-    });
+    expect(
+      await sql`SELECT watermark, change FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toMatchInlineSnapshot(`
+      Result [
+        [
+          "09",
+          {
+            "tag": "begin",
+          },
+        ],
+        [
+          "09",
+          {
+            "new": {
+              "big": 987654321987654321n,
+              "bool": true,
+              "flt": 123.456,
+              "id": "hello",
+              "int": 123456789,
+            },
+            "relation": {
+              "name": "foo",
+              "rowKey": {
+                "columns": [
+                  "id",
+                ],
+                "type": "default",
+              },
+              "schema": "public",
+              "tag": "relation",
+            },
+            "tag": "insert",
+          },
+        ],
+        [
+          "09",
+          {
+            "extra": "info",
+            "tag": "commit",
+          },
+        ],
+      ]
+    `);
 
     // Also verify when loading from the Store as opposed to direct forwarding.
     const catchupSub = await streamer.subscribe({
@@ -762,7 +863,6 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
-      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -787,7 +887,6 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
-      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -809,7 +908,6 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
-      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -843,7 +941,6 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
-      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -880,7 +977,6 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
-      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -895,7 +991,13 @@ describe('change-streamer/service', () => {
         {
           tag: 'insert',
           new: {id: i, val: bigString},
-          relation: {schema: 'public', name: 'foo', keyColumns: ['id']},
+          relation: {
+            schema: 'public',
+            name: 'foo',
+            rowKey: {
+              columns: ['id'],
+            },
+          },
         },
       ]).result;
     }
@@ -945,7 +1047,6 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
-      DEFAULT_BACK_PRESSURE_THRESHOLD,
     );
     void streamer.run();
 
@@ -1020,14 +1121,24 @@ describe('change-streamer/service', () => {
     await streamerDone;
 
     // Only the first changes should be committed.
-    const logEntries = await sql<
-      ChangeLogEntry[]
-    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
-    expect(logEntries.map(e => e.change.tag)).toEqual([
-      'begin',
-      'insert',
-      'commit',
-    ]);
+    expect(
+      await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toMatchInlineSnapshot(`
+      Result [
+        [
+          "0d",
+          "begin",
+        ],
+        [
+          "0d",
+          "insert",
+        ],
+        [
+          "0d",
+          "commit",
+        ],
+      ]
+    `);
 
     await expectTables(sql, {
       ['zoro_3/cdc.replicationState']: [
@@ -1065,14 +1176,24 @@ describe('change-streamer/service', () => {
     await streamerDone;
 
     // Only the first changes should be committed.
-    const logEntries = await sql<
-      ChangeLogEntry[]
-    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
-    expect(logEntries.map(e => e.change.tag)).toEqual([
-      'begin',
-      'insert',
-      'commit',
-    ]);
+    expect(
+      await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toMatchInlineSnapshot(`
+      Result [
+        [
+          "0d",
+          "begin",
+        ],
+        [
+          "0d",
+          "insert",
+        ],
+        [
+          "0d",
+          "commit",
+        ],
+      ]
+    `);
 
     await expectTables(sql, {
       ['zoro_3/cdc.replicationState']: [

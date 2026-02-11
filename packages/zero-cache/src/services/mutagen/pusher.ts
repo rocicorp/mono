@@ -24,11 +24,11 @@ import {type ZeroConfig} from '../../config/zero-config.ts';
 import {compileUrlPattern, fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
-import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
+import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 
 export interface Pusher extends RefCountedService {
   readonly pushURL: string | undefined;
@@ -37,14 +37,17 @@ export interface Pusher extends RefCountedService {
     clientID: string,
     wsID: string,
     userPushURL: string | undefined,
+    userPushHeaders: Record<string, string> | undefined,
   ): Source<Downstream>;
   enqueuePush(
     clientID: string,
     push: PushBody,
     auth: string | undefined,
     httpCookie: string | undefined,
+    origin: string | undefined,
   ): HandlerResult;
   ackMutationResponses(upToID: MutationID): Promise<void>;
+  deleteClientMutations(clientIDs: string[]): Promise<void>;
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
@@ -89,6 +92,7 @@ export class PusherService implements Service, Pusher {
       lc,
       pushConfig.url,
       pushConfig.apiKey,
+      pushConfig.allowedClientHeaders,
       this.#queue,
     );
     this.id = clientGroupID;
@@ -103,8 +107,14 @@ export class PusherService implements Service, Pusher {
     clientID: string,
     wsID: string,
     userPushURL: string | undefined,
+    userPushHeaders: Record<string, string> | undefined,
   ) {
-    return this.#pusher.initConnection(clientID, wsID, userPushURL);
+    return this.#pusher.initConnection(
+      clientID,
+      wsID,
+      userPushURL,
+      userPushHeaders,
+    );
   }
 
   enqueuePush(
@@ -112,11 +122,12 @@ export class PusherService implements Service, Pusher {
     push: PushBody,
     auth: string | undefined,
     httpCookie: string | undefined,
+    origin: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
     if (!this.#pushConfig.forwardCookies) {
       httpCookie = undefined; // remove cookies if not forwarded
     }
-    this.#queue.enqueue({push, auth, clientID, httpCookie});
+    this.#queue.enqueue({push, auth, clientID, httpCookie, origin});
 
     return {
       type: 'ok',
@@ -140,6 +151,7 @@ export class PusherService implements Service, Pusher {
           name: CLEANUP_RESULTS_MUTATION_NAME,
           args: [
             {
+              type: 'single',
               clientGroupID: this.id,
               clientID: upToID.clientID,
               upToMutationID: upToID.id,
@@ -159,7 +171,6 @@ export class PusherService implements Service, Pusher {
         'push',
         this.#lc,
         url,
-        false,
         this.#pushURLPatterns,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         {apiKey: this.#pushConfig.apiKey},
@@ -167,6 +178,57 @@ export class PusherService implements Service, Pusher {
       );
     } catch (e) {
       this.#lc.warn?.('Failed to send cleanup mutation', {
+        error: getErrorMessage(e),
+      });
+    }
+  }
+
+  async deleteClientMutations(clientIDs: string[]) {
+    if (clientIDs.length === 0) {
+      return;
+    }
+    const url = this.#pushConfig.url[0];
+    if (!url) {
+      // No push URL configured, skip cleanup
+      return;
+    }
+
+    const cleanupBody: PushBody = {
+      clientGroupID: this.id,
+      mutations: [
+        {
+          type: MutationType.Custom,
+          id: 0, // Not tracked - this is fire-and-forget
+          clientID: clientIDs[0], // Use first client as sender
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          args: [
+            {
+              type: 'bulk',
+              clientGroupID: this.id,
+              clientIDs,
+            },
+          ],
+          timestamp: Date.now(),
+        },
+      ],
+      pushVersion: 1,
+      timestamp: Date.now(),
+      requestID: `cleanup-bulk-${this.id}-${Date.now()}`,
+    };
+
+    try {
+      await fetchFromAPIServer(
+        pushResponseSchema,
+        'push',
+        this.#lc,
+        url,
+        this.#pushURLPatterns,
+        {appID: this.#config.app.id, shardNum: this.#config.shard.num},
+        {apiKey: this.#pushConfig.apiKey},
+        cleanupBody,
+      );
+    } catch (e) {
+      this.#lc.warn?.('Failed to send bulk cleanup mutation', {
         error: getErrorMessage(e),
       });
     }
@@ -208,6 +270,7 @@ type PusherEntry = {
   push: PushBody;
   auth: string | undefined;
   httpCookie: string | undefined;
+  origin: string | undefined;
   clientID: string;
 };
 type PusherEntryOrStop = PusherEntry | 'stop';
@@ -220,6 +283,7 @@ class PushWorker {
   readonly #pushURLs: string[];
   readonly #pushURLPatterns: URLPattern[];
   readonly #apiKey: string | undefined;
+  readonly #allowedClientHeaders: readonly string[] | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
   readonly #config: Config;
@@ -231,6 +295,7 @@ class PushWorker {
     }
   >;
   #userPushURL?: string | undefined;
+  #userPushHeaders?: Record<string, string> | undefined;
 
   readonly #customMutations = getOrCreateCounter(
     'mutation',
@@ -248,12 +313,14 @@ class PushWorker {
     lc: LogContext,
     pushURL: string[],
     apiKey: string | undefined,
+    allowedClientHeaders: readonly string[] | undefined,
     queue: Queue<PusherEntryOrStop>,
   ) {
     this.#pushURLs = pushURL;
     this.#lc = lc.withContext('component', 'pusher');
     this.#pushURLPatterns = pushURL.map(compileUrlPattern);
     this.#apiKey = apiKey;
+    this.#allowedClientHeaders = allowedClientHeaders;
     this.#queue = queue;
     this.#config = config;
     this.#clients = new Map();
@@ -271,6 +338,7 @@ class PushWorker {
     clientID: string,
     wsID: string,
     userPushURL: string | undefined,
+    userPushHeaders: Record<string, string> | undefined,
   ) {
     const existing = this.#clients.get(clientID);
     if (existing && existing.wsID === wsID) {
@@ -285,8 +353,9 @@ class PushWorker {
 
     // Handle client group level URL parameters
     if (this.#userPushURL === undefined) {
-      // First client in the group - store its URL
+      // First client in the group - store its URL and headers
       this.#userPushURL = userPushURL;
+      this.#userPushHeaders = userPushHeaders;
     } else {
       // Validate that subsequent clients have compatible parameters
       if (this.#userPushURL !== userPushURL) {
@@ -485,7 +554,6 @@ class PushWorker {
         'push',
         this.#lc,
         url,
-        url === this.#userPushURL,
         this.#pushURLPatterns,
         {
           appID: this.#config.app.id,
@@ -493,8 +561,11 @@ class PushWorker {
         },
         {
           apiKey: this.#apiKey,
+          customHeaders: this.#userPushHeaders,
+          allowedClientHeaders: this.#allowedClientHeaders,
           token: entry.auth,
           cookie: entry.httpCookie,
+          origin: entry.origin,
         },
         entry.push,
       );
@@ -520,8 +591,7 @@ class PushWorker {
     downstream: Subscription<Downstream>,
     errorBody: PushFailedBody,
   ): void {
-    const logLevel = errorBody.origin === ErrorOrigin.Server ? 'warn' : 'error';
-    downstream.fail(new ProtocolErrorWithLevel(errorBody, logLevel));
+    downstream.fail(new ProtocolErrorWithLevel(errorBody, 'warn'));
   }
 }
 
@@ -594,5 +664,9 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
   assert(
     left.httpCookie === right.httpCookie,
     'httpCookie must be the same for all pushes with the same clientID',
+  );
+  assert(
+    left.origin === right.origin,
+    'origin must be the same for all pushes with the same clientID',
   );
 }

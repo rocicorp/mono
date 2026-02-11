@@ -7,6 +7,7 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
+import {resolver} from '@rocicorp/resolver';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
@@ -43,7 +44,7 @@ import type {ReplicaState} from '../replicator/replicator.ts';
 import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {CVRStore} from './cvr-store.ts';
-import {CVRQueryDrivenUpdater} from './cvr.ts';
+import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
@@ -51,6 +52,7 @@ import {
   COMMENTS_QUERY,
   EXPECTED_LMIDS_AST,
   expectNoPokes,
+  inactivateQuery,
   ISSUES_QUERY,
   ISSUES_QUERY2,
   ISSUES_QUERY_WITH_EXISTS,
@@ -70,9 +72,15 @@ import {
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
 import type {ViewSyncerService} from './view-syncer.ts';
+import {ClientHandler} from './client-handler.ts';
+import {PipelineDriver} from './pipeline-driver.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   let storageDB: Database;
   let replicaDbFile: DbFile;
   let replica: Database;
@@ -120,6 +128,7 @@ describe('view-syncer/service', () => {
     protocolVersion: PROTOCOL_VERSION,
     tokenData: undefined,
     httpCookie: undefined,
+    origin: undefined,
   };
 
   beforeEach<PgTest>(async ({testDBs}) => {
@@ -167,7 +176,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -186,11 +194,11 @@ describe('view-syncer/service', () => {
         'query-hash1': {
           ast: ISSUES_QUERY,
           type: 'client',
-          clientState: {foo: {version: {stateVersion: '00', minorVersion: 1}}},
+          clientState: {foo: {version: {stateVersion: '00', configVersion: 1}}},
           id: 'query-hash1',
         },
       },
-      version: {stateVersion: '00', minorVersion: 1},
+      version: {stateVersion: '00', configVersion: 1},
     });
   });
 
@@ -214,7 +222,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -239,7 +246,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -284,7 +290,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -312,7 +317,7 @@ describe('view-syncer/service', () => {
             foo: {
               inactivatedAt,
               ttl: DEFAULT_TTL_MS,
-              version: {minorVersion: 2, stateVersion: '00'},
+              version: {configVersion: 2, stateVersion: '00'},
             },
           },
           id: 'query-hash1',
@@ -324,13 +329,13 @@ describe('view-syncer/service', () => {
             foo: {
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
-              version: {stateVersion: '00', minorVersion: 2},
+              version: {stateVersion: '00', configVersion: 2},
             },
           },
           id: 'query-hash2',
         },
       },
-      version: {stateVersion: '00', minorVersion: 2},
+      version: {stateVersion: '00', configVersion: 2},
     });
   });
 
@@ -766,6 +771,774 @@ describe('view-syncer/service', () => {
         `);
     });
 
+    test('removing one of two queries with shared transformation hash does not remove pipeline', async () => {
+      mockFetchImpl([
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-1',
+          name: 'named-query-1',
+        },
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-2',
+          name: 'named-query-2',
+        },
+      ]);
+      const ttl = 100;
+      vi.setSystemTime(Date.now());
+
+      const client = connect(SYNC_CONTEXT, [
+        {
+          op: 'put',
+          hash: 'custom-1',
+          name: 'named-query-1',
+          args: ['thing'],
+          ttl,
+        },
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "00:01",
+              "pokeID": "00:01",
+            },
+          ],
+        ]
+      `);
+
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+
+      await inactivateQuery(vs, SYNC_CONTEXT, 'custom-1');
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01",
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "del",
+                  },
+                ],
+              },
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:01",
+              "pokeID": "01:01",
+            },
+          ],
+        ]
+      `);
+
+      // Expire custom-1
+      callNextSetTimeout(ttl);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01:01",
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+              ],
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:02",
+              "pokeID": "01:02",
+            },
+          ],
+        ]
+      `);
+
+      // Verify custom-2 is still alive by making a data change
+      replicator.processTransaction(
+        '101',
+        messages.delete('issues', {id: '2'}),
+      );
+      stateChanges.push({state: 'version-ready'});
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01:02",
+              "pokeID": "101",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "pokeID": "101",
+              "rowsPatch": [
+                {
+                  "id": {
+                    "id": "2",
+                  },
+                  "op": "del",
+                  "tableName": "issues",
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "101",
+              "pokeID": "101",
+            },
+          ],
+        ]
+      `);
+    });
+
+    test('patching desired only trasnforms added custom queries', async () => {
+      // Spy on transformer's transform method instead of mocking fetch
+      using transformSpy = vi.spyOn(customQueryTransformer!, 'transform');
+
+      transformSpy.mockResolvedValue([
+        {
+          id: 'custom-1',
+          transformedAst: ISSUES_QUERY,
+          transformationHash: 'hash-1',
+        },
+      ]);
+
+      const client = connect(SYNC_CONTEXT, [
+        {
+          op: 'put',
+          hash: 'custom-1',
+          name: 'named-query-1',
+          args: ['thing'],
+        },
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "00:01",
+              "pokeID": "00:01",
+            },
+          ],
+        ]
+      `);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+          Result [
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+          ]
+        `);
+
+      // First client should have called transform once
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          {
+            "allowedClientHeaders": undefined,
+            "apiKey": undefined,
+            "cookie": undefined,
+            "customHeaders": undefined,
+            "origin": undefined,
+            "token": undefined,
+          },
+          [
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
+                  },
+                },
+              },
+              "id": "custom-1",
+              "name": "named-query-1",
+              "type": "custom",
+            },
+          ],
+          undefined,
+        ]
+      `);
+
+      transformSpy.mockResolvedValue([
+        {
+          id: 'custom-2',
+          transformedAst: USERS_QUERY,
+          transformationHash: 'hash-2',
+        },
+      ]);
+
+      await vs.changeDesiredQueries(SYNC_CONTEXT, [
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {
+              op: 'put',
+              hash: 'custom-2',
+              name: 'named-query-2',
+              args: ['thing'],
+            },
+          ],
+        },
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01",
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:01",
+              "pokeID": "01:01",
+            },
+          ],
+        ]
+      `);
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01:01",
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "pokeID": "01:02",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "100",
+                    "name": "Alice",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "101",
+                    "name": "Bob",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "102",
+                    "name": "Candice",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:02",
+              "pokeID": "01:02",
+            },
+          ],
+        ]
+      `);
+
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+          Result [
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01:02",
+              "refCounts": {
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "100",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "users",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01:02",
+              "refCounts": {
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "101",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "users",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01:02",
+              "refCounts": {
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "102",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "users",
+            },
+          ]
+        `);
+
+      expect(transformSpy).toHaveBeenCalledTimes(2);
+      // custom-1 is not transformed again
+      expect(transformSpy.mock.calls[1]).toMatchInlineSnapshot(`
+        [
+          {
+            "allowedClientHeaders": undefined,
+            "apiKey": undefined,
+            "cookie": undefined,
+            "customHeaders": undefined,
+            "origin": undefined,
+            "token": undefined,
+          },
+          [
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "01",
+                  },
+                },
+              },
+              "id": "custom-2",
+              "name": "named-query-2",
+              "type": "custom",
+            },
+          ],
+          undefined,
+        ]
+      `);
+    });
+
     test('different custom queries end up with the same query after transformation', async () => {
       mockFetchImpl([
         {
@@ -985,7 +1758,371 @@ describe('view-syncer/service', () => {
         `);
     });
 
-    test('always transforms custom queries to validate authorization', async () => {
+    test('different custom queries in different put desired queries patches end up with the same query after transformation', async () => {
+      mockFetchImpl([
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-1',
+          name: 'named-query-1',
+        },
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-2',
+          name: 'named-query-2',
+        },
+      ]);
+      const client = connect(SYNC_CONTEXT, [
+        {
+          op: 'put',
+          hash: 'custom-1',
+          name: 'named-query-1',
+          args: ['thing'],
+        },
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "00:01",
+              "pokeID": "00:01",
+            },
+          ],
+        ]
+      `);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+          Result [
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+          ]
+        `);
+
+      await vs.changeDesiredQueries(SYNC_CONTEXT, [
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {
+              op: 'put',
+              hash: 'custom-2',
+              name: 'named-query-2',
+              args: ['thing'],
+            },
+          ],
+        },
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01",
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "01:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:01",
+              "pokeID": "01:01",
+            },
+          ],
+        ]
+      `);
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "01:01",
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "pokeID": "01:02",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:02",
+              "pokeID": "01:02",
+            },
+          ],
+        ]
+      `);
+
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+          Result [
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+                "custom-2": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+          ]
+        `);
+    });
+
+    test('transforms all custom queries on new connection to validate authorization', async () => {
       // Spy on transformer's transform method instead of mocking fetch
       using transformSpy = vi
         .spyOn(customQueryTransformer!, 'transform')
@@ -1013,6 +2150,57 @@ describe('view-syncer/service', () => {
 
       // First client should have called transform once
       expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          {
+            "allowedClientHeaders": undefined,
+            "apiKey": undefined,
+            "cookie": undefined,
+            "customHeaders": undefined,
+            "origin": undefined,
+            "token": undefined,
+          },
+          [
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
+                  },
+                },
+              },
+              "id": "custom-1",
+              "name": "named-query-1",
+              "type": "custom",
+            },
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
+                  },
+                },
+              },
+              "id": "custom-2",
+              "name": "named-query-2",
+              "type": "custom",
+            },
+          ],
+          undefined,
+        ]
+      `);
 
       // Create second client with same queries
       const client2 = connect(
@@ -1139,8 +2327,89 @@ describe('view-syncer/service', () => {
       `);
       // Transform is called twice:
       // 1. First client connection triggers initial transform
-      // 2. Second client connection triggers transform again (separate validation)
+      // 2. Second client connection triggers transform again of all queries (separate validation)
       expect(transformSpy).toHaveBeenCalledTimes(2);
+      expect(transformSpy.mock.calls[1]).toMatchInlineSnapshot(`
+        [
+          {
+            "allowedClientHeaders": undefined,
+            "apiKey": undefined,
+            "cookie": undefined,
+            "customHeaders": undefined,
+            "origin": undefined,
+            "token": undefined,
+          },
+          [
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "cq-c2-client": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "01",
+                  },
+                },
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
+                  },
+                },
+              },
+              "id": "custom-1",
+              "name": "named-query-1",
+              "patchVersion": {
+                "stateVersion": "01",
+              },
+              "transformationHash": "hash-1",
+              "transformationVersion": {
+                "stateVersion": "01",
+              },
+              "type": "custom",
+            },
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "cq-c2-client": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "01",
+                  },
+                },
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
+                  },
+                },
+              },
+              "id": "custom-2",
+              "name": "named-query-2",
+              "patchVersion": {
+                "stateVersion": "01",
+              },
+              "transformationHash": "hash-2",
+              "transformationVersion": {
+                "stateVersion": "01",
+              },
+              "type": "custom",
+            },
+          ],
+          undefined,
+        ]
+      `);
     });
 
     // test cases where custom query transforms fail
@@ -1798,6 +3067,77 @@ describe('view-syncer/service', () => {
           "clientID": "bar",
           "deleted": true,
           "inactivatedAt": 0,
+          "queryHash": "query-hash2",
+          "ttl": "00:00:05",
+        },
+      ]
+    `);
+  });
+
+  test('ignores deleteClients from old wsID', async () => {
+    const ttl = 5000; // 5s
+    vi.setSystemTime(Date.UTC(2025, 2, 4));
+
+    const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+    ]);
+
+    const {queue: client2, source: connectSource2} = connectWithQueueAndSource(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY, ttl}],
+    );
+
+    await nextPoke(client1);
+    await nextPoke(client2);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(client1);
+    await nextPoke(client1);
+
+    await nextPoke(client2);
+    await nextPoke(client2);
+
+    connectSource2.cancel();
+
+    const deletedClientIDs = await vs.deleteClients(
+      {...SYNC_CONTEXT, wsID: 'old-wsid'},
+      ['deleteClients', {clientIDs: ['bar']}],
+    );
+
+    expect(deletedClientIDs).toEqual([]);
+    await expectNoPokes(client1);
+
+    expect(
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`,
+    ).toMatchInlineSnapshot(
+      `
+      Result [
+        {
+          "clientID": "foo",
+        },
+        {
+          "clientID": "bar",
+        },
+      ]
+    `,
+    );
+
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "ttl", "inactivatedAt" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "foo",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hash1",
+          "ttl": "00:00:05",
+        },
+        {
+          "clientID": "bar",
+          "deleted": false,
+          "inactivatedAt": null,
           "queryHash": "query-hash2",
           "ttl": "00:00:05",
         },
@@ -2845,6 +4185,7 @@ describe('view-syncer/service', () => {
         protocolVersion: PROTOCOL_VERSION,
         tokenData: undefined,
         httpCookie: undefined,
+        origin: undefined,
       },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
@@ -3080,7 +4421,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -3189,7 +4529,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -3250,7 +4589,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
@@ -3286,7 +4624,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
@@ -3323,7 +4660,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -3634,5 +4970,62 @@ describe('view-syncer/service', () => {
     await expect(nextPoke(client)).rejects.toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Reconnect required]`,
     );
+  });
+
+  test('stop waits for in-flight changeDesiredQueries', async () => {
+    // Bring pipelines into the synced state so changeDesiredQueries hits
+    // #syncQueryPipelineSet and currentPermissions.
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client);
+
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    // Gate the CVR flush so we can stop while a config update is in-flight.
+    const {promise: flushStarted, resolve: signalFlushStarted} =
+      resolver<void>();
+    const allowFlush = resolver<void>();
+    const originalFlush = CVRUpdater.prototype.flush;
+    vi.spyOn(CVRUpdater.prototype, 'flush').mockImplementation(async function (
+      this: CVRUpdater,
+      ...args: Parameters<CVRUpdater['flush']>
+    ) {
+      signalFlushStarted();
+      await allowFlush.promise;
+      return originalFlush.apply(this, args);
+    });
+    const failSpy = vi.spyOn(ClientHandler.prototype, 'fail');
+    let flushReleased = false;
+    let destroyCalledAfterRelease = false;
+    const originalDestroy = PipelineDriver.prototype.destroy;
+    const destroySpy = vi
+      .spyOn(PipelineDriver.prototype, 'destroy')
+      .mockImplementation(function (this: PipelineDriver) {
+        destroyCalledAfterRelease = flushReleased;
+        return originalDestroy.call(this);
+      });
+
+    // Start the config update; it will block on the flush gate.
+    const changePromise = vs.changeDesiredQueries(SYNC_CONTEXT, [
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {op: 'put', hash: 'query-hash2', ast: USERS_QUERY},
+        ],
+      },
+    ]);
+
+    await flushStarted;
+    const stopPromise = vs.stop();
+    flushReleased = true;
+    allowFlush.resolve();
+    await Promise.all([stopPromise, viewSyncerDone, changePromise]);
+
+    // The in-flight update should finish without failing the client.
+    expect(failSpy).not.toHaveBeenCalled();
+    expect(destroySpy).toHaveBeenCalled();
+    expect(destroyCalledAfterRelease).toBe(true);
   });
 });

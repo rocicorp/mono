@@ -16,10 +16,11 @@ import {
 } from '../../../../zqlite/src/database-storage.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {listTables} from '../../db/lite-tables.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
-import {initChangeLog} from '../replicator/schema/change-log.ts';
+import {populateFromExistingTables} from '../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   fakeReplicator,
@@ -66,7 +67,6 @@ describe('view-syncer/pipeline-driver', () => {
 
     db = dbFile.connect(lc);
     initReplicationState(db, ['zero_data'], '123');
-    initChangeLog(db);
     db.exec(`
       CREATE TABLE "${mutationsTableName}" (
         "clientGroupID"  TEXT,
@@ -87,6 +87,7 @@ describe('view-syncer/pipeline-driver', () => {
         issueID TEXT,
         upvotes INTEGER,
         ignored BYTEA,
+        stillBeingBackfilled TEXT,
          _0_version TEXT NOT NULL);
       CREATE TABLE "issueLabels" (
         issueID TEXT,
@@ -124,6 +125,18 @@ describe('view-syncer/pipeline-driver', () => {
       INSERT INTO "uniques" (id, name, _0_version) VALUES ('foo', 'bar', '123');
       INSERT INTO "uniques" (id, name, _0_version) VALUES ('boo', 'dar', '123');
       `);
+
+    // Initialize ColumnMetadata and mark a column as being backfilled,
+    // to verify that it does not appear in the pipeline results.
+    populateFromExistingTables(db, listTables(db, false));
+    db.prepare(
+      /*sql*/ `
+      UPDATE "_zero.column_metadata" 
+        SET backfill = '{"upstreamID":123}'
+        WHERE table_name = 'comments' 
+         AND column_name = 'stillBeingBackfilled'
+      `,
+    ).run();
     replicator = fakeReplicator(lc, db);
   });
 
@@ -348,6 +361,48 @@ describe('view-syncer/pipeline-driver', () => {
     orderBy: [['id', 'desc']],
   };
 
+  const ISSUES_WITH_SCALAR_SUBQUERY: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'scalarSubquery',
+      op: '=',
+      parentField: 'id',
+      childField: 'issueID',
+      subquery: {
+        table: 'comments',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: '10'},
+        },
+      },
+    },
+  };
+
+  const ISSUES_WITH_NONEXISTENT_SCALAR_SUBQUERY: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'scalarSubquery',
+      op: '=',
+      parentField: 'id',
+      childField: 'issueID',
+      subquery: {
+        table: 'comments',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: 'nonexistent'},
+        },
+      },
+    },
+  };
+
   const messages = new ReplicationMessages({
     issues: 'id',
     comments: 'id',
@@ -357,7 +412,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   function startTimer() {
-    return new TimeSliceTimer().startWithoutYielding();
+    return new TimeSliceTimer(lc).startWithoutYielding();
   }
 
   function changes(timer: Timer = NO_TIME_ADVANCEMENT_TIMER) {
@@ -380,104 +435,104 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ]).toMatchInlineSnapshot(`
-        [
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "closed": false,
-              "id": "3",
-            },
-            "rowKey": {
-              "id": "3",
-            },
-            "table": "issues",
-            "type": "add",
+      [
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "3",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "closed": true,
-              "id": "2",
-            },
-            "rowKey": {
-              "id": "2",
-            },
-            "table": "issues",
-            "type": "add",
+          "rowKey": {
+            "id": "3",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "22",
-              "issueID": "2",
-              "upvotes": 20000,
-            },
-            "rowKey": {
-              "id": "22",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": true,
+            "id": "2",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "21",
-              "issueID": "2",
-              "upvotes": 10000,
-            },
-            "rowKey": {
-              "id": "21",
-            },
-            "table": "comments",
-            "type": "add",
+          "rowKey": {
+            "id": "2",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "20",
-              "issueID": "2",
-              "upvotes": 1,
-            },
-            "rowKey": {
-              "id": "20",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "22",
+            "issueID": "2",
+            "upvotes": 20000,
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "closed": false,
-              "id": "1",
-            },
-            "rowKey": {
-              "id": "1",
-            },
-            "table": "issues",
-            "type": "add",
+          "rowKey": {
+            "id": "22",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "10",
-              "issueID": "1",
-              "upvotes": 0,
-            },
-            "rowKey": {
-              "id": "10",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "21",
+            "issueID": "2",
+            "upvotes": 10000,
           },
-        ]
-      `);
+          "rowKey": {
+            "id": "21",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "20",
+            "issueID": "2",
+            "upvotes": 1,
+          },
+          "rowKey": {
+            "id": "20",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
 
     // Adding a query with the same hash should be a noop.
     expect([
@@ -487,7 +542,105 @@ describe('view-syncer/pipeline-driver', () => {
         ISSUES_AND_COMMENTS,
         startTimer(),
       ),
-    ]).toMatchInlineSnapshot(`[]`);
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "3",
+          },
+          "rowKey": {
+            "id": "3",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": true,
+            "id": "2",
+          },
+          "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "22",
+            "issueID": "2",
+            "upvotes": 20000,
+          },
+          "rowKey": {
+            "id": "22",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "21",
+            "issueID": "2",
+            "upvotes": 10000,
+          },
+          "rowKey": {
+            "id": "21",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "20",
+            "issueID": "2",
+            "upvotes": 1,
+          },
+          "rowKey": {
+            "id": "20",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
   });
 
   test('insert', () => {
@@ -515,7 +668,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "31",
@@ -529,7 +682,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "closed": false,
@@ -542,7 +695,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "41",
@@ -579,7 +732,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -588,7 +741,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "10",
@@ -597,7 +750,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "21",
@@ -644,7 +797,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "22",
@@ -653,7 +806,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "22",
@@ -677,7 +830,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "135",
             "id": "22",
@@ -717,7 +870,7 @@ describe('view-syncer/pipeline-driver', () => {
     // Test that after reset hydration and advancement work.
     pipelines.reset(clientSchema);
 
-    expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
+    expect(pipelines.queries()).toEqual(new Map());
 
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
@@ -765,52 +918,14 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ];
-    expect(pipelines.addedQueries()).toMatchInlineSnapshot(`
-      [
-        Set {
-          "hash1",
-        },
-        Map {
-          "queryID1" => [
-            {
-              "transformationHash": "hash1",
-              "transformedAst": {
-                "orderBy": [
-                  [
-                    "id",
-                    "desc",
-                  ],
-                ],
-                "related": [
-                  {
-                    "correlation": {
-                      "childField": [
-                        "issueID",
-                      ],
-                      "parentField": [
-                        "id",
-                      ],
-                    },
-                    "subquery": {
-                      "alias": "comments",
-                      "orderBy": [
-                        [
-                          "id",
-                          "desc",
-                        ],
-                      ],
-                      "table": "comments",
-                    },
-                    "system": "client",
-                  },
-                ],
-                "table": "issues",
-              },
-            },
-          ],
-        },
-      ]
-    `);
+
+    expect(pipelines.queries().size).toEqual(1);
+    expect(pipelines.queries().get('queryID1')?.transformationHash).toEqual(
+      'hash1',
+    );
+    expect(pipelines.queries().get('queryID1')?.transformedAst).toEqual(
+      ISSUES_AND_COMMENTS,
+    );
 
     replicator.processTransaction(
       '134',
@@ -820,7 +935,7 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.advanceWithoutDiff();
     pipelines.reset(clientSchema);
 
-    expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
+    expect(pipelines.queries()).toEqual(new Map());
 
     // The newColumn should be reflected after a reset.
     expect([
@@ -831,107 +946,107 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ]).toMatchInlineSnapshot(`
-        [
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "134",
-              "closed": false,
-              "id": "3",
-              "newColumn": null,
-            },
-            "rowKey": {
-              "id": "3",
-            },
-            "table": "issues",
-            "type": "add",
+      [
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "134",
+            "closed": false,
+            "id": "3",
+            "newColumn": null,
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "134",
-              "closed": true,
-              "id": "2",
-              "newColumn": null,
-            },
-            "rowKey": {
-              "id": "2",
-            },
-            "table": "issues",
-            "type": "add",
+          "rowKey": {
+            "id": "3",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "22",
-              "issueID": "2",
-              "upvotes": 20000,
-            },
-            "rowKey": {
-              "id": "22",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "134",
+            "closed": true,
+            "id": "2",
+            "newColumn": null,
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "21",
-              "issueID": "2",
-              "upvotes": 10000,
-            },
-            "rowKey": {
-              "id": "21",
-            },
-            "table": "comments",
-            "type": "add",
+          "rowKey": {
+            "id": "2",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "20",
-              "issueID": "2",
-              "upvotes": 1,
-            },
-            "rowKey": {
-              "id": "20",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "22",
+            "issueID": "2",
+            "upvotes": 20000,
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "134",
-              "closed": false,
-              "id": "1",
-              "newColumn": null,
-            },
-            "rowKey": {
-              "id": "1",
-            },
-            "table": "issues",
-            "type": "add",
+          "rowKey": {
+            "id": "22",
           },
-          {
-            "queryHash": "hash1",
-            "row": {
-              "_0_version": "123",
-              "id": "10",
-              "issueID": "1",
-              "upvotes": 0,
-            },
-            "rowKey": {
-              "id": "10",
-            },
-            "table": "comments",
-            "type": "add",
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "21",
+            "issueID": "2",
+            "upvotes": 10000,
           },
-        ]
-      `);
+          "rowKey": {
+            "id": "21",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "20",
+            "issueID": "2",
+            "upvotes": 1,
+          },
+          "rowKey": {
+            "id": "20",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "134",
+            "closed": false,
+            "id": "1",
+            "newColumn": null,
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryID1",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
   });
 
   test('update unique non-primary key', () => {
@@ -941,7 +1056,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "foo",
@@ -954,7 +1069,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "boo",
@@ -982,7 +1097,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "boo",
@@ -1005,7 +1120,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "foo",
@@ -1018,7 +1133,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "boo",
@@ -1043,7 +1158,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "foo",
@@ -1052,7 +1167,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "baz",
@@ -1065,7 +1180,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "id": "foo",
@@ -1104,7 +1219,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -1113,7 +1228,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID",
           "row": undefined,
           "rowKey": {
             "issueID": "1",
@@ -1123,7 +1238,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -1147,7 +1262,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "closed": false,
@@ -1172,7 +1287,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash2",
+          "queryID": "queryID",
           "row": {
             "_0_version": "123",
             "closed": false,
@@ -1185,7 +1300,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash2",
+          "queryID": "queryID",
           "row": {
             "_0_version": "123",
             "issueID": "1",
@@ -1320,7 +1435,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "closed": true,
@@ -1333,7 +1448,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "issueID": "2",
@@ -1348,7 +1463,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "1",
@@ -1361,7 +1476,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "issueID": "2",
@@ -1376,7 +1491,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "add",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "123",
             "id": "1",
@@ -1403,7 +1518,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "2",
@@ -1412,7 +1527,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "issueID": "2",
@@ -1422,7 +1537,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -1431,7 +1546,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "issueID": "2",
@@ -1441,7 +1556,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "1",
@@ -1574,7 +1689,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "134",
             "closed": false,
@@ -1597,7 +1712,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": {
             "_0_version": "156",
             "id": "41",
@@ -1618,7 +1733,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changes()).toMatchInlineSnapshot(`
       [
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "4",
@@ -1627,7 +1742,7 @@ describe('view-syncer/pipeline-driver', () => {
           "type": "remove",
         },
         {
-          "queryHash": "hash1",
+          "queryID": "queryID1",
           "row": undefined,
           "rowKey": {
             "id": "41",
@@ -1650,54 +1765,16 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    expect([...pipelines.addedQueries()]).toMatchInlineSnapshot(`
-      [
-        Set {
-          "hash1",
-        },
-        Map {
-          "queryID1" => [
-            {
-              "transformationHash": "hash1",
-              "transformedAst": {
-                "orderBy": [
-                  [
-                    "id",
-                    "desc",
-                  ],
-                ],
-                "related": [
-                  {
-                    "correlation": {
-                      "childField": [
-                        "issueID",
-                      ],
-                      "parentField": [
-                        "id",
-                      ],
-                    },
-                    "subquery": {
-                      "alias": "comments",
-                      "orderBy": [
-                        [
-                          "id",
-                          "desc",
-                        ],
-                      ],
-                      "table": "comments",
-                    },
-                    "system": "client",
-                  },
-                ],
-                "table": "issues",
-              },
-            },
-          ],
-        },
-      ]
-    `);
-    pipelines.removeQuery('hash1');
-    expect([...pipelines.addedQueries()]).toEqual([new Set(), new Map()]);
+    expect(pipelines.queries().size).toEqual(1);
+    expect(pipelines.queries().get('queryID1')?.transformationHash).toEqual(
+      'hash1',
+    );
+    expect(pipelines.queries().get('queryID1')?.transformedAst).toEqual(
+      ISSUES_AND_COMMENTS,
+    );
+
+    pipelines.removeQuery('queryID1');
+    expect(pipelines.queries()).toEqual(new Map());
 
     replicator.processTransaction(
       '134',
@@ -1732,5 +1809,225 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     expect(() => changes()).toThrowError();
+  });
+
+  test('scalar subquery resolves to literal', () => {
+    pipelines.init(clientSchema);
+
+    // Comment '10' has issueID='1', so the subquery resolves to id = '1'
+    const results = [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalar",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryScalar",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
+
+    // The transformedAst should have the scalar subquery resolved to a simple condition
+    expect(
+      pipelines.queries().get('queryScalar')?.transformedAst.where,
+    ).toEqual({
+      type: 'simple',
+      op: '=',
+      left: {type: 'column', name: 'id'},
+      right: {type: 'literal', value: '1'},
+    });
+  });
+
+  test('scalar subquery with no matching rows', () => {
+    pipelines.init(clientSchema);
+
+    const results = [
+      ...pipelines.addQuery(
+        'hash-scalar-none',
+        'queryScalarNone',
+        ISSUES_WITH_NONEXISTENT_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    expect(results).toEqual([]);
+
+    // The transformedAst should have ALWAYS_FALSE
+    expect(
+      pipelines.queries().get('queryScalarNone')?.transformedAst.where,
+    ).toEqual({
+      type: 'simple',
+      op: '=',
+      left: {type: 'literal', value: 1},
+      right: {type: 'literal', value: 0},
+    });
+  });
+
+  test('scalar subquery in AND with other conditions', () => {
+    pipelines.init(clientSchema);
+
+    const queryWithAnd: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'closed'},
+            right: {type: 'literal', value: false},
+          },
+          {
+            type: 'scalarSubquery',
+            op: '=',
+            parentField: 'id',
+            childField: 'issueID',
+            subquery: {
+              table: 'comments',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'id'},
+                right: {type: 'literal', value: '10'},
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const results = [
+      ...pipelines.addQuery(
+        'hash-scalar-and',
+        'queryScalarAnd',
+        queryWithAnd,
+        startTimer(),
+      ),
+    ];
+
+    // Issue '1' is not closed and matches the subquery
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalarAnd",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryScalarAnd",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
+
+    // The transformedAst should have the scalar subquery resolved within the AND
+    expect(
+      pipelines.queries().get('queryScalarAnd')?.transformedAst.where,
+    ).toEqual({
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'closed'},
+          right: {type: 'literal', value: false},
+        },
+        {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: '1'},
+        },
+      ],
+    });
+  });
+
+  test('advancement after scalar subquery resolution', () => {
+    pipelines.init(clientSchema);
+
+    // This resolves to `issues WHERE id = '1'`
+    [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      messages.insert('issues', {id: '5', closed: 0}),
+      messages.update('issues', {id: '1', closed: 1}),
+    );
+
+    // Only the edit to issue '1' should appear (it matches the resolved filter),
+    // NOT the insert of issue '5' (which doesn't match id = '1').
+    expect(changes()).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalar",
+          "row": {
+            "_0_version": "134",
+            "closed": true,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "edit",
+        },
+      ]
+    `);
   });
 });

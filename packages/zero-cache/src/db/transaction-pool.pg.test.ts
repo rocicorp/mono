@@ -983,4 +983,34 @@ describe('db/transaction-pool', () => {
 
     expect(await pool.done().catch(e => e)).toBe(error);
   });
+
+  test('errors thrown from readTasks do not fail the pool', async () => {
+    await db`
+    INSERT INTO foo (id) VALUES (1);
+    INSERT INTO foo (id) VALUES (2);
+    INSERT INTO foo (id) VALUES (3);
+    `.simple();
+
+    const pool = newTransactionPool(Mode.READONLY);
+    pool.run(db);
+
+    const error = new Error('oh nose');
+    const throwingTask = async () => {
+      await sleep(5);
+      throw error;
+    };
+    const result = await pool.processReadTask(throwingTask).catch(e => e);
+    expect(result).toBe(error);
+
+    expect(pool.isRunning()).toBe(true);
+
+    const readTask = async (tx: postgres.TransactionSql) =>
+      (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
+    expect(await pool.processReadTask(readTask)).toEqual([1, 2, 3]);
+
+    expect(pool.isRunning()).toBe(true);
+
+    pool.setDone();
+    await pool.done();
+  });
 });

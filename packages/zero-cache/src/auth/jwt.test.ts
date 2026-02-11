@@ -107,4 +107,56 @@ function commonTests(
       verifyToken(config, token, {issuer: 'def'}),
     ).rejects.toThrowError(`unexpected "iss" claim value`);
   });
+
+  test('valid issuer', async () => {
+    const {expected, token} = await makeToken({
+      sub: '123',
+      iss: 'https://issuer.example.com',
+      exp: Math.floor(Date.now() / 1000) + 100,
+    });
+    expect(
+      await verifyToken(config, token, {issuer: 'https://issuer.example.com'}),
+    ).toEqual(expected);
+  });
+
+  test('invalid audience', async () => {
+    const {token} = await makeToken({
+      sub: '123',
+      aud: 'app-123',
+    });
+    await expect(() =>
+      verifyToken(config, token, {audience: 'app-456'}),
+    ).rejects.toThrowError(`unexpected "aud" claim value`);
+  });
+
+  test('valid audience', async () => {
+    const {expected, token} = await makeToken({
+      sub: '123',
+      aud: 'my-app',
+      exp: Math.floor(Date.now() / 1000) + 100,
+    });
+    expect(await verifyToken(config, token, {audience: 'my-app'})).toEqual(
+      expected,
+    );
+  });
+
+  test('audience in token but not in config should pass', async () => {
+    const {expected, token} = await makeToken({
+      sub: '123',
+      aud: 'some-audience',
+      exp: Math.floor(Date.now() / 1000) + 100,
+    });
+    // When audience is not specified in verify options, the aud claim is not validated
+    expect(await verifyToken(config, token, {})).toEqual(expected);
+  });
+
+  test('issuer in token but not in config should pass', async () => {
+    const {expected, token} = await makeToken({
+      sub: '123',
+      iss: 'https://some-issuer.com',
+      exp: Math.floor(Date.now() / 1000) + 100,
+    });
+    // When issuer is not specified in verify options, the iss claim is not validated
+    expect(await verifyToken(config, token, {})).toEqual(expected);
+  });
 }

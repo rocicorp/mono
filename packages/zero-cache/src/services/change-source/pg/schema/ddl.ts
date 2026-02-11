@@ -107,10 +107,10 @@ END
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION ${schema}.notice_ignore(object_id TEXT)
+CREATE OR REPLACE FUNCTION ${schema}.notice_ignore(tag TEXT, target record)
 RETURNS void AS $$
 BEGIN
-  RAISE NOTICE 'zero(%) ignoring %', ${lit(shardNum)}, object_id;
+  RAISE NOTICE 'zero(%) ignoring % %', ${lit(shardNum)}, tag, row_to_json(target);
 END
 $$ LANGUAGE plpgsql;
 
@@ -157,7 +157,7 @@ CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_end(tag TEXT)
 RETURNS void AS $$
 DECLARE
   publications TEXT[];
-  cmd RECORD;
+  target RECORD;
   relevant RECORD;
   schema_specs TEXT;
   message TEXT;
@@ -167,77 +167,71 @@ BEGIN
 
   SELECT objid, object_type, object_identity 
     FROM pg_event_trigger_ddl_commands() 
-    WHERE object_type IN (
-      'table',
-      'table column',
-      'index',
-      'publication relation',
-      'publication namespace',
-      'schema')
-    LIMIT 1 INTO cmd;
+    LIMIT 1 INTO target;
 
   -- Filter DDL updates that are not relevant to the shard (i.e. publications) when possible.
 
-  IF cmd.object_type = 'table' OR cmd.object_type = 'table column' THEN
+  IF target.object_type = 'table' OR target.object_type = 'table column' THEN
     SELECT ns.nspname AS "schema", c.relname AS "name" FROM pg_class AS c
       JOIN pg_namespace AS ns ON c.relnamespace = ns.oid
       JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = c.relname
-      WHERE c.oid = cmd.objid AND pb.pubname = ANY (publications)
+      WHERE c.oid = target.objid AND pb.pubname = ANY (publications)
       INTO relevant;
     IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(tag, target);
       RETURN;
     END IF;
 
-    cmd.object_type := 'table';  -- normalize the 'table column' target to 'table'
-
-  ELSIF cmd.object_type = 'index' THEN
+  ELSIF target.object_type = 'index' THEN
     SELECT ns.nspname AS "schema", c.relname AS "name" FROM pg_class AS c
       JOIN pg_namespace AS ns ON c.relnamespace = ns.oid
       JOIN pg_indexes as ind ON ind.schemaname = ns.nspname AND ind.indexname = c.relname
       JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = ind.tablename
-      WHERE c.oid = cmd.objid AND pb.pubname = ANY (publications)
+      WHERE c.oid = target.objid AND pb.pubname = ANY (publications)
       INTO relevant;
     IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(tag, target);
       RETURN;
     END IF;
 
-  ELSIF cmd.object_type = 'publication relation' THEN
+  ELSIF target.object_type = 'publication relation' THEN
     SELECT pb.pubname FROM pg_publication_rel AS rel
       JOIN pg_publication AS pb ON pb.oid = rel.prpubid
-      WHERE rel.oid = cmd.objid AND pb.pubname = ANY (publications) 
+      WHERE rel.oid = target.objid AND pb.pubname = ANY (publications) 
       INTO relevant;
     IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(tag, target);
       RETURN;
     END IF;
 
-  ELSIF cmd.object_type = 'publication namespace' THEN
+  ELSIF target.object_type = 'publication namespace' THEN
     SELECT pb.pubname FROM pg_publication_namespace AS ns
       JOIN pg_publication AS pb ON pb.oid = ns.pnpubid
-      WHERE ns.oid = cmd.objid AND pb.pubname = ANY (publications) 
+      WHERE ns.oid = target.objid AND pb.pubname = ANY (publications) 
       INTO relevant;
     IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(tag, target);
       RETURN;
     END IF;
 
-  ELSIF cmd.object_type = 'schema' THEN
+  ELSIF target.object_type = 'schema' THEN
     SELECT ns.nspname AS "schema", c.relname AS "name" FROM pg_class AS c
       JOIN pg_namespace AS ns ON c.relnamespace = ns.oid
       JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = c.relname
-      WHERE ns.oid = cmd.objid AND pb.pubname = ANY (publications)
+      WHERE ns.oid = target.objid AND pb.pubname = ANY (publications)
       INTO relevant;
     IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(tag, target);
       RETURN;
     END IF;
 
-  ELSIF tag LIKE 'CREATE %' THEN
-    PERFORM ${schema}.notice_ignore('noop ' || tag);
+  -- no-op CREATE IF NOT EXIST statements
+  ELSIF tag LIKE 'CREATE %' AND target.object_type IS NULL THEN
+    PERFORM ${schema}.notice_ignore(tag, target);
     RETURN;
   END IF;
+
+  RAISE INFO 'Creating ddlUpdate for % %', tag, row_to_json(target);
 
   -- Construct and emit the DdlUpdateEvent message.
   SELECT json_build_object('tag', tag) INTO event;

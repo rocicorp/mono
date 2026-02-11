@@ -4,11 +4,11 @@ import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {test, type PgTest} from '../../test/db.ts';
-import {versionToLexi} from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowID} from '../../types/row-key.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
+import {stateVersionToString} from '../../types/state-version.ts';
 import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import {ClientNotFoundError, CVRStore, OwnershipError} from './cvr-store.ts';
 import {
@@ -102,7 +102,6 @@ describe('view-syncer/cvr-store', () => {
     store = new CVRStore(
       lc,
       db,
-      upstreamDb,
       SHARD,
       TASK_ID,
       CVR_ID,
@@ -203,26 +202,12 @@ describe('view-syncer/cvr-store', () => {
 
   test('put various json types for named queries', async () => {});
 
-  // This is failing with:
-  //
-  //   ⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
-  // Error: {"kind":"ClientNotFound","message":"max attempts exceeded waiting for CVR@04 to catch up from 03"}
-  //  ❯ packages/zero-cache/src/services/view-syncer/cvr-store.ts:206:13
-  //  ❯ processTicksAndRejections node:internal/process/task_queues:105:5
-  //  ❯ packages/otel/src/span.ts:29:14
-
-  // ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
-  // Serialized Error: { logLevel: 'warn', errorBody: { kind: 'ClientNotFound', message: 'max attempts exceeded waiting for CVR@04 to catch up from 03' } }
-  // This error originated in "packages/zero-cache/src/services/view-syncer/cvr-store.pg.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
-  // The latest test that might've caused the error is "wait for row catchup". It might mean one of the following:
-  // - The error was thrown, while Vitest was running this test.
-  // - If the error occurred after the test had been completed, this was the last documented test before it was thrown.
-  test.skip('wait for row catchup', async () => {
+  test('wait for row catchup', async () => {
     // Simulate the CVR being ahead of the rows.
     await db`UPDATE "roze_1/cvr".instances SET version = '04'`;
 
     // start a CVR load.
-    const loading = store.load(lc, CONNECT_TIME);
+    const loading = store.load(lc, CONNECT_TIME).catch(e => e);
 
     await sleep(10);
 
@@ -235,7 +220,7 @@ describe('view-syncer/cvr-store', () => {
     const cvr = await loading;
     expect(cvr.version).toEqual({
       stateVersion: '05',
-      minorVersion: 1,
+      configVersion: 1,
     });
   });
 
@@ -657,7 +642,7 @@ describe('view-syncer/cvr-store', () => {
 
     // Commit 30 flushes of 10 rows each.
     for (let i = 20; i < 320; i += 10) {
-      const version = versionToLexi(i);
+      const version = stateVersionToString({major: i});
       const updater = new CVRQueryDrivenUpdater(store, cvr, version, '01');
       updater.trackQueries(
         lc,
@@ -734,7 +719,7 @@ describe('view-syncer/cvr-store', () => {
 
     // Commit 30 flushes of 10 rows each.
     for (let i = 20; i < 320; i += 10) {
-      const version = versionToLexi(i);
+      const version = stateVersionToString({major: i});
       const updater = new CVRQueryDrivenUpdater(store, cvr, version, '01');
       updater.trackQueries(
         lc,
@@ -761,7 +746,7 @@ describe('view-syncer/cvr-store', () => {
     const updater = new CVRQueryDrivenUpdater(
       store,
       cvr,
-      versionToLexi(320),
+      stateVersionToString({major: 320}),
       '01',
     );
     updater.trackQueries(

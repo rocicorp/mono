@@ -204,13 +204,13 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v5. Supported protocols: [v1 ... v4]`,
+        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v5. Supported protocols: [v1 ... v4]`,
+        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
@@ -347,11 +347,13 @@ describe('change-streamer/http', () => {
               "id": "foo",
             },
             "relation": {
-              "keyColumns": [
-                "id",
-              ],
               "name": "issues",
-              "replicaIdentity": "default",
+              "rowKey": {
+                "columns": [
+                  "id",
+                ],
+                "type": "default",
+              },
               "schema": "public",
               "tag": "relation",
             },

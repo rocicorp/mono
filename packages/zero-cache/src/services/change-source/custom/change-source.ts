@@ -9,24 +9,24 @@ import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import type {ShardConfig, ShardID} from '../../../types/shards.ts';
 import {stream} from '../../../types/streams.ts';
-import type {
-  ChangeSource,
-  ChangeStream,
-} from '../../change-streamer/change-streamer-service.ts';
 import {
   AutoResetSignal,
   type ReplicationConfig,
 } from '../../change-streamer/schema/tables.ts';
 import {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
-import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {
+  createReplicationStateTables,
   getSubscriptionState,
   initReplicationState,
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
+import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
-import {type ChangeSourceUpstream} from '../protocol/current/upstream.ts';
+import {
+  type BackfillRequest,
+  type ChangeSourceUpstream,
+} from '../protocol/current/upstream.ts';
 import {initSyncSchema} from './sync-schema.ts';
 
 /**
@@ -94,7 +94,15 @@ class CustomChangeSource implements ChangeSource {
     return this.#startStream();
   }
 
-  startStream(clientWatermark: string): Promise<ChangeStream> {
+  startStream(
+    clientWatermark: string,
+    backfillRequests: BackfillRequest[] = [],
+  ): Promise<ChangeStream> {
+    if (backfillRequests?.length) {
+      throw new Error(
+        'backfill is yet not supported for custom change sources',
+      );
+    }
     return Promise.resolve(this.#startStream(clientWatermark));
   }
 
@@ -153,6 +161,7 @@ export async function initialSync(
   });
   const {changes} = changeSource.initialSync();
 
+  createReplicationStateTables(tx);
   const processor = new ChangeProcessor(
     new StatementRunner(tx),
     'initial-sync',
@@ -178,8 +187,12 @@ export async function initialSync(
             `Copying upstream tables at version ${commitWatermark}`,
             5000,
           );
-          initReplicationState(tx, [...publications].sort(), commitWatermark);
-          initChangeLog(tx);
+          initReplicationState(
+            tx,
+            [...publications].sort(),
+            commitWatermark,
+            false,
+          );
           processor.processMessage(lc, change);
           break;
         }
@@ -256,7 +269,7 @@ function validateInitiallySyncedData(
   db: Database,
   shard: ShardID,
 ) {
-  const tables = computeZqlSpecs(lc, db);
+  const tables = computeZqlSpecs(lc, db, {includeBackfillingColumns: true});
   const required = getRequiredTables(shard);
   for (const [name, columns] of Object.entries(required)) {
     const table = tables.get(name)?.zqlSpec;

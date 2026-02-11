@@ -8,11 +8,7 @@ import {
   type Migration,
 } from '../../../../db/migration.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
-import {
-  appSchema,
-  upstreamSchema,
-  type ShardConfig,
-} from '../../../../types/shards.ts';
+import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
@@ -179,14 +175,10 @@ function getIncrementalMigrations(
     // Fixes field ordering of compound indexes. This incremental migration
     // only fixes indexes resulting from new schema changes. A full resync is
     // required to fix existing indexes.
-    9: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(lc, sql, {...shard, publications});
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    //
+    // The migration has been subsumed by the identical logic for migrating
+    // to v12 (i.e. a trigger upgrade).
+    9: {},
 
     // Adds the `mutations` table used to track mutation results.
     10: {
@@ -199,10 +191,44 @@ function getIncrementalMigrations(
       },
     },
 
-    11: {
+    // Formerly dropped the schemaVersions table, but restored in the v13
+    // migration for rollback safety.
+    11: {},
+
+    // Upgrade DDL trigger to query schemaOID, needed information for auto-backfill.
+    // (subsumed by v14)
+    12: {},
+
+    // Recreates the legacy schemaVersions table that was prematurely dropped
+    // in the (former) v11 migration. It needs to remain present for at least one
+    // release in order to be rollback safe.
+    //
+    // TODO: Drop the table once a release that no longer reads the table has
+    // been rolled out.
+    13: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          CREATE TABLE IF NOT EXISTS ${sql(upstreamSchema(shard))}."schemaVersions" (
+            "minSupportedVersion" INT4,
+            "maxSupportedVersion" INT4,
+            "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
+        );`;
+        await sql`
+          INSERT INTO ${sql(upstreamSchema(shard))}."schemaVersions" 
+            ("lock", "minSupportedVersion", "maxSupportedVersion")
+            VALUES (true, 1, 1)
+            ON CONFLICT DO NOTHING;
+        `;
+      },
+    },
+
+    // Upgrade DDL trigger to log more info to PG logs.
+    14: {
       migrateSchema: async (lc, sql) => {
-        await sql`DROP TABLE IF EXISTS ${sql(appSchema(shard))}."schemaVersions"`;
-        lc.info?.(`Dropped legacy schemaVersions table`);
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
       },
     },
   };

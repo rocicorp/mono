@@ -17,11 +17,27 @@ export const CRUD_MUTATION_NAME = '_zero_crud';
 // acknowledged mutation results from the upstream database.
 export const CLEANUP_RESULTS_MUTATION_NAME = '_zero_cleanupResults';
 
-export const cleanupResultsArgSchema = v.object({
-  clientGroupID: v.string(),
-  clientID: v.string(),
-  upToMutationID: v.number(),
-});
+export const cleanupResultsArgSchema = v.union(
+  // Legacy format (no type field) - treat as single
+  v.object({
+    clientGroupID: v.string(),
+    clientID: v.string(),
+    upToMutationID: v.number(),
+  }),
+  // Explicit single: delete up to a specific mutation ID for one client
+  v.object({
+    type: v.literal('single'),
+    clientGroupID: v.string(),
+    clientID: v.string(),
+    upToMutationID: v.number(),
+  }),
+  // Bulk: delete all mutations for multiple clients
+  v.object({
+    type: v.literal('bulk'),
+    clientGroupID: v.string(),
+    clientIDs: v.tuple([v.string()]).concat(v.array(v.string())),
+  }),
+);
 
 /**
  * Inserts if entity with id does not already exist.
@@ -109,6 +125,9 @@ export const pushBodySchema = v.object({
   schemaVersion: v.number().optional(),
   timestamp: v.number(),
   requestID: v.string(),
+  // Fresh auth token sent with each push - used instead of cached connection token
+  // to avoid expired token issues when pushing to upstream API
+  auth: v.string().optional(),
 });
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);

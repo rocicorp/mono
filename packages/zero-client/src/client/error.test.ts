@@ -308,7 +308,6 @@ describe('getErrorConnectionTransition', () => {
     ClientErrorKind.AbruptClose,
     ClientErrorKind.CleanClose,
     ClientErrorKind.ConnectTimeout,
-    ClientErrorKind.Hidden,
     ClientErrorKind.PingTimeout,
   ] as const)(
     'returns no status transition for retryable client error %s',
@@ -353,6 +352,18 @@ describe('getErrorConnectionTransition', () => {
     const error = new ClientError({
       kind: ClientErrorKind.NoSocketOrigin,
       message: 'no socket origin',
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Disconnected,
+      reason: error,
+    });
+  });
+
+  test('returns disconnected status for hidden tab', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.Hidden,
+      message: 'hidden',
     });
 
     expect(getErrorConnectionTransition(error)).toEqual({

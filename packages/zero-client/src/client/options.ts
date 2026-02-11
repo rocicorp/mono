@@ -137,6 +137,12 @@ export interface ZeroOptions<
   mutateURL?: string | undefined;
 
   /**
+   * Custom headers to include in mutation requests sent to your API server.
+   * These headers are passed through zero-cache to the mutate endpoint.
+   */
+  mutateHeaders?: Record<string, string> | undefined;
+
+  /**
    * Custom URL for query requests sent to your API server.
    * If not provided, uses the default configured in zero-cache.
    *
@@ -149,6 +155,12 @@ export interface ZeroOptions<
    * If not provided, uses the default configured in zero-cache.
    */
   queryURL?: string | undefined;
+
+  /**
+   * Custom headers to include in query requests sent to your API server.
+   * These headers are passed through zero-cache to the query endpoint.
+   */
+  queryHeaders?: Record<string, string> | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
@@ -199,7 +211,7 @@ export interface ZeroOptions<
    *
    * Instances in hidden tabs are disconnected to save resources.
    *
-   * Default is 5_000.
+   * Default is 5 minutes.
    */
   hiddenTabDisconnectDelay?: number | undefined;
 

@@ -3,6 +3,7 @@
  */
 
 import type {LogContext} from '@rocicorp/logger';
+import {timingSafeEqual} from 'node:crypto';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
   flagToEnv,
@@ -27,20 +28,6 @@ import {
 export type {LogConfig} from '../../../otel/src/log-options.ts';
 
 export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
-
-// Technically, any threshold is fine because the point of back pressure
-// is to adjust the rate of incoming messages, and the size of the pending
-// work queue does not affect that mechanism.
-//
-// However, it is theoretically possible to exceed the available memory if
-// the size of changes is very large. This threshold can be improved by
-// roughly measuring the size of the enqueued contents and setting the
-// threshold based on available memory.
-//
-// TODO: switch to a message size-based thresholding when migrating over
-// to stringified JSON messages, which will bound the computation involved
-// in measuring the size of row messages.
-export const DEFAULT_BACK_PRESSURE_THRESHOLD = 100_000;
 
 export const appOptions = {
   id: {
@@ -186,6 +173,26 @@ const authOptions = {
       `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
     ],
   },
+  issuer: {
+    type: v.string().optional(),
+    desc: [
+      `Expected issuer ({bold iss} claim) for JWT validation.`,
+      `If set, tokens with a different or missing issuer will be rejected.`,
+    ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
+  },
+  audience: {
+    type: v.string().optional(),
+    desc: [
+      `Expected audience ({bold aud} claim) for JWT validation.`,
+      `If set, tokens with a different or missing audience will be rejected.`,
+    ],
+    deprecated: [
+      `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
+    ],
+  },
 };
 
 const makeDeprecationMessage = (flag: string) =>
@@ -260,6 +267,23 @@ const makeMutatorQueryOptions = (
     ],
     ...(replacement
       ? {deprecated: [makeDeprecationMessage(`${replacement}-forward-cookies`)]}
+      : {}),
+  },
+  allowedClientHeaders: {
+    type: v.array(v.string()).optional(),
+    desc: [
+      `A list of header names that clients are allowed to set via custom headers.`,
+      `If specified, only headers in this list will be forwarded to the ${suffix === 'push mutations' ? 'push' : 'query'} URL.`,
+      `Header names are case-insensitive.`,
+      `If not specified, no client-provided headers are forwarded (secure by default).`,
+      `Example: ZERO_${replacement ? replacement.toUpperCase() : suffix === 'push mutations' ? 'MUTATE' : 'QUERY'}_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id`,
+    ],
+    ...(replacement
+      ? {
+          deprecated: [
+            makeDeprecationMessage(`${replacement}-allowed-client-headers`),
+          ],
+        }
       : {}),
   },
 });
@@ -530,17 +554,6 @@ export const zeroOptions = {
         `immediately, since the incoming request indicates that the task is registered as a target.`,
       ],
     },
-
-    backPressureThreshold: {
-      type: v.number().default(DEFAULT_BACK_PRESSURE_THRESHOLD),
-      desc: [
-        `The maximum number of queued changes before back pressure is applied to the`,
-        `change source. When the queue exceeds this threshold, the change-streamer pauses`,
-        `consumption from upstream until the queue drops to 90% of the threshold.`,
-        ``,
-        `Increasing this value may improve throughput at the cost of higher memory usage.`,
-      ],
-    },
   },
 
   taskID: {
@@ -615,6 +628,16 @@ export const zeroOptions = {
       'Example: \\{"zlibDeflateOptions":\\{"level":3\\},"threshold":1024\\}',
       '',
       'See https://github.com/websockets/ws/blob/master/doc/ws.md#new-websocketserveroptions-callback for available options.',
+    ],
+  },
+
+  websocketMaxPayloadBytes: {
+    type: v.number().default(10 * 1024 * 1024),
+    desc: [
+      'Maximum size of incoming WebSocket messages in bytes.',
+      '',
+      'Messages exceeding this limit are rejected before parsing.',
+      'Default: 10MB (10 * 1024 * 1024 = 10485760)',
     ],
   },
 
@@ -906,7 +929,19 @@ export function isAdminPasswordValid(
     return false;
   }
 
-  if (password !== config.adminPassword) {
+  // Use constant-time comparison to prevent timing attacks
+  const passwordBuffer = Buffer.from(password ?? '');
+  const configBuffer = Buffer.from(config.adminPassword);
+
+  // Handle length mismatch in constant time
+  if (passwordBuffer.length !== configBuffer.length) {
+    // Perform dummy comparison to maintain constant timing
+    timingSafeEqual(configBuffer, configBuffer);
+    lc.warn?.('Invalid admin password');
+    return false;
+  }
+
+  if (!timingSafeEqual(passwordBuffer, configBuffer)) {
     lc.warn?.('Invalid admin password');
     return false;
   }

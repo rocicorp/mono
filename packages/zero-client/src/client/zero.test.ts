@@ -275,7 +275,6 @@ describe('onOnlineChange callback', () => {
     expect(getOnlineCount()).toBe(1);
     expect(getOfflineCount()).toBe(1);
     // And followed by a reconnect.
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await z.connection.connect();
     await z.triggerConnected();
     expect(z.online).toBe(true);
@@ -562,12 +561,10 @@ test('transition to connecting state if ping fails', async () => {
   expect((await z.socket).messages).toEqual(['["ping",{}]']);
 
   await z.triggerPong();
-  await tickAFewTimes(vi);
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 
   await tickAFewTimes(vi, watchdogInterval);
   await z.triggerPong();
-  await tickAFewTimes(vi);
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 
   await tickAFewTimes(vi, watchdogInterval);
@@ -584,8 +581,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await tickAFewTimes(vi);
-
   const socket = await z.socket;
   socket.messages.length = 0;
 
@@ -594,7 +589,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
     requestID: 'req-1',
     lastMutationIDChanges: {},
   });
-  await tickAFewTimes(vi);
 
   const pingCountAfterAbort = socket.messages.filter(message =>
     message.startsWith('["ping"'),
@@ -609,7 +603,6 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   expect(pingMessages).toHaveLength(1);
 
   await z.triggerPong();
-  await tickAFewTimes(vi);
 });
 
 const mockProfileID = 'pProfID1';
@@ -822,6 +815,8 @@ describe('createSocket', () => {
         new LogContext('error', undefined, new TestLogSink()),
         undefined,
         undefined,
+        undefined,
+        undefined,
         additionalConnectParams,
         {activeClients},
         1048 * 8,
@@ -859,6 +854,8 @@ describe('createSocket', () => {
         'wsidx',
         debugPerf,
         new LogContext('error', undefined, new TestLogSink()),
+        undefined,
+        undefined,
         undefined,
         undefined,
         additionalConnectParams,
@@ -2412,7 +2409,6 @@ test('connect() without opts preserves existing auth', async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
-  await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
 
   // Reconnect without providing auth opts - should keep existing auth
   await z.connection.connect();
@@ -2750,9 +2746,7 @@ test('socketOrigin', async () => {
   for (const c of cases) {
     const z = zeroForTest(c.socketEnabled ? {} : {cacheURL: null});
 
-    await tickAFewTimes(vi);
-
-    expect(z.connectionStatus, c.name).toBe(
+    await z.waitForConnectionStatus(
       c.socketEnabled
         ? ConnectionStatus.Connecting
         : ConnectionStatus.Disconnected,
@@ -2833,8 +2827,6 @@ async function testWaitsForConnection(
     () => log.push('resolved'),
     () => log.push('rejected'),
   );
-
-  await tickAFewTimes(vi);
 
   // Rejections that happened in previous connect should not reject pusher.
   expect(log).toEqual([]);
@@ -3084,40 +3076,34 @@ describe('Disconnect on hide', () => {
     {
       name: 'default delay not during ping',
       test: async (r, changeVisibilityState) => {
-        expect(DEFAULT_PING_TIMEOUT_MS).lessThanOrEqual(
-          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-        );
-        expect(DEFAULT_PING_TIMEOUT_MS * 2).greaterThanOrEqual(
-          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-        );
         let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
-        timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
-        await r.triggerPong();
+        while (timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS) {
+          await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
+          timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
+          await r.triggerPong();
+        }
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
       },
     },
     {
       name: 'default delay during ping',
       test: async (r, changeVisibilityState) => {
-        expect(DEFAULT_PING_TIMEOUT_MS).lessThanOrEqual(
-          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-        );
-        expect(DEFAULT_PING_TIMEOUT_MS * 2).greaterThanOrEqual(
-          DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-        );
+        // Advance partway into a ping cycle before going hidden
         await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2);
         let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2); // sends ping
+        // Complete the current ping cycle
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2);
         timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS / 2;
-        await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
-        // Disconnect due to visibility does not happen until pong is received
-        // and microtask queue is processed.
-        expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
         await r.triggerPong();
-        await vi.advanceTimersByTimeAsync(0);
+        // Continue through remaining ping cycles
+        while (timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS) {
+          await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
+          timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
+          await r.triggerPong();
+        }
+        await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
       },
     },
     {
@@ -3256,35 +3242,23 @@ describe('Disconnect on hide', () => {
 
     await c.test(z, changeVisibilityState);
 
-    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
+    // Goes straight to Disconnected when hidden
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+    expect(z.connectionStatus).toBe(ConnectionStatus.Disconnected);
+    expect(z.connection.state.current).toEqual({
+      name: 'disconnected',
+      reason: 'Connection closed because tab was hidden',
+    });
     expect(await onOnlineChangeP).toBe(false);
     expect(z.online).toBe(false);
-
-    // Stays disconnected as long as we are hidden.
-    assert(z.connectionState.name === ConnectionStatus.Connecting);
-    const timeUntilGlobalDisconnect =
-      z.connectionState.disconnectAt - Date.now();
-    assert(timeUntilGlobalDisconnect > 0);
-    if (timeUntilGlobalDisconnect > 1) {
-      await vi.advanceTimersByTimeAsync(timeUntilGlobalDisconnect - 1);
-    }
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
-    expect(z.online).false;
     expect(document.visibilityState).toBe('hidden');
-
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-    expect(z.connectionStatus).toBe(ConnectionStatus.Disconnected);
-    expect(z.online).false;
 
     onOnlineChangeP = makeOnOnlineChangePromise();
 
     visibilityState = 'visible';
     document.dispatchEvent(new Event('visibilitychange'));
 
-    const reconnectingSocket = z.socket;
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-    await reconnectingSocket;
+    await z.socket;
     await z.triggerConnected();
     expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
     expect(await onOnlineChangeP).toBe(true);
@@ -3442,7 +3416,7 @@ describe('Mutation responses poked down', () => {
     await mutation.client;
     await mutation2.client;
 
-    await z.triggerPoke(null, '1', {
+    await z.triggerPoke({
       lastMutationIDChanges: {
         [z.clientID]: 5,
       },
@@ -4201,6 +4175,7 @@ test('custom mutations get pushed', async () => {
     [
       'push',
       {
+        auth: 'test-auth',
         timestamp: 1678829450000,
         clientGroupID: await z.clientGroupID,
         mutations: [
@@ -4219,6 +4194,7 @@ test('custom mutations get pushed', async () => {
     [
       'push',
       {
+        auth: 'test-auth',
         timestamp: 1678829450000,
         clientGroupID: await z.clientGroupID,
         mutations: [
@@ -4237,6 +4213,7 @@ test('custom mutations get pushed', async () => {
     [
       'push',
       {
+        auth: 'test-auth',
         timestamp: 1678829450000,
         clientGroupID: await z.clientGroupID,
         mutations: [
@@ -4508,7 +4485,6 @@ describe('Zero replicache refresh integration', () => {
       expect(z.enableRefresh()).toBe(true);
 
       // Reconnect
-      await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
       await z.connection.connect();
 
       // Status should transition to Connecting
