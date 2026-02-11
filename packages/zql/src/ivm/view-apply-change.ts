@@ -20,12 +20,19 @@ export const idSymbol = Symbol('id');
  * and stable identity. All entries in the view tree are MetaEntry instances,
  * created through makeNewMetaEntry().
  */
-type MetaEntry = Writable<Entry> & {
-  [refCountSymbol]: number;
-  [idSymbol]?: string | undefined;
-};
+type MetaEntry<M extends Mutate> = M extends true
+  ? Writable<Entry> & {
+      [refCountSymbol]: number;
+      [idSymbol]?: string | undefined;
+    }
+  : Entry & {
+      readonly [refCountSymbol]: number;
+      readonly [idSymbol]?: string | undefined;
+    };
 
-type MetaEntryList = MetaEntry[];
+type MutableArray<M extends Mutate, T> = M extends true ? T[] : readonly T[];
+
+type MetaEntryList<M extends Mutate> = MutableArray<M, MetaEntry<M>>;
 
 /**
  * Node with eagerly-expanded relationships (arrays instead of generators).
@@ -108,8 +115,8 @@ function* getChildNodes(
   }
 }
 
-type Mutate = 0 | 1;
-type WithIDs = '' | 'withIDs';
+type Mutate = boolean;
+type WithIDs = boolean;
 
 /**
  * Immutable view update. Returns new Entry on change, same Entry if unchanged.
@@ -129,11 +136,11 @@ export function applyChange(
   schema: SourceSchema,
   relationship: string,
   format: Format,
-  withIDs: WithIDs = '',
-  mutate: Mutate = 0,
+  withIDs: WithIDs = false,
+  mutate: Mutate = false,
 ): Entry {
   return applyChangeInternal(
-    parentEntry,
+    parentEntry as MetaEntry<typeof mutate>,
     change,
     schema,
     relationship,
@@ -143,15 +150,15 @@ export function applyChange(
   );
 }
 
-export function applyChangeInternal(
-  parentEntry: Entry,
+export function applyChangeInternal<M extends Mutate>(
+  parentEntry: MetaEntry<M>,
   change: ViewChange,
   schema: SourceSchema,
   relationship: string,
   format: Format,
   withIDs: WithIDs,
-  mutate: Mutate,
-): Entry {
+  mutate: M,
+): MetaEntry<M> {
   if (schema.isHidden) {
     switch (change.type) {
       case 'add':
@@ -427,7 +434,7 @@ export function applyChangeInternal(
             // old pos with decremented rc. As each edit arrives, old copy's rc
             // decrements and new pos rc increments. When copy rc hits 0, remove.
             const newRefCount = oldEntry[refCountSymbol] - 1;
-            let newView: MetaEntry[];
+            let newView: MetaEntryList<true>;
             let adjustedPos = pos;
 
             if (newRefCount === 0) {
@@ -517,8 +524,8 @@ export function applyChanges(
   schema: SourceSchema,
   relationship: string,
   format: Format,
-  withIDs: WithIDs = '',
-  mutate: Mutate = 0,
+  withIDs: WithIDs = false,
+  mutate: Mutate = false,
 ): Entry {
   let result = parentEntry;
   for (const change of changes) {
@@ -535,21 +542,26 @@ export function applyChanges(
   return result;
 }
 
-function applyEdit(
-  existing: MetaEntry,
+function applyEdit<M extends Mutate>(
+  existing: MetaEntry<M>,
   change: EditViewChange,
   schema: SourceSchema,
   withIDs: WithIDs,
   mutate: Mutate,
-): MetaEntry {
-  const newEntry: MetaEntry = mutate
+): MetaEntry<M> {
+  const newEntry: MetaEntry<M> = mutate
     ? Object.assign(existing, change.node.row)
     : {
         ...existing,
         ...change.node.row,
       };
   if (withIDs) {
-    newEntry[idSymbol] = makeID(change.node.row, schema);
+    return setProperty(
+      mutate,
+      newEntry,
+      idSymbol,
+      makeID(change.node.row, schema),
+    );
   }
   return newEntry;
 }
@@ -574,12 +586,12 @@ function applyEdit(
  * Hidden schemas still use applyChange to collapse junction levels.
  */
 function initializeRelationshipsForNewEntryIfAny(
-  entry: MetaEntry,
+  entry: MetaEntry<true>,
   node: ViewNode,
   schema: SourceSchema,
   childFormats: Record<string, Format>,
   withIDs: WithIDs,
-): MetaEntry {
+): MetaEntry<true> {
   let result = entry;
   for (const relationship of Object.keys(node.relationships)) {
     const childSchema = must(schema.relationships[relationship]);
@@ -590,7 +602,9 @@ function initializeRelationshipsForNewEntryIfAny(
 
     // Hidden/singular: use applyChange to handle properly
     if (childSchema.isHidden || childFormat.singular) {
-      const newView = childFormat.singular ? undefined : ([] as MetaEntry[]);
+      const newView = childFormat.singular
+        ? undefined
+        : ([] as MetaEntryList<true>);
       result[relationship] = newView;
 
       for (const childNode of getChildNodes(node, relationship)) {
@@ -601,14 +615,14 @@ function initializeRelationshipsForNewEntryIfAny(
           relationship,
           childFormat,
           withIDs,
-          1, // this is a new entry, so we can mutate
+          true, // this is a new entry, so we can mutate
         );
         assertMetaEntry(newResult);
         result = newResult;
       }
     } else {
       // Plural non-hidden: build array in-place for efficiency
-      const childArray: MetaEntry[] = [];
+      const childArray: MetaEntryList<true> = [];
 
       for (const childNode of getChildNodes(node, relationship)) {
         const newEntry = makeNewMetaEntry(
@@ -646,13 +660,17 @@ function initializeRelationshipsForNewEntryIfAny(
   return result;
 }
 
-function add(
+function add<M extends Mutate>(
   row: Row,
-  view: MetaEntryList,
+  view: MetaEntryList<M>,
   schema: SourceSchema,
   withIDs: WithIDs,
-  mutate: Mutate,
-): {newEntry: MetaEntry | undefined; newView: MetaEntry[]; pos: number} {
+  mutate: M,
+): {
+  newEntry: MetaEntry<true> | undefined;
+  newView: MetaEntryList<true>;
+  pos: number;
+} {
   const {pos, found} = binarySearch(view, row, schema.compareRows);
 
   if (found) {
@@ -669,28 +687,37 @@ function add(
   return {newEntry, newView: insertAt(mutate, view, pos, newEntry), pos};
 }
 
-function insertAt<T>(mutate: Mutate, array: T[], index: number, item: T): T[] {
+function insertAt<M extends Mutate, T>(
+  mutate: M,
+  array: MutableArray<M, T>,
+  index: number,
+  item: T,
+): T[] {
   if (mutate) {
-    array.splice(index, 0, item);
-    return array;
+    (array as T[]).splice(index, 0, item);
+    return array as T[];
   }
   return array.toSpliced(index, 0, item);
 }
 
-function removeAt<T>(mutate: Mutate, array: T[], index: number): T[] {
+function removeAt<M extends Mutate, T>(
+  mutate: M,
+  array: MutableArray<M, T>,
+  index: number,
+): T[] {
   if (mutate) {
-    array.splice(index, 1);
-    return array;
+    (array as T[]).splice(index, 1);
+    return array as T[];
   }
   return array.toSpliced(index, 1);
 }
 
-function removeAndUpdateRefCount(
-  view: MetaEntryList,
+function removeAndUpdateRefCount<M extends Mutate>(
+  view: MetaEntryList<M>,
   row: Row,
   compareRows: Comparator,
-  mutate: Mutate,
-): MetaEntry[] {
+  mutate: M,
+): MetaEntryList<true> {
   const {pos, found} = binarySearch(view, row, compareRows);
   assert(found, 'node does not exist');
   const oldEntry = view[pos];
@@ -703,7 +730,7 @@ function removeAndUpdateRefCount(
 }
 
 function binarySearch(
-  view: MetaEntryList,
+  view: MetaEntryList<Mutate>,
   target: Row,
   comparator: Comparator,
 ) {
@@ -725,12 +752,17 @@ function binarySearch(
 }
 
 /** Assert value is MetaEntry (has refCountSymbol). */
-function assertMetaEntry(v: unknown): asserts v is MetaEntry {
-  assertNumber((v as Partial<MetaEntry>)[refCountSymbol]);
+function assertMetaEntry<M extends Mutate>(
+  v: unknown,
+): asserts v is MetaEntry<M> {
+  assertNumber((v as Partial<MetaEntry<M>>)[refCountSymbol]);
 }
 
 /** Get singular MetaEntry, throws if missing. */
-function getSingularEntry(parentEntry: Entry, relationship: string): MetaEntry {
+function getSingularEntry<M extends Mutate>(
+  parentEntry: MetaEntry<M>,
+  relationship: string,
+): MetaEntry<M> {
   const entry = parentEntry[relationship];
   assert(entry !== undefined, 'node does not exist');
   assertMetaEntry(entry);
@@ -738,10 +770,10 @@ function getSingularEntry(parentEntry: Entry, relationship: string): MetaEntry {
 }
 
 /** Get singular MetaEntry or undefined if not set. */
-function getOptionalSingularEntry(
-  parentEntry: Entry,
+function getOptionalSingularEntry<M extends Mutate>(
+  parentEntry: MetaEntry<M>,
   relationship: string,
-): MetaEntry | undefined {
+): MetaEntry<M> | undefined {
   const entry = parentEntry[relationship];
   if (entry === undefined) {
     return undefined;
@@ -751,13 +783,13 @@ function getOptionalSingularEntry(
 }
 
 /** Get child array as MetaEntryList. */
-function getChildEntryList(
-  parentEntry: Entry,
+function getChildEntryList<M extends Mutate>(
+  parentEntry: MetaEntry<M>,
   relationship: string,
-): MetaEntryList {
+): MetaEntryList<M> {
   const view = parentEntry[relationship];
   assertArray(view);
-  return view as MetaEntryList;
+  return view as MetaEntryList<M>;
 }
 
 /** Create MetaEntry from row with given refCount. */
@@ -766,7 +798,7 @@ function makeNewMetaEntry(
   schema: SourceSchema,
   withIDs: WithIDs,
   rc: number,
-): MetaEntry {
+): MetaEntry<true> {
   // This creates a new MetaEntry from a Row. We never mutate Rows.
   if (withIDs) {
     return {...row, [refCountSymbol]: rc, [idSymbol]: makeID(row, schema)};
@@ -782,48 +814,65 @@ function makeID(row: Row, schema: SourceSchema) {
   return JSON.stringify(schema.primaryKey.map(k => row[k]));
 }
 
-function incRefCount(mutate: Mutate, entry: MetaEntry): MetaEntry {
+function incRefCount<M extends Mutate>(
+  mutate: M,
+  entry: MetaEntry<M>,
+): MetaEntry<M> {
   return setRefCount(mutate, entry, entry[refCountSymbol] + 1);
 }
 
-function decRefCount(mutate: Mutate, entry: MetaEntry): MetaEntry {
+function decRefCount<M extends Mutate>(
+  mutate: M,
+  entry: MetaEntry<M>,
+): MetaEntry<M> {
   return setRefCount(mutate, entry, entry[refCountSymbol] - 1);
 }
 
-function setRefCount(
-  mutate: Mutate,
-  entry: MetaEntry,
+function setRefCount<M extends Mutate>(
+  mutate: M,
+  entry: MetaEntry<M>,
   count: number,
-): MetaEntry {
+): MetaEntry<M> {
   if (mutate) {
-    entry[refCountSymbol] = count;
+    (entry as MetaEntry<true>)[refCountSymbol] = count;
     return entry;
   }
   return {...entry, [refCountSymbol]: count};
 }
 
-function setRelation(
-  mutate: Mutate,
-  parentEntry: Entry,
-  relationship: string,
-  value: Entry | Entry[] | undefined,
-): Entry {
-  if (mutate) {
-    (parentEntry as Writable<Entry>)[relationship] = value;
-    return parentEntry;
-  }
-  return {...parentEntry, [relationship]: value};
-}
-
-function arrayWith<T>(
-  mutate: Mutate,
-  array: T[],
+function arrayWith<M extends Mutate, T>(
+  mutate: M,
+  array: MutableArray<M, T>,
   index: number,
   value: T,
 ): T[] {
   if (mutate) {
-    array[index] = value;
-    return array;
+    (array as T[])[index] = value;
+    return array as T[];
   }
   return array.with(index, value);
 }
+
+function setProperty<
+  M extends Mutate,
+  K extends string | keyof MetaEntry<M>,
+  V,
+>(
+  mutate: M,
+  parentEntry: MetaEntry<M>,
+  key: K,
+  value: V,
+): MetaEntry<true> & {[P in K]: V} {
+  if (mutate) {
+    (parentEntry as {[P in K]: V})[key] = value;
+    return parentEntry as MetaEntry<true> & {[P in K]: V};
+  }
+  return {...parentEntry, [key]: value};
+}
+
+const setRelation: <M extends Mutate>(
+  mutate: M,
+  parentEntry: MetaEntry<M>,
+  relationship: string,
+  value: Entry | Entry[] | undefined,
+) => MetaEntry<true> = setProperty;

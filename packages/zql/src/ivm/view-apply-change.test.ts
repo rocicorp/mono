@@ -3,6 +3,7 @@ import {makeComparator} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 import {
   applyChange,
+  idSymbol,
   refCountSymbol,
   type ViewChange,
 } from './view-apply-change.ts';
@@ -12,8 +13,9 @@ import type {Entry, Format} from './view.ts';
 const entries = (e: Entry, key: string): Entry[] => e[key] as Entry[];
 const at = (e: Entry, key: string, i: number): Entry => entries(e, key)[i];
 
-const NO_MUTATE = 0 as const;
-const WITH_IDS = 'withIDs' as const;
+const MUTATE = true as const;
+const NO_MUTATE = false as const;
+const WITH_IDS = true as const;
 
 describe('applyChange', () => {
   const relationship = '';
@@ -2064,6 +2066,38 @@ describe('applyChange', () => {
       // Parent2's children should keep same reference
       expect(at(root, '', 1)['children']).toBe(parent2ChildrenRef);
     });
+
+    // When withIDs is enabled, edited rows get a new idSymbol
+    test('edited row with withIDs gets new idSymbol', () => {
+      let root: Entry = {'': []};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const originalRef = at(root, '', 0);
+      const originalId = (originalRef as {[idSymbol]?: string})[idSymbol];
+      expect(originalId).toBeDefined();
+
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: '1', name: 'Alice'}},
+        node: {row: {id: '1', name: 'Alicia'}},
+      });
+
+      const newRef = at(root, '', 0);
+      const newId = (newRef as {[idSymbol]?: string})[idSymbol];
+
+      // Reference should change (immutability)
+      expect(newRef).not.toBe(originalRef);
+      // idSymbol should be set on the new entry
+      expect(newId).toBeDefined();
+      expect(newId).toBe(originalId); // Same ID since primary key unchanged
+      expect(newRef).toEqual(
+        expect.objectContaining({id: '1', name: 'Alicia'}),
+      );
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2077,8 +2111,6 @@ describe('applyChange', () => {
   // 3. Within a view: root and arrays ARE mutated in place
   // ═══════════════════════════════════════════════════════════════════════════
   describe('In-place mutation (mutate = true)', () => {
-    const MUTATE = 1 as const;
-
     // Deep freeze helper to catch bugs where we mutate inputs
     function deepFreeze<T>(obj: T): T {
       Object.freeze(obj);
@@ -2576,6 +2608,43 @@ describe('applyChange', () => {
       expect(at(view2, '', 0)).toBe(view2RowRef);
       expect(at(view2, '', 0)).toEqual(
         expect.objectContaining({id: '1', name: 'Alice'}),
+      );
+    });
+
+    // When withIDs is enabled with mutation, idSymbol is set by mutating the entry
+    test('edited row with withIDs mutates idSymbol in place', () => {
+      let root: Entry = {'': []};
+      const rootRef = root;
+      const listRef = entries(root, '');
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: '1', name: 'Alice'}, relationships: {}},
+      });
+
+      const originalRef = at(root, '', 0);
+      const originalId = (originalRef as {[idSymbol]?: string})[idSymbol];
+      expect(originalId).toBeDefined();
+
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: '1', name: 'Alice'}},
+        node: {row: {id: '1', name: 'Alicia'}},
+      });
+
+      const newRef = at(root, '', 0);
+      const newId = (newRef as {[idSymbol]?: string})[idSymbol];
+
+      // Root and list should keep same reference (mutated in place)
+      expect(root).toBe(rootRef);
+      expect(entries(root, '')).toBe(listRef);
+      // Entry reference should stay the same (mutated in place)
+      expect(newRef).toBe(originalRef);
+      // idSymbol should be set on the mutated entry
+      expect(newId).toBeDefined();
+      expect(newId).toBe(originalId); // Same ID since primary key unchanged
+      expect(newRef).toEqual(
+        expect.objectContaining({id: '1', name: 'Alicia'}),
       );
     });
   });
