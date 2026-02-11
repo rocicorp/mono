@@ -1,3 +1,4 @@
+// oxlint-disable no-console
 import {expect, test} from '@playwright/test';
 
 const BASE_URL = 'http://localhost:5173';

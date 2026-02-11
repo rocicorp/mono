@@ -1,3 +1,7 @@
+// oxlint-disable arrow-body-style
+// oxlint-disable eqeqeq
+// oxlint-disable no-console
+// oxlint-disable no-explicit-any
 /**
  * Original @tanstack/virtual-core index.ts v3.13.18
  * https://github.com/TanStack/virtual/blob/main/packages/virtual-core/src/index.ts

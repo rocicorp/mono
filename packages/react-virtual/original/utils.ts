@@ -1,3 +1,5 @@
+// oxlint-disable no-console
+// oxlint-disable no-explicit-any
 /**
  * Original @tanstack/virtual-core utils.ts v3.13.18
  * https://github.com/TanStack/virtual/blob/main/packages/virtual-core/src/utils.ts

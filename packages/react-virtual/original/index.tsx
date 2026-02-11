@@ -1,3 +1,4 @@
+// oxlint-disable arrow-body-style
 /**
  * Original @tanstack/react-virtual index.tsx v3.13.18
  * https://github.com/TanStack/virtual/blob/main/packages/react-virtual/src/index.tsx
