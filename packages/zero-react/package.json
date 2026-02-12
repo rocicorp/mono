@@ -14,12 +14,13 @@
     "lint": "oxlint --type-aware src/"
   },
   "peerDependencies": {
-    "@tanstack/react-virtual": "^3.10.9",
+    "@tanstack/react-virtual": "^3.13.18",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
+    "@rocicorp/react-virtual": "0.0.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.18",
     "react": "^18.3.1",

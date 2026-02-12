@@ -11,13 +11,13 @@ export type {
   GetQueryReturnType,
   GetSingleQuery,
 } from './use-rows.ts';
-export {useZeroOnline} from './use-zero-online.tsx';
 export {
-  useZeroVirtualizer,
-  type PermalinkHistoryState,
-  type UseZeroVirtualizerOptions,
-  type ZeroVirtualizerResult,
-} from './use-zero-virtualizer.ts';
+  useStableScroll,
+  type CaptureAnchor,
+  type UseStableScrollOptions,
+  type UseStableScrollResult,
+} from './use-stable-scroll.ts';
+export {useZeroOnline} from './use-zero-online.tsx';
 export {
   createUseZero,
   useZero,

@@ -1,9 +1,9 @@
 import '../../../packages/shared/src/dotenv.ts';
 
 import * as fs from 'fs';
-import * as readline from 'readline';
 import {dirname, join} from 'path';
 import postgres from 'postgres';
+import * as readline from 'readline';
 import {pipeline} from 'stream/promises';
 import {fileURLToPath} from 'url';
 

@@ -8,18 +8,18 @@ import {useQuery, type UseQueryOptions} from './use-query.tsx';
 
 export type Anchor<TStartRow> =
   | Readonly<{
-      index: number;
       kind: 'forward';
+      index: number;
       startRow?: TStartRow | undefined;
     }>
   | Readonly<{
-      index: number;
       kind: 'backward';
+      index: number;
       startRow: TStartRow;
     }>
   | Readonly<{
-      index: number;
       kind: 'permalink';
+      index: number;
       id: string;
     }>;
 
@@ -30,6 +30,7 @@ export type GetPageQuery<TRow, TStartRow> = (
 ) => GetQueryReturnType<TRow>;
 
 export type GetSingleQuery<TRow> = (
+  // TODO(arv): id should be generic based on table primary key
   id: string,
 ) => GetQueryReturnType<TRow | undefined>;
 
