@@ -347,7 +347,19 @@ class Snapshot {
   }
 
   getRows(table: LiteTableSpecWithKeys, keys: PrimaryKey[], row: RowValue) {
-    const conds = keys.map(key => key.map(c => `${id(c)}=?`));
+    // Filter out keys where any column is NULL. This is both correct and
+    // critical for performance:
+    // 1. Correctness: NULL values can't violate uniqueness (NULL != NULL in SQL)
+    // 2. Performance: SQLite's MULTI-INDEX OR optimization completely fails when
+    //    any branch involves NULL, falling back to a full table scan. This was
+    //    causing slowdowns of hundreds of times on tables with nullable unique columns.
+    const validKeys = keys.filter(key =>
+      key.every(column => row[column] !== null && row[column] !== undefined),
+    );
+    if (validKeys.length === 0) {
+      return [];
+    }
+    const conds = validKeys.map(key => key.map(c => `${id(c)}=?`));
     const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
       `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
@@ -358,7 +370,7 @@ class Snapshot {
     try {
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       return cached.statement.all<any>(
-        keys.flatMap(key => key.map(column => row[column])),
+        validKeys.flatMap(key => key.map(column => row[column])),
       );
     } finally {
       this.db.statementCache.return(cached);

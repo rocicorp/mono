@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../db/specs.ts';
@@ -626,5 +626,47 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.changes).toBe(1);
 
     expect(() => [...diff]).toThrow(ResetPipelinesSignal);
+  });
+
+  test('getRows filters out unique keys with NULL column values', () => {
+    // This tests a critical performance optimization: when unique key columns
+    // have NULL values, they must be filtered out of the OR query. Otherwise,
+    // SQLite's MULTI-INDEX OR optimization fails and falls back to a full
+    // table scan (hundreds of times slower on large tables).
+
+    // Insert a user with a NULL handle
+    replicator.processTransaction(
+      '05',
+      messages.insert('users', {id: 30, handle: null}),
+    );
+
+    const diff = s.advance(tableSpecs);
+    expect(diff.curr.version).toBe('05');
+
+    // Spy on the statement cache to see what queries are generated
+    const getSpy = vi.spyOn(diff.prev.db.statementCache, 'get');
+
+    // Consume the diff - this will call getRows for the user with NULL handle
+    const changes = [...diff];
+    expect(changes).toHaveLength(1);
+
+    // Find the getRows query (SELECT from users with WHERE clause)
+    const getRowsCalls = getSpy.mock.calls.filter(
+      call =>
+        typeof call[0] === 'string' &&
+        call[0].includes('FROM "users"') &&
+        call[0].includes('WHERE'),
+    );
+
+    // Should have made exactly one query for the users table
+    expect(getRowsCalls).toHaveLength(1);
+
+    // Snapshot the entire query - it should only have "id"=? in WHERE,
+    // not "handle"=? since handle is NULL
+    expect(getRowsCalls[0][0]).toBe(
+      'SELECT "id","handle","_0_version" FROM "users" WHERE "id"=?',
+    );
+
+    getSpy.mockRestore();
   });
 });
