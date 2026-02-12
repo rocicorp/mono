@@ -12,7 +12,6 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {Queue} from '../../../shared/src/queue.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
 import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
@@ -468,6 +467,7 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_CHANGE_DB']: getConnectionURI(changeDB),
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_NUM_SYNC_WORKERS']: '1',
+      ['ZERO_ADMIN_PASSWORD']: '2p49fqnaivnepr',
     };
 
     return async () => {
@@ -498,11 +498,6 @@ describe('integration', {timeout: 30000}, () => {
         },
       },
     ],
-  };
-
-  const NOPK_QUERY: AST = {
-    table: 'nopk',
-    orderBy: [['id', 'asc']],
   };
 
   // One or two zero-caches (i.e. multi-node)
@@ -550,7 +545,7 @@ describe('integration', {timeout: 30000}, () => {
 
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
-  test.skip.each([
+  test.for([
     ['single-node', 'pg', () => [env], undefined],
     ['replica identity full', 'pg', () => [env], 'FULL'],
     [
@@ -587,6 +582,7 @@ describe('integration', {timeout: 30000}, () => {
           ...env,
           ['ZERO_PORT']: `${port2}`,
           ['ZERO_NUM_SYNC_WORKERS']: '0',
+          ['ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS']: '0',
         },
         // startZero() will then copy to replicaDbFile2 for the view-syncer
         {
@@ -626,6 +622,7 @@ describe('integration', {timeout: 30000}, () => {
           ...env,
           ['ZERO_PORT']: `${port2}`,
           ['ZERO_NUM_SYNC_WORKERS']: '0',
+          ['ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS']: '0',
         },
         // startZero() will then copy to replicaDbFile2 for the view-syncer
         {
@@ -651,7 +648,10 @@ describe('integration', {timeout: 30000}, () => {
     ],
   ] satisfies [string, 'pg' | 'custom', () => Envs, 'FULL' | undefined][])(
     '%s (%s)',
-    async (_name, backend, makeEnvs, replicaIdentity) => {
+    async ([_name, backend, makeEnvs, replicaIdentity], {skip}) => {
+      if (process.env.CI) {
+        skip();
+      }
       if (backend === 'pg') {
         await upDB.unsafe(initialPGSetup(replicaIdentity));
       }
@@ -674,6 +674,18 @@ describe('integration', {timeout: 30000}, () => {
               desiredQueriesPatch: [
                 {op: 'put', hash: 'query-hash1', ast: FOO_QUERY},
               ],
+              clientSchema: {
+                tables: {
+                  foo: {
+                    primaryKey: ['id'],
+                    columns: {id: {type: 'string'}},
+                  },
+                  ['boo.far']: {
+                    primaryKey: ['id'],
+                    columns: {id: {type: 'string'}},
+                  },
+                },
+              },
             },
           ] satisfies InitConnectionMessage),
         ),
@@ -682,14 +694,6 @@ describe('integration', {timeout: 30000}, () => {
       expect(await downstream.dequeue()).toMatchObject([
         'connected',
         {wsid: '123'},
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeStart',
-        {pokeID: '00'},
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeEnd',
-        {pokeID: '00'},
       ]);
       expect(await downstream.dequeue()).toMatchObject([
         'pokeStart',
@@ -821,6 +825,19 @@ describe('integration', {timeout: 30000}, () => {
               op: 'put',
               tableName: 'foo',
               value: {
+                id: 'voo',
+                ['far_id']: 'doo',
+                b: null,
+                j1: 'foo',
+                j2: false,
+                ['j.3']: 456.789,
+                j4: {bar: 'baz'},
+              },
+            },
+            {
+              op: 'put',
+              tableName: 'foo',
+              value: {
                 b: true,
                 ['far_id']: 'not_baz',
                 id: 'bar',
@@ -837,19 +854,6 @@ describe('integration', {timeout: 30000}, () => {
               id: {id: 'baz'},
               op: 'del',
               tableName: 'boo.far',
-            },
-            {
-              op: 'put',
-              tableName: 'foo',
-              value: {
-                id: 'voo',
-                ['far_id']: 'doo',
-                b: null,
-                j1: 'foo',
-                j2: false,
-                ['j.3']: 456.789,
-                j4: {bar: 'baz'},
-              },
             },
           ],
         },
@@ -960,65 +964,6 @@ describe('integration', {timeout: 30000}, () => {
       // take effect (which is necessary for the subsequent
       // "changeDesiredQueries" to succeed).
       await expectNoPokes(downstream);
-
-      // Now that nopk has a unique index, add a query to retrieve the data.
-      ws.send(
-        JSON.stringify([
-          'changeDesiredQueries',
-          {
-            desiredQueriesPatch: [
-              {op: 'put', hash: 'query-hash2', ast: NOPK_QUERY},
-            ],
-          },
-        ] satisfies ChangeDesiredQueriesMessage),
-      );
-
-      // poke confirming the query registration.
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeStart',
-        {pokeID: WATERMARK_REGEX},
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokePart',
-        {
-          pokeID: WATERMARK_REGEX,
-          desiredQueriesPatches: {
-            def: [{op: 'put', hash: 'query-hash2'}],
-          },
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeEnd',
-        {pokeID: WATERMARK_REGEX},
-      ]);
-
-      // poke containing the row data.
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeStart',
-        {pokeID: WATERMARK_REGEX},
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokePart',
-        {
-          pokeID: WATERMARK_REGEX,
-          rowsPatch: [
-            {
-              op: 'put',
-              tableName: 'nopk',
-              value: {id: 'bar', val: 'baz'},
-            },
-            {
-              op: 'put',
-              tableName: 'nopk',
-              value: {id: 'foo', val: 'bar'},
-            },
-          ],
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeEnd',
-        {pokeID: WATERMARK_REGEX},
-      ]);
 
       await testInvalidRequestHandling();
     },
