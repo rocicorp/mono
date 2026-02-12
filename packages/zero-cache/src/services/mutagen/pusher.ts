@@ -463,11 +463,13 @@ class PushWorker {
 
           this.#failDownstream(client.downstream, pushFailedBody);
           if (isPushAuthFailure(pushFailedBody)) {
+            this.#lc.debug?.('Auth failure detected in push response');
             client.onAuthFailure?.();
           }
         } else if ('kind' in response) {
           this.#failDownstream(client.downstream, response);
           if (isPushAuthFailure(response)) {
+            this.#lc.debug?.('Auth failure detected in push response');
             client.onAuthFailure?.();
           }
         } else {

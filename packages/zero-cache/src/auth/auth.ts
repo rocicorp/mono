@@ -94,6 +94,11 @@ export class AuthSessionImpl implements AuthSession {
   }
 
   clear(): void {
+    const lc = this.#lc.withContext(
+      'boundUserID',
+      this.#boundUserID ?? 'unknown',
+    );
+    lc.debug?.(`Clearing auth session`);
     this.#auth = undefined;
     this.#boundUserID = undefined;
     this.#revision = 0;
@@ -104,6 +109,8 @@ export class AuthSessionImpl implements AuthSession {
     wireAuth: string | undefined,
   ): Promise<AuthUpdateResult> {
     try {
+      const lc = this.#lc.withContext('newUserID', userID);
+
       // check if the auth update is trying to change the bound userID for this client group
       if (this.#boundUserID && this.#boundUserID !== userID) {
         return {
@@ -121,6 +128,12 @@ export class AuthSessionImpl implements AuthSession {
       const hasProvidedAuth = isProvidedAuth(wireAuth);
       let nextAuth = previousAuth;
 
+      if (previousAuth) {
+        lc.debug?.(`Attempting to update auth from previous value`);
+      } else {
+        lc.debug?.(`Attempting to initialize auth`);
+      }
+
       if (!hasProvidedAuth && previousAuth) {
         return {
           ok: false,
@@ -135,9 +148,11 @@ export class AuthSessionImpl implements AuthSession {
 
       if (!hasProvidedAuth) {
         nextAuth = undefined;
+        lc.debug?.(`Cleared auth`);
       } else if (this.#validateLegacyJWT !== undefined) {
         const verifiedToken = await this.#validateLegacyJWT(wireAuth, {userID});
         nextAuth = pickToken(this.#lc, this.#auth, verifiedToken);
+        lc.debug?.(`Updated auth with JWT`);
       } else {
         if (this.#auth?.type === 'jwt') {
           throw new Error(
@@ -148,6 +163,7 @@ export class AuthSessionImpl implements AuthSession {
           type: 'opaque',
           raw: wireAuth,
         };
+        lc.debug?.(`Updated auth with opaque token`);
       }
 
       this.#auth = nextAuth;

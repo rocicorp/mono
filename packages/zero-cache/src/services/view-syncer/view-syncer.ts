@@ -776,21 +776,30 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#runInLockForClient(
       ctx,
       msg,
-      (lc, clientID, msg: Partial<InitConnectionBody>, cvr) => {
+      async (lc, clientID, msg: Partial<InitConnectionBody>, cvr) => {
         let customQueryTransformMode: CustomQueryTransformMode = 'missing';
         const currentAuthRevision = this.#authSession.revision;
         if (this.#lastAuthRevision < currentAuthRevision) {
           customQueryTransformMode = 'all';
+          lc.debug?.(
+            'Auth revision changed, setting customQueryTransformMode to all',
+          );
         }
-        this.#lastAuthRevision = currentAuthRevision;
 
-        return this.#handleConfigUpdate(
+        const result = await this.#handleConfigUpdate(
           lc,
           clientID,
           msg,
           cvr,
           customQueryTransformMode,
         );
+
+        // commit the new revision after the config update is successful
+        if (customQueryTransformMode === 'all') {
+          this.#lastAuthRevision = currentAuthRevision;
+        }
+
+        return result;
       },
     );
   }
@@ -799,17 +808,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     await this.#runInLockForClient(ctx, msg, async (lc, clientID, _, cvr) => {
       // update auth and check if the revision has changed
       // if it has, we need to re-transform all queries since the auth data may be used in the transformation
-      const result = await this.#authSession.update(ctx.userID, msg[1].auth);
-      if (!result.ok) {
-        throw new ProtocolErrorWithLevel(result.error, 'warn');
+      const authResult = await this.#authSession.update(
+        ctx.userID,
+        msg[1].auth,
+      );
+      if (!authResult.ok) {
+        throw new ProtocolErrorWithLevel(authResult.error, 'warn');
       }
-      const currentRevision = this.#authSession.revision;
-      if (currentRevision <= this.#lastAuthRevision) {
+      const currentAuthRevision = this.#authSession.revision;
+      if (this.#lastAuthRevision >= currentAuthRevision) {
         lc.debug?.('Auth revision unchanged, skipping query re-transformation');
         return;
+      } else {
+        lc.debug?.('Auth revision changed, re-transforming queries');
       }
 
-      await this.#handleConfigUpdate(
+      const result = await this.#handleConfigUpdate(
         lc,
         clientID,
         {}, // no config updates, but we want to trigger re-transformation of custom queries if auth changed
@@ -818,7 +832,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       // commit the new revision after the config update is successful
-      this.#lastAuthRevision = currentRevision;
+      this.#lastAuthRevision = currentAuthRevision;
+
+      return result;
     });
   }
 
@@ -999,14 +1015,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             result = await fn(lc, clientID, body, cvr);
           });
         } catch (e) {
-          if (isTransformAuthFailure(e)) {
-            this.clearAuth();
-          }
           const lc = this.#lc
             .withContext('clientID', clientID)
             .withContext('wsID', wsID)
             .withContext('cmd', cmd);
           lc[getLogLevel(e)]?.(`closing connection with error`, e);
+          if (isTransformAuthFailure(e)) {
+            lc.debug?.('Auth failure detected in transform response');
+            this.clearAuth();
+          }
           if (client) {
             // Ideally, propagate the exception to the client's downstream subscription ...
             client.fail(e);
@@ -1065,7 +1082,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
 
           // Apply requested patches.
-          lc.debug?.(`applying ${desiredQueriesPatch?.length} query patches`);
+          lc.debug?.(
+            `applying ${desiredQueriesPatch?.length ?? 0} query patches`,
+          );
           if (desiredQueriesPatch?.length) {
             for (const patch of desiredQueriesPatch) {
               switch (patch.op) {
