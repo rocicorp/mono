@@ -8,6 +8,7 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {
@@ -17,6 +18,7 @@ import {
 } from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {
+  backfillRequestSchema,
   isDataChange,
   isSchemaChange,
   type BackfillID,
@@ -67,6 +69,8 @@ type PendingTransaction = {
   pos: number;
   startingReplicationState: Promise<ReplicationState>;
 };
+
+const backfillRequestsSchema = v.array(backfillRequestSchema);
 
 /**
  * Handles the storage of changes and the catchup of subscribers
@@ -208,13 +212,19 @@ export class Storer implements Service {
         // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
         // to make it optional and possibly `null`.
         sql<BackfillRequest[]>`
-        SELECT b."schema", b."table" as name, t."metadata", 
-               json_object_agg(b."column", b."backfill") as columns
+        SELECT 
+            json_build_object(
+              'schema', b."schema",
+              'name', b."table",
+              'metadata', t."metadata"
+            ) as "table",
+            json_object_agg(b."column", b."backfill") 
+              as "columns"
           FROM ${this.#cdc('backfilling')} as b
           LEFT JOIN ${this.#cdc('tableMetadata')} as t
           ON (b."schema" = t."schema" AND b."table" = t."table")
           GROUP BY b."schema", b."table", t."metadata"
-        `,
+        `.then(result => v.parse(result, backfillRequestsSchema)),
       ],
     );
 

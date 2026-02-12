@@ -232,27 +232,29 @@ describe('change-streamer/storer', () => {
       // since none was ever specified.
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "b": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
                 },
-                "b": {
-                  "barID": "ozz",
-                  "fooID": 843,
+                "table": {
+                  "metadata": null,
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "metadata": null,
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0a",
-        }
-      `);
+            ],
+            "lastWatermark": "0a",
+          }
+        `);
 
       // Add a column to the original table backfill metadata.
       storer.store([
@@ -280,46 +282,50 @@ describe('change-streamer/storer', () => {
       // table metadata.
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "b": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
                 },
-                "b": {
-                  "barID": "ozz",
-                  "fooID": 843,
-                },
-              },
-              "metadata": null,
-              "name": "bar",
-              "schema": "your",
-            },
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+                "table": {
+                  "metadata": null,
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "a",
-                    "b",
-                  ],
-                  "type": "index",
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                },
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                        "b",
+                      ],
+                      "type": "index",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "name": "foo",
-              "schema": "my",
-            },
-          ],
-          "lastWatermark": "0b",
-        }
-      `);
+            ],
+            "lastWatermark": "0b",
+          }
+        `);
 
       // Add another column to the same table with new table metadata.
       storer.store([
@@ -348,49 +354,53 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
-                },
-              },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
-                },
-                "b": {
-                  "barID": "ozz",
-                  "fooID": 843,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": null,
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0c",
-        }
-      `);
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "b": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                },
+                "table": {
+                  "metadata": null,
+                  "name": "bar",
+                  "schema": "your",
+                },
+              },
+            ],
+            "lastWatermark": "0c",
+          }
+        `);
 
       // Update the table metadata of the new table.
       storer.store([
@@ -420,56 +430,60 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
-                },
-              },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
-                },
-                "b": {
-                  "barID": "ozz",
-                  "fooID": 843,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "a",
-                  ],
-                  "type": "default",
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "b": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                },
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0d",
-        }
-      `);
+            ],
+            "lastWatermark": "0d",
+          }
+        `);
 
       // Rename one of the backfilling columns
       storer.store([
@@ -501,56 +515,60 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
-                },
-              },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
-                },
-                "newName": {
-                  "barID": "ozz",
-                  "fooID": 843,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "a",
-                  ],
-                  "type": "default",
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "newName": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                },
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0e",
-        }
-      `);
+            ],
+            "lastWatermark": "0e",
+          }
+        `);
 
       // Drop a backfilling column.
       storer.store([
@@ -575,52 +593,56 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
-                },
-              },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "a",
-                  ],
-                  "type": "default",
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                },
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0f",
-        }
-      `);
+            ],
+            "lastWatermark": "0f",
+          }
+        `);
 
       // Set the other backfilling column to completed
       storer.store([
@@ -646,34 +668,36 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-          ],
-          "lastWatermark": "110",
-        }
-      `);
+            ],
+            "lastWatermark": "110",
+          }
+        `);
 
       // Rename the backfilling table, and a contained column in the same tx.
       storer.store([
@@ -716,34 +740,36 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "deez": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "deez": {
-                  "barID": "boo",
-                  "fooID": 456,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "bloo",
+                  "schema": "your",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "bloo",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "111",
-        }
-      `);
+            ],
+            "lastWatermark": "111",
+          }
+        `);
 
       // Drop the backfilling table
       storer.store([
