@@ -196,14 +196,8 @@ function getIncrementalMigrations(
     11: {},
 
     // Upgrade DDL trigger to query schemaOID, needed information for auto-backfill.
-    12: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(lc, sql, {...shard, publications});
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // (subsumed by v14)
+    12: {},
 
     // Recreates the legacy schemaVersions table that was prematurely dropped
     // in the (former) v11 migration. It needs to remain present for at least one
@@ -225,6 +219,16 @@ function getIncrementalMigrations(
             VALUES (true, 1, 1)
             ON CONFLICT DO NOTHING;
         `;
+      },
+    },
+
+    // Upgrade DDL trigger to log more info to PG logs.
+    14: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
       },
     },
   };
