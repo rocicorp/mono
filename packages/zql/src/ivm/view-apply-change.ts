@@ -136,8 +136,8 @@ export function applyChange(
   schema: SourceSchema,
   relationship: string,
   format: Format,
-  withIDs: WithIDs = false,
-  mutate: Mutate = false,
+  withIDs = false,
+  mutate = false,
 ): Entry {
   return applyChangeInternal(
     parentEntry as MetaEntry<typeof mutate>,
