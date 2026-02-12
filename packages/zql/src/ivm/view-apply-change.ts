@@ -549,12 +549,12 @@ function applyEdit<M extends Mutate>(
   withIDs: WithIDs,
   mutate: Mutate,
 ): MetaEntry<M> {
-  const newEntry: MetaEntry<M> = mutate
-    ? Object.assign(existing, change.node.row)
-    : {
-        ...existing,
-        ...change.node.row,
-      };
+  const newEntry: MetaEntry<true> =
+    // Even for mutate we want to create a new entry if the primary key changed.
+    mutate && schema.compareRows(change.oldNode.row, change.node.row) === 0
+      ? Object.assign(existing, change.node.row)
+      : {...existing, ...change.node.row};
+
   if (withIDs) {
     return setProperty(
       mutate,

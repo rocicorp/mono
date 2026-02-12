@@ -1,4 +1,4 @@
-import {reconcile, type SetStoreFunction} from 'solid-js/store';
+import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
 import {emptyArray} from '../../shared/src/sentinels.ts';
 import {
   applyChange,
@@ -40,9 +40,12 @@ export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
  *   1. BULK INSERT (builderRoot path): When building from empty, we skip Solid's
  *      reactive tracking entirely and build a plain JS object. This is 5x faster
  *      for large initial loads (743ms → 133ms for 3000 rows with 2 children each).
+ *      Uses reconcile() to diff the final result into Solid.
  *
  *   2. INCREMENTAL UPDATE (#pendingChanges path): For existing views, we queue
- *      changes and apply them immutably, then use reconcile() to diff into Solid.
+ *      changes and apply them in-place within a produce() draft. produce() creates
+ *      a mutable draft, applyChange mutates it directly, then produce() handles
+ *      diffing and reactivity.
  *
  *   push(change)
  *       │
@@ -60,9 +63,10 @@ export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
  *               ▼
  *         onTransactionCommit()
  *               │
- *               ▼
- *   reconcile(newRoot, {key: idSymbol, merge: true})
- *   → matches rows by PK, updates only changed properties
+ *       ┌───────┴──────────┐
+ *       │                  │
+ *   builderRoot      produce(draft =>
+ *   → reconcile()      applyChange(draft, ..., mutate: true))
  */
 export class SolidView implements Output {
   readonly #input: Input;
@@ -84,10 +88,6 @@ export class SolidView implements Output {
   #pendingChanges: ViewChange[] = [];
   readonly #updateTTL: (ttl: TTL) => void;
 
-  // Tracks the current root entry outside of Solid's store so we can read it
-  // directly in #applyChanges without abusing setState as a read mechanism.
-  #lastRoot: Entry;
-
   constructor(
     input: Input,
     onTransactionCommit: (cb: () => void) => void,
@@ -107,15 +107,14 @@ export class SolidView implements Output {
 
     input.setOutput(this);
 
-    const emptyRoot = this.#createEmptyRoot();
-    const initialRoot = this.#applyChangesToRoot(
+    const initialRoot = this.#createEmptyRoot();
+    this.#applyChangesToRoot(
       skipYields(input.fetch({})),
       node => ({type: 'add', node}),
-      emptyRoot,
+      initialRoot,
     );
 
     this.#setState = setState;
-    this.#lastRoot = initialRoot;
     this.#setState(
       reconcile(
         [
@@ -177,8 +176,6 @@ export class SolidView implements Output {
             key: idSymbol as unknown as string,
           }),
         );
-        this.#setState(prev => [builderRoot, prev[1]]);
-        this.#lastRoot = builderRoot;
         this.#builderRoot = undefined;
       }
     } else {
@@ -198,7 +195,7 @@ export class SolidView implements Output {
     // using produce at the end of the transaction but read the relationships
     // now as they are only valid to read when the push is received.
     if (this.#builderRoot) {
-      this.#builderRoot = this.#applyChangeToRoot(change, this.#builderRoot);
+      this.#applyChangeToRoot(change, this.#builderRoot);
     } else {
       this.#pendingChanges.push(materializeRelationships(change));
     }
@@ -206,30 +203,12 @@ export class SolidView implements Output {
   }
 
   #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => ViewChange): void {
-    // Build new tree immutably from last known root, then reconcile() diffs
-    // by idSymbol. Solid's fine-grained reactivity only triggers signals for
-    // changed properties.
-    const newRoot = this.#applyChangesToRoot<T>(
-      changes,
-      mapper,
-      this.#lastRoot,
-    );
-    this.#lastRoot = newRoot;
-
-    if (isEmptyRoot(newRoot)) {
-      this.#builderRoot = this.#createEmptyRoot();
-    }
-
-    // reconcile with key=idSymbol matches rows by primary key.
-    // merge=true updates properties in place for fine-grained reactivity:
-    //   old: {id:1, name:"A"}  +  new: {id:1, name:"B"}  →  same object, name updated
-    // If idSymbol changes (PK edit), it's a remove+add (correct: different entity).
     this.#setState(
-      0,
-      reconcile(newRoot, {
-        // solidjs's types want a string, but a symbol works
-        key: idSymbol as unknown as string,
-        merge: true,
+      produce((draftState: State) => {
+        this.#applyChangesToRoot<T>(changes, mapper, draftState[0]);
+        if (isEmptyRoot(draftState[0])) {
+          this.#builderRoot = this.#createEmptyRoot();
+        }
       }),
     );
   }
@@ -238,22 +217,21 @@ export class SolidView implements Output {
     changes: Iterable<T>,
     mapper: (v: T) => ViewChange,
     root: Entry,
-  ): Entry {
-    let currentRoot = root;
+  ) {
     for (const change of changes) {
-      currentRoot = this.#applyChangeToRoot(mapper(change), currentRoot);
+      this.#applyChangeToRoot(mapper(change), root);
     }
-    return currentRoot;
   }
 
-  #applyChangeToRoot(change: ViewChange, root: Entry): Entry {
-    return applyChange(
+  #applyChangeToRoot(change: ViewChange, root: Entry) {
+    applyChange(
       root,
       change,
       this.#input.getSchema(),
       '',
       this.#format,
       true /* withIDs */,
+      true /* mutate */,
     );
   }
 
