@@ -149,7 +149,16 @@ export function installWebSocketReceiver<P>(
       message as IncomingMessage,
       socket as Socket,
       Buffer.from(head),
-      ws => receive(ws, payload, message),
+      ws => {
+        // Guard against WebSocket being closed during handoff.
+        // This can happen due to network issues or client disconnection
+        // between the time the socket was sent and when handleUpgrade completes.
+        if (ws.readyState === ws.CLOSED || ws.readyState === ws.CLOSING) {
+          lc.warn?.('websocket closed during upgrade, skipping receive');
+          return;
+        }
+        receive(ws, payload, message);
+      },
     );
   });
 }
