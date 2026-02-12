@@ -10,6 +10,7 @@ import {
   type Accessor,
   type JSX,
 } from 'solid-js';
+import {isJSONEqual} from '../../shared/src/json.ts';
 import {
   Zero,
   type CustomMutatorDefs,
@@ -71,7 +72,9 @@ export function createUseZero<
   return () => useZero<S, MD, Context>();
 }
 
-const NO_AUTH_SET = Symbol();
+const stableMemoOptions = {
+  equals: isJSONEqual,
+};
 
 export function ZeroProvider<
   S extends Schema = DefaultSchema,
@@ -88,16 +91,41 @@ export function ZeroProvider<
     | ZeroOptions<S, MD, Context>
   ),
 ) {
+  const context = createMemo(
+    () => ('zero' in props ? undefined : props.context),
+    undefined,
+    stableMemoOptions,
+  );
+  const mutateHeaders = createMemo(
+    () => ('zero' in props ? undefined : props.mutateHeaders),
+    undefined,
+    stableMemoOptions,
+  );
+  const queryHeaders = createMemo(
+    () => ('zero' in props ? undefined : props.queryHeaders),
+    undefined,
+    stableMemoOptions,
+  );
+
   const zero = createMemo(() => {
     if ('zero' in props) {
       return props.zero;
     }
 
-    const [, options] = splitProps(props, ['children', 'auth']);
+    const [, options] = splitProps(props, [
+      'children',
+      'auth',
+      'context',
+      'mutateHeaders',
+      'queryHeaders',
+    ]);
 
     const authValue = untrack(() => props.auth);
     const createdZero = new Zero({
       ...options,
+      context: context(),
+      mutateHeaders: mutateHeaders(),
+      queryHeaders: queryHeaders(),
       ...(authValue !== undefined ? {auth: authValue} : {}),
       batchViewUpdates: batch,
     });
@@ -106,30 +134,30 @@ export function ZeroProvider<
     return createdZero;
   });
 
-  const auth = createMemo<
-    typeof NO_AUTH_SET | ZeroOptions<S, MD, Context>['auth']
-  >(() => ('auth' in props ? props.auth : NO_AUTH_SET));
+  const hasAuthProp = createMemo(() => 'auth' in props);
+  const auth = createMemo<ZeroOptions<S, MD, Context>['auth']>(() =>
+    'auth' in props ? props.auth : undefined,
+  );
 
-  let prevAuth: typeof NO_AUTH_SET | ZeroOptions<S, MD, Context>['auth'] =
-    NO_AUTH_SET;
+  let prevHasAuth = hasAuthProp();
+  let prevAuth = auth();
 
   createEffect(() => {
     const currentZero = zero();
-    if (!currentZero || 'zero' in props) {
-      return;
-    }
-
+    const currentHasAuth = hasAuthProp();
     const currentAuth = auth();
 
-    if (prevAuth === NO_AUTH_SET) {
+    if (!currentZero || 'zero' in props) {
+      prevHasAuth = currentHasAuth;
       prevAuth = currentAuth;
       return;
     }
 
-    if (currentAuth !== prevAuth) {
+    if (currentHasAuth !== prevHasAuth || currentAuth !== prevAuth) {
+      prevHasAuth = currentHasAuth;
       prevAuth = currentAuth;
       void currentZero.connection.connect({
-        auth: currentAuth === NO_AUTH_SET ? undefined : currentAuth,
+        auth: currentHasAuth ? currentAuth : undefined,
       });
     }
   });

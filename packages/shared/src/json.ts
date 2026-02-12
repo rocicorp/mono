@@ -172,6 +172,16 @@ function assertJSONArray(v: unknown[]): asserts v is JSONValue[] {
   }
 }
 
+export function isJSONEqual(a: unknown, b: unknown): boolean {
+  if (a === undefined && b === undefined) {
+    return true;
+  }
+  if (isJSONValue(a, []) && isJSONValue(b, [])) {
+    return deepEqual(a, b);
+  }
+  return Object.is(a, b);
+}
+
 interface Path {
   push(key: string | number): void;
   pop(): void;

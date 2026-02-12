@@ -191,6 +191,121 @@ describe('ZeroProvider', () => {
       expect(createdZeros[1].close).not.toHaveBeenCalled();
     });
 
+    test('does not recreate zero when context is deeply equal', () => {
+      const createdZeros: MockZero[] = [];
+      ZeroMock.mockImplementation(function () {
+        const zero = createMockZero(`client-${createdZeros.length + 1}`);
+        createdZeros.push(zero);
+        return zero;
+      });
+
+      const schema = {} as Schema;
+      const [context, setContext] = createSignal({sub: 'u', role: 'crew'});
+
+      const wrapper = (props: {children: JSX.Element}) => (
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={schema}
+          context={context()}
+          userID="u"
+        >
+          {props.children}
+        </ZeroProvider>
+      );
+
+      const {result} = renderHook(() => useZero<Schema>(), {
+        initialProps: [],
+        wrapper,
+      });
+
+      expect(result()).toBe(createdZeros[0]);
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+
+      setContext({sub: 'u', role: 'crew'});
+
+      expect(result()).toBe(createdZeros[0]);
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+      expect(createdZeros[0].close).not.toHaveBeenCalled();
+    });
+
+    test('does not recreate zero when queryHeaders and mutateHeaders are deeply equal', () => {
+      const createdZeros: MockZero[] = [];
+      ZeroMock.mockImplementation(function () {
+        const zero = createMockZero(`client-${createdZeros.length + 1}`);
+        createdZeros.push(zero);
+        return zero;
+      });
+
+      const schema = {} as Schema;
+      const [queryHeaders, setQueryHeaders] = createSignal({'x-query': 'b'});
+      const [mutateHeaders, setMutateHeaders] = createSignal({'x-mutate': 'a'});
+
+      const wrapper = (props: {children: JSX.Element}) => (
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={schema}
+          queryHeaders={queryHeaders()}
+          mutateHeaders={mutateHeaders()}
+          userID="u"
+        >
+          {props.children}
+        </ZeroProvider>
+      );
+
+      const {result} = renderHook(() => useZero<Schema>(), {
+        initialProps: [],
+        wrapper,
+      });
+
+      expect(result()).toBe(createdZeros[0]);
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+
+      setQueryHeaders({'x-query': 'b'});
+      setMutateHeaders({'x-mutate': 'a'});
+
+      expect(result()).toBe(createdZeros[0]);
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+      expect(createdZeros[0].close).not.toHaveBeenCalled();
+    });
+
+    test('recreates zero when context value changes', () => {
+      const createdZeros: MockZero[] = [];
+      ZeroMock.mockImplementation(function () {
+        const zero = createMockZero(`client-${createdZeros.length + 1}`);
+        createdZeros.push(zero);
+        return zero;
+      });
+
+      const schema = {} as Schema;
+      const [context, setContext] = createSignal({sub: 'u', role: 'crew'});
+
+      const wrapper = (props: {children: JSX.Element}) => (
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={schema}
+          context={context()}
+          userID="u"
+        >
+          {props.children}
+        </ZeroProvider>
+      );
+
+      const {result} = renderHook(() => useZero<Schema>(), {
+        initialProps: [],
+        wrapper,
+      });
+
+      expect(result()).toBe(createdZeros[0]);
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+
+      setContext({sub: 'u', role: 'admin'});
+
+      expect(result()).toBe(createdZeros[1]);
+      expect(ZeroMock).toHaveBeenCalledTimes(2);
+      expect(createdZeros[0].close).toHaveBeenCalledTimes(1);
+      expect(createdZeros[1].close).not.toHaveBeenCalled();
+    });
+
     test('calls init callback with constructed zero', () => {
       const zero = createMockZero();
       ZeroMock.mockImplementation(function () {

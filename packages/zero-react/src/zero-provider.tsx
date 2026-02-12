@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import {isJSONEqual} from '../../shared/src/json.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
 import {
   Zero,
@@ -62,43 +63,72 @@ export type ZeroProviderProps<
   children: ReactNode;
 };
 
-const NO_AUTH_SET = Symbol();
+function useStableJSONProp<T>(value: T): T {
+  const stableRef = useRef(value);
+  if (!isJSONEqual(stableRef.current, value)) {
+    stableRef.current = value;
+  }
+  return stableRef.current;
+}
 
 export function ZeroProvider<
   S extends Schema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
   Context = DefaultContext,
->({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
-  const isExternalZero = 'zero' in props;
+>({children, init, ...initialProps}: ZeroProviderProps<S, MD, Context>) {
+  const isZeroInProps = 'zero' in initialProps;
+  const hasAuthProp = 'auth' in initialProps;
+
+  const {auth, context, mutateHeaders, queryHeaders, ...otherProps} = useMemo(
+    () =>
+      isZeroInProps
+        ? ({} as Partial<ZeroOptions<S, MD, Context>>)
+        : initialProps,
+    [isZeroInProps, initialProps],
+  );
+
+  const stableAuth = useStableJSONProp({hasAuthProp, auth});
+  const stableContext = useStableJSONProp(context);
+  const stableMutateHeaders = useStableJSONProp(mutateHeaders);
+  const stableQueryHeaders = useStableJSONProp(queryHeaders);
+  const externalZero = isZeroInProps ? initialProps.zero : undefined;
 
   const [zero, setZero] = useState<Zero<S, MD, Context> | undefined>(
-    isExternalZero ? props.zero : undefined,
+    externalZero,
   );
 
-  const auth = 'auth' in props ? props.auth : NO_AUTH_SET;
-  const prevAuthRef = useRef<typeof auth>(auth);
+  const prevAuthRef = useRef(stableAuth);
 
-  const keysWithoutAuth = useMemo(
-    () =>
-      Object.entries(props)
-        .filter(([key]) => key !== 'auth')
-        .sort(([a], [b]) => stringCompare(a, b))
-        .map(([_, value]) => value),
-    [props],
-  );
+  const zeroDepsWithoutAuth = useMemo(() => {
+    const depsByKey: Record<string, unknown> = {
+      ...otherProps,
+      context: stableContext,
+      mutateHeaders: stableMutateHeaders,
+      queryHeaders: stableQueryHeaders,
+    };
+
+    const deps: unknown[] = [];
+    for (const key of Object.keys(depsByKey).sort(stringCompare)) {
+      deps.push(depsByKey[key]);
+    }
+    return deps;
+  }, [otherProps, stableContext, stableMutateHeaders, stableQueryHeaders]);
 
   // If Zero is not passed in, we construct it, but only client-side.
   // Zero doesn't really work SSR today so this is usually the right thing.
   // When we support Zero SSR this will either become a breaking change or
   // more likely server support will be opt-in with a new prop on this
   // component.
+  // TODO(0xcadams): this client-side only conditional render results
+  // in all children being conditional on zero provider,
+  // which is not what most people want.
   useEffect(() => {
-    if (isExternalZero) {
-      setZero(props.zero);
+    if (isZeroInProps) {
+      setZero(initialProps.zero);
       return;
     }
 
-    const z = new Zero(props);
+    const z = new Zero(initialProps);
     init?.(z);
     setZero(z);
 
@@ -106,22 +136,21 @@ export function ZeroProvider<
       void z.close();
       setZero(undefined);
     };
-    // we intentionally don't include auth in the dependency array
-    // to avoid closing zero when auth changes
-  }, [init, ...keysWithoutAuth]);
+    // use stable props here to avoid unnecessary zero reconnects
+  }, [init, isZeroInProps, externalZero, ...zeroDepsWithoutAuth]);
 
   useEffect(() => {
-    if (!zero || isExternalZero) return;
+    if (!zero || isZeroInProps) return;
 
-    const authChanged = auth !== prevAuthRef.current;
+    const authChanged = stableAuth !== prevAuthRef.current;
 
     if (authChanged) {
-      prevAuthRef.current = auth;
+      prevAuthRef.current = stableAuth;
       void zero.connection.connect({
-        auth: auth === NO_AUTH_SET ? undefined : auth,
+        auth: stableAuth.hasAuthProp ? stableAuth.auth : undefined,
       });
     }
-  }, [auth, zero]);
+  }, [stableAuth, zero]);
 
   return (
     zero && <ZeroContext.Provider value={zero}>{children}</ZeroContext.Provider>
