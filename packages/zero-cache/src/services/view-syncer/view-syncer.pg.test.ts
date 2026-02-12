@@ -2622,6 +2622,34 @@ describe('view-syncer/service', () => {
       );
     });
 
+    test('transform 401 clears auth session to prevent DoS', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValueOnce({
+          kind: ErrorKind.TransformFailed,
+          message: 'Fetch from API server returned non-OK status 401',
+          origin: ErrorOrigin.ZeroCache,
+          queryIDs: ['custom-1'],
+          reason: ErrorReason.HTTP,
+          status: 401,
+          bodyPreview: '{ "error": "Unauthorized" }',
+        });
+
+      await authSession.update('user-bad', 'token-bad');
+
+      const badContext = {...SYNC_CONTEXT, userID: 'user-bad'};
+      const badClient = connect(badContext, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(badClient);
+      stateChanges.push({state: 'version-ready'});
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledTimes(1));
+
+      // 401 during transform clears session so the client group is not stuck.
+      expect(authSession.auth).toBeUndefined();
+    });
+
     // test cases where custom query transforms fail
     test('http transform call fails', async () => {
       mockFetchImpl(() =>
