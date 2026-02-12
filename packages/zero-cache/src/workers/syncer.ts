@@ -1,12 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {type JWTPayload} from 'jose';
 import {pid} from 'node:process';
 import type {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {type ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
 import {
@@ -90,6 +88,7 @@ export class Syncer implements SingletonService {
       id: string,
       sub: Subscription<ReplicaState>,
       drainCoordinator: DrainCoordinator,
+      validateLegacyJWT: ValidateLegacyJWT | undefined,
     ) => ViewSyncer & ActivityBasedService,
     mutagenFactory: (id: string) => Mutagen & Service,
     pusherFactory: ((id: string) => Pusher & Service) | undefined,
@@ -104,7 +103,13 @@ export class Syncer implements SingletonService {
     this.#lc = lc;
     this.#viewSyncers = new ServiceRunner(
       lc,
-      id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
+      id =>
+        viewSyncerFactory(
+          id,
+          notifier.subscribe(),
+          this.#drainCoordinator,
+          this.#validateLegacyJWT(),
+        ),
       v => v.keepalive(),
     );
     this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
@@ -132,12 +137,10 @@ export class Syncer implements SingletonService {
     );
     recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
+    const hasProvidedAuth = auth !== undefined && auth !== '';
 
-    // Verify JWT BEFORE touching existing connections - prevents unauthenticated
-    // attackers from force-disconnecting legitimate users via DoS
-    let decodedToken: JWTPayload | undefined;
-    if (auth) {
-      const tokenOptions = tokenConfigOptions(this.#config.auth);
+    if (hasProvidedAuth) {
+      const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
 
       const hasPushOrMutate =
         this.#config?.push?.url !== undefined ||
@@ -156,38 +159,17 @@ export class Syncer implements SingletonService {
             '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
         );
       }
+    }
 
-      if (tokenOptions.length > 0) {
-        try {
-          decodedToken = await verifyToken(this.#config.auth, auth, {
-            subject: userID,
-            ...(this.#config.auth.issuer && {
-              issuer: this.#config.auth.issuer,
-            }),
-            ...(this.#config.auth.audience && {
-              audience: this.#config.auth.audience,
-            }),
-          });
-          this.#lc.debug?.(
-            `Received auth token [redacted...${auth.slice(-8)}] for clientID ${clientID}`,
-          );
-        } catch (e) {
-          sendError(
-            this.#lc,
-            ws,
-            {
-              kind: ErrorKind.AuthInvalidated,
-              message: `Failed to decode auth token: ${String(e)}`,
-              origin: ErrorOrigin.ZeroCache,
-            },
-            e,
-          );
-          ws.close(3000, 'Failed to decode JWT');
-          return;
-        }
-      }
-    } else {
-      this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
+    const viewSyncer = this.#viewSyncers.getService(clientGroupID);
+
+    // Verify JWT BEFORE touching existing connections - prevents unauthenticated
+    // attackers from force-disconnecting legitimate users via DoS
+    const authResult = await viewSyncer.initAuthSession(userID, auth);
+    if (!authResult.ok) {
+      sendError(this.#lc, ws, authResult.error);
+      ws.close(3000, authResult.error.message);
+      return;
     }
 
     // Only check for and close existing connections AFTER auth is validated
@@ -214,13 +196,7 @@ export class Syncer implements SingletonService {
         new SyncerWsMessageHandler(
           this.#lc,
           params,
-          auth
-            ? {
-                raw: auth,
-                decoded: decodedToken ?? {},
-              }
-            : undefined,
-          this.#viewSyncers.getService(clientGroupID),
+          viewSyncer,
           mutagen,
           pusher,
         ),
@@ -291,5 +267,28 @@ export class Syncer implements SingletonService {
     this.#wss.close();
     this.#stopped.resolve();
     return promiseVoid;
+  }
+
+  /** @deprecated used in JWT validation */
+  #validateLegacyJWT(): ValidateLegacyJWT | undefined {
+    const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
+    if (tokenOptions.length !== 1) {
+      return undefined;
+    }
+
+    return async (token, {userID}) => {
+      const decoded = await verifyToken(this.#config.auth, token, {
+        subject: userID,
+        ...(this.#config.auth?.issuer && {issuer: this.#config.auth.issuer}),
+        ...(this.#config.auth?.audience && {
+          audience: this.#config.auth.audience,
+        }),
+      });
+      return {
+        type: 'jwt',
+        raw: token,
+        decoded,
+      };
+    };
   }
 }

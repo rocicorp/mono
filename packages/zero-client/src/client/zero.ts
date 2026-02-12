@@ -1857,8 +1857,6 @@ export class Zero<
           mutations: [zeroM],
           pushVersion: req.pushVersion,
           requestID,
-          // include fresh auth with each push to avoid stale token issues
-          auth: fromReplicacheAuthToken(this.#rep.auth),
         },
       ];
       send(socket, msg);
@@ -2235,6 +2233,10 @@ export class Zero<
    */
   #setAuth(auth: string | undefined | null): void {
     this.#rep.auth = toReplicacheAuthToken(auth);
+
+    if (auth) {
+      this.#send(['updateAuth', {auth}]);
+    }
   }
 
   /**

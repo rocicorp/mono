@@ -11,4 +11,5 @@ export * from './push.ts';
 export * from './queries-patch.ts';
 export * from './row-patch.ts';
 export * from './up.ts';
+export * from './update-auth.ts';
 export * from './version.ts';
