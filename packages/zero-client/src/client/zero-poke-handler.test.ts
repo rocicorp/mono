@@ -17,7 +17,9 @@ import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {PokeHandler, mergePokes} from './zero-poke-handler.ts';
 
-let setTimeoutStub: MockInstance<(callback: () => void, ms: number) => number>;
+let setTimeoutStub: MockInstance<
+  (callback: () => Promise<void>, ms: number) => number
+>;
 
 const ackMutationResponses = () => {};
 const onFatalError = () => {};
@@ -45,10 +47,9 @@ describe('poke handler', () => {
   beforeEach(() => {
     setTimeoutStub = vi
       .spyOn(globalThis, 'setTimeout')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation((() => 0) as any) as MockInstance<
-      (callback: () => void, ms: number) => number
-    >;
+      .mockImplementation(
+        (() => 0) as unknown as typeof setTimeout,
+      ) as MockInstance<(callback: () => Promise<void>, ms: number) => number>;
   });
 
   afterEach(() => {
@@ -118,7 +119,8 @@ describe('poke handler', () => {
     expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-    const timeoutCallback0 = setTimeoutStub.mock.calls[0][0] as () => void;
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
     await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
@@ -157,7 +159,8 @@ describe('poke handler', () => {
 
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
-    const timeoutCallback1 = setTimeoutStub.mock.calls[1][0] as () => void;
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
     await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
@@ -236,7 +239,8 @@ describe('poke handler', () => {
     expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-    const timeoutCallback0 = setTimeoutStub.mock.calls[0][0] as () => void;
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
     await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
@@ -271,7 +275,8 @@ describe('poke handler', () => {
 
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
-    const timeoutCallback1 = setTimeoutStub.mock.calls[1][0] as () => void;
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
     await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
@@ -374,7 +379,8 @@ describe('poke handler', () => {
     expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-    const timeoutCallback0 = setTimeoutStub.mock.calls[0][0] as () => void;
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
     await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
@@ -420,7 +426,8 @@ describe('poke handler', () => {
 
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
-    const timeoutCallback1 = setTimeoutStub.mock.calls[1][0] as () => void;
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
     await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
@@ -545,7 +552,8 @@ describe('poke handler', () => {
 
     pokeHandler.handlePokeEnd({pokeID: 'poke3', cookie: '3'});
 
-    const timeoutCallback0 = setTimeoutStub.mock.calls[0][0] as () => void;
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
     await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
@@ -599,7 +607,8 @@ describe('poke handler', () => {
 
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
-    const timeoutCallback1 = setTimeoutStub.mock.calls[1][0] as () => void;
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
     await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
@@ -664,7 +673,8 @@ describe('poke handler', () => {
     expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-    const timeoutCallback0 = setTimeoutStub.mock.calls[0][0] as () => void;
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
     await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
@@ -737,7 +747,8 @@ describe('poke handler', () => {
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
 
-    const timeoutCallback1 = setTimeoutStub.mock.calls[1][0] as () => void;
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
     await timeoutCallback1();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(2);
@@ -767,7 +778,8 @@ describe('poke handler', () => {
 
     expect(setTimeoutStub).toHaveBeenCalledTimes(3);
 
-    const timeoutCallback2 = setTimeoutStub.mock.calls[2][0] as () => void;
+    const timeoutCallback2 = setTimeoutStub.mock
+      .calls[2][0] as () => Promise<void>;
     await timeoutCallback2();
     expect(replicachePokeStub).toHaveBeenCalledTimes(2);
     expect(setTimeoutStub).toHaveBeenCalledTimes(3);
@@ -896,7 +908,8 @@ describe('poke handler', () => {
     replicachePokeStub.mockReturnValue(promise);
     expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
-    const timeoutCallback0 = setTimeoutStub.mock.calls[0][0] as () => void;
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
     const timeoutCallback0Result = timeoutCallback0();
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
@@ -931,7 +944,8 @@ describe('poke handler', () => {
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
 
-    const timeoutCallback1 = setTimeoutStub.mock.calls[1][0] as () => void;
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
     await timeoutCallback1();
     // poke 2 cleared so replicachePokeStub not called
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
@@ -1015,7 +1029,8 @@ describe('poke handler', () => {
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
-    const timeoutCallback0 = setTimeoutStub.mock.calls[0][0] as () => void;
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
     const timeoutCallback0Result = timeoutCallback0();
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
@@ -1049,7 +1064,8 @@ describe('poke handler', () => {
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
 
-    const timeoutCallback1 = setTimeoutStub.mock.calls[1][0] as () => void;
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
     await timeoutCallback1();
     // poke 3 cleared so replicachePokeStub not called
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -1117,7 +1133,8 @@ describe('poke handler', () => {
 
     pokeHandler.handleDisconnect();
 
-    const timeoutCallback0 = setTimeoutStub.mock.calls[0][0] as () => void;
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
     await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -1551,17 +1568,18 @@ describe('poke handler', () => {
 
 describe('mutation tracker interactions', () => {
   beforeEach(() => {
-    setTimeoutStub = vi
-      .spyOn(globalThis, 'setTimeout')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((callback: () => void) => {
-        // Invoke the callback immediately for these tests
-        // Use queueMicrotask to avoid infinite recursion
-        queueMicrotask(() => {
-          callback();
-        });
-        return 1;
-      }) as any) as MockInstance<(callback: () => void, ms: number) => number>;
+    setTimeoutStub = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: () => Promise<void>,
+    ) => {
+      // Invoke the callback immediately for these tests
+      // Use queueMicrotask to avoid infinite recursion
+      queueMicrotask(() => {
+        void callback();
+      });
+      return 1;
+    }) as unknown as typeof setTimeout) as MockInstance<
+      (callback: () => Promise<void>, ms: number) => number
+    >;
   });
 
   afterEach(() => {
