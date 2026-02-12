@@ -203,6 +203,7 @@ test('compare test framework to real framework', () => {
       const check = (c: Condition): boolean =>
         c.type === 'simple' ||
         c.type === 'correlatedSubquery' ||
+        c.type === 'scalarSubquery' ||
         c.conditions.every(child => child.type !== c.type && check(child));
       expect(check(actual)).toBe(true);
     }),

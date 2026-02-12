@@ -1,16 +1,32 @@
 import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import postgres from 'postgres';
+import {getHeapStatistics} from 'node:v8';
+import postgres, {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {type JSONValue} from '../../../../shared/src/bigint-json.ts';
+import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import {disableStatementTimeout, type PostgresDB} from '../../types/pg.ts';
+import {
+  disableStatementTimeout,
+  type PostgresDB,
+  type PostgresTransaction,
+} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
+import {
+  isDataChange,
+  isSchemaChange,
+  type BackfillID,
+  type BackfillRequest,
+  type Change,
+  type DataChange,
+  type Identifier,
+  type SchemaChange,
+  type TableMetadata,
+} from '../change-source/protocol/current.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
 import type {StatusMessage} from '../change-source/protocol/current/status.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
@@ -21,7 +37,9 @@ import * as ErrorType from './error-type-enum.ts';
 import {
   AutoResetSignal,
   markResetRequired,
+  type BackfillingColumn,
   type ReplicationState,
+  type TableMetadataRow,
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
 
@@ -31,7 +49,12 @@ type SubscriberAndMode = {
 };
 
 type QueueEntry =
-  | ['change', WatermarkedChange]
+  | [
+      'change',
+      watermark: string,
+      json: string,
+      orig: Exclude<Change, DataChange> | null, // null for DataChanges
+    ]
   | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
   | StatusMessage
@@ -87,8 +110,9 @@ export class Storer implements Service {
   readonly #onConsumed: (c: Commit | StatusMessage) => void;
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
-  readonly #backPressureThreshold: number;
+  readonly #backPressureThresholdBytes: number;
 
+  #approximateQueuedBytes = 0;
   #running = false;
 
   constructor(
@@ -101,7 +125,6 @@ export class Storer implements Service {
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
     onFatal: (err: Error) => void,
-    backPressureThreshold: number,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
@@ -112,7 +135,37 @@ export class Storer implements Service {
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
-    this.#backPressureThreshold = backPressureThreshold;
+
+    // Use 5% of the available heap (--max-old-space-size) as the buffer size
+    // for absorbing replication stream spikes. When the amount of queued data
+    // exceeds this threshold, back pressure is applied to the replication
+    // stream, delaying downstream sync as a result.
+    //
+    // The threshold was determined empirically with load testing. Higher
+    // thresholds like 10% have resulted in OOMs. Note also that the
+    // byte-counting logic in the queue is certainly an underestimate of
+    // actual memory usage (but importantly, proportionally correct), so
+    // the queue is actually using more than 5% of the heap.
+    //
+    // Resist the urge to "tune" this number; the buffer is useful for
+    // absorbing periodic spikes to avoid delaying downstream sync,
+    // but it does not meaningfully affect steady-state replication
+    // throughput; the latter is determined by other factors such as
+    // object serialization and PG throughput.
+    //
+    // In other words, the back pressure limit is not what constrains
+    // replication throughput; rather, it protects the system when the
+    // upstream throughput exceeds the downstream throughput.
+    const heapStats = getHeapStatistics();
+    this.#backPressureThresholdBytes =
+      (heapStats.heap_size_limit - heapStats.used_heap_size) * 0.05;
+
+    this.#lc.info?.(
+      `Using up to ${(this.#backPressureThresholdBytes / 1024 ** 2).toFixed(2)} MB of ` +
+        `--max-old-space-size (~${(heapStats.heap_size_limit / 1024 ** 2).toFixed(2)} MB) ` +
+        `to absorb upstream spikes`,
+      {heapStats},
+    );
   }
 
   // For readability in SQL statements.
@@ -134,7 +187,10 @@ export class Storer implements Service {
     this.#lc.info?.(`assumed ownership at ${addressWithProtocol}`);
   }
 
-  async getLastWatermarkToStartStream(): Promise<string> {
+  async getStartStreamInitializationParameters(): Promise<{
+    lastWatermark: string;
+    backfillRequests: BackfillRequest[];
+  }> {
     // Before starting or restarting a stream from the change source,
     // wait for all queued changes to be processed so that we pick up
     // from the right spot.
@@ -142,9 +198,27 @@ export class Storer implements Service {
     this.#queue.enqueue(['ready', resolve]);
     await ready;
 
-    const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
-      SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
-    return lastWatermark;
+    const [[{lastWatermark}], backfillRequests] = await this.#db.begin(
+      Mode.READONLY,
+      sql => [
+        sql<{lastWatermark: string}[]>`
+        SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`,
+
+        // Formats a BackfillRequest using json_object_agg() to construct the
+        // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
+        // to make it optional and possibly `null`.
+        sql<BackfillRequest[]>`
+        SELECT b."schema", b."table" as name, t."metadata", 
+               json_object_agg(b."column", b."backfill") as columns
+          FROM ${this.#cdc('backfilling')} as b
+          LEFT JOIN ${this.#cdc('tableMetadata')} as t
+          ON (b."schema" = t."schema" AND b."table" = t."table")
+          GROUP BY b."schema", b."table", t."metadata"
+        `,
+      ],
+    );
+
+    return {lastWatermark, backfillRequests};
   }
 
   async getMinWatermarkForCatchup(): Promise<string | null> {
@@ -181,7 +255,23 @@ export class Storer implements Service {
   }
 
   store(entry: WatermarkedChange) {
-    this.#queue.enqueue(['change', entry]);
+    const [watermark, [_tag, change]] = entry;
+    // Eagerly stringify the JSON object so that the memory usage can be
+    // more accurately measured (i.e. without an extra object traversal and
+    // ad hoc memory counting heuristics).
+    //
+    // This essentially moves the stringify() computation out of the pg client,
+    // which is instead configured to pass `string` objects directly as JSON
+    // strings for JSON-valued columns (see TypeOptions.sendStringAsJson).
+    const json = BigIntJSON.stringify(change);
+    this.#approximateQueuedBytes += json.length;
+
+    this.#queue.enqueue([
+      'change',
+      watermark,
+      json,
+      isDataChange(change) ? null : change, // drop DataChanges to save memory
+    ]);
   }
 
   abort() {
@@ -204,12 +294,12 @@ export class Storer implements Service {
     }
     if (
       this.#readyForMore === null &&
-      this.#queue.size() > this.#backPressureThreshold
+      this.#approximateQueuedBytes > this.#backPressureThresholdBytes
     ) {
       this.#lc.warn?.(
-        `applying back pressure with ${this.#queue.size()} queued changes (threshold: ${this.#backPressureThreshold})\n` +
+        `applying back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)\n` +
           `\n` +
-          `To inspect changeLog backlog in your CVR database:\n` +
+          `To inspect changeLog backlog in your change DB:\n` +
           `  SELECT\n` +
           `    (change->'relation'->>'schema') || '.' || (change->'relation'->>'name') AS table_name,\n` +
           `    change->>'tag' AS operation,\n` +
@@ -227,11 +317,11 @@ export class Storer implements Service {
   #maybeReleaseBackPressure() {
     if (
       this.#readyForMore !== null &&
-      // Wait for at least 10% of the threshold to free up.
-      this.#queue.size() < this.#backPressureThreshold * 0.9
+      // Wait for at least 20% of the threshold to free up.
+      this.#approximateQueuedBytes < this.#backPressureThresholdBytes * 0.8
     ) {
       this.#lc.info?.(
-        `releasing back pressure with ${this.#queue.size()} queued changes`,
+        `releasing back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)`,
       );
       this.#readyForMore.resolve();
       this.#readyForMore = null;
@@ -254,8 +344,6 @@ export class Storer implements Service {
 
     const catchupQueue: SubscriberAndMode[] = [];
     while ((msg = await this.#queue.dequeue()) !== 'stop') {
-      this.#maybeReleaseBackPressure();
-
       const [msgType] = msg;
       switch (msgType) {
         case 'ready': {
@@ -285,8 +373,10 @@ export class Storer implements Service {
         }
       }
       // msgType === 'change'
-      const [watermark, downstream] = msg[1];
-      const [tag, change] = downstream;
+      const [_, watermark, json, change] = msg;
+      const tag = change?.tag;
+      this.#approximateQueuedBytes -= json.length;
+
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
         const {promise, resolve, reject} = resolver<ReplicationState>();
@@ -311,7 +401,7 @@ export class Storer implements Service {
           return [];
         });
       } else {
-        assert(tx, `received ${tag} outside of transaction`);
+        assert(tx, () => `received change outside of transaction: ${json}`);
         tx.pos++;
       }
 
@@ -319,20 +409,23 @@ export class Storer implements Service {
         watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
         precommit: tag === 'commit' ? tx.preCommitWatermark : null,
         pos: tx.pos,
-        change: change as unknown as JSONValue,
+        change: json,
       };
 
-      const processed = tx.pool.process(tx => [
-        tx`
-        INSERT INTO ${this.#cdc('changeLog')} ${tx(entry)}`,
+      const processed = tx.pool.process(sql => [
+        sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+        ...(change !== null && isSchemaChange(change)
+          ? this.#trackBackfillMetadata(sql, change)
+          : []),
       ]);
 
-      if (tag === 'data' && tx.pos % 10_000 === 0) {
+      if (tx.pos % 100 === 0) {
         // Backpressure is exerted on commit when awaiting tx.pool.done().
         // However, backpressure checks need to be regularly done for
         // very large transactions in order to avoid memory blowup.
         await processed;
       }
+      this.#maybeReleaseBackPressure();
 
       if (tag === 'commit') {
         const {owner} = await tx.startingReplicationState;
@@ -367,7 +460,7 @@ export class Storer implements Service {
         tx = null;
 
         // ACK the LSN to the upstream Postgres.
-        this.#onConsumed(downstream);
+        this.#onConsumed(['commit', change, {watermark}]);
 
         // Before beginning the next transaction, open a READONLY snapshot to
         // concurrently catchup any queued subscribers.
@@ -489,6 +582,142 @@ export class Storer implements Service {
       }
       sub.fail(err);
     }
+  }
+
+  /**
+   * Returns the db statements necessary to track backfill and table metadata
+   * presented in the `change`, if any.
+   */
+  #trackBackfillMetadata(sql: PostgresTransaction, change: SchemaChange) {
+    const stmts: PendingQuery<Row[]>[] = [];
+
+    switch (change.tag) {
+      case 'update-table-metadata': {
+        const {table, new: metadata} = change;
+        stmts.push(this.#upsertTableMetadataStmt(sql, table, metadata));
+        break;
+      }
+
+      case 'create-table': {
+        const {spec, metadata, backfill} = change;
+        if (metadata) {
+          stmts.push(this.#upsertTableMetadataStmt(sql, spec, metadata));
+        }
+        if (backfill) {
+          Object.entries(backfill).forEach(([col, backfill]) => {
+            stmts.push(
+              this.#upsertColumnBackfillStmt(sql, spec, col, backfill),
+            );
+          });
+        }
+        break;
+      }
+
+      case 'rename-table': {
+        const {old} = change;
+        const row = {schema: change.new.schema, table: change.new.name};
+        stmts.push(
+          sql`UPDATE ${this.#cdc('tableMetadata')} SET ${sql(row)}
+                WHERE "schema" = ${old.schema} AND "table" = ${old.name}`,
+          sql`UPDATE ${this.#cdc('backfilling')} SET ${sql(row)}
+                WHERE "schema" = ${old.schema} AND "table" = ${old.name}`,
+        );
+        break;
+      }
+
+      case 'drop-table': {
+        const {
+          id: {schema, name},
+        } = change;
+        stmts.push(
+          sql`DELETE FROM ${this.#cdc('tableMetadata')}
+                WHERE "schema" = ${schema} AND "table" = ${name}`,
+          sql`DELETE FROM ${this.#cdc('backfilling')}
+                WHERE "schema" = ${schema} AND "table" = ${name}`,
+        );
+        break;
+      }
+
+      case 'add-column': {
+        const {table, tableMetadata, column, backfill} = change;
+        if (tableMetadata) {
+          stmts.push(this.#upsertTableMetadataStmt(sql, table, tableMetadata));
+        }
+        if (backfill) {
+          stmts.push(
+            this.#upsertColumnBackfillStmt(sql, table, column.name, backfill),
+          );
+        }
+        break;
+      }
+
+      case 'update-column': {
+        const {
+          table: {schema, name: table},
+          old: {name: oldName},
+          new: {name: newName},
+        } = change;
+        if (oldName !== newName) {
+          stmts.push(
+            sql`UPDATE ${this.#cdc('backfilling')} SET "column" = ${newName}
+                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" = ${oldName}`,
+          );
+        }
+        break;
+      }
+
+      case 'drop-column': {
+        const {
+          table: {schema, name},
+          column,
+        } = change;
+        stmts.push(
+          sql`DELETE FROM ${this.#cdc('backfilling')}
+                WHERE "schema" = ${schema} AND "table" = ${name} AND "column" = ${column}`,
+        );
+        break;
+      }
+
+      case 'backfill-completed': {
+        const {
+          relation: {schema, name: table, rowKey},
+          columns,
+        } = change;
+        const cols = [...rowKey.columns, columns];
+        stmts.push(
+          sql`DELETE FROM ${this.#cdc('backfilling')}
+                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" IN ${sql(cols)}`,
+        );
+      }
+    }
+    return stmts;
+  }
+
+  #upsertTableMetadataStmt(
+    sql: PostgresTransaction,
+    {schema, name: table}: Identifier,
+    metadata: TableMetadata,
+  ) {
+    const row: TableMetadataRow = {schema, table, metadata};
+    return sql`
+        INSERT INTO ${this.#cdc('tableMetadata')} ${sql(row)}
+          ON CONFLICT ("schema", "table") 
+          DO UPDATE SET ${sql(row)};
+    `;
+  }
+
+  #upsertColumnBackfillStmt(
+    sql: PostgresTransaction,
+    {schema, name: table}: Identifier,
+    column: string,
+    backfill: BackfillID,
+  ) {
+    const row: BackfillingColumn = {schema, table, column, backfill};
+    return sql`
+        INSERT INTO ${this.#cdc('backfilling')} ${sql(row)}
+          ON CONFLICT ("schema", "table", "column") 
+          DO UPDATE SET ${sql(row)};
+    `;
   }
 
   stop() {

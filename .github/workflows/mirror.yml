@@ -7,7 +7,7 @@ on:
 jobs:
   mirror_job:
     runs-on: ubuntu-latest
-    name: Mirror main branch to sandbox and gigabugs branch
+    name: Mirror main branch to sandbox and terabugs branch
     steps:
       - name: Mirror main to sandbox
         id: mirror-sandbox
@@ -16,10 +16,10 @@ jobs:
           github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           source: 'main'
           dest: 'sandbox'
-      - name: Mirror main to gigabugs
-        id: mirror-gigabugs
+      - name: Mirror main to terabugs
+        id: mirror-terabugs
         uses: google/mirror-branch-action@v2.0
         with:
           github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
           source: 'main'
-          dest: 'gigabugs'
+          dest: 'terabugs'

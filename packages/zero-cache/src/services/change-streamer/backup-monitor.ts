@@ -94,9 +94,7 @@ export class BackupMonitor implements Service {
     return this.#state.stopped();
   }
 
-  async startSnapshotReservation(
-    taskID: string,
-  ): Promise<Subscription<SnapshotMessage>> {
+  startSnapshotReservation(taskID: string): Subscription<SnapshotMessage> {
     this.#lc.info?.(`pausing change-log cleanup while ${taskID} snapshots`);
     // In the case of retries, only track the last reservation.
     this.#reservations.get(taskID)?.sub.cancel();
@@ -108,11 +106,20 @@ export class BackupMonitor implements Service {
       cleanup: () => this.endReservation(taskID, false),
     });
     this.#reservations.set(taskID, {start: new Date(), sub});
-    const changeLogState = await this.#changeStreamer.getChangeLogState();
-    sub.push([
-      'status',
-      {tag: 'status', backupURL: this.#backupURL, ...changeLogState},
-    ]);
+    // Note: the Subscription must be returned immediately so that the
+    //       websocket can begin sending liveness pings.
+    void this.#changeStreamer
+      .getChangeLogState()
+      .then(changeLogState => {
+        sub.push([
+          'status',
+          {tag: 'status', backupURL: this.#backupURL, ...changeLogState},
+        ]);
+      })
+      .catch(e => {
+        this.#lc.warn?.(`failing snapshot reservation`, e);
+        sub.fail(e);
+      });
     return sub;
   }
 

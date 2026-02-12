@@ -24,7 +24,7 @@ import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
-import {cvrSchema, type ShardID, upstreamSchema} from '../../types/shards.ts';
+import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
@@ -130,7 +130,6 @@ export class CVRStore {
   readonly #id: string;
   readonly #failService: (e: unknown) => void;
   readonly #db: PostgresDB;
-  readonly #upstreamDb: PostgresDB | undefined;
   readonly #writes: Set<{
     stats: Partial<CVRFlushStats>;
     write: (
@@ -138,9 +137,6 @@ export class CVRStore {
       lastConnectTime: number,
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
-  readonly #upstreamWrites: ((
-    tx: PostgresTransaction,
-  ) => PendingQuery<MaybeRow[]>)[] = [];
   readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
   );
@@ -148,17 +144,11 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
-  readonly #upstreamSchemaName: string;
   #rowCount: number = 0;
 
   constructor(
     lc: LogContext,
     cvrDb: PostgresDB,
-    // Optionally undefined to deal with custom upstreams.
-    // This is temporary until we have a more principled protocol to deal with
-    // custom upstreams and clearing their custom mutator responses.
-    // An implementor could simply clear them after N minutes for the time being.
-    upstreamDb: PostgresDB | undefined,
     shard: ShardID,
     taskID: string,
     cvrID: string,
@@ -170,7 +160,6 @@ export class CVRStore {
   ) {
     this.#failService = failService;
     this.#db = cvrDb;
-    this.#upstreamDb = upstreamDb;
     this.#schema = cvrSchema(shard);
     this.#taskID = taskID;
     this.#id = cvrID;
@@ -185,7 +174,6 @@ export class CVRStore {
     );
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
-    this.#upstreamSchemaName = upstreamSchema(shard);
   }
 
   #cvr(table: string) {
@@ -607,16 +595,10 @@ export class CVRStore {
     this.#writes.add({
       stats: {clients: 1},
       write: sql =>
-        sql`DELETE FROM ${this.#cvr('clients')} 
-            WHERE "clientGroupID" = ${this.#id} 
+        sql`DELETE FROM ${this.#cvr('clients')}
+            WHERE "clientGroupID" = ${this.#id}
               AND "clientID" = ${clientID}`,
     });
-    this.#upstreamWrites.push(
-      sql =>
-        sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" 
-            WHERE "clientGroupID" = ${this.#id} 
-              AND "clientID" = ${clientID}`,
-    );
   }
 
   putDesiredQuery(
@@ -901,14 +883,6 @@ export class CVRStore {
     );
     recordRowsSynced(this.#rowCount);
 
-    if (this.#upstreamDb) {
-      const start = Date.now();
-      lc.debug?.('flushing upstream writes');
-      await this.#upstreamDb.begin(Mode.READ_COMMITTED, async tx => {
-        await Promise.all(this.#upstreamWrites.map(write => write(tx)));
-      });
-      lc.debug?.(`flushed upstream writes in ${Date.now() - start} ms`);
-    }
     return stats;
   }
 
@@ -946,7 +920,6 @@ export class CVRStore {
       throw e;
     } finally {
       this.#writes.clear();
-      this.#upstreamWrites.length = 0;
       this.#pendingRowRecordUpdates.clear();
       this.#forceUpdates.clear();
     }
@@ -1029,11 +1002,14 @@ export async function checkVersion(
 
 export class ClientNotFoundError extends ProtocolErrorWithLevel {
   constructor(message: string) {
-    super({
-      kind: ErrorKind.ClientNotFound,
-      message,
-      origin: ErrorOrigin.ZeroCache,
-    });
+    super(
+      {
+        kind: ErrorKind.ClientNotFound,
+        message,
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'warn',
+    );
   }
 }
 

@@ -30,7 +30,12 @@ if (!dbPath) {
 
   // Get table specs using computeZqlSpecs
   const tableSpecs = new Map<string, LiteAndZqlSpec>();
-  computeZqlSpecs(createSilentLogContext(), db, tableSpecs);
+  computeZqlSpecs(
+    createSilentLogContext(),
+    db,
+    {includeBackfillingColumns: false},
+    tableSpecs,
+  );
 
   // Create SQLite cost model
   // const costModel = createSQLiteCostModel(db, tableSpecs);

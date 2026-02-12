@@ -7,6 +7,7 @@ import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
+import {AuthSessionImpl, type ValidateLegacyJWT} from '../auth/auth.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
@@ -107,6 +108,7 @@ export default function runWorker(
     id: string,
     sub: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
+    validateLegacyJWT: ValidateLegacyJWT | undefined,
   ) => {
     const logger = lc
       .withContext('component', 'view-syncer')
@@ -129,6 +131,13 @@ export default function runWorker(
       2,
     );
     const normalYieldThresholdMs = Math.max(config.yieldThresholdMs, 2);
+
+    const authSession = new AuthSessionImpl(
+      logger.withContext('component', 'auth-session'),
+      id,
+      validateLegacyJWT,
+    );
+
     return new ViewSyncerService(
       config,
       logger,
@@ -136,7 +145,6 @@ export default function runWorker(
       config.taskID,
       id,
       cvrDB,
-      config.upstream.type === 'pg' ? upstreamDB : undefined,
       new PipelineDriver(
         logger,
         config.log,
@@ -150,6 +158,7 @@ export default function runWorker(
             ? priorityOpRunningYieldThresholdMs
             : normalYieldThresholdMs,
         config.enableQueryPlanner,
+        config,
       ),
       sub,
       drainCoordinator,
@@ -157,6 +166,7 @@ export default function runWorker(
       inspectorDelegate,
       customQueryTransformer,
       runPriorityOp,
+      authSession,
     );
   };
 

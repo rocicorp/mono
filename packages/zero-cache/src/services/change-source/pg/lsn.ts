@@ -1,9 +1,8 @@
 import {assert} from '../../../../../shared/src/asserts.ts';
 import {
-  versionFromLexi,
-  versionToLexi,
-  type LexiVersion,
-} from '../../../types/lexi-version.ts';
+  majorVersionToString,
+  stateVersionFromString,
+} from '../../../types/state-version.ts';
 import type {Change} from '../protocol/current/data.ts';
 
 /**
@@ -29,13 +28,14 @@ export function toBigInt(lsn: LSN): bigint {
   return val;
 }
 
-export function toLexiVersion(lsn: LSN): LexiVersion {
-  return versionToLexi(toBigInt(lsn));
+export function toStateVersionString(lsn: LSN): string {
+  return majorVersionToString(toBigInt(lsn));
 }
 
-export function fromLexiVersion(lexi: LexiVersion): LSN {
-  const val = versionFromLexi(lexi);
-  return fromBigInt(val);
+/** The LSN is tracked by the `major` component of the StateVersion. */
+export function fromStateVersionString(ver: string): LSN {
+  const {major} = stateVersionFromString(ver);
+  return fromBigInt(major);
 }
 
 export function fromBigInt(val: bigint): LSN {

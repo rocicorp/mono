@@ -17,82 +17,24 @@ test('getDatabases with no existing record in db', async () => {
 });
 
 test('putDatabase with no existing record in db', async () => {
-  vi.setSystemTime(1);
-
   const store = new IDBDatabasesStore(_ => new TestMemStore());
-  const testDB = {
+  const testDB: IndexedDBDatabase = {
     name: 'testName',
     replicacheName: 'testReplicacheName',
     replicacheFormatVersion: 1,
     schemaVersion: 'testSchemaVersion',
   };
   expect(await store.putDatabase(testDB)).toEqual({
-    testName: withLastOpenedTimestampMS(testDB, 1),
+    testName: testDB,
   });
   expect(await store.getDatabases()).toEqual({
-    testName: withLastOpenedTimestampMS(testDB, 1),
+    testName: testDB,
   });
 });
-
-test('putDatabase updates lastOpenedTimestampMS', async () => {
-  vi.setSystemTime(1);
-
-  const store = new IDBDatabasesStore(_ => new TestMemStore());
-  const testDB = {
-    name: 'testName',
-    replicacheName: 'testReplicacheName',
-    replicacheFormatVersion: 1,
-    schemaVersion: 'testSchemaVersion',
-  };
-  expect(await store.putDatabase(testDB)).toEqual({
-    testName: withLastOpenedTimestampMS(testDB, 1),
-  });
-  expect(await store.getDatabases()).toEqual({
-    testName: withLastOpenedTimestampMS(testDB, 1),
-  });
-
-  vi.setSystemTime(2);
-  expect(await store.putDatabase(testDB)).toEqual({
-    testName: withLastOpenedTimestampMS(testDB, 2),
-  });
-  expect(await store.getDatabases()).toEqual({
-    testName: withLastOpenedTimestampMS(testDB, 2),
-  });
-});
-
-test('putDatabase ignores passed in lastOpenedTimestampMS', async () => {
-  vi.setSystemTime(2);
-
-  const store = new IDBDatabasesStore(_ => new TestMemStore());
-  const testDB = {
-    name: 'testName',
-    replicacheName: 'testReplicacheName',
-    replicacheFormatVersion: 1,
-    schemaVersion: 'testSchemaVersion',
-    lastOpenedTimestampMS: 1,
-  };
-  expect(await store.putDatabase(testDB)).toEqual({
-    testName: withLastOpenedTimestampMS(testDB, 2),
-  });
-  expect(await store.getDatabases()).toEqual({
-    testName: withLastOpenedTimestampMS(testDB, 2),
-  });
-});
-
-function withLastOpenedTimestampMS(
-  db: IndexedDBDatabase,
-  lastOpenedTimestampMS: number,
-): IndexedDBDatabase {
-  return {
-    ...db,
-    lastOpenedTimestampMS,
-  };
-}
 
 test('putDatabase sequence', async () => {
-  vi.setSystemTime(1);
   const store = new IDBDatabasesStore(_ => new TestMemStore());
-  const testDB1 = {
+  const testDB1: IndexedDBDatabase = {
     name: 'testName1',
     replicacheName: 'testReplicacheName1',
     replicacheFormatVersion: 1,
@@ -100,28 +42,26 @@ test('putDatabase sequence', async () => {
   };
 
   expect(await store.putDatabase(testDB1)).toEqual({
-    testName1: withLastOpenedTimestampMS(testDB1, 1),
+    testName1: testDB1,
   });
   expect(await store.getDatabases()).toEqual({
-    testName1: withLastOpenedTimestampMS(testDB1, 1),
+    testName1: testDB1,
   });
 
-  const testDB2 = {
+  const testDB2: IndexedDBDatabase = {
     name: 'testName2',
     replicacheName: 'testReplicacheName2',
     replicacheFormatVersion: 2,
     schemaVersion: 'testSchemaVersion2',
   };
 
-  vi.setSystemTime(2);
-
   expect(await store.putDatabase(testDB2)).toEqual({
-    testName1: withLastOpenedTimestampMS(testDB1, 1),
-    testName2: withLastOpenedTimestampMS(testDB2, 2),
+    testName1: testDB1,
+    testName2: testDB2,
   });
   expect(await store.getDatabases()).toEqual({
-    testName1: withLastOpenedTimestampMS(testDB1, 1),
-    testName2: withLastOpenedTimestampMS(testDB2, 2),
+    testName1: testDB1,
+    testName2: testDB2,
   });
 });
 
@@ -134,9 +74,8 @@ test('close closes kv store', async () => {
 });
 
 test('clear', async () => {
-  vi.setSystemTime(1);
   const store = new IDBDatabasesStore(_ => new TestMemStore());
-  const testDB1 = {
+  const testDB1: IndexedDBDatabase = {
     name: 'testName1',
     replicacheName: 'testReplicacheName1',
     replicacheFormatVersion: 1,
@@ -144,30 +83,28 @@ test('clear', async () => {
   };
 
   expect(await store.putDatabase(testDB1)).toEqual({
-    testName1: withLastOpenedTimestampMS(testDB1, Date.now()),
+    testName1: testDB1,
   });
   expect(await store.getDatabases()).toEqual({
-    testName1: withLastOpenedTimestampMS(testDB1, Date.now()),
+    testName1: testDB1,
   });
 
   await store.clearDatabases();
 
   expect(await store.getDatabases()).toEqual({});
 
-  const testDB2 = {
+  const testDB2: IndexedDBDatabase = {
     name: 'testName2',
     replicacheName: 'testReplicacheName2',
     replicacheFormatVersion: 2,
     schemaVersion: 'testSchemaVersion2',
   };
 
-  vi.setSystemTime(2);
-
   expect(await store.putDatabase(testDB2)).toEqual({
-    testName2: withLastOpenedTimestampMS(testDB2, Date.now()),
+    testName2: testDB2,
   });
   expect(await store.getDatabases()).toEqual({
-    testName2: withLastOpenedTimestampMS(testDB2, Date.now()),
+    testName2: testDB2,
   });
 });
 

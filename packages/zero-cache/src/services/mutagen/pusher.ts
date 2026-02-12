@@ -38,6 +38,7 @@ export interface Pusher extends RefCountedService {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
+    onAuthFailure?: (() => void) | undefined,
   ): Source<Downstream>;
   enqueuePush(
     clientID: string,
@@ -47,6 +48,7 @@ export interface Pusher extends RefCountedService {
     origin: string | undefined,
   ): HandlerResult;
   ackMutationResponses(upToID: MutationID): Promise<void>;
+  deleteClientMutations(clientIDs: string[]): Promise<void>;
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
@@ -107,12 +109,14 @@ export class PusherService implements Service, Pusher {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
+    onAuthFailure?: (() => void) | undefined,
   ) {
     return this.#pusher.initConnection(
       clientID,
       wsID,
       userPushURL,
       userPushHeaders,
+      onAuthFailure,
     );
   }
 
@@ -150,6 +154,7 @@ export class PusherService implements Service, Pusher {
           name: CLEANUP_RESULTS_MUTATION_NAME,
           args: [
             {
+              type: 'single',
               clientGroupID: this.id,
               clientID: upToID.clientID,
               upToMutationID: upToID.id,
@@ -169,7 +174,6 @@ export class PusherService implements Service, Pusher {
         'push',
         this.#lc,
         url,
-        false,
         this.#pushURLPatterns,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         {apiKey: this.#pushConfig.apiKey},
@@ -177,6 +181,57 @@ export class PusherService implements Service, Pusher {
       );
     } catch (e) {
       this.#lc.warn?.('Failed to send cleanup mutation', {
+        error: getErrorMessage(e),
+      });
+    }
+  }
+
+  async deleteClientMutations(clientIDs: string[]) {
+    if (clientIDs.length === 0) {
+      return;
+    }
+    const url = this.#pushConfig.url[0];
+    if (!url) {
+      // No push URL configured, skip cleanup
+      return;
+    }
+
+    const cleanupBody: PushBody = {
+      clientGroupID: this.id,
+      mutations: [
+        {
+          type: MutationType.Custom,
+          id: 0, // Not tracked - this is fire-and-forget
+          clientID: clientIDs[0], // Use first client as sender
+          name: CLEANUP_RESULTS_MUTATION_NAME,
+          args: [
+            {
+              type: 'bulk',
+              clientGroupID: this.id,
+              clientIDs,
+            },
+          ],
+          timestamp: Date.now(),
+        },
+      ],
+      pushVersion: 1,
+      timestamp: Date.now(),
+      requestID: `cleanup-bulk-${this.id}-${Date.now()}`,
+    };
+
+    try {
+      await fetchFromAPIServer(
+        pushResponseSchema,
+        'push',
+        this.#lc,
+        url,
+        this.#pushURLPatterns,
+        {appID: this.#config.app.id, shardNum: this.#config.shard.num},
+        {apiKey: this.#pushConfig.apiKey},
+        cleanupBody,
+      );
+    } catch (e) {
+      this.#lc.warn?.('Failed to send bulk cleanup mutation', {
         error: getErrorMessage(e),
       });
     }
@@ -240,6 +295,7 @@ class PushWorker {
     {
       wsID: string;
       downstream: Subscription<Downstream>;
+      onAuthFailure: (() => void) | undefined;
     }
   >;
   #userPushURL?: string | undefined;
@@ -287,6 +343,7 @@ class PushWorker {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
+    onAuthFailure?: (() => void) | undefined,
   ) {
     const existing = this.#clients.get(clientID);
     if (existing && existing.wsID === wsID) {
@@ -323,7 +380,7 @@ class PushWorker {
         this.#clients.delete(clientID);
       },
     });
-    this.#clients.set(clientID, {wsID, downstream});
+    this.#clients.set(clientID, {wsID, downstream, onAuthFailure});
     return downstream;
   }
 
@@ -405,8 +462,16 @@ class PushWorker {
                   };
 
           this.#failDownstream(client.downstream, pushFailedBody);
+          if (isPushAuthFailure(pushFailedBody)) {
+            this.#lc.debug?.('Auth failure detected in push response');
+            client.onAuthFailure?.();
+          }
         } else if ('kind' in response) {
           this.#failDownstream(client.downstream, response);
+          if (isPushAuthFailure(response)) {
+            this.#lc.debug?.('Auth failure detected in push response');
+            client.onAuthFailure?.();
+          }
         } else {
           unreachable(response);
         }
@@ -502,7 +567,6 @@ class PushWorker {
         'push',
         this.#lc,
         url,
-        url === this.#userPushURL,
         this.#pushURLPatterns,
         {
           appID: this.#config.app.id,
@@ -540,9 +604,15 @@ class PushWorker {
     downstream: Subscription<Downstream>,
     errorBody: PushFailedBody,
   ): void {
-    const logLevel = errorBody.origin === ErrorOrigin.Server ? 'warn' : 'error';
-    downstream.fail(new ProtocolErrorWithLevel(errorBody, logLevel));
+    downstream.fail(new ProtocolErrorWithLevel(errorBody, 'warn'));
   }
+}
+
+function isPushAuthFailure(errorBody: PushFailedBody): boolean {
+  return (
+    errorBody.reason === ErrorReason.HTTP &&
+    (errorBody.status === 401 || errorBody.status === 403)
+  );
 }
 
 /**

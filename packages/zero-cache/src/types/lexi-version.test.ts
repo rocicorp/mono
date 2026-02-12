@@ -2,7 +2,6 @@ import {expect, test} from 'vitest';
 import {
   max,
   min,
-  oneAfter,
   versionFromLexi,
   versionToLexi,
   type AtLeastOne,
@@ -30,11 +29,6 @@ test('LexiVersion encoding', () => {
     expect(versionToLexi(num)).toBe(lexi);
     expect(versionFromLexi(lexi).toString()).toBe(num.toString());
   }
-});
-
-test('oneAfter', () => {
-  expect(oneAfter('2zzz')).toBe('31000');
-  expect(oneAfter('e65gym2kbgwjf668')).toBe('e65gym2kbgwjf669');
 });
 
 test('min max', () => {

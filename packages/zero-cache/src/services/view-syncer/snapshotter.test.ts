@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {computeZqlSpecs} from '../../db/lite-tables.ts';
+import {computeZqlSpecs, listTables} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../db/specs.ts';
 import {DbFile, expectTables} from '../../test/lite.ts';
-import {initChangeLog} from '../replicator/schema/change-log.ts';
+import {populateFromExistingTables} from '../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   fakeReplicator,
@@ -29,8 +29,7 @@ describe('view-syncer/snapshotter', () => {
     dbFile = new DbFile('snapshotter_test');
     const db = dbFile.connect(lc);
     db.pragma('journal_mode = WAL2');
-    db.exec(
-      `
+    db.exec(/*sql*/ `
         CREATE TABLE "my_app.permissions" (
           "lock"        INT PRIMARY KEY,
           "permissions" JSON,
@@ -38,7 +37,14 @@ describe('view-syncer/snapshotter', () => {
           _0_version    TEXT NOT NULL
         );
         INSERT INTO "my_app.permissions" ("lock", "_0_version") VALUES (1, '01');
-        CREATE TABLE issues(id INT PRIMARY KEY, owner INTEGER, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
+        CREATE TABLE issues(
+          id INT PRIMARY KEY,
+          owner INTEGER,
+          desc TEXT,
+          ignore UNSUPPORTED_TYPE,
+          stillBeingBackfilled TEXT,
+          _0_version TEXT NOT NULL
+        );
         CREATE TABLE users(id INT PRIMARY KEY, handle TEXT UNIQUE, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
         CREATE TABLE comments(id INT PRIMARY KEY, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
 
@@ -48,12 +54,22 @@ describe('view-syncer/snapshotter', () => {
 
         INSERT INTO users(id, handle, ignore, _0_version) VALUES(10, 'alice', 'vvv', '01');
         INSERT INTO users(id, handle, ignore, _0_version) VALUES(20, 'bob', 'vxv', '01');
-      `,
-    );
+      `);
     initReplicationState(db, ['zero_data'], '01');
-    initChangeLog(db);
 
-    tableSpecs = computeZqlSpecs(lc, db);
+    // Initialize ColumnMetadata and mark a column as being backfilled,
+    // to verify that it does not appear in the pipeline results.
+    populateFromExistingTables(db, listTables(db, false));
+    db.prepare(
+      /*sql*/ `
+      UPDATE "_zero.column_metadata" 
+        SET backfill = '{"upstreamID":123}'
+        WHERE table_name = 'issues' 
+         AND column_name = 'stillBeingBackfilled'
+      `,
+    ).run();
+
+    tableSpecs = computeZqlSpecs(lc, db, {includeBackfillingColumns: false});
 
     replicator = fakeReplicator(lc, db);
     s = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
@@ -70,9 +86,30 @@ describe('view-syncer/snapshotter', () => {
     expect(version).toBe('01');
     expectTables(db.db, {
       issues: [
-        {id: 1, owner: 10, desc: 'foo', ignore: 'zzz', ['_0_version']: '01'},
-        {id: 2, owner: 10, desc: 'bar', ignore: 'xyz', ['_0_version']: '01'},
-        {id: 3, owner: 20, desc: 'baz', ignore: 'yyy', ['_0_version']: '01'},
+        {
+          id: 1,
+          owner: 10,
+          desc: 'foo',
+          ignore: 'zzz',
+          stillBeingBackfilled: null,
+          ['_0_version']: '01',
+        },
+        {
+          id: 2,
+          owner: 10,
+          desc: 'bar',
+          ignore: 'xyz',
+          stillBeingBackfilled: null,
+          ['_0_version']: '01',
+        },
+        {
+          id: 3,
+          owner: 20,
+          desc: 'baz',
+          ignore: 'yyy',
+          stillBeingBackfilled: null,
+          ['_0_version']: '01',
+        },
       ],
       users: [
         {id: 10, handle: 'alice', ignore: 'vvv', ['_0_version']: '01'},
@@ -554,5 +591,47 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.changes).toBe(1);
 
     expect(() => [...diff]).toThrow(ResetPipelinesSignal);
+  });
+
+  test('getRows filters out unique keys with NULL column values', () => {
+    // This tests a critical performance optimization: when unique key columns
+    // have NULL values, they must be filtered out of the OR query. Otherwise,
+    // SQLite's MULTI-INDEX OR optimization fails and falls back to a full
+    // table scan (hundreds of times slower on large tables).
+
+    // Insert a user with a NULL handle
+    replicator.processTransaction(
+      '05',
+      messages.insert('users', {id: 30, handle: null}),
+    );
+
+    const diff = s.advance(tableSpecs);
+    expect(diff.curr.version).toBe('05');
+
+    // Spy on the statement cache to see what queries are generated
+    const getSpy = vi.spyOn(diff.prev.db.statementCache, 'get');
+
+    // Consume the diff - this will call getRows for the user with NULL handle
+    const changes = [...diff];
+    expect(changes).toHaveLength(1);
+
+    // Find the getRows query (SELECT from users with WHERE clause)
+    const getRowsCalls = getSpy.mock.calls.filter(
+      call =>
+        typeof call[0] === 'string' &&
+        call[0].includes('FROM "users"') &&
+        call[0].includes('WHERE'),
+    );
+
+    // Should have made exactly one query for the users table
+    expect(getRowsCalls).toHaveLength(1);
+
+    // Snapshot the entire query - it should only have "id"=? in WHERE,
+    // not "handle"=? since handle is NULL
+    expect(getRowsCalls[0][0]).toBe(
+      'SELECT "id","handle","_0_version" FROM "users" WHERE "id"=?',
+    );
+
+    getSpy.mockRestore();
   });
 });

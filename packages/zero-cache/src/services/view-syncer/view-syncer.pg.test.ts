@@ -1,3 +1,4 @@
+import {resolver} from '@rocicorp/resolver';
 import {
   afterEach,
   beforeEach,
@@ -31,6 +32,7 @@ import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.t
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import type {AuthSession, OpaqueAuth} from '../../auth/auth.ts';
 import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
@@ -42,9 +44,11 @@ import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
+import {ClientHandler} from './client-handler.ts';
 import {CVRStore} from './cvr-store.ts';
-import {CVRQueryDrivenUpdater} from './cvr.ts';
+import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
+import {PipelineDriver} from './pipeline-driver.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   app2Messages,
@@ -74,6 +78,10 @@ import type {ViewSyncerService} from './view-syncer.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   let storageDB: Database;
   let replicaDbFile: DbFile;
   let replica: Database;
@@ -85,6 +93,7 @@ describe('view-syncer/service', () => {
 
   let operatorStorage: ClientGroupStorage;
   let vs: ViewSyncerService;
+  let authSession: AuthSession;
   let viewSyncerDone: Promise<void>;
   let replicator: FakeReplicator;
   let connect: (
@@ -119,9 +128,9 @@ describe('view-syncer/service', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    tokenData: undefined,
     httpCookie: undefined,
     origin: undefined,
+    userID: 'user-1',
   };
 
   beforeEach<PgTest>(async ({testDBs}) => {
@@ -135,6 +144,7 @@ describe('view-syncer/service', () => {
       drainCoordinator,
       operatorStorage,
       vs,
+      authSession,
       viewSyncerDone,
       replicator,
       connect,
@@ -169,7 +179,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -188,11 +197,11 @@ describe('view-syncer/service', () => {
         'query-hash1': {
           ast: ISSUES_QUERY,
           type: 'client',
-          clientState: {foo: {version: {stateVersion: '00', minorVersion: 1}}},
+          clientState: {foo: {version: {stateVersion: '00', configVersion: 1}}},
           id: 'query-hash1',
         },
       },
-      version: {stateVersion: '00', minorVersion: 1},
+      version: {stateVersion: '00', configVersion: 1},
     });
   });
 
@@ -216,7 +225,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -241,7 +249,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -286,7 +293,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -314,7 +320,7 @@ describe('view-syncer/service', () => {
             foo: {
               inactivatedAt,
               ttl: DEFAULT_TTL_MS,
-              version: {minorVersion: 2, stateVersion: '00'},
+              version: {configVersion: 2, stateVersion: '00'},
             },
           },
           id: 'query-hash1',
@@ -326,13 +332,13 @@ describe('view-syncer/service', () => {
             foo: {
               inactivatedAt: undefined,
               ttl: DEFAULT_TTL_MS,
-              version: {stateVersion: '00', minorVersion: 2},
+              version: {stateVersion: '00', configVersion: 2},
             },
           },
           id: 'query-hash2',
         },
       },
-      version: {stateVersion: '00', minorVersion: 2},
+      version: {stateVersion: '00', configVersion: 2},
     });
   });
 
@@ -554,12 +560,31 @@ describe('view-syncer/service', () => {
             return queryResponses();
           }
           return Promise.resolve(
-            new Response(
-              JSON.stringify([
-                'transformed',
-                queryResponses,
-              ] satisfies TransformResponseMessage),
-            ),
+            Response.json([
+              'transformed',
+              queryResponses,
+            ] satisfies TransformResponseMessage),
+          );
+        }
+        return Promise.reject(new Error('Unexpected fetch call ' + url));
+      });
+    }
+
+    function mockFetchImplWithHeaders(
+      queryResponses: TransformResponseBody,
+      expectedHeaders: Record<string, string>,
+    ) {
+      mockFetch.mockImplementation((url, init) => {
+        if (
+          url ===
+          'http://my-pull-endpoint.dev/api/zero/pull?schema=this_app_2&appID=this_app'
+        ) {
+          expect(init?.headers).toMatchObject(expectedHeaders);
+          return Promise.resolve(
+            Response.json([
+              'transformed',
+              queryResponses,
+            ] satisfies TransformResponseMessage),
           );
         }
         return Promise.reject(new Error('Unexpected fetch call ' + url));
@@ -766,6 +791,38 @@ describe('view-syncer/service', () => {
             },
           ]
         `);
+    });
+
+    test('custom query transform forwards opaque auth to fetch', async () => {
+      const token = 'opaque-token';
+      await authSession.update('user-1', token);
+      mockFetchImplWithHeaders(
+        [
+          {
+            ast: ISSUES_QUERY,
+            id: 'custom-opaque',
+            name: 'named-query-opaque',
+          },
+        ],
+        {
+          Authorization: `Bearer ${token}`,
+        },
+      );
+
+      const client = connect(SYNC_CONTEXT, [
+        {
+          op: 'put',
+          hash: 'custom-opaque',
+          name: 'named-query-opaque',
+          args: ['thing'],
+        },
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     test('removing one of two queries with shared transformation hash does not remove pipeline', async () => {
@@ -1263,7 +1320,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -1521,7 +1578,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "01",
                   },
                 },
@@ -2167,7 +2224,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -2185,7 +2242,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -2346,7 +2403,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "01",
                   },
                 },
@@ -2354,7 +2411,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -2379,7 +2436,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "01",
                   },
                 },
@@ -2387,7 +2444,7 @@ describe('view-syncer/service', () => {
                   "inactivatedAt": undefined,
                   "ttl": 300000,
                   "version": {
-                    "minorVersion": 1,
+                    "configVersion": 1,
                     "stateVersion": "00",
                   },
                 },
@@ -2407,6 +2464,190 @@ describe('view-syncer/service', () => {
           undefined,
         ]
       `);
+    });
+
+    test('retransforms custom queries when opaque auth refreshes', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValueOnce([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-1',
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-2',
+          },
+        ]);
+
+      const token1: OpaqueAuth = {
+        type: 'opaque',
+        raw: 'token-1',
+      };
+      const token2: OpaqueAuth = {
+        type: 'opaque',
+        raw: 'token-2',
+      };
+
+      await authSession.update('user-1', token1.raw);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy.mock.calls[0][0].token).toBe('token-1');
+
+      await vs.updateAuth(SYNC_CONTEXT, ['updateAuth', {auth: token2.raw}]);
+
+      expect(transformSpy).toHaveBeenCalledTimes(2);
+      expect(transformSpy.mock.calls[1][0].token).toBe('token-2');
+    });
+
+    test('does not retransform custom queries when opaque auth is unchanged after revision is synced', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValue([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-1',
+          },
+        ]);
+
+      await authSession.update('user-1', 'token-1');
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      // update existing auth session state
+      await vs.updateAuth(SYNC_CONTEXT, ['updateAuth', {auth: 'token-1'}]);
+      expect(transformSpy).toHaveBeenCalledTimes(2);
+
+      // subsequent auth updates should be no-op
+      await vs.updateAuth(SYNC_CONTEXT, ['updateAuth', {auth: 'token-1'}]);
+
+      expect(transformSpy).toHaveBeenCalledTimes(2);
+    });
+
+    test('failed updateAuth keeps existing auth and does not retransform queries', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValueOnce([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-1',
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-2',
+          },
+        ]);
+
+      await authSession.update('user-1', 'token-1');
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      await vs.updateAuth(SYNC_CONTEXT, ['updateAuth', {auth: ''}]);
+
+      expect(authSession.auth?.raw).toBe('token-1');
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+
+      await expect(client.dequeue()).rejects.toThrow('No token provided');
+    });
+
+    test('transform 401 during updateAuth clears auth session', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValueOnce([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'hash-1',
+          },
+        ])
+        .mockResolvedValueOnce({
+          kind: ErrorKind.TransformFailed,
+          message: 'Fetch from API server returned non-OK status 401',
+          origin: ErrorOrigin.ZeroCache,
+          queryIDs: ['custom-1'],
+          reason: ErrorReason.HTTP,
+          status: 401,
+          bodyPreview: '{ "error": "Unauthorized" }',
+        });
+
+      await authSession.update('user-1', 'token-1');
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(authSession.auth?.raw).toBe('token-1');
+
+      await vs.updateAuth(SYNC_CONTEXT, ['updateAuth', {auth: 'token-2'}]);
+
+      expect(authSession.auth).toBeUndefined();
+      expect(transformSpy).toHaveBeenCalledTimes(2);
+
+      await expect(nextPoke(client)).rejects.toThrow(
+        'Fetch from API server returned non-OK status 401',
+      );
+    });
+
+    test('transform 401 clears auth session to prevent DoS', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValueOnce({
+          kind: ErrorKind.TransformFailed,
+          message: 'Fetch from API server returned non-OK status 401',
+          origin: ErrorOrigin.ZeroCache,
+          queryIDs: ['custom-1'],
+          reason: ErrorReason.HTTP,
+          status: 401,
+          bodyPreview: '{ "error": "Unauthorized" }',
+        });
+
+      await authSession.update('user-bad', 'token-bad');
+
+      const badContext = {...SYNC_CONTEXT, userID: 'user-bad'};
+      const badClient = connect(badContext, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(badClient);
+      stateChanges.push({state: 'version-ready'});
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledTimes(1));
+
+      // 401 during transform clears session so the client group is not stuck.
+      expect(authSession.auth).toBeUndefined();
     });
 
     // test cases where custom query transforms fail
@@ -3064,6 +3305,77 @@ describe('view-syncer/service', () => {
           "clientID": "bar",
           "deleted": true,
           "inactivatedAt": 0,
+          "queryHash": "query-hash2",
+          "ttl": "00:00:05",
+        },
+      ]
+    `);
+  });
+
+  test('ignores deleteClients from old wsID', async () => {
+    const ttl = 5000; // 5s
+    vi.setSystemTime(Date.UTC(2025, 2, 4));
+
+    const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+    ]);
+
+    const {queue: client2, source: connectSource2} = connectWithQueueAndSource(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY, ttl}],
+    );
+
+    await nextPoke(client1);
+    await nextPoke(client2);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(client1);
+    await nextPoke(client1);
+
+    await nextPoke(client2);
+    await nextPoke(client2);
+
+    connectSource2.cancel();
+
+    const deletedClientIDs = await vs.deleteClients(
+      {...SYNC_CONTEXT, wsID: 'old-wsid'},
+      ['deleteClients', {clientIDs: ['bar']}],
+    );
+
+    expect(deletedClientIDs).toEqual([]);
+    await expectNoPokes(client1);
+
+    expect(
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`,
+    ).toMatchInlineSnapshot(
+      `
+      Result [
+        {
+          "clientID": "foo",
+        },
+        {
+          "clientID": "bar",
+        },
+      ]
+    `,
+    );
+
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "ttl", "inactivatedAt" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "foo",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hash1",
+          "ttl": "00:00:05",
+        },
+        {
+          "clientID": "bar",
+          "deleted": false,
+          "inactivatedAt": null,
           "queryHash": "query-hash2",
           "ttl": "00:00:05",
         },
@@ -4109,9 +4421,9 @@ describe('view-syncer/service', () => {
         wsID: '9382',
         baseCookie: preAdvancement.cookie,
         protocolVersion: PROTOCOL_VERSION,
-        tokenData: undefined,
         httpCookie: undefined,
         origin: undefined,
+        userID: 'user-1',
       },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
@@ -4347,7 +4659,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -4456,7 +4767,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -4517,7 +4827,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
@@ -4553,7 +4862,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
@@ -4590,7 +4898,6 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -4901,5 +5208,62 @@ describe('view-syncer/service', () => {
     await expect(nextPoke(client)).rejects.toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Reconnect required]`,
     );
+  });
+
+  test('stop waits for in-flight changeDesiredQueries', async () => {
+    // Bring pipelines into the synced state so changeDesiredQueries hits
+    // #syncQueryPipelineSet and currentPermissions.
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client);
+
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    // Gate the CVR flush so we can stop while a config update is in-flight.
+    const {promise: flushStarted, resolve: signalFlushStarted} =
+      resolver<void>();
+    const allowFlush = resolver<void>();
+    const originalFlush = CVRUpdater.prototype.flush;
+    vi.spyOn(CVRUpdater.prototype, 'flush').mockImplementation(async function (
+      this: CVRUpdater,
+      ...args: Parameters<CVRUpdater['flush']>
+    ) {
+      signalFlushStarted();
+      await allowFlush.promise;
+      return originalFlush.apply(this, args);
+    });
+    const failSpy = vi.spyOn(ClientHandler.prototype, 'fail');
+    let flushReleased = false;
+    let destroyCalledAfterRelease = false;
+    const originalDestroy = PipelineDriver.prototype.destroy;
+    const destroySpy = vi
+      .spyOn(PipelineDriver.prototype, 'destroy')
+      .mockImplementation(function (this: PipelineDriver) {
+        destroyCalledAfterRelease = flushReleased;
+        return originalDestroy.call(this);
+      });
+
+    // Start the config update; it will block on the flush gate.
+    const changePromise = vs.changeDesiredQueries(SYNC_CONTEXT, [
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {op: 'put', hash: 'query-hash2', ast: USERS_QUERY},
+        ],
+      },
+    ]);
+
+    await flushStarted;
+    const stopPromise = vs.stop();
+    flushReleased = true;
+    allowFlush.resolve();
+    await Promise.all([stopPromise, viewSyncerDone, changePromise]);
+
+    // The in-flight update should finish without failing the client.
+    expect(failSpy).not.toHaveBeenCalled();
+    expect(destroySpy).toHaveBeenCalled();
+    expect(destroyCalledAfterRelease).toBe(true);
   });
 });

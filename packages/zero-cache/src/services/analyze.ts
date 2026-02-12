@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
@@ -12,12 +13,12 @@ import {Database} from '../../../zqlite/src/db.ts';
 import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
 import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
+import type {JWTAuth} from '../auth/auth.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
 import {runAst} from './run-ast.ts';
-import {TimeSliceTimer, type TokenData} from './view-syncer/view-syncer.ts';
-import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
+import {TimeSliceTimer} from './view-syncer/view-syncer.ts';
 
 const TIME_SLICE_LAP_THRESHOLD_MS = 200;
 
@@ -29,7 +30,7 @@ export async function analyzeQuery(
   syncedRows = true,
   vendedRows = false,
   permissions?: PermissionsConfig,
-  authData?: TokenData,
+  auth?: JWTAuth,
   joinPlans = false,
 ): Promise<AnalyzeQueryResult> {
   using db = new Database(lc, config.replica.file);
@@ -37,7 +38,13 @@ export async function analyzeQuery(
   const tableSpecs = new Map<string, LiteAndZqlSpec>();
   const tables = new Map<string, TableSource>();
 
-  computeZqlSpecs(lc, db, tableSpecs, fullTables);
+  computeZqlSpecs(
+    lc,
+    db,
+    {includeBackfillingColumns: false},
+    tableSpecs,
+    fullTables,
+  );
 
   const planDebugger = joinPlans ? new AccumulatorDebugger() : undefined;
   const costModel = joinPlans
@@ -55,7 +62,7 @@ export async function analyzeQuery(
       applyPermissions: permissions !== undefined,
       syncedRows,
       vendedRows,
-      authData,
+      auth,
       db,
       tableSpecs,
       permissions,

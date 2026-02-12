@@ -5,8 +5,6 @@ import {
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
-import {areEqual} from '../../../../../shared/src/arrays.ts';
-import {unreachable} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
@@ -22,41 +20,39 @@ import {Database} from '../../../../../zqlite/src/db.ts';
 import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
 import type {ColumnSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {
-  oneAfter,
-  versionFromLexi,
-  versionToLexi,
-  type LexiVersion,
-} from '../../../types/lexi-version.ts';
+import {type LexiVersion} from '../../../types/lexi-version.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {
   upstreamSchema,
   type ShardConfig,
   type ShardID,
 } from '../../../types/shards.ts';
+import {
+  majorVersionFromString,
+  majorVersionToString,
+} from '../../../types/state-version.ts';
 import type {Sink} from '../../../types/streams.ts';
-import {Subscription, type PendingResult} from '../../../types/subscription.ts';
-import type {
-  ChangeSource,
-  ChangeStream,
-} from '../../change-streamer/change-streamer-service.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
   getSubscriptionState,
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
-import type {JSONObject} from '../protocol/current.ts';
+import type {ChangeSource, ChangeStream} from '../change-source.ts';
+import {BackfillManager} from '../common/backfill-manager.ts';
+import {ChangeStreamMultiplexer} from '../common/change-stream-multiplexer.ts';
+import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
-  DataChange,
   Identifier,
   MessageRelation,
-  TableMetadata,
+  SchemaChange,
 } from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
+import type {TableMetadata} from './backfill-metadata.ts';
+import {streamBackfill} from './backfill-stream.ts';
 import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
   Message,
@@ -64,7 +60,7 @@ import type {
   MessageRelation as PostgresRelation,
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe} from './logical-replication/stream.ts';
-import {fromBigInt, toLexiVersion, type LSN} from './lsn.ts';
+import {fromBigInt, toStateVersionString, type LSN} from './lsn.ts';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
 import {
@@ -209,6 +205,9 @@ async function checkAndUpdateUpstream(
   return upstreamReplica;
 }
 
+// Parameterize this if necessary. In practice starvation may never happen.
+const MAX_LOW_PRIORITY_DELAY_MS = 1000;
+
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.
@@ -231,8 +230,11 @@ class PostgresChangeSource implements ChangeSource {
     this.#replica = replica;
   }
 
-  async startStream(clientWatermark: string): Promise<ChangeStream> {
-    const db = pgClient(this.#lc, this.#upstreamUri, {}, 'json-as-string');
+  async startStream(
+    clientWatermark: string,
+    backfillRequests: BackfillRequest[] = [],
+  ): Promise<ChangeStream> {
+    const db = pgClient(this.#lc, this.#upstreamUri);
     const {slot} = this.#replica;
 
     let cleanup = promiseVoid;
@@ -243,7 +245,13 @@ class PostgresChangeSource implements ChangeSource {
       ));
       const config = await getInternalShardConfig(db, this.#shard);
       this.#lc.info?.(`starting replication stream@${slot}`);
-      return await this.#startStream(db, slot, clientWatermark, config);
+      return await this.#startStream(
+        db,
+        slot,
+        clientWatermark,
+        config,
+        backfillRequests,
+      );
     } finally {
       void cleanup.then(() => db.end());
     }
@@ -254,19 +262,29 @@ class PostgresChangeSource implements ChangeSource {
     slot: string,
     clientWatermark: string,
     shardConfig: InternalShardConfig,
+    backfillRequests: BackfillRequest[],
   ): Promise<ChangeStream> {
-    const clientStart = oneAfter(clientWatermark);
+    const clientStart = majorVersionFromString(clientWatermark) + 1n;
     const {messages, acks} = await subscribe(
       this.#lc,
       db,
       slot,
       [...shardConfig.publications],
-      versionFromLexi(clientStart),
+      clientStart,
     );
 
-    const changes = Subscription.create<ChangeStreamMessage>({
-      cleanup: () => messages.cancel(),
-    });
+    // The ChangeStreamMultiplexer facilitates cooperative streaming from
+    // the main replication stream and backfill streams initiated by the
+    // BackfillManager.
+    const changes = new ChangeStreamMultiplexer(this.#lc, clientWatermark);
+    const backfillManager = new BackfillManager(this.#lc, changes, req =>
+      streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req),
+    );
+    changes
+      .addProducers(messages, backfillManager)
+      .addListeners(backfillManager);
+    backfillManager.run(clientWatermark, backfillRequests);
+
     const acker = new Acker(acks);
 
     const changeMaker = new ChangeMaker(
@@ -279,18 +297,48 @@ class PostgresChangeSource implements ChangeSource {
 
     void (async function () {
       try {
+        let reserved = false;
+
         for await (const [lsn, msg] of messages) {
+          // Note: no reservation is needed for pushStatus().
           if (msg.tag === 'keepalive') {
-            changes.push(['status', msg, {watermark: versionToLexi(lsn)}]);
+            changes.pushStatus([
+              'status',
+              msg,
+              {watermark: majorVersionToString(lsn)},
+            ]);
             continue;
           }
-          let last: PendingResult | undefined;
-          for (const change of await changeMaker.makeChanges(lsn, msg)) {
-            last = changes.push(change);
+
+          if (!reserved) {
+            const res = changes.reserve('replication');
+            typeof res === 'string' || (await res); // awaits should be uncommon
+            reserved = true;
           }
-          await last?.result; // Allow the change-streamer to push back.
+
+          let lastChange: ChangeStreamMessage | undefined;
+          for (const change of await changeMaker.makeChanges(lsn, msg)) {
+            await changes.push(change); // Allow the change-streamer to push back.
+            lastChange = change;
+          }
+
+          if (
+            lastChange?.[0] === 'commit' &&
+            (messages.queued === 0 ||
+              changes.waiterDelay() > MAX_LOW_PRIORITY_DELAY_MS)
+          ) {
+            // After each transaction, release the reservation:
+            // - if there are no pending upstream messages
+            // - or if a low priority request has been waiting for longer
+            //   than MAX_LOW_PRIORITY_DELAY_MS. This is to prevent
+            //   (backfill) starvation on very active upstreams.
+            changes.release(lastChange[2].watermark);
+            reserved = false;
+          }
         }
       } catch (e) {
+        // Note: no need to worry about reservations here since downstream
+        //       is being completely canceled.
         changes.fail(translateError(e));
       }
     })();
@@ -302,7 +350,7 @@ class PostgresChangeSource implements ChangeSource {
     );
 
     return {
-      changes,
+      changes: changes.asSource(),
       acks: {push: status => acker.ack(status[2].watermark)},
     };
   }
@@ -421,7 +469,7 @@ export class Acker {
 
     // Note: Sending '0/0' means "keep alive but do not update confirmed_flush_lsn"
     // https://github.com/postgres/postgres/blob/3edc67d337c2e498dad1cd200e460f7c63e512e6/src/backend/replication/walsender.c#L2457
-    const lsn = watermark ? versionFromLexi(watermark) : 0n;
+    const lsn = watermark ? majorVersionFromString(watermark) : 0n;
     this.#acks.push(lsn);
   }
 }
@@ -520,7 +568,7 @@ class ChangeMaker {
           [
             'begin',
             {...msg, json: 's'},
-            {commitWatermark: toLexiVersion(must(msg.commitLsn))},
+            {commitWatermark: toStateVersionString(must(msg.commitLsn))},
           ],
         ];
 
@@ -571,7 +619,11 @@ class ChangeMaker {
 
       case 'commit':
         return [
-          ['commit', msg, {watermark: toLexiVersion(must(msg.commitLsn))}],
+          [
+            'commit',
+            msg,
+            {watermark: toStateVersionString(must(msg.commitLsn))},
+          ],
         ];
 
       case 'relation':
@@ -608,8 +660,9 @@ class ChangeMaker {
     ).map(change => ['data', change] satisfies Data);
 
     this.#lc
+      .withContext('tag', event.event.tag)
       .withContext('query', event.context.query)
-      .info?.(`${changes.length} schema change(s)`, changes);
+      .info?.(`${changes.length} schema change(s)`, {changes});
 
     const replicaIdentities = replicaIdentitiesForTablesWithoutPrimaryKeys(
       event.schema,
@@ -657,11 +710,11 @@ class ChangeMaker {
   #makeSchemaChanges(
     preSchema: PublishedSchema,
     update: DdlUpdateEvent,
-  ): DataChange[] {
+  ): SchemaChange[] {
     try {
       const [prevTbl, prevIdx] = specsByID(preSchema);
       const [nextTbl, nextIdx] = specsByID(update.schema);
-      const changes: DataChange[] = [];
+      const changes: SchemaChange[] = [];
 
       // Validate the new table schemas
       for (const table of nextTbl.values()) {
@@ -715,8 +768,8 @@ class ChangeMaker {
   #getTableChanges(
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
-  ): DataChange[] {
-    const changes: DataChange[] = [];
+  ): SchemaChange[] {
+    const changes: SchemaChange[] = [];
     if (
       oldTable.schema !== newTable.schema ||
       oldTable.name !== newTable.name
@@ -727,18 +780,14 @@ class ChangeMaker {
         new: {schema: newTable.schema, name: newTable.name},
       });
     }
-    if (
-      oldTable.replicaIdentity !== newTable.replicaIdentity ||
-      !areEqual(
-        oldTable.replicaIdentityColumns,
-        newTable.replicaIdentityColumns,
-      )
-    ) {
+    const oldMetadata = getMetadata(oldTable);
+    const newMetadata = getMetadata(newTable);
+    if (!deepEqual(oldMetadata, newMetadata)) {
       changes.push({
         tag: 'update-table-metadata',
         table: {schema: newTable.schema, name: newTable.name},
-        old: getMetadata(oldTable),
-        new: getMetadata(newTable),
+        old: oldMetadata,
+        new: newMetadata,
       });
     }
     const table = {schema: newTable.schema, name: newTable.name};
@@ -964,30 +1013,16 @@ function columnsByID(
 }
 
 function getMetadata(table: PublishedTableWithReplicaIdentity): TableMetadata {
-  const metadata: TableMetadata = {
-    rowKey: {
-      columns: table.replicaIdentityColumns,
-    },
+  return {
+    schemaOID: must(table.schemaOID),
+    relationOID: table.oid,
+    rowKey: Object.fromEntries(
+      table.replicaIdentityColumns.map(k => [
+        k,
+        {attNum: table.columns[k].pos},
+      ]),
+    ),
   };
-  switch (table.replicaIdentity) {
-    case 'd':
-      metadata.rowKey.type = 'default';
-      break;
-    case 'i':
-      metadata.rowKey.type = 'index';
-      break;
-    case 'f':
-      metadata.rowKey.type = 'full';
-      break;
-    case 'n':
-      metadata.rowKey.type = 'nothing';
-      break;
-    case undefined:
-      break;
-    default:
-      unreachable(table.replicaIdentity);
-  }
-  return metadata;
 }
 
 // Avoid sending the `columns` from the Postgres MessageRelation message.

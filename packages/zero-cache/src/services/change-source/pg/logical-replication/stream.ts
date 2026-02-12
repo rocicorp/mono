@@ -21,6 +21,13 @@ const DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE = 5;
 
 export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
 
+// Expose the `queued` variable of the Subscription to allow
+// the change-source to determine if there are more messages
+// immediately available.
+type SourceWithPendingQueue<T> = Source<T> & {
+  queued: number;
+};
+
 export async function subscribe(
   lc: LogContext,
   db: PostgresDB,
@@ -29,7 +36,10 @@ export async function subscribe(
   lsn: bigint,
   retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
   applicationName = 'zero-replicator',
-): Promise<{messages: Source<StreamMessage>; acks: Sink<bigint>}> {
+): Promise<{
+  messages: SourceWithPendingQueue<StreamMessage>;
+  acks: Sink<bigint>;
+}> {
   const session = postgres(
     defu(
       {
@@ -91,7 +101,7 @@ export async function subscribe(
   }, manualKeepaliveTimeout / 5);
 
   let destroyed = false;
-  const typeParsers = await getTypeParsers(db);
+  const typeParsers = await getTypeParsers(db, {returnJsonAsString: true});
   const parser = new PgoutputParser(typeParsers);
   const messages = Subscription.create<StreamMessage>({
     cleanup: () => {
@@ -117,7 +127,15 @@ export async function subscribe(
       lc.error?.(`error from ${db.options.host}`, e),
   );
 
-  pipe(readable, messages, buffer => parseStreamMessage(lc, buffer, parser));
+  pipe({
+    source: readable,
+    sink: messages,
+    parse: buffer => parseStreamMessage(lc, buffer, parser),
+    // Allow a small buffer of messages to be queued in the subscription so
+    // that the change-source loop can check the queue to determine if more
+    // messages are immediately available.
+    bufferMessages: 5,
+  });
 
   return {
     messages,

@@ -26,6 +26,7 @@ vi.mock('../server/anonymous-otel-start.ts', () => ({
 }));
 
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,6 +40,7 @@ import {
   DatabaseStorage,
 } from '../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {AuthSessionImpl, type ValidateLegacyJWT} from '../auth/auth.ts';
 import * as jwt from '../auth/jwt.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {
@@ -83,17 +85,40 @@ function makeFactories(
   const writeAuthzStorage = new DatabaseStorage(storageDb);
 
   return {
-    viewSyncerFactory: (id: string) =>
-      ({
-        id,
-        keepalive: () => true,
-        stop() {
-          return Promise.resolve();
-        },
-        run() {
-          return Promise.resolve();
-        },
-      }) as ViewSyncer & ActivityBasedService,
+    viewSyncerFactory: (
+      id: string,
+      _sub: unknown,
+      _drainCoordinator: unknown,
+      validateLegacyJWT: ValidateLegacyJWT | undefined,
+    ) =>
+      (() => {
+        const stopped = resolver<void>();
+        const authSession = new AuthSessionImpl(lc, id, validateLegacyJWT);
+        return {
+          id,
+          get auth() {
+            return authSession.auth;
+          },
+          clearAuth: vi.fn(() => authSession.clear()),
+          initAuthSession: vi.fn(
+            (userID: string, wireAuth: string | undefined) =>
+              authSession.update(userID, wireAuth),
+          ),
+          initConnection: vi.fn(),
+          changeDesiredQueries: vi.fn(),
+          deleteClients: vi.fn(),
+          inspect: vi.fn(),
+          updateAuth: vi.fn(),
+          keepalive: () => true,
+          stop() {
+            stopped.resolve();
+            return stopped.promise;
+          },
+          run() {
+            return stopped.promise;
+          },
+        } as ViewSyncer & ActivityBasedService;
+      })(),
     mutagenFactory: (id: string) => {
       const ret = new MutagenService(
         lc,
@@ -156,9 +181,9 @@ function makeParams(clientID: number, params: any = {}) {
   };
 }
 
-function openConnection(clientID: number, params: any = {}) {
+async function openConnection(clientID: number, params: any = {}) {
   const ws = new MockWebSocket() as unknown as WebSocket;
-  receiver(ws, makeParams(clientID, params), {} as any);
+  await receiver(ws, makeParams(clientID, params), {} as any);
   return ws;
 }
 
@@ -167,7 +192,11 @@ describe('cleanup', () => {
   let mutagens: MutagenService[];
   let pushers: PusherService[];
   beforeEach(() => {
-    const env = setupSyncer(lc, {} as ZeroConfig);
+    const env = setupSyncer(lc, {
+      auth: {
+        secret: 'test-secret',
+      },
+    } as ZeroConfig);
     syncer = env.syncer;
     mutagens = env.mutagens;
     pushers = env.pushers;
@@ -179,7 +208,7 @@ describe('cleanup', () => {
 
   const newConnection = (clientID: number) => openConnection(clientID);
 
-  test('bumps ref count when getting same service over and over', () => {
+  test('bumps ref count when getting same service over and over', async () => {
     const connections: WebSocket[] = [];
     function check() {
       expect(mutagens.length).toBe(1);
@@ -189,7 +218,7 @@ describe('cleanup', () => {
     }
 
     for (let i = 0; i < 10; i++) {
-      connections.push(newConnection(i));
+      connections.push(await newConnection(i));
       check();
     }
 
@@ -203,7 +232,7 @@ describe('cleanup', () => {
     expect(pushers.length).toBe(1);
   });
 
-  test('decrements ref count on connection close, returns new instance on next connection if ref count is 0', () => {
+  test('decrements ref count on connection close, returns new instance on next connection if ref count is 0', async () => {
     function check(iteration: number) {
       expect(mutagens.length).toBe(iteration + 1);
       expect(pushers.length).toBe(iteration + 1);
@@ -213,13 +242,13 @@ describe('cleanup', () => {
     }
 
     for (let i = 0; i < 10; i++) {
-      const ws = newConnection(i);
+      const ws = await newConnection(i);
       ws.close();
       check(i);
     }
   });
 
-  test('handles same client coming back on different connections', () => {
+  test('handles same client coming back on different connections', async () => {
     function check(iteration: number) {
       expect(mutagens.length).toBe(iteration + 1);
       expect(pushers.length).toBe(iteration + 1);
@@ -236,7 +265,7 @@ describe('cleanup', () => {
     }
 
     for (let i = 0; i < 10; i++) {
-      newConnection(1);
+      await newConnection(1);
       check(i);
     }
   });
@@ -247,7 +276,11 @@ describe('connection telemetry', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const env = setupSyncer(lc, {} as ZeroConfig);
+    const env = setupSyncer(lc, {
+      auth: {
+        secret: 'test-secret',
+      },
+    } as ZeroConfig);
     syncer = env.syncer;
   });
 
@@ -258,30 +291,30 @@ describe('connection telemetry', () => {
   const newConnection = (clientID: number, params: any = {}) =>
     openConnection(clientID, params);
 
-  test('should record connection success for valid protocol version', () => {
+  test('should record connection success for valid protocol version', async () => {
     // Create a connection with valid protocol version
-    newConnection(1);
+    await newConnection(1);
 
     // Should record connection success
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
   });
 
-  test('should record multiple successful connections', () => {
+  test('should record multiple successful connections', async () => {
     // Create multiple connections with valid protocol version
-    newConnection(1);
-    newConnection(2);
-    newConnection(3);
+    await newConnection(1);
+    await newConnection(2);
+    await newConnection(3);
 
     // Should record multiple connection successes
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(3);
   });
 
-  test('should record connection attempted for each connection', () => {
+  test('should record connection attempted for each connection', async () => {
     // Create connections - both should record attempts
     // supported protocol version
-    newConnection(1);
+    await newConnection(1);
     // unsupported protocol version
-    newConnection(2, {protocolVersion: 21});
+    await newConnection(2, {protocolVersion: 21});
 
     // Should record connection attempts
     expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(2);
@@ -367,11 +400,20 @@ describe('jwt auth without options', () => {
     await syncer.stop();
   });
 
-  const newConnection = (clientID: number, params: any = {}) =>
-    openConnection(clientID, params);
-
-  test('succeeds when using mutations & queries and skips verification', () => {
-    const ws = newConnection(1, {auth: 'dummy-token'});
+  test('succeeds when using mutations & queries and skips verification', async () => {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: '1',
+        userID: 'anon',
+        wsID: '1',
+        protocolVersion: 30,
+        auth: 'dummy-token',
+      },
+      {} as any,
+    );
 
     expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
@@ -383,15 +425,6 @@ describe('jwt auth without options', () => {
     expect(messages.length).toBeGreaterThan(0);
     const first = JSON.parse(messages[0]);
     expect(first[0]).toBe('connected');
-
-    // check that we logged a warning that the auth token must be manually verified by the user
-    expect(logSink.messages).toContainEqual([
-      'warn',
-      {},
-      [
-        'One of jwk, secret, or jwksUrl is not configured - the `authorization` header must be manually verified by the user',
-      ],
-    ]);
 
     // Services should be instantiated for successful connection
     expect(mutagens.length).toBe(1);
@@ -417,6 +450,19 @@ describe('jwt auth missing options and missing endpoints', () => {
 
   afterEach(async () => {
     await syncer.stop();
+  });
+
+  test('succeeds when no auth token is provided', async () => {
+    const ws = await openConnection(1);
+
+    expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
+
+    expect((ws as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
+    expect(mutagens.length).toBe(1);
+    expect(pushers.length).toBe(1);
   });
 
   test('fails when no JWT options and no custom endpoints are set', async () => {
@@ -450,6 +496,7 @@ describe('connection hijacking prevention', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     verifySpy = vi.spyOn(jwt, 'verifyToken');
+    verifySpy.mockReset();
     const env = setupSyncer(lc, {
       auth: {
         secret: 'test-secret',
@@ -463,7 +510,7 @@ describe('connection hijacking prevention', () => {
   });
 
   test('invalid auth does not close existing connection', async () => {
-    // First, establish a legitimate connection (no auth required for initial connection)
+    // First, establish a legitimate unauthenticated connection
     const existingWs = new MockWebSocket() as unknown as WebSocket;
     await receiver(
       existingWs,
@@ -473,7 +520,7 @@ describe('connection hijacking prevention', () => {
         userID: 'legit-user',
         wsID: 'ws-1',
         protocolVersion: 30,
-        // No auth token - simulates an existing open connection
+        // No auth token - existing unauthenticated connection
       },
       {} as any,
     );
@@ -550,6 +597,81 @@ describe('connection hijacking prevention', () => {
     // The new connection should be open
     expect((newWs as unknown as MockWebSocket).readyState).toBe(
       MockWebSocket.OPEN,
+    );
+  });
+
+  test('rejects missing auth on reconnect for authenticated client group', async () => {
+    verifySpy.mockResolvedValueOnce({sub: 'user-1'});
+    const firstWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      firstWs,
+      {
+        clientGroupID: '1',
+        clientID: 'client-1',
+        userID: 'user-1',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+        auth: 'valid-token',
+      },
+      {} as any,
+    );
+    expect((firstWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
+
+    const reconnectWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      reconnectWs,
+      {
+        clientGroupID: '1',
+        clientID: 'client-2',
+        userID: 'user-1',
+        wsID: 'ws-2',
+        protocolVersion: 30,
+      },
+      {} as any,
+    );
+
+    expect((reconnectWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.CLOSED,
+    );
+    expect((firstWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
+  });
+
+  test('retains user binding until view syncer expires', async () => {
+    verifySpy.mockResolvedValueOnce({sub: 'user-1'});
+    const firstWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      firstWs,
+      {
+        clientGroupID: '1',
+        clientID: 'client-1',
+        userID: 'user-1',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+        auth: 'valid-token',
+      },
+      {} as any,
+    );
+    firstWs.close();
+
+    const reconnectWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      reconnectWs,
+      {
+        clientGroupID: '1',
+        clientID: 'client-2',
+        userID: 'user-2',
+        wsID: 'ws-2',
+        protocolVersion: 30,
+      },
+      {} as any,
+    );
+
+    expect((reconnectWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.CLOSED,
     );
   });
 });

@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {JWTPayload} from 'jose';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {AST, Condition} from '../../../zero-protocol/src/ast.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {bindStaticParameters} from '../../../zql/src/builder/builder.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
+import type {JWTAuth} from './auth.ts';
 
 export type TransformedAndHashed = {
   id: string;
@@ -26,12 +26,12 @@ export function transformAndHashQuery(
   id: string,
   query: AST,
   permissionRules: PermissionsConfig,
-  authData: JWTPayload | undefined,
+  auth: JWTAuth | undefined,
   internalQuery: boolean | null | undefined,
 ): TransformedAndHashed {
   const transformed = internalQuery
     ? query // application permissions do not apply to internal queries
-    : transformQuery(lc, query, permissionRules, authData);
+    : transformQuery(lc, query, permissionRules, auth);
   return {
     id,
     transformedAst: transformed,
@@ -46,7 +46,7 @@ export function transformQuery(
   lc: LogContext,
   query: AST,
   permissionRules: PermissionsConfig,
-  authData: JWTPayload | undefined,
+  auth: JWTAuth | undefined,
 ): AST {
   const queryWithPermissions = transformQueryInternal(
     lc,
@@ -54,7 +54,7 @@ export function transformQuery(
     permissionRules,
   );
   return bindStaticParameters(queryWithPermissions, {
-    authData: authData as Record<string, JSONValue>,
+    authData: auth ? (auth.decoded as Record<string, JSONValue>) : {},
   });
 }
 
@@ -146,6 +146,13 @@ function transformCondition(
           ...cond.related,
           subquery: query,
         },
+      };
+    }
+    case 'scalarSubquery': {
+      const query = transformQueryInternal(lc, cond.subquery, auth);
+      return {
+        ...cond,
+        subquery: query,
       };
     }
   }

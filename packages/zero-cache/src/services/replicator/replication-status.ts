@@ -55,14 +55,7 @@ export class ReplicationStatusPublisher {
     e: unknown,
   ): Promise<never> {
     this.stop();
-    const event = replicationStatusEvent(
-      lc,
-      this.#db,
-      stage,
-      'ERROR',
-      String(e),
-    );
-    event.errorDetails = makeErrorDetails(e);
+    const event = replicationStatusError(lc, stage, 'ERROR', this.#db);
     await publishCriticalEvent(lc, event);
     throw e;
   }
@@ -92,10 +85,22 @@ export async function publishReplicationError(
   await publishCriticalEvent(lc, event);
 }
 
+export function replicationStatusError(
+  lc: LogContext,
+  stage: ReplicationStage,
+  e: unknown,
+  db?: Database,
+  now = new Date(),
+) {
+  const event = replicationStatusEvent(lc, db, stage, 'ERROR', String(e), now);
+  event.errorDetails = makeErrorDetails(e);
+  return event;
+}
+
 // Exported for testing.
 export function replicationStatusEvent(
   lc: LogContext,
-  db: Database,
+  db: Database | undefined,
   stage: ReplicationStage,
   status: Status,
   description?: string,
@@ -110,9 +115,9 @@ export function replicationStatusEvent(
       description,
       time: now.toISOString(),
       state: {
-        tables: getReplicatedTables(db),
-        indexes: getReplicatedIndexes(db),
-        replicaSize: getReplicaSize(db),
+        tables: db ? getReplicatedTables(db) : [],
+        indexes: db ? getReplicatedIndexes(db) : [],
+        replicaSize: db ? getReplicaSize(db) : undefined,
       },
     };
   } catch (e) {
@@ -138,6 +143,9 @@ function getReplicatedTables(db: Database): ReplicatedTable[] {
   const clientSchema = computeZqlSpecs(
     createSilentLogContext(), // avoid logging warnings about indexes
     db,
+    // TODO: Consider exposing backfilling columns with an indication
+    //       of backfill status.
+    {includeBackfillingColumns: false},
     new Map(),
     fullTables,
   );

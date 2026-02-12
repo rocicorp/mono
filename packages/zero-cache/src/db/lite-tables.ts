@@ -7,7 +7,7 @@ import type {Database} from '../../../zqlite/src/db.ts';
 import {
   ColumnMetadataStore,
   metadataToLiteTypeString,
-} from '../services/change-source/column-metadata.ts';
+} from '../services/replicator/schema/column-metadata.ts';
 import {
   isArray,
   isEnum,
@@ -33,9 +33,18 @@ type ColumnInfo = {
   keyPos: number;
 };
 
-export function listTables(db: Database): LiteTableSpec[] {
-  const metadataStore = ColumnMetadataStore.getInstance(db);
+export type LiteTableSpecWithReplicationStatus = LiteTableSpec & {
+  readonly backfilling?: string[];
+};
 
+type MutableLiteTableSpecWithReplicationStatus = MutableLiteTableSpec & {
+  backfilling: string[];
+};
+
+export function listTables(
+  db: Database,
+  useColumnMetadata = true,
+): LiteTableSpecWithReplicationStatus[] {
   const columns = db
     .prepare(
       `
@@ -57,7 +66,7 @@ export function listTables(db: Database): LiteTableSpec[] {
     .all() as ColumnInfo[];
 
   const tables: LiteTableSpec[] = [];
-  let table: MutableLiteTableSpec | undefined;
+  let table: MutableLiteTableSpecWithReplicationStatus | undefined;
 
   columns.forEach(col => {
     if (col.table !== table?.name) {
@@ -65,6 +74,7 @@ export function listTables(db: Database): LiteTableSpec[] {
       table = {
         name: col.table,
         columns: {},
+        backfilling: [],
       };
       tables.push(table);
     }
@@ -76,7 +86,9 @@ export function listTables(db: Database): LiteTableSpec[] {
       | typeof PostgresTypeClass.Enum
       | null;
 
-    const metadata = metadataStore?.getColumn(col.table, col.name);
+    const metadata = useColumnMetadata
+      ? ColumnMetadataStore.getInstance(db)?.getColumn(col.table, col.name)
+      : undefined;
     if (metadata) {
       // Read from metadata table and convert to pipe notation
       dataType = metadataToLiteTypeString(metadata);
@@ -103,6 +115,9 @@ export function listTables(db: Database): LiteTableSpec[] {
       dflt: col.dflt,
       elemPgTypeClass,
     };
+    if (metadata?.isBackfilling) {
+      table.backfilling.push(col.name);
+    }
     if (col.keyPos) {
       table.primaryKey ??= [];
       while (table.primaryKey.length < col.keyPos) {
@@ -158,6 +173,17 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
   return ret;
 }
 
+export type ZqlSpecOptions = {
+  /**
+   * Controls whether to include backfilling columns in the computed
+   * LiteAndZqlSpec. In general, backfilling columns should be include
+   * in "replication" logic (copying data from upstream to the replica),
+   * and excluded from "sync" logic (sending data from the replica to
+   * clients).
+   */
+  includeBackfillingColumns: boolean;
+};
+
 /**
  * Computes a TableSpec "view" of the replicated data that is
  * suitable for processing / consumption for the client. This
@@ -176,28 +202,50 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
 export function computeZqlSpecs(
   lc: LogContext,
   replica: Database,
+  opts: ZqlSpecOptions,
   tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
   fullTables?: Map<string, LiteTableSpec>,
+): Map<string, LiteAndZqlSpec> {
+  return computeZqlSpecsFromLiteSpecs(
+    listTables(replica),
+    listIndexes(replica),
+    opts,
+    tableSpecs,
+    fullTables,
+    lc,
+  );
+}
+
+export function computeZqlSpecsFromLiteSpecs(
+  tables: LiteTableSpecWithReplicationStatus[],
+  indexes: LiteIndexSpec[],
+  {includeBackfillingColumns}: ZqlSpecOptions,
+  tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
+  fullTables?: Map<string, LiteTableSpec>,
+  lc?: LogContext,
 ): Map<string, LiteAndZqlSpec> {
   tableSpecs.clear();
   fullTables?.clear();
 
-  const uniqueColumns = new Map<string, string[][]>();
-  for (const {tableName, columns} of listIndexes(replica).filter(
-    idx => idx.unique,
-  )) {
-    if (!uniqueColumns.has(tableName)) {
-      uniqueColumns.set(tableName, []);
+  const uniqueIndexColumns = new Map<string, string[][]>();
+  for (const {tableName, columns} of indexes.filter(idx => idx.unique)) {
+    if (!uniqueIndexColumns.has(tableName)) {
+      uniqueIndexColumns.set(tableName, []);
     }
-    uniqueColumns.get(tableName)?.push(Object.keys(columns));
+    uniqueIndexColumns.get(tableName)?.push(Object.keys(columns));
   }
 
-  listTables(replica).forEach(fullTable => {
+  tables.forEach(fullTable => {
     fullTables?.set(fullTable.name, fullTable);
 
-    // Only include columns for which the mapped ZQL Value is defined.
+    const backfilling = new Set(fullTable.backfilling);
+    // Only include columns that:
+    // - have a defined ZQL Value
+    // - aren't backfilling if `includeBackfillingColumns` is false
     const visibleColumns = Object.entries(fullTable.columns).filter(
-      ([, {dataType}]) => liteTypeToZqlValueType(dataType),
+      ([col, {dataType}]) =>
+        liteTypeToZqlValueType(dataType) &&
+        (includeBackfillingColumns || !backfilling.has(col)),
     );
     const notNullColumns = new Set(
       visibleColumns
@@ -208,24 +256,21 @@ export function computeZqlSpecs(
         .map(([col]) => col),
     );
 
-    // Collect all columns that are part of a unique index.
-    const allKeyColumns = new Set<string>();
-
-    const uniqueKeys = uniqueColumns.get(fullTable.name) ?? [];
-    // Examine all column combinations that can serve as a primary key.
-    const keys = uniqueKeys.filter(key => {
-      if (difference(new Set(key), notNullColumns).size > 0) {
-        return false; // Exclude indexes over non-visible columns.
-      }
-      for (const col of key) {
-        allKeyColumns.add(col);
-      }
-      return true;
-    });
+    const uniqueKeys = uniqueIndexColumns.get(fullTable.name) ?? [];
+    // Examine all column combinations that can serve as a primary key,
+    // i.e. excluding indexes over nullable or unsynced columns.
+    const keys = uniqueKeys.filter(
+      key => difference(new Set(key), notNullColumns).size === 0,
+    );
     if (keys.length === 0) {
       // Only include tables with a row key.
-      lc.debug?.(
-        `not syncing table ${fullTable.name} because it has no primary key`,
+      //
+      // Note that this will automatically exclude tables that are being
+      // backfilled (when includeBackfillingColumns is `false`) since candidate
+      // keys only include visible columns.
+      lc?.debug?.(
+        `not syncing table ${fullTable.name} because it ` +
+          (backfilling.size ? 'is being backfilled' : 'has no primary key'),
       );
       return;
     }

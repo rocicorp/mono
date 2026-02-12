@@ -1,7 +1,6 @@
 import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import type {JWTPayload} from 'jose';
 import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
 import {version} from '../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
@@ -11,10 +10,9 @@ import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
-import type {
-  SyncContext,
-  TokenData,
-  ViewSyncer,
+import {
+  type SyncContext,
+  type ViewSyncer,
 } from '../services/view-syncer/view-syncer.ts';
 import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
@@ -26,19 +24,13 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #mutagen: Mutagen;
   readonly #mutationLock: Lock;
   readonly #lc: LogContext;
-  readonly #authData: JWTPayload | undefined;
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #pusher: Pusher | undefined;
-  // DEPRECATED: remove #token
-  // and forward auth and cookie headers that were
-  // sent with the push.
-  readonly #token: string | undefined;
 
   constructor(
     lc: LogContext,
     connectParams: ConnectParams,
-    tokenData: TokenData | undefined,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
     pusher: Pusher | undefined,
@@ -52,6 +44,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       protocolVersion,
       httpCookie,
       origin,
+      userID,
     } = connectParams;
     this.#viewSyncer = viewSyncer;
     this.#mutagen = mutagen;
@@ -61,8 +54,6 @@ export class SyncerWsMessageHandler implements MessageHandler {
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
-    this.#authData = tokenData?.decoded;
-    this.#token = tokenData?.raw;
     this.#clientGroupID = clientGroupID;
     this.#pusher = pusher;
     this.#syncContext = {
@@ -71,9 +62,9 @@ export class SyncerWsMessageHandler implements MessageHandler {
       wsID,
       baseCookie,
       protocolVersion,
-      tokenData,
       httpCookie,
       origin,
+      userID,
     };
   }
 
@@ -93,7 +84,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           tracer,
           'connection.push',
           async () => {
-            const {clientGroupID, mutations} = msg[1];
+            const {clientGroupID, mutations, auth: pushAuth} = msg[1];
             if (clientGroupID !== this.#clientGroupID) {
               return [
                 {
@@ -107,6 +98,14 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   },
                 } satisfies HandlerResult,
               ];
+            }
+
+            // for backwards compatibility, if the push contains auth, we update it
+            if (pushAuth) {
+              await viewSyncer.updateAuth(this.#syncContext, [
+                'updateAuth',
+                {auth: pushAuth},
+              ]);
             }
 
             if (mutations.length === 0) {
@@ -129,12 +128,18 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 this.#pusher.enqueuePush(
                   this.#syncContext.clientID,
                   msg[1],
-                  this.#token,
+                  viewSyncer.auth?.raw,
                   this.#syncContext.httpCookie,
                   this.#syncContext.origin,
                 ),
               ];
             }
+
+            const auth = viewSyncer.auth;
+            assert(
+              auth?.type !== 'opaque',
+              'Only JWT auth is supported for CRUD mutations',
+            );
 
             // Hold a connection-level lock while processing mutations so that:
             // 1. Mutations are processed in the order in which they are received and
@@ -144,7 +149,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
               for (const mutation of mutations) {
                 const maybeError = await this.#mutagen.processMutation(
                   mutation,
-                  this.#authData,
+                  auth?.decoded,
                   this.#pusher !== undefined,
                 );
                 if (maybeError !== undefined) {
@@ -169,11 +174,22 @@ export class SyncerWsMessageHandler implements MessageHandler {
           viewSyncer.changeDesiredQueries(this.#syncContext, msg),
         );
         break;
-      case 'deleteClients':
-        await startAsyncSpan(tracer, 'connection.deleteClients', () =>
-          viewSyncer.deleteClients(this.#syncContext, msg),
-        );
+      case 'updateAuth':
+        await startAsyncSpan(tracer, 'connection.updateAuth', async () => {
+          await viewSyncer.updateAuth(this.#syncContext, msg);
+        });
         break;
+      case 'deleteClients': {
+        const deletedClientIDs = await startAsyncSpan(
+          tracer,
+          'connection.deleteClients',
+          () => viewSyncer.deleteClients(this.#syncContext, msg),
+        );
+        if (this.#pusher && deletedClientIDs.length > 0) {
+          await this.#pusher.deleteClientMutations(deletedClientIDs);
+        }
+        break;
+      }
       case 'initConnection': {
         const ret: HandlerResult[] = [
           {
@@ -198,6 +214,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
               this.#syncContext.wsID,
               msg[1].userPushURL,
               msg[1].userPushHeaders,
+              () => viewSyncer.clearAuth(),
             ),
           });
         }

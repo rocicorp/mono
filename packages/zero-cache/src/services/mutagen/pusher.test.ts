@@ -617,6 +617,7 @@ describe('pusher service', () => {
     expect(body.mutations).toHaveLength(1);
     expect(body.mutations[0].name).toBe('_zero_cleanupResults');
     expect(body.mutations[0].args[0]).toEqual({
+      type: 'single',
       clientGroupID: 'cgid',
       clientID: 'test-client',
       upToMutationID: 42,
@@ -930,12 +931,10 @@ describe('pusher errors', () => {
 
     const iterator = stream[Symbol.asyncIterator]();
     const failure = iterator.next();
-    const expectedLogLevel =
-      expectedError.origin === ErrorOrigin.Server ? 'warn' : 'error';
     await expect(failure).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
     await expect(failure).rejects.toMatchObject({
       errorBody: expectedError,
-      logLevel: expectedLogLevel,
+      logLevel: 'warn',
     });
   }
 
@@ -998,6 +997,106 @@ describe('pusher errors', () => {
         mutationIDs: [{clientID: 'test-cid', id: 1}],
       },
     );
+  });
+
+  test('invokes auth failure handler on 401 push failure', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.HTTP,
+          status: 401,
+          bodyPreview: 'Unauthorized access',
+          message: 'Fetch from API server returned non-OK status 401',
+          mutationIDs: [{clientID, id: 1}],
+        } satisfies PushResponse),
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    const onAuthFailure = vi.fn();
+    const stream = pusher.initConnection(
+      clientID,
+      wsID,
+      undefined,
+      undefined,
+      onAuthFailure,
+    );
+
+    pusher.enqueuePush(
+      clientID,
+      makePush(1, clientID),
+      'jwt',
+      undefined,
+      undefined,
+    );
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
+      ProtocolErrorWithLevel,
+    );
+    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not invoke auth failure handler on non-auth push failure', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.HTTP,
+          status: 500,
+          bodyPreview: 'Internal Server Error',
+          message: 'Fetch from API server returned non-OK status 500',
+          mutationIDs: [{clientID, id: 1}],
+        } satisfies PushResponse),
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    const onAuthFailure = vi.fn();
+    const stream = pusher.initConnection(
+      clientID,
+      wsID,
+      undefined,
+      undefined,
+      onAuthFailure,
+    );
+
+    pusher.enqueuePush(
+      clientID,
+      makePush(1, clientID),
+      'jwt',
+      undefined,
+      undefined,
+    );
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
+      ProtocolErrorWithLevel,
+    );
+    expect(onAuthFailure).not.toHaveBeenCalled();
   });
 
   test('emits error message with legacy http error format', async () => {
@@ -1086,8 +1185,7 @@ describe('pusher errors', () => {
         kind: ErrorKind.PushFailed,
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
-        message:
-          'Fetch from API server failed with unknown error: string error',
+        message: 'Fetch from API server threw error: string error',
         mutationIDs: [
           {
             clientID: 'test-cid',
@@ -1095,7 +1193,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1245,7 +1343,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
 
     await expect(failure2).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
@@ -1264,7 +1362,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1301,8 +1399,7 @@ describe('pusher errors', () => {
         kind: ErrorKind.PushFailed,
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
-        message:
-          'Fetch from API server failed with unknown error: Network error',
+        message: 'Fetch from API server threw error: Network error',
         mutationIDs: [
           {
             clientID: 'test-cid',
@@ -1310,7 +1407,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
   });
 
@@ -1359,7 +1456,7 @@ describe('pusher errors', () => {
           },
         ],
       },
-      logLevel: 'error',
+      logLevel: 'warn',
     });
 
     await pusher.stop();

@@ -7,6 +7,7 @@ import {
 import type {PostgresDB, PostgresTransaction} from '../../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../../types/shards.ts';
 import {
+  createBackfillTables,
   createReplicationStateTable,
   setupCDCTables,
   type ReplicationState,
@@ -91,11 +92,18 @@ export async function initChangeStreamerSchema(
     },
   };
 
+  const migrateV5ToV6 = {
+    migrateSchema: async (_: LogContext, db: PostgresTransaction) => {
+      await db.unsafe(createBackfillTables(shard));
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: {migrateSchema: migrateV1toV2},
     3: migrateV2ToV3,
     4: migrateV3ToV4,
     5: migrateV4ToV5,
+    6: migrateV5ToV6,
   };
 
   await runSchemaMigrations(

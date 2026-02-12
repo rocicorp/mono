@@ -204,13 +204,13 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v6. Supported protocols: [v1 ... v5]`,
+        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v6. Supported protocols: [v1 ... v5]`,
+        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],

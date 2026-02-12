@@ -41,12 +41,15 @@ export interface ZeroOptions<
    *
    * Set `auth` to `null` or `undefined` if there is no logged in user.
    *
+   * The call to `connect` is handled automatically by the ZeroProvider component
+   * for React and SolidJS when the `auth` prop changes.
+   *
+   * When `auth` changes while connected, Zero refreshes server-side auth context
+   * and re-transforms queries without reconnecting.
+   *
    * When a 401 or 403 HTTP status code is received from your server, Zero will
    * transition to the `needs-auth` connection state. The app should call
    * `zero.connection.connect({auth: newToken})` with a new token to reconnect.
-   *
-   * The call to `connect` is handled automatically by the ZeroProvider component
-   * for React and SolidJS when the `auth` prop changes.
    */
   auth?: string | null | undefined;
 
@@ -211,7 +214,7 @@ export interface ZeroOptions<
    *
    * Instances in hidden tabs are disconnected to save resources.
    *
-   * Default is 5_000.
+   * Default is 5 minutes.
    */
   hiddenTabDisconnectDelay?: number | undefined;
 
