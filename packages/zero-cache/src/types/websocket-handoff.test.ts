@@ -256,4 +256,62 @@ describe('types/websocket-handoff', () => {
 
     wssNoCompression.close();
   });
+
+  test('websocket closed during upgrade is handled gracefully', async () => {
+    const [parent, child] = inProcChannel();
+
+    installWebSocketHandoff(
+      lc,
+      () => ({
+        payload: {foo: 'boo'},
+        sender: child,
+      }),
+      server,
+    );
+
+    let receiveCalled = false;
+    const {promise: testComplete, resolve: completeTest} = resolver<void>();
+
+    // Create a custom WSS that simulates a closed websocket after upgrade
+    const wssWithClosedWs = new WebSocketServer({noServer: true});
+
+    // Override handleUpgrade to close the websocket before calling the callback
+    const originalHandleUpgrade = wssWithClosedWs.handleUpgrade.bind(wssWithClosedWs);
+    wssWithClosedWs.handleUpgrade = (request, socket, head, callback) => {
+      originalHandleUpgrade(request, socket, head, (ws, req) => {
+        // Simulate the race condition: close the websocket before the callback runs
+        ws.close();
+        // Wait a tick for the close to take effect
+        setTimeout(() => callback(ws, req), 10);
+      });
+    };
+
+    installWebSocketReceiver(
+      lc,
+      wssWithClosedWs,
+      () => {
+        receiveCalled = true;
+      },
+      parent,
+    );
+
+    const ws = new WebSocket(`ws://localhost:${port}/`);
+    ws.on('close', () => {
+      // Give time for receive to potentially be called
+      setTimeout(() => {
+        completeTest();
+      }, 50);
+    });
+    ws.on('error', () => {
+      // Errors are expected when connection closes abruptly
+    });
+
+    await testComplete;
+
+    // The receive callback should NOT have been called because
+    // the websocket was closed during the handoff
+    expect(receiveCalled).toBe(false);
+
+    wssWithClosedWs.close();
+  });
 });
