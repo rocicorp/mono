@@ -30,6 +30,7 @@ import {
   DatabaseStorage,
 } from '../../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {AuthSessionImpl, type ValidateLegacyJWT} from '../../auth/auth.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
@@ -579,6 +580,7 @@ export async function setup(
   testDBs: TestDBs,
   testName: string,
   permissions: PermissionsConfig | undefined,
+  validateLegacyJWT: ValidateLegacyJWT | undefined = undefined,
 ) {
   const lc = createSilentLogContext();
   const storageDB = new Database(lc, ':memory:');
@@ -716,6 +718,7 @@ export async function setup(
     );
 
   const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
+  const authSession = new AuthSessionImpl(lc, serviceID, validateLegacyJWT);
   const vs = new ViewSyncerService(
     config,
     lc,
@@ -739,6 +742,7 @@ export async function setup(
     inspectorDelegate,
     customQueryTransformer,
     (_lc, _description, op) => op(),
+    authSession,
     undefined,
     setTimeoutFn,
   );
@@ -798,6 +802,7 @@ export async function setup(
     drainCoordinator,
     operatorStorage,
     vs,
+    authSession,
     viewSyncerDone,
     replicator,
     connect,

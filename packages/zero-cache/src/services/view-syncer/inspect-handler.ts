@@ -1,7 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import type {JWTAuth} from '../../auth/auth.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import {
@@ -15,8 +17,6 @@ import {analyzeQuery} from '../analyze.ts';
 import type {ClientHandler} from './client-handler.ts';
 import type {CVRStore} from './cvr-store.ts';
 import type {CVRSnapshot} from './cvr.ts';
-import type {TokenData} from './view-syncer.ts';
-import {must} from '../../../../shared/src/must.ts';
 
 export async function handleInspect(
   lc: LogContext,
@@ -29,7 +29,7 @@ export async function handleInspect(
   config: NormalizedZeroConfig,
   headerOptions: HeaderOptions,
   userQueryURL: string | undefined,
-  authData: TokenData | undefined,
+  auth: JWTAuth | undefined,
 ): Promise<void> {
   // Check if the client is already authenticated. We only authenticate the clientGroup
   // once per "worker".
@@ -150,7 +150,7 @@ export async function handleInspect(
           body.options?.syncedRows,
           body.options?.vendedRows,
           permissions,
-          authData,
+          auth,
           body.options?.joinPlans,
         );
         client.sendInspectResponse(lc, {
