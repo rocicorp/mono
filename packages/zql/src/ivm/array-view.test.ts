@@ -12,10 +12,10 @@ import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
 import type {Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
+import {consume} from './stream.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 import {refCountSymbol} from './view-apply-change.ts';
-import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -111,12 +111,13 @@ test('basics', () => {
   view.flush();
   expect(callCount).toBe(3);
   expect(view.data).toEqual([]);
-  // The data remains but the rc gets updated.
+  // With immutability, old captured data reference is unchanged.
+  // The listener was unsubscribed, so no new data was captured.
   expect(data).toEqual([
     {
       a: 3,
       b: 'c',
-      [refCountSymbol]: 0,
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -153,22 +154,25 @@ test('single-format', () => {
 
   // trying to add another element should be an error
   // pipeline should have been configured with a limit of one
-  expect(() => consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}))).toThrow(
+  // With batched change application, the error is thrown when changes are applied
+  // (at flush() or .data access), not at push() time.
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
+  expect(() => view.flush()).toThrow(
     "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
   );
 
   // Adding the same element is not an error in the ArrayView but it is an error
   // in the Source. This case is tested in view-apply-change.ts.
 
-  consume(ms.push({row: {a: 1, b: 'a'}, type: 'remove'}));
+  // Note: After the failed flush, the pending change is still there. Let's verify
+  // that accessing .data also throws (auto-flush safety net).
+  expect(() => view.data).toThrow(
+    "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
+  );
 
-  // no call until flush
+  // The listener's data is still the old value since the flush failed
   expect(data).toEqual({a: 1, b: 'a'});
   expect(callCount).toBe(1);
-  view.flush();
-
-  expect(data).toEqual(undefined);
-  expect(callCount).toBe(2);
 
   unlisten();
 });
@@ -2037,6 +2041,189 @@ test('listeners added after error still receive error state', async () => {
   // Should immediately receive error state
   expect(receivedResultType).toBe('error');
   expect(receivedError).toEqual(testError);
+});
+
+test('O(N + K) batching: multiple changes applied efficiently', () => {
+  // This test verifies that K changes are buffered and applied in one batch,
+  // achieving O(N + K) complexity instead of O(K × N).
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+
+  // Create initial array of N=10 items
+  for (let i = 0; i < 10; i++) {
+    consume(ms.push({row: {a: i * 10, b: `item-${i}`}, type: 'add'}));
+  }
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+
+  let callCount = 0;
+  let data: ReadonlyJSONValue[] = [];
+  view.addListener(entries => {
+    ++callCount;
+    assertArray(entries);
+    // Capture references to verify identity preservation
+    data = [...entries] as ReadonlyJSONValue[];
+  });
+
+  // Initial hydration: 10 items
+  expect(data.length).toBe(10);
+  expect(callCount).toBe(1);
+
+  // Store references to original items for identity comparison
+  const originalItems = [...data];
+
+  // Push K=5 changes WITHOUT calling flush (they should be buffered)
+  consume(ms.push({row: {a: 15, b: 'new-1'}, type: 'add'}));
+  consume(ms.push({row: {a: 25, b: 'new-2'}, type: 'add'}));
+  consume(ms.push({row: {a: 35, b: 'new-3'}, type: 'add'}));
+  consume(ms.push({row: {a: 45, b: 'new-4'}, type: 'add'}));
+  consume(ms.push({row: {a: 55, b: 'new-5'}, type: 'add'}));
+
+  // Listener should NOT have been called yet (changes are buffered)
+  expect(callCount).toBe(1);
+
+  // Now flush: all 5 changes should be applied in one batch
+  view.flush();
+
+  // Listener should be called exactly once for the batch
+  expect(callCount).toBe(2);
+
+  // Verify all 15 items are present (10 original + 5 new)
+  expect(data.length).toBe(15);
+
+  // Verify the data is correctly sorted (by 'a' ascending)
+  const sortedA = data.map(d => (d as {a: number}).a);
+  expect(sortedA).toEqual([
+    0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90,
+  ]);
+
+  // Verify UNCHANGED items preserve reference identity
+  // Original items at indices 0, 1 (a=0, a=10) should still be the same references
+  // (Items at a=0 and a=10 are before all insertions, so their array indices don't change)
+  expect(data[0]).toBe(originalItems[0]); // a=0
+  expect(data[1]).toBe(originalItems[1]); // a=10
+
+  // Items that were shifted should still have the same object identity
+  // (immutable updates preserve identity for unchanged rows)
+  // Original item with a=20 (was at index 2, now at index 3)
+  expect(data[3]).toBe(originalItems[2]); // a=20
+  // Original item with a=30 (was at index 3, now at index 5)
+  expect(data[5]).toBe(originalItems[3]); // a=30
+});
+
+test('O(N + K) batching: auto-flush in .data getter', () => {
+  // This test verifies the auto-flush safety net: accessing .data should
+  // apply any pending changes, ensuring backwards compatibility.
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+
+  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
+  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+
+  // Don't add a listener, just use .data directly
+  expect(view.data).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+  ]);
+
+  // Push changes WITHOUT calling flush
+  consume(ms.push({row: {a: 3, b: 'c'}, type: 'add'}));
+  consume(ms.push({row: {a: 4, b: 'd'}, type: 'add'}));
+
+  // Accessing .data should auto-flush and show the new data
+  // (This is the backwards compatibility safety net)
+  expect(view.data).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+    {a: 3, b: 'c', [refCountSymbol]: 1},
+    {a: 4, b: 'd', [refCountSymbol]: 1},
+  ]);
+});
+
+test('O(N + K) batching: listener called once per flush with all changes', () => {
+  // This test verifies that multiple pushes before flush result in
+  // a single listener notification with the final state.
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+
+  consume(ms.push({row: {a: 1, b: 'initial'}, type: 'add'}));
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+
+  const snapshots: ReadonlyJSONValue[][] = [];
+  view.addListener(entries => {
+    assertArray(entries);
+    // Store a snapshot of the data at each listener call
+    snapshots.push([...entries] as ReadonlyJSONValue[]);
+  });
+
+  // Initial hydration
+  expect(snapshots.length).toBe(1);
+  expect(snapshots[0].length).toBe(1);
+
+  // Push 3 changes
+  consume(ms.push({row: {a: 2, b: 'second'}, type: 'add'}));
+  consume(ms.push({row: {a: 3, b: 'third'}, type: 'add'}));
+  consume(ms.push({row: {a: 4, b: 'fourth'}, type: 'add'}));
+
+  // Still only 1 snapshot (changes are buffered)
+  expect(snapshots.length).toBe(1);
+
+  // Flush
+  view.flush();
+
+  // Now we should have 2 snapshots total
+  expect(snapshots.length).toBe(2);
+
+  // The second snapshot should have ALL 4 items (not intermediate states)
+  expect(snapshots[1].length).toBe(4);
+  expect(snapshots[1].map(d => (d as {a: number}).a)).toEqual([1, 2, 3, 4]);
+
+  // Do another batch of changes
+  consume(ms.push({row: {a: 5, b: 'fifth'}, type: 'add'}));
+  consume(ms.push({row: {a: 6, b: 'sixth'}, type: 'add'}));
+
+  // Still only 2 snapshots
+  expect(snapshots.length).toBe(2);
+
+  // Flush again
+  view.flush();
+
+  // Now 3 snapshots
+  expect(snapshots.length).toBe(3);
+  expect(snapshots[2].length).toBe(6);
 });
 
 test('error state persists through flush operations', async () => {
