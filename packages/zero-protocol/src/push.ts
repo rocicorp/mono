@@ -125,8 +125,10 @@ export const pushBodySchema = v.object({
   schemaVersion: v.number().optional(),
   timestamp: v.number(),
   requestID: v.string(),
-  // Fresh auth token sent with each push - used instead of cached connection token
-  // to avoid expired token issues when pushing to upstream API
+  /**
+   * @deprecated auth is managed at client-group scope via connect/updateAuth
+   * and should not be included in push messages.
+   */
   auth: v.string().optional(),
 });
 

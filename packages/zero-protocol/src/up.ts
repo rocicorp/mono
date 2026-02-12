@@ -7,6 +7,7 @@ import {inspectUpMessageSchema} from './inspect-up.ts';
 import {pingMessageSchema} from './ping.ts';
 import {pullRequestMessageSchema} from './pull.ts';
 import {ackMutationResponsesMessageSchema, pushMessageSchema} from './push.ts';
+import {updateAuthMessageSchema} from './update-auth.ts';
 
 export const upstreamSchema = v.union(
   initConnectionMessageSchema,
@@ -14,6 +15,7 @@ export const upstreamSchema = v.union(
   deleteClientsMessageSchema,
   changeDesiredQueriesMessageSchema,
   pullRequestMessageSchema,
+  updateAuthMessageSchema,
   pushMessageSchema,
   closeConnectionMessageSchema,
   inspectUpMessageSchema,
