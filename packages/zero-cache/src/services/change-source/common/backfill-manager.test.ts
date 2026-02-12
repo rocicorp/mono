@@ -4,6 +4,7 @@ import {createSilentLogContext} from '../../../../../shared/src/logging-test-uti
 import {must} from '../../../../../shared/src/must.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
 import {sleep} from '../../../../../shared/src/sleep.ts';
+import {JSON_PARSED} from '../../../types/lite.ts';
 import {
   majorVersionFromString,
   majorVersionToString,
@@ -32,6 +33,7 @@ describe('backfill-manager', () => {
       lc,
       changeStream,
       backfillStreamer,
+      JSON_PARSED,
       10,
       50,
     );
@@ -116,7 +118,7 @@ describe('backfill-manager', () => {
     ]);
 
     expect(await drainChanges(5)).toMatchObject([
-      ['begin', {tag: 'begin'}, {commitWatermark: '123.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
       [
         'data',
         {
@@ -243,7 +245,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '125.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
       [
         'data',
         {
@@ -361,7 +363,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '130'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '130.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '130.01'}],
       [
         'data',
         {
@@ -539,7 +541,7 @@ describe('backfill-manager', () => {
     changeStream.release('125');
 
     expect((await drainChanges(15)).slice(-3)).toMatchObject([
-      ['begin', {tag: 'begin'}, {commitWatermark: '125.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
       [
         'data',
         {
@@ -633,7 +635,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '125.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
       [
         'data',
         {
@@ -733,7 +735,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '125.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
       [
         'data',
         {
@@ -836,7 +838,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '125.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
       [
         'data',
         {
@@ -970,7 +972,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '140.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '140.01'}],
       [
         'data',
         {
@@ -1192,7 +1194,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '140.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '140.01'}],
       [
         'data',
         {
@@ -1217,7 +1219,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140.01'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '140.02'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '140.02'}],
       [
         'data',
         {
@@ -1292,7 +1294,7 @@ describe('backfill-manager', () => {
     ]);
 
     expect(await drainChanges(3)).toMatchObject([
-      ['begin', {tag: 'begin'}, {commitWatermark: '123.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
       [
         'data',
         {
@@ -1333,6 +1335,115 @@ describe('backfill-manager', () => {
         columns: {a: {id: '123'}, b: {id: '234'}},
         table: {
           metadata: {rowKey: {a: 123}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+    ]);
+  });
+
+  test('backfill retried for non-empty table without row key', async () => {
+    testStreams.push(
+      [
+        {
+          tag: 'backfill',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: []}},
+          columns: ['id'],
+          watermark: '150',
+          rowValues: [[1]],
+        },
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: []}},
+          columns: ['id'],
+        },
+      ],
+      [
+        {
+          tag: 'backfill',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: []}},
+          columns: ['id'],
+          watermark: '150',
+          rowValues: [[1]],
+        },
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: []}},
+          columns: ['id'],
+        },
+      ],
+      // This time the table has a row key.
+      [
+        {
+          tag: 'backfill',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['id']}},
+          columns: [],
+          watermark: '188',
+          rowValues: [[1]],
+        },
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['id']}},
+          columns: [],
+        },
+      ],
+    );
+
+    void backfillManager.run('123', [
+      {
+        columns: {id: {id: '123'}},
+        table: {
+          metadata: {rowKey: {}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+    ]);
+
+    expect(await drainChanges(4)).toMatchObject([
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
+      [
+        'data',
+        {
+          tag: 'backfill',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['id']}},
+          columns: [],
+          watermark: '188',
+          rowValues: [[1]],
+        },
+      ],
+      [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['id']}},
+          columns: [],
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+    ] satisfies ChangeStreamMessage[]);
+
+    expect(backfillRequests).toMatchObject([
+      {
+        columns: {id: {id: '123'}},
+        table: {
+          metadata: {rowKey: {}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+      {
+        columns: {id: {id: '123'}},
+        table: {
+          metadata: {rowKey: {}},
+          name: 'bar',
+          schema: 'foo',
+        },
+      },
+      {
+        columns: {id: {id: '123'}},
+        table: {
+          metadata: {rowKey: {}},
           name: 'bar',
           schema: 'foo',
         },
@@ -1403,7 +1514,7 @@ describe('backfill-manager', () => {
     // Each 'backfill' message is wrapped in a separate transaction because
     // the backfill-manager yielded the stream between every message.
     expect(await drainChanges(15)).toMatchObject([
-      ['begin', {tag: 'begin'}, {commitWatermark: '141.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '141.01'}],
       [
         'data',
         {
@@ -1419,7 +1530,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '141.01'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '142.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '142.01'}],
       [
         'data',
         {
@@ -1435,7 +1546,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '142.01'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '143.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '143.01'}],
       [
         'data',
         {
@@ -1451,7 +1562,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '143.01'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '144.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '144.01'}],
       [
         'data',
         {
@@ -1467,7 +1578,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '144.01'}],
-      ['begin', {tag: 'begin'}, {commitWatermark: '145.01'}],
+      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '145.01'}],
       [
         'data',
         {
