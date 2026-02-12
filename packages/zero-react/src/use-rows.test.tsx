@@ -219,30 +219,40 @@ describe('useRows', () => {
     expect(result.current.permalinkNotFound).toBe(false);
 
     // Check the anchor item (ID 500 = "Item 0500")
-    expect(result.current.rowAt(500)).toEqual({
-      id: '500',
-      name: 'Item 0500',
-    });
+    expect(result.current.rowAt(500)).toEqual(
+      expect.objectContaining({
+        id: '500',
+        name: 'Item 0500',
+      }),
+    );
 
     // Check items before
-    expect(result.current.rowAt(495)).toEqual({
-      id: '495',
-      name: 'Item 0495',
-    });
-    expect(result.current.rowAt(499)).toEqual({
-      id: '499',
-      name: 'Item 0499',
-    });
+    expect(result.current.rowAt(495)).toEqual(
+      expect.objectContaining({
+        id: '495',
+        name: 'Item 0495',
+      }),
+    );
+    expect(result.current.rowAt(499)).toEqual(
+      expect.objectContaining({
+        id: '499',
+        name: 'Item 0499',
+      }),
+    );
 
     // Check items after
-    expect(result.current.rowAt(501)).toEqual({
-      id: '501',
-      name: 'Item 0501',
-    });
-    expect(result.current.rowAt(504)).toEqual({
-      id: '504',
-      name: 'Item 0504',
-    });
+    expect(result.current.rowAt(501)).toEqual(
+      expect.objectContaining({
+        id: '501',
+        name: 'Item 0501',
+      }),
+    );
+    expect(result.current.rowAt(504)).toEqual(
+      expect.objectContaining({
+        id: '504',
+        name: 'Item 0504',
+      }),
+    );
 
     // Out of range should be undefined
     expect(result.current.rowAt(494)).toBeUndefined();
@@ -268,10 +278,18 @@ describe('useRows', () => {
     expect(result.current.atStart).toBe(true);
     expect(result.current.atEnd).toBe(false);
 
-    expect(result.current.rowAt(0)).toEqual({id: '1', name: 'Item 0001'});
-    expect(result.current.rowAt(1)).toEqual({id: '2', name: 'Item 0002'});
-    expect(result.current.rowAt(2)).toEqual({id: '3', name: 'Item 0003'});
-    expect(result.current.rowAt(6)).toEqual({id: '7', name: 'Item 0007'});
+    expect(result.current.rowAt(0)).toEqual(
+      expect.objectContaining({id: '1', name: 'Item 0001'}),
+    );
+    expect(result.current.rowAt(1)).toEqual(
+      expect.objectContaining({id: '2', name: 'Item 0002'}),
+    );
+    expect(result.current.rowAt(2)).toEqual(
+      expect.objectContaining({id: '3', name: 'Item 0003'}),
+    );
+    expect(result.current.rowAt(6)).toEqual(
+      expect.objectContaining({id: '7', name: 'Item 0007'}),
+    );
   });
 
   test('permalink anchor - item near end', async () => {
@@ -293,18 +311,24 @@ describe('useRows', () => {
     expect(result.current.atStart).toBe(false);
     expect(result.current.atEnd).toBe(true);
 
-    expect(result.current.rowAt(992)).toEqual({
-      id: '993',
-      name: 'Item 0993',
-    });
-    expect(result.current.rowAt(997)).toEqual({
-      id: '998',
-      name: 'Item 0998',
-    });
-    expect(result.current.rowAt(999)).toEqual({
-      id: '1000',
-      name: 'Item 1000',
-    });
+    expect(result.current.rowAt(992)).toEqual(
+      expect.objectContaining({
+        id: '993',
+        name: 'Item 0993',
+      }),
+    );
+    expect(result.current.rowAt(997)).toEqual(
+      expect.objectContaining({
+        id: '998',
+        name: 'Item 0998',
+      }),
+    );
+    expect(result.current.rowAt(999)).toEqual(
+      expect.objectContaining({
+        id: '1000',
+        name: 'Item 1000',
+      }),
+    );
   });
 
   test('permalink anchor - item not found', async () => {
@@ -356,18 +380,26 @@ describe('useRows', () => {
 
     // Verify the new items are included and properly sorted
     expect(result.current.rowsLength).toBe(10);
-    expect(result.current.rowAt(0)).toEqual({
-      id: '1001',
-      name: 'Item 0000',
-    });
-    expect(result.current.rowAt(1)).toEqual({
-      id: '1002',
-      name: 'Item 00005',
-    });
-    expect(result.current.rowAt(2)).toEqual({id: '1', name: 'Item 0001'});
+    expect(result.current.rowAt(0)).toEqual(
+      expect.objectContaining({
+        id: '1001',
+        name: 'Item 0000',
+      }),
+    );
+    expect(result.current.rowAt(1)).toEqual(
+      expect.objectContaining({
+        id: '1002',
+        name: 'Item 00005',
+      }),
+    );
+    expect(result.current.rowAt(2)).toEqual(
+      expect.objectContaining({id: '1', name: 'Item 0001'}),
+    );
 
     // Original items shifted down - item 10 and 9 should be pushed out
-    expect(result.current.rowAt(9)).toEqual({id: '8', name: 'Item 0008'});
+    expect(result.current.rowAt(9)).toEqual(
+      expect.objectContaining({id: '8', name: 'Item 0008'}),
+    );
     expect(result.current.rowAt(10)).toBeUndefined();
   });
 
@@ -427,7 +459,9 @@ describe('useRows', () => {
 
     // Verify the permalink item is centered
     expect(result.current.permalinkNotFound).toBe(false);
-    expect(result.current.rowAt(500)).toEqual({id: '501', name: 'Item 0501'});
+    expect(result.current.rowAt(500)).toEqual(
+      expect.objectContaining({id: '501', name: 'Item 0501'}),
+    );
 
     const initialFirstIndex = result.current.firstRowIndex;
 

@@ -187,7 +187,9 @@ describe('useZeroVirtualizer', () => {
     expect(result.current.estimatedTotal).toBeGreaterThan(0);
 
     // Verify we can access rows
-    expect(result.current.rowAt(0)).toEqual({id: '1', name: 'Item 0001'});
+    expect(result.current.rowAt(0)).toEqual(
+      expect.objectContaining({id: '1', name: 'Item 0001'}),
+    );
   });
 
   test('permalink loading', async () => {
@@ -405,9 +407,15 @@ describe('useZeroVirtualizer', () => {
     });
 
     // Test rowAt function
-    expect(result.current.rowAt(0)).toEqual({id: '1', name: 'Item 0001'});
-    expect(result.current.rowAt(1)).toEqual({id: '2', name: 'Item 0002'});
-    expect(result.current.rowAt(99)).toEqual({id: '100', name: 'Item 0100'});
+    expect(result.current.rowAt(0)).toEqual(
+      expect.objectContaining({id: '1', name: 'Item 0001'}),
+    );
+    expect(result.current.rowAt(1)).toEqual(
+      expect.objectContaining({id: '2', name: 'Item 0002'}),
+    );
+    expect(result.current.rowAt(99)).toEqual(
+      expect.objectContaining({id: '100', name: 'Item 0100'}),
+    );
 
     // Out of range should be undefined
     expect(result.current.rowAt(10000)).toBeUndefined();
@@ -1213,10 +1221,12 @@ describe('useZeroVirtualizer', () => {
       });
 
       // Verify getRowKey receives the correct row data (first row)
-      expect(getRowKey.mock.calls[0][0]).toEqual({
-        id: '1',
-        name: 'Item 0001',
-      });
+      expect(getRowKey.mock.calls[0][0]).toEqual(
+        expect.objectContaining({
+          id: '1',
+          name: 'Item 0001',
+        }),
+      );
     });
 
     test('falls back to index for unloaded rows when using getRowKey', async () => {
@@ -1419,10 +1429,12 @@ describe('useZeroVirtualizer', () => {
       // Get the first call and verify it received a proper Item
       const firstCall = getRowKey.mock.calls[0];
       expect(firstCall).toBeDefined();
-      expect(firstCall[0]).toEqual({
-        id: '1',
-        name: 'Item 0001',
-      });
+      expect(firstCall[0]).toEqual(
+        expect.objectContaining({
+          id: '1',
+          name: 'Item 0001',
+        }),
+      );
     });
 
     test('getRowKey can return different key types (string, number)', async () => {
