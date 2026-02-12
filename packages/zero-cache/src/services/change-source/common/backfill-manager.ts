@@ -3,6 +3,8 @@ import {assert} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {randInt} from '../../../../../shared/src/rand.ts';
+import {JSON_STRINGIFIED, type JSONFormat} from '../../../types/lite.ts';
 import {
   majorVersionToString,
   stateVersionFromString,
@@ -67,6 +69,7 @@ export class BackfillManager implements Cancelable, Listener {
   );
   readonly #changeStreamer: ChangeStreamMultiplexer;
   readonly #backfillStreamer: BackfillStreamer;
+  readonly #jsonFormat: JSONFormat;
 
   /**
    * The current running backfill. The backfill request is always also in
@@ -83,12 +86,14 @@ export class BackfillManager implements Cancelable, Listener {
     lc: LogContext,
     changeStreamer: ChangeStreamMultiplexer,
     backfillStreamer: BackfillStreamer,
+    jsonFormat: JSONFormat = JSON_STRINGIFIED,
     minBackoffMs = MIN_BACKOFF_INTERVAL_MS,
     maxBackoffMs = MAX_BACKOFF_INTERVAL_MS,
   ) {
     this.#lc = lc.withContext('component', 'backfill-manager');
     this.#changeStreamer = changeStreamer;
     this.#backfillStreamer = backfillStreamer;
+    this.#jsonFormat = jsonFormat;
     this.#minBackoffMs = minBackoffMs;
     this.#maxBackoffMs = maxBackoffMs;
     this.#retryDelayMs = minBackoffMs;
@@ -108,30 +113,42 @@ export class BackfillManager implements Cancelable, Listener {
   #backfillRetryTimer: NodeJS.Timeout | undefined;
 
   #checkAndStartBackfill() {
-    if (!this.#backfillRetryTimer && !this.#runningBackfill) {
-      // Use the iterator to pick the first request.
-      for (const first of this.#requiredBackfills.values()) {
-        const state = {request: first, minMajorVersion: ''};
-        const lc = this.#lc.withContext('table', first.table.name);
+    if (
+      !this.#backfillRetryTimer &&
+      !this.#runningBackfill &&
+      this.#requiredBackfills.size
+    ) {
+      // Pick a random backfill to avoid head-of-line blocking by a
+      // problematic backfill (e.g. awaiting a primary key). This is
+      // simpler that adding logic to classify (and declassify)
+      // problematic backfills.
+      const candidates = [...this.#requiredBackfills.values()];
+      const request = candidates[randInt(0, candidates.length - 1)];
+      const state = {request, minMajorVersion: ''};
+      const lc = this.#lc.withContext('table', request.table.name);
 
-        this.#runningBackfill = state;
-        void this.#runBackfill(lc, state)
-          .then(() => {
-            this.#stopRunningBackfill('backfill exited', state);
-            this.#retryDelayMs = this.#minBackoffMs; // reset on success
-          })
-          // For unexpected errors (e.g. upstream replication slot
-          // unavailability), retry with exponential backoff.
-          .catch(e => {
-            this.#stopRunningBackfill(String(e), state);
-            this.#retryBackfillWithBackoff(e);
-          });
-        return;
-      }
+      this.#runningBackfill = state;
+      void this.#runBackfill(lc, state)
+        .then(() => {
+          this.#stopRunningBackfill('backfill exited', state);
+          this.#retryDelayMs = this.#minBackoffMs; // reset on success
+        })
+        // For unexpected errors (e.g. upstream replication slot
+        // unavailability), retry with exponential backoff.
+        .catch(e => {
+          this.#stopRunningBackfill(String(e), state);
+          this.#retryBackfillWithBackoff(e);
+        });
     }
   }
 
   #retryBackfillWithBackoff(e: unknown) {
+    if (e instanceof SchemaIncompatibilityError) {
+      this.#lc.info?.(`Schema incompatibility detected by backfill stream`, e);
+      // No need for backoff with schema incompatibility errors
+      this.#checkAndStartBackfill();
+      return;
+    }
     const log = this.#retryDelayMs === this.#maxBackoffMs ? 'error' : 'warn';
     this.#lc[log]?.(
       `Error running backfill. Retrying in ${this.#retryDelayMs} ms`,
@@ -185,7 +202,11 @@ export class BackfillManager implements Cancelable, Listener {
         minor: BigInt(minor) + 1n,
       });
 
-      void changeStream.push(['begin', {tag: 'begin'}, {commitWatermark: tx}]);
+      void changeStream.push([
+        'begin',
+        {tag: 'begin', json: this.#jsonFormat},
+        {commitWatermark: tx},
+      ]);
       return (backfillTx = tx);
     };
 
@@ -204,6 +225,14 @@ export class BackfillManager implements Cancelable, Listener {
     for await (const msg of this.#backfillStreamer(state.request)) {
       // If necessary, yield the reservation to the main stream.
       backfillTx && changeStream.waiterDelay() > 0 && commitTx();
+
+      if (
+        msg.tag === 'backfill' &&
+        msg.rowValues.length > 0 &&
+        msg.relation.rowKey.columns.length === 0
+      ) {
+        throw new MissingRowKeyError(state.request);
+      }
 
       // Reserve the changeStreamer if not in a transaction.
       if ((backfillTx ??= await beginTxFor(msg)) === null) {
@@ -249,17 +278,16 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   #setRequiredBackfill(source: string, req: BackfillRequest) {
-    const exists = this.#requiredBackfills.has(req.table);
-    this.#lc.info?.(`Backfill ${exists ? 'updated' : 'added'} by ${source}`, {
-      backfill: req,
-    });
+    const action = this.#requiredBackfills.has(req.table) ? 'updated' : 'added';
+    this.#lc.info?.(`Backfill ${action}: ${source}`, {backfill: req});
     this.#requiredBackfills.set(req.table, req);
   }
 
   #deleteRequiredBackfill(source: string, id: Identifier) {
     const req = this.#requiredBackfills.get(id);
     if (req) {
-      this.#lc.info?.(`Backfill dropped by ${source}`, {backfill: req});
+      const action = source === 'backfill-completed' ? 'completed' : 'dropped';
+      this.#lc.info?.(`Backfill ${action}: ${source}`, {backfill: req});
       this.#requiredBackfills.delete(id);
     }
   }
@@ -468,5 +496,56 @@ export class BackfillManager implements Cancelable, Listener {
   cancel(): void {
     this.#stopRunningBackfill(`change stream canceled`);
     clearTimeout(this.#backfillRetryTimer);
+  }
+}
+
+abstract class BackfillStreamError extends Error {
+  constructor(bf: BackfillRequest, msg: string, cause?: unknown) {
+    super(
+      `Cannot backfill ${bf.table.schema}.${bf.table.name}` +
+        `[${Object.keys(bf.columns).join(',')}]: ${msg}`,
+      {cause},
+    );
+  }
+}
+
+/**
+ * Background: The zero-cache supports replication of tables without a
+ * PRIMARY KEY to facilitate the onboarding process. These rows can be
+ * INSERT'ed, but postgres will rightfully prohibit UPDATEs and DELETEs
+ * on such tables because the rows cannot be identified by a key. Supporting
+ * this mode of replication allows the user to "fix" the setup by adding the
+ * primary key, after which the table can be published downstream without
+ * requiring a resync of the data.
+ *
+ * In terms of backfill, however, non-empty tables without a row key **cannot**
+ * be backfilled, because backfill retries would result in writing duplicating
+ * rows. (Empty tables, on the other hand, are fine because there is no data
+ * to be deduped.)
+ *
+ * The MissingRowKeyError is used to signal that the table cannot be backfilled
+ * in its current state. For simplicity, it is handled like runtime errors and
+ * retried with backoff, with which it can eventually succeed if (1) a primary
+ * key is added or (2) the table is emptied, e.g. via a TRUNCATE.
+ */
+class MissingRowKeyError extends BackfillStreamError {
+  readonly name = 'MissingRowKeyError';
+
+  constructor(bf: BackfillRequest, cause?: unknown) {
+    super(bf, `"${bf.table.name}" is missing a PRIMARY KEY`, cause);
+  }
+}
+
+/**
+ * Error type for backfill stream implementations to throw indicating that
+ * the backfill request failed to due a schema incompatibility error. This
+ * type of error does not need exponential backoff, as the retry happens
+ * naturally once the invalidating schema change is processed and committed.
+ */
+export class SchemaIncompatibilityError extends BackfillStreamError {
+  readonly name = 'SchemaIncompatibilityError';
+
+  constructor(bf: BackfillRequest, msg: string, cause?: unknown) {
+    super(bf, msg, cause);
   }
 }
