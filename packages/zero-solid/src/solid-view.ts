@@ -29,23 +29,25 @@ export const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
 export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
 
 /**
- * SolidView bridges Zero's incremental view updates with Solid's reactive store.
+ * SolidView bridges Zero's incremental view updates with Solid's reactive
+ * store.
  *
  * The challenge: Zero pushes individual row changes (add/remove/edit) as they
- * arrive, but updating Solid's store on each push is expensive. We batch changes
- * until transaction commit, then apply them all at once.
+ * arrive, but updating Solid's store on each push is expensive. We batch
+ * changes until transaction commit, then apply them all at once.
  *
  * Two code paths optimize for different scenarios:
  *
- *   1. BULK INSERT (builderRoot path): When building from empty, we skip Solid's
- *      reactive tracking entirely and build a plain JS object. This is 5x faster
- *      for large initial loads (743ms → 133ms for 3000 rows with 2 children each).
- *      Uses reconcile() to diff the final result into Solid.
+ *   1. BULK INSERT (builderRoot path): When building from empty, we skip
+ *      Solid's reactive tracking entirely and build a plain JS object. This is
+ *      5x faster for large initial loads. Uses reconcile() to diff the final
+ *      result into Solid.
  *
  *   2. INCREMENTAL UPDATE (#pendingChanges path): For existing views, we queue
- *      changes and apply them in-place within a produce() draft. produce() creates
- *      a mutable draft, applyChange mutates it directly, then produce() handles
- *      diffing and reactivity.
+ *      changes and apply them in-place within a produce() draft. produce()
+ *      creates a mutable draft, applyChange mutates it directly, then produce()
+ *      handles diffing and reactivity.
+ *
  *
  *   push(change)
  *       │
