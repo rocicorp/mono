@@ -128,12 +128,6 @@ export class ChangeStreamerHttpServer extends HttpService {
 
   readonly #reserveSnapshot = async (ws: WebSocket, req: RequestHeaders) => {
     try {
-      // Guard against WebSocket being closed during handoff from dispatcher.
-      // This can happen due to network issues or client disconnection.
-      if (ws.readyState === ws.CLOSED || ws.readyState === ws.CLOSING) {
-        this._lc.warn?.('websocket closed before snapshot stream could start');
-        return;
-      }
       const url = new URL(
         req.url ?? '',
         req.headers.origin ?? 'http://localhost',
@@ -153,12 +147,6 @@ export class ChangeStreamerHttpServer extends HttpService {
 
   readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
     try {
-      // Guard against WebSocket being closed during handoff from dispatcher.
-      // This can happen due to network issues or client disconnection.
-      if (ws.readyState === ws.CLOSED || ws.readyState === ws.CLOSING) {
-        this._lc.warn?.('websocket closed before subscribe stream could start');
-        return;
-      }
       const ctx = getSubscriberContext(req);
       if (ctx.mode === 'serving') {
         this.#ensureChangeStreamerStarted('incoming subscription');
