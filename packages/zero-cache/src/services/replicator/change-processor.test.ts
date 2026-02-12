@@ -3363,6 +3363,92 @@ describe('replicator/change-processor', () => {
       },
       expectedTablesInBackupReplicatorChangeLog: ['bff'],
     },
+    {
+      name: 'table backfill of row keys only',
+      setup: ``,
+      downstream: [
+        // Create a table that needs backfilling.
+        ['begin', bff.begin(), {commitWatermark: '0e'}],
+        [
+          'data',
+          bff.createTable(
+            {
+              schema: 'public',
+              name: 'bff',
+              primaryKey: ['id'],
+              columns: {
+                id: {dataType: 'int', pos: 0},
+              },
+            },
+            {
+              metadata: {rowKey: {columns: ['id']}},
+              backfill: {
+                id: {id: 1},
+              },
+            },
+          ),
+        ],
+        [
+          'data',
+          bff.createIndex({
+            name: 'bff_pkey',
+            schema: 'public',
+            tableName: 'bff',
+            unique: true,
+            columns: {
+              id: 'ASC',
+            },
+          }),
+        ],
+        ['commit', bff.commit(), {watermark: '0e'}],
+
+        ['begin', bff.begin(), {commitWatermark: '123.01'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['id']},
+            },
+            watermark: '115',
+            columns: [],
+            rowValues: [[2], [83]],
+          },
+        ],
+        [
+          'data',
+          {
+            tag: 'backfill-completed',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            columns: ['d', 'e'],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.01'}],
+      ],
+      data: {
+        bff: [
+          {id: 2n, _0_version: '123.01'},
+          {id: 83n, _0_version: '123.01'},
+        ],
+        ['_zero.changeLog2']: [
+          {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '123.01',
+            stateVersion: '123.01',
+            table: 'bff',
+          },
+        ],
+      },
+      expectedTablesInBackupReplicatorChangeLog: ['bff'],
+    },
   ];
 
   for (const c of cases) {
