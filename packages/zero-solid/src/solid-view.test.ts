@@ -1546,7 +1546,12 @@ test('edit trigger reactivity at the column level', () => {
   ];
   expect(data()).toEqual(data2);
   expect(row0Log).toEqual([]);
-  expect(row1Log).toEqual([]);
+  // PK change (a: 2→3) means idSymbol changes ('2'→'3').
+  // reconcile treats different keys as remove+add (correct: different PK = different entity).
+  // row1Log sees the "new" row because the old row object was replaced.
+  expect(row1Log).toEqual([
+    {a: 3, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '3'},
+  ]);
   expect(row0ALog).toEqual([]);
   expect(row0BLog).toEqual([]);
   expect(row1ALog).toEqual([3]);
