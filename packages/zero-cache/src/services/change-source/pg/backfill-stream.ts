@@ -1,5 +1,10 @@
+import {
+  PG_UNDEFINED_COLUMN,
+  PG_UNDEFINED_TABLE,
+} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {getDefaultHighWaterMark} from 'node:stream';
+import postgres from 'postgres';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {READONLY} from '../../../db/mode-enum.ts';
@@ -8,6 +13,7 @@ import {getTypeParsers, type TypeParser} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {TransactionPool} from '../../../db/transaction-pool.ts';
 import {pgClient} from '../../../types/pg.ts';
+import {SchemaIncompatibilityError} from '../common/backfill-manager.ts';
 import type {
   BackfillCompleted,
   BackfillRequest,
@@ -76,9 +82,29 @@ export async function* streamBackfill(
       cols.map(col => types.getTypeParser(tableSpec.columns[col].typeOID)),
       flushThresholdBytes,
     );
+  } catch (e) {
+    // Although we make the best effort to validate the schema at the
+    // transaction snapshot, certain forms of `ALTER TABLE` are not
+    // MVCC safe and not "frozen" in the snapshot:
+    //
+    // https://www.postgresql.org/docs/current/mvcc-caveats.html
+    //
+    // Handle these errors as schema incompatibility errors rather than
+    // unknown runtime errors.
+    if (
+      e instanceof postgres.PostgresError &&
+      (e.code === PG_UNDEFINED_TABLE || e.code === PG_UNDEFINED_COLUMN)
+    ) {
+      throw new SchemaIncompatibilityError(bf, String(e), {cause: e});
+    }
+    throw e;
   } finally {
     tx.setDone();
-    await db.end();
+    // errors are already thrown and handled from processReadTask()
+    void tx.done().catch(() => {});
+    // Workaround postgres.js hanging at the end of some COPY commands:
+    // https://github.com/porsager/postgres/issues/499
+    void db.end().catch(e => lc.warn?.(`error closing backfill connection`, e));
   }
 }
 
@@ -263,15 +289,4 @@ function validateSchema(
     };
     return {tableSpec: spec, backfill};
   });
-}
-
-export class SchemaIncompatibilityError extends Error {
-  readonly name = 'SchemaIncompatibilityError';
-
-  constructor(bf: BackfillRequest, msg: string) {
-    super(
-      `Cannot backfill ${bf.table.schema}.${bf.table.name}` +
-        `[${Object.keys(bf.columns).join(',')}]: ${msg}`,
-    );
-  }
 }
