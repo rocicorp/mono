@@ -1,10 +1,12 @@
 import {useQuery, useZero} from '@rocicorp/zero/solid';
 import {createEffect, createSignal, For, Show} from 'solid-js';
-import {mutators, queries, ZERO_PROJECT_ID} from './zero.ts';
 import {IssueRow} from './IssueRow.tsx';
+import {useLogin} from './login-provider.tsx';
+import {mutators, queries, ZERO_PROJECT_ID} from './zero.ts';
 
 export function App() {
   const z = useZero();
+  const login = useLogin();
   const [newTitle, setNewTitle] = createSignal('');
 
   console.log('[App] Zero instance:', z(), 'clientID:', z().clientID);
@@ -28,9 +30,15 @@ export function App() {
   );
 
   createEffect(() => {
-    console.log('[App] Query result type:', result().type, 'issues count:', issues()?.length ?? 0);
-    if (issues() && issues()!.length > 0) {
-      console.log('[App] First issue:', issues()![0]?.title);
+    console.log(
+      '[App] Query result type:',
+      result().type,
+      'issues count:',
+      issues()?.length ?? 0,
+    );
+    const issueList = issues();
+    if (issueList && issueList.length > 0) {
+      console.log('[App] First issue:', issueList[0]?.title);
     }
   });
 
@@ -57,11 +65,32 @@ export function App() {
     }
   };
 
+  const loginHref = `/api/login/github?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+  const loginState = login.loginState();
+
   return (
     <div class="app">
       <header>
-        <h1>zsolid</h1>
-        <p class="subtitle">Zero + Solid reactivity test</p>
+        <div
+          style={{
+            'display': 'flex',
+            'justify-content': 'space-between',
+            'align-items': 'center',
+          }}
+        >
+          <div>
+            <h1>zsolid</h1>
+            <p class="subtitle">Zero + Solid reactivity test</p>
+          </div>
+          <div
+            style={{'display': 'flex', 'gap': '10px', 'align-items': 'center'}}
+          >
+            <Show when={loginState} fallback={<a href={loginHref}>Login</a>}>
+              <span>{loginState?.decoded.name}</span>
+              <button onClick={login.logout}>Logout</button>
+            </Show>
+          </div>
+        </div>
       </header>
       <main>
         <div class="create-issue">
@@ -70,7 +99,7 @@ export function App() {
             type="text"
             placeholder="New issue title..."
             value={newTitle()}
-            onInput={(e) => setNewTitle(e.currentTarget.value)}
+            onInput={e => setNewTitle(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
           />
           <button class="create-issue-button" onClick={createIssue}>
@@ -78,7 +107,7 @@ export function App() {
           </button>
         </div>
         <div class="issue-list">
-          <div style={{"font-size": "12px", color: "#888"}}>
+          <div style={{'font-size': '12px', 'color': '#888'}}>
             Query state: {result().type} | Count: {issues()?.length ?? 'N/A'}
           </div>
           <Show when={issues()} fallback={<div>Loading...</div>}>

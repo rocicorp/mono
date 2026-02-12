@@ -1,7 +1,8 @@
 import {render} from 'solid-js/web';
 import {App} from './App.tsx';
-import {ZeroInit} from './zero-init.tsx';
 import './index.css';
+import {LoginProvider} from './login-provider.tsx';
+import {ZeroInit} from './zero-init.tsx';
 
 const root = document.getElementById('root');
 
@@ -11,9 +12,11 @@ if (!root) {
 
 render(
   () => (
-    <ZeroInit>
-      <App />
-    </ZeroInit>
+    <LoginProvider>
+      <ZeroInit>
+        <App />
+      </ZeroInit>
+    </LoginProvider>
   ),
   root,
 );

@@ -1,0 +1,10 @@
+{
+  "extends": ["../../.oxlintrc.json"],
+  "env": {
+    "builtin": true,
+    "browser": true
+  },
+  "rules": {
+    "no-console": "off"
+  }
+}

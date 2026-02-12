@@ -14,9 +14,11 @@ export function IssueRow(props: {issue: Issue}) {
     on(
       () => [props.issue.title, props.issue.modified],
       () => {
-        setUpdateCount((c) => c + 1);
+        setUpdateCount(c => c + 1);
         const id = props.issue.id.slice(0, 8);
-        console.log(`[update #${updateCount()}] IssueRow: ${id} - "${props.issue.title.slice(0, 30)}"`);
+        console.log(
+          `[update #${updateCount()}] IssueRow: ${id} - "${props.issue.title.slice(0, 30)}"`,
+        );
       },
       {defer: true},
     ),
@@ -26,9 +28,8 @@ export function IssueRow(props: {issue: Issue}) {
   const [editing, setEditing] = createSignal(false);
   const [editValue, setEditValue] = createSignal('');
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString();
-  };
+  const formatDate = (timestamp: number) =>
+    new Date(timestamp).toLocaleDateString();
 
   const startEditing = () => {
     setEditValue(props.issue.title);
@@ -63,11 +64,17 @@ export function IssueRow(props: {issue: Issue}) {
 
   return (
     <div class="issue-row">
-      <span class="render-badge" title="Update count">{updateCount()}</span>
+      <span class="render-badge" title="Update count">
+        {updateCount()}
+      </span>
       <Show
         when={editing()}
         fallback={
-          <span class="issue-title" onClick={startEditing} style={{cursor: 'pointer'}}>
+          <span
+            class="issue-title"
+            onClick={startEditing}
+            style={{cursor: 'pointer'}}
+          >
             {props.issue.title}
           </span>
         }
@@ -76,10 +83,10 @@ export function IssueRow(props: {issue: Issue}) {
           class="issue-title-input"
           type="text"
           value={editValue()}
-          onInput={(e) => setEditValue(e.currentTarget.value)}
+          onInput={e => setEditValue(e.currentTarget.value)}
           onBlur={saveEdit}
           onKeyDown={handleKeyDown}
-          ref={(el) => setTimeout(() => el.focus(), 0)}
+          ref={el => setTimeout(() => el.focus(), 0)}
         />
       </Show>
       <span class="issue-modified">{formatDate(props.issue.modified)}</span>
