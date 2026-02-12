@@ -276,7 +276,8 @@ describe('types/websocket-handoff', () => {
     const wssWithClosedWs = new WebSocketServer({noServer: true});
 
     // Override handleUpgrade to close the websocket before calling the callback
-    const originalHandleUpgrade = wssWithClosedWs.handleUpgrade.bind(wssWithClosedWs);
+    const originalHandleUpgrade =
+      wssWithClosedWs.handleUpgrade.bind(wssWithClosedWs);
     wssWithClosedWs.handleUpgrade = (request, socket, head, callback) => {
       originalHandleUpgrade(request, socket, head, (ws, req) => {
         // Simulate the race condition: close the websocket before the callback runs
