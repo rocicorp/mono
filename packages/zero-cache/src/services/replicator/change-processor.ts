@@ -821,10 +821,10 @@ class TransactionProcessor {
       }
       const updates =
         rowOp?.op === SET_OP
-          ? columns.filter(
+          ? cols.filter(
               c => (rowOp.backfillingColumnVersions[c] ?? '') <= watermark,
             )
-          : columns;
+          : cols;
       if (updates.length === 0) {
         // row already has newer values for all backfilling columns.
         skipped++;
