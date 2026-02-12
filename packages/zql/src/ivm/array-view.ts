@@ -1,5 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Immutable} from '../../../shared/src/immutable.ts';
+import {mapValues} from '../../../shared/src/objects.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
@@ -22,11 +23,8 @@ import type {Entry, Format, View} from './view.ts';
 function expandNode(node: Node): ExpandedNode {
   return {
     row: node.row,
-    relationships: Object.fromEntries(
-      Object.entries(node.relationships).map(([k, v]) => [
-        k,
-        [...skipYields(v())].map(expandNode),
-      ]),
+    relationships: mapValues(node.relationships, v =>
+      Array.from(skipYields(v()), expandNode),
     ),
   };
 }
@@ -107,15 +105,17 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       this.#resultType = 'error';
       this.#error = queryComplete;
     } else {
+      const flushAndFire = () =>
+        this.#dirty ? this.flush() : this.#fireListeners();
       void queryComplete
         .then(() => {
           this.#resultType = 'complete';
-          this.#fireListeners();
+          flushAndFire();
         })
-        .catch(e => {
+        .catch((e: ErroredQuery) => {
           this.#resultType = 'error';
           this.#error = e;
-          this.#fireListeners();
+          flushAndFire();
         });
     }
     this.#hydrate();

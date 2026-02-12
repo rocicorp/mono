@@ -12,10 +12,10 @@ import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
 import type {Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
+import {consume} from './stream.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 import {refCountSymbol} from './view-apply-change.ts';
-import {consume} from './stream.ts';
 
 const lc = createSilentLogContext();
 
