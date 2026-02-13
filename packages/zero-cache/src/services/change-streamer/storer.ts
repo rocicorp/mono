@@ -129,6 +129,7 @@ export class Storer implements Service {
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
     onFatal: (err: Error) => void,
+    backPressureLimitHeapProportion: number,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
@@ -140,29 +141,10 @@ export class Storer implements Service {
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
 
-    // Use 5% of the available heap (--max-old-space-size) as the buffer size
-    // for absorbing replication stream spikes. When the amount of queued data
-    // exceeds this threshold, back pressure is applied to the replication
-    // stream, delaying downstream sync as a result.
-    //
-    // The threshold was determined empirically with load testing. Higher
-    // thresholds like 10% have resulted in OOMs. Note also that the
-    // byte-counting logic in the queue is certainly an underestimate of
-    // actual memory usage (but importantly, proportionally correct), so
-    // the queue is actually using more than 5% of the heap.
-    //
-    // Resist the urge to "tune" this number; the buffer is useful for
-    // absorbing periodic spikes to avoid delaying downstream sync,
-    // but it does not meaningfully affect steady-state replication
-    // throughput; the latter is determined by other factors such as
-    // object serialization and PG throughput.
-    //
-    // In other words, the back pressure limit is not what constrains
-    // replication throughput; rather, it protects the system when the
-    // upstream throughput exceeds the downstream throughput.
     const heapStats = getHeapStatistics();
     this.#backPressureThresholdBytes =
-      (heapStats.heap_size_limit - heapStats.used_heap_size) * 0.05;
+      (heapStats.heap_size_limit - heapStats.used_heap_size) *
+      backPressureLimitHeapProportion;
 
     this.#lc.info?.(
       `Using up to ${(this.#backPressureThresholdBytes / 1024 ** 2).toFixed(2)} MB of ` +
