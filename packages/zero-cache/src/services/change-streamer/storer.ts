@@ -45,6 +45,9 @@ import {
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
 
+// Back pressure is applied when either the queued bytes threshold or the queued
+// change count threshold is exceeded, and released only after we fall below
+// both thresholds by a safety margin.
 const BACK_PRESSURE_RELEASE_RATIO = 0.8;
 
 type SubscriberAndMode = {
@@ -334,7 +337,6 @@ export class Storer implements Service {
       isBelowThreshold(this.#queue.size(), this.#queueSizeBackPressureThreshold);
     if (
       this.#readyForMore !== null &&
-      // Wait for at least 20% of each configured threshold to free up.
       belowBytes &&
       belowQueueSize
     ) {
