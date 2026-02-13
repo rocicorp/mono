@@ -861,8 +861,11 @@ describe('change-streamer/storer', () => {
       const [sub, _, stream] = createSubscriber('00');
 
       // This should be buffered until catchup is complete.
-      sub.send(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
-      sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+      void sub.send([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      void sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
 
       // Catchup should start immediately since there are no txes in progress.
       storer.catchup(sub, 'backup');
@@ -980,13 +983,19 @@ describe('change-streamer/storer', () => {
       const [sub2, _1, stream2] = createSubscriber('06');
 
       // This should be buffered until catchup is complete.
-      sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-      sub1.send([
+      void sub1.send([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      void sub1.send([
         '0a',
         ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
       ]);
-      sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-      sub2.send([
+      void sub2.send([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      void sub2.send([
         '0a',
         ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
       ]);
@@ -1221,13 +1230,19 @@ describe('change-streamer/storer', () => {
       const [sub2, _1, stream2] = createSubscriber('06');
 
       // This should be buffered until catchup is complete.
-      sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-      sub1.send([
+      void sub1.send([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      void sub1.send([
         '0a',
         ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
       ]);
-      sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-      sub2.send([
+      void sub2.send([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      void sub2.send([
         '0a',
         ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
       ]);
@@ -1402,8 +1417,11 @@ describe('change-streamer/storer', () => {
       const [sub, _0, stream] = createSubscriber('03');
 
       // This should be buffered until catchup is complete.
-      sub.send(['0b', ['begin', messages.begin(), {commitWatermark: '0c'}]]);
-      sub.send([
+      void sub.send([
+        '0b',
+        ['begin', messages.begin(), {commitWatermark: '0c'}],
+      ]);
+      void sub.send([
         '0c',
         ['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}],
       ]);

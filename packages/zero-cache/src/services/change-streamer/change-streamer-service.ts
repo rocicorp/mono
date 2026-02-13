@@ -359,7 +359,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           }
 
           this.#storer.store([watermark, change]);
-          this.#forwarder.forward([watermark, change]);
+          await this.#forwarder.forward([watermark, change]);
 
           if (type === 'commit' || type === 'rollback') {
             watermark = null;
@@ -382,7 +382,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       if (watermark) {
         this.#lc.warn?.(`aborting interrupted transaction ${watermark}`);
         this.#storer.abort();
-        this.#forwarder.forward([watermark, ['rollback', {tag: 'rollback'}]]);
+        await this.#forwarder.forward([
+          watermark,
+          ['rollback', {tag: 'rollback'}],
+        ]);
       }
 
       await this.#state.backoff(this.#lc, err);

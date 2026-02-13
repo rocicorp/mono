@@ -532,7 +532,7 @@ export class Storer implements Service {
               // Catchup starts from *after* the watermark.
               watermarkFound = true;
             } else if (watermarkFound) {
-              lastBatchConsumed = sub.catchup(toDownstream(entry)).result;
+              lastBatchConsumed = sub.catchup(toDownstream(entry));
               count++;
             } else if (mode === 'backup') {
               throw new AutoResetSignal(

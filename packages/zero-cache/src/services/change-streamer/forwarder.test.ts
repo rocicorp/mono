@@ -15,15 +15,18 @@ describe('change-streamer/forwarder', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    forwarder.forward([
+    void forwarder.forward([
       '11',
       ['begin', messages.begin(), {commitWatermark: '13'}],
     ]);
     forwarder.add(sub2);
-    forwarder.forward(['12', ['data', messages.truncate('issues')]]);
-    forwarder.forward(['13', ['commit', messages.commit(), {watermark: '13'}]]);
+    void forwarder.forward(['12', ['data', messages.truncate('issues')]]);
+    void forwarder.forward([
+      '13',
+      ['commit', messages.commit(), {watermark: '13'}],
+    ]);
     forwarder.add(sub3);
-    forwarder.forward([
+    void forwarder.forward([
       '14',
       ['begin', messages.begin(), {commitWatermark: '15'}],
     ]);
@@ -154,15 +157,15 @@ describe('change-streamer/forwarder', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    forwarder.forward([
+    void forwarder.forward([
       '11',
       ['begin', messages.begin(), {commitWatermark: '14'}],
     ]);
     forwarder.add(sub2);
-    forwarder.forward(['12', ['data', messages.truncate('issues')]]);
-    forwarder.forward(['13', ['rollback', messages.rollback()]]);
+    void forwarder.forward(['12', ['data', messages.truncate('issues')]]);
+    void forwarder.forward(['13', ['rollback', messages.rollback()]]);
     forwarder.add(sub3);
-    forwarder.forward([
+    void forwarder.forward([
       '14',
       ['begin', messages.begin(), {commitWatermark: '15'}],
     ]);
