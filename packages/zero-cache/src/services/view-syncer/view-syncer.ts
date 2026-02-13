@@ -1,4 +1,3 @@
-import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -8,7 +7,6 @@ import {
   startAsyncSpan,
   startSpan,
 } from '../../../../otel/src/span.ts';
-import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
@@ -99,6 +97,7 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
+import {tracer} from './tracer.ts';
 import {
   ttlClockAsNumber,
   ttlClockFromNumber,
@@ -115,8 +114,6 @@ export type SyncContext = {
   readonly origin: string | undefined;
   readonly userID: string;
 };
-
-const tracer = trace.getTracer('view-syncer', version);
 
 const PROTOCOL_VERSION_ATTR = 'protocol.version';
 
@@ -868,22 +865,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
-    return this.#runPriorityOp(lc, 'flushing cvr', async () => {
-      const now = Date.now();
-      const ttlClock = this.#getTTLClock(now);
-      const {cvr, flushed} = await updater.flush(
-        lc,
-        this.#lastConnectTime,
-        now,
-        ttlClock,
-      );
+    return startAsyncSpan(tracer, 'vs.#flushUpdater', () => {
+      return this.#runPriorityOp(lc, 'flushing cvr', async () => {
+        const now = Date.now();
+        const ttlClock = this.#getTTLClock(now);
+        const {cvr, flushed} = await updater.flush(
+          lc,
+          this.#lastConnectTime,
+          now,
+          ttlClock,
+        );
 
-      if (flushed) {
-        // If the CVR was flushed, we restart the ttlClock interval.
-        this.#startTTLClockInterval(lc);
-      }
+        if (flushed) {
+          // If the CVR was flushed, we restart the ttlClock interval.
+          this.#startTTLClockInterval(lc);
+        }
 
-      return cvr;
+        return cvr;
+      });
     });
   }
 
@@ -942,11 +941,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // (Clients that are behind the cvr.version need to be caught up in
       //  #syncQueryPipelineSet(), as row data may be needed for catchup)
       const newCVR = this.#cvr;
-      const pokers = startPoke(this.#getClients(cvr.version), newCVR.version);
-      for (const patch of patches) {
-        await pokers.addPatch(patch);
-      }
-      await pokers.end(newCVR.version);
+      await startAsyncSpan(
+        tracer,
+        'vs.#updateCVRConfig.pokeClients',
+        async () => {
+          const pokers = startPoke(
+            this.#getClients(cvr.version),
+            newCVR.version,
+          );
+          for (const patch of patches) {
+            await pokers.addPatch(patch);
+          }
+          await pokers.end(newCVR.version);
+        },
+      );
     }
 
     if (this.#pipelinesSynced) {
@@ -1061,7 +1069,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     customQueryTransformMode: CustomQueryTransformMode,
     profileID?: string,
   ) =>
-    startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
+    startAsyncSpan(tracer, 'vs.#handleConfigUpdate', async () => {
       const deletedClientIDs: string[] = [];
       const deletedClientGroupIDs: string[] = [];
 
@@ -1149,14 +1157,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         deletedClientGroupIDs.length
       ) {
         const clients = this.#getClients();
-        await Promise.allSettled(
-          clients.map(client =>
-            client.sendDeleteClients(
-              lc,
-              deletedClientIDs,
-              deletedClientGroupIDs,
+        await startAsyncSpan(
+          tracer,
+          'vs.#handleConfigUpdate.sendDeleteClients',
+          () =>
+            Promise.allSettled(
+              clients.map(client =>
+                client.sendDeleteClients(
+                  lc,
+                  deletedClientIDs,
+                  deletedClientGroupIDs,
+                ),
+              ),
             ),
-          ),
         );
       }
 
