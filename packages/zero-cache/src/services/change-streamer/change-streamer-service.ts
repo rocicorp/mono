@@ -56,9 +56,21 @@ export async function initializeStreamer(
   subscriptionState: SubscriptionState,
   autoReset: boolean,
   backPressureLimitHeapProportion: number,
-  queueSizeBackPressureThreshold: number | undefined,
-  setTimeoutFn = setTimeout,
+  queueSizeBackPressureThresholdOrSetTimeoutFn?: number | typeof setTimeout,
+  setTimeoutFn?: typeof setTimeout,
 ): Promise<ChangeStreamerService> {
+  // Backward compatible signature:
+  // - Old callers: initializeStreamer(..., backPressureLimitHeapProportion, setTimeoutFn?)
+  // - New callers: initializeStreamer(..., backPressureLimitHeapProportion, queueSizeBackPressureThreshold, setTimeoutFn?)
+  const queueSizeBackPressureThreshold =
+    typeof queueSizeBackPressureThresholdOrSetTimeoutFn === 'number'
+      ? queueSizeBackPressureThresholdOrSetTimeoutFn
+      : undefined;
+  const resolvedSetTimeoutFn =
+    typeof queueSizeBackPressureThresholdOrSetTimeoutFn === 'function'
+      ? queueSizeBackPressureThresholdOrSetTimeoutFn
+      : (setTimeoutFn ?? setTimeout);
+
   // Make sure the ChangeLog DB is set up.
   await initChangeStreamerSchema(lc, changeDB, shard);
   await ensureReplicationConfig(
@@ -82,7 +94,7 @@ export async function initializeStreamer(
     autoReset,
     backPressureLimitHeapProportion,
     queueSizeBackPressureThreshold,
-    setTimeoutFn,
+    resolvedSetTimeoutFn,
   );
 }
 
