@@ -100,6 +100,10 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   run(lastWatermark: string, initialRequests: BackfillRequest[]) {
+    this.#lc.info?.(
+      `starting backfill manager with ${initialRequests.length} initial requests`,
+      {requests: initialRequests},
+    );
     this.#changeStreamWatermark = stateVersionFromString(lastWatermark);
     initialRequests.forEach(req =>
       this.#setRequiredBackfill('initial-request', req),
@@ -143,12 +147,6 @@ export class BackfillManager implements Cancelable, Listener {
   }
 
   #retryBackfillWithBackoff(e: unknown) {
-    if (e instanceof SchemaIncompatibilityError) {
-      this.#lc.info?.(`Schema incompatibility detected by backfill stream`, e);
-      // No need for backoff with schema incompatibility errors
-      this.#checkAndStartBackfill();
-      return;
-    }
     const log = this.#retryDelayMs === this.#maxBackoffMs ? 'error' : 'warn';
     this.#lc[log]?.(
       `Error running backfill. Retrying in ${this.#retryDelayMs} ms`,
@@ -428,10 +426,14 @@ export class BackfillManager implements Cancelable, Listener {
         const backfillRequest = this.#requiredBackfills.get(table);
         if (backfillRequest && column in backfillRequest.columns) {
           const {[column]: _excluded, ...remaining} = backfillRequest.columns;
-          this.#setRequiredBackfill(tag, {
-            ...backfillRequest,
-            columns: remaining,
-          });
+          if (Object.keys(remaining).length === 0) {
+            this.#deleteRequiredBackfill(tag, table);
+          } else {
+            this.#setRequiredBackfill(tag, {
+              ...backfillRequest,
+              columns: remaining,
+            });
+          }
           const backfill = this.#backfillRunningFor(table);
           if (backfill && column in backfill.request.columns) {
             this.#stopRunningBackfill(`column dropped`);

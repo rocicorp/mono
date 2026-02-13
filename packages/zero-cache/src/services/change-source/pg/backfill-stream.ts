@@ -117,6 +117,7 @@ async function* stream(
   colParsers: TypeParser[],
   flushThresholdBytes: number,
 ): AsyncGenerator<MessageBackfill | BackfillCompleted> {
+  const start = performance.now();
   lc.info?.(`Starting backfill copy stream:`, selectStmt);
   const copyStream = await tx.processReadTask(sql =>
     sql.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
@@ -163,7 +164,8 @@ async function* stream(
   }
 
   yield {tag: 'backfill-completed', ...backfill};
-  lc.info?.(`Finished streaming ${totalRows} rows`);
+  const elapsed = performance.now() - start;
+  lc.info?.(`Finished streaming ${totalRows} rows (${elapsed.toFixed(3)} ms)`);
 }
 
 /**
