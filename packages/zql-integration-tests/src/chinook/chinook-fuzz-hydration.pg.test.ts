@@ -24,8 +24,10 @@ const harness = await bootstrap({
   pgContent,
 });
 
+const VITEST_TIMEOUT_MS = 60_000; // set via third argument to test() calls
+
 // Internal timeout for graceful handling (shorter than vitest timeout)
-const TEST_TIMEOUT_MS = 15_000;
+const TEST_TIMEOUT_MS = VITEST_TIMEOUT_MS / 2;
 
 /**
  * Error thrown when a fuzz test query exceeds the time limit.
@@ -60,7 +62,7 @@ function createCheckAbort(
 test.each(Array.from({length: 100}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
-  60_000, // vitest timeout: longer than internal timeout to ensure we catch it ourselves
+  VITEST_TIMEOUT_MS, // vitest timeout: longer than internal timeout to ensure we catch it ourselves
 );
 
 test('sentinel', () => {
@@ -69,18 +71,22 @@ test('sentinel', () => {
 
 if (REPRO_SEED) {
   // oxlint-disable-next-line no-focused-tests
-  test.only('repro', async () => {
-    const tc = createCase(REPRO_SEED);
-    const {query} = tc;
-    console.log(
-      'ZQL',
-      await formatOutput(
-        asQueryInternals(query[0]).ast.table +
-          astToZQL(asQueryInternals(query[0]).ast),
-      ),
-    );
-    await runCase(tc);
-  }, 60_000);
+  test.only(
+    'repro',
+    async () => {
+      const tc = createCase(REPRO_SEED);
+      const {query} = tc;
+      console.log(
+        'ZQL',
+        await formatOutput(
+          asQueryInternals(query[0]).ast.table +
+            astToZQL(asQueryInternals(query[0]).ast),
+        ),
+      );
+      await runCase(tc);
+    },
+    VITEST_TIMEOUT_MS,
+  );
 }
 
 function createCase(seed?: number) {
