@@ -8,6 +8,7 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {
@@ -17,6 +18,7 @@ import {
 } from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {
+  backfillRequestSchema,
   isDataChange,
   isSchemaChange,
   type BackfillID,
@@ -67,6 +69,8 @@ type PendingTransaction = {
   pos: number;
   startingReplicationState: Promise<ReplicationState>;
 };
+
+const backfillRequestsSchema = v.array(backfillRequestSchema);
 
 /**
  * Handles the storage of changes and the catchup of subscribers
@@ -125,6 +129,7 @@ export class Storer implements Service {
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
     onFatal: (err: Error) => void,
+    backPressureLimitHeapProportion: number,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
@@ -136,29 +141,10 @@ export class Storer implements Service {
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
 
-    // Use 5% of the available heap (--max-old-space-size) as the buffer size
-    // for absorbing replication stream spikes. When the amount of queued data
-    // exceeds this threshold, back pressure is applied to the replication
-    // stream, delaying downstream sync as a result.
-    //
-    // The threshold was determined empirically with load testing. Higher
-    // thresholds like 10% have resulted in OOMs. Note also that the
-    // byte-counting logic in the queue is certainly an underestimate of
-    // actual memory usage (but importantly, proportionally correct), so
-    // the queue is actually using more than 5% of the heap.
-    //
-    // Resist the urge to "tune" this number; the buffer is useful for
-    // absorbing periodic spikes to avoid delaying downstream sync,
-    // but it does not meaningfully affect steady-state replication
-    // throughput; the latter is determined by other factors such as
-    // object serialization and PG throughput.
-    //
-    // In other words, the back pressure limit is not what constrains
-    // replication throughput; rather, it protects the system when the
-    // upstream throughput exceeds the downstream throughput.
     const heapStats = getHeapStatistics();
     this.#backPressureThresholdBytes =
-      (heapStats.heap_size_limit - heapStats.used_heap_size) * 0.05;
+      (heapStats.heap_size_limit - heapStats.used_heap_size) *
+      backPressureLimitHeapProportion;
 
     this.#lc.info?.(
       `Using up to ${(this.#backPressureThresholdBytes / 1024 ** 2).toFixed(2)} MB of ` +
@@ -208,13 +194,19 @@ export class Storer implements Service {
         // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
         // to make it optional and possibly `null`.
         sql<BackfillRequest[]>`
-        SELECT b."schema", b."table" as name, t."metadata", 
-               json_object_agg(b."column", b."backfill") as columns
+        SELECT 
+            json_build_object(
+              'schema', b."schema",
+              'name', b."table",
+              'metadata', t."metadata"
+            ) as "table",
+            json_object_agg(b."column", b."backfill") 
+              as "columns"
           FROM ${this.#cdc('backfilling')} as b
           LEFT JOIN ${this.#cdc('tableMetadata')} as t
           ON (b."schema" = t."schema" AND b."table" = t."table")
           GROUP BY b."schema", b."table", t."metadata"
-        `,
+        `.then(result => v.parse(result, backfillRequestsSchema)),
       ],
     );
 
