@@ -45,6 +45,8 @@ import {
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
 
+const BACK_PRESSURE_RELEASE_RATIO = 0.8;
+
 type SubscriberAndMode = {
   subscriber: Subscriber;
   mode: ReplicatorMode;
@@ -322,10 +324,12 @@ export class Storer implements Service {
 
   #maybeReleaseBackPressure() {
     const belowBytes =
-      this.#approximateQueuedBytes < this.#backPressureThresholdBytes * 0.8;
+      this.#approximateQueuedBytes <
+      this.#backPressureThresholdBytes * BACK_PRESSURE_RELEASE_RATIO;
     const belowQueueSize =
       this.#queueSizeBackPressureThreshold === undefined ||
-      this.#queue.size() < this.#queueSizeBackPressureThreshold * 0.8;
+      this.#queue.size() <
+        this.#queueSizeBackPressureThreshold * BACK_PRESSURE_RELEASE_RATIO;
     if (
       this.#readyForMore !== null &&
       // Wait for at least 20% of the threshold to free up.
