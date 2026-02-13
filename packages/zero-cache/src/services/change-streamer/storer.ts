@@ -326,15 +326,16 @@ export class Storer implements Service {
   }
 
   #maybeReleaseBackPressure() {
-    const isBelowThreshold = (current: number, threshold: number) =>
-      current < threshold * BACK_PRESSURE_RELEASE_RATIO;
-    const belowBytes = isBelowThreshold(
-      this.#approximateQueuedBytes,
-      this.#backPressureThresholdBytes,
-    );
+    const releaseBytesThreshold =
+      this.#backPressureThresholdBytes * BACK_PRESSURE_RELEASE_RATIO;
+    const releaseQueueSizeThreshold =
+      this.#queueSizeBackPressureThreshold === undefined
+        ? undefined
+        : this.#queueSizeBackPressureThreshold * BACK_PRESSURE_RELEASE_RATIO;
+    const belowBytes = this.#approximateQueuedBytes < releaseBytesThreshold;
     const belowQueueSize =
-      this.#queueSizeBackPressureThreshold === undefined ||
-      isBelowThreshold(this.#queue.size(), this.#queueSizeBackPressureThreshold);
+      releaseQueueSizeThreshold === undefined ||
+      this.#queue.size() < releaseQueueSizeThreshold;
     if (
       this.#readyForMore !== null &&
       belowBytes &&
