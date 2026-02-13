@@ -98,6 +98,7 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
+        0.04,
       );
       await storer.assumeOwnership();
       done = storer.run();
@@ -1536,6 +1537,7 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
+        0.04,
       );
       await storer.assumeOwnership();
       done = storer.run();
