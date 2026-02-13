@@ -1086,6 +1086,73 @@ describe('backfill-manager', () => {
     ]);
   });
 
+  test('backfill canceled because of last column drop', async () => {
+    testStreams.push([
+      {
+        tag: 'backfill-completed',
+        relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+        columns: ['b'],
+      },
+    ]);
+    await changeStream.reserve('main');
+
+    // Backfill manager will start the first request and block on the
+    // 'main' change-stream reservation.
+    void backfillManager.run('123', [
+      {
+        columns: {b: {id: '234'}},
+        table: {
+          schema: 'foo',
+          name: 'bar',
+          metadata: {rowKey: {a: 123}},
+        },
+      },
+    ]);
+
+    // In the meantime, the table gets renamed on the main stream.
+    for (const msg of [
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      [
+        'data',
+        {
+          tag: 'drop-column',
+          table: {schema: 'foo', name: 'bar'},
+          column: 'b',
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+    ] satisfies ChangeStreamMessage[]) {
+      void changeStream.push(msg);
+    }
+    changeStream.release('125');
+
+    // The backfill request is canceled
+    expect(await drainChanges(3)).toMatchObject([
+      ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
+      [
+        'data',
+        {
+          tag: 'drop-column',
+          table: {schema: 'foo', name: 'bar'},
+          column: 'b',
+        },
+      ],
+      ['commit', {tag: 'commit'}, {watermark: '125'}],
+    ] satisfies ChangeStreamMessage[]);
+
+    expect(backfillRequests).toMatchObject([
+      // Canceled request, and no subsequent attempts
+      {
+        table: {
+          schema: 'foo',
+          name: 'bar',
+          metadata: {rowKey: {a: 123}},
+        },
+        columns: {b: {id: '234'}},
+      },
+    ]);
+  });
+
   test('column added to backfilling table', async () => {
     testStreams.push(
       [
