@@ -36,7 +36,13 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const {
     taskID,
-    changeStreamer: {port, address, protocol, startupDelayMs},
+    changeStreamer: {
+      port,
+      address,
+      protocol,
+      startupDelayMs,
+      backPressureLimitHeapProportion,
+    },
     upstream,
     change,
     replica,
@@ -94,6 +100,7 @@ export default async function runWorker(
         changeSource,
         subscriptionState,
         autoReset ?? false,
+        backPressureLimitHeapProportion,
         setTimeout,
       );
       break;

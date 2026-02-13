@@ -55,6 +55,7 @@ export async function initializeStreamer(
   changeSource: ChangeSource,
   subscriptionState: SubscriptionState,
   autoReset: boolean,
+  backPressureLimitHeapProportion: number,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
@@ -78,6 +79,7 @@ export async function initializeStreamer(
     replicaVersion,
     changeSource,
     autoReset,
+    backPressureLimitHeapProportion,
     setTimeoutFn,
   );
 }
@@ -274,6 +276,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     replicaVersion: string,
     source: ChangeSource,
     autoReset: boolean,
+    backPressureLimitHeapProportion: number,
     setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
@@ -292,6 +295,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
       err => this.stop(err),
+      backPressureLimitHeapProportion,
     );
     this.#forwarder = new Forwarder();
     this.#autoReset = autoReset;
