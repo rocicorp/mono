@@ -61,11 +61,11 @@ describe('change-streamer/service', () => {
     acks = new Queue();
     setTimeoutFn = vi.fn();
 
-    streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
-      'change.streamer:12345',
+	    streamer = await initializeStreamer(
+	      lc,
+	      shard,
+	      'task-id',
+	      'change.streamer:12345',
       'ws',
       sql,
       {
@@ -76,12 +76,11 @@ describe('change-streamer/service', () => {
             acks: {push: status => acks.enqueue(status)},
           }),
       },
-      replicaConfig,
-      true,
-      0.04,
-      undefined,
-      setTimeoutFn as unknown as typeof setTimeout,
-    );
+	      replicaConfig,
+	      true,
+	      0.04,
+	      setTimeoutFn as unknown as typeof setTimeout,
+	    );
     streamerDone = streamer.run();
 
     return async () => {
@@ -866,7 +865,6 @@ describe('change-streamer/service', () => {
 	      replicaConfig,
 	      true,
 	      0.04,
-	      undefined,
 	    );
     void streamer.run();
 
@@ -892,7 +890,6 @@ describe('change-streamer/service', () => {
 	      replicaConfig,
 	      true,
 	      0.04,
-	      undefined,
 	    );
     void streamer.run();
 
@@ -915,7 +912,6 @@ describe('change-streamer/service', () => {
 	      replicaConfig,
 	      true,
 	      0.04,
-	      undefined,
 	    );
     void streamer.run();
 
@@ -950,7 +946,6 @@ describe('change-streamer/service', () => {
 	      replicaConfig,
 	      true,
 	      0.04,
-	      undefined,
 	    );
     void streamer.run();
 
@@ -988,7 +983,6 @@ describe('change-streamer/service', () => {
 	      replicaConfig,
 	      true,
 	      0.04,
-	      undefined,
 	    );
     void streamer.run();
 
@@ -1060,7 +1054,6 @@ describe('change-streamer/service', () => {
 	      replicaConfig,
 	      true,
 	      0.04,
-	      undefined,
 	    );
     void streamer.run();
 
