@@ -211,7 +211,7 @@ describe('view-syncer/service', () => {
       {
         id: 'test-version-inspect',
         op: 'version',
-        value: expect.stringMatching(/^\d+\.\d+\.\d+$/),
+        value: expect.stringMatching(/^\d+\.\d+\.\d+(-canary\.\d+)?$/),
       },
     ]);
   });
