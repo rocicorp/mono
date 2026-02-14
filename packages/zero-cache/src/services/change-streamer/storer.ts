@@ -246,6 +246,9 @@ export class Storer implements Service {
     });
   }
 
+  /**
+   * @returns The size of the serialized entry, for memory / I/O estimations.
+   */
   store(entry: WatermarkedChange) {
     const [watermark, [_tag, change]] = entry;
     // Eagerly stringify the JSON object so that the memory usage can be
@@ -264,6 +267,8 @@ export class Storer implements Service {
       json,
       isDataChange(change) ? null : change, // drop DataChanges to save memory
     ]);
+
+    return json.length;
   }
 
   abort() {
