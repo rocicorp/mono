@@ -6,7 +6,7 @@ import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
-import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
@@ -19,7 +19,7 @@ describe('change-streamer/storer', () => {
   let db: PostgresDB;
   let storer: Storer;
   let done: Promise<void>;
-  let consumed: Queue<Commit | StatusMessage>;
+  let consumed: Queue<Commit | UpstreamStatusMessage>;
   let fatalErrors: Queue<Error>;
   let shard: {appID: string; shardNum: number};
 
@@ -1014,8 +1014,8 @@ describe('change-streamer/storer', () => {
         ['commit', messages.commit({extra: 'stuff'}), {watermark: '08'}],
       ]);
 
-      storer.status(['status', {}, {watermark: '0e'}]);
-      storer.status(['status', {}, {watermark: '0f'}]);
+      storer.status(['status', {ack: true}, {watermark: '0e'}]);
+      storer.status(['status', {ack: true}, {watermark: '0f'}]);
 
       // Catchup should wait for the transaction to complete before querying
       // the database, and start after watermark '03'.
@@ -1258,8 +1258,8 @@ describe('change-streamer/storer', () => {
       // Rollback the transaction.
       storer.store(['08', ['rollback', messages.rollback()]]);
 
-      storer.status(['status', {}, {watermark: '0a'}]);
-      storer.status(['status', {}, {watermark: '0c'}]);
+      storer.status(['status', {ack: true}, {watermark: '0a'}]);
+      storer.status(['status', {ack: true}, {watermark: '0c'}]);
 
       // Catchup should wait for the transaction to complete before querying
       // the database, and start after watermark '03'.
@@ -1448,8 +1448,8 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
 
-      storer.status(['status', {}, {watermark: '0d'}]);
-      storer.status(['status', {}, {watermark: '0e'}]);
+      storer.status(['status', {ack: true}, {watermark: '0d'}]);
+      storer.status(['status', {ack: true}, {watermark: '0e'}]);
 
       // Wait for the storer to commit that transaction.
       for (let i = 0; i < 10; i++) {

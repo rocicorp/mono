@@ -304,7 +304,7 @@ class PostgresChangeSource implements ChangeSource {
           if (msg.tag === 'keepalive') {
             changes.pushStatus([
               'status',
-              msg,
+              {ack: msg.shouldRespond},
               {watermark: majorVersionToString(lsn)},
             ]);
             continue;

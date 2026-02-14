@@ -102,6 +102,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     const queue = new Queue<ChangeStreamMessage | 'timeout'>();
     void (async () => {
       for await (const msg of sub) {
+        if (msg[0] === 'status' && !msg[1].ack) {
+          continue; // filter out keepalives
+        }
         queue.enqueue(msg);
       }
     })();
