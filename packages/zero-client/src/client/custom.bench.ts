@@ -23,5 +23,6 @@ bench('big schema', () => {
       [zeroData]: {},
     } as unknown as WriteTransaction,
     schema,
+    'bench',
   );
 });

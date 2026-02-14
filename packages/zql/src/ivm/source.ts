@@ -1,5 +1,6 @@
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import type {TableSchema} from '../../../zero-types/src/schema.ts';
 import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import type {Input} from './operator.ts';
@@ -25,6 +26,14 @@ export type SourceChange =
   | SourceChangeAdd
   | SourceChangeRemove
   | SourceChangeEdit;
+
+/**
+ * Options for push operations.
+ */
+export type PushOptions = {
+  /** Reason for the push, used for debugging. Can be any JSON-serializable value. */
+  reason?: JSONValue | undefined;
+};
 
 /**
  * A source is an input that serves as the root data source of the pipeline.
@@ -76,7 +85,10 @@ export interface Source {
    * Once the stream is exhausted, the change will have been pushed into all
    * connected inputs and committed to the source.
    */
-  push(change: SourceChange): Stream<'yield'>;
+  push(
+    change: SourceChange,
+    options?: PushOptions | undefined,
+  ): Stream<'yield'>;
 
   /**
    * Pushes a change into the source.
@@ -88,7 +100,10 @@ export interface Source {
    * Once the stream is exhausted, the change will have been pushed
    * into all connected inputs and committed to the source.
    */
-  genPush(change: SourceChange): Stream<'yield' | undefined>;
+  genPush(
+    change: SourceChange,
+    options?: PushOptions | undefined,
+  ): Stream<'yield' | undefined>;
 }
 
 export interface SourceInput extends Input {

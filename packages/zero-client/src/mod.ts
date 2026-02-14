@@ -108,6 +108,7 @@ export type {
 export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
+export {debugMemorySource} from '../../zql/src/ivm/memory-source.ts';
 export type {Input, Output} from '../../zql/src/ivm/operator.ts';
 export type {Stream} from '../../zql/src/ivm/stream.ts';
 export type {

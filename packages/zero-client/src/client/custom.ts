@@ -127,14 +127,19 @@ export class TransactionImpl<TSchema extends Schema = DefaultSchema>
   readonly #repTx: WriteTransaction;
   readonly #zeroContext: ZeroContext;
 
-  constructor(lc: LogContext, repTx: WriteTransaction, schema: TSchema) {
+  constructor(
+    lc: LogContext,
+    repTx: WriteTransaction,
+    schema: TSchema,
+    mutationName: string,
+  ) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     const txData = getZeroTxData(repTx);
     const ivmBranch = txData.ivmSources as IVMSourceBranch;
 
     this.#repTx = repTx;
 
-    const executor = makeCRUDExecutor(repTx, schema, ivmBranch);
+    const executor = makeCRUDExecutor(repTx, schema, ivmBranch, mutationName);
     this.mutate = makeTransactionMutate(schema, executor);
 
     const zeroContext = newZeroContext(
@@ -188,12 +193,13 @@ export function makeReplicacheMutator<
   mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
   context: Context,
+  mutationName: string,
 ): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
   ): Promise<void> => {
-    const tx = new TransactionImpl(lc, repTx, schema);
+    const tx = new TransactionImpl(lc, repTx, schema, mutationName);
     await mutator(tx, args, context);
   };
 }

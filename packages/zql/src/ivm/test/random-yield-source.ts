@@ -1,7 +1,12 @@
 import type {Condition, Ordering} from '../../../../zero-protocol/src/ast.ts';
 import type {DebugDelegate} from '../../builder/debug-delegate.ts';
 import type {FetchRequest} from '../operator.ts';
-import type {Source, SourceChange, SourceInput} from '../source.ts';
+import type {
+  PushOptions,
+  Source,
+  SourceChange,
+  SourceInput,
+} from '../source.ts';
 import type {Stream} from '../stream.ts';
 import type {Node} from '../data.ts';
 
@@ -80,8 +85,11 @@ export class RandomYieldSource implements Source {
     return wrappedInput;
   }
 
-  *push(change: SourceChange): Stream<'yield'> {
-    for (const item of this.#source.push(change)) {
+  *push(
+    change: SourceChange,
+    options?: PushOptions | undefined,
+  ): Stream<'yield'> {
+    for (const item of this.#source.push(change, options)) {
       // Check for abort (can throw)
       this.#checkAbort?.();
       // Randomly yield before each yield from underlying source
@@ -100,8 +108,11 @@ export class RandomYieldSource implements Source {
     }
   }
 
-  *genPush(change: SourceChange): Stream<'yield' | undefined> {
-    for (const item of this.#source.genPush(change)) {
+  *genPush(
+    change: SourceChange,
+    options?: PushOptions | undefined,
+  ): Stream<'yield' | undefined> {
+    for (const item of this.#source.genPush(change, options)) {
       // Check for abort (can throw)
       this.#checkAbort?.();
       // Randomly yield before each item

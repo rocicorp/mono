@@ -1,4 +1,5 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {stringify as bigintStringify} from '../../../shared/src/bigint-json.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {once} from '../../../shared/src/iterables.ts';
@@ -10,6 +11,133 @@ import type {
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
+import type {PushOptions} from './source.ts';
+
+// #region Debug infrastructure for tracking MemorySource operations
+
+/**
+ * Debug configuration for MemorySource operation tracking.
+ * Enable by adding table names to `opBufferTables`.
+ *
+ * @example
+ * ```ts
+ * import {debugMemorySource} from '@rocicorp/zero';
+ * debugMemorySource.opBufferTables.add('candidate_job_connections');
+ * ```
+ */
+export const debugMemorySource = {
+  /** Tables to track operations for. Only tables in this set will record ops. */
+  opBufferTables: new Set<string>(),
+  /** Size of the ring buffer per table. Defaults to 100,000. */
+  opBufferSize: 100_000,
+};
+
+type OpBufferEntry = {
+  op: 'add' | 'remove' | 'edit';
+  rowKey: Record<string, unknown>;
+  reason: unknown;
+  timestamp: number;
+};
+
+// Global op buffers per table (only for tables in debugMemorySource.opBufferTables)
+const opBuffers = new Map<string, OpBufferEntry[]>();
+
+/**
+ * Clears all op buffers. Exported for testing.
+ */
+export function clearOpBuffersForTesting(): void {
+  opBuffers.clear();
+}
+
+function makeRowKey(row: Row, primaryKey: PrimaryKey): Record<string, unknown> {
+  const key: Record<string, unknown> = {};
+  for (const k of primaryKey) {
+    key[k] = row[k];
+  }
+  return key;
+}
+
+function rowKeyToString(rowKey: Record<string, unknown>): string {
+  return Object.entries(rowKey)
+    .map(([k, v]) => `${k}=${bigintStringify(v)}`)
+    .join(',');
+}
+
+function rowKeysMatch(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  for (const k of aKeys) {
+    if (a[k] !== b[k]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function recordOp(
+  tableName: string,
+  op: 'add' | 'remove' | 'edit',
+  rowKey: Record<string, unknown>,
+  reason: unknown,
+): void {
+  if (!debugMemorySource.opBufferTables.has(tableName)) {
+    return;
+  }
+
+  let buffer = opBuffers.get(tableName);
+  if (!buffer) {
+    buffer = [];
+    opBuffers.set(tableName, buffer);
+  }
+
+  buffer.push({
+    op,
+    rowKey,
+    reason,
+    timestamp: Date.now(),
+  });
+
+  // Ring buffer: remove oldest if over size
+  if (buffer.length > debugMemorySource.opBufferSize) {
+    buffer.shift();
+  }
+}
+
+function getOpHistory(
+  tableName: string,
+  rowKey: Record<string, unknown>,
+): string {
+  const buffer = opBuffers.get(tableName);
+  if (!buffer || buffer.length === 0) {
+    return (
+      "No op history recorded. Enable with: debugMemorySource.opBufferTables.add('" +
+      tableName +
+      "')"
+    );
+  }
+
+  // Find all ops for this row
+  const rowOps = buffer.filter(e => rowKeysMatch(e.rowKey, rowKey));
+  const rowKeyStr = rowKeyToString(rowKey);
+
+  if (rowOps.length === 0) {
+    return `No ops found for row ${rowKeyStr}. Total ops in buffer: ${buffer.length}`;
+  }
+
+  const lines = rowOps.map(
+    e =>
+      `  ${new Date(e.timestamp).toISOString()} ${e.op} reason=${bigintStringify(e.reason)}`,
+  );
+  return `Op history for ${rowKeyStr} (${rowOps.length} ops):\n${lines.join('\n')}`;
+}
+
+// #endregion
 import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import {
   createPredicate,
@@ -354,15 +482,21 @@ export class MemorySource implements Source {
       : withConstraint;
   }
 
-  *push(change: SourceChange): Stream<'yield'> {
-    for (const result of this.genPush(change)) {
+  *push(
+    change: SourceChange,
+    options?: PushOptions | undefined,
+  ): Stream<'yield'> {
+    for (const result of this.genPush(change, options)) {
       if (result === 'yield') {
         yield result;
       }
     }
   }
 
-  *genPush(change: SourceChange) {
+  *genPush(
+    change: SourceChange,
+    options?: PushOptions | undefined,
+  ): Stream<'yield' | undefined> {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
     const exists = (row: Row) => data.has(row);
@@ -375,6 +509,9 @@ export class MemorySource implements Source {
       setOverlay,
       writeChange,
       () => ++this.#pushEpoch,
+      this.#tableName,
+      this.#primaryKey,
+      options?.reason,
     );
   }
 
@@ -438,6 +575,9 @@ export function* genPushAndWriteWithSplitEdit(
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
   getNextEpoch: () => number,
+  tableName?: string | undefined,
+  primaryKey?: PrimaryKey | undefined,
+  reason?: unknown,
 ) {
   let shouldSplitEdit = false;
   if (change.type === 'edit') {
@@ -464,6 +604,9 @@ export function* genPushAndWriteWithSplitEdit(
       setOverlay,
       writeChange,
       getNextEpoch(),
+      tableName,
+      primaryKey,
+      reason,
     );
     yield* genPushAndWrite(
       connections,
@@ -475,6 +618,9 @@ export function* genPushAndWriteWithSplitEdit(
       setOverlay,
       writeChange,
       getNextEpoch(),
+      tableName,
+      primaryKey,
+      reason,
     );
   } else {
     yield* genPushAndWrite(
@@ -484,6 +630,9 @@ export function* genPushAndWriteWithSplitEdit(
       setOverlay,
       writeChange,
       getNextEpoch(),
+      tableName,
+      primaryKey,
+      reason,
     );
   }
 }
@@ -495,8 +644,20 @@ function* genPushAndWrite(
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
   pushEpoch: number,
+  tableName?: string | undefined,
+  primaryKey?: PrimaryKey | undefined,
+  reason?: unknown,
 ) {
-  for (const x of genPush(connections, change, exists, setOverlay, pushEpoch)) {
+  for (const x of genPush(
+    connections,
+    change,
+    exists,
+    setOverlay,
+    pushEpoch,
+    tableName,
+    primaryKey,
+    reason,
+  )) {
     yield x;
   }
   writeChange(change);
@@ -508,19 +669,39 @@ function* genPush(
   exists: (row: Row) => boolean,
   setOverlay: (o: Overlay | undefined) => void,
   pushEpoch: number,
+  tableName?: string | undefined,
+  primaryKey?: PrimaryKey | undefined,
+  reason?: unknown,
 ) {
+  const row = change.type === 'edit' ? change.oldRow : change.row;
+  const rowKey = primaryKey ? makeRowKey(row, primaryKey) : undefined;
+
+  // Record op for debugging if enabled
+  if (tableName && rowKey) {
+    recordOp(tableName, change.type, rowKey, reason);
+  }
+
+  const getHistory = () =>
+    tableName && rowKey ? '\n' + getOpHistory(tableName, rowKey) : '';
+
   switch (change.type) {
     case 'add':
       assert(
         !exists(change.row),
-        () => `Row already exists ${stringify(change)}`,
+        () => `Row already exists ${stringify(change)}${getHistory()}`,
       );
       break;
     case 'remove':
-      assert(exists(change.row), () => `Row not found ${stringify(change)}`);
+      assert(
+        exists(change.row),
+        () => `Row not found ${stringify(change)}${getHistory()}`,
+      );
       break;
     case 'edit':
-      assert(exists(change.oldRow), () => `Row not found ${stringify(change)}`);
+      assert(
+        exists(change.oldRow),
+        () => `Row not found ${stringify(change)}${getHistory()}`,
+      );
       break;
     default:
       unreachable(change);
