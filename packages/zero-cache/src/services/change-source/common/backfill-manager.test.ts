@@ -103,6 +103,7 @@ describe('backfill-manager', () => {
         tag: 'backfill-completed',
         relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
         columns: ['b'],
+        watermark: '130',
       },
     ]);
 
@@ -151,6 +152,7 @@ describe('backfill-manager', () => {
           columns: ['b'],
           relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
           tag: 'backfill-completed',
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
@@ -194,6 +196,7 @@ describe('backfill-manager', () => {
         tag: 'backfill-completed',
         relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
         columns: ['b'],
+        watermark: '130',
       },
     ]);
     void backfillManager.run('123', []);
@@ -278,6 +281,7 @@ describe('backfill-manager', () => {
           columns: ['b'],
           relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
           tag: 'backfill-completed',
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125.01'}],
@@ -321,6 +325,7 @@ describe('backfill-manager', () => {
         tag: 'backfill-completed',
         relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
         columns: ['b'],
+        watermark: '130',
       },
     ]);
     void backfillManager.run('123', []);
@@ -396,6 +401,7 @@ describe('backfill-manager', () => {
           columns: ['b'],
           relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
           tag: 'backfill-completed',
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '130.01'}],
@@ -419,6 +425,7 @@ describe('backfill-manager', () => {
         tag: 'backfill-completed',
         relation: {schema: 'boo', name: 'far', rowKey: {columns: ['z']}},
         columns: ['d', 'c'],
+        watermark: '130',
       },
     ]);
     void backfillManager.run('123', []);
@@ -552,6 +559,7 @@ describe('backfill-manager', () => {
             schema: 'boo',
           },
           tag: 'backfill-completed',
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125.01'}],
@@ -580,6 +588,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: ['b'],
+          watermark: '120',
         },
       ],
       [
@@ -587,6 +596,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: [],
+          watermark: '130',
         },
       ],
     );
@@ -646,6 +656,7 @@ describe('backfill-manager', () => {
             rowKey: {columns: ['a']},
           },
           columns: [],
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125.01'}],
@@ -680,6 +691,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: ['a', 'b'],
+          watermark: '120',
         },
       ],
       [
@@ -687,6 +699,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'boo', name: 'far', rowKey: {columns: ['a']}},
           columns: ['a', 'b'],
+          watermark: '130',
         },
       ],
     );
@@ -746,6 +759,7 @@ describe('backfill-manager', () => {
             name: 'far',
             rowKey: {columns: ['a']},
           },
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125.01'}],
@@ -780,6 +794,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: ['a', 'b'],
+          watermark: '120',
         },
       ],
       [
@@ -787,6 +802,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['b']}},
           columns: ['a', 'b'],
+          watermark: '130',
         },
       ],
     );
@@ -849,6 +865,7 @@ describe('backfill-manager', () => {
             name: 'bar',
             rowKey: {columns: ['b']},
           },
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125.01'}],
@@ -895,6 +912,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: ['a', 'b'],
+          watermark: '120',
         },
       ],
       [
@@ -914,6 +932,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: ['a', 'b'],
+          watermark: '130',
         },
       ],
     );
@@ -994,6 +1013,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           columns: ['a', 'b'],
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140.01'}],
@@ -1027,6 +1047,7 @@ describe('backfill-manager', () => {
         tag: 'backfill-completed',
         relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
         columns: ['a', 'b'],
+        watermark: '120',
       },
     ]);
     await changeStream.reserve('main');
@@ -1092,6 +1113,7 @@ describe('backfill-manager', () => {
         tag: 'backfill-completed',
         relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
         columns: ['b'],
+        watermark: '120',
       },
     ]);
     await changeStream.reserve('main');
@@ -1172,6 +1194,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: ['a', 'b'],
+          watermark: '130',
         },
       ],
       [
@@ -1191,6 +1214,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: ['c', 'd'],
+          watermark: '150',
         },
       ],
     );
@@ -1283,6 +1307,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           columns: ['a', 'b'],
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140.01'}],
@@ -1308,6 +1333,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           columns: ['c', 'd'],
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
+          watermark: '150',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140.02'}],
@@ -1345,6 +1371,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
           columns: ['b'],
+          watermark: '130',
         },
       ],
     );
@@ -1368,6 +1395,7 @@ describe('backfill-manager', () => {
           columns: ['b'],
           relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
           tag: 'backfill-completed',
+          watermark: '130',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
@@ -1423,6 +1451,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: []}},
           columns: ['id'],
+          watermark: '150',
         },
       ],
       [
@@ -1437,6 +1466,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: []}},
           columns: ['id'],
+          watermark: '150',
         },
       ],
       // This time the table has a row key.
@@ -1452,6 +1482,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['id']}},
           columns: [],
+          watermark: '188',
         },
       ],
     );
@@ -1485,6 +1516,7 @@ describe('backfill-manager', () => {
           tag: 'backfill-completed',
           relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['id']}},
           columns: [],
+          watermark: '188',
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
@@ -1552,6 +1584,7 @@ describe('backfill-manager', () => {
         tag: 'backfill-completed',
         relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
         columns: ['b'],
+        watermark: '130',
       },
     ]);
     await changeStream.reserve('main');

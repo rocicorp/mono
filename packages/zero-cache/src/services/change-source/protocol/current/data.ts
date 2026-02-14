@@ -282,6 +282,12 @@ export const backfillCompletedSchema = v.object({
   // The columns to be backfilled. `rowKey` columns are automatically excluded,
   // which means that this field may be empty.
   columns: v.array(v.string()),
+
+  // The watermark at which the backfill data was queried. Note that this
+  // generally will be different from the commit watermarks of the main change
+  // stream, and in particular, the commit watermark of the backfill change's
+  // enclosing transaction.
+  watermark: v.string(),
 });
 
 export type MessageBegin = v.Infer<typeof beginSchema>;
