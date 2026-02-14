@@ -4,10 +4,10 @@ import {
   identifierSchema,
   tableMetadataSchema,
 } from './data.ts';
-import {statusMessageSchema} from './status.ts';
+import {upstreamStatusMessageSchema} from './status.ts';
 
 /** At the moment, the only upstream messages are status messages.  */
-export const changeSourceUpstreamSchema = statusMessageSchema;
+export const changeSourceUpstreamSchema = upstreamStatusMessageSchema;
 export type ChangeSourceUpstream = v.Infer<typeof changeSourceUpstreamSchema>;
 
 /**

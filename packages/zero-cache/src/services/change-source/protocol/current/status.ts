@@ -1,21 +1,35 @@
 import * as v from '../../../../../../shared/src/valita.ts';
+import {commitSchema} from './data.ts';
 
 /**
- * The StatusMessage payload itself is unspecified. The `zero-cache` will
- * send the Commit payload when acknowledging a completed transaction, and
- * will echo back whatever message was sent from the ChangeSource when
- * acknowledging a downstream StatusMessage.
+ * The downstream status message indicates whether it should be echoed
+ * back in an upstream status message.
  */
-export const statusSchema = v.object({});
+export const downstreamStatusSchema = v.object({
+  ack: v.boolean().optional(() => true),
+});
 
-export const statusMessageSchema = v.tuple([
+export type DownstreamStatus = v.Infer<typeof downstreamStatusSchema>;
+
+export const downstreamStatusMessageSchema = v.tuple([
   v.literal('status'),
-  statusSchema,
+  downstreamStatusSchema,
   v.object({watermark: v.string()}),
 ]);
 
 /**
- * A StatusMessage conveys positional information from both the ChangeSource
+ * The `zero-cache` will send the Commit payload when acknowledging a
+ * completed transaction, and will echo back the downstreamStatus message
+ * if `ack` is true.
+ */
+export const upstreamStatusMessageSchema = v.tuple([
+  v.literal('status'),
+  v.union(downstreamStatusSchema, commitSchema),
+  v.object({watermark: v.string()}),
+]);
+
+/**
+ * Status messages convey positional information from both the ChangeSource
  * and the `zero-cache`.
  *
  * A StatusMessage from the ChangeSource indicates a position in its change
@@ -39,4 +53,7 @@ export const statusMessageSchema = v.tuple([
  * its change log purely from Commit-driven StatusMessages there is no need
  * for the ChangeSource to send StatusMessages.
  */
-export type StatusMessage = v.Infer<typeof statusMessageSchema>;
+export type DownstreamStatusMessage = v.Infer<
+  typeof downstreamStatusMessageSchema
+>;
+export type UpstreamStatusMessage = v.Infer<typeof upstreamStatusMessageSchema>;

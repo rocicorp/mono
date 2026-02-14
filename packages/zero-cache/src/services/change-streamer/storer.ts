@@ -30,7 +30,7 @@ import {
   type TableMetadata,
 } from '../change-source/protocol/current.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
-import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
@@ -59,7 +59,7 @@ type QueueEntry =
     ]
   | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
-  | StatusMessage
+  | UpstreamStatusMessage
   | ['abort']
   | 'stop';
 
@@ -111,7 +111,7 @@ export class Storer implements Service {
   readonly #discoveryProtocol: string;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
-  readonly #onConsumed: (c: Commit | StatusMessage) => void;
+  readonly #onConsumed: (c: Commit | UpstreamStatusMessage) => void;
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
@@ -127,7 +127,7 @@ export class Storer implements Service {
     discoveryProtocol: string,
     db: PostgresDB,
     replicaVersion: string,
-    onConsumed: (c: Commit | StatusMessage) => void,
+    onConsumed: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
     backPressureLimitHeapProportion: number,
   ) {
@@ -275,7 +275,7 @@ export class Storer implements Service {
     this.#queue.enqueue(['abort']);
   }
 
-  status(s: StatusMessage) {
+  status(s: UpstreamStatusMessage) {
     this.#queue.enqueue(s);
   }
 
