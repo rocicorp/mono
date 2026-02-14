@@ -206,6 +206,7 @@ export function makeCRUDExecutor(
   tx: WriteTransaction,
   schema: Schema,
   ivmBranch: IVMSourceBranch | undefined,
+  mutationName: string,
 ): CRUDExecutor {
   return (tableName, kind, value) => {
     const {primaryKey} = schema.tables[tableName];
@@ -215,6 +216,7 @@ export function makeCRUDExecutor(
       {op: kind, tableName, primaryKey, value} as any,
       schema,
       ivmBranch,
+      mutationName,
     );
   };
 }
@@ -228,7 +230,12 @@ export function makeCRUDMutator(schema: Schema): CRUDMutator {
     tx: WriteTransaction,
     crudArg: CRUDMutationArg,
   ): Promise<void> => {
-    const executor = makeCRUDExecutor(tx, schema, undefined);
+    const executor = makeCRUDExecutor(
+      tx,
+      schema,
+      undefined,
+      CRUD_MUTATION_NAME,
+    );
     for (const op of crudArg.ops) {
       await executor(op.tableName, op.op, op.value);
     }

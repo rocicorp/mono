@@ -29,6 +29,7 @@ import {
 import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {
+  type PushOptions,
   type Source,
   type SourceChange,
   type SourceInput,
@@ -362,7 +363,10 @@ export class TableSource implements Source {
     }
   }
 
-  *push(change: SourceChange): Stream<'yield'> {
+  *push(
+    change: SourceChange,
+    _options?: PushOptions | undefined,
+  ): Stream<'yield'> {
     for (const result of this.genPush(change)) {
       if (result === 'yield') {
         yield result;
@@ -370,7 +374,10 @@ export class TableSource implements Source {
     }
   }
 
-  *genPush(change: SourceChange) {
+  *genPush(
+    change: SourceChange,
+    _options?: PushOptions | undefined,
+  ): Stream<'yield' | undefined> {
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),

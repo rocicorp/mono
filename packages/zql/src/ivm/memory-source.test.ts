@@ -1,10 +1,12 @@
-import {describe, expect, test} from 'vitest';
+import {afterEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {Catch} from './catch.ts';
 import type {Change} from './change.ts';
 import {
+  clearOpBuffersForTesting,
+  debugMemorySource,
   generateWithOverlayInner,
   MemorySource,
   overlaysForConstraintForTest,
@@ -509,4 +511,186 @@ test('overlaysForStartAt', () => {
       compare,
     ),
   ).toEqual({add: undefined, remove: undefined});
+});
+
+describe('debugMemorySource', () => {
+  afterEach(() => {
+    // Clean up after each test
+    debugMemorySource.opBufferTables.clear();
+    debugMemorySource.opBufferSize = 100_000;
+    clearOpBuffersForTesting();
+  });
+
+  test('does not record ops when table is not in opBufferTables', () => {
+    const ms = new MemorySource('test_table', {id: {type: 'string'}}, ['id']);
+
+    // Push without enabling debug
+    consume(ms.push({type: 'add', row: {id: '1'}}));
+
+    // Try to remove a non-existent row - error should not include op history
+    expect(() => {
+      consume(ms.push({type: 'remove', row: {id: 'nonexistent'}}));
+    }).toThrow(/No op history recorded/);
+  });
+
+  test('records ops and includes history in error when table is in opBufferTables', () => {
+    debugMemorySource.opBufferTables.add('test_table');
+
+    const ms = new MemorySource('test_table', {id: {type: 'string'}}, ['id']);
+
+    // Push some operations
+    consume(ms.push({type: 'add', row: {id: '1'}}, {reason: 'init'}));
+    consume(ms.push({type: 'add', row: {id: '2'}}, {reason: {type: 'poke'}}));
+    consume(
+      ms.push(
+        {type: 'edit', row: {id: '1'}, oldRow: {id: '1'}},
+        {reason: {type: 'mutation', name: 'updateItem'}},
+      ),
+    );
+    consume(ms.push({type: 'remove', row: {id: '1'}}, {reason: 'rebase'}));
+
+    // Try to remove a row that doesn't exist anymore - error should include history
+    expect(() => {
+      consume(ms.push({type: 'remove', row: {id: '1'}}));
+    }).toThrow(/Op history for id="1"/);
+  });
+
+  test('includes reason in op history', () => {
+    debugMemorySource.opBufferTables.add('test_table');
+
+    const ms = new MemorySource('test_table', {id: {type: 'string'}}, ['id']);
+
+    consume(ms.push({type: 'add', row: {id: '1'}}, {reason: {type: 'poke'}}));
+    consume(ms.push({type: 'remove', row: {id: '1'}}, {reason: 'test-reason'}));
+
+    // Try to remove again - error should include reasons
+    let error: Error | undefined;
+    try {
+      consume(ms.push({type: 'remove', row: {id: '1'}}));
+    } catch (e) {
+      error = e as Error;
+    }
+
+    expect(error).toBeDefined();
+    expect(error!.message).toContain('poke');
+    expect(error!.message).toContain('test-reason');
+  });
+
+  test('ring buffer respects opBufferSize limit', () => {
+    debugMemorySource.opBufferTables.add('test_table');
+    // Set buffer size to 5 - we'll push 6 ops then the failing one
+    // So we should see: op3, op4, op5, op6, and the failing remove
+    debugMemorySource.opBufferSize = 5;
+
+    const ms = new MemorySource('test_table', {id: {type: 'string'}}, ['id']);
+
+    // Push 6 operations on the same row
+    consume(ms.push({type: 'add', row: {id: '1'}}, {reason: 'op1'}));
+    consume(
+      ms.push(
+        {type: 'edit', row: {id: '1'}, oldRow: {id: '1'}},
+        {reason: 'op2'},
+      ),
+    );
+    consume(
+      ms.push(
+        {type: 'edit', row: {id: '1'}, oldRow: {id: '1'}},
+        {reason: 'op3'},
+      ),
+    );
+    consume(
+      ms.push(
+        {type: 'edit', row: {id: '1'}, oldRow: {id: '1'}},
+        {reason: 'op4'},
+      ),
+    );
+    consume(
+      ms.push(
+        {type: 'edit', row: {id: '1'}, oldRow: {id: '1'}},
+        {reason: 'op5'},
+      ),
+    );
+    consume(ms.push({type: 'remove', row: {id: '1'}}, {reason: 'op6'}));
+
+    // Try to remove again - failing push is also recorded, so buffer will have:
+    // op3, op4, op5, op6, failing-remove (5 items after op1, op2 are evicted)
+    let error: Error | undefined;
+    try {
+      consume(ms.push({type: 'remove', row: {id: '1'}}));
+    } catch (e) {
+      error = e as Error;
+    }
+
+    expect(error).toBeDefined();
+    // op1, op2 should have been evicted
+    expect(error!.message).not.toContain('op1');
+    expect(error!.message).not.toContain('op2');
+    // op3, op4, op5, op6 should still be there
+    expect(error!.message).toContain('op3');
+    expect(error!.message).toContain('op4');
+    expect(error!.message).toContain('op5');
+    expect(error!.message).toContain('op6');
+  });
+
+  test('only records ops for enabled tables', () => {
+    debugMemorySource.opBufferTables.add('enabled_table');
+
+    const enabled = new MemorySource('enabled_table', {id: {type: 'string'}}, [
+      'id',
+    ]);
+    const disabled = new MemorySource(
+      'disabled_table',
+      {id: {type: 'string'}},
+      ['id'],
+    );
+
+    consume(enabled.push({type: 'add', row: {id: '1'}}, {reason: 'tracked'}));
+    consume(
+      disabled.push({type: 'add', row: {id: '1'}}, {reason: 'not-tracked'}),
+    );
+
+    // Enabled table should have history
+    expect(() => {
+      consume(enabled.push({type: 'remove', row: {id: 'nonexistent'}}));
+    }).toThrow(/Op history for/);
+
+    // Disabled table should not have history
+    expect(() => {
+      consume(disabled.push({type: 'remove', row: {id: 'nonexistent'}}));
+    }).toThrow(/No op history recorded/);
+  });
+
+  test('handles compound primary keys in row key', () => {
+    debugMemorySource.opBufferTables.add('compound_table');
+
+    const ms = new MemorySource(
+      'compound_table',
+      {a: {type: 'string'}, b: {type: 'number'}},
+      ['a', 'b'],
+    );
+
+    consume(
+      ms.push({type: 'add', row: {a: 'x', b: 1}}, {reason: 'add-compound'}),
+    );
+    consume(
+      ms.push(
+        {type: 'remove', row: {a: 'x', b: 1}},
+        {reason: 'remove-compound'},
+      ),
+    );
+
+    // Error should include both key parts
+    let error: Error | undefined;
+    try {
+      consume(ms.push({type: 'remove', row: {a: 'x', b: 1}}));
+    } catch (e) {
+      error = e as Error;
+    }
+
+    expect(error).toBeDefined();
+    expect(error!.message).toContain('a="x"');
+    expect(error!.message).toContain('b=1');
+    expect(error!.message).toContain('add-compound');
+    expect(error!.message).toContain('remove-compound');
+  });
 });

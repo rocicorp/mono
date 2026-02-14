@@ -474,6 +474,7 @@ describe('rebasing custom mutators', () => {
         },
       } as unknown as WriteTransaction,
       legacySchema,
+      'test-mutation',
     ) as unknown as Transaction<Schema>;
 
     await tx1.mutate.issue.insert({
