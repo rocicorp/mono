@@ -33,6 +33,7 @@ export async function insert(
   arg: InsertOp,
   schema: Schema,
   ivmBranch: IVMSourceBranch | undefined,
+  mutationName: string,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -47,10 +48,13 @@ export async function insert(
     await tx.set(key, val);
     if (ivmBranch) {
       consume(
-        must(ivmBranch.getSource(arg.tableName)).push({
-          type: 'add',
-          row: arg.value,
-        }),
+        must(ivmBranch.getSource(arg.tableName)).push(
+          {
+            type: 'add',
+            row: arg.value,
+          },
+          {reason: {type: 'mutation', name: mutationName}},
+        ),
       );
     }
   }
@@ -61,6 +65,7 @@ export async function upsert(
   arg: InsertOp | UpsertOp,
   schema: Schema,
   ivmBranch: IVMSourceBranch | undefined,
+  mutationName: string,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -68,9 +73,9 @@ export async function upsert(
     arg.value,
   );
   if (await tx.has(key)) {
-    await update(tx, {...arg, op: 'update'}, schema, ivmBranch);
+    await update(tx, {...arg, op: 'update'}, schema, ivmBranch, mutationName);
   } else {
-    await insert(tx, {...arg, op: 'insert'}, schema, ivmBranch);
+    await insert(tx, {...arg, op: 'insert'}, schema, ivmBranch, mutationName);
   }
 }
 
@@ -79,6 +84,7 @@ export async function update(
   arg: UpdateOp,
   schema: Schema,
   ivmBranch: IVMSourceBranch | undefined,
+  mutationName: string,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -89,21 +95,24 @@ export async function update(
   if (prev === undefined) {
     return;
   }
-  const update = arg.value;
+  const updateVal = arg.value;
   const next = {...(prev as ReadonlyJSONObject)};
-  for (const k in update) {
-    if (update[k] !== undefined) {
-      next[k] = update[k];
+  for (const k in updateVal) {
+    if (updateVal[k] !== undefined) {
+      next[k] = updateVal[k];
     }
   }
   await tx.set(key, next);
   if (ivmBranch) {
     consume(
-      must(ivmBranch.getSource(arg.tableName)).push({
-        type: 'edit',
-        oldRow: prev as Row,
-        row: next,
-      }),
+      must(ivmBranch.getSource(arg.tableName)).push(
+        {
+          type: 'edit',
+          oldRow: prev as Row,
+          row: next,
+        },
+        {reason: {type: 'mutation', name: mutationName}},
+      ),
     );
   }
 }
@@ -113,6 +122,7 @@ async function deleteImpl(
   arg: DeleteOp,
   schema: Schema,
   ivmBranch: IVMSourceBranch | undefined,
+  mutationName: string,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -126,10 +136,13 @@ async function deleteImpl(
   await tx.del(key);
   if (ivmBranch) {
     consume(
-      must(ivmBranch.getSource(arg.tableName)).push({
-        type: 'remove',
-        row: prev as Row,
-      }),
+      must(ivmBranch.getSource(arg.tableName)).push(
+        {
+          type: 'remove',
+          row: prev as Row,
+        },
+        {reason: {type: 'mutation', name: mutationName}},
+      ),
     );
   }
 }
