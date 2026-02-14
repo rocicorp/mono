@@ -208,6 +208,10 @@ async function checkAndUpdateUpstream(
 // Parameterize this if necessary. In practice starvation may never happen.
 const MAX_LOW_PRIORITY_DELAY_MS = 1000;
 
+type ReservationState = {
+  lastWatermark?: string;
+};
+
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.
@@ -297,7 +301,8 @@ class PostgresChangeSource implements ChangeSource {
 
     void (async function () {
       try {
-        let reserved = false;
+        let reservation: ReservationState | null = null;
+        let inTransaction = false;
 
         for await (const [lsn, msg] of messages) {
           // Note: no reservation is needed for pushStatus().
@@ -307,13 +312,21 @@ class PostgresChangeSource implements ChangeSource {
               {ack: msg.shouldRespond},
               {watermark: majorVersionToString(lsn)},
             ]);
+
+            // If we're not in a transaction but the last reservation was kept
+            // because of pending keepalives in the queue, release the
+            // reservation.
+            if (!inTransaction && reservation?.lastWatermark) {
+              changes.release(reservation.lastWatermark);
+              reservation = null;
+            }
             continue;
           }
 
-          if (!reserved) {
+          if (!reservation) {
             const res = changes.reserve('replication');
             typeof res === 'string' || (await res); // awaits should be uncommon
-            reserved = true;
+            reservation = {};
           }
 
           let lastChange: ChangeStreamMessage | undefined;
@@ -322,18 +335,26 @@ class PostgresChangeSource implements ChangeSource {
             lastChange = change;
           }
 
-          if (
-            lastChange?.[0] === 'commit' &&
-            (messages.queued === 0 ||
-              changes.waiterDelay() > MAX_LOW_PRIORITY_DELAY_MS)
-          ) {
-            // After each transaction, release the reservation:
-            // - if there are no pending upstream messages
-            // - or if a low priority request has been waiting for longer
-            //   than MAX_LOW_PRIORITY_DELAY_MS. This is to prevent
-            //   (backfill) starvation on very active upstreams.
-            changes.release(lastChange[2].watermark);
-            reserved = false;
+          switch (lastChange?.[0]) {
+            case 'begin':
+              inTransaction = true;
+              break;
+            case 'commit':
+              inTransaction = false;
+              reservation.lastWatermark = lastChange[2].watermark;
+              if (
+                messages.queued === 0 ||
+                changes.waiterDelay() > MAX_LOW_PRIORITY_DELAY_MS
+              ) {
+                // After each transaction, release the reservation:
+                // - if there are no pending upstream messages
+                // - or if a low priority request has been waiting for longer
+                //   than MAX_LOW_PRIORITY_DELAY_MS. This is to prevent
+                //   (backfill) starvation on very active upstreams.
+                changes.release(reservation.lastWatermark);
+                reservation = null;
+              }
+              break;
           }
         }
       } catch (e) {
