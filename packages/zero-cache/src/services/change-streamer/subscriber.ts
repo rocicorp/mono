@@ -2,7 +2,6 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
-import {type PendingResult} from '../../types/subscription.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream} from './change-streamer.ts';
@@ -47,13 +46,13 @@ export class Subscriber {
     return this.#acked;
   }
 
-  send(change: WatermarkedChange) {
+  async send(change: WatermarkedChange) {
     const [watermark] = change;
     if (watermark > this.#watermark) {
       if (this.#backlog) {
         this.#backlog.push(change);
       } else {
-        this.#send(change);
+        await this.#send(change);
       }
     }
   }
@@ -68,9 +67,9 @@ export class Subscriber {
   }
 
   /** catchup() is called on ChangeEntries loaded from the store. */
-  catchup(change: WatermarkedChange): PendingResult {
+  async catchup(change: WatermarkedChange) {
     this.#ensureInitialStatusSent();
-    return this.#send(change);
+    await this.#send(change);
   }
 
   /**
@@ -83,19 +82,23 @@ export class Subscriber {
       this.#backlog,
       'setCaughtUp() called but subscriber is not in catchup mode',
     );
+    // Note that this method must be asynchronous in order for send() to
+    // interpret the #backlog variable correctly. This is the only place
+    // where I/O flow control is not heeded. However, it will be awaited
+    // by the next caller to send().
     for (const change of this.#backlog) {
-      this.#send(change);
+      void this.#send(change);
     }
     this.#backlog = null;
   }
 
-  #send(change: WatermarkedChange): PendingResult {
+  async #send(change: WatermarkedChange) {
     const [watermark, downstream] = change;
     if (watermark <= this.watermark) {
-      return ALREADY_CONSUMED_RESULT;
+      return;
     }
     if (!this.supportsMessage(downstream[1])) {
-      return ALREADY_CONSUMED_RESULT;
+      return;
     }
     const pending = this.#downstream.push(downstream);
     if (downstream[0] === 'commit') {
@@ -106,7 +109,7 @@ export class Subscriber {
         }
       });
     }
-    return pending;
+    await pending.result;
   }
 
   supportsMessage(change: ChangeStreamData[1]) {
@@ -132,7 +135,3 @@ export class Subscriber {
     }
   }
 }
-
-const ALREADY_CONSUMED_RESULT: PendingResult = {
-  result: Promise.resolve('consumed'),
-};

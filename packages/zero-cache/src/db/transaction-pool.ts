@@ -183,6 +183,7 @@ export class TransactionPool {
     const timeoutTask = tt.task === 'done' ? 'done' : this.#stmtRunner(tt.task);
 
     const worker = async (tx: PostgresTransaction) => {
+      const start = performance.now();
       try {
         lc.debug?.('started transaction');
         disableStatementTimeout(tx);
@@ -220,7 +221,8 @@ export class TransactionPool {
           }
         }
 
-        lc.debug?.('closing transaction');
+        const elapsed = performance.now() - start;
+        lc.debug?.(`closing transaction (${elapsed.toFixed(3)} ms)`);
         // Given the semantics of a Postgres transaction, the last statement
         // will only succeed if all of the preceding statements succeeded.
         return last;
