@@ -312,6 +312,7 @@ describe('MutationTracker', () => {
         relationships: [],
       }),
       'context',
+      'test-mutation',
     );
 
     const tx = {

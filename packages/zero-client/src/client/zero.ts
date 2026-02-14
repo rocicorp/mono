@@ -622,6 +622,7 @@ export class Zero<
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
     this.#rep = rep;
+    this.#ivmMain.setDebugName(rep.clientID);
 
     if (TESTING) {
       internalReplicacheImplMap.set(this, rep);
@@ -2365,7 +2366,6 @@ export class Zero<
       ));
     }
   }
-
   #addMetric: <K extends keyof MetricMap>(
     metric: K,
     value: number,

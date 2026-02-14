@@ -41,16 +41,23 @@ import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 export class IVMSourceBranch {
   readonly #sources: Map<string, MemorySource | undefined>;
   readonly #tables: Record<string, TableSchema>;
+  #debugName: string | undefined;
   hash: Hash | undefined;
 
   constructor(
     tables: Record<string, TableSchema>,
     hash?: Hash,
-    sources: Map<string, MemorySource | undefined> = new Map(),
+    sources?: Map<string, MemorySource | undefined>,
+    debugName?: string | undefined,
   ) {
     this.#tables = tables;
-    this.#sources = sources;
+    this.#sources = sources ?? new Map();
     this.hash = hash;
+    this.#debugName = debugName;
+  }
+
+  setDebugName(name: string) {
+    this.#debugName = name;
   }
 
   getSource(name: string): MemorySource | undefined {
@@ -60,7 +67,13 @@ export class IVMSourceBranch {
 
     const schema = this.#tables[name];
     const source = schema
-      ? new MemorySource(name, schema.columns, schema.primaryKey)
+      ? new MemorySource(
+          name,
+          schema.columns,
+          schema.primaryKey,
+          undefined,
+          this.#debugName,
+        )
       : undefined;
     this.#sources.set(name, source);
     return source;
@@ -74,14 +87,19 @@ export class IVMSourceBranch {
    * Mutates the current branch, advancing it to the new head
    * by applying the given diffs.
    */
-  advance(expectedHead: Hash | undefined, newHead: Hash, diffs: NoIndexDiff) {
+  advance(
+    expectedHead: Hash | undefined,
+    newHead: Hash,
+    diffs: NoIndexDiff,
+    reason: ApplyDiffsReason = 'poke',
+  ) {
     assert(
       this.hash === expectedHead,
       () =>
         `Expected head must match the main head. Got: ${this.hash}, expected: ${expectedHead}`,
     );
 
-    applyDiffs(diffs, this);
+    applyDiffs(diffs, this, reason);
     this.hash = newHead;
   }
 
@@ -122,6 +140,7 @@ export class IVMSourceBranch {
           source?.fork(),
         ]),
       ),
+      this.#debugName ? `${this.#debugName}:fork` : undefined,
     );
   }
 }
@@ -146,7 +165,7 @@ export async function initFromStore(
     }
   });
 
-  branch.advance(undefined, hash, diffs);
+  branch.advance(undefined, hash, diffs, 'init');
 }
 
 async function patchBranch(
@@ -164,7 +183,7 @@ async function patchBranch(
   if (!diffs) {
     return;
   }
-  applyDiffs(diffs, fork);
+  applyDiffs(diffs, fork, 'rebase');
 }
 
 async function computeDiffs(
@@ -199,7 +218,13 @@ async function computeDiffs(
   return diffs.get('');
 }
 
-function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
+type ApplyDiffsReason = 'poke' | 'rebase' | 'init' | 'refresh';
+
+function applyDiffs(
+  diffs: NoIndexDiff,
+  branch: IVMSourceBranch,
+  reason: ApplyDiffsReason,
+) {
   for (
     let i = diffBinarySearch(diffs, ENTITIES_KEY_PREFIX, diff => diff.key);
     i < diffs.length;
@@ -212,30 +237,40 @@ function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
     }
     const name = sourceNameFromKey(key);
     const source = must(branch.getSource(name));
+    const options = {reason};
     switch (diff.op) {
       case 'del':
         consume(
-          source.push({
-            type: 'remove',
-            row: diff.oldValue as Row,
-          }),
+          source.push(
+            {
+              type: 'remove',
+              row: diff.oldValue as Row,
+            },
+            options,
+          ),
         );
         break;
       case 'add':
         consume(
-          source.push({
-            type: 'add',
-            row: diff.newValue as Row,
-          }),
+          source.push(
+            {
+              type: 'add',
+              row: diff.newValue as Row,
+            },
+            options,
+          ),
         );
         break;
       case 'change':
         consume(
-          source.push({
-            type: 'edit',
-            row: diff.newValue as Row,
-            oldRow: diff.oldValue as Row,
-          }),
+          source.push(
+            {
+              type: 'edit',
+              row: diff.newValue as Row,
+              oldRow: diff.oldValue as Row,
+            },
+            options,
+          ),
         );
         break;
     }

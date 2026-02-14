@@ -42,6 +42,7 @@ export function extendReplicacheMutators<S extends Schema, C>(
           mutator,
           schema,
           context,
+          fullKey,
         );
       } else if (typeof mutator === 'function') {
         const fullKey = customMutatorKey('|', path);
@@ -51,6 +52,7 @@ export function extendReplicacheMutators<S extends Schema, C>(
           mutator as CustomMutatorImpl<any>,
           schema,
           context,
+          fullKey,
         );
       } else if (mutator !== null && typeof mutator === 'object') {
         processMutators(mutator, path);
@@ -72,12 +74,13 @@ function makeReplicacheMutator<
   mutator: Mutator<TArgs, TSchema, TContext, TWrappedTransaction>,
   schema: TSchema,
   context: TContext,
+  mutationName: string,
 ): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
   ): Promise<void> => {
-    const tx = new TransactionImpl(lc, repTx, schema);
+    const tx = new TransactionImpl(lc, repTx, schema, mutationName);
     // fn does input validation internally
     await mutator.fn({
       args: args as TArgs,
@@ -177,7 +180,7 @@ function extendFromMutatorRegistry<S extends Schema, C>(
           repTx: WriteTransaction,
           args: ReadonlyJSONValue,
         ): Promise<void> => {
-          const tx = new TransactionImpl(lc, repTx, schema);
+          const tx = new TransactionImpl(lc, repTx, schema, value.mutatorName);
           return value.fn({args, ctx: context, tx});
         };
       } else if (typeof value === 'object' && value !== null) {
