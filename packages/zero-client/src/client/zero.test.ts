@@ -4348,6 +4348,36 @@ describe('WebSocket event error handling', () => {
   });
 });
 
+test('socket close code 1006 is logged as info, not error', async () => {
+  const z = zeroForTest({logLevel: 'info'});
+  await z.triggerConnected();
+  const socket = await z.socket;
+
+  const initialLogCount = z.testLogSink.messages.length;
+  socket.dispatchEvent(
+    new CloseEvent('close', {code: 1006, reason: '', wasClean: false}),
+  );
+  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+
+  const newLogs = z.testLogSink.messages.slice(initialLogCount);
+  const closeLog = newLogs.find(
+    ([, , args]) =>
+      Array.isArray(args) && args[0] === 'Got socket close event',
+  );
+  expect(closeLog).toBeDefined();
+  assert(closeLog);
+  expect(closeLog[0]).toBe('info');
+  expect(closeLog[2][1]).toEqual({code: 1006, reason: '', wasClean: false});
+
+  const errorLog = newLogs.find(
+    ([level, , args]) =>
+      level === 'error' && args[0] === 'Got unexpected socket close event',
+  );
+  expect(errorLog).toBeUndefined();
+
+  await z.close().catch(() => {});
+});
+
 test('Logging stack on close', async () => {
   const z = zeroForTest({logLevel: 'debug'});
   await z.triggerConnected();
