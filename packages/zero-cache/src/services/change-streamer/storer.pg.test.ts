@@ -662,6 +662,7 @@ describe('change-streamer/storer', () => {
               rowKey: {columns: ['a']},
             },
             columns: [],
+            watermark: '0f',
           },
         ],
       ]);

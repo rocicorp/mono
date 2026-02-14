@@ -70,7 +70,12 @@ export async function* streamBackfill(
   const tx = new TransactionPool(lc, READONLY).run(db);
   try {
     const watermark = await setSnapshot(lc, upstreamURI, tx, slot);
-    const {tableSpec, backfill} = await validateSchema(tx, publications, bf);
+    const {tableSpec, backfill} = await validateSchema(
+      tx,
+      publications,
+      bf,
+      watermark,
+    );
     const types = await getTypeParsers(db, {returnJsonAsString: true});
 
     // Note: validateSchema ensures that the rowKey and columns are disjoint
@@ -81,7 +86,6 @@ export async function* streamBackfill(
       lc,
       tx,
       backfill,
-      watermark,
       makeSelectPublishedStmt(tableSpec, cols),
       cols.map(col => types.getTypeParser(tableSpec.columns[col].typeOID)),
       flushThresholdBytes,
@@ -116,7 +120,6 @@ async function* stream(
   lc: LogContext,
   tx: TransactionPool,
   backfill: BackfillParams,
-  watermark: string,
   selectStmt: string,
   colParsers: TypeParser[],
   flushThresholdBytes: number,
@@ -161,7 +164,7 @@ async function* stream(
     totalBytes += chunk.byteLength;
 
     if (bufferedBytes >= flushThresholdBytes) {
-      yield {tag: 'backfill', ...backfill, watermark, rowValues};
+      yield {tag: 'backfill', ...backfill, rowValues};
       totalMsgs++;
       logFlushed();
       rowValues = [];
@@ -171,7 +174,7 @@ async function* stream(
 
   // Flush the last batch of rows.
   if (rowValues.length > 0) {
-    yield {tag: 'backfill', ...backfill, watermark, rowValues};
+    yield {tag: 'backfill', ...backfill, rowValues};
     totalMsgs++;
     logFlushed();
   }
@@ -236,6 +239,7 @@ function validateSchema(
   tx: TransactionPool,
   publications: string[],
   bf: BackfillRequest,
+  watermark: string,
 ): Promise<{
   tableSpec: PublishedTableSpec;
   backfill: BackfillParams;
@@ -304,6 +308,7 @@ function validateSchema(
       columns: Object.keys(bf.columns).filter(
         col => !(col in tableMeta.rowKey),
       ),
+      watermark,
     };
     return {tableSpec: spec, backfill};
   });
