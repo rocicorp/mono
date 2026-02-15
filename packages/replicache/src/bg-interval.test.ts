@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
 import {initBgIntervalProcess} from './bg-interval.ts';
+import {IDBNotFoundError} from './kv/idb-store.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -120,6 +121,30 @@ test('error thrown during process (before stop is called) is logged to error', a
     'Error running.',
     'TestErrorBeforeStop',
   );
+});
+
+test('IDBNotFoundError thrown during process is logged to info, not error', async () => {
+  const testLogSink = new TestLogSink();
+  const lc = new LogContext('info', undefined, testLogSink);
+  const idbError = new IDBNotFoundError('test db missing');
+  const process = () => Promise.reject(idbError);
+  const controller = new AbortController();
+  initBgIntervalProcess(
+    'testProcess',
+    process,
+    () => 100,
+    lc,
+    controller.signal,
+  );
+  await vi.advanceTimersByTimeAsync(100);
+  controller.abort();
+  expect(testLogSink.messages).toEqual([
+    [
+      'info',
+      {bgIntervalProcess: 'testProcess'},
+      ['IndexedDB was deleted externally.', idbError],
+    ],
+  ]);
 });
 
 test('error thrown during process (after stop is called) is logged to debug', async () => {
