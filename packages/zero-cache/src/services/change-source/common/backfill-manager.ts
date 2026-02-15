@@ -136,15 +136,19 @@ export class BackfillManager implements Cancelable, Listener {
     }
   }
 
-  async #changeStreamReached(lc: LogContext, watermark: string) {
+  #changeStreamReached(
+    lc: LogContext,
+    watermark: string,
+  ): Promise<void> | null {
     if ((this.#lastStatusWatermark ?? '') < watermark) {
       const {promise, resolve: reached} = resolver();
       this.#awaitingStatusWatermarks.push({watermark, reached});
       lc.info?.(
         `waiting for change stream (at ${this.#lastStatusWatermark}) to reach ${watermark}`,
       );
-      await promise;
+      return promise;
     }
+    return null;
   }
 
   readonly #minBackoffMs: number;
@@ -257,8 +261,21 @@ export class BackfillManager implements Cancelable, Listener {
     };
 
     for await (const msg of this.#backfillStreamer(state.request)) {
+      // Before sending `backfill-completed`, the main replication stream
+      // may need to catch up.
+      const mustWaitBeforeFlush =
+        msg.tag === 'backfill-completed' &&
+        this.#changeStreamReached(lc, msg.watermark);
+
       // If necessary, yield the reservation to the main stream.
-      backfillTx && changeStream.waiterDelay() > 0 && commitTx();
+      if (
+        backfillTx &&
+        (changeStream.waiterDelay() > 0 || mustWaitBeforeFlush)
+      ) {
+        commitTx();
+      }
+
+      await mustWaitBeforeFlush;
 
       if (
         msg.tag === 'backfill' &&
@@ -276,12 +293,6 @@ export class BackfillManager implements Cancelable, Listener {
         );
         this.#checkAndStartBackfill(); // start the next backfill if present
         return; // this backfill is canceled
-      }
-
-      if (msg.tag === 'backfill-completed') {
-        // The change stream must reach or exceed the backfill snapshot before
-        // the backfill is considered complete.
-        await this.#changeStreamReached(lc, msg.watermark);
       }
 
       // `await` to allow the change streamer to exert back pressure
