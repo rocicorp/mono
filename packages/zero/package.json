@@ -71,7 +71,6 @@
     "postgres": "3.4.7",
     "prettier": "^3.5.3",
     "semver": "^7.5.4",
-    "tsx": "^4.19.1",
     "url-pattern": "^1.0.3",
     "urlpattern-polyfill": "^10.1.0",
     "ws": "^8.18.1"
@@ -99,8 +98,8 @@
     "zqlite": "0.0.0"
   },
   "peerDependencies": {
-    "expo-sqlite": ">=15",
-    "@op-engineering/op-sqlite": ">=15"
+    "@op-engineering/op-sqlite": ">=15",
+    "expo-sqlite": ">=15"
   },
   "peerDependenciesMeta": {
     "expo-sqlite": {
