@@ -8,6 +8,7 @@ import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {mapValues} from '../../../../../shared/src/objects.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   equals,
@@ -17,7 +18,10 @@ import {
 import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
-import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
+import {
+  mapPostgresToLiteColumn,
+  UnsupportedColumnDefaultError,
+} from '../../../db/pg-to-lite.ts';
 import type {ColumnSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
@@ -42,16 +46,18 @@ import {BackfillManager} from '../common/backfill-manager.ts';
 import {ChangeStreamMultiplexer} from '../common/change-stream-multiplexer.ts';
 import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
+  ColumnAdd,
   Identifier,
   MessageRelation,
   SchemaChange,
+  TableCreate,
 } from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
-import type {TableMetadata} from './backfill-metadata.ts';
+import type {ColumnMetadata, TableMetadata} from './backfill-metadata.ts';
 import {streamBackfill} from './backfill-stream.ts';
 import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
@@ -767,11 +773,19 @@ class ChangeMaker {
       // CREATE
       for (const id of createdTbl) {
         const spec = must(nextTbl.get(id));
-        changes.push({
+        const createTable: TableCreate = {
           tag: 'create-table',
           spec,
           metadata: getMetadata(spec),
-        });
+        };
+        if (!update.event.tag.startsWith('CREATE')) {
+          // Tables introduced to the publication via ALTER statements
+          // must be backfilled.
+          createTable.backfill = mapValues(spec.columns, ({pos: attNum}) => ({
+            attNum,
+          })) satisfies Record<string, ColumnMetadata>;
+        }
+        changes.push(createTable);
       }
 
       // Add indexes last since they may reference tables / columns that need
@@ -849,14 +863,34 @@ class ChangeMaker {
     for (const id of added) {
       const {name, ...spec} = must(newColumns.get(id));
       const column = {name, spec};
-      // Validate that the ChangeProcessor will accept the column change.
-      mapPostgresToLiteColumn(table.name, column);
-      changes.push({
+      const addColumn: ColumnAdd = {
         tag: 'add-column',
         table,
         column,
         tableMetadata: getMetadata(newTable),
-      });
+      };
+      // Determine if the ChangeProcessor will accept the column change as is.
+      try {
+        mapPostgresToLiteColumn(table.name, column);
+      } catch (e) {
+        if (!(e instanceof UnsupportedColumnDefaultError)) {
+          // Note: mapPostgresToLiteColumn is not expected to throw any other
+          // types of errors.
+          throw e;
+        }
+        // If the column has an unsupported default (e.g. an expression or a
+        // generated value), create the column as initially hidden with a
+        // `null` default, and publish it after backfilling the values from
+        // upstream. Note that this does require that the table have a valid
+        // REPLICA IDENTITY, since backfill relies on merging new data with
+        // an existing row.
+        this.#lc.info?.(
+          `Backfilling column ${table.name}.${name}: ${String(e)}`,
+        );
+        addColumn.column.spec.dflt = null;
+        addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
+      }
+      changes.push(addColumn);
     }
     return changes;
   }
