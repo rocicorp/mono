@@ -45,6 +45,11 @@ import {
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
 
+// Back pressure is applied when either the queued bytes threshold or the queued
+// change count threshold is exceeded, and released only after we fall below
+// both thresholds by a safety margin.
+const BACK_PRESSURE_RELEASE_RATIO = 0.8;
+
 type SubscriberAndMode = {
   subscriber: Subscriber;
   mode: ReplicatorMode;
@@ -115,6 +120,7 @@ export class Storer implements Service {
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
+  readonly #queueSizeBackPressureThreshold: number | undefined;
 
   #approximateQueuedBytes = 0;
   #running = false;
@@ -130,6 +136,7 @@ export class Storer implements Service {
     onConsumed: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
     backPressureLimitHeapProportion: number,
+    queueSizeBackPressureThreshold: number | undefined,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
@@ -140,6 +147,7 @@ export class Storer implements Service {
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
+    this.#queueSizeBackPressureThreshold = queueSizeBackPressureThreshold;
 
     const heapStats = getHeapStatistics();
     this.#backPressureThresholdBytes =
@@ -152,6 +160,12 @@ export class Storer implements Service {
         `to absorb upstream spikes`,
       {heapStats},
     );
+
+    if (this.#queueSizeBackPressureThreshold !== undefined) {
+      this.#lc.info?.(
+        `Queue size back pressure threshold set to ${this.#queueSizeBackPressureThreshold} queued changes`,
+      );
+    }
   }
 
   // For readability in SQL statements.
@@ -289,9 +303,14 @@ export class Storer implements Service {
     if (!this.#running) {
       return undefined;
     }
+    const overBytes =
+      this.#approximateQueuedBytes > this.#backPressureThresholdBytes;
+    const overQueueSize =
+      this.#queueSizeBackPressureThreshold !== undefined &&
+      this.#queue.size() > this.#queueSizeBackPressureThreshold;
     if (
       this.#readyForMore === null &&
-      this.#approximateQueuedBytes > this.#backPressureThresholdBytes
+      (overBytes || overQueueSize)
     ) {
       this.#lc.warn?.(
         `applying back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)\n` +
@@ -312,10 +331,20 @@ export class Storer implements Service {
   }
 
   #maybeReleaseBackPressure() {
+    const releaseBytesThreshold =
+      this.#backPressureThresholdBytes * BACK_PRESSURE_RELEASE_RATIO;
+    const releaseQueueSizeThreshold =
+      this.#queueSizeBackPressureThreshold === undefined
+        ? undefined
+        : this.#queueSizeBackPressureThreshold * BACK_PRESSURE_RELEASE_RATIO;
+    const belowBytes = this.#approximateQueuedBytes < releaseBytesThreshold;
+    const belowQueueSize =
+      releaseQueueSizeThreshold === undefined ||
+      this.#queue.size() < releaseQueueSizeThreshold;
     if (
       this.#readyForMore !== null &&
-      // Wait for at least 20% of the threshold to free up.
-      this.#approximateQueuedBytes < this.#backPressureThresholdBytes * 0.8
+      belowBytes &&
+      belowQueueSize
     ) {
       this.#lc.info?.(
         `releasing back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)`,
