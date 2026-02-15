@@ -24,12 +24,21 @@ export type DefaultSchema<TDefaultTypes = DefaultTypes> =
     ? S
     : Schema;
 
+export type BaseDefaultSchema<TDefaultTypes = DefaultTypes> =
+  DefaultSchema<TDefaultTypes>;
+
 export type DefaultContext<TDefaultTypes = DefaultTypes> =
   TDefaultTypes extends {
     readonly context: infer C;
   }
     ? Expand<Readonly<C>>
     : unknown;
+
+export type BaseDefaultContext<TDefaultTypes = DefaultTypes> =
+  unknown extends DefaultContext<TDefaultTypes>
+    ? // oxlint-disable-next-line no-explicit-any
+      any
+    : DefaultContext<TDefaultTypes>;
 
 export type InferTransactionFromDbProvider<TDbProvider> = TDbProvider extends {
   transaction: <R>(
