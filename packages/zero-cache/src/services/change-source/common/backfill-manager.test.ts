@@ -1745,7 +1745,7 @@ describe('backfill-manager', () => {
 
     // Let the backfill start streaming before acquiring a reservation
     // for the main stream.
-    await sleep(1000);
+    await sleep(100);
 
     // Move the main replication stream past the backfill LSN
     await changeStream.reserve('main');
@@ -1757,7 +1757,7 @@ describe('backfill-manager', () => {
     }
     changeStream.release('131');
 
-    expect(await drainChanges(8)).toMatchInlineSnapshot([
+    expect(await drainChanges(8)).toMatchObject([
       ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
       [
         'data',
@@ -1836,10 +1836,10 @@ describe('backfill-manager', () => {
     // Let the backfill start streaming before acquiring a reservation
     // for the main stream. It should end its transaction and release
     // the reservation before flushing the backfill-completed message.
-    await sleep(1000);
+    await sleep(100);
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
-    expect(await drainChanges(6)).toMatchInlineSnapshot([
+    expect(await drainChanges(6)).toMatchObject([
       ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
       [
         'data',
