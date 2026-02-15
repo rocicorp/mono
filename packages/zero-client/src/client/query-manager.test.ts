@@ -2403,3 +2403,114 @@ test('Getting the AST of custom query', () => {
     table: 'issue',
   });
 });
+
+describe('query lifecycle hooks', () => {
+  function createQueryManagerWithHooks(
+    hooks?: {
+      onQueryMaterialize?: (event: {
+        id: string;
+        ast: AST;
+        durationMs: number;
+        name: string | undefined;
+      }) => void;
+    },
+  ) {
+    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    return new QueryManager(
+      lc,
+      mutationTracker,
+      'client1',
+      schema.tables,
+      send,
+      () => () => {},
+      0,
+      queryChangeThrottleMs,
+      slowMaterializeThreshold,
+      onFatalError,
+      hooks,
+    );
+  }
+
+  test('onQueryMaterialize is called for query-materialization-end-to-end metric', () => {
+    const onQueryMaterialize = vi.fn();
+    const qm = createQueryManagerWithHooks({onQueryMaterialize});
+
+    const ast: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    };
+    qm.addMetric('query-materialization-end-to-end', 150, 'query-456', ast);
+
+    expect(onQueryMaterialize).toHaveBeenCalledOnce();
+    expect(onQueryMaterialize).toHaveBeenCalledWith({
+      id: 'query-456',
+      ast,
+      durationMs: 150,
+      name: undefined,
+    });
+  });
+
+  test('onQueryMaterialize includes query name when available', () => {
+    const onQueryMaterialize = vi.fn();
+    const qm = createQueryManagerWithHooks({onQueryMaterialize});
+
+    const ast: AST = {table: 'issue'};
+    qm.addCustom(ast, {name: 'myQuery', args: []}, 'forever');
+    qm.flushBatch();
+
+    const queryID = hashOfNameAndArgs('myQuery', []);
+    qm.addMetric('query-materialization-end-to-end', 200, queryID, ast);
+
+    expect(onQueryMaterialize).toHaveBeenCalledOnce();
+    expect(onQueryMaterialize).toHaveBeenCalledWith({
+      id: queryID,
+      ast,
+      durationMs: 200,
+      name: 'myQuery',
+    });
+  });
+
+  test('hook errors are swallowed and do not break query execution', () => {
+    const onQueryMaterialize = vi.fn(() => {
+      throw new Error('hook blew up');
+    });
+    const qm = createQueryManagerWithHooks({onQueryMaterialize});
+
+    const ast: AST = {table: 'issue'};
+
+    expect(() => {
+      qm.addMetric('query-materialization-end-to-end', 20, 'q1', ast);
+    }).not.toThrow();
+
+    expect(onQueryMaterialize).toHaveBeenCalledOnce();
+  });
+
+  test('no hooks provided does not crash', () => {
+    const qm = createQueryManagerWithHooks();
+
+    const ast: AST = {table: 'issue'};
+
+    expect(() => {
+      qm.addMetric('query-materialization-client', 10, 'q1');
+    }).not.toThrow();
+    expect(() => {
+      qm.addMetric('query-materialization-end-to-end', 20, 'q2', ast);
+    }).not.toThrow();
+  });
+
+  test('onQueryMaterialize only fires for end-to-end metric', () => {
+    const onQueryMaterialize = vi.fn();
+    const qm = createQueryManagerWithHooks({onQueryMaterialize});
+
+    qm.addMetric('query-materialization-client', 10, 'q1');
+    expect(onQueryMaterialize).not.toHaveBeenCalled();
+
+    qm.addMetric('query-update-client', 5, 'q1');
+    expect(onQueryMaterialize).not.toHaveBeenCalled();
+
+    const ast: AST = {table: 'issue'};
+    qm.addMetric('query-materialization-end-to-end', 20, 'q2', ast);
+    expect(onQueryMaterialize).toHaveBeenCalledOnce();
+  });
+});
