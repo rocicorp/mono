@@ -620,6 +620,141 @@ describe('ZeroProvider', () => {
   });
 
   describe('prop changes', () => {
+    test('does not recreate zero when context is deeply equal', () => {
+      const mockZero = createMockZero();
+      const ZeroMock = vi.mocked(ZeroConstructor);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
+
+      const schema = {} as Schema;
+
+      const root = renderWithRoot(
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={schema}
+          context={{sub: 'u', role: 'crew'}}
+          userID="test-user"
+        >
+          <div>test</div>
+        </ZeroProvider>,
+      );
+
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        root.render(
+          <ZeroProvider
+            cacheURL="https://example.com"
+            schema={schema}
+            context={{sub: 'u', role: 'crew'}}
+            userID="test-user"
+          >
+            <div>test</div>
+          </ZeroProvider>,
+        );
+      });
+
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+      expect(mockZero.close).not.toHaveBeenCalled();
+
+      act(() => {
+        root.unmount();
+      });
+    });
+
+    test('does not recreate zero when queryHeaders and mutateHeaders are deeply equal', () => {
+      const mockZero = createMockZero();
+      const ZeroMock = vi.mocked(ZeroConstructor);
+      ZeroMock.mockImplementation(function () {
+        return mockZero;
+      });
+
+      const schema = {} as Schema;
+
+      const root = renderWithRoot(
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={schema}
+          mutateHeaders={{'x-mutate': 'a'}}
+          queryHeaders={{'x-query': 'b'}}
+          userID="test-user"
+        >
+          <div>test</div>
+        </ZeroProvider>,
+      );
+
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        root.render(
+          <ZeroProvider
+            cacheURL="https://example.com"
+            schema={schema}
+            mutateHeaders={{'x-mutate': 'a'}}
+            queryHeaders={{'x-query': 'b'}}
+            userID="test-user"
+          >
+            <div>test</div>
+          </ZeroProvider>,
+        );
+      });
+
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+      expect(mockZero.close).not.toHaveBeenCalled();
+
+      act(() => {
+        root.unmount();
+      });
+    });
+
+    test('recreates zero when context value changes', () => {
+      const mockZero1 = createMockZero('client-1');
+      const mockZero2 = createMockZero('client-2');
+      const ZeroMock = vi.mocked(ZeroConstructor);
+
+      let callCount = 0;
+      ZeroMock.mockImplementation(function () {
+        callCount++;
+        return callCount === 1 ? mockZero1 : mockZero2;
+      });
+
+      const schema = {} as Schema;
+
+      const root = renderWithRoot(
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={schema}
+          context={{sub: 'u', role: 'crew'}}
+          userID="test-user"
+        >
+          <div>test</div>
+        </ZeroProvider>,
+      );
+
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        root.render(
+          <ZeroProvider
+            cacheURL="https://example.com"
+            schema={schema}
+            context={{sub: 'u', role: 'admin'}}
+            userID="test-user"
+          >
+            <div>test</div>
+          </ZeroProvider>,
+        );
+      });
+
+      expect(ZeroMock).toHaveBeenCalledTimes(2);
+      expect(mockZero1.close).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        root.unmount();
+      });
+    });
+
     test('recreates zero when server changes', () => {
       const mockZero1 = createMockZero('client-1');
       const mockZero2 = createMockZero('client-2');
