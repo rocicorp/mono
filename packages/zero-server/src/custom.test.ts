@@ -12,6 +12,7 @@ import type {
   DeleteID,
   InsertValue,
   UpdateValue,
+  UpsertOptions,
   UpsertValue,
 } from '../../zql/src/mutate/crud.ts';
 import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
@@ -163,7 +164,7 @@ describe('server CRUD patterns', () => {
         (value: UpdateValue<BasicTable>) => Promise<void>
       >();
       expectTypeOf<BasicCRUD['upsert']>().toEqualTypeOf<
-        (value: UpsertValue<BasicTable>) => Promise<void>
+        (value: UpsertValue<BasicTable>, options?: UpsertOptions<BasicTable>) => Promise<void>
       >();
       expectTypeOf<BasicCRUD['delete']>().toEqualTypeOf<
         (id: DeleteID<BasicTable>) => Promise<void>

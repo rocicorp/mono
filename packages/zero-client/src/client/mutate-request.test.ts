@@ -6,6 +6,7 @@ import type {
   InsertValue,
   SchemaCRUD,
   UpdateValue,
+  UpsertOptions,
   UpsertValue,
 } from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
@@ -127,7 +128,7 @@ describe('zero.mutate(mr) with MutateRequest', () => {
       (value: {id: string; readonly name?: string | undefined}) => Promise<void>
     >();
     expectTypeOf(z.mutate.user.upsert).toEqualTypeOf<
-      (value: {id: string; readonly name: string}) => Promise<void>
+      (value: {id: string; readonly name: string}, options?: UpsertOptions<typeof schema.tables.user>) => Promise<void>
     >();
     expectTypeOf(z.mutate.user.delete).toEqualTypeOf<
       (id: {id: string}) => Promise<void>
@@ -420,7 +421,7 @@ describe('CRUD patterns on client', () => {
         (value: UpdateValue<UserTableSchema>) => Promise<void>
       >();
       expectTypeOf<UserMutators['upsert']>().toEqualTypeOf<
-        (value: UpsertValue<UserTableSchema>) => Promise<void>
+        (value: UpsertValue<UserTableSchema>, options?: UpsertOptions<UserTableSchema>) => Promise<void>
       >();
       expectTypeOf<UserMutators['delete']>().toEqualTypeOf<
         (id: DeleteID<UserTableSchema>) => Promise<void>
