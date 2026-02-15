@@ -579,14 +579,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       `,
     ],
     [
-      'UnsupportedColumnDefaultError: Cannot ADD a column with CURRENT_TIME, CURRENT_DATE, or CURRENT_TIMESTAMP',
-      `ALTER TABLE foo ADD bar TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP`,
-    ],
-    [
-      'UnsupportedColumnDefaultError: Unsupported default value for foo.pubid: random()',
-      `ALTER TABLE foo ADD pubid INT DEFAULT random()`,
-    ],
-    [
       'UnsupportedTableSchemaError: Table "bar" is missing its REPLICA IDENTITY INDEX',
       `DROP INDEX my.bar_idx`,
     ],

@@ -114,7 +114,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   async function nextTransaction(): Promise<DataOrSchemaChange[]> {
     const data: DataOrSchemaChange[] = [];
     for (;;) {
-      const change = await downstream.dequeue('timeout', 2000);
+      const change = await downstream.dequeue('timeout', 5000);
       if (change === 'timeout') {
         throw new Error('timed out waiting for change');
       }
@@ -148,15 +148,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         gen INT8 GENERATED ALWAYS AS (id + 1) STORED  -- Should be excluded
        );`,
       [
-        {
-          tag: 'create-table',
-          metadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {id: {attNum: 1}},
+        [
+          {
+            tag: 'create-table',
+            metadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
           },
-        },
-        {tag: 'create-index'},
+          {tag: 'create-index'},
+        ],
       ],
       {['my.baz']: []},
       [
@@ -193,7 +195,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'rename table',
       'ALTER TABLE my.baz RENAME TO bar;',
-      [{tag: 'rename-table'}],
+      [[{tag: 'rename-table'}]],
       {['my.bar']: []},
       [
         {
@@ -230,14 +232,16 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'add column',
       'ALTER TABLE my.bar ADD name INT8;',
       [
-        {
-          tag: 'add-column',
-          tableMetadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {id: {attNum: 1}},
+        [
+          {
+            tag: 'add-column',
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
           },
-        },
+        ],
       ],
       {['my.bar']: []},
       [
@@ -275,7 +279,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'rename column',
       'ALTER TABLE my.bar RENAME name TO handle;',
-      [{tag: 'update-column'}],
+      [[{tag: 'update-column'}]],
       {['my.bar']: []},
       [
         {
@@ -312,7 +316,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'change column data type',
       'ALTER TABLE my.bar ALTER handle TYPE TEXT;',
-      [{tag: 'update-column'}],
+      [[{tag: 'update-column'}]],
       {['my.bar']: []},
       [
         {
@@ -353,47 +357,49 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ALTER TABLE my.bar ADD PRIMARY KEY (handle);
       `,
       [
-        {tag: 'drop-index'},
-        {
-          tag: 'update-table-metadata',
-          table: {schema: 'my', name: 'bar'},
-          old: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {id: {attNum: 1}},
+        [
+          {tag: 'drop-index'},
+          {
+            tag: 'update-table-metadata',
+            table: {schema: 'my', name: 'bar'},
+            old: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
+            new: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {},
+            },
           },
-          new: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {},
+          {
+            tag: 'update-table-metadata',
+            table: {schema: 'my', name: 'bar'},
+            old: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {},
+            },
+            new: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {handle: {attNum: 3}},
+            },
           },
-        },
-        {
-          tag: 'update-table-metadata',
-          table: {schema: 'my', name: 'bar'},
-          old: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {},
+          {
+            tag: 'update-column',
+            old: {
+              name: 'handle',
+              spec: {dataType: 'text', notNull: false, pos: expect.any(Number)},
+            },
+            new: {
+              name: 'handle',
+              spec: {dataType: 'text', notNull: true, pos: expect.any(Number)},
+            },
           },
-          new: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {handle: {attNum: 3}},
-          },
-        },
-        {
-          tag: 'update-column',
-          old: {
-            name: 'handle',
-            spec: {dataType: 'text', notNull: false, pos: expect.any(Number)},
-          },
-          new: {
-            name: 'handle',
-            spec: {dataType: 'text', notNull: true, pos: expect.any(Number)},
-          },
-        },
-        {tag: 'create-index'},
+          {tag: 'create-index'},
+        ],
       ],
       {['my.bar']: []},
       [
@@ -439,15 +445,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'add unique column to automatically generate index',
       'ALTER TABLE my.bar ADD username TEXT UNIQUE;',
       [
-        {
-          tag: 'add-column',
-          tableMetadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {handle: {attNum: 3}},
+        [
+          {
+            tag: 'add-column',
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {handle: {attNum: 3}},
+            },
           },
-        },
-        {tag: 'create-index'},
+          {tag: 'create-index'},
+        ],
       ],
       {['my.bar']: []},
       [
@@ -500,7 +508,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'rename unique column with associated index',
       'ALTER TABLE my.bar RENAME username TO login;',
-      [{tag: 'update-column'}],
+      [[{tag: 'update-column'}]],
       {['my.bar']: []},
       [
         {
@@ -552,7 +560,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'retype unique column with associated index',
       'ALTER TABLE my.bar ALTER login TYPE VARCHAR(180);',
-      [{tag: 'update-column'}],
+      [[{tag: 'update-column'}]],
       {['my.bar']: []},
       [
         {
@@ -606,7 +614,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       `
        ALTER TABLE my.bar ALTER login SET DEFAULT floor(10000 * random())::text;
        ALTER TABLE my.bar ALTER login SET NOT NULL;`,
-      [{tag: 'update-column'}],
+      [[{tag: 'update-column'}]],
       {['my.bar']: []},
       [
         {
@@ -658,7 +666,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'drop column with index',
       'ALTER TABLE my.bar DROP login;',
-      [{tag: 'drop-index'}, {tag: 'drop-column'}],
+      [[{tag: 'drop-index'}, {tag: 'drop-column'}]],
       {['my.bar']: []},
       [
         {
@@ -696,22 +704,24 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'add multiple columns',
       'ALTER TABLE my.bar ADD foo TEXT, ADD bar TEXT;',
       [
-        {
-          tag: 'add-column',
-          tableMetadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {handle: {attNum: 3}},
+        [
+          {
+            tag: 'add-column',
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {handle: {attNum: 3}},
+            },
           },
-        },
-        {
-          tag: 'add-column',
-          tableMetadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {handle: {attNum: 3}},
+          {
+            tag: 'add-column',
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {handle: {attNum: 3}},
+            },
           },
-        },
+        ],
       ],
       {['my.bar']: []},
       [
@@ -766,16 +776,18 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'alter, add, and drop columns',
       'ALTER TABLE my.bar ALTER foo SET NOT NULL, ADD boo TEXT, DROP bar;',
       [
-        {tag: 'drop-column'},
-        {tag: 'update-column'},
-        {
-          tag: 'add-column',
-          tableMetadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {handle: {attNum: 3}},
+        [
+          {tag: 'drop-column'},
+          {tag: 'update-column'},
+          {
+            tag: 'add-column',
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {handle: {attNum: 3}},
+            },
           },
-        },
+        ],
       ],
       {['my.bar']: []},
       [
@@ -829,7 +841,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'rename schema',
       'ALTER SCHEMA my RENAME TO your;',
-      [{tag: 'drop-index'}, {tag: 'rename-table'}, {tag: 'create-index'}],
+      [[{tag: 'drop-index'}, {tag: 'rename-table'}, {tag: 'create-index'}]],
       {['your.bar']: []},
       [
         {
@@ -889,7 +901,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'add unpublished column',
       'ALTER TABLE foo ADD "newInt" INT4;',
-      [], // no DDL event published
+      [[]], // no DDL event published
       {},
       [
         // the view of "foo" is unchanged.
@@ -928,22 +940,24 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'alter publication add and drop column',
       'ALTER PUBLICATION zero_some_public SET TABLE foo (id, "newInt");',
       [
-        // Since it is an ALTER PUBLICATION command, we should correctly get
-        // a drop and an add, and not a rename.
-        {
-          tag: 'drop-column',
-          table: {schema: 'public', name: 'foo'},
-          column: 'int',
-        },
-        {
-          tag: 'add-column',
-          table: {schema: 'public', name: 'foo'},
-          tableMetadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {id: {attNum: 1}},
+        [
+          // Since it is an ALTER PUBLICATION command, we should correctly get
+          // a drop and an add, and not a rename.
+          {
+            tag: 'drop-column',
+            table: {schema: 'public', name: 'foo'},
+            column: 'int',
           },
-        },
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
+          },
+        ],
       ],
       {foo: []},
       [
@@ -982,24 +996,26 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'alter publication add multiple columns',
       'ALTER PUBLICATION zero_some_public SET TABLE foo (id, "newInt", int, flt);',
       [
-        {
-          tag: 'add-column',
-          table: {schema: 'public', name: 'foo'},
-          tableMetadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {id: {attNum: 1}},
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
           },
-        },
-        {
-          tag: 'add-column',
-          table: {schema: 'public', name: 'foo'},
-          tableMetadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {id: {attNum: 1}},
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
           },
-        },
+        ],
       ],
       {foo: []},
       [
@@ -1053,7 +1069,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'create unpublished table with indexes',
       'CREATE TABLE public.boo (id INT8 PRIMARY KEY, name TEXT UNIQUE);',
-      [],
+      [[]],
       {},
       [],
       [],
@@ -1062,18 +1078,25 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'alter publication introduces table with indexes and changes columns',
       'ALTER PUBLICATION zero_some_public SET TABLE foo (id, flt), boo;',
       [
-        {tag: 'drop-column'},
-        {tag: 'drop-column'},
-        {
-          tag: 'create-table',
-          metadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {id: {attNum: 1}},
+        [
+          {tag: 'drop-column'},
+          {tag: 'drop-column'},
+          {
+            tag: 'create-table',
+            metadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
+            backfill: {
+              id: {},
+              name: {},
+            },
           },
-        },
-        {tag: 'create-index'},
-        {tag: 'create-index'},
+          {tag: 'create-index'},
+          {tag: 'create-index'},
+        ],
+        [{tag: 'backfill-completed'}],
       ],
       {foo: []},
       [
@@ -1155,7 +1178,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       CREATE INDEX foo_flt1 ON foo (flt DESC, id ASC);
       CREATE INDEX foo_flt2 ON foo (id DESC, flt DESC);
       `,
-      [{tag: 'create-index'}, {tag: 'create-index'}],
+      [[{tag: 'create-index'}, {tag: 'create-index'}]],
       {foo: []},
       [],
       [
@@ -1177,10 +1200,12 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'drop index',
       'DROP INDEX foo_flt1;',
       [
-        {
-          tag: 'drop-index',
-          id: {schema: 'public', name: 'foo_flt1'},
-        },
+        [
+          {
+            tag: 'drop-index',
+            id: {schema: 'public', name: 'foo_flt1'},
+          },
+        ],
       ],
       {foo: []},
       [],
@@ -1190,18 +1215,20 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'remove table (with indexes) from publication',
       `ALTER PUBLICATION zero_some_public DROP TABLE boo`,
       [
-        {
-          tag: 'drop-index',
-          id: {schema: 'public', name: 'boo_name_key'},
-        },
-        {
-          tag: 'drop-index',
-          id: {schema: 'public', name: 'boo_pkey'},
-        },
-        {
-          tag: 'drop-table',
-          id: {schema: 'public', name: 'boo'},
-        },
+        [
+          {
+            tag: 'drop-index',
+            id: {schema: 'public', name: 'boo_name_key'},
+          },
+          {
+            tag: 'drop-index',
+            id: {schema: 'public', name: 'boo_pkey'},
+          },
+          {
+            tag: 'drop-table',
+            id: {schema: 'public', name: 'boo'},
+          },
+        ],
       ],
       {},
       [],
@@ -1232,36 +1259,38 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         );
       `,
       [
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {tag: 'add-column'},
-        {
-          tag: 'insert',
-          new: {
-            id: 'abc',
-            int: -2,
-            big: 9007199254740993n,
-            bool: true,
-            timea: 1547253035381.101,
-            date: 1050105600000,
-            json: '[{"foo":"bar","bar":"foo"},123]',
-            jsonb: '{"boo": {"baz": 123}, "far": 456}',
-            numz: '2',
-            uuid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-            intarr: [1, 2, 3, 4, 5],
-            jsons: [1, '2', {a: 123}],
-            jsonbs: [4, '5', {b: 678}],
+        [
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {tag: 'add-column'},
+          {
+            tag: 'insert',
+            new: {
+              id: 'abc',
+              int: -2,
+              big: 9007199254740993n,
+              bool: true,
+              timea: 1547253035381.101,
+              date: 1050105600000,
+              json: '[{"foo":"bar","bar":"foo"},123]',
+              jsonb: '{"boo": {"baz": 123}, "far": 456}',
+              numz: '2',
+              uuid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+              intarr: [1, 2, 3, 4, 5],
+              jsons: [1, '2', {a: 123}],
+              jsonbs: [4, '5', {b: 678}],
+            },
           },
-        },
+        ],
       ],
       {
         foo: [
@@ -1416,39 +1445,40 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'no primary key',
       `
-      CREATE TABLE nopk (a TEXT NOT NULL, b TEXT);
-      ALTER PUBLICATION zero_some_public ADD TABLE nopk;
+      CREATE TABLE your.nopk (a TEXT NOT NULL, b TEXT);
 
-      INSERT INTO nopk (a, b) VALUES ('foo', 'bar');
+      INSERT INTO your.nopk (a, b) VALUES ('foo', 'bar');
       `,
       [
-        {
-          tag: 'create-table',
-          metadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            // Note: This means is will be replicated to SQLite but not synced to clients.
-            rowKey: {},
-          },
-        },
-        {
-          tag: 'insert',
-          relation: {
-            schema: 'public',
-            name: 'nopk',
-            replicaIdentity: 'default',
-            keyColumns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
-            rowKey: {
-              columns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
-              type: 'default',
+        [
+          {
+            tag: 'create-table',
+            metadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              // Note: This means is will be replicated to SQLite but not synced to clients.
+              rowKey: {},
             },
           },
-        },
+          {
+            tag: 'insert',
+            relation: {
+              schema: 'your',
+              name: 'nopk',
+              replicaIdentity: 'default',
+              keyColumns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
+              rowKey: {
+                columns: [], // Note: This means is will be replicated to SQLite but not synced to clients.
+                type: 'default',
+              },
+            },
+          },
+        ],
       ],
-      {nopk: [{a: 'foo', b: 'bar'}]},
+      {['your.nopk']: [{a: 'foo', b: 'bar'}]},
       [
         {
-          name: 'nopk',
+          name: 'your.nopk',
           columns: {
             a: {
               characterMaximumLength: null,
@@ -1503,34 +1533,56 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       UPDATE existing_full SET a = a;
       `,
       [
-        {
-          tag: 'create-table',
-          metadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {
-              a: {attNum: 1},
-              b: {attNum: 2},
+        [
+          {
+            tag: 'create-table',
+            metadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {
+                a: {attNum: 1},
+                b: {attNum: 2},
+              },
             },
           },
-        },
-        {tag: 'create-index'},
-        {tag: 'create-index'},
-        {tag: 'update-table-metadata'},
-        {tag: 'update'},
-        {tag: 'update'},
-        {tag: 'update-table-metadata'},
-        {
-          tag: 'create-table',
-          metadata: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {a: {attNum: 1}}, // computes the shortest eligible key
+          {tag: 'create-index'},
+          {tag: 'create-index'},
+          {tag: 'update-table-metadata'},
+          {tag: 'update'},
+          {tag: 'update'},
+          {tag: 'update-table-metadata'},
+          {
+            tag: 'create-table',
+            metadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {a: {attNum: 1}}, // computes the shortest eligible key
+            },
           },
-        },
-        {tag: 'create-index'},
-        {tag: 'update'},
-        {tag: 'update'},
+          {tag: 'create-index'},
+          {tag: 'update'},
+          {tag: 'update'},
+        ],
+        [
+          {
+            tag: 'backfill',
+            rowValues: [
+              ['c', 'd'],
+              ['e', 'f'],
+            ],
+          },
+          {tag: 'backfill-completed'},
+        ],
+        [
+          {
+            tag: 'backfill',
+            rowValues: [
+              ['c', 'd'],
+              ['e', 'f'],
+            ],
+          },
+          {tag: 'backfill-completed'},
+        ],
       ],
       {
         existing: [
@@ -1621,23 +1673,25 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ALTER TABLE existing REPLICA IDENTITY FULL;
       `,
       [
-        {
-          tag: 'update-table-metadata',
-          table: {schema: 'public', name: 'existing'},
-          old: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {
-              a: {attNum: 1},
-              b: {attNum: 2},
+        [
+          {
+            tag: 'update-table-metadata',
+            table: {schema: 'public', name: 'existing'},
+            old: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {
+                a: {attNum: 1},
+                b: {attNum: 2},
+              },
+            },
+            new: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {a: {attNum: 1}}, // computes the shortest eligible key
             },
           },
-          new: {
-            schemaOID: expect.any(Number),
-            relationOID: expect.any(Number),
-            rowKey: {a: {attNum: 1}}, // computes the shortest eligible key
-          },
-        },
+        ],
       ],
       {},
       [],
@@ -1646,7 +1700,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   ] satisfies [
     name: string,
     statements: string,
-    changes: Partial<DataOrSchemaChange>[],
+    transactions: Partial<DataOrSchemaChange>[][],
     expectedData: Record<string, JSONValue>,
     expectedTables: LiteTableSpec[],
     expectedIndexes: LiteIndexSpec[],
@@ -1655,14 +1709,16 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     async (
       _name,
       stmts,
-      changes,
+      transactions,
       expectedData,
       expectedTables,
       expectedIndexes,
     ) => {
       await upstream.unsafe(stmts);
-      const transaction = await nextTransaction();
-      expect(transaction).toMatchObject(changes);
+      for (const changes of transactions) {
+        const transaction = await nextTransaction();
+        expect(transaction).toMatchObject(changes);
+      }
 
       expectMatchingObjectsInTables(replica, expectedData, 'bigint');
 
