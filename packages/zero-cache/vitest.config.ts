@@ -7,6 +7,7 @@ function nameFromURL(url: string) {
 }
 
 export function configForVersion(version: number, url: string) {
+  const TIMEOUT = (CI ? 2 : 1) * 20_000;
   const name = nameFromURL(url);
   const merged = mergeConfig(config, {
     test: {
@@ -19,8 +20,8 @@ export function configForVersion(version: number, url: string) {
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
         include: ['src/**'],
       },
-      testTimeout: 20000,
-      hookTimeout: 20000,
+      testTimeout: TIMEOUT,
+      hookTimeout: TIMEOUT,
     },
   });
   // Override include to only pg tests (mergeConfig merges arrays, we want to replace)

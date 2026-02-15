@@ -7,7 +7,10 @@ import {
   vi,
 } from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import type {ChangeStreamMessage} from '../protocol/current.ts';
+import type {
+  ChangeStreamMessage,
+  DownstreamStatusMessage,
+} from '../protocol/current.ts';
 import {ChangeStreamMultiplexer} from './change-stream-multiplexer.ts';
 
 type CancelFn = () => void;
@@ -33,7 +36,7 @@ describe('change-stream-multiplexer', () => {
 
   test('reservations', async () => {
     // pushStatus() does not require a reservation.
-    stream.pushStatus(['status', {tag: 'status'}, {watermark: 'foo'}]);
+    stream.pushStatus(['status', {ack: true}, {watermark: 'foo'}]);
 
     // However, other pushes should fail with an assert.
     expect(() =>
@@ -110,5 +113,14 @@ describe('change-stream-multiplexer', () => {
 
     expect(listenFn1).toHaveBeenNthCalledWith(2, commit);
     expect(listenFn2).toHaveBeenNthCalledWith(2, commit);
+
+    const status: DownstreamStatusMessage = [
+      'status',
+      {ack: false},
+      {watermark: '124'},
+    ];
+    void stream.pushStatus(status);
+    expect(listenFn1).toHaveBeenNthCalledWith(3, status);
+    expect(listenFn2).toHaveBeenNthCalledWith(3, status);
   });
 });

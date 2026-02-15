@@ -14,7 +14,7 @@ import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
-import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {
   getSubscriptionState,
   initReplicationState,
@@ -36,7 +36,7 @@ describe('change-streamer/service', () => {
   let sql: PostgresDB;
   let streamer: ChangeStreamerService;
   let changes: Subscription<ChangeStreamMessage>;
-  let acks: Queue<StatusMessage>;
+  let acks: Queue<UpstreamStatusMessage>;
   let streamerDone: Promise<void>;
 
   // vi.useFakeTimers() does not play well with the postgres client.
@@ -78,6 +78,7 @@ describe('change-streamer/service', () => {
       },
       replicaConfig,
       true,
+      0.04,
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
@@ -148,7 +149,8 @@ describe('change-streamer/service', () => {
       {watermark: '09'},
     ]);
 
-    changes.push(['status', {}, {watermark: '0b'}]);
+    changes.push(['status', {ack: false}, {watermark: '0a'}]);
+    changes.push(['status', {ack: true}, {watermark: '0b'}]);
 
     expect(await nextChange(downstream)).toMatchObject({tag: 'status'});
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
@@ -224,7 +226,7 @@ describe('change-streamer/service', () => {
       initial: true,
     });
 
-    changes.push(['status', {}, {watermark: '0a'}]);
+    changes.push(['status', {ack: true}, {watermark: '0a'}]);
 
     // Process more upstream changes.
     changes.push(['begin', messages.begin(), {commitWatermark: '0b'}]);
@@ -235,7 +237,7 @@ describe('change-streamer/service', () => {
       {watermark: '0b'},
     ]);
 
-    changes.push(['status', {}, {watermark: '0d'}]);
+    changes.push(['status', {ack: true}, {watermark: '0d'}]);
 
     // Verify that all changes were sent to the subscriber ...
     const downstream = drainToQueue(sub);
@@ -339,7 +341,7 @@ describe('change-streamer/service', () => {
     changes.push(['data', messages.delete('foo', {id: 'world'})]);
     changes.push(['rollback', messages.rollback()]);
 
-    changes.push(['status', {}, {watermark: '0d'}]);
+    changes.push(['status', {ack: true}, {watermark: '0d'}]);
 
     // Verify that all changes were sent to the subscriber ...
     const downstream = drainToQueue(sub);
@@ -863,6 +865,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      0.04,
     );
     void streamer.run();
 
@@ -887,6 +890,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      0.04,
     );
     void streamer.run();
 
@@ -908,6 +912,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      0.04,
     );
     void streamer.run();
 
@@ -941,6 +946,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      0.04,
     );
     void streamer.run();
 
@@ -977,6 +983,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      0.04,
     );
     void streamer.run();
 
@@ -1047,6 +1054,7 @@ describe('change-streamer/service', () => {
       source,
       replicaConfig,
       true,
+      0.04,
     );
     void streamer.run();
 

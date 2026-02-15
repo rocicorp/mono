@@ -3,7 +3,10 @@ import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import type {Source} from '../../../types/streams.ts';
 import {Subscription} from '../../../types/subscription.ts';
-import type {ChangeStreamMessage, StatusMessage} from '../protocol/current.ts';
+import type {
+  ChangeStreamMessage,
+  DownstreamStatusMessage,
+} from '../protocol/current.ts';
 
 export type Cancelable = {
   cancel(): void;
@@ -122,8 +125,14 @@ export class ChangeStreamMultiplexer {
    * does not constitute a data change and can appear anywhere
    * in the stream.
    */
-  pushStatus(message: StatusMessage) {
-    this.#sub.push(message);
+  pushStatus(message: DownstreamStatusMessage) {
+    // Let listeners know about all status messages.
+    this.#listeners.forEach(l => l.onChange(message));
+    // The ChangeStreamer only cares about status messages requiring an ack.
+    // To reduce churn, avoid sending other status messages.
+    if (message[1].ack) {
+      this.#sub.push(message);
+    }
   }
 
   /**
