@@ -941,8 +941,6 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       'ALTER PUBLICATION zero_some_public SET TABLE foo (id, "newInt");',
       [
         [
-          // Since it is an ALTER PUBLICATION command, we should correctly get
-          // a drop and an add, and not a rename.
           {
             tag: 'drop-column',
             table: {schema: 'public', name: 'foo'},
@@ -956,8 +954,12 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               relationOID: expect.any(Number),
               rowKey: {id: {attNum: 1}},
             },
+            // For an ALTER PUBLICATION command, a backfill should happen
+            // for the introduced column.
+            backfill: {attNum: expect.any(Number)},
           },
         ],
+        [{tag: 'backfill-completed'}],
       ],
       {foo: []},
       [
@@ -1005,6 +1007,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               relationOID: expect.any(Number),
               rowKey: {id: {attNum: 1}},
             },
+            backfill: {attNum: expect.any(Number)},
           },
           {
             tag: 'add-column',
@@ -1014,8 +1017,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               relationOID: expect.any(Number),
               rowKey: {id: {attNum: 1}},
             },
+            backfill: {attNum: expect.any(Number)},
           },
         ],
+        [{tag: 'backfill-completed'}],
       ],
       {foo: []},
       [
@@ -1237,10 +1242,26 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'data types',
       `
-      ALTER PUBLICATION zero_some_public SET TABLE foo (
-        id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr, jsons, jsonbs);
+      CREATE TABLE your.zoo(
+        id TEXT NOT NULL,
+        int INT4,
+        big BIGINT,
+        flt FLOAT8,
+        bool BOOLEAN,
+        timea TIMESTAMPTZ,
+        timeb TIMESTAMPTZ,
+        date DATE,
+        time TIME,
+        json JSON,
+        jsonb JSONB,
+        numz ENUMZ,
+        uuid UUID,
+        intarr INT4[],
+        jsons JSON[],
+        jsonbs JSONB[]
+      );
 
-      INSERT INTO foo (id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr, jsons, jsonbs)
+      INSERT INTO your.zoo (id, int, big, flt, bool, timea, date, json, jsonb, numz, uuid, intarr, jsons, jsonbs)
          VALUES (
           'abc',
           -2,
@@ -1260,18 +1281,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       `,
       [
         [
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
-          {tag: 'add-column'},
+          {tag: 'create-table'},
           {
             tag: 'insert',
             new: {
@@ -1293,7 +1303,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         ],
       ],
       {
-        foo: [
+        ['your.zoo']: [
           {
             id: 'abc',
             int: -2n,
@@ -1315,7 +1325,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       },
       [
         {
-          name: 'foo',
+          name: 'your.zoo',
           columns: {
             id: {
               characterMaximumLength: null,
@@ -1325,17 +1335,25 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               notNull: false,
               pos: 1,
             },
-            flt: {
+            int: {
               characterMaximumLength: null,
-              dataType: 'float8',
+              dataType: 'int4',
+              dflt: null,
+              elemPgTypeClass: null,
+              notNull: false,
+              pos: 2,
+            },
+            big: {
+              characterMaximumLength: null,
+              dataType: 'int8',
               dflt: null,
               elemPgTypeClass: null,
               notNull: false,
               pos: 3,
             },
-            big: {
+            flt: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'float8',
               dflt: null,
               elemPgTypeClass: null,
               notNull: false,
@@ -1349,27 +1367,27 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               notNull: false,
               pos: 5,
             },
+            timea: {
+              characterMaximumLength: null,
+              dataType: 'timestamptz',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 6,
+            },
+            timeb: {
+              characterMaximumLength: null,
+              dataType: 'timestamptz',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 7,
+            },
             date: {
               characterMaximumLength: null,
               dataType: 'date',
               dflt: null,
               elemPgTypeClass: null,
-              notNull: false,
-              pos: 6,
-            },
-            int: {
-              characterMaximumLength: null,
-              dataType: 'int4',
-              dflt: null,
-              elemPgTypeClass: null,
-              notNull: false,
-              pos: 7,
-            },
-            intarr: {
-              characterMaximumLength: null,
-              dataType: 'int4[]|TEXT_ARRAY',
-              dflt: null,
-              elemPgTypeClass: 'b',
               notNull: false,
               pos: 8,
             },
@@ -1379,7 +1397,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 9,
+              pos: 10,
             },
             jsonb: {
               characterMaximumLength: null,
@@ -1387,23 +1405,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 10,
-            },
-            jsonbs: {
-              characterMaximumLength: null,
-              dataType: 'jsonb[]|TEXT_ARRAY',
-              elemPgTypeClass: 'b',
-              dflt: null,
-              notNull: false,
               pos: 11,
-            },
-            jsons: {
-              characterMaximumLength: null,
-              dataType: 'json[]|TEXT_ARRAY',
-              elemPgTypeClass: 'b',
-              dflt: null,
-              notNull: false,
-              pos: 12,
             },
             numz: {
               characterMaximumLength: null,
@@ -1411,15 +1413,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
-              pos: 13,
-            },
-            timea: {
-              characterMaximumLength: null,
-              dataType: 'timestamptz',
-              elemPgTypeClass: null,
-              dflt: null,
-              notNull: false,
-              pos: 14,
+              pos: 12,
             },
             uuid: {
               characterMaximumLength: null,
@@ -1427,15 +1421,38 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               elemPgTypeClass: null,
               dflt: null,
               notNull: false,
+              pos: 13,
+            },
+            intarr: {
+              characterMaximumLength: null,
+              dataType: 'int4[]|TEXT_ARRAY',
+              dflt: null,
+              elemPgTypeClass: 'b',
+              notNull: false,
+              pos: 14,
+            },
+            jsons: {
+              characterMaximumLength: null,
+              dataType: 'json[]|TEXT_ARRAY',
+              elemPgTypeClass: 'b',
+              dflt: null,
+              notNull: false,
               pos: 15,
             },
-
+            jsonbs: {
+              characterMaximumLength: null,
+              dataType: 'jsonb[]|TEXT_ARRAY',
+              elemPgTypeClass: 'b',
+              dflt: null,
+              notNull: false,
+              pos: 16,
+            },
             ['_0_version']: {
               characterMaximumLength: null,
               dataType: 'TEXT',
               elemPgTypeClass: null,
               notNull: false,
-              pos: 2,
+              pos: 17,
             },
           },
         },

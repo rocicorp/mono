@@ -66,7 +66,6 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
       num INT
     );
 
-    -- Seed the published.bar table with toastable values.
     DO $$
     BEGIN
       FOR i IN 1..3 LOOP
@@ -74,14 +73,33 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
       END LOOP;
     END $$;
 
-    CREATE PUBLICATION zero_published FOR TABLES IN SCHEMA published;
+    CREATE TABLE baz(
+      id INT PRIMARY KEY,
+      num INT,
+      ooka TEXT
+    );
+
+    DO $$
+    BEGIN
+      FOR i IN 1..3 LOOP
+        INSERT INTO baz (id, num, ooka) VALUES(i, i, 'aaa');
+      END LOOP;
+    END $$;
+
+
+    CREATE PUBLICATION published_schema FOR TABLES IN SCHEMA published;
+    CREATE PUBLICATION published_tables FOR TABLE baz(id, num);  -- ooka is excluded
     `);
 
     const source = (
       await initializePostgresChangeSource(
         lc,
         upstreamURI,
-        {appID: APP_ID, publications: ['zero_published'], shardNum: 0},
+        {
+          appID: APP_ID,
+          publications: ['published_schema', 'published_tables'],
+          shardNum: 0,
+        },
         replicaDbFile.path,
         {tableCopyWorkers: 5},
       )
@@ -223,7 +241,7 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
         END LOOP;
       END $$;
 
-      ALTER PUBLICATION zero_published 
+      ALTER PUBLICATION published_schema 
         ADD TABLE foo WHERE (id % 2 = 0);
       `,
       null,
@@ -450,6 +468,39 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
       ],
     ],
     [
+      'published column change',
+      PG_15_UP,
+      /*sql*/ `
+      ALTER PUBLICATION published_tables SET TABLE baz (id, ooka);
+      `,
+      null,
+      {
+        ['baz']: [
+          {
+            id: 1n,
+            ooka: 'aaa',
+          },
+          {
+            id: 2n,
+            ooka: 'aaa',
+          },
+          {
+            id: 3n,
+            ooka: 'aaa',
+          },
+        ],
+      },
+      [
+        {
+          name: 'baz',
+          columns: {
+            id: {dataType: 'int4|NOT_NULL', pos: 1},
+            ooka: {dataType: 'text', pos: 3},
+          },
+        },
+      ],
+    ],
+    [
       'column renamed while being backfilled',
       PG_15_UP,
       /*sql*/ `
@@ -492,7 +543,7 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
       'add generated column',
       PG_18_UP,
       /*sql*/ `
-      ALTER PUBLICATION zero_published SET (publish_generated_columns=stored);
+      ALTER PUBLICATION published_schema SET (publish_generated_columns=stored);
 
       ALTER TABLE published.bar ADD COLUMN "genNum2" INT 
         GENERATED ALWAYS AS (num * 2) STORED;

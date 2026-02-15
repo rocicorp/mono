@@ -760,13 +760,14 @@ class ChangeMaker {
         const {schema, name} = must(prevTbl.get(id));
         changes.push({tag: 'drop-table', id: {schema, name}});
       }
-      // ALTER
+      // ALTER TABLE | ALTER PUBLICATION
       const tables = intersection(prevTbl, nextTbl);
       for (const id of tables) {
         changes.push(
           ...this.#getTableChanges(
             must(prevTbl.get(id)),
             must(nextTbl.get(id)),
+            update.event.tag,
           ),
         );
       }
@@ -803,6 +804,7 @@ class ChangeMaker {
   #getTableChanges(
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
+    ddlTag: string,
   ): SchemaChange[] {
     const changes: SchemaChange[] = [];
     if (
@@ -859,6 +861,11 @@ class ChangeMaker {
       }
     }
 
+    // All columns introduced by a publication change require backfill.
+    // Columns created by ALTER TABLE, on the other hand, only require
+    // backfill if they have non-constant defaults.
+    const alwaysBackfill = ddlTag === 'ALTER PUBLICATION';
+
     // ADD
     for (const id of added) {
       const {name, ...spec} = must(newColumns.get(id));
@@ -869,26 +876,31 @@ class ChangeMaker {
         column,
         tableMetadata: getMetadata(newTable),
       };
-      // Determine if the ChangeProcessor will accept the column change as is.
-      try {
-        mapPostgresToLiteColumn(table.name, column);
-      } catch (e) {
-        if (!(e instanceof UnsupportedColumnDefaultError)) {
-          // Note: mapPostgresToLiteColumn is not expected to throw any other
-          // types of errors.
-          throw e;
-        }
-        // If the column has an unsupported default (e.g. an expression or a
-        // generated value), create the column as initially hidden with a
-        // `null` default, and publish it after backfilling the values from
-        // upstream. Note that this does require that the table have a valid
-        // REPLICA IDENTITY, since backfill relies on merging new data with
-        // an existing row.
-        this.#lc.info?.(
-          `Backfilling column ${table.name}.${name}: ${String(e)}`,
-        );
+      if (alwaysBackfill) {
         addColumn.column.spec.dflt = null;
         addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
+      } else {
+        // Determine if the ChangeProcessor will accept the column add as is.
+        try {
+          mapPostgresToLiteColumn(table.name, column);
+        } catch (e) {
+          if (!(e instanceof UnsupportedColumnDefaultError)) {
+            // Note: mapPostgresToLiteColumn is not expected to throw any other
+            // types of errors.
+            throw e;
+          }
+          // If the column has an unsupported default (e.g. an expression or a
+          // generated value), create the column as initially hidden with a
+          // `null` default, and publish it after backfilling the values from
+          // upstream. Note that this does require that the table have a valid
+          // REPLICA IDENTITY, since backfill relies on merging new data with
+          // an existing row.
+          this.#lc.info?.(
+            `Backfilling column ${table.name}.${name}: ${String(e)}`,
+          );
+          addColumn.column.spec.dflt = null;
+          addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
+        }
       }
       changes.push(addColumn);
     }
