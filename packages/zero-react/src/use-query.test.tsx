@@ -14,6 +14,8 @@ import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
   getAllViewsSizeForTesting,
+  type MaybeSelectedQueryResult,
+  type SelectedQueryResult,
   useQuery,
   useSuspenseQuery,
   ViewStore,
@@ -1226,6 +1228,479 @@ describe('useSuspenseQuery', () => {
 
       // All views should be cleaned up
       expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+    });
+  });
+});
+
+describe('select option', () => {
+  let container: HTMLElement;
+  let root: Root;
+  let zero: Zero<Schema>;
+  let unique: number = 0;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    zero = newMockZero('client-select');
+    unique++;
+  });
+
+  afterEach(() => {
+    root.unmount();
+    document.body.removeChild(container);
+    vi.resetAllMocks();
+  });
+
+  test('select with primitive return value only re-renders when value changes', async () => {
+    const q = newMockQuery('query-select-primitive' + unique);
+    let renderCount = 0;
+
+    function Comp() {
+      renderCount++;
+      const [count] = useQuery(q, {
+        select: (data: unknown[]) => data.length,
+      });
+      return <div>count:{count}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    // Wait for initial render
+    await expect.poll(() => container.textContent).toBe('count:0');
+    const initialRenderCount = renderCount;
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // Emit data with 2 items
+    view.listeners.forEach(cb => cb([{id: 1}, {id: 2}], 'complete'));
+    await expect.poll(() => container.textContent).toBe('count:2');
+    expect(renderCount).toBe(initialRenderCount + 1);
+
+    // Emit different data but same length (should NOT re-render)
+    const renderCountBeforeSameLength = renderCount;
+    view.listeners.forEach(cb => cb([{id: 3}, {id: 4}], 'complete'));
+
+    // Give React time to potentially re-render
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(renderCount).toBe(renderCountBeforeSameLength);
+    expect(container.textContent).toBe('count:2');
+
+    // Emit data with different length (should re-render)
+    view.listeners.forEach(cb => cb([{id: 1}], 'complete'));
+    await expect.poll(() => container.textContent).toBe('count:1');
+    expect(renderCount).toBe(renderCountBeforeSameLength + 1);
+  });
+
+  test('select with object return value uses deep equality', async () => {
+    const q = newMockQuery('query-select-object' + unique);
+    let renderCount = 0;
+
+    function Comp() {
+      renderCount++;
+      const [summary] = useQuery(q, {
+        select: (data: unknown[]) => {
+          const typedData = data as Array<{id: number; name: string}>;
+          return {
+            count: typedData.length,
+            firstId: typedData[0]?.id ?? null,
+          };
+        },
+      });
+      return (
+        <div>
+          count:{summary?.count ?? 0},first:{summary?.firstId ?? 'none'}
+        </div>
+      );
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    // Wait for initial render
+    await expect.poll(() => container.textContent).toBe('count:0,first:none');
+    const initialRenderCount = renderCount;
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // Emit data
+    view.listeners.forEach(cb =>
+      cb([{id: 1, name: 'Alice'}, {id: 2, name: 'Bob'}], 'complete'),
+    );
+    await expect.poll(() => container.textContent).toBe('count:2,first:1');
+    expect(renderCount).toBe(initialRenderCount + 1);
+
+    // Emit different underlying data but same selected object shape
+    // (count still 2, firstId still 1) - should NOT re-render
+    const renderCountBeforeSameObject = renderCount;
+    view.listeners.forEach(cb =>
+      cb([{id: 1, name: 'Alice Updated'}, {id: 2, name: 'Bob Updated'}], 'complete'),
+    );
+
+    // Give React time to potentially re-render
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(renderCount).toBe(renderCountBeforeSameObject);
+    expect(container.textContent).toBe('count:2,first:1');
+
+    // Change count but keep firstId - should re-render
+    view.listeners.forEach(cb =>
+      cb([{id: 1, name: 'Alice'}, {id: 2, name: 'Bob'}, {id: 3, name: 'Charlie'}], 'complete'),
+    );
+    await expect.poll(() => container.textContent).toBe('count:3,first:1');
+    expect(renderCount).toBe(renderCountBeforeSameObject + 1);
+
+    // Change firstId but keep count - should re-render
+    const renderCountBeforeFirstIdChange = renderCount;
+    view.listeners.forEach(cb =>
+      cb([{id: 5, name: 'Eve'}, {id: 6, name: 'Frank'}, {id: 7, name: 'Grace'}], 'complete'),
+    );
+    await expect.poll(() => container.textContent).toBe('count:3,first:5');
+    expect(renderCount).toBe(renderCountBeforeFirstIdChange + 1);
+  });
+
+  test('select with array return value changes instance when content changes', async () => {
+    const q = newMockQuery('query-select-array' + unique);
+    const capturedArrays: Array<number[] | undefined> = [];
+    let renderCount = 0;
+
+    function Comp() {
+      renderCount++;
+      const [ids] = useQuery(q, {
+        select: (data: unknown[]) =>
+          (data as Array<{id: number; name: string}>).map(item => item.id),
+      });
+      capturedArrays.push(ids);
+      return <div>ids:{JSON.stringify(ids)}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    // Wait for initial render
+    await expect.poll(() => container.textContent).toBe('ids:[]');
+    const initialRenderCount = renderCount;
+    expect(capturedArrays.length).toBe(initialRenderCount);
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // Emit data with some items
+    view.listeners.forEach(cb =>
+      cb([{id: 1, name: 'Alice'}, {id: 2, name: 'Bob'}], 'complete'),
+    );
+    await expect.poll(() => container.textContent).toBe('ids:[1,2]');
+    expect(renderCount).toBe(initialRenderCount + 1);
+
+    // Capture the array reference after first data update
+    const firstArrayRef = capturedArrays[capturedArrays.length - 1];
+    expect(firstArrayRef).toEqual([1, 2]);
+
+    // Emit same IDs but different names (should NOT re-render, same array content)
+    const renderCountBefore = renderCount;
+    view.listeners.forEach(cb =>
+      cb([{id: 1, name: 'Alice Updated'}, {id: 2, name: 'Bob Updated'}], 'complete'),
+    );
+
+    // Give React time to potentially re-render
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(renderCount).toBe(renderCountBefore);
+    expect(container.textContent).toBe('ids:[1,2]');
+
+    // Verify array reference is still the same (no re-render occurred)
+    expect(capturedArrays[capturedArrays.length - 1]).toBe(firstArrayRef);
+
+    // Emit different IDs (should re-render, array content changed)
+    view.listeners.forEach(cb =>
+      cb([{id: 1, name: 'Alice'}, {id: 3, name: 'Charlie'}], 'complete'),
+    );
+    await expect.poll(() => container.textContent).toBe('ids:[1,3]');
+    expect(renderCount).toBe(renderCountBefore + 1);
+
+    // Verify array reference changed (new array instance for useEffect deps)
+    const secondArrayRef = capturedArrays[capturedArrays.length - 1];
+    expect(secondArrayRef).toEqual([1, 3]);
+    expect(secondArrayRef).not.toBe(firstArrayRef);
+  });
+
+  test('select with .one() query transforms singular result', async () => {
+    // Create a singular query (like .one())
+    const q = newMockQuery('query-select-one' + unique, true);
+    let renderCount = 0;
+
+    function Comp() {
+      renderCount++;
+      const [name] = useQuery(q, {
+        select: (data: unknown) => {
+          const typedData = data as {id: number; name: string} | undefined;
+          return typedData?.name ?? 'none';
+        },
+      });
+      return <div>name:{name}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    // Wait for initial render (undefined data → 'none')
+    await expect.poll(() => container.textContent).toBe('name:none');
+    const initialRenderCount = renderCount;
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // Emit singular data (not an array, just an object)
+    view.listeners.forEach(cb => cb({id: 1, name: 'Alice'}, 'complete'));
+    await expect.poll(() => container.textContent).toBe('name:Alice');
+    expect(renderCount).toBe(initialRenderCount + 1);
+
+    // Emit different object with same name (should NOT re-render)
+    const renderCountBeforeSameName = renderCount;
+    view.listeners.forEach(cb => cb({id: 2, name: 'Alice'}, 'complete'));
+
+    // Give React time to potentially re-render
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(renderCount).toBe(renderCountBeforeSameName);
+    expect(container.textContent).toBe('name:Alice');
+
+    // Emit object with different name (should re-render)
+    view.listeners.forEach(cb => cb({id: 1, name: 'Bob'}, 'complete'));
+    await expect.poll(() => container.textContent).toBe('name:Bob');
+    expect(renderCount).toBe(renderCountBeforeSameName + 1);
+
+    // Emit undefined (no match) (should re-render)
+    const renderCountBeforeUndefined = renderCount;
+    view.listeners.forEach(cb => cb(undefined, 'complete'));
+    await expect.poll(() => container.textContent).toBe('name:none');
+    expect(renderCount).toBe(renderCountBeforeUndefined + 1);
+  });
+
+  test('select receives undefined during loading state', async () => {
+    const q = newMockQuery('query-select-loading' + unique);
+    const selectCalls: Array<unknown[]> = [];
+
+    function Comp() {
+      const [ids] = useQuery(q, {
+        select: (data: unknown[]) => {
+          selectCalls.push(data);
+          return (data as Array<{id: number}>).map(item => item.id);
+        },
+      });
+      return <div>ids:{JSON.stringify(ids)}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    // Wait for initial render (loading state with empty array)
+    await expect.poll(() => container.textContent).toBe('ids:[]');
+
+    // Select should have been called with empty array during initial loading
+    expect(selectCalls.length).toBeGreaterThan(0);
+    expect(selectCalls[0]).toEqual([]);
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // Emit actual data
+    view.listeners.forEach(cb => cb([{id: 1}, {id: 2}], 'complete'));
+    await expect.poll(() => container.textContent).toBe('ids:[1,2]');
+
+    // Select should have been called with the actual data
+    expect(selectCalls[selectCalls.length - 1]).toEqual([{id: 1}, {id: 2}]);
+  });
+
+  test('status change causes re-render even if selected value unchanged', async () => {
+    const q = newMockQuery('query-select-status' + unique);
+    let renderCount = 0;
+    let capturedDetails: QueryResultDetails | undefined;
+
+    function Comp() {
+      renderCount++;
+      const [count, details] = useQuery(q, {
+        select: (data: unknown[]) => data.length,
+      });
+      capturedDetails = details;
+      return (
+        <div>
+          count:{count},status:{details.type}
+        </div>
+      );
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    // Wait for initial render (unknown status with empty array)
+    await expect.poll(() => container.textContent).toBe('count:0,status:unknown');
+    const initialRenderCount = renderCount;
+    expect(capturedDetails?.type).toBe('unknown');
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // Emit same data (empty array, count=0) but with 'complete' status
+    // This should trigger a re-render because status changed, even though selected value is the same
+    view.listeners.forEach(cb => cb([], 'complete'));
+    await expect.poll(() => container.textContent).toBe('count:0,status:complete');
+    expect(renderCount).toBe(initialRenderCount + 1);
+    expect(capturedDetails?.type).toBe('complete');
+
+    // Emit same data again with same 'complete' status (should NOT re-render)
+    const renderCountBeforeSameStatus = renderCount;
+    view.listeners.forEach(cb => cb([], 'complete'));
+
+    // Give React time to potentially re-render
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(renderCount).toBe(renderCountBeforeSameStatus);
+    expect(container.textContent).toBe('count:0,status:complete');
+  });
+
+  test('no select maintains existing behavior with reference equality', async () => {
+    const q = newMockQuery('query-no-select-reference' + unique);
+    let renderCount = 0;
+    const capturedData: Array<unknown[]> = [];
+
+    function Comp() {
+      renderCount++;
+      const [data] = useQuery(q);
+      capturedData.push(data as unknown[]);
+      return <div>count:{(data as unknown[]).length}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    // Wait for initial render
+    await expect.poll(() => container.textContent).toBe('count:0');
+    const initialRenderCount = renderCount;
+
+    const view = vi.mocked(zero.materialize).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    // Emit data - should re-render since data changed
+    view.listeners.forEach(cb => cb([{id: 1}, {id: 2}], 'complete'));
+    await expect.poll(() => container.textContent).toBe('count:2');
+    expect(renderCount).toBe(initialRenderCount + 1);
+
+    // Without select, emitting deeply equal but different data DOES cause re-render
+    // because useSyncExternalStore uses reference equality, and the ViewWrapper
+    // creates a new snapshot on each onData call (even for deep-equal data).
+    const renderCountBeforeNewData = renderCount;
+    view.listeners.forEach(cb => cb([{id: 1}, {id: 2}], 'complete'));
+    await expect.poll(() => renderCount).toBe(renderCountBeforeNewData + 1);
+
+    // The data arrays should be different references (not deep-equal optimized)
+    const prevData = capturedData[capturedData.length - 2];
+    const currData = capturedData[capturedData.length - 1];
+    expect(prevData).not.toBe(currData); // Different references
+    expect(prevData).toEqual(currData); // But same content
+
+    // Emit same data with same status again - still re-renders
+    // (ViewWrapper creates a new snapshot each time onData is called)
+    const renderCountBeforeThirdEmit = renderCount;
+    view.listeners.forEach(cb => cb([{id: 1}, {id: 2}], 'complete'));
+    await expect.poll(() => renderCount).toBe(renderCountBeforeThirdEmit + 1);
+  });
+
+  describe('type inference', () => {
+    // Schema with typed queries for type tests
+    const testSchema = createSchema({
+      tables: [
+        table('item').columns({id: number(), name: string()}).primaryKey('id'),
+      ],
+    });
+    const pluralQuery = newQuery(testSchema, 'item');
+    const singularQuery = pluralQuery.one();
+    type Item = {readonly id: number; readonly name: string};
+
+    // Type-only tests wrapped in component functions to avoid runtime execution
+    test('select infers TSelected from select function return type', () => {
+      function Types() {
+        const [count, countDetails] = useQuery(pluralQuery, {
+          select: (data: Item[]) => data.length,
+        });
+        expectTypeOf(count).toEqualTypeOf<number>();
+        expectTypeOf([count, countDetails] as const).toEqualTypeOf<SelectedQueryResult<number>>();
+
+        const [names, namesDetails] = useQuery(pluralQuery, {
+          select: (data: Item[]) => data.map(item => item.name),
+        });
+        expectTypeOf(names).toEqualTypeOf<string[]>();
+        expectTypeOf([names, namesDetails] as const).toEqualTypeOf<SelectedQueryResult<string[]>>();
+
+        const [hasItems, hasItemsDetails] = useQuery(pluralQuery, {
+          select: (data: Item[]) => data.length > 0,
+        });
+        expectTypeOf(hasItems).toEqualTypeOf<boolean>();
+        expectTypeOf([hasItems, hasItemsDetails] as const).toEqualTypeOf<SelectedQueryResult<boolean>>();
+      }
+      void Types;
+    });
+
+    test('select with singular query receives Item | undefined', () => {
+      function Types() {
+        const [name, details] = useQuery(singularQuery, {
+          select: (data: Item | undefined) => data?.name ?? 'unknown',
+        });
+        expectTypeOf(name).toEqualTypeOf<string>();
+        expectTypeOf([name, details] as const).toEqualTypeOf<SelectedQueryResult<string>>();
+      }
+      void Types;
+    });
+
+    test('select with maybe query returns MaybeSelectedQueryResult', () => {
+      function Types() {
+        const maybeQuery = pluralQuery as typeof pluralQuery | null;
+        const [count, details] = useQuery(maybeQuery, {
+          select: (data: Item[]) => data.length,
+        });
+        expectTypeOf(count).toEqualTypeOf<number | undefined>();
+        expectTypeOf([count, details] as const).toEqualTypeOf<MaybeSelectedQueryResult<number>>();
+      }
+      void Types;
+    });
+
+    test('without select returns original HumanReadable type', () => {
+      function Types() {
+        const [items] = useQuery(pluralQuery);
+        expectTypeOf(items).toEqualTypeOf<Item[]>();
+
+        const [item] = useQuery(singularQuery);
+        expectTypeOf(item).toEqualTypeOf<Item | undefined>();
+      }
+      void Types;
     });
   });
 });

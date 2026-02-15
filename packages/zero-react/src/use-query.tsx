@@ -1,5 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import React, {useSyncExternalStore} from 'react';
+import {deepEqual} from 'shared/src/json.ts';
 import {
   type Immutable,
   addContextToQuery,
@@ -52,6 +53,48 @@ export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
+/**
+ * Options for useQuery with a select function that transforms query results.
+ * When select is provided, the hook uses deep equality comparison for re-renders.
+ */
+export type UseQueryOptionsWithSelect<TReturn, TSelected> = UseQueryOptions & {
+  /**
+   * Transform function that derives a value from the query result.
+   * The hook will only re-render when the selected value changes (deep equality).
+   * This encourages a pattern of large top-down queries with selective subscriptions.
+   *
+   * @param data - The query result (may be undefined during loading or for .one() queries)
+   * @returns The derived value to subscribe to
+   *
+   * @example
+   * ```typescript
+   * // Only re-renders when student IDs change
+   * const studentIds = useQuery(
+   *   z.query.school({id: schoolId}),
+   *   {select: (school) => school?.students.map(s => s.id) ?? []}
+   * );
+   * ```
+   */
+  select: (data: HumanReadable<TReturn>) => TSelected;
+};
+
+/**
+ * Result type for queries with a select function.
+ */
+export type SelectedQueryResult<TSelected> = readonly [
+  TSelected,
+  QueryResultDetails & {},
+];
+
+/**
+ * Result type for "maybe queries" with a select function.
+ * Used when the query may be falsy/disabled.
+ */
+export type MaybeSelectedQueryResult<TSelected> = readonly [
+  TSelected | undefined,
+  QueryResultDetails & {},
+];
+
 export type UseSuspenseQueryOptions = UseQueryOptions & {
   /**
    * Whether to suspend until:
@@ -75,7 +118,44 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
-// Overload 1: Query
+// Overload 1: Query with select
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+  TSelected = unknown,
+>(
+  query: QueryOrQueryRequest<
+    TTable,
+    TInput,
+    TOutput,
+    TSchema,
+    TReturn,
+    TContext
+  >,
+  options: UseQueryOptionsWithSelect<TReturn, TSelected>,
+): SelectedQueryResult<TSelected>;
+
+// Overload 2: Maybe query with select
+export function useQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema = DefaultSchema,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = DefaultContext,
+  TSelected = unknown,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  options: UseQueryOptionsWithSelect<TReturn, TSelected>,
+): MaybeSelectedQueryResult<TSelected>;
+
+// Overload 3: Query without select
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -95,7 +175,7 @@ export function useQuery<
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn>;
 
-// Overload 2: Maybe query
+// Overload 4: Maybe query without select
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
@@ -118,18 +198,23 @@ export function useQuery<
   TSchema extends Schema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
+  TSelected = unknown,
 >(
   query:
     | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
     | Falsy,
-  options?: UseQueryOptions | boolean,
-): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
+  options?: UseQueryOptions | UseQueryOptionsWithSelect<TReturn, TSelected> | boolean,
+): QueryResult<TReturn> | MaybeQueryResult<TReturn> | SelectedQueryResult<TSelected> | MaybeSelectedQueryResult<TSelected> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
+  let select: ((data: HumanReadable<TReturn>) => TSelected) | undefined;
   if (typeof options === 'boolean') {
     enabled = options;
   } else if (options) {
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
+    if ('select' in options) {
+      select = options.select;
+    }
   }
 
   const zero = useZero<TSchema, undefined, TContext>();
@@ -138,14 +223,72 @@ export function useQuery<
   const q = query ? addContextToQuery(query, zero.context) : undefined;
   const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
 
+  // Track the previous selected value for deep equality comparison.
+  // This ref persists across renders and allows us to return the same
+  // snapshot reference when the selected value hasn't changed.
+  const selectStateRef = React.useRef<{
+    lastSelected: TSelected | undefined;
+    lastDetails: QueryResultDetails | undefined;
+    lastSnapshot: SelectedQueryResult<TSelected> | MaybeSelectedQueryResult<TSelected> | undefined;
+  }>({lastSelected: undefined, lastDetails: undefined, lastSnapshot: undefined});
+
+  // Create a wrapper getSnapshot that applies select and deep equality.
+  // This callback is only used when select is defined.
+  const getSnapshotWithSelect = React.useCallback((): SelectedQueryResult<TSelected> | MaybeSelectedQueryResult<TSelected> => {
+    const baseSnapshot = view?.getSnapshot() ?? getDisabledSnapshot();
+    // Data is HumanReadable<TReturn> | undefined. For singular queries,
+    // HumanReadable<TReturn> already includes undefined. For plural queries
+    // with disabled view, we pass undefined to select (callers should handle this).
+    const data = baseSnapshot[0];
+    const details = baseSnapshot[1];
+
+    // TypeScript can't narrow select here since it's from a closure, so we
+    // assert it exists (this callback is only used when select is truthy).
+    const selected = select!(data as HumanReadable<TReturn>);
+
+    // Use deep equality to determine if we should return a new snapshot.
+    // Cast to ReadonlyJSONValue since selected values derived from Zero queries
+    // are always JSON-serializable.
+    // IMPORTANT: We must also re-render if the details/status changed, even if
+    // the selected value is the same.
+    const state = selectStateRef.current;
+    if (
+      state.lastSnapshot !== undefined &&
+      state.lastDetails === details &&
+      deepEqual(
+        state.lastSelected as ReadonlyJSONValue | undefined,
+        selected as ReadonlyJSONValue | undefined,
+      )
+    ) {
+      return state.lastSnapshot;
+    }
+
+    // Selected value or details changed, create new snapshot
+    const newSnapshot: SelectedQueryResult<TSelected> = [selected, details];
+    state.lastSelected = selected;
+    state.lastDetails = details;
+    state.lastSnapshot = newSnapshot;
+    return newSnapshot;
+  }, [view, select]);
+
   // https://react.dev/reference/react/useSyncExternalStore
-  // Always call useSyncExternalStore to maintain consistent hook order
+  // Always call useSyncExternalStore to maintain consistent hook order.
+  // When select is provided, use the wrapper that applies transformation and deep equality.
+  // Otherwise, use the view's raw getSnapshot (or disabled snapshot for falsy queries).
+  if (select) {
+    return useSyncExternalStore(
+      view?.subscribeReactInternals ?? disabledSubscriber,
+      getSnapshotWithSelect,
+      getSnapshotWithSelect,
+    );
+  }
+
+  // Cast needed: getDisabledSnapshot returns a narrower type than QueryResult<TReturn>
+  const getSnapshot = (view?.getSnapshot ?? getDisabledSnapshot) as () => QueryResult<TReturn>;
   return useSyncExternalStore(
     view?.subscribeReactInternals ?? disabledSubscriber,
-    view?.getSnapshot ??
-      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
-    view?.getSnapshot ??
-      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+    getSnapshot,
+    getSnapshot,
   );
 }
 
