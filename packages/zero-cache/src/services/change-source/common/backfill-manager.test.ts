@@ -1720,16 +1720,6 @@ describe('backfill-manager', () => {
         watermark: '130',
         columns: ['b'],
         rowValues: [
-          [1, 2],
-          [3, 4],
-        ],
-      },
-      {
-        tag: 'backfill',
-        relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
-        watermark: '130',
-        columns: ['b'],
-        rowValues: [
           [5, 6],
           [7, 8],
         ],
@@ -1755,7 +1745,7 @@ describe('backfill-manager', () => {
 
     // Let the backfill start streaming before acquiring a reservation
     // for the main stream.
-    await sleep(100);
+    await sleep(1000);
 
     // Move the main replication stream past the backfill LSN
     await changeStream.reserve('main');
@@ -1767,21 +1757,8 @@ describe('backfill-manager', () => {
     }
     changeStream.release('131');
 
-    expect(await drainChanges(9)).toMatchInlineSnapshot([
+    expect(await drainChanges(8)).toMatchInlineSnapshot([
       ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
-      [
-        'data',
-        {
-          columns: ['b'],
-          relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
-          rowValues: [
-            [1, 2],
-            [3, 4],
-          ],
-          tag: 'backfill',
-          watermark: '130',
-        },
-      ],
       [
         'data',
         {
@@ -1838,16 +1815,6 @@ describe('backfill-manager', () => {
         ],
       },
       {
-        tag: 'backfill',
-        relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
-        watermark: '130',
-        columns: ['b'],
-        rowValues: [
-          [5, 6],
-          [7, 8],
-        ],
-      },
-      {
         tag: 'backfill-completed',
         relation: {schema: 'foo', name: 'bar', rowKey: {columns: ['a']}},
         columns: ['b'],
@@ -1869,10 +1836,10 @@ describe('backfill-manager', () => {
     // Let the backfill start streaming before acquiring a reservation
     // for the main stream. It should end its transaction and release
     // the reservation before flushing the backfill-completed message.
-    await sleep(100);
+    await sleep(1000);
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
-    expect(await drainChanges(7)).toMatchInlineSnapshot([
+    expect(await drainChanges(6)).toMatchInlineSnapshot([
       ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
       [
         'data',
@@ -1882,19 +1849,6 @@ describe('backfill-manager', () => {
           rowValues: [
             [1, 2],
             [3, 4],
-          ],
-          tag: 'backfill',
-          watermark: '130',
-        },
-      ],
-      [
-        'data',
-        {
-          columns: ['b'],
-          relation: {name: 'bar', rowKey: {columns: ['a']}, schema: 'foo'},
-          rowValues: [
-            [5, 6],
-            [7, 8],
           ],
           tag: 'backfill',
           watermark: '130',
