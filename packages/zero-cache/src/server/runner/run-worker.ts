@@ -33,10 +33,13 @@ export async function runWorker(
 
   const {port, lazyStartup} = config;
   const serverVersion = getServerVersion(config);
-  lc.info?.(
-    `starting server${!serverVersion ? '' : `@${serverVersion}`} ` +
-      `protocolVersion=${PROTOCOL_VERSION}`,
-  );
+  lc.info?.(`starting server${!serverVersion ? '' : `@${serverVersion}`} `, {
+    protocolVersion: PROTOCOL_VERSION,
+    taskID: config.taskID,
+    app: config.app,
+    shard: config.shard,
+    port: config.port,
+  });
 
   let zeroCache: Resolver<Worker> | undefined;
   function startZeroCache(): Promise<Worker> {
