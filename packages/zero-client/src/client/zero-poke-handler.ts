@@ -7,7 +7,6 @@ import type {
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
-import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import type {
@@ -39,11 +38,11 @@ type PokeAccumulator = {
 /**
  * Handles the multi-part format of zero pokes.
  * As an optimization it also debounces pokes, only poking Replicache with a
- * merged poke at most once per frame (as determined by requestAnimationFrame).
- * The client cannot control how fast the server sends pokes, and it can only
- * update the UI once per frame. This debouncing avoids wastefully
- * computing separate diffs and IVM updates for intermediate states that will
- * never been displayed to the UI.
+ * merged poke at most once per scheduled callback (using setTimeout).
+ * This debouncing avoids wastefully computing separate diffs and IVM updates
+ * for intermediate states. setTimeout is used instead of requestAnimationFrame
+ * to ensure pokes are delivered even when the tab is in the background,
+ * enabling notifications (sounds, favicon badges) to work correctly.
  */
 export class PokeHandler {
   readonly #replicachePoke: (poke: PokeInternal) => Promise<void>;
@@ -53,16 +52,13 @@ export class PokeHandler {
   #receivingPoke: Omit<PokeAccumulator, 'pokeEnd'> | undefined = undefined;
   readonly #pokeBuffer: PokeAccumulator[] = [];
   #pokePlaybackLoopRunning = false;
-  #lastRafPerfTimestamp = 0;
+  #lastScheduledTimestamp = 0;
   // Serializes calls to this.#replicachePoke otherwise we can cause out of
   // order poke errors.
   readonly #pokeLock = new Lock();
   readonly #schema: Schema;
   readonly #serverToClient: NameMapper;
   readonly #mutationTracker: MutationTracker;
-
-  readonly #raf =
-    getBrowserGlobalMethod('requestAnimationFrame') ?? rafFallback;
 
   constructor(
     replicachePoke: (poke: PokeInternal) => Promise<void>,
@@ -139,25 +135,28 @@ export class PokeHandler {
   #startPlaybackLoop() {
     this.#lc.debug?.('starting playback loop');
     this.#pokePlaybackLoopRunning = true;
-    this.#raf(this.#rafCallback);
+    setTimeout(this.#scheduledCallback, 0);
   }
 
-  #rafCallback = async () => {
-    const rafLC = this.#lc.withContext('rafAt', Math.floor(performance.now()));
+  #scheduledCallback = async () => {
+    const lc = this.#lc.withContext(
+      'scheduledAt',
+      Math.floor(performance.now()),
+    );
     if (this.#pokeBuffer.length === 0) {
-      rafLC.debug?.('stopping playback loop');
+      lc.debug?.('stopping playback loop');
       this.#pokePlaybackLoopRunning = false;
       return;
     }
-    this.#raf(this.#rafCallback);
+    setTimeout(this.#scheduledCallback, 0);
     const start = performance.now();
-    rafLC.debug?.(
-      'raf fired, processing pokes.  Since last raf',
-      start - this.#lastRafPerfTimestamp,
+    lc.debug?.(
+      'scheduled callback fired, processing pokes. Since last callback',
+      start - this.#lastScheduledTimestamp,
     );
-    this.#lastRafPerfTimestamp = start;
-    await this.#processPokesForFrame(rafLC);
-    rafLC.debug?.('processing pokes took', performance.now() - start);
+    this.#lastScheduledTimestamp = start;
+    await this.#processPokesForFrame(lc);
+    lc.debug?.('processing pokes took', performance.now() - start);
   };
 
   #processPokesForFrame(lc: LogContext): Promise<void> {
@@ -390,12 +389,4 @@ function rowsPatchOpToReplicachePatchOp(
     default:
       unreachable(op);
   }
-}
-
-/**
- * Some environments we run in don't have `requestAnimationFrame` (such as
- * Node, Cloudflare Workers).
- */
-function rafFallback(callback: () => void): void {
-  setTimeout(callback, 0);
 }

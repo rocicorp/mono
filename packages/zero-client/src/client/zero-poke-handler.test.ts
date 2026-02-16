@@ -17,10 +17,9 @@ import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {PokeHandler, mergePokes} from './zero-poke-handler.ts';
 
-let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
-// The FrameRequestCallback in PokeHandler does not use
-// its time argument, so use an arbitrary constant for it in tests.
-const UNUSED_RAF_ARG = 10;
+let setTimeoutStub: MockInstance<
+  (callback: () => Promise<void>, ms: number) => number
+>;
 
 const ackMutationResponses = () => {};
 const onFatalError = () => {};
@@ -46,16 +45,18 @@ const schema = createSchema({
 
 describe('poke handler', () => {
   beforeEach(() => {
-    rafStub = vi
-      .spyOn(globalThis, 'requestAnimationFrame')
-      .mockImplementation(() => 0);
+    setTimeoutStub = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(
+        (() => 0) as unknown as typeof setTimeout,
+      ) as MockInstance<(callback: () => Promise<void>, ms: number) => number>;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  test('completed poke plays on first raf', async () => {
+  test('completed poke plays on first scheduled callback', async () => {
     const onPokeErrorStub = vi.fn();
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
@@ -68,7 +69,7 @@ describe('poke handler', () => {
       logContext,
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
@@ -111,15 +112,16 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-    const rafCallback0 = rafStub.mock.calls[0][0];
-    await rafCallback0(UNUSED_RAF_ARG);
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
@@ -155,12 +157,13 @@ describe('poke handler', () => {
       },
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
-    const rafCallback1 = rafStub.mock.calls[1][0];
-    await rafCallback1(UNUSED_RAF_ARG);
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
+    await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
   });
 
   test('canceled poke is not applied', async () => {
@@ -176,7 +179,7 @@ describe('poke handler', () => {
       logContext,
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     const pokeStartAndParts = (pokeID: string) => {
       pokeHandler.handlePokeStart({
@@ -218,26 +221,27 @@ describe('poke handler', () => {
     };
     pokeStartAndParts('poke1');
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '', cancel: true});
 
-    // raf is not scheduled because poke was canceled;
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    // setTimeout is not scheduled because poke was canceled;
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
     // now test receiving a poke after the canceled poke
     pokeStartAndParts('poke2');
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '2'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-    const rafCallback0 = rafStub.mock.calls[0][0];
-    await rafCallback0(UNUSED_RAF_ARG);
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
@@ -269,15 +273,16 @@ describe('poke handler', () => {
       },
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
-    const rafCallback1 = rafStub.mock.calls[1][0];
-    await rafCallback1(UNUSED_RAF_ARG);
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
+    await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
   });
 
-  test('multiple pokes received before raf callback are merged', async () => {
+  test('multiple pokes received before scheduled callback are merged', async () => {
     const onPokeErrorStub = vi.fn();
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
@@ -291,7 +296,7 @@ describe('poke handler', () => {
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
@@ -330,10 +335,10 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
     pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
@@ -367,15 +372,16 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '3'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-    const rafCallback0 = rafStub.mock.calls[0][0];
-    await rafCallback0(UNUSED_RAF_ARG);
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
@@ -418,15 +424,16 @@ describe('poke handler', () => {
       },
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
-    const rafCallback1 = rafStub.mock.calls[1][0];
-    await rafCallback1(UNUSED_RAF_ARG);
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
+    await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
   });
 
-  test('multiple pokes received before raf callback are merged, canceled pokes are not merged', async () => {
+  test('multiple pokes received before scheduled callback are merged, canceled pokes are not merged', async () => {
     const onPokeErrorStub = vi.fn();
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
@@ -440,7 +447,7 @@ describe('poke handler', () => {
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
@@ -479,10 +486,10 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
     pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
@@ -516,11 +523,11 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '', cancel: true});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
@@ -541,12 +548,13 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke3', cookie: '3'});
 
-    const rafCallback0 = rafStub.mock.calls[0][0];
-    await rafCallback0(UNUSED_RAF_ARG);
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
@@ -597,15 +605,16 @@ describe('poke handler', () => {
       },
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
-    const rafCallback1 = rafStub.mock.calls[1][0];
-    await rafCallback1(UNUSED_RAF_ARG);
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
+    await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
   });
 
-  test('playback over series of rafs', async () => {
+  test('playback over series of scheduled callbacks', async () => {
     const onPokeErrorStub = vi.fn();
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
@@ -619,7 +628,7 @@ describe('poke handler', () => {
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
@@ -658,14 +667,15 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
     pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
-    const rafCallback0 = rafStub.mock.calls[0][0];
-    await rafCallback0(UNUSED_RAF_ARG);
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
@@ -697,7 +707,7 @@ describe('poke handler', () => {
       },
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke2',
@@ -730,15 +740,16 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '3'});
 
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
 
-    const rafCallback1 = rafStub.mock.calls[1][0];
-    await rafCallback1(UNUSED_RAF_ARG);
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
+    await timeoutCallback1();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(2);
     const replicachePoke1 = replicachePokeStub.mock.calls[1][0];
@@ -765,12 +776,13 @@ describe('poke handler', () => {
       },
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(3);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(3);
 
-    const rafCallback2 = rafStub.mock.calls[2][0];
-    await rafCallback2(UNUSED_RAF_ARG);
+    const timeoutCallback2 = setTimeoutStub.mock
+      .calls[2][0] as () => Promise<void>;
+    await timeoutCallback2();
     expect(replicachePokeStub).toHaveBeenCalledTimes(2);
-    expect(rafStub).toHaveBeenCalledTimes(3);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(3);
   });
 
   suite('onPokeErrors', () => {
@@ -846,7 +858,7 @@ describe('poke handler', () => {
       logContext,
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
@@ -885,19 +897,20 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
     const {promise, reject} = resolver();
     replicachePokeStub.mockReturnValue(promise);
     expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
-    const rafCallback0 = rafStub.mock.calls[0][0];
-    const rafCallback0Result = rafCallback0(UNUSED_RAF_ARG);
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    const timeoutCallback0Result = timeoutCallback0();
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
@@ -924,18 +937,19 @@ describe('poke handler', () => {
     });
 
     reject('error in poke');
-    await rafCallback0Result;
+    await timeoutCallback0Result;
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
 
-    const rafCallback1 = rafStub.mock.calls[1][0];
-    await rafCallback1(UNUSED_RAF_ARG);
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
+    await timeoutCallback1();
     // poke 2 cleared so replicachePokeStub not called
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
   });
 
   test('cookie gap during mergePoke calls onPokeError and clears', async () => {
@@ -951,7 +965,7 @@ describe('poke handler', () => {
       logContext,
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
@@ -990,11 +1004,11 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
@@ -1010,13 +1024,14 @@ describe('poke handler', () => {
 
     pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '4'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
-    const rafCallback0 = rafStub.mock.calls[0][0];
-    const rafCallback0Result = rafCallback0(UNUSED_RAF_ARG);
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    const timeoutCallback0Result = timeoutCallback0();
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
 
@@ -1041,19 +1056,20 @@ describe('poke handler', () => {
       pokeID: 'poke3',
       cookie: '5',
     });
-    await rafCallback0Result;
+    await timeoutCallback0Result;
 
     // not called because error is in merge before call
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
 
-    const rafCallback1 = rafStub.mock.calls[1][0];
-    await rafCallback1(UNUSED_RAF_ARG);
+    const timeoutCallback1 = setTimeoutStub.mock
+      .calls[1][0] as () => Promise<void>;
+    await timeoutCallback1();
     // poke 3 cleared so replicachePokeStub not called
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
-    expect(rafStub).toHaveBeenCalledTimes(2);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(2);
   });
 
   test('onDisconnect clears pending pokes', async () => {
@@ -1069,7 +1085,7 @@ describe('poke handler', () => {
       logContext,
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
@@ -1108,20 +1124,21 @@ describe('poke handler', () => {
       ],
     });
 
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handleDisconnect();
 
-    const rafCallback0 = rafStub.mock.calls[0][0];
-    await rafCallback0(UNUSED_RAF_ARG);
+    const timeoutCallback0 = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    await timeoutCallback0();
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(0);
-    expect(rafStub).toHaveBeenCalledTimes(1);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(1);
   });
 
   test('handlePoke returns the last mutation id change for this client from pokePart or undefined if none or error', () => {
@@ -1137,7 +1154,7 @@ describe('poke handler', () => {
       logContext,
       new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
-    expect(rafStub).toHaveBeenCalledTimes(0);
+    expect(setTimeoutStub).toHaveBeenCalledTimes(0);
 
     pokeHandler.handlePokeStart({
       pokeID: 'poke1',
@@ -1551,14 +1568,18 @@ describe('poke handler', () => {
 
 describe('mutation tracker interactions', () => {
   beforeEach(() => {
-    rafStub = vi
-      .spyOn(globalThis, 'requestAnimationFrame')
-      .mockImplementation(c => {
-        setTimeout(() => {
-          c(UNUSED_RAF_ARG);
-        }, 0);
-        return 1;
+    setTimeoutStub = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: () => Promise<void>,
+    ) => {
+      // Invoke the callback immediately for these tests
+      // Use queueMicrotask to avoid infinite recursion
+      queueMicrotask(() => {
+        void callback();
       });
+      return 1;
+    }) as unknown as typeof setTimeout) as MockInstance<
+      (callback: () => Promise<void>, ms: number) => number
+    >;
   });
 
   afterEach(() => {
