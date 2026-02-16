@@ -275,7 +275,7 @@ export class BackfillManager implements Cancelable, Listener {
         commitTx();
       }
 
-      await mustWaitBeforeFlush;
+      mustWaitBeforeFlush && (await mustWaitBeforeFlush);
 
       if (
         msg.tag === 'backfill' &&
