@@ -391,55 +391,57 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<void> {
     const rid = randomID();
     this.#lc.debug?.('about to acquire lock for cvr ', rid);
-    return this.#lock.withLock(async () => {
-      this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
-      const lc = this.#lc.withContext('lock', rid);
-      if (!this.#stateChanges.active) {
-        // view-syncer has been shutdown. this can be a backlog of tasks
-        // queued on the lock, or it can be a race condition in which a
-        // client connects before the ViewSyncer has been deleted from the
-        // ServiceRunner.
-        this.#lc.debug?.('state changes are inactive');
-        clearTimeout(this.#expiredQueriesTimer);
-        throw new ProtocolErrorWithLevel(
-          {
-            kind: ErrorKind.Rehome,
-            message: 'Reconnect required',
-            origin: ErrorOrigin.ZeroCache,
-          },
-          'info',
-        );
-      }
-      // If all clients have disconnected, cancel all pending work.
-      if (await this.#checkForShutdownConditionsInLock()) {
-        this.#lc.info?.(`closing clientGroupID=${this.id}`);
-        this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
-        return;
-      }
-      if (!this.#cvr) {
-        this.#lc.debug?.('loading cvr');
-        this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
-          this.#cvrStore.load(lc, this.#lastConnectTime),
-        );
-        this.#ttlClock = this.#cvr.ttlClock;
-        this.#ttlClockBase = Date.now();
-      } else {
-        // Make sure the CVR ttlClock is up to date.
-        const now = Date.now();
-        this.#cvr = {
-          ...this.#cvr,
-          ttlClock: this.#getTTLClock(now),
-        };
-      }
+    return startAsyncSpan(tracer, 'vs.#runInLockWithCVR', () =>
+      this.#lock.withLock(async () => {
+        this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
+        const lc = this.#lc.withContext('lock', rid);
+        if (!this.#stateChanges.active) {
+          // view-syncer has been shutdown. this can be a backlog of tasks
+          // queued on the lock, or it can be a race condition in which a
+          // client connects before the ViewSyncer has been deleted from the
+          // ServiceRunner.
+          this.#lc.debug?.('state changes are inactive');
+          clearTimeout(this.#expiredQueriesTimer);
+          throw new ProtocolErrorWithLevel(
+            {
+              kind: ErrorKind.Rehome,
+              message: 'Reconnect required',
+              origin: ErrorOrigin.ZeroCache,
+            },
+            'info',
+          );
+        }
+        // If all clients have disconnected, cancel all pending work.
+        if (await this.#checkForShutdownConditionsInLock()) {
+          this.#lc.info?.(`closing clientGroupID=${this.id}`);
+          this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
+          return;
+        }
+        if (!this.#cvr) {
+          this.#lc.debug?.('loading cvr');
+          this.#cvr = await this.#runPriorityOp(lc, 'loading cvr', () =>
+            this.#cvrStore.load(lc, this.#lastConnectTime),
+          );
+          this.#ttlClock = this.#cvr.ttlClock;
+          this.#ttlClockBase = Date.now();
+        } else {
+          // Make sure the CVR ttlClock is up to date.
+          const now = Date.now();
+          this.#cvr = {
+            ...this.#cvr,
+            ttlClock: this.#getTTLClock(now),
+          };
+        }
 
-      try {
-        await fn(lc, this.#cvr);
-      } catch (e) {
-        // Clear cached state if an error is encountered.
-        this.#cvr = undefined;
-        throw e;
-      }
-    });
+        try {
+          await fn(lc, this.#cvr);
+        } catch (e) {
+          // Clear cached state if an error is encountered.
+          this.#cvr = undefined;
+          throw e;
+        }
+      }),
+    );
   }
 
   readyState(): Promise<'initialized' | 'draining'> {

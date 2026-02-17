@@ -214,6 +214,8 @@ export class CVRStore {
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
     this.#batchConfigWrites = batchConfigWrites;
+
+    // assert(batchConfigWrites);
   }
 
   #cvr(table: string) {
