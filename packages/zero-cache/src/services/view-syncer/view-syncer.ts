@@ -865,8 +865,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #flushUpdater(lc: LogContext, updater: CVRUpdater): Promise<CVRSnapshot> {
-    return startAsyncSpan(tracer, 'vs.#flushUpdater', () => {
-      return this.#runPriorityOp(lc, 'flushing cvr', async () => {
+    return startAsyncSpan(tracer, 'vs.#flushUpdater', () =>
+      this.#runPriorityOp(lc, 'flushing cvr', async () => {
         const now = Date.now();
         const ttlClock = this.#getTTLClock(now);
         const {cvr, flushed} = await updater.flush(
@@ -882,8 +882,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
 
         return cvr;
-      });
-    });
+      }),
+    );
   }
 
   #startTTLClockInterval(lc: LogContext): void {
