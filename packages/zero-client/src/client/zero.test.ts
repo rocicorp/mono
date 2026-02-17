@@ -4361,8 +4361,7 @@ test('socket close code 1006 is logged as info, not error', async () => {
 
   const newLogs = z.testLogSink.messages.slice(initialLogCount);
   const closeLog = newLogs.find(
-    ([, , args]) =>
-      Array.isArray(args) && args[0] === 'Got socket close event',
+    ([, , args]) => Array.isArray(args) && args[0] === 'Got socket close event',
   );
   expect(closeLog).toBeDefined();
   assert(closeLog);
