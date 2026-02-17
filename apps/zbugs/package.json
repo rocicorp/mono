@@ -88,7 +88,7 @@
     "rehype-video": "^2.3.0",
     "shared": "0.0.0",
     "tailwindcss": "^3.0.23",
-    "tsx": "^4.19.1",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "universal-user-agent": "^7.0.2",
     "vite": "7.2.7",
