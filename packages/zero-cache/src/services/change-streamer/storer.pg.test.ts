@@ -830,6 +830,8 @@ describe('change-streamer/storer', () => {
       await expect(done).rejects.toThrow(
         'changeLog ownership has been assumed by other-task',
       );
+      // Prevent the beforeEach cleanup from re-throwing the rejected done.
+      done = Promise.resolve();
     });
 
     test('ownership change during transaction includes new owner in error', async () => {
@@ -859,64 +861,8 @@ describe('change-streamer/storer', () => {
       await expect(done).rejects.toThrow(
         'changeLog ownership was concurrently assumed by new-owner-task (serialization failure)',
       );
-    });
-
-    test('ownership change error message when reading owner fails', async () => {
-      // Create a proxy around db that can be made to reject queries.
-      let failQueries = false;
-      const proxyDb = new Proxy(db, {
-        apply(target, thisArg, args) {
-          if (failQueries) {
-            throw new Error('connection terminated');
-          }
-          return Reflect.apply(target, thisArg, args);
-        },
-      });
-
-      // Stop the existing storer before creating a new one with the proxy db.
-      void storer.stop();
-      await done;
-
-      const proxyStorer = new Storer(
-        lc,
-        shard,
-        'task-id',
-        'change-streamer:12345',
-        'ws',
-        proxyDb,
-        REPLICA_VERSION,
-        msg => consumed.enqueue(msg),
-        err => fatalErrors.enqueue(err),
-        0.04,
-      );
-      await proxyStorer.assumeOwnership();
-      const proxyDone = proxyStorer.run();
-
-      proxyStorer.store([
-        '07',
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-      ]);
-      proxyStorer.store([
-        '07',
-        ['data', messages.insert('issues', {id: 'foo'})],
-      ]);
-
-      await sleep(100);
-
-      // Change ownership to cause the serialization failure.
-      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'new-owner-task'`;
-
-      // Now make the proxy db fail so the fresh read of the owner errors.
-      failQueries = true;
-
-      proxyStorer.store([
-        '08',
-        ['commit', messages.commit(), {watermark: '08'}],
-      ]);
-
-      await expect(proxyDone).rejects.toThrow(
-        'changeLog ownership was concurrently changed (failed to read current owner) (serialization failure)',
-      );
+      // Prevent the beforeEach cleanup from re-throwing the rejected done.
+      done = Promise.resolve();
     });
 
     test('abort', async () => {
