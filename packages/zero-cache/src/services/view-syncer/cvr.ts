@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {startAsyncSpan, startSpan} from '../../../../otel/src/span.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {type JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
@@ -41,6 +42,7 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
+import {tracer} from './tracer.ts';
 import {ttlClockAsNumber, type TTLClock} from './ttl-clock.ts';
 
 export type RowUpdate = {
@@ -210,80 +212,82 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   ensureClient(id: string): ClientRecord {
-    let client = this._cvr.clients[id];
-    if (client) {
-      return client;
-    }
-    // Add the ClientRecord and PutPatch
-    client = {id, desiredQueryIDs: []};
-    this._cvr.clients[id] = client;
+    return startSpan(tracer, 'CVRConfigDrivenUpdater.ensureClient', () => {
+      let client = this._cvr.clients[id];
+      if (client) {
+        return client;
+      }
+      // Add the ClientRecord and PutPatch
+      client = {id, desiredQueryIDs: []};
+      this._cvr.clients[id] = client;
 
-    this._ensureNewVersion();
-    this._cvrStore.insertClient(client);
+      this._ensureNewVersion();
+      this._cvrStore.insertClient(client);
 
-    if (!this._cvr.queries[CLIENT_LMID_QUERY_ID]) {
-      const lmidsQuery: InternalQueryRecord = {
-        id: CLIENT_LMID_QUERY_ID,
-        ast: {
-          schema: '',
-          table: `${upstreamSchema(this.#shard)}.clients`,
-          where: {
-            type: 'simple',
-            left: {
-              type: 'column',
-              name: 'clientGroupID',
+      if (!this._cvr.queries[CLIENT_LMID_QUERY_ID]) {
+        const lmidsQuery: InternalQueryRecord = {
+          id: CLIENT_LMID_QUERY_ID,
+          ast: {
+            schema: '',
+            table: `${upstreamSchema(this.#shard)}.clients`,
+            where: {
+              type: 'simple',
+              left: {
+                type: 'column',
+                name: 'clientGroupID',
+              },
+              op: '=',
+              right: {
+                type: 'literal',
+                value: this._cvr.id,
+              },
             },
-            op: '=',
-            right: {
-              type: 'literal',
-              value: this._cvr.id,
-            },
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+            ],
           },
-          orderBy: [
-            ['clientGroupID', 'asc'],
-            ['clientID', 'asc'],
-          ],
-        },
-        type: 'internal',
-      };
-      this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
-      this._cvrStore.putQuery(lmidsQuery);
-    }
-    if (!this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID]) {
-      const mutationResultsQuery: InternalQueryRecord = getMutationResultsQuery(
-        upstreamSchema(this.#shard),
-        this._cvr.id,
-      );
-      this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID] =
-        mutationResultsQuery;
-      this._cvrStore.putQuery(mutationResultsQuery);
-    }
+          type: 'internal',
+        };
+        this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
+        this._cvrStore.putQuery(lmidsQuery);
+      }
+      if (!this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID]) {
+        const mutationResultsQuery: InternalQueryRecord =
+          getMutationResultsQuery(upstreamSchema(this.#shard), this._cvr.id);
+        this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID] =
+          mutationResultsQuery;
+        this._cvrStore.putQuery(mutationResultsQuery);
+      }
 
-    return client;
+      return client;
+    });
   }
 
   setClientSchema(lc: LogContext, clientSchema: ClientSchema) {
-    if (this._cvr.clientSchema === null) {
-      this._cvr.clientSchema = clientSchema;
-      this._cvrStore.putInstance(this._cvr);
-    } else if (!deepEqual(this._cvr.clientSchema, clientSchema)) {
-      // This should not be possible with a correct Zero client, as clients
-      // of a CVR should all have the same schema (given that the schema hash
-      // is part of the idb key). In fact, clients joining an existing group
-      // (i.e. non-empty baseCookie) do not send the clientSchema message.
-      lc.warn?.(
-        `New schema ${JSON.stringify(
-          clientSchema,
-        )} does not match existing schema ${JSON.stringify(
-          this._cvr.clientSchema,
-        )}`,
-      );
-      throw new ProtocolError({
-        kind: 'InvalidConnectionRequest',
-        message: `Provided schema does not match previous schema`,
-        origin: ErrorOrigin.ZeroCache,
-      });
-    }
+    startSpan(tracer, 'CVRConfigDrivenUpdater.setClientSchema', () => {
+      if (this._cvr.clientSchema === null) {
+        this._cvr.clientSchema = clientSchema;
+        this._cvrStore.putInstance(this._cvr);
+      } else if (!deepEqual(this._cvr.clientSchema, clientSchema)) {
+        // This should not be possible with a correct Zero client, as clients
+        // of a CVR should all have the same schema (given that the schema hash
+        // is part of the idb key). In fact, clients joining an existing group
+        // (i.e. non-empty baseCookie) do not send the clientSchema message.
+        lc.warn?.(
+          `New schema ${JSON.stringify(
+            clientSchema,
+          )} does not match existing schema ${JSON.stringify(
+            this._cvr.clientSchema,
+          )}`,
+        );
+        throw new ProtocolError({
+          kind: 'InvalidConnectionRequest',
+          message: `Provided schema does not match previous schema`,
+          origin: ErrorOrigin.ZeroCache,
+        });
+      }
+    });
   }
 
   setProfileID(lc: LogContext, profileID: string) {
@@ -314,89 +318,91 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       ttl?: number | undefined;
     }>[],
   ): PatchToVersion[] {
-    const patches: PatchToVersion[] = [];
-    const client = this.ensureClient(clientID);
-    const current = new Set(client.desiredQueryIDs);
+    return startSpan(tracer, 'CVRConfigDrivenUpdater.putDesiredQueries', () => {
+      const patches: PatchToVersion[] = [];
+      const client = this.ensureClient(clientID);
+      const current = new Set(client.desiredQueryIDs);
 
-    // Find the new/changed desired queries.
-    const needed: Set<string> = new Set();
+      // Find the new/changed desired queries.
+      const needed: Set<string> = new Set();
 
-    const recordQueryForTelemetry = (q: (typeof queries)[0]) => {
-      const {ast, name, args} = q;
-      if (ast) {
-        recordQuery('crud');
-      } else if (name && args) {
-        recordQuery('custom');
-      }
-    };
-
-    for (const q of queries) {
-      const {hash, ttl = DEFAULT_TTL_MS} = q;
-      const query = this._cvr.queries[hash];
-      if (!query) {
-        // New query - record for telemetry
-        recordQueryForTelemetry(q);
-        needed.add(hash);
-        continue;
-      }
-      if (query.type === 'internal') {
-        continue;
-      }
-
-      const oldClientState = query.clientState[clientID];
-      // Old query was inactivated or never desired by this client.
-      if (!oldClientState || oldClientState.inactivatedAt !== undefined) {
-        // Reactivated query - record for telemetry
-        recordQueryForTelemetry(q);
-        needed.add(hash);
-        continue;
-      }
-
-      if (compareTTL(ttl, oldClientState.ttl) > 0) {
-        // TTL update only - don't record for telemetry
-        needed.add(hash);
-      }
-    }
-
-    if (needed.size === 0) {
-      return patches;
-    }
-    const newVersion = this._ensureNewVersion();
-    client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
-
-    for (const id of needed) {
-      const q = must(queries.find(({hash}) => hash === id));
-      const {ast, name, args} = q;
-
-      const ttl = clampTTL(q.ttl ?? DEFAULT_TTL_MS);
-      const query =
-        this._cvr.queries[id] ?? newQueryRecord(id, ast, name, args);
-      assertNotInternal(query);
-
-      const inactivatedAt = undefined;
-
-      query.clientState[clientID] = {
-        inactivatedAt,
-        ttl,
-        version: newVersion,
+      const recordQueryForTelemetry = (q: (typeof queries)[0]) => {
+        const {ast, name, args} = q;
+        if (ast) {
+          recordQuery('crud');
+        } else if (name && args) {
+          recordQuery('custom');
+        }
       };
-      this._cvr.queries[id] = query;
-      patches.push({
-        toVersion: newVersion,
-        patch: {type: 'query', op: 'put', id, clientID},
-      });
 
-      this._cvrStore.putQuery(query);
-      this._cvrStore.putDesiredQuery(
-        newVersion,
-        query,
-        client,
-        false,
-        inactivatedAt,
-        ttl,
-      );
-    }
-    return patches;
+      for (const q of queries) {
+        const {hash, ttl = DEFAULT_TTL_MS} = q;
+        const query = this._cvr.queries[hash];
+        if (!query) {
+          // New query - record for telemetry
+          recordQueryForTelemetry(q);
+          needed.add(hash);
+          continue;
+        }
+        if (query.type === 'internal') {
+          continue;
+        }
+
+        const oldClientState = query.clientState[clientID];
+        // Old query was inactivated or never desired by this client.
+        if (!oldClientState || oldClientState.inactivatedAt !== undefined) {
+          // Reactivated query - record for telemetry
+          recordQueryForTelemetry(q);
+          needed.add(hash);
+          continue;
+        }
+
+        if (compareTTL(ttl, oldClientState.ttl) > 0) {
+          // TTL update only - don't record for telemetry
+          needed.add(hash);
+        }
+      }
+
+      if (needed.size === 0) {
+        return patches;
+      }
+      const newVersion = this._ensureNewVersion();
+      client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
+
+      for (const id of needed) {
+        const q = must(queries.find(({hash}) => hash === id));
+        const {ast, name, args} = q;
+
+        const ttl = clampTTL(q.ttl ?? DEFAULT_TTL_MS);
+        const query =
+          this._cvr.queries[id] ?? newQueryRecord(id, ast, name, args);
+        assertNotInternal(query);
+
+        const inactivatedAt = undefined;
+
+        query.clientState[clientID] = {
+          inactivatedAt,
+          ttl,
+          version: newVersion,
+        };
+        this._cvr.queries[id] = query;
+        patches.push({
+          toVersion: newVersion,
+          patch: {type: 'query', op: 'put', id, clientID},
+        });
+
+        this._cvrStore.putQuery(query);
+        this._cvrStore.putDesiredQuery(
+          newVersion,
+          query,
+          client,
+          false,
+          inactivatedAt,
+          ttl,
+        );
+      }
+      return patches;
+    });
   }
 
   markDesiredQueriesAsInactive(
@@ -419,64 +425,66 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     queryHashes: string[],
     inactivatedAt: TTLClock | undefined,
   ): PatchToVersion[] {
-    const patches: PatchToVersion[] = [];
-    const client = this.ensureClient(clientID);
-    const current = new Set(client.desiredQueryIDs);
-    const unwanted = new Set(queryHashes);
-    const remove = intersection(unwanted, current);
-    if (remove.size === 0) {
-      return patches;
-    }
-
-    const newVersion = this._ensureNewVersion();
-    client.desiredQueryIDs = [...difference(current, remove)].sort(
-      stringCompare,
-    );
-
-    for (const id of remove) {
-      const query = this._cvr.queries[id];
-      if (!query) {
-        continue; // Query itself has already been removed. Should not happen?
-      }
-      assertNotInternal(query);
-
-      let ttl = DEFAULT_TTL_MS;
-      if (inactivatedAt === undefined) {
-        delete query.clientState[clientID];
-      } else {
-        // client state can be missing if the query never transformed so we never
-        // recorded it.
-        const clientState = query.clientState[clientID];
-        if (clientState !== undefined) {
-          assert(
-            clientState.inactivatedAt === undefined,
-            `Query ${id} is already inactivated`,
-          );
-          // Clamp TTL to ensure we don't propagate historical unclamped values.
-          ttl = clampTTL(clientState.ttl);
-          query.clientState[clientID] = {
-            inactivatedAt,
-            ttl,
-            version: newVersion,
-          };
-        }
+    return startSpan(tracer, 'CVRConfigDrivenUpdater.#deleteQueries', () => {
+      const patches: PatchToVersion[] = [];
+      const client = this.ensureClient(clientID);
+      const current = new Set(client.desiredQueryIDs);
+      const unwanted = new Set(queryHashes);
+      const remove = intersection(unwanted, current);
+      if (remove.size === 0) {
+        return patches;
       }
 
-      this._cvrStore.putQuery(query);
-      this._cvrStore.putDesiredQuery(
-        newVersion,
-        query,
-        client,
-        true,
-        inactivatedAt,
-        ttl,
+      const newVersion = this._ensureNewVersion();
+      client.desiredQueryIDs = [...difference(current, remove)].sort(
+        stringCompare,
       );
-      patches.push({
-        toVersion: newVersion,
-        patch: {type: 'query', op: 'del', id, clientID},
-      });
-    }
-    return patches;
+
+      for (const id of remove) {
+        const query = this._cvr.queries[id];
+        if (!query) {
+          continue; // Query itself has already been removed. Should not happen?
+        }
+        assertNotInternal(query);
+
+        let ttl = DEFAULT_TTL_MS;
+        if (inactivatedAt === undefined) {
+          delete query.clientState[clientID];
+        } else {
+          // client state can be missing if the query never transformed so we never
+          // recorded it.
+          const clientState = query.clientState[clientID];
+          if (clientState !== undefined) {
+            assert(
+              clientState.inactivatedAt === undefined,
+              `Query ${id} is already inactivated`,
+            );
+            // Clamp TTL to ensure we don't propagate historical unclamped values.
+            ttl = clampTTL(clientState.ttl);
+            query.clientState[clientID] = {
+              inactivatedAt,
+              ttl,
+              version: newVersion,
+            };
+          }
+        }
+
+        this._cvrStore.putQuery(query);
+        this._cvrStore.putDesiredQuery(
+          newVersion,
+          query,
+          client,
+          true,
+          inactivatedAt,
+          ttl,
+        );
+        patches.push({
+          toVersion: newVersion,
+          patch: {type: 'query', op: 'del', id, clientID},
+        });
+      }
+      return patches;
+    });
   }
 
   clearDesiredQueries(clientID: string): PatchToVersion[] {
@@ -485,27 +493,29 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   deleteClient(clientID: string, ttlClock: TTLClock): PatchToVersion[] {
-    // clientID might not be part of this client group but if it is, this delete
-    // may generate changes to the desired queries.
+    return startSpan(tracer, 'CVRConfigDrivenUpdater.deleteClient', () => {
+      // clientID might not be part of this client group but if it is, this delete
+      // may generate changes to the desired queries.
 
-    const client = this._cvr.clients[clientID];
-    if (!client) {
-      // Clients in different client groups are no longer deleted, leaving
-      // cleanup to inactive CVR purging logic.
-      return [];
-    }
+      const client = this._cvr.clients[clientID];
+      if (!client) {
+        // Clients in different client groups are no longer deleted, leaving
+        // cleanup to inactive CVR purging logic.
+        return [];
+      }
 
-    // When a client is deleted we mark all of its desired queries as inactive.
-    // They will then be removed when the queries expire.
-    const patches = this.markDesiredQueriesAsInactive(
-      clientID,
-      client.desiredQueryIDs,
-      ttlClock,
-    );
-    delete this._cvr.clients[clientID];
-    this._cvrStore.deleteClient(clientID);
+      // When a client is deleted we mark all of its desired queries as inactive.
+      // They will then be removed when the queries expire.
+      const patches = this.markDesiredQueriesAsInactive(
+        clientID,
+        client.desiredQueryIDs,
+        ttlClock,
+      );
+      delete this._cvr.clients[clientID];
+      this._cvrStore.deleteClient(clientID);
 
-    return patches;
+      return patches;
+    });
   }
 }
 
@@ -587,62 +597,70 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     executed: {id: string; transformationHash: string}[],
     removed: {id: string}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
-    assert(this.#existingRows === undefined, `trackQueries already called`);
+    return startSpan(tracer, 'CVRQueryDrivenUpdater.trackQueries', () => {
+      assert(this.#existingRows === undefined, `trackQueries already called`);
 
-    const queryPatches: Patch[] = [
-      executed.map(q => this.#trackExecuted(q.id, q.transformationHash)),
-      removed.map(q => this.#trackRemoved(q.id)),
-    ].flat(2);
+      const queryPatches: Patch[] = [
+        executed.map(q => this.#trackExecuted(q.id, q.transformationHash)),
+        removed.map(q => this.#trackRemoved(q.id)),
+      ].flat(2);
 
-    this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
-    // Immediately attach a rejection handler to avoid unhandled rejections.
-    // The error will surface when this.#existingRows is awaited.
-    void this.#existingRows.then(() => {});
+      this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
+      // Immediately attach a rejection handler to avoid unhandled rejections.
+      // The error will surface when this.#existingRows is awaited.
+      void this.#existingRows.then(() => {});
 
-    return {
-      newVersion: this._cvr.version,
-      queryPatches: queryPatches.map(patch => ({
-        patch,
-        toVersion: this._cvr.version,
-      })),
-    };
+      return {
+        newVersion: this._cvr.version,
+        queryPatches: queryPatches.map(patch => ({
+          patch,
+          toVersion: this._cvr.version,
+        })),
+      };
+    });
   }
 
-  async #lookupRowsForExecutedAndRemovedQueries(
+  #lookupRowsForExecutedAndRemovedQueries(
     lc: LogContext,
   ): Promise<Iterable<RowRecord>> {
-    const results = new CustomKeyMap<RowID, RowRecord>(rowIDString);
+    return startAsyncSpan(
+      tracer,
+      'CVRQueryDrivenUpdater.#lookupRowsForExecutedAndRemovedQueries',
+      async () => {
+        const results = new CustomKeyMap<RowID, RowRecord>(rowIDString);
 
-    if (this.#removedOrExecutedQueryIDs.size === 0) {
-      // Query-less update. This can happen for config only changes.
-      return [];
-    }
-
-    // Utilizes the in-memory RowCache.
-    const allRowRecords = (await this._cvrStore.getRowRecords()).values();
-    let total = 0;
-    for (const existing of allRowRecords) {
-      total++;
-      assert(
-        existing.refCounts !== null,
-        'allRowRecords should not include null refCounts',
-      );
-      for (const id of Object.keys(existing.refCounts)) {
-        if (this.#removedOrExecutedQueryIDs.has(id)) {
-          results.set(existing.id, existing);
-          break;
+        if (this.#removedOrExecutedQueryIDs.size === 0) {
+          // Query-less update. This can happen for config only changes.
+          return [];
         }
-      }
-    }
 
-    lc.debug?.(
-      `found ${
-        results.size
-      } (of ${total}) rows for executed / removed queries ${[
-        ...this.#removedOrExecutedQueryIDs,
-      ]}`,
+        // Utilizes the in-memory RowCache.
+        const allRowRecords = (await this._cvrStore.getRowRecords()).values();
+        let total = 0;
+        for (const existing of allRowRecords) {
+          total++;
+          assert(
+            existing.refCounts !== null,
+            'allRowRecords should not include null refCounts',
+          );
+          for (const id of Object.keys(existing.refCounts)) {
+            if (this.#removedOrExecutedQueryIDs.has(id)) {
+              results.set(existing.id, existing);
+              break;
+            }
+          }
+        }
+
+        lc.debug?.(
+          `found ${
+            results.size
+          } (of ${total}) rows for executed / removed queries ${[
+            ...this.#removedOrExecutedQueryIDs,
+          ]}`,
+        );
+        return results.values();
+      },
     );
-    return results.values();
   }
 
   /**
@@ -652,32 +670,34 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This must be called for all executed queries.
    */
   #trackExecuted(queryID: string, transformationHash: string): Patch[] {
-    assert(
-      !this.#removedOrExecutedQueryIDs.has(queryID),
-      () => `Query ${queryID} already tracked as executed or removed`,
-    );
-    this.#removedOrExecutedQueryIDs.add(queryID);
+    return startSpan(tracer, 'CVRQueryDrivenUpdater.#trackExecuted', () => {
+      assert(
+        !this.#removedOrExecutedQueryIDs.has(queryID),
+        () => `Query ${queryID} already tracked as executed or removed`,
+      );
+      this.#removedOrExecutedQueryIDs.add(queryID);
 
-    let gotQueryPatch: Patch | undefined;
-    const query = this._cvr.queries[queryID];
-    if (query.transformationHash !== transformationHash) {
-      const transformationVersion = this._ensureNewVersion();
+      let gotQueryPatch: Patch | undefined;
+      const query = this._cvr.queries[queryID];
+      if (query.transformationHash !== transformationHash) {
+        const transformationVersion = this._ensureNewVersion();
 
-      if (query.type !== 'internal' && query.patchVersion === undefined) {
-        // client query: desired -> gotten
-        query.patchVersion = transformationVersion;
-        gotQueryPatch = {
-          type: 'query',
-          op: 'put',
-          id: query.id,
-        };
+        if (query.type !== 'internal' && query.patchVersion === undefined) {
+          // client query: desired -> gotten
+          query.patchVersion = transformationVersion;
+          gotQueryPatch = {
+            type: 'query',
+            op: 'put',
+            id: query.id,
+          };
+        }
+
+        query.transformationHash = transformationHash;
+        query.transformationVersion = transformationVersion;
+        this._cvrStore.updateQuery(query);
       }
-
-      query.transformationHash = transformationHash;
-      query.transformationVersion = transformationVersion;
-      this._cvrStore.updateQuery(query);
-    }
-    return gotQueryPatch ? [gotQueryPatch] : [];
+      return gotQueryPatch ? [gotQueryPatch] : [];
+    });
   }
 
   /**
@@ -691,20 +711,22 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This must only be called on queries that are not "desired" by any client.
    */
   #trackRemoved(queryID: string): Patch[] {
-    const query = this._cvr.queries[queryID];
-    assertNotInternal(query);
+    return startSpan(tracer, 'CVRQueryDrivenUpdater.#trackRemoved', () => {
+      const query = this._cvr.queries[queryID];
+      assertNotInternal(query);
 
-    assert(
-      !this.#removedOrExecutedQueryIDs.has(queryID),
-      () => `Query ${queryID} already tracked as executed or removed`,
-    );
-    this.#removedOrExecutedQueryIDs.add(queryID);
-    delete this._cvr.queries[queryID];
+      assert(
+        !this.#removedOrExecutedQueryIDs.has(queryID),
+        () => `Query ${queryID} already tracked as executed or removed`,
+      );
+      this.#removedOrExecutedQueryIDs.add(queryID);
+      delete this._cvr.queries[queryID];
 
-    const newVersion = this._ensureNewVersion();
-    const queryPatch = {type: 'query', op: 'del', id: queryID} as const;
-    this._cvrStore.markQueryAsDeleted(newVersion, queryPatch);
-    return [queryPatch];
+      const newVersion = this._ensureNewVersion();
+      const queryPatch = {type: 'query', op: 'del', id: queryID} as const;
+      this._cvrStore.markQueryAsDeleted(newVersion, queryPatch);
+      return [queryPatch];
+    });
   }
 
   /**
@@ -730,101 +752,110 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * returns (put) patches to be returned to update their state, versioned by
    * patchVersion so that only the patches new to the clients are sent.
    */
-  async received(
+  received(
     _lc: LogContext,
     rows: Map<RowID, RowUpdate>,
   ): Promise<PatchToVersion[]> {
-    const patches: PatchToVersion[] = [];
-    const existingRows = await this._cvrStore.getRowRecords();
+    return startAsyncSpan(
+      tracer,
+      'CVRQueryDrivenUpdater.received',
+      async () => {
+        const patches: PatchToVersion[] = [];
+        const existingRows = await this._cvrStore.getRowRecords();
 
-    for (const [id, update] of rows.entries()) {
-      const {contents, version, refCounts} = update;
+        for (const [id, update] of rows.entries()) {
+          const {contents, version, refCounts} = update;
 
-      let existing = existingRows.get(id);
-      // Accumulate all received refCounts to determine which rows to prune.
-      const previouslyReceived = this.#receivedRows.get(id);
+          let existing = existingRows.get(id);
+          // Accumulate all received refCounts to determine which rows to prune.
+          const previouslyReceived = this.#receivedRows.get(id);
 
-      const merged =
-        previouslyReceived !== undefined
-          ? mergeRefCounts(previouslyReceived, refCounts)
-          : mergeRefCounts(
-              existing?.refCounts,
-              refCounts,
-              this.#removedOrExecutedQueryIDs,
-            );
+          const merged =
+            previouslyReceived !== undefined
+              ? mergeRefCounts(previouslyReceived, refCounts)
+              : mergeRefCounts(
+                  existing?.refCounts,
+                  refCounts,
+                  this.#removedOrExecutedQueryIDs,
+                );
 
-      this.#receivedRows.set(id, merged);
+          this.#receivedRows.set(id, merged);
 
-      const newRowVersion = merged === null ? undefined : version;
-      const patchVersion =
-        existing && existing.rowVersion === newRowVersion
-          ? existing.patchVersion // existing row is unchanged
-          : this.#assertNewVersion();
+          const newRowVersion = merged === null ? undefined : version;
+          const patchVersion =
+            existing && existing.rowVersion === newRowVersion
+              ? existing.patchVersion // existing row is unchanged
+              : this.#assertNewVersion();
 
-      // Note: for determining what to commit to the CVR store, use the
-      // `version` of the update even if `merged` is null (i.e. don't
-      // use `newRowVersion`). This will be deduped by the cvr-store flush
-      // if it is redundant. In rare cases--namely, if the row key has
-      // changed--we _do_ want to add row-put for the new row key with
-      // `refCounts: null` in order to correctly record a delete patch
-      // for that row, as the row with the old key will be removed.
-      const rowVersion = version ?? existing?.rowVersion;
-      if (rowVersion) {
-        this._cvrStore.putRowRecord({
-          id,
-          rowVersion,
-          patchVersion,
-          refCounts: merged,
-        });
-      } else {
-        // This means that a row that was not in the CVR was added during
-        // this update, and then subsequently removed. Since there's no
-        // corresponding row in the CVR itself, cancel the previous put.
-        // Note that we still send a 'del' patch to the client in order to
-        // cancel the previous 'put' patch.
-        this._cvrStore.delRowRecord(id);
-      }
-
-      // Dedupe against the lastPatch sent for the row, and ensure that
-      // toVersion never backtracks (lest it be undesirably filtered).
-      const lastPatch = this.#lastPatches.get(id);
-      const toVersion = maxVersion(patchVersion, lastPatch?.toVersion);
-
-      if (merged === null) {
-        // All refCounts have gone to zero, if row was previously synced
-        // delete it.
-        if (existing || previouslyReceived) {
-          // dedupe
-          if (lastPatch?.rowVersion !== null) {
-            patches.push({
-              patch: {
-                type: 'row',
-                op: 'del',
-                id,
-              },
-              toVersion,
+          // Note: for determining what to commit to the CVR store, use the
+          // `version` of the update even if `merged` is null (i.e. don't
+          // use `newRowVersion`). This will be deduped by the cvr-store flush
+          // if it is redundant. In rare cases--namely, if the row key has
+          // changed--we _do_ want to add row-put for the new row key with
+          // `refCounts: null` in order to correctly record a delete patch
+          // for that row, as the row with the old key will be removed.
+          const rowVersion = version ?? existing?.rowVersion;
+          if (rowVersion) {
+            this._cvrStore.putRowRecord({
+              id,
+              rowVersion,
+              patchVersion,
+              refCounts: merged,
             });
-            this.#lastPatches.set(id, {rowVersion: null, toVersion});
+          } else {
+            // This means that a row that was not in the CVR was added during
+            // this update, and then subsequently removed. Since there's no
+            // corresponding row in the CVR itself, cancel the previous put.
+            // Note that we still send a 'del' patch to the client in order to
+            // cancel the previous 'put' patch.
+            this._cvrStore.delRowRecord(id);
+          }
+
+          // Dedupe against the lastPatch sent for the row, and ensure that
+          // toVersion never backtracks (lest it be undesirably filtered).
+          const lastPatch = this.#lastPatches.get(id);
+          const toVersion = maxVersion(patchVersion, lastPatch?.toVersion);
+
+          if (merged === null) {
+            // All refCounts have gone to zero, if row was previously synced
+            // delete it.
+            if (existing || previouslyReceived) {
+              // dedupe
+              if (lastPatch?.rowVersion !== null) {
+                patches.push({
+                  patch: {
+                    type: 'row',
+                    op: 'del',
+                    id,
+                  },
+                  toVersion,
+                });
+                this.#lastPatches.set(id, {rowVersion: null, toVersion});
+              }
+            }
+          } else if (contents) {
+            assert(
+              rowVersion,
+              'rowVersion is required when contents is present',
+            );
+            // dedupe
+            if (!lastPatch?.rowVersion || lastPatch.rowVersion < rowVersion) {
+              patches.push({
+                patch: {
+                  type: 'row',
+                  op: 'put',
+                  id,
+                  contents,
+                },
+                toVersion,
+              });
+              this.#lastPatches.set(id, {rowVersion, toVersion});
+            }
           }
         }
-      } else if (contents) {
-        assert(rowVersion, 'rowVersion is required when contents is present');
-        // dedupe
-        if (!lastPatch?.rowVersion || lastPatch.rowVersion < rowVersion) {
-          patches.push({
-            patch: {
-              type: 'row',
-              op: 'put',
-              id,
-              contents,
-            },
-            toVersion,
-          });
-          this.#lastPatches.set(id, {rowVersion, toVersion});
-        }
-      }
-    }
-    return patches;
+        return patches;
+      },
+    );
   }
 
   /**
@@ -839,66 +870,78 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This is Step [5] of the
    * [CVR Sync Algorithm](https://www.notion.so/replicache/Sync-and-Client-View-Records-CVR-a18e02ec3ec543449ea22070855ff33d?pvs=4#7874f9b80a514be2b8cd5cf538b88d37).
    */
-  async deleteUnreferencedRows(lc?: LogContext): Promise<PatchToVersion[]> {
-    if (this.#removedOrExecutedQueryIDs.size === 0) {
-      // Query-less update. This can happen for config-only changes.
-      assert(
-        this.#receivedRows.size === 0,
-        () =>
-          `Expected no received rows for query-less update, got ${this.#receivedRows.size}`,
-      );
-      return [];
-    }
+  deleteUnreferencedRows(lc?: LogContext): Promise<PatchToVersion[]> {
+    return startAsyncSpan(
+      tracer,
+      'CVRQueryDrivenUpdater.deleteUnreferencedRows',
+      async () => {
+        if (this.#removedOrExecutedQueryIDs.size === 0) {
+          // Query-less update. This can happen for config-only changes.
+          assert(
+            this.#receivedRows.size === 0,
+            () =>
+              `Expected no received rows for query-less update, got ${this.#receivedRows.size}`,
+          );
+          return [];
+        }
 
-    // patches to send to the client.
-    const patches: PatchToVersion[] = [];
+        // patches to send to the client.
+        const patches: PatchToVersion[] = [];
 
-    const start = Date.now();
-    assert(this.#existingRows, `trackQueries() was not called`);
-    for (const existing of await this.#existingRows) {
-      const deletedID = this.#deleteUnreferencedRow(existing);
-      if (deletedID === null) {
-        continue;
-      }
-      patches.push({
-        toVersion: this._cvr.version,
-        patch: {type: 'row', op: 'del', id: deletedID},
-      });
-    }
-    lc?.debug?.(
-      `computed ${patches.length} delete patches (${Date.now() - start} ms)`,
+        const start = Date.now();
+        assert(this.#existingRows, `trackQueries() was not called`);
+        for (const existing of await this.#existingRows) {
+          const deletedID = this.#deleteUnreferencedRow(existing);
+          if (deletedID === null) {
+            continue;
+          }
+          patches.push({
+            toVersion: this._cvr.version,
+            patch: {type: 'row', op: 'del', id: deletedID},
+          });
+        }
+        lc?.debug?.(
+          `computed ${patches.length} delete patches (${Date.now() - start} ms)`,
+        );
+
+        return patches;
+      },
     );
-
-    return patches;
   }
 
   #deleteUnreferencedRow(existing: RowRecord): RowID | null {
-    if (this.#receivedRows.get(existing.id)) {
-      return null;
-    }
+    return startSpan(
+      tracer,
+      'CVRQueryDrivenUpdater.#deleteUnreferencedRow',
+      () => {
+        if (this.#receivedRows.get(existing.id)) {
+          return null;
+        }
 
-    const newRefCounts = mergeRefCounts(
-      existing.refCounts,
-      undefined,
-      this.#removedOrExecutedQueryIDs,
+        const newRefCounts = mergeRefCounts(
+          existing.refCounts,
+          undefined,
+          this.#removedOrExecutedQueryIDs,
+        );
+        // If a row is still referenced, we update the refCounts but not the
+        // patchVersion (as the existence and contents of the row have not
+        // changed from the clients' perspective). If the row is deleted, it
+        // gets a new patchVersion (and corresponding poke).
+        const patchVersion = newRefCounts
+          ? existing.patchVersion
+          : this.#assertNewVersion();
+        const rowRecord: RowRecord = {
+          ...existing,
+          patchVersion,
+          refCounts: newRefCounts,
+        };
+
+        this._cvrStore.putRowRecord(rowRecord);
+
+        // Return the id to delete if no longer referenced.
+        return newRefCounts ? null : existing.id;
+      },
     );
-    // If a row is still referenced, we update the refCounts but not the
-    // patchVersion (as the existence and contents of the row have not
-    // changed from the clients' perspective). If the row is deleted, it
-    // gets a new patchVersion (and corresponding poke).
-    const patchVersion = newRefCounts
-      ? existing.patchVersion
-      : this.#assertNewVersion();
-    const rowRecord: RowRecord = {
-      ...existing,
-      patchVersion,
-      refCounts: newRefCounts,
-    };
-
-    this._cvrStore.putRowRecord(rowRecord);
-
-    // Return the id to delete if no longer referenced.
-    return newRefCounts ? null : existing.id;
   }
 }
 
