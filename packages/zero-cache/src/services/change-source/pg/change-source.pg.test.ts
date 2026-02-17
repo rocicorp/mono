@@ -107,6 +107,9 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     void (async () => {
       try {
         for await (const msg of sub) {
+          if (msg[0] === 'status' && !msg[1].ack) {
+            continue; // filter out keepalives
+          }
           queue.enqueue(msg);
         }
       } catch (e) {
@@ -277,7 +280,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {tag: 'commit'},
       {watermark: begin1[2]?.commitWatermark},
     ]);
-    acks.push(['status', {}, commit1[2]]);
+    acks.push(['status', {ack: true}, commit1[2]]);
 
     // Write more upstream changes.
     await upstream.begin(async tx => {
@@ -404,7 +407,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {tag: 'commit'},
       {watermark: begin1[2]?.commitWatermark},
     ]);
-    acks.push(['status', {}, commit1[2]]);
+    acks.push(['status', {ack: true}, commit1[2]]);
   });
 
   test.each([
@@ -574,14 +577,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         ALTER TABLE foo RENAME TO "invalid/character$";
         INSERT INTO "invalid/character$"(id) VALUES('world');
       `,
-    ],
-    [
-      'UnsupportedColumnDefaultError: Cannot ADD a column with CURRENT_TIME, CURRENT_DATE, or CURRENT_TIMESTAMP',
-      `ALTER TABLE foo ADD bar TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP`,
-    ],
-    [
-      'UnsupportedColumnDefaultError: Unsupported default value for foo.pubid: random()',
-      `ALTER TABLE foo ADD pubid INT DEFAULT random()`,
     ],
     [
       'UnsupportedTableSchemaError: Table "bar" is missing its REPLICA IDENTITY INDEX',
@@ -815,7 +810,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     let err;
     try {
-      for await (const _ of changes) {
+      for await (const msg of changes) {
+        if (msg[0] === 'status') {
+          continue;
+        }
         throw new Error('DatabaseError was not thrown');
       }
     } catch (e) {

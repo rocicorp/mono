@@ -339,7 +339,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           const [type, msg] = change;
           switch (type) {
             case 'status':
-              this.#storer.status(change); // storer acks once it gets through its queue
+              if (msg.ack) {
+                this.#storer.status(change); // storer acks once it gets through its queue
+              }
               continue;
             case 'control':
               await this.#handleControlMessage(msg);

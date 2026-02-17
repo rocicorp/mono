@@ -197,6 +197,35 @@ Zero is a streaming database:
 - Zero schema definitions are separate from PostgreSQL schema
 - Apps like zbugs demonstrate the connection between PostgreSQL tables and Zero schemas
 
+## Known Gotchas
+
+This section documents surprising behaviors and hard-won lessons. If you discover something non-obvious that caused significant debugging pain, consider adding it here.
+
+### SQLite: NULL + OR = Full Table Scan
+
+When building OR queries with bound parameters in SQLite, if **any** branch involves a NULL value, SQLite abandons its MULTI-INDEX OR optimization and falls back to a full table scan.
+
+```sql
+-- Even this simple query becomes a full table scan if ? is NULL:
+SELECT * FROM users WHERE id = ? OR email = ?;
+
+-- If email is NULL, SQLite won't use MULTI-INDEX OR, even for the valid id branch
+EXPLAIN QUERY PLAN → "SCAN users" (not "SEARCH users USING INDEX")
+```
+
+**Why it matters**: This caused 320x slowdowns on tables with nullable unique columns. A query that should take <1ms was taking 320ms.
+
+**Fix**: Filter out conditions where the value is NULL before building OR queries. NULL values can't violate uniqueness constraints anyway (NULL ≠ NULL in SQL).
+
+```typescript
+// Filter out keys where any column is NULL
+const validKeys = keys.filter(key =>
+  key.every(column => row[column] !== null && row[column] !== undefined),
+);
+```
+
+See: https://github.com/rocicorp/mono/pull/5542
+
 ## Git Conventions
 
 ### Commit Messages
