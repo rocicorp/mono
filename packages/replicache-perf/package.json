@@ -24,7 +24,7 @@
     "playwright": "^1.53.2",
     "replicache": "15.2.1",
     "shared": "0.0.0",
-    "tsx": "^4.19.1",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "vite": "7.2.7",
     "xbytes": "^1.7.0"
