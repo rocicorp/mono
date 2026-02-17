@@ -31,11 +31,9 @@ export class Forwarder {
    * two components have an equivalent interpretation of whether a Transaction is
    * currently being streamed.
    */
-  forward(entry: WatermarkedChange) {
+  async forward(entry: WatermarkedChange) {
     const [type] = entry[1];
-    for (const active of this.#active.values()) {
-      active.send(entry);
-    }
+    const results = [...this.#active.values()].map(sub => sub.send(entry));
     switch (type) {
       case 'begin':
         // While in a Transaction, all added subscribers are "queued" so that no
@@ -59,6 +57,7 @@ export class Forwarder {
         this.#queued.clear();
         break;
     }
+    await Promise.all(results);
   }
 
   getAcks(): Set<string> {

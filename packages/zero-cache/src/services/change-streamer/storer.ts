@@ -30,7 +30,7 @@ import {
   type TableMetadata,
 } from '../change-source/protocol/current.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
-import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
@@ -59,7 +59,7 @@ type QueueEntry =
     ]
   | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
-  | StatusMessage
+  | UpstreamStatusMessage
   | ['abort']
   | 'stop';
 
@@ -111,7 +111,7 @@ export class Storer implements Service {
   readonly #discoveryProtocol: string;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
-  readonly #onConsumed: (c: Commit | StatusMessage) => void;
+  readonly #onConsumed: (c: Commit | UpstreamStatusMessage) => void;
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
@@ -127,7 +127,7 @@ export class Storer implements Service {
     discoveryProtocol: string,
     db: PostgresDB,
     replicaVersion: string,
-    onConsumed: (c: Commit | StatusMessage) => void,
+    onConsumed: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
     backPressureLimitHeapProportion: number,
   ) {
@@ -246,6 +246,9 @@ export class Storer implements Service {
     });
   }
 
+  /**
+   * @returns The size of the serialized entry, for memory / I/O estimations.
+   */
   store(entry: WatermarkedChange) {
     const [watermark, [_tag, change]] = entry;
     // Eagerly stringify the JSON object so that the memory usage can be
@@ -264,13 +267,15 @@ export class Storer implements Service {
       json,
       isDataChange(change) ? null : change, // drop DataChanges to save memory
     ]);
+
+    return json.length;
   }
 
   abort() {
     this.#queue.enqueue(['abort']);
   }
 
-  status(s: StatusMessage) {
+  status(s: UpstreamStatusMessage) {
     this.#queue.enqueue(s);
   }
 
@@ -532,7 +537,7 @@ export class Storer implements Service {
               // Catchup starts from *after* the watermark.
               watermarkFound = true;
             } else if (watermarkFound) {
-              lastBatchConsumed = sub.catchup(toDownstream(entry)).result;
+              lastBatchConsumed = sub.catchup(toDownstream(entry));
               count++;
             } else if (mode === 'backup') {
               throw new AutoResetSignal(

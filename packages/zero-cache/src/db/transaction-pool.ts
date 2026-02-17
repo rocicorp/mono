@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
-import {AbortError} from '../../../shared/src/abort-error.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {Queue} from '../../../shared/src/queue.ts';
@@ -184,6 +183,7 @@ export class TransactionPool {
     const timeoutTask = tt.task === 'done' ? 'done' : this.#stmtRunner(tt.task);
 
     const worker = async (tx: PostgresTransaction) => {
+      const start = performance.now();
       try {
         lc.debug?.('started transaction');
         disableStatementTimeout(tx);
@@ -221,7 +221,8 @@ export class TransactionPool {
           }
         }
 
-        lc.debug?.('closing transaction');
+        const elapsed = performance.now() - start;
+        lc.debug?.(`closing transaction (${elapsed.toFixed(3)} ms)`);
         // Given the semantics of a Postgres transaction, the last statement
         // will only succeed if all of the preceding statements succeeded.
         return last;
@@ -467,12 +468,10 @@ export class TransactionPool {
   fail(err: unknown) {
     if (!this.#failure) {
       this.#failure = ensureError(err); // Fail fast: this is checked in the worker loop.
+      // Logged for informational purposes. It is the responsibility of
+      // higher level logic to classify and handle the exception.
       const level =
-        this.#failure instanceof ControlFlowError
-          ? 'debug'
-          : this.#failure instanceof AbortError
-            ? 'info'
-            : 'error';
+        this.#failure instanceof ControlFlowError ? 'debug' : 'info';
       this.#lc[level]?.(this.#failure);
 
       for (let i = 0; i < this.#numWorkers; i++) {

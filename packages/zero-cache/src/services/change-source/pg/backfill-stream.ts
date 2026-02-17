@@ -3,7 +3,6 @@ import {
   PG_UNDEFINED_TABLE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import {getDefaultHighWaterMark} from 'node:stream';
 import postgres from 'postgres';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../shared/src/valita.ts';
@@ -42,6 +41,11 @@ type StreamOptions = {
   flushThresholdBytes?: number;
 };
 
+// The size of chunks that Postgres sends on COPY stream.
+// This happens to match NodeJS's getDefaultHighWatermark()
+// (for Node v20+).
+const POSTGRES_COPY_CHUNK_SIZE = 64 * 1024;
+
 /**
  * Streams a series of `backfill` messages (ending with `backfill-complete`)
  * at a set watermark (i.e. LSN). The data is retrieved via a COPY stream
@@ -59,14 +63,19 @@ export async function* streamBackfill(
     .withContext('component', 'backfill')
     .withContext('table', bf.table.name);
 
-  const {flushThresholdBytes = getDefaultHighWaterMark(false)} = opts;
+  const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE} = opts;
   const db = pgClient(lc, upstreamURI, {
     connection: {['application_name']: 'backfill-stream'},
   });
   const tx = new TransactionPool(lc, READONLY).run(db);
   try {
     const watermark = await setSnapshot(lc, upstreamURI, tx, slot);
-    const {tableSpec, backfill} = await validateSchema(tx, publications, bf);
+    const {tableSpec, backfill} = await validateSchema(
+      tx,
+      publications,
+      bf,
+      watermark,
+    );
     const types = await getTypeParsers(db, {returnJsonAsString: true});
 
     // Note: validateSchema ensures that the rowKey and columns are disjoint
@@ -77,7 +86,6 @@ export async function* streamBackfill(
       lc,
       tx,
       backfill,
-      watermark,
       makeSelectPublishedStmt(tableSpec, cols),
       cols.map(col => types.getTypeParser(tableSpec.columns[col].typeOID)),
       flushThresholdBytes,
@@ -112,7 +120,6 @@ async function* stream(
   lc: LogContext,
   tx: TransactionPool,
   backfill: BackfillParams,
-  watermark: string,
   selectStmt: string,
   colParsers: TypeParser[],
   flushThresholdBytes: number,
@@ -125,8 +132,17 @@ async function* stream(
 
   const tsvParser = new TsvParser();
   let totalRows = 0;
+  let totalBytes = 0;
+  let totalMsgs = 0;
   let rowValues: JSONValue[][] = [];
   let bufferedBytes = 0;
+
+  const logFlushed = () => {
+    lc.debug?.(
+      `Flushed ${rowValues.length} rows, ${bufferedBytes} bytes ` +
+        `(total: rows=${totalRows}, msgs=${totalMsgs}, bytes=${totalBytes})`,
+    );
+  };
 
   // Tracks the row being parsed.
   let row: JSONValue[] = Array.from({length: colParsers.length});
@@ -140,32 +156,35 @@ async function* stream(
       if (++col === colParsers.length) {
         rowValues.push(row);
         totalRows++;
-        bufferedBytes += chunk.byteLength;
-
         row = Array.from({length: colParsers.length});
         col = 0;
-
-        if (bufferedBytes >= flushThresholdBytes) {
-          yield {tag: 'backfill', ...backfill, watermark, rowValues};
-          lc.debug?.(
-            `Flushed ${rowValues.length} rows (${bufferedBytes} bytes)`,
-          );
-          rowValues = [];
-          bufferedBytes = 0;
-        }
       }
+    }
+    bufferedBytes += chunk.byteLength;
+    totalBytes += chunk.byteLength;
+
+    if (bufferedBytes >= flushThresholdBytes) {
+      yield {tag: 'backfill', ...backfill, rowValues};
+      totalMsgs++;
+      logFlushed();
+      rowValues = [];
+      bufferedBytes = 0;
     }
   }
 
   // Flush the last batch of rows.
   if (rowValues.length > 0) {
-    yield {tag: 'backfill', ...backfill, watermark, rowValues};
-    lc.debug?.(`Flushed ${rowValues.length} rows (${bufferedBytes} bytes)`);
+    yield {tag: 'backfill', ...backfill, rowValues};
+    totalMsgs++;
+    logFlushed();
   }
 
   yield {tag: 'backfill-completed', ...backfill};
   const elapsed = performance.now() - start;
-  lc.info?.(`Finished streaming ${totalRows} rows (${elapsed.toFixed(3)} ms)`);
+  lc.info?.(
+    `Finished streaming ${totalRows} rows, ${totalMsgs} msgs, ${totalBytes} bytes ` +
+      `(${elapsed.toFixed(3)} ms)`,
+  );
 }
 
 /**
@@ -220,6 +239,7 @@ function validateSchema(
   tx: TransactionPool,
   publications: string[],
   bf: BackfillRequest,
+  watermark: string,
 ): Promise<{
   tableSpec: PublishedTableSpec;
   backfill: BackfillParams;
@@ -288,6 +308,7 @@ function validateSchema(
       columns: Object.keys(bf.columns).filter(
         col => !(col in tableMeta.rowKey),
       ),
+      watermark,
     };
     return {tableSpec: spec, backfill};
   });

@@ -544,6 +544,7 @@ describe('integration', {timeout: 30000}, () => {
   }
 
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
+  const BACKFILL_WATERMARK_REGEX = /[0-9a-z]{4,}\.[0-9a-z]{2,}/;
 
   test.for([
     ['single-node', 'pg', () => [env], undefined],
@@ -877,6 +878,39 @@ describe('integration', {timeout: 30000}, () => {
         'pokeEnd',
         {pokeID: WATERMARK_REGEX},
       ]);
+
+      // Test backfill of a new column
+      if (backend === 'pg') {
+        await upDB.unsafe(/*sql*/ `
+          ALTER TABLE foo ADD COLUMN espresso INT DEFAULT (1 + 2 + 3) * 6;
+      `);
+        expect(await downstream.dequeue()).toMatchObject([
+          'pokeStart',
+          {pokeID: BACKFILL_WATERMARK_REGEX},
+        ]);
+        expect(await downstream.dequeue()).toMatchObject([
+          'pokePart',
+          {
+            pokeID: BACKFILL_WATERMARK_REGEX,
+            rowsPatch: [
+              {
+                op: 'put',
+                tableName: 'foo',
+                value: {id: 'bar', espresso: 36},
+              },
+              {
+                op: 'put',
+                tableName: 'foo',
+                value: {id: 'voo', espresso: 36},
+              },
+            ],
+          },
+        ]);
+        expect(await downstream.dequeue()).toMatchObject([
+          'pokeEnd',
+          {pokeID: BACKFILL_WATERMARK_REGEX},
+        ]);
+      }
 
       // Test TRUNCATE
       if (backend === 'pg') {

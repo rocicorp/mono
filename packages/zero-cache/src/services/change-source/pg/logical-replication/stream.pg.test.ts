@@ -57,6 +57,9 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
     void (async () => {
       try {
         for await (const msg of sub) {
+          if (msg[1].tag === 'keepalive') {
+            continue; // filter out keepalives
+          }
           queue.enqueue(msg[1]);
         }
       } catch (e) {
