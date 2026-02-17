@@ -815,6 +815,110 @@ describe('change-streamer/storer', () => {
       ]);
     });
 
+    test('ownership change detected at begin aborts transaction', async () => {
+      // Change ownership before storing begin — the storer's pipelined
+      // SELECT will read the new owner immediately.
+      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'other-task'`;
+
+      storer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      storer.store(['07', ['data', messages.insert('issues', {id: 'foo'})]]);
+      storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+
+      await expect(done).rejects.toThrow(
+        'changeLog ownership has been assumed by other-task',
+      );
+    });
+
+    test('ownership change during transaction includes new owner in error', async () => {
+      // Start a transaction — this begins a SERIALIZABLE tx that
+      // reads replicationState (owner = 'task-id').
+      storer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      storer.store(['07', ['data', messages.insert('issues', {id: 'foo'})]]);
+
+      // Wait for the storer to process 'begin' and start the SERIALIZABLE tx.
+      // The pipelined SELECT of replicationState should have executed by now.
+      await sleep(100);
+
+      // Change ownership externally — this commits immediately on a separate
+      // connection, modifying the replicationState row that the storer's
+      // SERIALIZABLE tx has already read.
+      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'new-owner-task'`;
+
+      // Now send commit. The storer's initial read shows owner = 'task-id'
+      // (matching), so it proceeds to UPDATE lastWatermark. But Postgres
+      // detects the serialization conflict and throws PG_SERIALIZATION_FAILURE.
+      storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+
+      // The AbortError should include the new owner read from a fresh query.
+      await expect(done).rejects.toThrow(
+        'changeLog ownership was concurrently assumed by new-owner-task (serialization failure)',
+      );
+    });
+
+    test('ownership change error message when reading owner fails', async () => {
+      // Create a proxy around db that can be made to reject queries.
+      let failQueries = false;
+      const proxyDb = new Proxy(db, {
+        apply(target, thisArg, args) {
+          if (failQueries) {
+            throw new Error('connection terminated');
+          }
+          return Reflect.apply(target, thisArg, args);
+        },
+      });
+
+      // Stop the existing storer before creating a new one with the proxy db.
+      void storer.stop();
+      await done;
+
+      const proxyStorer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        proxyDb,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        0.04,
+      );
+      await proxyStorer.assumeOwnership();
+      const proxyDone = proxyStorer.run();
+
+      proxyStorer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      proxyStorer.store([
+        '07',
+        ['data', messages.insert('issues', {id: 'foo'})],
+      ]);
+
+      await sleep(100);
+
+      // Change ownership to cause the serialization failure.
+      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'new-owner-task'`;
+
+      // Now make the proxy db fail so the fresh read of the owner errors.
+      failQueries = true;
+
+      proxyStorer.store([
+        '08',
+        ['commit', messages.commit(), {watermark: '08'}],
+      ]);
+
+      await expect(proxyDone).rejects.toThrow(
+        'changeLog ownership was concurrently changed (failed to read current owner) (serialization failure)',
+      );
+    });
+
     test('abort', async () => {
       storer.store([
         '0b',

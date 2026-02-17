@@ -454,7 +454,18 @@ export class Storer implements Service {
             e.code === PG_SERIALIZATION_FAILURE
           ) {
             // Ownership change happened after the replicationState was read in 'begin'.
-            throw new AbortError(`changeLog ownership has changed`, {cause: e});
+            let ownerInfo: string;
+            try {
+              const [{owner}] = await this.#db<ReplicationState[]>`
+                SELECT * FROM ${this.#cdc('replicationState')}`;
+              ownerInfo = `ownership was concurrently assumed by ${owner}`;
+            } catch {
+              ownerInfo = `ownership was concurrently changed (failed to read current owner)`;
+            }
+            throw new AbortError(
+              `changeLog ${ownerInfo} (serialization failure)`,
+              {cause: e},
+            );
           }
           throw e;
         }
