@@ -168,6 +168,56 @@ describe('change-streamer/storer', () => {
       ]);
     });
 
+    test('ownership change detected at begin aborts transaction', async () => {
+      // Change ownership before storing begin — the storer's pipelined
+      // SELECT will read the new owner immediately.
+      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'other-task'`;
+
+      storer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      storer.store(['07', ['data', messages.insert('issues', {id: 'foo'})]]);
+      storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+
+      await expect(done).rejects.toThrow(
+        'changeLog ownership has been assumed by other-task',
+      );
+      // Prevent the beforeEach cleanup from re-throwing the rejected done.
+      done = Promise.resolve();
+    });
+
+    test('ownership change during transaction includes new owner in error', async () => {
+      // Start a transaction — this begins a SERIALIZABLE tx that
+      // reads replicationState (owner = 'task-id').
+      storer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      storer.store(['07', ['data', messages.insert('issues', {id: 'foo'})]]);
+
+      // Wait for the storer to process 'begin' and start the SERIALIZABLE tx.
+      // The pipelined SELECT of replicationState should have executed by now.
+      await sleep(100);
+
+      // Change ownership externally — this commits immediately on a separate
+      // connection, modifying the replicationState row that the storer's
+      // SERIALIZABLE tx has already read.
+      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'new-owner-task'`;
+
+      // Now send commit. The storer's initial read shows owner = 'task-id'
+      // (matching), so it proceeds to UPDATE lastWatermark. But Postgres
+      // detects the serialization conflict and throws PG_SERIALIZATION_FAILURE.
+      storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+
+      // The AbortError should include the new owner read from a fresh query.
+      await expect(done).rejects.toThrow(
+        'changeLog ownership was concurrently assumed by new-owner-task (serialization failure)',
+      );
+      // Prevent the beforeEach cleanup from re-throwing the rejected done.
+      done = Promise.resolve();
+    });
+
     test('abort', async () => {
       storer.store([
         '0b',
