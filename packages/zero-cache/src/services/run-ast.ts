@@ -9,6 +9,7 @@ import {sleep} from '../../../shared/src/sleep.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
@@ -17,18 +18,17 @@ import {
   buildPipeline,
   type BuilderDelegate,
 } from '../../../zql/src/builder/builder.ts';
-import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
+import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
+import type {JWTAuth} from '../auth/auth.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {hydrate} from './view-syncer/pipeline-driver.ts';
-import type {TokenData} from './view-syncer/view-syncer.ts';
-import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 
 export type RunAstOptions = {
   applyPermissions?: boolean | undefined;
-  authData?: TokenData | undefined;
+  auth?: JWTAuth | undefined;
   clientToServerMapper?: NameMapper | undefined;
   costModel?: ConnectionCostModel | undefined;
   db: Database;
@@ -67,8 +67,8 @@ export async function runAst(
     ast = mapAST(ast, must(clientToServerMapper));
   }
   if (options.applyPermissions) {
-    const authData = options.authData?.decoded;
-    if (!authData) {
+    const auth = options.auth;
+    if (!auth) {
       result.warnings.push(
         'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
       );
@@ -78,7 +78,7 @@ export async function runAst(
       'clientGroupIDForAnalyze',
       ast,
       must(permissions),
-      authData,
+      auth,
       false,
     ).transformedAst;
     result.afterPermissions = await formatOutput(ast.table + astToZQL(ast));

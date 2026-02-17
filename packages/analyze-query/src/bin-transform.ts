@@ -47,7 +47,11 @@ const queryAst = transformAndHashQuery(
   '',
   rows[0].clientAST,
   permissions,
-  {},
+  {
+    type: 'jwt',
+    raw: '',
+    decoded: {},
+  },
   rows[0].internal,
 ).transformedAst;
 

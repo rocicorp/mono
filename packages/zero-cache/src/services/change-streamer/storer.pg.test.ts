@@ -6,7 +6,7 @@ import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
-import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
@@ -19,7 +19,7 @@ describe('change-streamer/storer', () => {
   let db: PostgresDB;
   let storer: Storer;
   let done: Promise<void>;
-  let consumed: Queue<Commit | StatusMessage>;
+  let consumed: Queue<Commit | UpstreamStatusMessage>;
   let fatalErrors: Queue<Error>;
   let shard: {appID: string; shardNum: number};
 
@@ -98,6 +98,7 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
+        0.04,
       );
       await storer.assumeOwnership();
       done = storer.run();
@@ -232,27 +233,29 @@ describe('change-streamer/storer', () => {
       // since none was ever specified.
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "b": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
                 },
-                "b": {
-                  "barID": "ozz",
-                  "fooID": 843,
+                "table": {
+                  "metadata": null,
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "metadata": null,
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0a",
-        }
-      `);
+            ],
+            "lastWatermark": "0a",
+          }
+        `);
 
       // Add a column to the original table backfill metadata.
       storer.store([
@@ -280,46 +283,50 @@ describe('change-streamer/storer', () => {
       // table metadata.
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "b": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
                 },
-                "b": {
-                  "barID": "ozz",
-                  "fooID": 843,
-                },
-              },
-              "metadata": null,
-              "name": "bar",
-              "schema": "your",
-            },
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+                "table": {
+                  "metadata": null,
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "a",
-                    "b",
-                  ],
-                  "type": "index",
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                },
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                        "b",
+                      ],
+                      "type": "index",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "name": "foo",
-              "schema": "my",
-            },
-          ],
-          "lastWatermark": "0b",
-        }
-      `);
+            ],
+            "lastWatermark": "0b",
+          }
+        `);
 
       // Add another column to the same table with new table metadata.
       storer.store([
@@ -348,49 +355,53 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
-                },
-              },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
-                },
-                "b": {
-                  "barID": "ozz",
-                  "fooID": 843,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": null,
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0c",
-        }
-      `);
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "b": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                },
+                "table": {
+                  "metadata": null,
+                  "name": "bar",
+                  "schema": "your",
+                },
+              },
+            ],
+            "lastWatermark": "0c",
+          }
+        `);
 
       // Update the table metadata of the new table.
       storer.store([
@@ -420,56 +431,60 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
-                },
-              },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
-                },
-                "b": {
-                  "barID": "ozz",
-                  "fooID": 843,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "a",
-                  ],
-                  "type": "default",
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "b": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                },
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0d",
-        }
-      `);
+            ],
+            "lastWatermark": "0d",
+          }
+        `);
 
       // Rename one of the backfilling columns
       storer.store([
@@ -501,56 +516,60 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
-                },
-              },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
-                },
-                "newName": {
-                  "barID": "ozz",
-                  "fooID": 843,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "a",
-                  ],
-                  "type": "default",
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "newName": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                },
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0e",
-        }
-      `);
+            ],
+            "lastWatermark": "0e",
+          }
+        `);
 
       // Drop a backfilling column.
       storer.store([
@@ -575,52 +594,56 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
-                },
-              },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-            {
-              "columns": {
-                "a": {
-                  "barID": "zoo",
-                  "fooID": 987,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "a",
-                  ],
-                  "type": "default",
+              {
+                "columns": {
+                  "a": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                },
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "bar",
+                  "schema": "your",
                 },
               },
-              "name": "bar",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "0f",
-        }
-      `);
+            ],
+            "lastWatermark": "0f",
+          }
+        `);
 
       // Set the other backfilling column to completed
       storer.store([
@@ -639,6 +662,7 @@ describe('change-streamer/storer', () => {
               rowKey: {columns: ['a']},
             },
             columns: [],
+            watermark: '0f',
           },
         ],
       ]);
@@ -646,34 +670,36 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "d": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "d": {
-                  "barID": "boo",
-                  "fooID": 456,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "foo",
+                  "schema": "my",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "foo",
-              "schema": "my",
-            },
-          ],
-          "lastWatermark": "110",
-        }
-      `);
+            ],
+            "lastWatermark": "110",
+          }
+        `);
 
       // Rename the backfilling table, and a contained column in the same tx.
       storer.store([
@@ -716,34 +742,36 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [
-            {
-              "columns": {
-                "c": {
-                  "barID": "baz",
-                  "fooID": 123,
+          {
+            "backfillRequests": Result [
+              {
+                "columns": {
+                  "c": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "deez": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
                 },
-                "deez": {
-                  "barID": "boo",
-                  "fooID": 456,
+                "table": {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "name": "bloo",
+                  "schema": "your",
                 },
               },
-              "metadata": {
-                "rowKey": {
-                  "columns": [
-                    "b",
-                  ],
-                  "type": "default",
-                },
-              },
-              "name": "bloo",
-              "schema": "your",
-            },
-          ],
-          "lastWatermark": "111",
-        }
-      `);
+            ],
+            "lastWatermark": "111",
+          }
+        `);
 
       // Drop the backfilling table
       storer.store([
@@ -834,8 +862,11 @@ describe('change-streamer/storer', () => {
       const [sub, _, stream] = createSubscriber('00');
 
       // This should be buffered until catchup is complete.
-      sub.send(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
-      sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+      void sub.send([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      void sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
 
       // Catchup should start immediately since there are no txes in progress.
       storer.catchup(sub, 'backup');
@@ -953,13 +984,19 @@ describe('change-streamer/storer', () => {
       const [sub2, _1, stream2] = createSubscriber('06');
 
       // This should be buffered until catchup is complete.
-      sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-      sub1.send([
+      void sub1.send([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      void sub1.send([
         '0a',
         ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
       ]);
-      sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-      sub2.send([
+      void sub2.send([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      void sub2.send([
         '0a',
         ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
       ]);
@@ -978,8 +1015,8 @@ describe('change-streamer/storer', () => {
         ['commit', messages.commit({extra: 'stuff'}), {watermark: '08'}],
       ]);
 
-      storer.status(['status', {}, {watermark: '0e'}]);
-      storer.status(['status', {}, {watermark: '0f'}]);
+      storer.status(['status', {ack: true}, {watermark: '0e'}]);
+      storer.status(['status', {ack: true}, {watermark: '0f'}]);
 
       // Catchup should wait for the transaction to complete before querying
       // the database, and start after watermark '03'.
@@ -1194,13 +1231,19 @@ describe('change-streamer/storer', () => {
       const [sub2, _1, stream2] = createSubscriber('06');
 
       // This should be buffered until catchup is complete.
-      sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-      sub1.send([
+      void sub1.send([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      void sub1.send([
         '0a',
         ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
       ]);
-      sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-      sub2.send([
+      void sub2.send([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      void sub2.send([
         '0a',
         ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
       ]);
@@ -1216,8 +1259,8 @@ describe('change-streamer/storer', () => {
       // Rollback the transaction.
       storer.store(['08', ['rollback', messages.rollback()]]);
 
-      storer.status(['status', {}, {watermark: '0a'}]);
-      storer.status(['status', {}, {watermark: '0c'}]);
+      storer.status(['status', {ack: true}, {watermark: '0a'}]);
+      storer.status(['status', {ack: true}, {watermark: '0c'}]);
 
       // Catchup should wait for the transaction to complete before querying
       // the database, and start after watermark '03'.
@@ -1375,8 +1418,11 @@ describe('change-streamer/storer', () => {
       const [sub, _0, stream] = createSubscriber('03');
 
       // This should be buffered until catchup is complete.
-      sub.send(['0b', ['begin', messages.begin(), {commitWatermark: '0c'}]]);
-      sub.send([
+      void sub.send([
+        '0b',
+        ['begin', messages.begin(), {commitWatermark: '0c'}],
+      ]);
+      void sub.send([
         '0c',
         ['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}],
       ]);
@@ -1403,8 +1449,8 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
 
-      storer.status(['status', {}, {watermark: '0d'}]);
-      storer.status(['status', {}, {watermark: '0e'}]);
+      storer.status(['status', {ack: true}, {watermark: '0d'}]);
+      storer.status(['status', {ack: true}, {watermark: '0e'}]);
 
       // Wait for the storer to commit that transaction.
       for (let i = 0; i < 10; i++) {
@@ -1510,6 +1556,7 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
+        0.04,
       );
       await storer.assumeOwnership();
       done = storer.run();

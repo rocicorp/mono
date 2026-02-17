@@ -59,9 +59,9 @@ describe('view-syncer/yield-during-hydrate', () => {
     wsID: 'ws1',
     baseCookie: null,
     protocolVersion: PROTOCOL_VERSION,
-    tokenData: undefined,
     httpCookie: undefined,
     origin: undefined,
+    userID: 'bar',
   };
 
   afterEach(() => {

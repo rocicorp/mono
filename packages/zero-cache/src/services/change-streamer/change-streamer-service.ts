@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {getDefaultHighWaterMark} from 'node:stream';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {
@@ -55,6 +56,7 @@ export async function initializeStreamer(
   changeSource: ChangeSource,
   subscriptionState: SubscriptionState,
   autoReset: boolean,
+  backPressureLimitHeapProportion: number,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
@@ -78,6 +80,7 @@ export async function initializeStreamer(
     replicaVersion,
     changeSource,
     autoReset,
+    backPressureLimitHeapProportion,
     setTimeoutFn,
   );
 }
@@ -274,6 +277,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     replicaVersion: string,
     source: ChangeSource,
     autoReset: boolean,
+    backPressureLimitHeapProportion: number,
     setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
@@ -292,6 +296,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
       err => this.stop(err),
+      backPressureLimitHeapProportion,
     );
     this.#forwarder = new Forwarder();
     this.#autoReset = autoReset;
@@ -311,9 +316,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       .then(() => this.stop())
       .catch(e => this.stop(e));
 
+    // The threshold in (estimated number of) bytes to send() on subscriber
+    // websockets before `await`-ing the I/O buffers to be ready for more.
+    const flushBytesThreshold = getDefaultHighWaterMark(false);
+
     while (this.#state.shouldRun()) {
       let err: unknown;
       let watermark: string | null = null;
+      let unflushedBytes = 0;
       try {
         const {lastWatermark, backfillRequests} =
           await this.#storer.getStartStreamInitializationParameters();
@@ -329,7 +339,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           const [type, msg] = change;
           switch (type) {
             case 'status':
-              this.#storer.status(change); // storer acks once it gets through its queue
+              if (msg.ack) {
+                this.#storer.status(change); // storer acks once it gets through its queue
+              }
               continue;
             case 'control':
               await this.#handleControlMessage(msg);
@@ -354,8 +366,19 @@ class ChangeStreamerImpl implements ChangeStreamerService {
               break;
           }
 
-          this.#storer.store([watermark, change]);
-          this.#forwarder.forward([watermark, change]);
+          unflushedBytes += this.#storer.store([watermark, change]);
+          const sent = this.#forwarder.forward([watermark, change]);
+          if (unflushedBytes >= flushBytesThreshold) {
+            // Wait for messages to clear socket buffers to ensure that they
+            // make their way to subscribers. Without this `await`, the
+            // messages end up being buffered in this process, which:
+            // (1) results in memory pressure and increased GC activity
+            // (2) prevents subscribers from processing the messages as they
+            //     arrive, instead getting them in a large batch after being
+            //     idle while they were queued (causing further delays).
+            await sent;
+            unflushedBytes = 0;
+          }
 
           if (type === 'commit' || type === 'rollback') {
             watermark = null;
@@ -378,7 +401,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       if (watermark) {
         this.#lc.warn?.(`aborting interrupted transaction ${watermark}`);
         this.#storer.abort();
-        this.#forwarder.forward([watermark, ['rollback', {tag: 'rollback'}]]);
+        await this.#forwarder.forward([
+          watermark,
+          ['rollback', {tag: 'rollback'}],
+        ]);
       }
 
       await this.#state.backoff(this.#lc, err);

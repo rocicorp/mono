@@ -637,6 +637,7 @@ describe('replicator/incremental-sync', () => {
             rowKey: {columns: ['issueID']},
           },
           columns: ['new_column'],
+          watermark: '110',
         },
       ],
       ['commit', issues.commit(), {watermark: '110.02'}],

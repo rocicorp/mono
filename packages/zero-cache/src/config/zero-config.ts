@@ -554,6 +554,30 @@ export const zeroOptions = {
         `immediately, since the incoming request indicates that the task is registered as a target.`,
       ],
     },
+
+    backPressureLimitHeapProportion: {
+      type: v.number().default(0.04),
+      desc: [
+        `The percentage of {bold --max-old-space-size} to use as a buffer for absorbing replication`,
+        `stream spikes. When the estimated amount of queued data exceeds this threshold, back pressure`,
+        `is applied to the replication stream, delaying downstream sync as a result.`,
+        ``,
+        `The threshold was determined empirically with load testing. Higher thresholds have resulted`,
+        `in OOMs. Note also that the byte-counting logic in the queue is strictly an underestimate of`,
+        `actual memory usage (but importantly, proportionally correct), so the queue is actually`,
+        `using more than what this proportion suggests.`,
+        ``,
+        `This parameter is exported as an emergency knob to reduce the size of the buffer in the`,
+        `event that the server OOMs from back pressure. Resist the urge to {italic increase} this`,
+        `proportion, as it is mainly useful for absorbing periodic spikes and does not meaningfully`,
+        `affect steady-state replication throughput; the latter is determined by other factors such`,
+        `as object serialization and PG throughput`,
+        ``,
+        `In other words, the back pressure limit does not constrain replication throughput;`,
+        `rather, it protects the system when the upstream throughput exceeds the downstream`,
+        `throughput.`,
+      ],
+    },
   },
 
   taskID: {
