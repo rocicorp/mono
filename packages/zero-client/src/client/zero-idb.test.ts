@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import {hasMemStore} from '../../../replicache/src/kv/mem-store.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -94,4 +95,36 @@ test('idbName generation with URL configuration', async () => {
 
     await zero.close();
   }
+});
+
+test('dropAllDatabases drops all known mem stores', async () => {
+  const z1 = new Zero({
+    userID: 'drop-all-user-1',
+    storageKey: 'drop-all-storage-1',
+    schema,
+    kvStore: 'mem',
+  });
+  const z2 = new Zero({
+    userID: 'drop-all-user-2',
+    storageKey: 'drop-all-storage-2',
+    schema,
+    kvStore: 'mem',
+  });
+
+  const dbNames = [z1.idbName, z2.idbName];
+
+  for (const dbName of dbNames) {
+    expect(hasMemStore(dbName)).toBe(true);
+  }
+
+  await z1.close();
+  await z2.close();
+
+  const result = await z1.dropAllDatabases();
+
+  for (const dbName of dbNames) {
+    expect(result.dropped).toContain(dbName);
+    expect(hasMemStore(dbName)).toBe(false);
+  }
+  expect(result.errors).toHaveLength(0);
 });
