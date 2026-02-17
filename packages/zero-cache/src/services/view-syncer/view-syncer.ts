@@ -351,7 +351,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       undefined,
       undefined,
       undefined,
-      false,
+      config.cvr.batchConfigWrites,
     );
     this.#setTimeout = setTimeoutFn;
     this.#runPriorityOp = runPriorityOp;

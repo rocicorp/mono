@@ -1153,15 +1153,15 @@ export class CVRStore {
 
       // Batch flush config writes if enabled
       if (this.#batchConfigWrites) {
-        const flushPromises: Promise<unknown>[] = [];
-
-        // Flush queries
+        // Flush queries first (desires depend on queries via foreign key)
         const hasQueryUpdates =
           this.#pendingQueryUpdates.size > 0 ||
           this.#pendingQueryPartialUpdates.size > 0;
 
+        const desireFlush = this.#flushDesires(tx, lc);
+
         if (hasQueryUpdates) {
-          flushPromises.push(this.#flushQueries(tx, lc));
+          const queryFlush = this.#flushQueries(tx, lc);
 
           // Count both full updates and partial-only updates
           const partialOnlyCount = Array.from(
@@ -1172,18 +1172,20 @@ export class CVRStore {
           stats.statements +=
             (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
             (partialOnlyCount > 0 ? 1 : 0);
-        }
 
-        // Flush desires
-        const desireFlush = this.#flushDesires(tx, lc);
-        if (desireFlush) {
-          flushPromises.push(desireFlush.execute());
+          // Chain desire flush to execute after queries complete
+          if (desireFlush) {
+            pipelined.push(queryFlush.then(() => desireFlush.execute()));
+            stats.desires = this.#pendingDesireUpdates.size;
+            stats.statements++;
+          } else {
+            pipelined.push(queryFlush);
+          }
+        } else if (desireFlush) {
+          // No queries to flush, just flush desires
+          pipelined.push(desireFlush.execute());
           stats.desires = this.#pendingDesireUpdates.size;
           stats.statements++;
-        }
-
-        if (flushPromises.length > 0) {
-          pipelined.push(Promise.all(flushPromises));
         }
       }
 
