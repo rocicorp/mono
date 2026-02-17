@@ -5,7 +5,10 @@ import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
 } from '../../../replicache/src/impl.ts';
-import {dropDatabase} from '../../../replicache/src/persist/collect-idb-databases.ts';
+import {
+  dropAllDatabases,
+  dropDatabase,
+} from '../../../replicache/src/persist/collect-idb-databases.ts';
 import type {Puller, PullerResult} from '../../../replicache/src/puller.ts';
 import type {Pusher, PusherResult} from '../../../replicache/src/pusher.ts';
 import type {ReplicacheOptions} from '../../../replicache/src/replicache-options.ts';
@@ -2385,6 +2388,17 @@ export class Zero<
         },
       ));
     }
+  }
+
+  dropAllDatabases(): Promise<{
+    dropped: string[];
+    errors: unknown[];
+  }> {
+    return dropAllDatabases({
+      kvStore: this.#options.kvStore,
+      logLevel: this.#logOptions.logLevel,
+      logSinks: [this.#logOptions.logSink],
+    });
   }
 
   #addMetric: <K extends keyof MetricMap>(
