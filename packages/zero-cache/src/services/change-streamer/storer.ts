@@ -331,6 +331,11 @@ export class Storer implements Service {
       await this.#processQueue();
     } finally {
       this.#running = false;
+      // Release any pending backpressure so the upstream can proceed
+      if (this.#readyForMore !== null) {
+        this.#readyForMore.resolve();
+        this.#readyForMore = null;
+      }
       this.#lc.info?.('storer stopped');
     }
   }
