@@ -19,7 +19,10 @@ import type {Message} from './pgoutput.types.ts';
 
 const DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE = 5;
 
-export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
+export type StreamMessage = [
+  lsn: bigint,
+  Message | {tag: 'keepalive'; shouldRespond: boolean},
+];
 
 // Expose the `queued` variable of the Subscription to allow
 // the change-source to determine if there are more messages
@@ -218,11 +221,9 @@ function parseStreamMessage(
     // XLogData
     return [lsn, parser.parse(buffer.subarray(25))];
   }
-  if (buffer.readInt8(17)) {
-    // Primary keepalive message: shouldRespond
-    return [lsn, {tag: 'keepalive'}];
-  }
-  return null;
+  // Primary keepalive message: shouldRespond
+  const shouldRespond = buffer.readInt8(17) !== 0;
+  return [lsn, {tag: 'keepalive', shouldRespond}];
 }
 
 // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE

@@ -8,6 +8,7 @@ import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {mapValues} from '../../../../../shared/src/objects.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   equals,
@@ -17,7 +18,10 @@ import {
 import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
-import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
+import {
+  mapPostgresToLiteColumn,
+  UnsupportedColumnDefaultError,
+} from '../../../db/pg-to-lite.ts';
 import type {ColumnSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
@@ -42,16 +46,18 @@ import {BackfillManager} from '../common/backfill-manager.ts';
 import {ChangeStreamMultiplexer} from '../common/change-stream-multiplexer.ts';
 import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
+  ColumnAdd,
   Identifier,
   MessageRelation,
   SchemaChange,
+  TableCreate,
 } from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
-import type {TableMetadata} from './backfill-metadata.ts';
+import type {ColumnMetadata, TableMetadata} from './backfill-metadata.ts';
 import {streamBackfill} from './backfill-stream.ts';
 import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
@@ -208,6 +214,10 @@ async function checkAndUpdateUpstream(
 // Parameterize this if necessary. In practice starvation may never happen.
 const MAX_LOW_PRIORITY_DELAY_MS = 1000;
 
+type ReservationState = {
+  lastWatermark?: string;
+};
+
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.
@@ -297,23 +307,32 @@ class PostgresChangeSource implements ChangeSource {
 
     void (async function () {
       try {
-        let reserved = false;
+        let reservation: ReservationState | null = null;
+        let inTransaction = false;
 
         for await (const [lsn, msg] of messages) {
           // Note: no reservation is needed for pushStatus().
           if (msg.tag === 'keepalive') {
             changes.pushStatus([
               'status',
-              msg,
+              {ack: msg.shouldRespond},
               {watermark: majorVersionToString(lsn)},
             ]);
+
+            // If we're not in a transaction but the last reservation was kept
+            // because of pending keepalives in the queue, release the
+            // reservation.
+            if (!inTransaction && reservation?.lastWatermark) {
+              changes.release(reservation.lastWatermark);
+              reservation = null;
+            }
             continue;
           }
 
-          if (!reserved) {
+          if (!reservation) {
             const res = changes.reserve('replication');
             typeof res === 'string' || (await res); // awaits should be uncommon
-            reserved = true;
+            reservation = {};
           }
 
           let lastChange: ChangeStreamMessage | undefined;
@@ -322,18 +341,26 @@ class PostgresChangeSource implements ChangeSource {
             lastChange = change;
           }
 
-          if (
-            lastChange?.[0] === 'commit' &&
-            (messages.queued === 0 ||
-              changes.waiterDelay() > MAX_LOW_PRIORITY_DELAY_MS)
-          ) {
-            // After each transaction, release the reservation:
-            // - if there are no pending upstream messages
-            // - or if a low priority request has been waiting for longer
-            //   than MAX_LOW_PRIORITY_DELAY_MS. This is to prevent
-            //   (backfill) starvation on very active upstreams.
-            changes.release(lastChange[2].watermark);
-            reserved = false;
+          switch (lastChange?.[0]) {
+            case 'begin':
+              inTransaction = true;
+              break;
+            case 'commit':
+              inTransaction = false;
+              reservation.lastWatermark = lastChange[2].watermark;
+              if (
+                messages.queued === 0 ||
+                changes.waiterDelay() > MAX_LOW_PRIORITY_DELAY_MS
+              ) {
+                // After each transaction, release the reservation:
+                // - if there are no pending upstream messages
+                // - or if a low priority request has been waiting for longer
+                //   than MAX_LOW_PRIORITY_DELAY_MS. This is to prevent
+                //   (backfill) starvation on very active upstreams.
+                changes.release(reservation.lastWatermark);
+                reservation = null;
+              }
+              break;
           }
         }
       } catch (e) {
@@ -733,24 +760,33 @@ class ChangeMaker {
         const {schema, name} = must(prevTbl.get(id));
         changes.push({tag: 'drop-table', id: {schema, name}});
       }
-      // ALTER
+      // ALTER TABLE | ALTER PUBLICATION
       const tables = intersection(prevTbl, nextTbl);
       for (const id of tables) {
         changes.push(
           ...this.#getTableChanges(
             must(prevTbl.get(id)),
             must(nextTbl.get(id)),
+            update.event.tag,
           ),
         );
       }
       // CREATE
       for (const id of createdTbl) {
         const spec = must(nextTbl.get(id));
-        changes.push({
+        const createTable: TableCreate = {
           tag: 'create-table',
           spec,
           metadata: getMetadata(spec),
-        });
+        };
+        if (!update.event.tag.startsWith('CREATE')) {
+          // Tables introduced to the publication via ALTER statements
+          // must be backfilled.
+          createTable.backfill = mapValues(spec.columns, ({pos: attNum}) => ({
+            attNum,
+          })) satisfies Record<string, ColumnMetadata>;
+        }
+        changes.push(createTable);
       }
 
       // Add indexes last since they may reference tables / columns that need
@@ -768,6 +804,7 @@ class ChangeMaker {
   #getTableChanges(
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
+    ddlTag: string,
   ): SchemaChange[] {
     const changes: SchemaChange[] = [];
     if (
@@ -824,18 +861,48 @@ class ChangeMaker {
       }
     }
 
+    // All columns introduced by a publication change require backfill.
+    // Columns created by ALTER TABLE, on the other hand, only require
+    // backfill if they have non-constant defaults.
+    const alwaysBackfill = ddlTag === 'ALTER PUBLICATION';
+
     // ADD
     for (const id of added) {
       const {name, ...spec} = must(newColumns.get(id));
       const column = {name, spec};
-      // Validate that the ChangeProcessor will accept the column change.
-      mapPostgresToLiteColumn(table.name, column);
-      changes.push({
+      const addColumn: ColumnAdd = {
         tag: 'add-column',
         table,
         column,
         tableMetadata: getMetadata(newTable),
-      });
+      };
+      if (alwaysBackfill) {
+        addColumn.column.spec.dflt = null;
+        addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
+      } else {
+        // Determine if the ChangeProcessor will accept the column add as is.
+        try {
+          mapPostgresToLiteColumn(table.name, column);
+        } catch (e) {
+          if (!(e instanceof UnsupportedColumnDefaultError)) {
+            // Note: mapPostgresToLiteColumn is not expected to throw any other
+            // types of errors.
+            throw e;
+          }
+          // If the column has an unsupported default (e.g. an expression or a
+          // generated value), create the column as initially hidden with a
+          // `null` default, and publish it after backfilling the values from
+          // upstream. Note that this does require that the table have a valid
+          // REPLICA IDENTITY, since backfill relies on merging new data with
+          // an existing row.
+          this.#lc.info?.(
+            `Backfilling column ${table.name}.${name}: ${String(e)}`,
+          );
+          addColumn.column.spec.dflt = null;
+          addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
+        }
+      }
+      changes.push(addColumn);
     }
     return changes;
   }

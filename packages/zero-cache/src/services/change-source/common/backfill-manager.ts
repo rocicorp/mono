@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../../shared/src/custom-key-map.ts';
@@ -6,10 +7,8 @@ import {must} from '../../../../../shared/src/must.ts';
 import {randInt} from '../../../../../shared/src/rand.ts';
 import {JSON_STRINGIFIED, type JSONFormat} from '../../../types/lite.ts';
 import {
-  majorVersionToString,
   stateVersionFromString,
   stateVersionToString,
-  type StateVersion,
 } from '../../../types/state-version.ts';
 import type {
   BackfillCompleted,
@@ -35,11 +34,16 @@ type BackfillStreamer = (
 type RunningBackfillState = {
   request: BackfillRequest;
   canceledReason?: string | undefined;
-  minMajorVersion: string;
+  minWatermark: string;
 };
 
 const MIN_BACKOFF_INTERVAL_MS = 2_000;
 const MAX_BACKOFF_INTERVAL_MS = 60_000;
+
+type AwaitingStatusWatermark = {
+  watermark: string;
+  reached: () => void;
+};
 
 /**
  * The BackfillManager initiates backfills for BackfillRequests from the
@@ -80,7 +84,12 @@ export class BackfillManager implements Cancelable, Listener {
   #runningBackfill: RunningBackfillState | null = null;
 
   /** The last seen watermark in the change stream. */
-  #changeStreamWatermark: StateVersion | null = null;
+  #lastStatusWatermark: string | null = null;
+
+  readonly #awaitingStatusWatermarks: AwaitingStatusWatermark[] = [];
+
+  /** The watermark of the current transaction in the change stream. */
+  #currentTxWatermark: string | null = null;
 
   constructor(
     lc: LogContext,
@@ -104,11 +113,42 @@ export class BackfillManager implements Cancelable, Listener {
       `starting backfill manager with ${initialRequests.length} initial requests`,
       {requests: initialRequests},
     );
-    this.#changeStreamWatermark = stateVersionFromString(lastWatermark);
+    this.#lastStatusWatermark = lastWatermark;
     initialRequests.forEach(req =>
       this.#setRequiredBackfill('initial-request', req),
     );
     this.#checkAndStartBackfill();
+  }
+
+  #setLastStatusWatermark({watermark}: {watermark: string}) {
+    // Only allow the watermark to move forward. This prevents a backfill
+    // transaction (whose watermark is unrelated to change-stream state)
+    // from moving the watermark backwards.
+    if ((this.#lastStatusWatermark ?? '') < watermark) {
+      this.#lastStatusWatermark = watermark;
+      for (let i = this.#awaitingStatusWatermarks.length - 1; i >= 0; i--) {
+        const awaiting = this.#awaitingStatusWatermarks[i];
+        if (watermark >= awaiting.watermark) {
+          awaiting.reached();
+          this.#awaitingStatusWatermarks.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  #changeStreamReached(
+    lc: LogContext,
+    watermark: string,
+  ): Promise<void> | null {
+    if ((this.#lastStatusWatermark ?? '') < watermark) {
+      const {promise, resolve: reached} = resolver();
+      this.#awaitingStatusWatermarks.push({watermark, reached});
+      lc.info?.(
+        `waiting for change stream (at ${this.#lastStatusWatermark}) to reach ${watermark}`,
+      );
+      return promise;
+    }
+    return null;
   }
 
   readonly #minBackoffMs: number;
@@ -128,7 +168,7 @@ export class BackfillManager implements Cancelable, Listener {
       // problematic backfills.
       const candidates = [...this.#requiredBackfills.values()];
       const request = candidates[randInt(0, candidates.length - 1)];
-      const state = {request, minMajorVersion: ''};
+      const state = {request, minWatermark: ''};
       const lc = this.#lc.withContext('table', request.table.name);
 
       this.#runningBackfill = state;
@@ -180,12 +220,12 @@ export class BackfillManager implements Cancelable, Listener {
       // had changes that resulted in invalidating / canceling this backfill.
       if (
         state.canceledReason ||
-        (msg.tag === 'backfill' && msg.watermark < state.minMajorVersion)
+        (msg.tag === 'backfill' && msg.watermark < state.minWatermark)
       ) {
         if (state.canceledReason === undefined) {
           assert(msg.tag === 'backfill'); // TypeScript should have figured this out.
           this.#stopRunningBackfill(
-            `row key change at ${state.minMajorVersion} ` +
+            `row key change at ${state.minWatermark} ` +
               `postdates backfill watermark at ${msg.watermark}`,
             state,
           );
@@ -221,8 +261,21 @@ export class BackfillManager implements Cancelable, Listener {
     };
 
     for await (const msg of this.#backfillStreamer(state.request)) {
+      // Before sending `backfill-completed`, the main replication stream
+      // may need to catch up.
+      const mustWaitBeforeFlush =
+        msg.tag === 'backfill-completed' &&
+        this.#changeStreamReached(lc, msg.watermark);
+
       // If necessary, yield the reservation to the main stream.
-      backfillTx && changeStream.waiterDelay() > 0 && commitTx();
+      if (
+        backfillTx &&
+        (changeStream.waiterDelay() > 0 || mustWaitBeforeFlush)
+      ) {
+        commitTx();
+      }
+
+      mustWaitBeforeFlush && (await mustWaitBeforeFlush);
 
       if (
         msg.tag === 'backfill' &&
@@ -296,15 +349,19 @@ export class BackfillManager implements Cancelable, Listener {
    */
   onChange(message: ChangeStreamMessage): void {
     if (message[0] === 'begin') {
-      this.#changeStreamWatermark = stateVersionFromString(
-        message[2].commitWatermark,
-      );
+      this.#currentTxWatermark = message[2].commitWatermark;
       return;
     }
     if (message[0] === 'commit') {
+      this.#currentTxWatermark = null;
+      this.#setLastStatusWatermark(message[2]);
       // Every commit is a candidate for starting the next backfill
       // (if one is not currently running).
       this.#checkAndStartBackfill();
+      return;
+    }
+    if (message[0] === 'status') {
+      this.#setLastStatusWatermark(message[2]);
       return;
     }
     if (message[0] !== 'data') {
@@ -444,7 +501,7 @@ export class BackfillManager implements Cancelable, Listener {
       case 'update': {
         const {relation, key, new: row} = change;
         const backfill = this.#backfillRunningFor(relation);
-        const {major} = must(this.#changeStreamWatermark, `not in a tx`);
+        const txWatermark = must(this.#currentTxWatermark, `not in a tx`);
         if (backfill?.request.table.metadata && key !== null) {
           // A corner case that backfill is unable to correctly handle is
           // when a row's key changes; this is decomposed into a delete
@@ -457,10 +514,10 @@ export class BackfillManager implements Cancelable, Listener {
             backfill.request.table.metadata.rowKey,
           )) {
             if (key[col] !== row[col]) {
-              backfill.minMajorVersion = majorVersionToString(major);
+              backfill.minWatermark = txWatermark;
               this.#lc.info?.(
                 `key for row as changed (col: ${col}). ` +
-                  `backfill data must not predate ${backfill.minMajorVersion}`,
+                  `backfill data must not predate ${backfill.minWatermark}`,
               );
               break;
             }

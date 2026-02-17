@@ -7,7 +7,7 @@ import {
   rollbackSchema,
   schemaChangeSchema,
 } from './data.ts';
-import {statusMessageSchema} from './status.ts';
+import {downstreamStatusMessageSchema} from './status.ts';
 
 const begin = v.tuple([
   v.literal('begin'),
@@ -43,7 +43,7 @@ export type ChangeStreamControl = v.Infer<typeof changeStreamControlSchema>;
 export const changeStreamMessageSchema = v.union(
   changeStreamDataSchema,
   changeStreamControlSchema,
-  statusMessageSchema,
+  downstreamStatusMessageSchema,
 );
 
 export type ChangeStreamMessage = v.Infer<typeof changeStreamMessageSchema>;
