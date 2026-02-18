@@ -1184,10 +1184,10 @@ describe('view-syncer/cvr', () => {
         "clients": 2,
         "desires": 8,
         "instances": 1,
-        "queries": 10,
+        "queries": 6,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 22,
+        "statements": 6,
       }
     `);
     expect(updated).toEqual({
@@ -3040,7 +3040,7 @@ describe('view-syncer/cvr', () => {
         "queries": 2,
         "rows": 2,
         "rowsDeferred": 0,
-        "statements": 5,
+        "statements": 4,
       }
     `);
 
