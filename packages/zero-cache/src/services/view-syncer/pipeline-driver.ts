@@ -994,11 +994,5 @@ function scalarValuesEqual(
   a: LiteralValue | null | undefined,
   b: LiteralValue | null | undefined,
 ): boolean {
-  if (a === undefined && b === undefined) {
-    return true;
-  }
-  if (a === null && b === null) {
-    return true;
-  }
   return a === b;
 }

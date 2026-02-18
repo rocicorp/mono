@@ -2114,4 +2114,32 @@ describe('view-syncer/pipeline-driver', () => {
 
     expect(() => changes()).toThrowError(ResetPipelinesSignal);
   });
+
+  test('companion pipeline throws ResetPipelinesSignal when companion row added', () => {
+    pipelines.init(clientSchema);
+
+    replicator.processTransaction(
+      '134',
+      messages.delete('comments', {id: '10'}),
+    );
+
+    changes();
+
+    [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    // Insert comment '10' — the scalar value goes from undefined to '1'
+    replicator.processTransaction(
+      '135',
+      messages.insert('comments', {id: '10', issueID: '1', upvotes: 0}),
+    );
+
+    expect(() => changes()).toThrowError(ResetPipelinesSignal);
+  });
 });

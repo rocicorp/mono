@@ -18,7 +18,8 @@ export type CompanionSubquery = {
   ast: AST;
   /** The field in the subquery row whose value was resolved. */
   childField: string;
-  /** The resolved value, or `undefined` if no row matched. */
+  /** The resolved value, `null` if a row matched but the field was `NULL`,
+   * or `undefined` if no row matched. */
   resolvedValue: LiteralValue | null | undefined;
 };
 
