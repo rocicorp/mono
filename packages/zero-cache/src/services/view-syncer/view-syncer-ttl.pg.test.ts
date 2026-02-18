@@ -459,8 +459,8 @@ describe('ttl', () => {
     expect(desires).toEqual([
       {
         deleted: true,
-        // inactivatedAt is stored in DB as seconds (TIMESTAMPTZ), not milliseconds
-        inactivatedAt: 2,
+        // inactivatedAt is a TIMESTAMPTZ, parsed to milliseconds by our type config
+        inactivatedAt: 2000,
       },
     ]);
 

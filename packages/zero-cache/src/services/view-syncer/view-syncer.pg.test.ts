@@ -3561,8 +3561,8 @@ describe('view-syncer/service', () => {
       {
         clientID: 'clientC',
         deleted: true,
-        // inactivatedAt is stored as TIMESTAMPTZ in seconds (raw SELECT returns seconds)
-        inactivatedAt: 60 * 60,
+        // inactivatedAt is a TIMESTAMPTZ, parsed to milliseconds by our type config
+        inactivatedAt: 60 * 60 * 1000,
         queryHash: 'query-hashC',
       },
     ]);
