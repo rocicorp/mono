@@ -175,7 +175,10 @@ export class CVRStore {
   // setProfileID, and the final call in #flush) replace each other rather than
   // accumulating as independent statements in #writes.
   #pendingInstanceWrite:
-    | ((tx: PostgresTransaction, lastConnectTime: number) => PendingQuery<MaybeRow[]>)
+    | ((
+        tx: PostgresTransaction,
+        lastConnectTime: number,
+      ) => PendingQuery<MaybeRow[]>)
     | undefined = undefined;
   readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
