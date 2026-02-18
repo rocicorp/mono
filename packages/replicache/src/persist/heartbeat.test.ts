@@ -269,7 +269,7 @@ test('heartbeat with dropped idb throws', async () => {
     dagStore,
     onClientStateNotFound,
     HEARTBEAT_INTERVAL,
-    new LogContext('error', undefined, testLogSink),
+    new LogContext('info', undefined, testLogSink),
     controller.signal,
   );
 
