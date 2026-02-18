@@ -16,6 +16,11 @@ type TableSpecWithUniqueKeys = {
 export type CompanionSubquery = {
   /** The original scalar subquery AST (the subquery table query). */
   ast: AST;
+  /** The field in the subquery row whose value was resolved. */
+  childField: string;
+  /** The resolved value, `null` if a row matched but the field was `NULL`,
+   * or `undefined` if no row matched. */
+  resolvedValue: LiteralValue | null | undefined;
 };
 
 export type ResolveResult = {
@@ -128,7 +133,11 @@ function resolveScalarSubquery(
 
   // Record the companion subquery AST so its rows are synced to the client.
   // The client rewrites scalar subqueries to EXISTS and needs those rows.
-  companions.push({ast: subquery});
+  companions.push({
+    ast: subquery,
+    childField: condition.childField,
+    resolvedValue: value,
+  });
 
   if (value === undefined || value === null) {
     // No rows or NULL value — both x = NULL and x != NULL are false in SQL
