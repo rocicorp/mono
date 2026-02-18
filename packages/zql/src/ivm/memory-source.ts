@@ -276,7 +276,9 @@ export class MemorySource implements Source {
       this.#columns,
       this.#primaryKey,
       primaryIndex.data.clone(),
-      this.#debugName ? `${this.#debugName}:fork` : `fork of #${this.#sourceID}`,
+      this.#debugName
+        ? `${this.#debugName}:fork`
+        : `fork of #${this.#sourceID}`,
     );
   }
 
