@@ -179,7 +179,6 @@ export class CVRStore {
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
   #rowCount: number = 0;
-  readonly #batchConfigWrites: boolean;
   readonly #pendingQueryUpdates = new Map<string, StringifiedQueriesRow>();
   readonly #pendingDesireUpdates = new Map<string, DesiresRow>();
   readonly #pendingQueryPartialUpdates = new Map<string, Partial<QueriesRow>>();
@@ -195,7 +194,6 @@ export class CVRStore {
     maxLoadAttempts = MAX_LOAD_ATTEMPTS,
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
-    batchConfigWrites = false, // Feature flag for batched config writes
   ) {
     this.#failService = failService;
     this.#db = cvrDb;
@@ -213,29 +211,15 @@ export class CVRStore {
     );
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
-    this.#batchConfigWrites = batchConfigWrites;
-
-    // assert(batchConfigWrites);
   }
 
   #cvr(table: string) {
     return this.#db(`${this.#schema}.${table}`);
   }
 
-  #updateQueryFields(
-    queryHash: string,
-    fields: Partial<QueriesRow>,
-  ): void {
-    if (this.#batchConfigWrites) {
-      // Track as partial-only update
-      this.#pendingQueryPartialUpdates.set(queryHash, fields);
-    } else {
-      this.#writes.add({
-        stats: {queries: 1},
-        write: tx => tx`UPDATE ${this.#cvr('queries')} SET ${tx(fields)}
-        WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryHash}`,
-      });
-    }
+  #updateQueryFields(queryHash: string, fields: Partial<QueriesRow>): void {
+    // Track as partial-only update for batched flush
+    this.#pendingQueryPartialUpdates.set(queryHash, fields);
   }
 
   load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
@@ -554,15 +538,12 @@ export class CVRStore {
   }
 
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
-    this.#updateQueryFields(
-      queryPatch.id,
-      {
-        patchVersion: versionString(version),
-        deleted: true,
-        transformationHash: null,
-        transformationVersion: null,
-      },
-    );
+    this.#updateQueryFields(queryPatch.id, {
+      patchVersion: versionString(version),
+      deleted: true,
+      transformationHash: null,
+      transformationVersion: null,
+    });
   }
 
   putQuery(query: QueryRecord): void {
@@ -577,68 +558,21 @@ export class CVRStore {
       transformationVersion: change.transformationVersion ?? null,
       deleted: change.deleted ?? false,
     };
-    if (this.#batchConfigWrites) {
-      this.#pendingQueryUpdates.set(query.id, c);
-    } else {
-      // ${JSON.stringify(change.queryArgs)}::text::json is used because postgres.js
-      // gets confused if the input is `[boolean]` and throws an error saying a bool
-      // cannot be converted to json.
-      // https://github.com/porsager/postgres/issues/386
-
-      this.#writes.add({
-        stats: {queries: 1},
-        write: tx => tx`INSERT INTO ${this.#cvr('queries')} (
-          "clientGroupID",
-          "queryHash",
-          "clientAST",
-          "queryName",
-          "queryArgs",
-          "patchVersion",
-          "transformationHash",
-          "transformationVersion",
-          "internal",
-          "deleted"
-        ) VALUES (
-          ${c.clientGroupID},
-          ${c.queryHash},
-          ${c.clientAST},
-          ${c.queryName},
-          ${c.queryArgs}::text::json,
-          ${c.patchVersion},
-          ${c.transformationHash},
-          ${c.transformationVersion},
-          ${c.internal},
-          ${c.deleted}
-        )
-        ON CONFLICT ("clientGroupID", "queryHash")
-        DO UPDATE SET 
-          "clientAST" = ${c.clientAST},
-          "queryName" = ${c.queryName},
-          "queryArgs" = ${c.queryArgs}::text::json,
-          "patchVersion" = ${c.patchVersion},
-          "transformationHash" = ${c.transformationHash},
-          "transformationVersion" = ${c.transformationVersion},
-          "internal" = ${c.internal},
-          "deleted" = ${c.deleted}`,
-      });
-    }
+    this.#pendingQueryUpdates.set(query.id, c);
   }
 
   updateQuery(query: QueryRecord) {
     const maybeVersionString = (v: CVRVersion | undefined) =>
       v ? versionString(v) : null;
-    this.#updateQueryFields(
-      query.id,
-      {
-        patchVersion:
-          query.type === 'internal'
-            ? null
-            : maybeVersionString(query.patchVersion),
-        transformationHash: query.transformationHash ?? null,
-        transformationVersion: maybeVersionString(query.transformationVersion),
-        deleted: false,
-      },
-    );
+    this.#updateQueryFields(query.id, {
+      patchVersion:
+        query.type === 'internal'
+          ? null
+          : maybeVersionString(query.patchVersion),
+      transformationHash: query.transformationHash ?? null,
+      transformationVersion: maybeVersionString(query.transformationVersion),
+      deleted: false,
+    });
   }
 
   insertClient(client: ClientRecord): void {
@@ -671,8 +605,7 @@ export class CVRStore {
     inactivatedAt: TTLClock | undefined,
     ttl: number,
   ): void {
-    const {ttlInterval, ttlMs, inactivatedAtTimestamp, inactivatedAtMs} =
-      convertTTLValues(inactivatedAt, ttl);
+    const {ttlMs, inactivatedAtMs} = convertTTLValues(inactivatedAt, ttl);
 
     const change: DesiresRow = {
       clientGroupID: this.#id,
@@ -684,46 +617,9 @@ export class CVRStore {
       ttl: ttlMs,
     };
 
-    if (this.#batchConfigWrites) {
-      // Use composite key to deduplicate/replace entries for the same client-query pair
-      const key = `${client.id}:${query.id}`;
-      this.#pendingDesireUpdates.set(key, change);
-    } else {
-      this.#writes.add({
-        stats: {desires: 1},
-        write: tx => tx`
-        INSERT INTO ${this.#cvr('desires')} (
-          "clientGroupID",
-          "clientID",
-          "queryHash",
-          "patchVersion",
-          "deleted",
-          "ttl",
-          "ttlMs",
-          "inactivatedAt",
-          "inactivatedAtMs"
-        ) VALUES (
-          ${change.clientGroupID},
-          ${change.clientID},
-          ${change.queryHash}, 
-          ${change.patchVersion},
-          ${change.deleted},
-          ${ttlInterval},
-          ${ttlMs},
-          ${inactivatedAtTimestamp},
-          ${inactivatedAtMs}
-        )
-        ON CONFLICT ("clientGroupID", "clientID", "queryHash")
-        DO UPDATE SET
-          "patchVersion" = ${change.patchVersion},
-          "deleted" = ${change.deleted},
-          "ttl" = ${ttlInterval},
-          "ttlMs" = ${ttlMs},
-          "inactivatedAt" = ${inactivatedAtTimestamp},
-          "inactivatedAtMs" = ${inactivatedAtMs}
-        `,
-      });
-    }
+    // Use composite key to deduplicate/replace entries for the same client-query pair
+    const key = `${client.id}:${query.id}`;
+    this.#pendingDesireUpdates.set(key, change);
   }
 
   catchupRowPatches(
@@ -986,7 +882,9 @@ export class CVRStore {
         "ttlMs",
         CASE
           WHEN "inactivatedAt" IS NULL THEN NULL
-          ELSE to_timestamp("inactivatedAt")
+          -- Divide by 1000 because postgres.js serializeTimestamp treats numbers as ms
+          -- and to_timestamp expects seconds. This matches non-batched behavior.
+          ELSE to_timestamp("inactivatedAt" / 1000.0)
         END,
         "inactivatedAtMs"
       FROM json_to_recordset(${rows}) AS x(
@@ -1114,11 +1012,6 @@ export class CVRStore {
       let i = 0;
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;
-        // When batching is enabled, query/desire stats come from batch flush
-        if (!this.#batchConfigWrites) {
-          stats.queries += write.stats.queries ?? 0;
-          stats.desires += write.stats.desires ?? 0;
-        }
         stats.clients += write.stats.clients ?? 0;
         stats.rows += write.stats.rows ?? 0;
 
@@ -1137,42 +1030,40 @@ export class CVRStore {
         stats.statements++;
       }
 
-      // Batch flush config writes if enabled
-      if (this.#batchConfigWrites) {
-        // Flush queries first (desires depend on queries via foreign key)
-        const hasQueryUpdates =
-          this.#pendingQueryUpdates.size > 0 ||
-          this.#pendingQueryPartialUpdates.size > 0;
+      // Batch flush config writes
+      // Flush queries first (desires depend on queries via foreign key)
+      const hasQueryUpdates =
+        this.#pendingQueryUpdates.size > 0 ||
+        this.#pendingQueryPartialUpdates.size > 0;
 
-        const desireFlush = this.#flushDesires(tx, lc);
+      const desireFlush = this.#flushDesires(tx, lc);
 
-        if (hasQueryUpdates) {
-          const queryFlush = this.#flushQueries(tx, lc);
+      if (hasQueryUpdates) {
+        const queryFlush = this.#flushQueries(tx, lc);
 
-          // Count both full updates and partial-only updates
-          const partialOnlyCount = Array.from(
-            this.#pendingQueryPartialUpdates.keys(),
-          ).filter(key => !this.#pendingQueryUpdates.has(key)).length;
+        // Count both full updates and partial-only updates
+        const partialOnlyCount = Array.from(
+          this.#pendingQueryPartialUpdates.keys(),
+        ).filter(key => !this.#pendingQueryUpdates.has(key)).length;
 
-          stats.queries = this.#pendingQueryUpdates.size + partialOnlyCount;
-          stats.statements +=
-            (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
-            (partialOnlyCount > 0 ? 1 : 0);
+        stats.queries = this.#pendingQueryUpdates.size + partialOnlyCount;
+        stats.statements +=
+          (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
+          (partialOnlyCount > 0 ? 1 : 0);
 
-          // Chain desire flush to execute after queries complete
-          if (desireFlush) {
-            pipelined.push(queryFlush.then(() => desireFlush.execute()));
-            stats.desires = this.#pendingDesireUpdates.size;
-            stats.statements++;
-          } else {
-            pipelined.push(queryFlush);
-          }
-        } else if (desireFlush) {
-          // No queries to flush, just flush desires
-          pipelined.push(desireFlush.execute());
+        // Chain desire flush to execute after queries complete
+        if (desireFlush) {
+          pipelined.push(queryFlush.then(() => desireFlush.execute()));
           stats.desires = this.#pendingDesireUpdates.size;
           stats.statements++;
+        } else {
+          pipelined.push(queryFlush);
         }
+      } else if (desireFlush) {
+        // No queries to flush, just flush desires
+        pipelined.push(desireFlush.execute());
+        stats.desires = this.#pendingDesireUpdates.size;
+        stats.statements++;
       }
 
       const rowUpdates = this.#rowCache.executeRowUpdates(

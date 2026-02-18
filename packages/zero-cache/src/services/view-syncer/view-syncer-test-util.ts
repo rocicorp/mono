@@ -705,9 +705,7 @@ export async function setup(
     log: {
       level: 'error',
     },
-    cvr: {
-      batchConfigWrites: false,
-    },
+    cvr: {},
   } as NormalizedZeroConfig;
 
   // Create the custom query transformer if configured

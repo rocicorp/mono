@@ -403,16 +403,6 @@ export const zeroOptions = {
         `Setting this to 0 effectively disables CVR garbage collection.`,
       ],
     },
-
-    batchConfigWrites: {
-      type: v.boolean().default(false),
-      desc: [
-        `Enable batched writes for CVR configuration updates (queries, desires).`,
-        `This optimization reduces the number of SQL statements during CVR flushes`,
-        `by batching multiple config updates into fewer queries.`,
-      ],
-      hidden: true,
-    },
   },
 
   queryHydrationStats: {

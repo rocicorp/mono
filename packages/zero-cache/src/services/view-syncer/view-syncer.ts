@@ -347,11 +347,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // On failure, cancel the #stateChanges subscription. The run()
       // loop will then await #cvrStore.flushed() which rejects if necessary.
       () => this.#stateChanges.cancel(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      config.cvr.batchConfigWrites,
     );
     this.#setTimeout = setTimeoutFn;
     this.#runPriorityOp = runPriorityOp;
