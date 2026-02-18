@@ -702,7 +702,10 @@ export class CVRStore {
     }
   }
 
-  async #flushQueries(tx: PostgresTransaction, lc: LogContext): Promise<void> {
+  #flushQueries(
+    tx: PostgresTransaction,
+    lc: LogContext,
+  ): PendingQuery<Row[]>[] {
     // Merge partial updates into full updates
     const partialOnly = new Map<string, Partial<QueriesRow>>();
     for (const [queryHash, partial] of this.#pendingQueryPartialUpdates) {
@@ -716,14 +719,14 @@ export class CVRStore {
       }
     }
 
-    const promises: Promise<unknown>[] = [];
+    const queries: PendingQuery<Row[]>[] = [];
 
     // Batch full updates
     if (this.#pendingQueryUpdates.size > 0) {
       const rows = [...this.#pendingQueryUpdates.values()];
       lc.debug?.(`Batch flushing ${rows.length} full query updates`);
 
-      promises.push(tx`
+      queries.push(tx`
         INSERT INTO ${this.#cvr('queries')} (
           "clientGroupID",
           "queryHash",
@@ -795,7 +798,7 @@ export class CVRStore {
           transformationVersion: partial.transformationVersion ?? null,
         }),
       );
-      promises.push(tx`
+      queries.push(tx`
         UPDATE ${this.#cvr('queries')} AS q
         SET
           "patchVersion" = CASE
@@ -831,7 +834,7 @@ export class CVRStore {
       `);
     }
 
-    await Promise.all(promises);
+    return queries;
   }
 
   #flushDesires(
@@ -908,20 +911,28 @@ export class CVRStore {
       `;
   }
 
-  async #checkVersionAndOwnership(
+  #checkVersionAndOwnership(
     lc: LogContext,
     tx: PostgresTransaction,
-    expectedCurrentVersion: CVRVersion,
-    lastConnectTime: number,
-  ): Promise<void> {
-    const start = Date.now();
+    _expectedCurrentVersion: CVRVersion,
+    _lastConnectTime: number,
+  ): PendingQuery<Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]> {
     lc.debug?.('checking cvr version and ownership');
-    const expected = versionString(expectedCurrentVersion);
-    const result = await tx<
+    return tx<
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
     >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
-        FOR UPDATE`.execute(); // Note: execute() immediately to send the query before others.
+        FOR UPDATE`;
+  }
+
+  #validateVersionAndOwnership(
+    lc: LogContext,
+    result: Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[],
+    expectedCurrentVersion: CVRVersion,
+    lastConnectTime: number,
+    startTime: number,
+  ): void {
+    const expected = versionString(expectedCurrentVersion);
     const {version, owner, grantedAt} =
       result.length > 0
         ? result[0]
@@ -931,7 +942,9 @@ export class CVRStore {
             grantedAt: null,
           };
     lc.debug?.(
-      'checked cvr version and ownership in ' + (Date.now() - start) + ' ms',
+      'checked cvr version and ownership in ' +
+        (Date.now() - startTime) +
+        ' ms',
     );
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
       throw new OwnershipError(owner, grantedAt, lastConnectTime);
@@ -991,42 +1004,27 @@ export class CVRStore {
     this.putInstance(cvr);
     const start = Date.now();
     lc.debug?.('flush tx beginning');
-    const rowsFlushed = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
-      lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
-      const pipelined: Promise<unknown>[] = [
-        // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
-        // query to acquire a row-level lock so that version-updating
-        // transactions are effectively serialized per cvr.instance.
-        //
-        // Note that `rowsVersion` updates, on the other hand, are not subject
-        // to this lock and can thus commit / be-committed independently of
-        // cvr.instances.
-        this.#checkVersionAndOwnership(
-          lc,
-          tx,
-          expectedCurrentVersion,
-          lastConnectTime,
-        ),
-      ];
 
-      let i = 0;
+    const checkStart = Date.now();
+    const results = await this.#db.begin(Mode.READ_COMMITTED, tx => {
+      lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
+
+      // Put the FOR UPDATE query first to acquire row-level lock before other queries.
+      // This ensures version-updating transactions are serialized per cvr.instance.
+      const versionCheck = this.#checkVersionAndOwnership(
+        lc,
+        tx,
+        expectedCurrentVersion,
+        lastConnectTime,
+      );
+
+      const writeQueries = [];
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;
         stats.clients += write.stats.clients ?? 0;
         stats.rows += write.stats.rows ?? 0;
 
-        const writeIndex = i++;
-        const writeStart = Date.now();
-        pipelined.push(
-          write
-            .write(tx, lastConnectTime)
-            .execute()
-            .then(() => {
-              lc.debug?.(
-                `write ${writeIndex}/${this.#writes.size} completed in ${Date.now() - writeStart} ms`,
-              );
-            }),
-        );
+        writeQueries.push(write.write(tx, lastConnectTime));
         stats.statements++;
       }
 
@@ -1038,8 +1036,9 @@ export class CVRStore {
 
       const desireFlush = this.#flushDesires(tx, lc);
 
+      let queryFlushes: PendingQuery<Row[]>[] = [];
       if (hasQueryUpdates) {
-        const queryFlush = this.#flushQueries(tx, lc);
+        queryFlushes = this.#flushQueries(tx, lc);
 
         // Count both full updates and partial-only updates
         const partialOnlyCount = Array.from(
@@ -1051,17 +1050,11 @@ export class CVRStore {
           (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
           (partialOnlyCount > 0 ? 1 : 0);
 
-        // Chain desire flush to execute after queries complete
         if (desireFlush) {
-          pipelined.push(queryFlush.then(() => desireFlush.execute()));
           stats.desires = this.#pendingDesireUpdates.size;
           stats.statements++;
-        } else {
-          pipelined.push(queryFlush);
         }
       } else if (desireFlush) {
-        // No queries to flush, just flush desires
-        pipelined.push(desireFlush.execute());
         stats.desires = this.#pendingDesireUpdates.size;
         stats.statements++;
       }
@@ -1073,21 +1066,54 @@ export class CVRStore {
         'allow-defer',
         lc,
       );
-      pipelined.push(...rowUpdates);
       stats.statements += rowUpdates.length;
 
-      // Make sure Errors thrown by pipelined statements
-      // are propagated up the stack.
-      await Promise.all(pipelined);
-      lc.debug?.(`flush tx returning after ${Date.now() - start} ms`);
-      if (rowUpdates.length === 0) {
-        stats.rowsDeferred = this.#pendingRowRecordUpdates.size;
-        return false;
-      }
-      stats.rows += this.#pendingRowRecordUpdates.size;
+      // Construct the full query list in one expression for postgres.js pipelining
+      const pipelined = [
+        versionCheck,
+        ...writeQueries,
+        ...queryFlushes,
+        ...(desireFlush ? [desireFlush] : []),
+        ...rowUpdates,
+      ];
 
-      return true;
+      lc.debug?.(`returning ${pipelined.length} queries for pipelining`);
+
+      // Return array of queries - postgres.js will pipeline them automatically
+      return pipelined;
     });
+
+    // Validate version and ownership from the FOR UPDATE query (first in pipeline)
+    this.#validateVersionAndOwnership(
+      lc,
+      results[0] as Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[],
+      expectedCurrentVersion,
+      lastConnectTime,
+      checkStart,
+    );
+
+    lc.debug?.(`flush tx completed after ${Date.now() - start} ms`);
+
+    // Calculate how many row update queries were in the pipeline
+    // (total - version check - writes - query flushes - desire flush if present)
+    const baseQueries =
+      1 + // version check
+      this.#writes.size +
+      (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
+      (Array.from(this.#pendingQueryPartialUpdates.keys()).filter(
+        key => !this.#pendingQueryUpdates.has(key),
+      ).length > 0
+        ? 1
+        : 0) +
+      (this.#pendingDesireUpdates.size > 0 ? 1 : 0);
+    const rowUpdateCount = results.length - baseQueries;
+
+    const rowsFlushed = rowUpdateCount > 0;
+    if (!rowsFlushed) {
+      stats.rowsDeferred = this.#pendingRowRecordUpdates.size;
+    } else {
+      stats.rows += this.#pendingRowRecordUpdates.size;
+    }
 
     this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
