@@ -225,24 +225,10 @@ export class CVRStore {
   #updateQueryFields(
     queryHash: string,
     fields: Partial<QueriesRow>,
-    isFullUpdate: boolean,
   ): void {
     if (this.#batchConfigWrites) {
-      if (isFullUpdate) {
-        // Merge partial updates into full update if it exists
-        const existing = this.#pendingQueryUpdates.get(queryHash);
-        if (existing) {
-          Object.assign(existing, fields);
-        } else {
-          this.#pendingQueryUpdates.set(
-            queryHash,
-            fields as StringifiedQueriesRow,
-          );
-        }
-      } else {
-        // Track as partial-only update
-        this.#pendingQueryPartialUpdates.set(queryHash, fields);
-      }
+      // Track as partial-only update
+      this.#pendingQueryPartialUpdates.set(queryHash, fields);
     } else {
       this.#writes.add({
         stats: {queries: 1},
@@ -576,7 +562,6 @@ export class CVRStore {
         transformationHash: null,
         transformationVersion: null,
       },
-      false, // partial update
     );
   }
 
@@ -653,7 +638,6 @@ export class CVRStore {
         transformationVersion: maybeVersionString(query.transformationVersion),
         deleted: false,
       },
-      false, // partial update
     );
   }
 
