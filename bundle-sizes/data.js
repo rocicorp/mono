@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1770347985300,
+  "lastUpdate": 1771429904846,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55145,6 +55145,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31951,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "johannes.bingen@gmail.com",
+            "name": "jbingen",
+            "username": "jbingen"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "746bb50e6602b213c5587be024e4d8cce2382691",
+          "message": "fix(replicache): downgrade IDBNotFoundError to info log level (#5562)\n\n`IDBNotFoundError` is explicitly documented as non-fatal:\n\n> This likely means that the user deleted IndexedDB instances while the\napp was running. This is non-fatal. The app will continue running in\nmemory until reload.\n\nbut `bg-interval.ts` catches it with `lc.error` which floods error\nmonitoring (Sentry) in downstream apps. especially common in Electron\napps where IndexedDB can be cleared during sleep/wake cycles.\n\nchecks for `IDBNotFoundError` before the generic error log and uses\n`lc.info` instead, matching the non-fatal nature described in the error\nmessage itself.\n\n## test plan\n- added test verifying `IDBNotFoundError` is logged at info level\n- existing tests pass (18/18 across chromium, webkit, firefox)\n\n---------\n\nCo-authored-by: Chase Adams <c@cadams.io>\nCo-authored-by: Chase Adams <gh@cadams.io>",
+          "timestamp": "2026-02-18T15:38:58Z",
+          "tree_id": "01753569eac598f20f5a04292c8ec5bfb1175adb",
+          "url": "https://github.com/rocicorp/mono/commit/746bb50e6602b213c5587be024e4d8cce2382691"
+        },
+        "date": 1771429892461,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 304492,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54890,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111765,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31995,
             "unit": "bytes"
           }
         ]
