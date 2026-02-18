@@ -1,6 +1,6 @@
 import {trace} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
-import type {MaybeRow, PendingQuery} from 'postgres';
+import type {MaybeRow, PendingQuery, Row} from 'postgres';
 import {startAsyncSpan} from '../../../../otel/src/span.ts';
 import {version} from '../../../../otel/src/version.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -70,7 +70,41 @@ export type CVRFlushStats = {
 
 let flushCounter = 0;
 
+/**
+ * Convert TTL/timestamp values for both old (seconds-based) and new (ms-based) columns.
+ * Old columns: inactivatedAt (TIMESTAMPTZ), ttl (INTERVAL) - need conversion ms->seconds
+ * New columns: inactivatedAtMs (DOUBLE PRECISION), ttlMs (DOUBLE PRECISION) - store ms directly
+ */
+function convertTTLValues(
+  inactivatedAt: TTLClock | undefined,
+  ttl: number,
+): {
+  ttlInterval: number | null;
+  ttlMs: number | null;
+  inactivatedAtTimestamp: TTLClock | null;
+  inactivatedAtMs: TTLClock | null;
+} {
+  return {
+    ttlInterval: ttl < 0 ? null : ttl / 1000, // INTERVAL needs seconds
+    ttlMs: ttl < 0 ? null : ttl, // New column stores ms directly
+    inactivatedAtTimestamp:
+      inactivatedAt === undefined
+        ? null
+        : ttlClockFromNumber(ttlClockAsNumber(inactivatedAt) / 1000),
+    inactivatedAtMs: inactivatedAt ?? null,
+  };
+}
+
 const tracer = trace.getTracer('cvr-store', version);
+
+/**
+ * QueriesRow with queryArgs as a stringified JSON value.
+ * Used for batched config writes where queryArgs are pre-stringified
+ * to handle the postgres.js boolean array bug.
+ */
+type StringifiedQueriesRow = Omit<QueriesRow, 'queryArgs'> & {
+  queryArgs: string | null;
+};
 
 function asQuery(row: QueriesRow): QueryRecord {
   const maybeVersion = (s: string | null) =>
@@ -137,6 +171,15 @@ export class CVRStore {
       lastConnectTime: number,
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
+  // Stored separately so repeated putInstance() calls (e.g. setClientSchema,
+  // setProfileID, and the final call in #flush) replace each other rather than
+  // accumulating as independent statements in #writes.
+  #pendingInstanceWrite:
+    | ((
+        tx: PostgresTransaction,
+        lastConnectTime: number,
+      ) => PendingQuery<MaybeRow[]>)
+    | undefined = undefined;
   readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
   );
@@ -145,6 +188,9 @@ export class CVRStore {
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
   #rowCount: number = 0;
+  readonly #pendingQueryUpdates = new Map<string, StringifiedQueriesRow>();
+  readonly #pendingDesireUpdates = new Map<string, DesiresRow>();
+  readonly #pendingQueryPartialUpdates = new Map<string, Partial<QueriesRow>>();
 
   constructor(
     lc: LogContext,
@@ -178,6 +224,11 @@ export class CVRStore {
 
   #cvr(table: string) {
     return this.#db(`${this.#schema}.${table}`);
+  }
+
+  #updateQueryFields(queryHash: string, fields: Partial<QueriesRow>): void {
+    // Track as partial-only update for batched flush
+    this.#pendingQueryPartialUpdates.set(queryHash, fields);
   }
 
   load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
@@ -474,95 +525,54 @@ export class CVRStore {
     | 'profileID'
     | 'ttlClock'
   >): void {
-    this.#writes.add({
-      stats: {instances: 1},
-      write: (tx, lastConnectTime) => {
-        const change: InstancesRow = {
-          clientGroupID: this.#id,
-          version: versionString(version),
-          lastActive,
-          ttlClock,
-          replicaVersion,
-          owner: this.#taskID,
-          grantedAt: lastConnectTime,
-          clientSchema,
-          profileID,
-        };
-        return tx`
+    // Overwrite any previously queued instance write — only the last call
+    // matters since they all target the same row.
+    this.#pendingInstanceWrite = (tx, lastConnectTime) => {
+      const change: InstancesRow = {
+        clientGroupID: this.#id,
+        version: versionString(version),
+        lastActive,
+        ttlClock,
+        replicaVersion,
+        owner: this.#taskID,
+        grantedAt: lastConnectTime,
+        clientSchema,
+        profileID,
+      };
+      return tx`
         INSERT INTO ${this.#cvr('instances')} ${tx(change)} 
           ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
-      },
-    });
+    };
   }
 
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
-    this.#writes.add({
-      stats: {queries: 1},
-      write: tx => tx`UPDATE ${this.#cvr('queries')} SET ${tx({
-        patchVersion: versionString(version),
-        deleted: true,
-        transformationHash: null,
-        transformationVersion: null,
-      })}
-      WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryPatch.id}`,
+    this.#updateQueryFields(queryPatch.id, {
+      patchVersion: versionString(version),
+      deleted: true,
+      transformationHash: null,
+      transformationVersion: null,
     });
   }
 
   putQuery(query: QueryRecord): void {
-    const change: QueriesRow = queryRecordToQueryRow(this.#id, query);
-    // ${JSON.stringify(change.queryArgs)}::text::json is used because postgres.js
-    // gets confused if the input is `[boolean]` and throws an error saying a bool
-    // cannot be converted to json.
-    // https://github.com/porsager/postgres/issues/386
-    this.#writes.add({
-      stats: {queries: 1},
-      write: tx => tx`INSERT INTO ${this.#cvr('queries')} (
-        "clientGroupID",
-        "queryHash",
-        "clientAST",
-        "queryName",
-        "queryArgs",
-        "patchVersion",
-        "transformationHash",
-        "transformationVersion",
-        "internal",
-        "deleted"
-      ) VALUES (
-        ${change.clientGroupID},
-        ${change.queryHash},
-        ${change.clientAST},
-        ${change.queryName},
-        ${change.queryArgs === undefined ? null : JSON.stringify(change.queryArgs)}::text::json,
-        ${change.patchVersion},
-        ${change.transformationHash ?? null},
-        ${change.transformationVersion ?? null},
-        ${change.internal},
-        ${change.deleted ?? false}
-      )
-      ON CONFLICT ("clientGroupID", "queryHash")
-      DO UPDATE SET 
-        "clientAST" = ${change.clientAST},
-        "queryName" = ${change.queryName},
-        "queryArgs" = ${change.queryArgs === undefined ? null : JSON.stringify(change.queryArgs)}::text::json,
-        "patchVersion" = ${change.patchVersion},
-        "transformationHash" = ${change.transformationHash ?? null},
-        "transformationVersion" = ${change.transformationVersion ?? null},
-        "internal" = ${change.internal},
-        "deleted" = ${change.deleted ?? false}`,
-    });
+    const change = queryRecordToQueryRow(this.#id, query);
+
+    const c = {
+      ...change,
+      // Pre-stringify queryArgs to handle postgres.js boolean array bug
+      queryArgs:
+        change.queryArgs !== null ? JSON.stringify(change.queryArgs) : null,
+      transformationHash: change.transformationHash ?? null,
+      transformationVersion: change.transformationVersion ?? null,
+      deleted: change.deleted ?? false,
+    };
+    this.#pendingQueryUpdates.set(query.id, c);
   }
 
   updateQuery(query: QueryRecord) {
     const maybeVersionString = (v: CVRVersion | undefined) =>
       v ? versionString(v) : null;
-
-    const change: Pick<
-      QueriesRow,
-      | 'patchVersion'
-      | 'transformationHash'
-      | 'transformationVersion'
-      | 'deleted'
-    > = {
+    this.#updateQueryFields(query.id, {
       patchVersion:
         query.type === 'internal'
           ? null
@@ -570,12 +580,6 @@ export class CVRStore {
       transformationHash: query.transformationHash ?? null,
       transformationVersion: maybeVersionString(query.transformationVersion),
       deleted: false,
-    };
-
-    this.#writes.add({
-      stats: {queries: 1},
-      write: tx => tx`UPDATE ${this.#cvr('queries')} SET ${tx(change)}
-      WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${query.id}`,
     });
   }
 
@@ -609,50 +613,21 @@ export class CVRStore {
     inactivatedAt: TTLClock | undefined,
     ttl: number,
   ): void {
+    const {ttlMs, inactivatedAtMs} = convertTTLValues(inactivatedAt, ttl);
+
     const change: DesiresRow = {
       clientGroupID: this.#id,
       clientID: client.id,
       deleted,
-      inactivatedAt: inactivatedAt ?? null,
+      inactivatedAt: inactivatedAtMs,
       patchVersion: versionString(newVersion),
       queryHash: query.id,
-
-      // ttl is in ms in JavaScript
-      ttl: ttl < 0 ? null : ttl,
+      ttl: ttlMs,
     };
 
-    // For backward compatibility during rollout, write to both old and new columns:
-    // Old columns: inactivatedAt (TIMESTAMPTZ), ttl (INTERVAL) - need conversion ms->seconds
-    // New columns: inactivatedAtMs (DOUBLE PRECISION), ttlMs (DOUBLE PRECISION) - store ms directly (1:1 with JS)
-    const inactivatedAtTimestamp =
-      inactivatedAt === undefined
-        ? null
-        : ttlClockFromNumber(ttlClockAsNumber(inactivatedAt) / 1000);
-    const inactivatedAtMs = inactivatedAt ?? null;
-    const ttlInterval = ttl < 0 ? null : ttl / 1000; // INTERVAL needs seconds
-    const ttlMs = ttl < 0 ? null : ttl; // New column stores ms directly
-
-    this.#writes.add({
-      stats: {desires: 1},
-      write: tx => tx`
-      INSERT INTO ${this.#cvr('desires')} (
-        "clientGroupID", "clientID", "queryHash", "patchVersion", "deleted",
-        "ttl", "ttlMs", "inactivatedAt", "inactivatedAtMs"
-      ) VALUES (
-        ${change.clientGroupID}, ${change.clientID}, ${change.queryHash}, 
-        ${change.patchVersion}, ${change.deleted}, ${ttlInterval}, ${ttlMs},
-        ${inactivatedAtTimestamp}, ${inactivatedAtMs}
-      )
-      ON CONFLICT ("clientGroupID", "clientID", "queryHash")
-      DO UPDATE SET
-        "patchVersion" = ${change.patchVersion},
-        "deleted" = ${change.deleted},
-        "ttl" = ${ttlInterval},
-        "ttlMs" = ${ttlMs},
-        "inactivatedAt" = ${inactivatedAtTimestamp},
-        "inactivatedAtMs" = ${inactivatedAtMs}
-      `,
-    });
+    // Use composite key to deduplicate/replace entries for the same client-query pair
+    const key = `${client.id}:${query.id}`;
+    this.#pendingDesireUpdates.set(key, change);
   }
 
   catchupRowPatches(
@@ -735,6 +710,215 @@ export class CVRStore {
     }
   }
 
+  #flushQueries(
+    tx: PostgresTransaction,
+    lc: LogContext,
+  ): PendingQuery<Row[]>[] {
+    // Merge partial updates into full updates
+    const partialOnly = new Map<string, Partial<QueriesRow>>();
+    for (const [queryHash, partial] of this.#pendingQueryPartialUpdates) {
+      const existing = this.#pendingQueryUpdates.get(queryHash);
+      if (existing) {
+        // Merge partial into full update
+        Object.assign(existing, partial);
+      } else {
+        // Track partial-only updates to batch separately
+        partialOnly.set(queryHash, partial);
+      }
+    }
+
+    const queries: PendingQuery<Row[]>[] = [];
+
+    // Batch full updates
+    if (this.#pendingQueryUpdates.size > 0) {
+      const rows = [...this.#pendingQueryUpdates.values()];
+      lc.debug?.(`Batch flushing ${rows.length} full query updates`);
+
+      queries.push(tx`
+        INSERT INTO ${this.#cvr('queries')} (
+          "clientGroupID",
+          "queryHash",
+          "clientAST",
+          "queryName",
+          "queryArgs",
+          "patchVersion",
+          "transformationHash",
+          "transformationVersion",
+          "internal",
+          "deleted"
+        )
+        SELECT
+          "clientGroupID",
+          "queryHash",
+          "clientAST",
+          "queryName",
+          CASE
+            WHEN "queryArgs" IS NULL THEN NULL
+            ELSE "queryArgs"::json
+          END,
+          "patchVersion",
+          "transformationHash",
+          "transformationVersion",
+          "internal",
+          "deleted"
+        FROM json_to_recordset(${rows}) AS x(
+          "clientGroupID" TEXT,
+          "queryHash" TEXT,
+          "clientAST" JSONB,
+          "queryName" TEXT,
+          "queryArgs" TEXT,
+          "patchVersion" TEXT,
+          "transformationHash" TEXT,
+          "transformationVersion" TEXT,
+          "internal" BOOLEAN,
+          "deleted" BOOLEAN
+        )
+        ON CONFLICT ("clientGroupID", "queryHash") DO UPDATE SET
+          "clientAST" = excluded."clientAST",
+          "queryName" = excluded."queryName",
+          "queryArgs" = CASE 
+            WHEN excluded."queryArgs" IS NULL THEN NULL
+            ELSE excluded."queryArgs"::json
+          END,
+          "patchVersion" = excluded."patchVersion",
+          "transformationHash" = excluded."transformationHash",
+          "transformationVersion" = excluded."transformationVersion",
+          "internal" = excluded."internal",
+          "deleted" = excluded."deleted"
+      `);
+    }
+
+    // Batch partial-only updates
+    if (partialOnly.size > 0) {
+      lc.debug?.(`Batch flushing ${partialOnly.size} partial query updates`);
+      const rows = Array.from(
+        partialOnly.entries(),
+        ([queryHash, partial]) => ({
+          clientGroupID: this.#id,
+          queryHash,
+          patchVersionSet: partial.patchVersion !== undefined,
+          patchVersion: partial.patchVersion ?? null,
+          deletedSet: partial.deleted !== undefined,
+          deleted: partial.deleted ?? null,
+          transformationHashSet: partial.transformationHash !== undefined,
+          transformationHash: partial.transformationHash ?? null,
+          transformationVersionSet: partial.transformationVersion !== undefined,
+          transformationVersion: partial.transformationVersion ?? null,
+        }),
+      );
+      queries.push(tx`
+        UPDATE ${this.#cvr('queries')} AS q
+        SET
+          "patchVersion" = CASE
+            WHEN u."patchVersionSet" THEN u."patchVersion"
+            ELSE q."patchVersion"
+          END,
+          "deleted" = CASE
+            WHEN u."deletedSet" THEN u."deleted"
+            ELSE q."deleted"
+          END,
+          "transformationHash" = CASE
+            WHEN u."transformationHashSet" THEN u."transformationHash"
+            ELSE q."transformationHash"
+          END,
+          "transformationVersion" = CASE
+            WHEN u."transformationVersionSet" THEN u."transformationVersion"
+            ELSE q."transformationVersion"
+          END
+        FROM json_to_recordset(${rows}) AS u(
+          "clientGroupID" TEXT,
+          "queryHash" TEXT,
+          "patchVersionSet" BOOLEAN,
+          "patchVersion" TEXT,
+          "deletedSet" BOOLEAN,
+          "deleted" BOOLEAN,
+          "transformationHashSet" BOOLEAN,
+          "transformationHash" TEXT,
+          "transformationVersionSet" BOOLEAN,
+          "transformationVersion" TEXT
+        )
+        WHERE q."clientGroupID" = u."clientGroupID"
+          AND q."queryHash" = u."queryHash"
+      `);
+    }
+
+    return queries;
+  }
+
+  #flushDesires(
+    tx: PostgresTransaction,
+    lc: LogContext,
+  ): PendingQuery<Row[]> | null {
+    if (this.#pendingDesireUpdates.size === 0) {
+      return null;
+    }
+
+    const rows = Array.from(this.#pendingDesireUpdates.values(), row => {
+      const {ttlInterval, ttlMs, inactivatedAtTimestamp, inactivatedAtMs} =
+        convertTTLValues(row.inactivatedAt ?? undefined, row.ttl ?? -1);
+      return {
+        clientGroupID: row.clientGroupID,
+        clientID: row.clientID,
+        queryHash: row.queryHash,
+        patchVersion: row.patchVersion,
+        deleted: row.deleted,
+        ttl: ttlInterval,
+        ttlMs,
+        inactivatedAt: inactivatedAtTimestamp,
+        inactivatedAtMs,
+      };
+    });
+
+    lc.debug?.(`Batch flushing ${rows.length} desire updates`);
+
+    return tx`
+      INSERT INTO ${this.#cvr('desires')} (
+        "clientGroupID",
+        "clientID",
+        "queryHash",
+        "patchVersion",
+        "deleted",
+        "ttl",
+        "ttlMs",
+        "inactivatedAt",
+        "inactivatedAtMs"
+      )
+      SELECT
+        "clientGroupID",
+        "clientID",
+        "queryHash",
+        "patchVersion",
+        "deleted",
+        "ttl",
+        "ttlMs",
+        CASE
+          WHEN "inactivatedAt" IS NULL THEN NULL
+          -- Divide by 1000 because postgres.js serializeTimestamp treats numbers as ms
+          -- and to_timestamp expects seconds. This matches non-batched behavior.
+          ELSE to_timestamp("inactivatedAt" / 1000.0)
+        END,
+        "inactivatedAtMs"
+      FROM json_to_recordset(${rows}) AS x(
+        "clientGroupID" TEXT,
+        "clientID" TEXT,
+        "queryHash" TEXT,
+        "patchVersion" TEXT,
+        "deleted" BOOLEAN,
+        "ttl" INTERVAL,
+        "ttlMs" DOUBLE PRECISION,
+        "inactivatedAt" DOUBLE PRECISION,
+        "inactivatedAtMs" DOUBLE PRECISION
+      )
+      ON CONFLICT ("clientGroupID", "clientID", "queryHash") DO UPDATE SET
+        "patchVersion" = excluded."patchVersion",
+        "deleted" = excluded."deleted",
+        "ttl" = excluded."ttl",
+        "ttlMs" = excluded."ttlMs",
+        "inactivatedAt" = excluded."inactivatedAt",
+        "inactivatedAtMs" = excluded."inactivatedAtMs"
+      `;
+  }
+
   async #checkVersionAndOwnership(
     lc: LogContext,
     tx: PostgresTransaction,
@@ -743,12 +927,12 @@ export class CVRStore {
   ): Promise<void> {
     const start = Date.now();
     lc.debug?.('checking cvr version and ownership');
-    const expected = versionString(expectedCurrentVersion);
     const result = await tx<
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
     >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
-        FOR UPDATE`.execute(); // Note: execute() immediately to send the query before others.
+        FOR UPDATE`;
+    const expected = versionString(expectedCurrentVersion);
     const {version, owner, grantedAt} =
       result.length > 0
         ? result[0]
@@ -804,7 +988,14 @@ export class CVRStore {
         }
       }
     }
-    if (this.#pendingRowRecordUpdates.size === 0 && this.#writes.size === 0) {
+    if (
+      this.#pendingRowRecordUpdates.size === 0 &&
+      this.#writes.size === 0 &&
+      this.#pendingInstanceWrite === undefined &&
+      this.#pendingQueryUpdates.size === 0 &&
+      this.#pendingQueryPartialUpdates.size === 0 &&
+      this.#pendingDesireUpdates.size === 0
+    ) {
       return null;
     }
     // Note: The CVR instance itself is only updated if there are material
@@ -812,44 +1003,65 @@ export class CVRStore {
     this.putInstance(cvr);
     const start = Date.now();
     lc.debug?.('flush tx beginning');
-    const rowsFlushed = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
-      lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
-      const pipelined: Promise<unknown>[] = [
-        // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
-        // query to acquire a row-level lock so that version-updating
-        // transactions are effectively serialized per cvr.instance.
-        //
-        // Note that `rowsVersion` updates, on the other hand, are not subject
-        // to this lock and can thus commit / be-committed independently of
-        // cvr.instances.
-        this.#checkVersionAndOwnership(
-          lc,
-          tx,
-          expectedCurrentVersion,
-          lastConnectTime,
-        ),
-      ];
 
-      let i = 0;
+    // Use an async callback so we can await the version/ownership check and
+    // validate it INSIDE the transaction. If validation fails, the exception
+    // causes postgres.js to ROLLBACK, ensuring no writes are committed on error.
+    const results = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
+      lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
+
+      // Acquire row-level lock and validate version/ownership before queuing writes.
+      // Throwing here (inside the begin callback) rolls back the transaction so that
+      // no writes are committed when concurrent modification or ownership errors occur.
+      await this.#checkVersionAndOwnership(
+        lc,
+        tx,
+        expectedCurrentVersion,
+        lastConnectTime,
+      );
+
+      const writeQueries = [];
+      if (this.#pendingInstanceWrite) {
+        writeQueries.push(this.#pendingInstanceWrite(tx, lastConnectTime));
+        stats.instances++;
+        stats.statements++;
+      }
       for (const write of this.#writes) {
-        stats.instances += write.stats.instances ?? 0;
-        stats.queries += write.stats.queries ?? 0;
-        stats.desires += write.stats.desires ?? 0;
         stats.clients += write.stats.clients ?? 0;
         stats.rows += write.stats.rows ?? 0;
 
-        const writeIndex = i++;
-        const writeStart = Date.now();
-        pipelined.push(
-          write
-            .write(tx, lastConnectTime)
-            .execute()
-            .then(() => {
-              lc.debug?.(
-                `write ${writeIndex}/${this.#writes.size} completed in ${Date.now() - writeStart} ms`,
-              );
-            }),
-        );
+        writeQueries.push(write.write(tx, lastConnectTime));
+        stats.statements++;
+      }
+
+      // Batch flush config writes
+      // Flush queries first (desires depend on queries via foreign key)
+      const hasQueryUpdates =
+        this.#pendingQueryUpdates.size > 0 ||
+        this.#pendingQueryPartialUpdates.size > 0;
+
+      const desireFlush = this.#flushDesires(tx, lc);
+
+      let queryFlushes: PendingQuery<Row[]>[] = [];
+      if (hasQueryUpdates) {
+        queryFlushes = this.#flushQueries(tx, lc);
+
+        // Count both full updates and partial-only updates
+        const partialOnlyCount = Array.from(
+          this.#pendingQueryPartialUpdates.keys(),
+        ).filter(key => !this.#pendingQueryUpdates.has(key)).length;
+
+        stats.queries = this.#pendingQueryUpdates.size + partialOnlyCount;
+        stats.statements +=
+          (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
+          (partialOnlyCount > 0 ? 1 : 0);
+
+        if (desireFlush) {
+          stats.desires = this.#pendingDesireUpdates.size;
+          stats.statements++;
+        }
+      } else if (desireFlush) {
+        stats.desires = this.#pendingDesireUpdates.size;
         stats.statements++;
       }
 
@@ -860,21 +1072,46 @@ export class CVRStore {
         'allow-defer',
         lc,
       );
-      pipelined.push(...rowUpdates);
       stats.statements += rowUpdates.length;
 
-      // Make sure Errors thrown by pipelined statements
-      // are propagated up the stack.
-      await Promise.all(pipelined);
-      lc.debug?.(`flush tx returning after ${Date.now() - start} ms`);
-      if (rowUpdates.length === 0) {
-        stats.rowsDeferred = this.#pendingRowRecordUpdates.size;
-        return false;
-      }
-      stats.rows += this.#pendingRowRecordUpdates.size;
+      // Pipeline writes now that the version check has passed.
+      const pipelined = [
+        ...writeQueries,
+        ...queryFlushes,
+        ...(desireFlush ? [desireFlush] : []),
+        ...rowUpdates,
+      ];
 
-      return true;
+      lc.debug?.(`returning ${pipelined.length} queries for pipelining`);
+
+      // Explicitly await all pipelined queries. When the begin callback is async,
+      // postgres.js does not call Promise.all() on the return value the way it does
+      // for sync callbacks, so we must do it ourselves.
+      return Promise.all(pipelined);
     });
+
+    lc.debug?.(`flush tx completed after ${Date.now() - start} ms`);
+
+    // Calculate how many row update queries were in the pipeline.
+    // Note: the version check was awaited separately and is not in the results array.
+    const baseQueries =
+      (this.#pendingInstanceWrite ? 1 : 0) +
+      this.#writes.size +
+      (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
+      (Array.from(this.#pendingQueryPartialUpdates.keys()).filter(
+        key => !this.#pendingQueryUpdates.has(key),
+      ).length > 0
+        ? 1
+        : 0) +
+      (this.#pendingDesireUpdates.size > 0 ? 1 : 0);
+    const rowUpdateCount = results.length - baseQueries;
+
+    const rowsFlushed = rowUpdateCount > 0;
+    if (!rowsFlushed) {
+      stats.rowsDeferred = this.#pendingRowRecordUpdates.size;
+    } else {
+      stats.rows += this.#pendingRowRecordUpdates.size;
+    }
 
     this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
@@ -920,8 +1157,12 @@ export class CVRStore {
       throw e;
     } finally {
       this.#writes.clear();
+      this.#pendingInstanceWrite = undefined;
       this.#pendingRowRecordUpdates.clear();
       this.#forceUpdates.clear();
+      this.#pendingQueryUpdates.clear();
+      this.#pendingDesireUpdates.clear();
+      this.#pendingQueryPartialUpdates.clear();
     }
   }
 
