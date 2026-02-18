@@ -172,6 +172,15 @@ export class CVRStore {
       lastConnectTime: number,
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
+  // Stored separately so repeated putInstance() calls (e.g. setClientSchema,
+  // setProfileID, and the final call in #flush) replace each other rather than
+  // accumulating as independent statements in #writes.
+  #pendingInstanceWrite:
+    | ((
+        tx: PostgresTransaction,
+        lastConnectTime: number,
+      ) => PendingQuery<MaybeRow[]>)
+    | undefined = undefined;
   readonly #upstreamWrites: ((
     tx: PostgresTransaction,
   ) => PendingQuery<MaybeRow[]>)[] = [];
@@ -519,25 +528,24 @@ export class CVRStore {
     | 'profileID'
     | 'ttlClock'
   >): void {
-    this.#writes.add({
-      stats: {instances: 1},
-      write: (tx, lastConnectTime) => {
-        const change: InstancesRow = {
-          clientGroupID: this.#id,
-          version: versionString(version),
-          lastActive,
-          ttlClock,
-          replicaVersion,
-          owner: this.#taskID,
-          grantedAt: lastConnectTime,
-          clientSchema,
-          profileID,
-        };
-        return tx`
+    // Overwrite any previously queued instance write — only the last call
+    // matters since they all target the same row.
+    this.#pendingInstanceWrite = (tx, lastConnectTime) => {
+      const change: InstancesRow = {
+        clientGroupID: this.#id,
+        version: versionString(version),
+        lastActive,
+        ttlClock,
+        replicaVersion,
+        owner: this.#taskID,
+        grantedAt: lastConnectTime,
+        clientSchema,
+        profileID,
+      };
+      return tx`
         INSERT INTO ${this.#cvr('instances')} ${tx(change)} 
           ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
-      },
-    });
+    };
   }
 
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
@@ -920,27 +928,19 @@ export class CVRStore {
       `;
   }
 
-  #checkVersionAndOwnership(
+  async #checkVersionAndOwnership(
     lc: LogContext,
     tx: PostgresTransaction,
-    _expectedCurrentVersion: CVRVersion,
-    _lastConnectTime: number,
-  ): PendingQuery<Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]> {
+    expectedCurrentVersion: CVRVersion,
+    lastConnectTime: number,
+  ): Promise<void> {
+    const start = Date.now();
     lc.debug?.('checking cvr version and ownership');
-    return tx<
+    const result = await tx<
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
     >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
         FOR UPDATE`;
-  }
-
-  #validateVersionAndOwnership(
-    lc: LogContext,
-    result: Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[],
-    expectedCurrentVersion: CVRVersion,
-    lastConnectTime: number,
-    startTime: number,
-  ): void {
     const expected = versionString(expectedCurrentVersion);
     const {version, owner, grantedAt} =
       result.length > 0
@@ -951,9 +951,7 @@ export class CVRStore {
             grantedAt: null,
           };
     lc.debug?.(
-      'checked cvr version and ownership in ' +
-        (Date.now() - startTime) +
-        ' ms',
+      'checked cvr version and ownership in ' + (Date.now() - start) + ' ms',
     );
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
       throw new OwnershipError(owner, grantedAt, lastConnectTime);
@@ -1002,6 +1000,7 @@ export class CVRStore {
     if (
       this.#pendingRowRecordUpdates.size === 0 &&
       this.#writes.size === 0 &&
+      this.#pendingInstanceWrite === undefined &&
       this.#pendingQueryUpdates.size === 0 &&
       this.#pendingQueryPartialUpdates.size === 0 &&
       this.#pendingDesireUpdates.size === 0
@@ -1014,13 +1013,16 @@ export class CVRStore {
     const start = Date.now();
     lc.debug?.('flush tx beginning');
 
-    const checkStart = Date.now();
-    const results = await this.#db.begin(Mode.READ_COMMITTED, tx => {
+    // Use an async callback so we can await the version/ownership check and
+    // validate it INSIDE the transaction. If validation fails, the exception
+    // causes postgres.js to ROLLBACK, ensuring no writes are committed on error.
+    const results = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
       lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
 
-      // Put the FOR UPDATE query first to acquire row-level lock before other queries.
-      // This ensures version-updating transactions are serialized per cvr.instance.
-      const versionCheck = this.#checkVersionAndOwnership(
+      // Acquire row-level lock and validate version/ownership before queuing writes.
+      // Throwing here (inside the begin callback) rolls back the transaction so that
+      // no writes are committed when concurrent modification or ownership errors occur.
+      await this.#checkVersionAndOwnership(
         lc,
         tx,
         expectedCurrentVersion,
@@ -1028,8 +1030,12 @@ export class CVRStore {
       );
 
       const writeQueries = [];
+      if (this.#pendingInstanceWrite) {
+        writeQueries.push(this.#pendingInstanceWrite(tx, lastConnectTime));
+        stats.instances++;
+        stats.statements++;
+      }
       for (const write of this.#writes) {
-        stats.instances += write.stats.instances ?? 0;
         stats.clients += write.stats.clients ?? 0;
         stats.rows += write.stats.rows ?? 0;
 
@@ -1077,9 +1083,8 @@ export class CVRStore {
       );
       stats.statements += rowUpdates.length;
 
-      // Construct the full query list in one expression for postgres.js pipelining
+      // Pipeline writes now that the version check has passed.
       const pipelined = [
-        versionCheck,
         ...writeQueries,
         ...queryFlushes,
         ...(desireFlush ? [desireFlush] : []),
@@ -1088,25 +1093,18 @@ export class CVRStore {
 
       lc.debug?.(`returning ${pipelined.length} queries for pipelining`);
 
-      // Return array of queries - postgres.js will pipeline them automatically
-      return pipelined;
+      // Explicitly await all pipelined queries. When the begin callback is async,
+      // postgres.js does not call Promise.all() on the return value the way it does
+      // for sync callbacks, so we must do it ourselves.
+      return Promise.all(pipelined);
     });
-
-    // Validate version and ownership from the FOR UPDATE query (first in pipeline)
-    this.#validateVersionAndOwnership(
-      lc,
-      results[0] as Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[],
-      expectedCurrentVersion,
-      lastConnectTime,
-      checkStart,
-    );
 
     lc.debug?.(`flush tx completed after ${Date.now() - start} ms`);
 
-    // Calculate how many row update queries were in the pipeline
-    // (total - version check - writes - query flushes - desire flush if present)
+    // Calculate how many row update queries were in the pipeline.
+    // Note: the version check was awaited separately and is not in the results array.
     const baseQueries =
-      1 + // version check
+      (this.#pendingInstanceWrite ? 1 : 0) +
       this.#writes.size +
       (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
       (Array.from(this.#pendingQueryPartialUpdates.keys()).filter(
@@ -1179,6 +1177,7 @@ export class CVRStore {
       throw e;
     } finally {
       this.#writes.clear();
+      this.#pendingInstanceWrite = undefined;
       this.#upstreamWrites.length = 0;
       this.#pendingRowRecordUpdates.clear();
       this.#forceUpdates.clear();
