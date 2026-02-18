@@ -382,7 +382,7 @@ export class RowRecordCache {
     const pending: PendingQuery<Row[]>[] = [
       tx`INSERT INTO ${this.#cvr('rowsVersion')} ${tx(rowsVersion)}
            ON CONFLICT ("clientGroupID") 
-           DO UPDATE SET ${tx(rowsVersion)}`.execute(),
+           DO UPDATE SET ${tx(rowsVersion)}`,
     ];
 
     const rowRecordRows: RowsRow[] = [];
@@ -395,7 +395,7 @@ export class RowRecordCache {
               AND "schema" = ${id.schema}
               AND "table" = ${id.table}
               AND "rowKey" = ${id.rowKey}
-       `.execute(),
+       `,
         );
       } else {
         rowRecordRows.push(rowRecordToRowsRow(this.#cvrID, row));
@@ -420,7 +420,7 @@ export class RowRecordCache {
     DO UPDATE SET "rowVersion" = excluded."rowVersion",
       "patchVersion" = excluded."patchVersion",
       "refCounts" = excluded."refCounts"
-    `.execute(),
+    `,
       );
       lc.debug?.(
         `flushing ${rowUpdates.size} rows (${rowRecordRows.length} inserts, ${
