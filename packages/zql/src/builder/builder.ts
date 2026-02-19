@@ -136,6 +136,7 @@ export function buildPipeline(
     ast,
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
   );
+  ast = rewriteScalarSubqueriesInAST(ast);
   if (costModel) {
     ast = planQuery(ast, costModel, planDebugger, lc);
   }
@@ -258,17 +259,42 @@ export function assertNoNotExists(condition: Condition): void {
   }
 }
 
-function rewriteScalarSubqueryConditions(condition: Condition): Condition {
+function rewriteScalarSubqueriesInCondition(condition: Condition): Condition {
   if (condition.type === 'scalarSubquery') {
-    return rewriteScalarSubquery(condition);
+    return rewriteScalarSubquery({
+      ...condition,
+      subquery: rewriteScalarSubqueriesInAST(condition.subquery),
+    });
+  }
+  if (condition.type === 'correlatedSubquery') {
+    return {
+      ...condition,
+      related: {
+        ...condition.related,
+        subquery: rewriteScalarSubqueriesInAST(condition.related.subquery),
+      },
+    };
   }
   if (condition.type === 'and' || condition.type === 'or') {
     return {
       type: condition.type,
-      conditions: condition.conditions.map(rewriteScalarSubqueryConditions),
+      conditions: condition.conditions.map(rewriteScalarSubqueriesInCondition),
     };
   }
   return condition;
+}
+
+function rewriteScalarSubqueriesInAST(ast: AST): AST {
+  return {
+    ...ast,
+    where: ast.where
+      ? rewriteScalarSubqueriesInCondition(ast.where)
+      : undefined,
+    related: ast.related?.map(sq => ({
+      ...sq,
+      subquery: rewriteScalarSubqueriesInAST(sq.subquery),
+    })),
+  };
 }
 
 function rewriteScalarSubquery(condition: ScalarSubqueryCondition): Condition {
@@ -307,12 +333,6 @@ function buildPipelineInternal(
   const source = delegate.getSource(ast.table);
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
-  }
-
-  // Rewrite scalar subquery conditions to correlated subquery conditions
-  // before the rest of the pipeline processing.
-  if (ast.where) {
-    ast = {...ast, where: rewriteScalarSubqueryConditions(ast.where)};
   }
 
   ast = uniquifyCorrelatedSubqueryConditionAliases(ast);

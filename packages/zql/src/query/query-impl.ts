@@ -209,6 +209,16 @@ export class QueryImpl<
     ) as Query<TTable, TSchema, TReturn>;
   };
 
+  whereScalar = (
+    relationship: string,
+    cb?: (q: AnyQuery) => AnyQuery,
+  ): Query<TTable, TSchema, TReturn> =>
+    this.where(() => this.#scalarSubquery(relationship, cb)) as Query<
+      TTable,
+      TSchema,
+      TReturn
+    >;
+
   related = (
     relationship: string,
     cb?: (q: AnyQuery) => AnyQuery,
@@ -560,6 +570,50 @@ export class QueryImpl<
     }
 
     throw new Error(`Invalid relationship ${relationship}`);
+  };
+
+  #scalarSubquery = (
+    relationship: string,
+    cb: ((query: AnyQuery) => AnyQuery) | undefined,
+  ): Condition => {
+    cb = cb ?? (q => q);
+    const related = this.#schema.relationships[this.#tableName][relationship];
+    assert(related, 'Invalid relationship');
+    assert(
+      isOneHop(related),
+      'whereScalar only supports one-hop relationships',
+    );
+
+    const {destSchema: destTableName, sourceField, destField} = related[0];
+    assert(isCompoundKey(sourceField), 'Invalid relationship');
+    assert(isCompoundKey(destField), 'Invalid relationship');
+    assert(
+      sourceField.length === 1 && destField.length === 1,
+      'whereScalar only supports single-field relationships',
+    );
+
+    const subQuery = asQueryImpl(
+      cb(
+        this.#newQuery(
+          destTableName,
+          {
+            table: destTableName,
+            alias: `${SUBQ_PREFIX}${relationship}`,
+          },
+          defaultFormat,
+          this.customQueryID,
+          undefined,
+        ),
+      ),
+    );
+
+    return {
+      type: 'scalarSubquery',
+      op: '=',
+      parentField: sourceField[0],
+      childField: destField[0],
+      subquery: {...subQuery.#ast, limit: 1},
+    };
   };
 
   get ast(): AST {
