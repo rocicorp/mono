@@ -278,7 +278,7 @@ export interface Query<
   /**
    * EXPERIMENTAL: Support for scalar subqueries in WHERE clauses.
    * Do not use unless you know what you are doing.
-   * API is unstable and has different reactivity semantics than `EXISTS`.
+   * API is unstable.
    * Use at your own risk.
    */
   whereScalar(
@@ -287,7 +287,7 @@ export interface Query<
   /**
    * EXPERIMENTAL: Support for scalar subqueries in WHERE clauses.
    * Do not use unless you know what you are doing.
-   * API is unstable and has different reactivity semantics than `EXISTS`.
+   * API is unstable.
    * Use at your own risk.
    */
   whereScalar<TRelationship extends AvailableRelationships<TTable, TSchema>>(
