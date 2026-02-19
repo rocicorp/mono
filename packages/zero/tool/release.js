@@ -285,7 +285,7 @@ Stable Release Examples:
 
 Maintenance/cherry-pick workflow:
   1. Create a maintenance branch from tag: git checkout -b maint/zero/v0.24 zero/v0.24.0
-  2. Cherry-pick commits: git cherry-pick <commit-hash>
+  2. Cherry-pick commits: git cherry-pick -x <commit-hash>
   3. Push to origin: git push origin maint/zero/v0.24
   4. Run: node release.js --from maint/zero/v0.24
 
