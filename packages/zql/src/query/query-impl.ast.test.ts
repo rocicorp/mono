@@ -2331,3 +2331,92 @@ describe('scalar subquery via cmp + scalar', () => {
     `);
   });
 });
+
+describe('whereScalar', () => {
+  test('basic (no callback)', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(ast(issueQuery.whereScalar('owner'))).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "childField": "id",
+          "op": "=",
+          "parentField": "ownerId",
+          "subquery": {
+            "alias": "zsubq_owner",
+            "limit": 1,
+            "table": "user",
+          },
+          "type": "scalarSubquery",
+        },
+      }
+    `);
+  });
+
+  test('with callback', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(ast(issueQuery.whereScalar('owner', q => q.where('name', 'Alice'))))
+      .toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "childField": "id",
+          "op": "=",
+          "parentField": "ownerId",
+          "subquery": {
+            "alias": "zsubq_owner",
+            "limit": 1,
+            "table": "user",
+            "where": {
+              "left": {
+                "name": "name",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "Alice",
+              },
+              "type": "simple",
+            },
+          },
+          "type": "scalarSubquery",
+        },
+      }
+    `);
+  });
+
+  test('chained with where', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    const q = issueQuery
+      .whereScalar('owner', q => q.where('name', 'Alice'))
+      .where('closed', false);
+
+    expect(ast(q).where).toMatchObject({
+      type: 'and',
+      conditions: [
+        {
+          type: 'scalarSubquery',
+          op: '=',
+          parentField: 'ownerId',
+          childField: 'id',
+        },
+        {
+          type: 'simple',
+          op: '=',
+        },
+      ],
+    });
+  });
+
+  test('two-hop relationship throws', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(() => issueQuery.whereScalar('labels')).toThrow(
+      'whereScalar only supports one-hop relationships',
+    );
+  });
+});
