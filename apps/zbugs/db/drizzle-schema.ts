@@ -175,7 +175,11 @@ export const label = pgTable(
   },
   table => [
     uniqueIndex('label_project_idx').using('btree', table.id, table.projectID),
-    index('label_name_idx').using('btree', table.name),
+    uniqueIndex('label_name_project_idx').using(
+      'btree',
+      table.projectID,
+      table.name,
+    ),
     foreignKey({
       columns: [table.projectID],
       foreignColumns: [project.id],
