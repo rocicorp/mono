@@ -47,6 +47,11 @@ export default async function runWorker(
   startOtelAuto(createLogContext(config, {worker: 'change-streamer'}, false));
   const lc = createLogContext(config, {worker: 'change-streamer'}, true);
   initEventSink(lc, config);
+  lc.info?.(
+    `replication-manager litestream backupURL=${
+      config.litestream.backupURL ?? '(none)'
+    } replicaFile=${config.replica.file}`,
+  );
 
   // Kick off DB connection warmup in the background.
   const changeDB = pgClient(lc, change.db, {

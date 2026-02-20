@@ -96,6 +96,13 @@ export default async function runWorker(
 
   let restoreStart = new Date();
   if (litestream.backupURL || (litestream.executable && !runChangeStreamer)) {
+    lc.info?.(
+      `dispatcher restore config role=${
+        runChangeStreamer ? 'replication-manager' : 'view-syncer'
+      } backupURL=${litestream.backupURL ?? '(none)'} replicaFile=${
+        config.replica.file
+      }`,
+    );
     try {
       restoreStart = await restoreReplica(lc, config);
     } catch (e) {
@@ -136,6 +143,9 @@ export default async function runWorker(
   await changeStreamerReady;
 
   if (runChangeStreamer && litestream.backupURL) {
+    lc.info?.(
+      `starting litestream replicate for replication-manager backupURL=${litestream.backupURL} replicaFile=${config.replica.file}`,
+    );
     // Start a backup replicator and corresponding litestream backup process.
     const {promise: backupReady, resolve} = resolver();
     const mode: ReplicaFileMode = 'backup';

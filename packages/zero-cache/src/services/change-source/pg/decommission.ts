@@ -15,14 +15,26 @@ export async function decommissionShard(
     // Kill the active_pid's on existing slots before altering publications,
     // as deleting a publication associated with an existing subscriber causes
     // weirdness; the active_pid becomes null and thus unable to be terminated.
-    const slots = await sql<{pid: string | null}[]>`
-    SELECT pg_terminate_backend(active_pid), active_pid as pid
+    const slots = await sql<
+      {
+        slot: string;
+        pid: string | null;
+        terminated: boolean | null;
+      }[]
+    >`
+    SELECT slot_name as slot, pg_terminate_backend(active_pid) as terminated, active_pid as pid
       FROM pg_replication_slots 
       WHERE slot_name = ${shard} 
          OR slot_name LIKE ${shard + '_%'}`;
     if (slots.length > 0) {
-      if (slots[0].pid !== null) {
-        lc.info?.(`signaled subscriber ${slots[0].pid} to shut down`);
+      lc.info?.(
+        `decommission targeted slots before drop: ${JSON.stringify(slots)}`,
+      );
+    }
+    if (slots.length > 0) {
+      const pids = slots.filter(({pid}) => pid !== null).map(({pid}) => pid);
+      if (pids.length > 0) {
+        lc.info?.(`signaled subscriber(s) ${pids} to shut down`);
       }
       // Escape underscores for the LIKE expression.
       const slotExpression = `${appID}_${shardID}_%`.replaceAll('_', '\\_');
@@ -33,6 +45,15 @@ export async function decommissionShard(
              OR slot_name LIKE ${slotExpression}`;
       lc.debug?.(
         `Dropped replication slot(s) ${dropped.map(({slotName}) => slotName)}`,
+      );
+      const remaining = await sql<{slot: string}[]>`
+        SELECT slot_name as slot
+          FROM pg_replication_slots
+          WHERE slot_name = ${shard}
+             OR slot_name LIKE ${slotExpression}
+          ORDER BY slot_name`;
+      lc.debug?.(
+        `Remaining decommission slot(s) after drop: ${remaining.map(({slot}) => slot)}`,
       );
       await sql.unsafe(dropShard(appID, shardID));
       lc.debug?.(`Dropped upstream shard schema ${shard} and event triggers`);
