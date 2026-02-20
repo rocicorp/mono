@@ -28,6 +28,30 @@ const ALWAYS_FALSE: SimpleCondition = {
   right: {type: 'literal', value: 0},
 };
 
+/**
+ * Helper to build a scalar subquery condition in the new format
+ * (correlatedSubquery with scalar: true).
+ */
+function scalarCondition(
+  op: '=' | 'IS NOT',
+  parentField: string,
+  childField: string,
+  subquery: AST,
+): Condition {
+  return {
+    type: 'correlatedSubquery',
+    related: {
+      correlation: {
+        parentField: [parentField],
+        childField: [childField],
+      },
+      subquery,
+    },
+    op: op === '=' ? 'EXISTS' : 'NOT EXISTS',
+    scalar: true,
+  };
+}
+
 // ---------- extractLiteralEqualityConstraints ----------
 
 test('extractLiteralEqualityConstraints: simple column = literal', () => {
@@ -216,21 +240,15 @@ test('resolves a simple scalar subquery to a literal condition', () => {
   const specs = makeTableSpecs({users: [['id']]});
   const ast: AST = {
     table: 'issues',
-    where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'ownerId',
-      childField: 'name',
-      subquery: {
-        table: 'users',
-        where: {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: '0001'},
-        },
+    where: scalarCondition('=', 'ownerId', 'name', {
+      table: 'users',
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'id'},
+        right: {type: 'literal', value: '0001'},
       },
-    },
+    }),
   };
 
   const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
@@ -253,21 +271,15 @@ test('preserves the operator from the scalar subquery condition', () => {
   const specs = makeTableSpecs({users: [['id']]});
   const ast: AST = {
     table: 'issues',
-    where: {
-      type: 'scalarSubquery',
-      op: 'IS NOT',
-      parentField: 'ownerId',
-      childField: 'name',
-      subquery: {
-        table: 'users',
-        where: {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: '0001'},
-        },
+    where: scalarCondition('IS NOT', 'ownerId', 'name', {
+      table: 'users',
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'id'},
+        right: {type: 'literal', value: '0001'},
       },
-    },
+    }),
   };
 
   const {ast: resolved} = resolveSimpleScalarSubqueries(
@@ -283,21 +295,15 @@ test('returns ALWAYS_FALSE when executor returns undefined', () => {
   const specs = makeTableSpecs({users: [['id']]});
   const ast: AST = {
     table: 'issues',
-    where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'ownerId',
-      childField: 'name',
-      subquery: {
-        table: 'users',
-        where: {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: 'nonexistent'},
-        },
+    where: scalarCondition('=', 'ownerId', 'name', {
+      table: 'users',
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'id'},
+        right: {type: 'literal', value: 'nonexistent'},
       },
-    },
+    }),
   };
 
   const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
@@ -314,21 +320,15 @@ test('returns ALWAYS_FALSE when executor returns null', () => {
   const specs = makeTableSpecs({users: [['id']]});
   const ast: AST = {
     table: 'issues',
-    where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'ownerId',
-      childField: 'name',
-      subquery: {
-        table: 'users',
-        where: {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: '0001'},
-        },
+    where: scalarCondition('=', 'ownerId', 'name', {
+      table: 'users',
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'id'},
+        right: {type: 'literal', value: '0001'},
       },
-    },
+    }),
   };
 
   const {ast: resolved} = resolveSimpleScalarSubqueries(ast, specs, () => null);
@@ -340,16 +340,10 @@ test('leaves non-simple scalar subquery untouched', () => {
   const specs = makeTableSpecs({users: [['id']]});
   const ast: AST = {
     table: 'issues',
-    where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'ownerId',
-      childField: 'name',
-      subquery: {
-        // No where clause → not simple
-        table: 'users',
-      },
-    },
+    where: scalarCondition('=', 'ownerId', 'name', {
+      // No where clause → not simple
+      table: 'users',
+    }),
   };
 
   const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
@@ -375,21 +369,15 @@ test('resolves scalar subqueries inside AND conditions', () => {
           left: {type: 'column', name: 'closed'},
           right: {type: 'literal', value: false},
         },
-        {
-          type: 'scalarSubquery',
-          op: '=',
-          parentField: 'ownerId',
-          childField: 'id',
-          subquery: {
-            table: 'users',
-            where: {
-              type: 'simple',
-              op: '=',
-              left: {type: 'column', name: 'id'},
-              right: {type: 'literal', value: '0001'},
-            },
+        scalarCondition('=', 'ownerId', 'id', {
+          table: 'users',
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: '0001'},
           },
-        },
+        }),
       ],
     },
   };
@@ -426,21 +414,15 @@ test('resolves scalar subqueries inside OR conditions', () => {
     where: {
       type: 'or',
       conditions: [
-        {
-          type: 'scalarSubquery',
-          op: '=',
-          parentField: 'ownerId',
-          childField: 'id',
-          subquery: {
-            table: 'users',
-            where: {
-              type: 'simple',
-              op: '=',
-              left: {type: 'column', name: 'id'},
-              right: {type: 'literal', value: '0001'},
-            },
+        scalarCondition('=', 'ownerId', 'id', {
+          table: 'users',
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: '0001'},
           },
-        },
+        }),
         {
           type: 'simple',
           op: '=',
@@ -488,21 +470,15 @@ test('resolves scalar subqueries in related subqueries', () => {
         },
         subquery: {
           table: 'users',
-          where: {
-            type: 'scalarSubquery',
-            op: '=',
-            parentField: 'name',
-            childField: 'name',
-            subquery: {
-              table: 'users',
-              where: {
-                type: 'simple',
-                op: '=',
-                left: {type: 'column', name: 'id'},
-                right: {type: 'literal', value: '0002'},
-              },
+          where: scalarCondition('=', 'name', 'name', {
+            table: 'users',
+            where: {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'id'},
+              right: {type: 'literal', value: '0002'},
             },
-          },
+          }),
         },
       },
     ],
@@ -562,21 +538,15 @@ test('resolves scalar subqueries inside correlatedSubquery (EXISTS) conditions',
         },
         subquery: {
           table: 'issueLabel',
-          where: {
-            type: 'scalarSubquery',
-            op: '=',
-            parentField: 'labelID',
-            childField: 'id',
-            subquery: {
-              table: 'label',
-              where: {
-                type: 'simple',
-                op: '=',
-                left: {type: 'column', name: 'id'},
-                right: {type: 'literal', value: 'label-001'},
-              },
+          where: scalarCondition('=', 'labelID', 'id', {
+            table: 'label',
+            where: {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'id'},
+              right: {type: 'literal', value: 'label-001'},
             },
-          },
+          }),
         },
       },
     },
@@ -589,7 +559,7 @@ test('resolves scalar subqueries inside correlatedSubquery (EXISTS) conditions',
   );
 
   // The correlatedSubquery condition should still be present, but its inner
-  // subquery's WHERE should be resolved from scalarSubquery to simple.
+  // subquery's WHERE should be resolved from scalar to simple.
   expect(resolved.where).toEqual({
     type: 'correlatedSubquery',
     op: 'EXISTS',
@@ -633,21 +603,15 @@ test('resolves scalar subqueries inside AND of correlatedSubquery conditions', (
             },
             subquery: {
               table: 'issueLabel',
-              where: {
-                type: 'scalarSubquery',
-                op: '=',
-                parentField: 'labelID',
-                childField: 'id',
-                subquery: {
-                  table: 'label',
-                  where: {
-                    type: 'simple',
-                    op: '=',
-                    left: {type: 'column', name: 'id'},
-                    right: {type: 'literal', value: 'label-bug'},
-                  },
+              where: scalarCondition('=', 'labelID', 'id', {
+                table: 'label',
+                where: {
+                  type: 'simple',
+                  op: '=',
+                  left: {type: 'column', name: 'id'},
+                  right: {type: 'literal', value: 'label-bug'},
                 },
-              },
+              }),
             },
           },
         },
@@ -661,21 +625,15 @@ test('resolves scalar subqueries inside AND of correlatedSubquery conditions', (
             },
             subquery: {
               table: 'issueLabel',
-              where: {
-                type: 'scalarSubquery',
-                op: '=',
-                parentField: 'labelID',
-                childField: 'id',
-                subquery: {
-                  table: 'label',
-                  where: {
-                    type: 'simple',
-                    op: '=',
-                    left: {type: 'column', name: 'id'},
-                    right: {type: 'literal', value: 'label-software'},
-                  },
+              where: scalarCondition('=', 'labelID', 'id', {
+                table: 'label',
+                where: {
+                  type: 'simple',
+                  op: '=',
+                  left: {type: 'column', name: 'id'},
+                  right: {type: 'literal', value: 'label-software'},
                 },
-              },
+              }),
             },
           },
         },
@@ -764,41 +722,29 @@ test('resolves nested scalar subqueries in subquery where clause', () => {
 
   const ast: AST = {
     table: 'issues',
-    where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'ownerId',
-      childField: 'id',
-      subquery: {
-        table: 'users',
-        where: {
-          type: 'and',
-          conditions: [
-            {
+    where: scalarCondition('=', 'ownerId', 'id', {
+      table: 'users',
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: '0001'},
+          },
+          scalarCondition('=', 'role', 'value', {
+            table: 'config',
+            where: {
               type: 'simple',
               op: '=',
-              left: {type: 'column', name: 'id'},
-              right: {type: 'literal', value: '0001'},
+              left: {type: 'column', name: 'key'},
+              right: {type: 'literal', value: 'default_role'},
             },
-            {
-              type: 'scalarSubquery',
-              op: '=',
-              parentField: 'role',
-              childField: 'value',
-              subquery: {
-                table: 'config',
-                where: {
-                  type: 'simple',
-                  op: '=',
-                  left: {type: 'column', name: 'key'},
-                  right: {type: 'literal', value: 'default_role'},
-                },
-              },
-            },
-          ],
-        },
+          }),
+        ],
       },
-    },
+    }),
   };
 
   const values: Record<string, string> = {

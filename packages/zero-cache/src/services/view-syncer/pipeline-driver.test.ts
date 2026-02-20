@@ -365,18 +365,23 @@ describe('view-syncer/pipeline-driver', () => {
     table: 'issues',
     orderBy: [['id', 'asc']],
     where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'id',
-      childField: 'issueID',
-      subquery: {
-        table: 'comments',
-        orderBy: [['id', 'asc']],
-        where: {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: '10'},
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'comments',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: '10'},
+          },
         },
       },
     },
@@ -386,18 +391,23 @@ describe('view-syncer/pipeline-driver', () => {
     table: 'issues',
     orderBy: [['id', 'asc']],
     where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'id',
-      childField: 'issueID',
-      subquery: {
-        table: 'comments',
-        orderBy: [['id', 'asc']],
-        where: {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: 'nonexistent'},
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'comments',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: 'nonexistent'},
+          },
         },
       },
     },
@@ -1908,18 +1918,23 @@ describe('view-syncer/pipeline-driver', () => {
             right: {type: 'literal', value: false},
           },
           {
-            type: 'scalarSubquery',
-            op: '=',
-            parentField: 'id',
-            childField: 'issueID',
-            subquery: {
-              table: 'comments',
-              orderBy: [['id', 'asc']],
-              where: {
-                type: 'simple',
-                op: '=',
-                left: {type: 'column', name: 'id'},
-                right: {type: 'literal', value: '10'},
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            scalar: true,
+            related: {
+              correlation: {
+                parentField: ['id'],
+                childField: ['issueID'],
+              },
+              subquery: {
+                table: 'comments',
+                orderBy: [['id', 'asc']],
+                where: {
+                  type: 'simple',
+                  op: '=',
+                  left: {type: 'column', name: 'id'},
+                  right: {type: 'literal', value: '10'},
+                },
               },
             },
           },

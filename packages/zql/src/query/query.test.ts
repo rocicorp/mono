@@ -967,40 +967,6 @@ describe('Where expression factory and builder', () => {
     query.where(({not, exists}) => not(exists('self')));
   });
 
-  test('scalar', () => {
-    const query = mockQuery as unknown as Query<
-      'testWithMoreRelationships',
-      Schema
-    >;
-
-    const selfQuery = mockQuery as unknown as Query<
-      'testWithMoreRelationships',
-      Schema
-    >;
-
-    const testRelQuery = mockQuery as unknown as Query<
-      'testWithRelationships',
-      Schema
-    >;
-
-    const testQuery = mockQuery as unknown as Query<'test', Schema>;
-
-    // scalar in cmp - valid destination table (self)
-    query.where(({cmp, scalar}) => cmp('s', scalar(selfQuery, 's')));
-
-    // scalar in cmp with IS NOT op
-    query.where(({cmp, scalar}) => cmp('s', 'IS NOT', scalar(selfQuery, 's')));
-
-    // scalar with a related table
-    query.where(({cmp, scalar}) => cmp('a', scalar(testRelQuery, 'a')));
-
-    // scalar with test table
-    query.where(({cmp, scalar}) => cmp('s', scalar(testQuery, 's')));
-
-    // not(cmp(..., scalar(...)))
-    query.where(({not, cmp, scalar}) => not(cmp('s', scalar(selfQuery, 's'))));
-  });
-
   describe('allow undefined terms', () => {
     test('and', () => {
       const query = mockQuery as unknown as Query<'test', Schema>;

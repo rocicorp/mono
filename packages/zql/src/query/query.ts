@@ -40,7 +40,7 @@ export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
 
 export type QueryTable<Q> = Q extends Query<infer T, any, any> ? T : never;
 
-export type ExistsOptions = {flip: boolean};
+export type ExistsOptions = {flip?: boolean; scalar?: boolean};
 
 export type GetFilterType<
   TSchema extends TableSchema,
@@ -273,28 +273,6 @@ export interface Query<
       q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
     ) => Query<string, TSchema>,
     options?: ExistsOptions,
-  ): Query<TTable, TSchema, TReturn>;
-
-  /**
-   * EXPERIMENTAL: Support for scalar subqueries in WHERE clauses.
-   * Do not use unless you know what you are doing.
-   * API is unstable.
-   * Use at your own risk.
-   */
-  whereScalar(
-    relationship: AvailableRelationships<TTable, TSchema>,
-  ): Query<TTable, TSchema, TReturn>;
-  /**
-   * EXPERIMENTAL: Support for scalar subqueries in WHERE clauses.
-   * Do not use unless you know what you are doing.
-   * API is unstable.
-   * Use at your own risk.
-   */
-  whereScalar<TRelationship extends AvailableRelationships<TTable, TSchema>>(
-    relationship: TRelationship,
-    cb: (
-      q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
-    ) => Query<string, TSchema>,
   ): Query<TTable, TSchema, TReturn>;
 
   start(
