@@ -10,10 +10,11 @@ import {
 import {stringCompare} from '../../shared/src/string-compare.ts';
 import {
   Zero,
+  type BaseDefaultContext,
+  type BaseDefaultSchema,
   type CustomMutatorDefs,
   type DefaultContext,
   type DefaultSchema,
-  type Schema,
   type ZeroOptions,
 } from './zero.ts';
 
@@ -23,9 +24,9 @@ export const ZeroContext = createContext<Zero<any, any, any> | undefined>(
 );
 
 export function useZero<
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = DefaultContext,
+  Context extends BaseDefaultContext = DefaultContext,
 >(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
@@ -46,17 +47,17 @@ export function useZero<
  * }
  */
 export function createUseZero<
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = DefaultContext,
+  Context extends BaseDefaultContext = DefaultContext,
 >() {
   return () => useZero<S, MD, Context>();
 }
 
 export type ZeroProviderProps<
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = DefaultContext,
+  Context extends BaseDefaultContext = DefaultContext,
 > = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
   init?: (zero: Zero<S, MD, Context>) => void;
   children: ReactNode;
@@ -65,9 +66,9 @@ export type ZeroProviderProps<
 const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = DefaultContext,
+  Context extends BaseDefaultContext = DefaultContext,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
   const isExternalZero = 'zero' in props;
 

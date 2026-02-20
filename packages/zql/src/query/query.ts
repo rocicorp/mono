@@ -8,7 +8,6 @@ import type {
 } from '../../../zero-types/src/schema-value.ts';
 import type {
   LastInTuple,
-  Schema,
   TableSchema,
   Schema as ZeroSchema,
 } from '../../../zero-types/src/schema.ts';
@@ -132,7 +131,7 @@ export type PullRow<
   >;
 } & {};
 
-type RowNamespace<S extends Schema | TypeError> = S extends Schema
+type RowNamespace<S extends ZeroSchema | TypeError> = S extends ZeroSchema
   ? {
       readonly [K in keyof S['tables'] &
         string]: S['tables'][K] extends TableSchema
@@ -144,18 +143,19 @@ type RowNamespace<S extends Schema | TypeError> = S extends Schema
     }
   : S;
 
-export type Row<T extends Schema | TableSchema | AnyQueryLike = DefaultSchema> =
-  T extends Schema
-    ? RowNamespace<T>
-    : T extends TableSchema
-      ? {
-          readonly [K in keyof T['columns']]: SchemaValueToTSType<
-            T['columns'][K]
-          >;
-        }
-      : T extends AnyQueryLike
-        ? QueryRowType<T>
-        : never;
+export type Row<
+  T extends ZeroSchema | TableSchema | AnyQueryLike = DefaultSchema,
+> = T extends ZeroSchema
+  ? RowNamespace<T>
+  : T extends TableSchema
+    ? {
+        readonly [K in keyof T['columns']]: SchemaValueToTSType<
+          T['columns'][K]
+        >;
+      }
+    : T extends AnyQueryLike
+      ? QueryRowType<T>
+      : never;
 
 /**
  * The shape of a CustomQuery's phantom type property.
@@ -393,4 +393,4 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
   type: 'complete',
 } as const;
 
-export type AnyQuery = Query<string, Schema, any>;
+export type AnyQuery = Query<string, ZeroSchema, any>;

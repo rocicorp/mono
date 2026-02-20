@@ -2,22 +2,20 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {
+  BaseDefaultContext,
+  BaseDefaultSchema,
   DefaultContext,
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
-/**
- * Configuration for {@linkcode Zero}.
- */
-export interface ZeroOptions<
-  S extends Schema = DefaultSchema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  C = DefaultContext,
-> {
+type ZeroOptionsBase<
+  S extends BaseDefaultSchema,
+  MD extends CustomMutatorDefs | undefined,
+  C extends BaseDefaultContext,
+> = {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
    * - "https://myapp-myteam.zero.ms"
@@ -318,20 +316,33 @@ export interface ZeroOptions<
   queryChangeThrottleMs?: number | undefined;
 
   /**
-   * Context is passed to Synced Queries when they are executed
+   * Context is passed to queries when they are executed.
    */
-  // TODO(arv): Mutators should also get context.
   context?: C | undefined;
-}
+};
+
+/**
+ * Configuration for {@linkcode Zero}.
+ */
+export type ZeroOptions<
+  S extends BaseDefaultSchema = DefaultSchema,
+  MD extends CustomMutatorDefs | undefined = undefined,
+  C extends BaseDefaultContext = DefaultContext,
+> = ZeroOptionsBase<S, MD, C> &
+  (unknown extends DefaultContext
+    ? {}
+    : {
+        context: C;
+      });
 
 /**
  * @deprecated Use {@link ZeroOptions} instead.
  */
-export interface ZeroAdvancedOptions<
-  S extends Schema,
+export type ZeroAdvancedOptions<
+  S extends BaseDefaultSchema,
   MD extends CustomMutatorDefs | undefined,
-  Context,
-> extends ZeroOptions<S, MD, Context> {}
+  Context extends BaseDefaultContext,
+> = ZeroOptions<S, MD, Context>;
 
 type UpdateNeededReasonBase = {
   message?: string;
