@@ -1,14 +1,13 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
+import {getKVStoreProvider} from '../../../replicache/src/get-kv-store-provider.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
 } from '../../../replicache/src/impl.ts';
-import {
-  dropAllDatabases,
-  dropDatabase,
-} from '../../../replicache/src/persist/collect-idb-databases.ts';
+import {dropDatabase as dropReplicacheDatabase} from '../../../replicache/src/persist/collect-idb-databases.ts';
+import {IDBDatabasesStore} from '../../../replicache/src/persist/idb-databases-store.ts';
 import type {Puller, PullerResult} from '../../../replicache/src/puller.ts';
 import type {Pusher, PusherResult} from '../../../replicache/src/pusher.ts';
 import type {ReplicacheOptions} from '../../../replicache/src/replicache-options.ts';
@@ -433,6 +432,7 @@ export class Zero<
   #totalToConnectStart: number | undefined = undefined;
 
   readonly #options: ZeroOptions<S, MD, C>;
+  readonly #kvStore: ZeroOptions<S, MD, C>['kvStore'];
 
   /**
    * Query builders for each table in the schema.
@@ -498,6 +498,8 @@ export class Zero<
         message: 'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
       });
     }
+
+    this.#kvStore = kvStore;
 
     this.pingTimeoutMs = pingTimeoutMs;
 
@@ -1412,7 +1414,9 @@ export class Zero<
       kind === ErrorKind.InvalidConnectionRequestLastMutationID ||
       kind === ErrorKind.InvalidConnectionRequestBaseCookie
     ) {
-      await dropDatabase(this.#rep.idbName);
+      await dropReplicacheDatabase(this.#rep.idbName, {
+        kvStore: this.#kvStore,
+      });
       reloadWithReason(lc, this.#reload, kind, serverAheadReloadReason);
     }
   }
@@ -2390,15 +2394,38 @@ export class Zero<
     }
   }
 
-  dropAllDatabases(): Promise<{
-    dropped: string[];
-    errors: unknown[];
-  }> {
-    return dropAllDatabases({
-      kvStore: this.#options.kvStore,
-      logLevel: this.#logOptions.logLevel,
-      logSinks: [this.#logOptions.logSink],
-    });
+  async delete(): Promise<{deleted: string[]; errors: unknown[]}> {
+    await this.close();
+
+    const kvStoreProvider = getKVStoreProvider(this.#lc, this.#kvStore);
+    const idbDatabasesStore = new IDBDatabasesStore(kvStoreProvider.create);
+    try {
+      const databases = await idbDatabasesStore.getDatabases();
+      const dbNamesToDelete = Object.values(databases)
+        .filter(database => database.replicacheName === this.#rep.name)
+        .map(database => database.name);
+
+      const deleteResults = await Promise.allSettled(
+        dbNamesToDelete.map(async dbName => {
+          await dropReplicacheDatabase(dbName, {kvStore: this.#kvStore});
+          return dbName;
+        }),
+      );
+
+      const deleted: string[] = [];
+      const errors: unknown[] = [];
+      for (const result of deleteResults) {
+        if (result.status === 'fulfilled') {
+          deleted.push(result.value);
+        } else {
+          errors.push(result.reason);
+        }
+      }
+
+      return {deleted, errors};
+    } finally {
+      await idbDatabasesStore.close();
+    }
   }
 
   #addMetric: <K extends keyof MetricMap>(

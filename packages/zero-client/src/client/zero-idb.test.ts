@@ -16,6 +16,18 @@ const schema = createSchema({
   ],
 });
 
+const schemaV2 = createSchema({
+  tables: [
+    table('foo')
+      .columns({
+        id: string(),
+        value: string(),
+        value2: string(),
+      })
+      .primaryKey('id'),
+  ],
+});
+
 const userID = 'test-user';
 const storageKey = 'test-storage';
 
@@ -97,34 +109,51 @@ test('idbName generation with URL configuration', async () => {
   }
 });
 
-test('dropAllDatabases drops all known mem stores', async () => {
-  const z1 = new Zero({
-    userID: 'drop-all-user-1',
-    storageKey: 'drop-all-storage-1',
+test('delete closes and removes all databases for the same zero instance', async () => {
+  const userIDForDrop = 'drop-db-user';
+  const storageKeyForDrop = 'drop-db-storage';
+
+  const zOld = new Zero({
+    userID: userIDForDrop,
+    storageKey: storageKeyForDrop,
     schema,
     kvStore: 'mem',
   });
-  const z2 = new Zero({
-    userID: 'drop-all-user-2',
-    storageKey: 'drop-all-storage-2',
+  const oldDBName = zOld.idbName;
+  await zOld.close();
+
+  const zCurrent = new Zero({
+    userID: userIDForDrop,
+    storageKey: storageKeyForDrop,
+    schema: schemaV2,
+    kvStore: 'mem',
+  });
+  const currentDBName = zCurrent.idbName;
+
+  const zOther = new Zero({
+    userID: 'drop-db-other-user',
+    storageKey: 'drop-db-other-storage',
     schema,
     kvStore: 'mem',
   });
+  const otherDBName = zOther.idbName;
 
-  const dbNames = [z1.idbName, z2.idbName];
+  expect(zCurrent.closed).toBe(false);
+  expect(hasMemStore(oldDBName)).toBe(true);
+  expect(hasMemStore(currentDBName)).toBe(true);
+  expect(hasMemStore(otherDBName)).toBe(true);
 
-  for (const dbName of dbNames) {
-    expect(hasMemStore(dbName)).toBe(true);
-  }
+  const result = await zCurrent.delete();
 
-  await z1.close();
-  await z2.close();
-
-  const result = await z1.dropAllDatabases();
-
-  for (const dbName of dbNames) {
-    expect(result.dropped).toContain(dbName);
-    expect(hasMemStore(dbName)).toBe(false);
-  }
+  expect(zCurrent.closed).toBe(true);
   expect(result.errors).toHaveLength(0);
+  expect(result.deleted).toContain(oldDBName);
+  expect(result.deleted).toContain(currentDBName);
+  expect(hasMemStore(oldDBName)).toBe(false);
+  expect(hasMemStore(currentDBName)).toBe(false);
+
+  expect(hasMemStore(otherDBName)).toBe(true);
+
+  await zOther.close();
+  await zOther.delete();
 });
