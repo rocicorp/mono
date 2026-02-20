@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import {hasMemStore} from '../../../replicache/src/kv/mem-store.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -10,6 +11,18 @@ const schema = createSchema({
       .columns({
         id: string(),
         value: string(),
+      })
+      .primaryKey('id'),
+  ],
+});
+
+const schemaV2 = createSchema({
+  tables: [
+    table('foo')
+      .columns({
+        id: string(),
+        value: string(),
+        value2: string(),
       })
       .primaryKey('id'),
   ],
@@ -94,4 +107,53 @@ test('idbName generation with URL configuration', async () => {
 
     await zero.close();
   }
+});
+
+test('delete closes and removes all databases for the same zero instance', async () => {
+  const userIDForDrop = 'drop-db-user';
+  const storageKeyForDrop = 'drop-db-storage';
+
+  const zOld = new Zero({
+    userID: userIDForDrop,
+    storageKey: storageKeyForDrop,
+    schema,
+    kvStore: 'mem',
+  });
+  const oldDBName = zOld.idbName;
+  await zOld.close();
+
+  const zCurrent = new Zero({
+    userID: userIDForDrop,
+    storageKey: storageKeyForDrop,
+    schema: schemaV2,
+    kvStore: 'mem',
+  });
+  const currentDBName = zCurrent.idbName;
+
+  const zOther = new Zero({
+    userID: 'drop-db-other-user',
+    storageKey: 'drop-db-other-storage',
+    schema,
+    kvStore: 'mem',
+  });
+  const otherDBName = zOther.idbName;
+
+  expect(zCurrent.closed).toBe(false);
+  expect(hasMemStore(oldDBName)).toBe(true);
+  expect(hasMemStore(currentDBName)).toBe(true);
+  expect(hasMemStore(otherDBName)).toBe(true);
+
+  const result = await zCurrent.delete();
+
+  expect(zCurrent.closed).toBe(true);
+  expect(result.errors).toHaveLength(0);
+  expect(result.deleted).toContain(oldDBName);
+  expect(result.deleted).toContain(currentDBName);
+  expect(hasMemStore(oldDBName)).toBe(false);
+  expect(hasMemStore(currentDBName)).toBe(false);
+
+  expect(hasMemStore(otherDBName)).toBe(true);
+
+  await zOther.close();
+  await zOther.delete();
 });
