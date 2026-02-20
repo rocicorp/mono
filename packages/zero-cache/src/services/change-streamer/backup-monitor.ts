@@ -7,8 +7,8 @@ import type {Service} from '../service.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import type {SnapshotMessage} from './snapshot.ts';
 
-export const CHECK_INTERVAL_MS = 60 * 1000;
-const MIN_CLEANUP_DELAY_MS = 30 * 1000;
+export const CHECK_INTERVAL_MS = 60_000;
+const MIN_CLEANUP_DELAY_MS = 30_000;
 
 type Reservation = {
   start: Date;
@@ -20,7 +20,7 @@ type Reservation = {
  * watermark (label) value of the `litestream_replica_progress` gauge and
  * schedules cleanup of change log entries that can be purged as a result.
  *
- * See: https: *github.com/rocicorp/litestream/pull/3
+ * See: https://github.com/rocicorp/litestream/pull/3
  *
  * Note that change log entries cannot simply be purged as soon as they
  * have been applied and backed up by litestream. Consider the case in which
@@ -156,15 +156,33 @@ export class BackupMonitor implements Service {
     }
   };
 
-  async #checkWatermarks() {
-    const resp = await fetch(this.#metricsEndpoint);
+  async *#fetchWatermarks(): AsyncGenerator<{
+    watermark: string;
+    time: Date;
+    name?: string | undefined;
+  }> {
+    const metricsEndpoint = this.#metricsEndpoint;
+    const signal = this.#state.signal;
+    let resp;
+    try {
+      resp = await fetch(metricsEndpoint, {signal});
+    } catch (e) {
+      if (signal.aborted) {
+        // not an error.
+        return;
+      }
+      // Treat exceptions from fetch (e.g. network errors) as non-fatal, and simply
+      // log them and skip the watermark check until the next interval.
+      this.#lc.warn?.(`unable to fetch metrics at ${this.#metricsEndpoint}`, e);
+      return;
+    }
     if (!resp.ok) {
       this.#lc.warn?.(
-        `unable to fetch metrics at ${this.#metricsEndpoint}`,
-        await resp.text(),
+        `unable to fetch metrics at ${this.#metricsEndpoint}: ${await resp.text()}`,
       );
       return;
     }
+
     const families = parsePrometheusTextFormat(await resp.text());
     for (const family of families) {
       if (
@@ -173,19 +191,25 @@ export class BackupMonitor implements Service {
       ) {
         for (const metric of family.metrics) {
           const watermark = metric.labels?.watermark;
-          if (
-            watermark &&
-            watermark > this.#lastWatermark &&
-            !this.#watermarks.has(watermark)
-          ) {
-            const time = new Date(parseFloat(metric.value) * 1000);
-            this.#lc.info?.(
-              `replicated watermark=${watermark} to ${metric.labels?.name}` +
-                ` at ${time.toISOString()}.`,
-            );
-            this.#watermarks.set(watermark, time);
+          const name = metric.labels?.name;
+          const time = new Date(parseFloat(metric.value) * 1000);
+
+          if (watermark) {
+            yield {watermark, time, name};
           }
         }
+      }
+    }
+  }
+
+  async #checkWatermarks() {
+    for await (const {watermark, name, time} of this.#fetchWatermarks()) {
+      if (watermark > this.#lastWatermark && !this.#watermarks.has(watermark)) {
+        this.#lc.info?.(
+          `replicated watermark=${watermark} to ${name}` +
+            ` at ${time.toISOString()}.`,
+        );
+        this.#watermarks.set(watermark, time);
       }
     }
   }
