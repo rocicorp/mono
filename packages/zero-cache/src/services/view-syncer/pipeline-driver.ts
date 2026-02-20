@@ -18,7 +18,6 @@ import {
   skipYields,
   type Storage,
 } from '../../../../zql/src/ivm/operator.ts';
-import {first} from '../../../../zql/src/ivm/stream.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -29,7 +28,10 @@ import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-conn
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
 import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
-import {resolveSimpleScalarSubqueries} from '../../../../zqlite/src/resolve-scalar-subqueries.ts';
+import {
+  resolveSimpleScalarSubqueries,
+  type CompanionSubquery,
+} from '../../../../zqlite/src/resolve-scalar-subqueries.ts';
 import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
@@ -77,11 +79,18 @@ export type RowEdit = {
 
 export type RowChange = RowAdd | RowRemove | RowEdit;
 
+type CompanionPipeline = {
+  readonly input: Input;
+  readonly childField: string;
+  readonly resolvedValue: LiteralValue | null | undefined;
+};
+
 type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
   readonly transformedAst: AST;
   readonly transformationHash: string;
+  readonly companions: readonly CompanionPipeline[];
 };
 
 type QueryInfo = {
@@ -197,8 +206,11 @@ export class PipelineDriver {
    * as TableSources need to be recomputed.
    */
   reset(clientSchema: ClientSchema) {
-    for (const {input} of this.#pipelines.values()) {
-      input.destroy();
+    for (const pipeline of this.#pipelines.values()) {
+      pipeline.input.destroy();
+      for (const companion of pipeline.companions) {
+        companion.input.destroy();
+      }
     }
     this.#pipelines.clear();
     this.#tables.clear();
@@ -317,8 +329,11 @@ export class PipelineDriver {
   #resolveScalarSubqueries(ast: AST): {
     ast: AST;
     companionRows: {table: string; row: Row}[];
+    companions: CompanionSubquery[];
+    companionInputs: Input[];
   } {
     const companionRows: {table: string; row: Row}[] = [];
+    const companionInputs: Input[] = [];
 
     const executor = (
       subqueryAST: AST,
@@ -336,24 +351,30 @@ export class PipelineDriver {
         },
         'scalar-subquery',
       );
-      try {
-        const node = first(skipYields(input.fetch({})));
-        if (!node) {
-          return undefined;
-        }
-        companionRows.push({table: subqueryAST.table, row: node.row as Row});
-        return (node.row[childField] as LiteralValue) ?? null;
-      } finally {
-        input.destroy();
+      // Consume the full stream rather than using first() to avoid
+      // triggering early return on Take's #initialFetch assertion.
+      // The subquery AST already has limit: 1, so at most one row is produced.
+      let node: Node | undefined;
+      for (const n of skipYields(input.fetch({}))) {
+        node ??= n;
       }
+      if (!node) {
+        // Keep the companion alive even with no results — it will
+        // detect a future insert that creates the row.
+        companionInputs.push(input);
+        return undefined;
+      }
+      companionRows.push({table: subqueryAST.table, row: node.row as Row});
+      companionInputs.push(input);
+      return (node.row[childField] as LiteralValue) ?? null;
     };
 
-    const {ast: resolved} = resolveSimpleScalarSubqueries(
+    const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
       ast,
       this.#tableSpecs,
       executor,
     );
-    return {ast: resolved, companionRows};
+    return {ast: resolved, companionRows, companions, companionInputs};
   }
 
   /**
@@ -398,8 +419,12 @@ export class PipelineDriver {
       timer,
     };
     try {
-      const {ast: resolvedQuery, companionRows} =
-        this.#resolveScalarSubqueries(query);
+      const {
+        ast: resolvedQuery,
+        companionRows,
+        companions: companionMeta,
+        companionInputs,
+      } = this.#resolveScalarSubqueries(query);
 
       const input = buildPipeline(
         resolvedQuery,
@@ -467,6 +492,46 @@ export class PipelineDriver {
       }
       debugDelegate?.reset();
 
+      // Set up live companion pipelines for reactive scalar subquery monitoring.
+      const liveCompanions: CompanionPipeline[] = [];
+      for (let i = 0; i < companionMeta.length; i++) {
+        const meta = companionMeta[i];
+        const companionInput = companionInputs[i];
+        const companionSchema = companionInput.getSchema();
+        const {childField, resolvedValue} = meta;
+        companionInput.setOutput({
+          push: (change: Change) => {
+            let newValue: LiteralValue | null | undefined;
+            switch (change.type) {
+              case 'add':
+              case 'edit':
+                newValue =
+                  (change.node.row[childField] as LiteralValue) ?? null;
+                break;
+              case 'remove':
+                newValue = undefined;
+                break;
+              case 'child':
+                return [];
+            }
+            if (!scalarValuesEqual(newValue, resolvedValue)) {
+              throw new ResetPipelinesSignal(
+                `Scalar subquery value changed for ${meta.ast.table}: ` +
+                  `${String(resolvedValue)} -> ${String(newValue)}`,
+              );
+            }
+            const streamer = this.#streamer;
+            assert(
+              streamer,
+              'must #startAccumulating() before pushing changes',
+            );
+            streamer.accumulate(queryID, companionSchema, [change]);
+            return [];
+          },
+        });
+        liveCompanions.push({input: companionInput, childField, resolvedValue});
+      }
+
       // Note: This hydrationTime is a wall-clock overestimate, as it does
       // not take time slicing into account. The view-syncer resets this
       // to a more precise processing-time measurement with setHydrationTime().
@@ -475,6 +540,7 @@ export class PipelineDriver {
         hydrationTimeMs,
         transformedAst: resolvedQuery,
         transformationHash,
+        companions: liveCompanions,
       });
     } finally {
       this.#hydrateContext = null;
@@ -490,6 +556,9 @@ export class PipelineDriver {
     if (pipeline) {
       this.#pipelines.delete(queryID);
       pipeline.input.destroy();
+      for (const companion of pipeline.companions) {
+        companion.input.destroy();
+      }
     }
   }
 
@@ -918,4 +987,17 @@ function mustGetPrimaryKey(
     `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
       `Check the spelling and ensure that the table has a primary key.`,
   );
+}
+
+/**
+ * Compares two scalar subquery resolved values for equality.
+ * Unlike `valuesEqual` in data.ts (which treats null != null for join
+ * semantics), this uses identity semantics: undefined === undefined
+ * (no row matched), null === null (row matched but field was NULL).
+ */
+function scalarValuesEqual(
+  a: LiteralValue | null | undefined,
+  b: LiteralValue | null | undefined,
+): boolean {
+  return a === b;
 }

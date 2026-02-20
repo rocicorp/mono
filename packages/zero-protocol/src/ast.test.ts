@@ -170,6 +170,90 @@ test('conditions are sorted', () => {
       },
     ],
   });
+
+  // correlatedSubquery conditions differing only in flip sort deterministically
+  ast = {
+    table: 'table',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          flip: true,
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          flip: false,
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+      ],
+    },
+  };
+
+  const flips = (
+    normalizeAST(ast).where as unknown as {conditions: {flip?: boolean}[]}
+  ).conditions.map(c => c.flip);
+  // undefined < false < true
+  expect(flips).toEqual([undefined, false, true]);
+
+  // correlatedSubquery conditions differing only in scalar sort deterministically
+  ast = {
+    table: 'table',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: false,
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+      ],
+    },
+  };
+
+  const scalars = (
+    normalizeAST(ast).where as unknown as {conditions: {scalar?: boolean}[]}
+  ).conditions.map(c => c.scalar);
+  // undefined < false < true
+  expect(scalars).toEqual([undefined, false, true]);
 });
 
 test('related subqueries are sorted', () => {
@@ -606,6 +690,6 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toEqual('1b4tkghe24u7q');
-  expect(PROTOCOL_VERSION).toBe(48);
+  expect(hash).toEqual('1dsf0svqtvyhv');
+  expect(PROTOCOL_VERSION).toBe(49);
 });

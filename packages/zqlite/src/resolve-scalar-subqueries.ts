@@ -1,8 +1,8 @@
 import type {
   AST,
   Condition,
+  CorrelatedSubqueryCondition,
   LiteralValue,
-  ScalarSubqueryCondition,
   SimpleCondition,
 } from '../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
@@ -16,6 +16,11 @@ type TableSpecWithUniqueKeys = {
 export type CompanionSubquery = {
   /** The original scalar subquery AST (the subquery table query). */
   ast: AST;
+  /** The field in the subquery row whose value was resolved. */
+  childField: string;
+  /** The resolved value, `null` if a row matched but the field was `NULL`,
+   * or `undefined` if no row matched. */
+  resolvedValue: LiteralValue | null | undefined;
 };
 
 export type ResolveResult = {
@@ -84,8 +89,31 @@ function resolveCondition(
   companions: CompanionSubquery[],
 ): Condition {
   switch (condition.type) {
-    case 'scalarSubquery':
-      return resolveScalarSubquery(condition, tableSpecs, execute, companions);
+    case 'correlatedSubquery':
+      if (condition.scalar) {
+        return resolveScalarSubquery(
+          condition,
+          tableSpecs,
+          execute,
+          companions,
+        );
+      }
+      // Non-scalar correlated subquery: recurse into its subquery
+      {
+        const resolvedSubquery = resolveASTRecursive(
+          condition.related.subquery,
+          tableSpecs,
+          execute,
+          companions,
+        );
+        if (resolvedSubquery !== condition.related.subquery) {
+          return {
+            ...condition,
+            related: {...condition.related, subquery: resolvedSubquery},
+          };
+        }
+        return condition;
+      }
     case 'and':
     case 'or': {
       const resolved = condition.conditions.map(c =>
@@ -102,15 +130,18 @@ function resolveCondition(
 }
 
 function resolveScalarSubquery(
-  condition: ScalarSubqueryCondition,
+  condition: CorrelatedSubqueryCondition,
   tableSpecs: Map<string, TableSpecWithUniqueKeys>,
   execute: ScalarExecutor,
   companions: CompanionSubquery[],
 ): Condition {
+  const parentField = condition.related.correlation.parentField[0];
+  const childField = condition.related.correlation.childField[0];
+
   // Recursively resolve any scalar subqueries nested in the
   // subquery's own WHERE (and related) before evaluating this one.
   const subquery = resolveASTRecursive(
-    condition.subquery,
+    condition.related.subquery,
     tableSpecs,
     execute,
     companions,
@@ -118,27 +149,35 @@ function resolveScalarSubquery(
 
   if (!isSimpleSubquery(subquery, tableSpecs)) {
     // Return with the (possibly partially-resolved) subquery.
-    if (subquery !== condition.subquery) {
-      return {...condition, subquery};
+    if (subquery !== condition.related.subquery) {
+      return {
+        ...condition,
+        related: {...condition.related, subquery},
+      };
     }
     return condition;
   }
 
-  const value = execute(subquery, condition.childField);
+  const value = execute(subquery, childField);
 
   // Record the companion subquery AST so its rows are synced to the client.
   // The client rewrites scalar subqueries to EXISTS and needs those rows.
-  companions.push({ast: subquery});
+  companions.push({
+    ast: subquery,
+    childField,
+    resolvedValue: value,
+  });
 
   if (value === undefined || value === null) {
     // No rows or NULL value — both x = NULL and x != NULL are false in SQL
     return ALWAYS_FALSE;
   }
 
+  const op = condition.op === 'EXISTS' ? '=' : 'IS NOT';
   return {
     type: 'simple',
-    op: condition.op,
-    left: {type: 'column', name: condition.parentField},
+    op,
+    left: {type: 'column', name: parentField},
     right: {type: 'literal', value},
   } satisfies SimpleCondition;
 }
@@ -151,8 +190,11 @@ const ALWAYS_FALSE: SimpleCondition = {
 };
 
 /**
- * Checks if the subquery has at least one unique index whose columns
- * are all equality-constrained by literal values.
+ * Checks if the subquery is guaranteed to return at most one deterministic row.
+ *
+ * This is true when all columns of at least one unique index on the subquery
+ * table are equality-constrained by literal values in the WHERE clause
+ * (using only AND conjunctions).
  */
 export function isSimpleSubquery(
   subquery: AST,
@@ -208,7 +250,7 @@ function collectConstraints(
         collectConstraints(c, constraints);
       }
       break;
-    // OR, correlatedSubquery, scalarSubquery — don't contribute constraints
+    // OR, correlatedSubquery (non-scalar) — don't contribute constraints
     default:
       break;
   }

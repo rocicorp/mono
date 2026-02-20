@@ -14,7 +14,6 @@ import type {
   LiteralValue,
   Ordering,
   Parameter,
-  ScalarSubqueryCondition,
   SimpleCondition,
   ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
@@ -136,6 +135,7 @@ export function buildPipeline(
     ast,
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
   );
+
   if (costModel) {
     ast = planQuery(ast, costModel, planDebugger, lc);
   }
@@ -175,12 +175,7 @@ export function bindStaticParameters(
         },
       };
     }
-    if (condition.type === 'scalarSubquery') {
-      return {
-        ...condition,
-        subquery: visit(condition.subquery),
-      };
-    }
+
     return {
       ...condition,
       conditions: condition.conditions.map(bindCondition),
@@ -236,7 +231,6 @@ const PERMISSIONS_EXISTS_LIMIT = 1;
 export function assertNoNotExists(condition: Condition): void {
   switch (condition.type) {
     case 'simple':
-    case 'scalarSubquery':
       return;
 
     case 'correlatedSubquery':
@@ -258,45 +252,6 @@ export function assertNoNotExists(condition: Condition): void {
   }
 }
 
-function rewriteScalarSubqueryConditions(condition: Condition): Condition {
-  if (condition.type === 'scalarSubquery') {
-    return rewriteScalarSubquery(condition);
-  }
-  if (condition.type === 'and' || condition.type === 'or') {
-    return {
-      type: condition.type,
-      conditions: condition.conditions.map(rewriteScalarSubqueryConditions),
-    };
-  }
-  return condition;
-}
-
-function rewriteScalarSubquery(condition: ScalarSubqueryCondition): Condition {
-  const correlated: CorrelatedSubquery = {
-    correlation: {
-      parentField: [condition.parentField],
-      childField: [condition.childField],
-    },
-    subquery: condition.subquery,
-  };
-
-  if (condition.op === '=') {
-    // field = (SELECT col FROM ...) rewrites to EXISTS with correlation
-    return {
-      type: 'correlatedSubquery',
-      related: correlated,
-      op: 'EXISTS',
-    };
-  }
-
-  // field IS NOT (SELECT col FROM ...) rewrites to NOT EXISTS with correlation
-  return {
-    type: 'correlatedSubquery',
-    related: correlated,
-    op: 'NOT EXISTS',
-  };
-}
-
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
@@ -307,12 +262,6 @@ function buildPipelineInternal(
   const source = delegate.getSource(ast.table);
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
-  }
-
-  // Rewrite scalar subquery conditions to correlated subquery conditions
-  // before the rest of the pipeline processing.
-  if (ast.where) {
-    ast = {...ast, where: rewriteScalarSubqueryConditions(ast.where)};
   }
 
   ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
@@ -542,10 +491,6 @@ function applyFilter(
       return applyCorrelatedSubqueryCondition(input, condition, delegate, name);
     case 'simple':
       return applySimpleCondition(input, delegate, condition);
-    case 'scalarSubquery':
-      // Scalar subqueries are rewritten to correlated subqueries before
-      // the filter pipeline is built, so this should not be reached.
-      throw new Error('Unexpected scalarSubquery in applyFilter');
   }
 }
 
@@ -624,10 +569,7 @@ export function groupSubqueryConditions(condition: Disjunction) {
 export function isNotAndDoesNotContainSubquery(
   condition: Condition,
 ): condition is NoSubqueryCondition {
-  if (
-    condition.type === 'correlatedSubquery' ||
-    condition.type === 'scalarSubquery'
-  ) {
+  if (condition.type === 'correlatedSubquery') {
     return false;
   }
   if (condition.type === 'simple') {
@@ -792,7 +734,7 @@ function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
   });
 
   const uniquify = (cond: Condition): Condition => {
-    if (cond.type === 'simple' || cond.type === 'scalarSubquery') {
+    if (cond.type === 'simple') {
       return cond;
     } else if (cond.type === 'correlatedSubquery') {
       return uniquifyCorrelatedSubquery(cond);
@@ -825,7 +767,7 @@ export function conditionIncludesFlippedSubqueryAtAnyLevel(
       conditionIncludesFlippedSubqueryAtAnyLevel(c),
     );
   }
-  // simple and scalarSubquery don't have flips
+  // simple conditions don't have flips
   return false;
 }
 

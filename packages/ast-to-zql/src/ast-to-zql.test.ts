@@ -637,121 +637,244 @@ test('EXISTS with order', () => {
   );
 });
 
-test('scalar subquery with = operator', () => {
+test('EXISTS with scalar option', () => {
   const ast: AST = {
     table: 'issue',
     where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'ownerId',
-      subquery: {
-        table: 'user',
-      },
-      childField: 'id',
-    },
-  };
-  expect(astToZQL(ast)).toMatchInlineSnapshot(
-    `".where(({cmp, scalar}) => cmp('ownerId', scalar(q => q, 'id')))"`,
-  );
-});
-
-test('scalar subquery with IS NOT operator', () => {
-  const ast: AST = {
-    table: 'issue',
-    where: {
-      type: 'scalarSubquery',
-      op: 'IS NOT',
-      parentField: 'ownerId',
-      subquery: {
-        table: 'user',
-      },
-      childField: 'id',
-    },
-  };
-  expect(astToZQL(ast)).toMatchInlineSnapshot(
-    `".where(({cmp, scalar}) => cmp('ownerId', 'IS NOT', scalar(q => q, 'id')))"`,
-  );
-});
-
-test('scalar subquery with where clause in subquery', () => {
-  const ast: AST = {
-    table: 'issue',
-    where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'ownerId',
-      subquery: {
-        table: 'user',
-        where: {
-          type: 'simple',
-          left: {type: 'column', name: 'name'},
-          op: '=',
-          right: {type: 'literal', value: 'Alice'},
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
         },
       },
-      childField: 'id',
     },
   };
   expect(astToZQL(ast)).toMatchInlineSnapshot(
-    `".where(({cmp, scalar}) => cmp('ownerId', scalar(q => q.where('name', 'Alice'), 'id')))"`,
+    `".whereExists('owner', {scalar: true})"`,
   );
 });
 
-test('scalar subquery inside AND combinator', () => {
+test('NOT EXISTS with scalar option', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'NOT EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({exists, not}) => not(exists('owner', {scalar: true})))"`,
+  );
+});
+
+test('EXISTS with scalar and where condition on subquery', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+          where: {
+            type: 'simple',
+            left: {type: 'column', name: 'name'},
+            op: '=',
+            right: {type: 'literal', value: 'Alice'},
+          },
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".whereExists('owner', q => q.where('name', 'Alice'), {scalar: true})"`,
+  );
+});
+
+test('NOT EXISTS with scalar and where condition', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'NOT EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+          where: {
+            type: 'simple',
+            left: {type: 'column', name: 'name'},
+            op: '=',
+            right: {type: 'literal', value: 'Alice'},
+          },
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({exists, not}) => not(exists('owner', q => q.where('name', 'Alice'), {scalar: true})))"`,
+  );
+});
+
+test('scalar in AND combinator', () => {
   const ast: AST = {
     table: 'issue',
     where: {
       type: 'and',
       conditions: [
         {
-          type: 'simple',
-          left: {type: 'column', name: 'status'},
-          op: '=',
-          right: {type: 'literal', value: 'open'},
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
+          related: {
+            correlation: {
+              parentField: ['ownerId'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'user',
+              alias: 'zsubq_owner',
+            },
+          },
         },
         {
-          type: 'scalarSubquery',
-          op: '=',
-          parentField: 'ownerId',
-          subquery: {
-            table: 'user',
-          },
-          childField: 'id',
+          type: 'simple',
+          left: {type: 'column', name: 'title'},
+          op: 'LIKE',
+          right: {type: 'literal', value: '%bug%'},
         },
       ],
     },
   };
   expect(astToZQL(ast)).toMatchInlineSnapshot(
-    `".where('status', 'open').where(({cmp, scalar}) => cmp('ownerId', scalar(q => q, 'id')))"`,
+    `".whereExists('owner', {scalar: true}).where('title', 'LIKE', '%bug%')"`,
   );
 });
 
-test('scalar subquery inside OR combinator', () => {
+test('EXISTS with both flip and scalar options', () => {
   const ast: AST = {
     table: 'issue',
     where: {
-      type: 'or',
-      conditions: [
-        {
-          type: 'simple',
-          left: {type: 'column', name: 'status'},
-          op: '=',
-          right: {type: 'literal', value: 'open'},
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
         },
-        {
-          type: 'scalarSubquery',
-          op: '=',
-          parentField: 'ownerId',
-          subquery: {
-            table: 'user',
-          },
-          childField: 'id',
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
         },
-      ],
+      },
     },
   };
   expect(astToZQL(ast)).toMatchInlineSnapshot(
-    `".where(({cmp, or, scalar}) => or(cmp('status', 'open'), cmp('ownerId', scalar(q => q, 'id'))))"`,
+    `".whereExists('owner', {flip: true, scalar: true})"`,
+  );
+});
+
+test('EXISTS with explicit flip: false', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: false,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".whereExists('owner', {flip: false})"`,
+  );
+});
+
+test('EXISTS with explicit scalar: false', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      scalar: false,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".whereExists('owner', {scalar: false})"`,
+  );
+});
+
+test('EXISTS with flip: false and scalar: false', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: false,
+      scalar: false,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".whereExists('owner', {flip: false, scalar: false})"`,
   );
 });
 

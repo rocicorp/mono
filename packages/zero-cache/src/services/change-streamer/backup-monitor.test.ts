@@ -256,4 +256,41 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual(['618p0bw8']);
   });
+
+  test('aborts in-flight fetch on stop', async () => {
+    nock.cleanAll();
+    const {promise: requestReceived, resolve: signalRequestReceived} =
+      resolver<void>();
+    const {promise: allowResponse, resolve: letResponseThrough} =
+      resolver<void>();
+
+    setMetricsResponse('618ocqq8', '1.74545644476593e+09');
+
+    nock('http://localhost:4850')
+      .get('/metrics')
+      .reply(200, async () => {
+        signalRequestReceived();
+        await allowResponse;
+        return metricsResponse;
+      });
+
+    const checkPromise = monitor.checkWatermarksAndScheduleCleanup();
+
+    // Wait until the fetch is in-flight before aborting.
+    await requestReceived;
+
+    // Aborting the signal by stopping the monitor should cause the
+    // in-flight fetch to reject with an AbortError, which is handled
+    // gracefully (no warning logged, no cleanup scheduled).
+    const stopPromise = monitor.stop();
+
+    // Unblock the nock response handler so it doesn't hang.
+    letResponseThrough();
+
+    await checkPromise;
+    await stopPromise;
+
+    // Since the fetch was aborted, no watermarks were processed.
+    expect(scheduled).toEqual([]);
+  });
 });

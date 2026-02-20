@@ -238,7 +238,6 @@ describe('completeOrdering', () => {
       {
         "table": "issue",
         "where": {
-          "flip": undefined,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -253,7 +252,6 @@ describe('completeOrdering', () => {
               "alias": "zsubq_labels",
               "table": "issueLabel",
               "where": {
-                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -281,72 +279,70 @@ describe('completeOrdering', () => {
     `);
     expect(completeOrdering(ast(issueQuery), getPrimaryKey))
       .toMatchInlineSnapshot(`
-      {
-        "orderBy": [
-          [
-            "id",
-            "asc",
+        {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
           ],
-        ],
-        "table": "issue",
-        "where": {
-          "flip": undefined,
-          "op": "EXISTS",
-          "related": {
-            "correlation": {
-              "childField": [
-                "issueId",
-              ],
-              "parentField": [
-                "id",
-              ],
-            },
-            "subquery": {
-              "alias": "zsubq_labels",
-              "orderBy": [
-                [
+          "table": "issue",
+          "where": {
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
                   "issueId",
-                  "asc",
                 ],
-                [
-                  "labelId",
-                  "asc",
+                "parentField": [
+                  "id",
                 ],
-              ],
-              "table": "issueLabel",
-              "where": {
-                "flip": undefined,
-                "op": "EXISTS",
-                "related": {
-                  "correlation": {
-                    "childField": [
-                      "id",
-                    ],
-                    "parentField": [
-                      "labelId",
-                    ],
-                  },
-                  "subquery": {
-                    "alias": "zsubq_zhidden_labels",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "label",
-                  },
-                  "system": "client",
-                },
-                "type": "correlatedSubquery",
               },
+              "subquery": {
+                "alias": "zsubq_labels",
+                "orderBy": [
+                  [
+                    "issueId",
+                    "asc",
+                  ],
+                  [
+                    "labelId",
+                    "asc",
+                  ],
+                ],
+                "table": "issueLabel",
+                "where": {
+                  "op": "EXISTS",
+                  "related": {
+                    "correlation": {
+                      "childField": [
+                        "id",
+                      ],
+                      "parentField": [
+                        "labelId",
+                      ],
+                    },
+                    "subquery": {
+                      "alias": "zsubq_zhidden_labels",
+                      "orderBy": [
+                        [
+                          "id",
+                          "asc",
+                        ],
+                      ],
+                      "table": "label",
+                    },
+                    "system": "client",
+                  },
+                  "type": "correlatedSubquery",
+                },
+              },
+              "system": "client",
             },
-            "system": "client",
+            "type": "correlatedSubquery",
           },
-          "type": "correlatedSubquery",
-        },
-      }
-    `);
+        }
+      `);
   });
 
   test('exists in compound condition', () => {
@@ -377,7 +373,6 @@ describe('completeOrdering', () => {
               "type": "simple",
             },
             {
-              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -411,7 +406,6 @@ describe('completeOrdering', () => {
                   "type": "simple",
                 },
                 {
-                  "flip": undefined,
                   "op": "EXISTS",
                   "related": {
                     "correlation": {
@@ -440,101 +434,99 @@ describe('completeOrdering', () => {
     `);
     expect(completeOrdering(ast(issueQuery), getPrimaryKey))
       .toMatchInlineSnapshot(`
-      {
-        "orderBy": [
-          [
-            "id",
-            "asc",
+        {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
           ],
-        ],
-        "table": "issue",
-        "where": {
-          "conditions": [
-            {
-              "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "1",
-              },
-              "type": "simple",
-            },
-            {
-              "flip": undefined,
-              "op": "EXISTS",
-              "related": {
-                "correlation": {
-                  "childField": [
-                    "id",
-                  ],
-                  "parentField": [
-                    "ownerId",
-                  ],
+          "table": "issue",
+          "where": {
+            "conditions": [
+              {
+                "left": {
+                  "name": "id",
+                  "type": "column",
                 },
-                "subquery": {
-                  "alias": "zsubq_owner",
-                  "orderBy": [
-                    [
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "1",
+                },
+                "type": "simple",
+              },
+              {
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": [
                       "id",
-                      "asc",
                     ],
-                  ],
-                  "table": "user",
-                },
-                "system": "client",
-              },
-              "type": "correlatedSubquery",
-            },
-            {
-              "conditions": [
-                {
-                  "left": {
-                    "name": "ownerId",
-                    "type": "column",
+                    "parentField": [
+                      "ownerId",
+                    ],
                   },
-                  "op": "=",
-                  "right": {
-                    "type": "literal",
-                    "value": "2",
-                  },
-                  "type": "simple",
-                },
-                {
-                  "flip": undefined,
-                  "op": "EXISTS",
-                  "related": {
-                    "correlation": {
-                      "childField": [
-                        "issueId",
-                      ],
-                      "parentField": [
+                  "subquery": {
+                    "alias": "zsubq_owner",
+                    "orderBy": [
+                      [
                         "id",
+                        "asc",
                       ],
-                    },
-                    "subquery": {
-                      "alias": "zsubq_comments",
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
-                      "table": "comment",
-                    },
-                    "system": "client",
+                    ],
+                    "table": "user",
                   },
-                  "type": "correlatedSubquery",
+                  "system": "client",
                 },
-              ],
-              "type": "or",
-            },
-          ],
-          "type": "and",
-        },
-      }
-    `);
+                "type": "correlatedSubquery",
+              },
+              {
+                "conditions": [
+                  {
+                    "left": {
+                      "name": "ownerId",
+                      "type": "column",
+                    },
+                    "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "2",
+                    },
+                    "type": "simple",
+                  },
+                  {
+                    "op": "EXISTS",
+                    "related": {
+                      "correlation": {
+                        "childField": [
+                          "issueId",
+                        ],
+                        "parentField": [
+                          "id",
+                        ],
+                      },
+                      "subquery": {
+                        "alias": "zsubq_comments",
+                        "orderBy": [
+                          [
+                            "id",
+                            "asc",
+                          ],
+                        ],
+                        "table": "comment",
+                      },
+                      "system": "client",
+                    },
+                    "type": "correlatedSubquery",
+                  },
+                ],
+                "type": "or",
+              },
+            ],
+            "type": "and",
+          },
+        }
+      `);
   });
 });

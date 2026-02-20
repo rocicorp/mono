@@ -199,14 +199,11 @@ export class QueryImpl<
   ): Query<TTable, TSchema, TReturn> => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
-    const flipped = opts?.flip;
-    return this.where(({exists}) =>
-      exists(
-        relationship,
-        cb,
-        flipped !== undefined ? {flip: flipped} : undefined,
-      ),
-    ) as Query<TTable, TSchema, TReturn>;
+    return this.where(({exists}) => exists(relationship, cb, opts)) as Query<
+      TTable,
+      TSchema,
+      TReturn
+    >;
   };
 
   related = (
@@ -470,6 +467,7 @@ export class QueryImpl<
   ): Condition => {
     cb = cb ?? (q => q);
     const flip = options?.flip;
+    const scalar = options?.scalar;
     const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
 
@@ -503,9 +501,12 @@ export class QueryImpl<
           subquery: subQuery.#ast,
         },
         op: 'EXISTS',
-        flip,
+        ...(flip !== undefined ? {flip} : {}),
+        ...(scalar !== undefined ? {scalar} : {}),
       };
     }
+
+    assert(!scalar, 'scalar option only supports one-hop relationships');
 
     if (isTwoHop(related)) {
       const [firstRelation, secondRelation] = related;
@@ -550,12 +551,12 @@ export class QueryImpl<
                 subquery: asQueryImpl(queryToDest).#ast,
               },
               op: 'EXISTS',
-              flip,
+              ...(flip !== undefined ? {flip} : {}),
             },
           },
         },
         op: 'EXISTS',
-        flip,
+        ...(flip !== undefined ? {flip} : {}),
       };
     }
 

@@ -365,18 +365,23 @@ describe('view-syncer/pipeline-driver', () => {
     table: 'issues',
     orderBy: [['id', 'asc']],
     where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'id',
-      childField: 'issueID',
-      subquery: {
-        table: 'comments',
-        orderBy: [['id', 'asc']],
-        where: {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: '10'},
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'comments',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: '10'},
+          },
         },
       },
     },
@@ -386,18 +391,23 @@ describe('view-syncer/pipeline-driver', () => {
     table: 'issues',
     orderBy: [['id', 'asc']],
     where: {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: 'id',
-      childField: 'issueID',
-      subquery: {
-        table: 'comments',
-        orderBy: [['id', 'asc']],
-        where: {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: 'nonexistent'},
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      scalar: true,
+      related: {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'comments',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'id'},
+            right: {type: 'literal', value: 'nonexistent'},
+          },
         },
       },
     },
@@ -1908,18 +1918,23 @@ describe('view-syncer/pipeline-driver', () => {
             right: {type: 'literal', value: false},
           },
           {
-            type: 'scalarSubquery',
-            op: '=',
-            parentField: 'id',
-            childField: 'issueID',
-            subquery: {
-              table: 'comments',
-              orderBy: [['id', 'asc']],
-              where: {
-                type: 'simple',
-                op: '=',
-                left: {type: 'column', name: 'id'},
-                right: {type: 'literal', value: '10'},
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            scalar: true,
+            related: {
+              correlation: {
+                parentField: ['id'],
+                childField: ['issueID'],
+              },
+              subquery: {
+                table: 'comments',
+                orderBy: [['id', 'asc']],
+                where: {
+                  type: 'simple',
+                  op: '=',
+                  left: {type: 'column', name: 'id'},
+                  right: {type: 'literal', value: '10'},
+                },
               },
             },
           },
@@ -2029,5 +2044,117 @@ describe('view-syncer/pipeline-driver', () => {
         },
       ]
     `);
+  });
+
+  test('companion pipeline throws ResetPipelinesSignal when scalar value changes', () => {
+    pipelines.init(clientSchema);
+
+    // Resolves comment '10' (issueID='1'), so query becomes `issues WHERE id = '1'`
+    [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    // Change comment '10' issueID from '1' to '2' — the scalar value changes
+    replicator.processTransaction(
+      '134',
+      messages.update('comments', {id: '10', issueID: '2', upvotes: 0}),
+    );
+
+    expect(() => changes()).toThrowError(ResetPipelinesSignal);
+  });
+
+  test('companion pipeline does not throw when scalar value stays same', () => {
+    pipelines.init(clientSchema);
+
+    // Resolves comment '10' (issueID='1'), so query becomes `issues WHERE id = '1'`
+    [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    // Change a different column (upvotes) on comment '10' — issueID stays '1'
+    replicator.processTransaction(
+      '134',
+      messages.update('comments', {id: '10', issueID: '1', upvotes: 5}),
+    );
+
+    // No ResetPipelinesSignal, and the companion row change is synced
+    expect(changes()).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalar",
+          "row": {
+            "_0_version": "134",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 5,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "edit",
+        },
+      ]
+    `);
+  });
+
+  test('companion pipeline throws ResetPipelinesSignal when companion row deleted', () => {
+    pipelines.init(clientSchema);
+
+    // Resolves comment '10' (issueID='1'), so query becomes `issues WHERE id = '1'`
+    [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    // Delete comment '10' — the scalar value goes from '1' to undefined (no row)
+    replicator.processTransaction(
+      '134',
+      messages.delete('comments', {id: '10'}),
+    );
+
+    expect(() => changes()).toThrowError(ResetPipelinesSignal);
+  });
+
+  test('companion pipeline throws ResetPipelinesSignal when companion row added', () => {
+    pipelines.init(clientSchema);
+
+    replicator.processTransaction(
+      '134',
+      messages.delete('comments', {id: '10'}),
+    );
+
+    changes();
+
+    [
+      ...pipelines.addQuery(
+        'hash-scalar',
+        'queryScalar',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    // Insert comment '10' — the scalar value goes from undefined to '1'
+    replicator.processTransaction(
+      '135',
+      messages.insert('comments', {id: '10', issueID: '1', upvotes: 0}),
+    );
+
+    expect(() => changes()).toThrowError(ResetPipelinesSignal);
   });
 });
