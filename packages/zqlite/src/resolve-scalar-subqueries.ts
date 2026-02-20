@@ -1,8 +1,8 @@
 import type {
   AST,
   Condition,
+  CorrelatedSubqueryCondition,
   LiteralValue,
-  ScalarSubqueryCondition,
   SimpleCondition,
 } from '../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
@@ -89,8 +89,31 @@ function resolveCondition(
   companions: CompanionSubquery[],
 ): Condition {
   switch (condition.type) {
-    case 'scalarSubquery':
-      return resolveScalarSubquery(condition, tableSpecs, execute, companions);
+    case 'correlatedSubquery':
+      if (condition.scalar) {
+        return resolveScalarSubquery(
+          condition,
+          tableSpecs,
+          execute,
+          companions,
+        );
+      }
+      // Non-scalar correlated subquery: recurse into its subquery
+      {
+        const resolvedSubquery = resolveASTRecursive(
+          condition.related.subquery,
+          tableSpecs,
+          execute,
+          companions,
+        );
+        if (resolvedSubquery !== condition.related.subquery) {
+          return {
+            ...condition,
+            related: {...condition.related, subquery: resolvedSubquery},
+          };
+        }
+        return condition;
+      }
     case 'and':
     case 'or': {
       const resolved = condition.conditions.map(c =>
@@ -101,36 +124,24 @@ function resolveCondition(
       }
       return {type: condition.type, conditions: resolved};
     }
-    case 'correlatedSubquery': {
-      const resolvedSubquery = resolveASTRecursive(
-        condition.related.subquery,
-        tableSpecs,
-        execute,
-        companions,
-      );
-      if (resolvedSubquery !== condition.related.subquery) {
-        return {
-          ...condition,
-          related: {...condition.related, subquery: resolvedSubquery},
-        };
-      }
-      return condition;
-    }
     default:
       return condition;
   }
 }
 
 function resolveScalarSubquery(
-  condition: ScalarSubqueryCondition,
+  condition: CorrelatedSubqueryCondition,
   tableSpecs: Map<string, TableSpecWithUniqueKeys>,
   execute: ScalarExecutor,
   companions: CompanionSubquery[],
 ): Condition {
+  const parentField = condition.related.correlation.parentField[0];
+  const childField = condition.related.correlation.childField[0];
+
   // Recursively resolve any scalar subqueries nested in the
   // subquery's own WHERE (and related) before evaluating this one.
   const subquery = resolveASTRecursive(
-    condition.subquery,
+    condition.related.subquery,
     tableSpecs,
     execute,
     companions,
@@ -138,19 +149,22 @@ function resolveScalarSubquery(
 
   if (!isSimpleSubquery(subquery, tableSpecs)) {
     // Return with the (possibly partially-resolved) subquery.
-    if (subquery !== condition.subquery) {
-      return {...condition, subquery};
+    if (subquery !== condition.related.subquery) {
+      return {
+        ...condition,
+        related: {...condition.related, subquery},
+      };
     }
     return condition;
   }
 
-  const value = execute(subquery, condition.childField);
+  const value = execute(subquery, childField);
 
   // Record the companion subquery AST so its rows are synced to the client.
   // The client rewrites scalar subqueries to EXISTS and needs those rows.
   companions.push({
     ast: subquery,
-    childField: condition.childField,
+    childField,
     resolvedValue: value,
   });
 
@@ -159,10 +173,11 @@ function resolveScalarSubquery(
     return ALWAYS_FALSE;
   }
 
+  const op = condition.op === 'EXISTS' ? '=' : 'IS NOT';
   return {
     type: 'simple',
-    op: condition.op,
-    left: {type: 'column', name: condition.parentField},
+    op,
+    left: {type: 'column', name: parentField},
     right: {type: 'literal', value},
   } satisfies SimpleCondition;
 }
@@ -235,7 +250,7 @@ function collectConstraints(
         collectConstraints(c, constraints);
       }
       break;
-    // OR, correlatedSubquery, scalarSubquery — don't contribute constraints
+    // OR, correlatedSubquery (non-scalar) — don't contribute constraints
     default:
       break;
   }

@@ -17,7 +17,6 @@ import type {
   Correlation,
   LiteralReference,
   Ordering,
-  ScalarSubqueryCondition,
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
@@ -304,9 +303,10 @@ function where(
         ' OR ',
       )})`;
     case 'correlatedSubquery':
+      if (condition.scalar) {
+        return scalarSubquery(spec, condition, table);
+      }
       return exists(spec, condition, table);
-    case 'scalarSubquery':
-      return scalarSubquery(spec, condition, table);
     case 'simple':
       return simple(spec, condition, table);
   }
@@ -351,30 +351,32 @@ function exists(
 
 function scalarSubquery(
   spec: Spec,
-  condition: ScalarSubqueryCondition,
+  condition: CorrelatedSubqueryCondition,
   parentTable: Table,
 ): SQLQuery {
+  const parentField = condition.related.correlation.parentField[0];
+  const childField = condition.related.correlation.childField[0];
+  const subqueryAST = condition.related.subquery;
+
   const parentCol = colIdent(spec.server, {
     table: parentTable,
-    zql: condition.parentField,
+    zql: parentField,
   });
 
-  const subqueryTable = makeTable(spec, condition.subquery.table);
+  const subqueryTable = makeTable(spec, subqueryAST.table);
   const childCol = colIdent(spec.server, {
     table: subqueryTable,
-    zql: condition.childField,
+    zql: childField,
   });
 
-  const op = sql.__dangerous__rawValue(condition.op);
-
-  const subqueryWhere = condition.subquery.where
-    ? sql`WHERE ${where(spec, condition.subquery.where, subqueryTable)}`
-    : sql``;
-  const subqueryOrderBy = orderBy(
-    spec,
-    condition.subquery.orderBy,
-    subqueryTable,
+  const op = sql.__dangerous__rawValue(
+    condition.op === 'EXISTS' ? '=' : 'IS NOT',
   );
+
+  const subqueryWhere = subqueryAST.where
+    ? sql`WHERE ${where(spec, subqueryAST.where, subqueryTable)}`
+    : sql``;
+  const subqueryOrderBy = orderBy(spec, subqueryAST.orderBy, subqueryTable);
 
   return sql`${parentCol} ${op} (SELECT ${childCol} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
 }

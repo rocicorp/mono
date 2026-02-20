@@ -10,7 +10,6 @@ import type {
   LiteralReference,
   Ordering,
   Parameter,
-  ScalarSubqueryCondition,
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
@@ -86,8 +85,6 @@ function transformCondition(
       return transformLogicalCondition(condition, prefix, args);
     case 'correlatedSubquery':
       return transformExistsCondition(condition, prefix, args);
-    case 'scalarSubquery':
-      return transformScalarSubqueryCondition(condition, prefix, args);
     default:
       unreachable(condition);
   }
@@ -164,22 +161,32 @@ function transformExistsCondition(
     nextSubquery.orderBy ||
     nextSubquery.limit;
 
+  // Build options string for flip and scalar
+  const optionParts: string[] = [];
+  if (condition.flip !== undefined) {
+    optionParts.push(`flip: ${condition.flip}`);
+  }
+  if (condition.scalar !== undefined) {
+    optionParts.push(`scalar: ${condition.scalar}`);
+  }
+  const optionsStr =
+    optionParts.length > 0 ? `, {${optionParts.join(', ')}}` : '';
+
   if (op === 'EXISTS') {
-    const flipped = condition.flip ? ', {flip: true}' : '';
     if (!hasSubQueryProps) {
       if (prefix === '.where') {
-        return `.whereExists('${relationship}'${flipped})`;
+        return `.whereExists('${relationship}'${optionsStr})`;
       }
       args.add('exists');
-      return `exists('${relationship}'${flipped})`;
+      return `exists('${relationship}'${optionsStr})`;
     }
 
     if (prefix === '.where') {
-      return `.whereExists('${relationship}', q => q${astToZQL(nextSubquery)}${flipped})`;
+      return `.whereExists('${relationship}', q => q${astToZQL(nextSubquery)}${optionsStr})`;
     }
     prefix satisfies 'cmp';
     args.add('exists');
-    return `exists('${relationship}', q => q${astToZQL(nextSubquery)}${flipped})`;
+    return `exists('${relationship}', q => q${astToZQL(nextSubquery)}${optionsStr})`;
   }
 
   op satisfies 'NOT EXISTS';
@@ -188,44 +195,21 @@ function transformExistsCondition(
     if (prefix === '.where') {
       return `.where(({exists, not}) => not(exists('${relationship}', q => q${astToZQL(
         nextSubquery,
-      )})))`;
+      )}${optionsStr})))`;
     }
     prefix satisfies 'cmp';
     args.add('not');
     args.add('exists');
-    return `not(exists('${relationship}', q => q${astToZQL(nextSubquery)}))`;
+    return `not(exists('${relationship}', q => q${astToZQL(nextSubquery)}${optionsStr}))`;
   }
 
   if (prefix === '.where') {
-    return `.where(({exists, not}) => not(exists('${relationship}')))`;
+    return `.where(({exists, not}) => not(exists('${relationship}'${optionsStr})))`;
   }
   args.add('not');
   args.add('exists');
 
-  return `not(exists('${relationship}')))`;
-}
-
-function transformScalarSubqueryCondition(
-  condition: ScalarSubqueryCondition,
-  prefix: Prefix,
-  args: Args,
-): string {
-  const subqueryCode = astToZQL(condition.subquery);
-  const scalarExpr = `scalar(q => q${subqueryCode}, '${condition.childField}')`;
-
-  let cmpExpr: string;
-  if (condition.op === '=') {
-    cmpExpr = `cmp('${condition.parentField}', ${scalarExpr})`;
-  } else {
-    cmpExpr = `cmp('${condition.parentField}', '${condition.op}', ${scalarExpr})`;
-  }
-
-  if (prefix === '.where') {
-    return `.where(({cmp, scalar}) => ${cmpExpr})`;
-  }
-  args.add('cmp');
-  args.add('scalar');
-  return cmpExpr;
+  return `not(exists('${relationship}'${optionsStr})))`;
 }
 
 // If the `exists` is applied against a junction edge, both hops will have the same alias and both hops will be exists conditions.

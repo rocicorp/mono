@@ -54,7 +54,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 46 adds scalarSubquery condition type to AST
 // -- version 47 adds optional auth token to push body
 // -- version 48 adds updateAuth
-export const PROTOCOL_VERSION = 48;
+// -- version 49 adds `scalar` to CorrelatedSubqueryCondition, removes scalarSubquery
+export const PROTOCOL_VERSION = 49;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

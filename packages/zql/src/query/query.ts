@@ -40,7 +40,33 @@ export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
 
 export type QueryTable<Q> = Q extends Query<infer T, any, any> ? T : never;
 
-export type ExistsOptions = {flip: boolean};
+export type ExistsOptions = {
+  /**
+   * Controls the join direction.
+   * - `true`: Force the join to be flipped (child drives the join).
+   * - `false`: Force the join to stay as a semi-join (parent drives).
+   * - `undefined`: Let the planner decide the optimal direction.
+   */
+  flip?: boolean;
+
+  /**
+   * @experimental
+   *
+   * When true and the subquery is known to return at most one row, the
+   * server pre-resolves the matching value from the related table and
+   * rewrites the condition as a direct field comparison at hydration time.
+   * This avoids a join at query time, and provides more information
+   * to the query planner, often resulting in more efficient query plans.
+   *
+   * However, this can be less efficient if the subquery's result changes
+   * frequently, as the query will need to be rehydrated whenever the
+   * subquery's result changes.
+   *
+   * Only supported for one-hop relationships. Throws if used with
+   * junction (two-hop) relationships.
+   */
+  scalar?: boolean;
+};
 
 export type GetFilterType<
   TSchema extends TableSchema,
@@ -273,28 +299,6 @@ export interface Query<
       q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
     ) => Query<string, TSchema>,
     options?: ExistsOptions,
-  ): Query<TTable, TSchema, TReturn>;
-
-  /**
-   * EXPERIMENTAL: Support for scalar subqueries in WHERE clauses.
-   * Do not use unless you know what you are doing.
-   * API is unstable.
-   * Use at your own risk.
-   */
-  whereScalar(
-    relationship: AvailableRelationships<TTable, TSchema>,
-  ): Query<TTable, TSchema, TReturn>;
-  /**
-   * EXPERIMENTAL: Support for scalar subqueries in WHERE clauses.
-   * Do not use unless you know what you are doing.
-   * API is unstable.
-   * Use at your own risk.
-   */
-  whereScalar<TRelationship extends AvailableRelationships<TTable, TSchema>>(
-    relationship: TRelationship,
-    cb: (
-      q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
-    ) => Query<string, TSchema>,
   ): Query<TTable, TSchema, TReturn>;
 
   start(

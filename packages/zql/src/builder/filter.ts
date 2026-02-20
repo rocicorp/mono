@@ -170,7 +170,6 @@ export function transformFilters(filters: Condition | undefined): {
     case 'simple':
       return {filters, conditionsRemoved: false};
     case 'correlatedSubquery':
-    case 'scalarSubquery':
       return {filters: undefined, conditionsRemoved: true};
     case 'and':
     case 'or': {

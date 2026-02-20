@@ -62,12 +62,6 @@ function completeOrderingInCondition<C extends Condition | undefined>(
       },
     };
   }
-  if (condition.type === 'scalarSubquery') {
-    return {
-      ...condition,
-      subquery: completeOrdering(condition.subquery, getPrimaryKey),
-    };
-  }
   condition.type satisfies 'and' | 'or';
   return {
     ...condition,

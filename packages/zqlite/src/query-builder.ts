@@ -19,7 +19,7 @@ import type {Start} from '../../zql/src/ivm/operator.ts';
  */
 export type NoSubqueryCondition = Exclude<
   Condition,
-  {type: 'correlatedSubquery'} | {type: 'scalarSubquery'}
+  {type: 'correlatedSubquery'}
 >;
 
 export function buildSelectQuery(

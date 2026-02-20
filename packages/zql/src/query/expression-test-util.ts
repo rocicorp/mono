@@ -174,8 +174,6 @@ export function stringify(c: Condition): string {
         .join(c.type === 'and' ? ' & ' : ' | ');
     case 'correlatedSubquery':
       return c.op + ' ()';
-    case 'scalarSubquery':
-      return `${c.parentField} ${c.op} (SCALAR)`;
   }
 }
 function eat(tokens: string[], expectedToken: string) {

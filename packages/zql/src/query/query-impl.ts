@@ -199,25 +199,12 @@ export class QueryImpl<
   ): Query<TTable, TSchema, TReturn> => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
-    const flipped = opts?.flip;
-    return this.where(({exists}) =>
-      exists(
-        relationship,
-        cb,
-        flipped !== undefined ? {flip: flipped} : undefined,
-      ),
-    ) as Query<TTable, TSchema, TReturn>;
-  };
-
-  whereScalar = (
-    relationship: string,
-    cb?: (q: AnyQuery) => AnyQuery,
-  ): Query<TTable, TSchema, TReturn> =>
-    this.where(() => this.#scalarSubquery(relationship, cb)) as Query<
+    return this.where(({exists}) => exists(relationship, cb, opts)) as Query<
       TTable,
       TSchema,
       TReturn
     >;
+  };
 
   related = (
     relationship: string,
@@ -480,6 +467,7 @@ export class QueryImpl<
   ): Condition => {
     cb = cb ?? (q => q);
     const flip = options?.flip;
+    const scalar = options?.scalar;
     const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
 
@@ -513,9 +501,12 @@ export class QueryImpl<
           subquery: subQuery.#ast,
         },
         op: 'EXISTS',
-        flip,
+        ...(flip !== undefined ? {flip} : {}),
+        ...(scalar !== undefined ? {scalar} : {}),
       };
     }
+
+    assert(!scalar, 'scalar option only supports one-hop relationships');
 
     if (isTwoHop(related)) {
       const [firstRelation, secondRelation] = related;
@@ -560,60 +551,16 @@ export class QueryImpl<
                 subquery: asQueryImpl(queryToDest).#ast,
               },
               op: 'EXISTS',
-              flip,
+              ...(flip !== undefined ? {flip} : {}),
             },
           },
         },
         op: 'EXISTS',
-        flip,
+        ...(flip !== undefined ? {flip} : {}),
       };
     }
 
     throw new Error(`Invalid relationship ${relationship}`);
-  };
-
-  #scalarSubquery = (
-    relationship: string,
-    cb: ((query: AnyQuery) => AnyQuery) | undefined,
-  ): Condition => {
-    cb = cb ?? (q => q);
-    const related = this.#schema.relationships[this.#tableName][relationship];
-    assert(related, 'Invalid relationship');
-    assert(
-      isOneHop(related),
-      'whereScalar only supports one-hop relationships',
-    );
-
-    const {destSchema: destTableName, sourceField, destField} = related[0];
-    assert(isCompoundKey(sourceField), 'Invalid relationship');
-    assert(isCompoundKey(destField), 'Invalid relationship');
-    assert(
-      sourceField.length === 1 && destField.length === 1,
-      'whereScalar only supports single-field relationships',
-    );
-
-    const subQuery = asQueryImpl(
-      cb(
-        this.#newQuery(
-          destTableName,
-          {
-            table: destTableName,
-            alias: `${SUBQ_PREFIX}${relationship}`,
-          },
-          defaultFormat,
-          this.customQueryID,
-          undefined,
-        ),
-      ),
-    );
-
-    return {
-      type: 'scalarSubquery',
-      op: '=',
-      parentField: sourceField[0],
-      childField: destField[0],
-      subquery: {...subQuery.#ast, limit: 1},
-    };
   };
 
   get ast(): AST {
