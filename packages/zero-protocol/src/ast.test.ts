@@ -170,6 +170,90 @@ test('conditions are sorted', () => {
       },
     ],
   });
+
+  // correlatedSubquery conditions differing only in flip sort deterministically
+  ast = {
+    table: 'table',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          flip: true,
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          flip: false,
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+      ],
+    },
+  };
+
+  const flips = (
+    normalizeAST(ast).where as unknown as {conditions: {flip?: boolean}[]}
+  ).conditions.map(c => c.flip);
+  // undefined < false < true
+  expect(flips).toEqual([undefined, false, true]);
+
+  // correlatedSubquery conditions differing only in scalar sort deterministically
+  ast = {
+    table: 'table',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: false,
+          related: {
+            correlation: {parentField: ['id'], childField: ['id']},
+            subquery: {table: 'other', alias: 'zsubq_rel'},
+          },
+        },
+      ],
+    },
+  };
+
+  const scalars = (
+    normalizeAST(ast).where as unknown as {conditions: {scalar?: boolean}[]}
+  ).conditions.map(c => c.scalar);
+  // undefined < false < true
+  expect(scalars).toEqual([undefined, false, true]);
 });
 
 test('related subqueries are sorted', () => {

@@ -176,7 +176,8 @@ export function not(expression: Condition): Condition {
         type: 'correlatedSubquery',
         related: expression.related,
         op: negateOperator(expression.op),
-        ...(expression.scalar ? {scalar: expression.scalar} : {}),
+        ...(expression.flip !== undefined ? {flip: expression.flip} : {}),
+        ...(expression.scalar !== undefined ? {scalar: expression.scalar} : {}),
       };
     case 'simple':
       return {

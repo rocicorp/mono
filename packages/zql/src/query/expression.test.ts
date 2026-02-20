@@ -288,6 +288,59 @@ test('not', () => {
   );
 });
 
+test('not preserves flip and scalar on correlatedSubquery', () => {
+  const base: Condition = {
+    type: 'correlatedSubquery',
+    related: {
+      correlation: {parentField: ['ownerId'], childField: ['id']},
+      subquery: {table: 'user', alias: 'zsubq_owner'},
+    },
+    op: 'EXISTS',
+  };
+
+  // flip: true is preserved
+  const withFlipTrue = not({...base, flip: true});
+  assert(withFlipTrue.type === 'correlatedSubquery');
+  expect(withFlipTrue.op).toBe('NOT EXISTS');
+  expect(withFlipTrue.flip).toBe(true);
+
+  // flip: false is preserved (not dropped)
+  const withFlipFalse = not({...base, flip: false});
+  assert(withFlipFalse.type === 'correlatedSubquery');
+  expect(withFlipFalse.op).toBe('NOT EXISTS');
+  expect(withFlipFalse.flip).toBe(false);
+
+  // flip: undefined is not present
+  const withFlipUndefined = not({...base});
+  assert(withFlipUndefined.type === 'correlatedSubquery');
+  expect(withFlipUndefined.op).toBe('NOT EXISTS');
+  expect('flip' in withFlipUndefined).toBe(false);
+
+  // scalar: true is preserved
+  const withScalarTrue = not({...base, scalar: true});
+  assert(withScalarTrue.type === 'correlatedSubquery');
+  expect(withScalarTrue.op).toBe('NOT EXISTS');
+  expect(withScalarTrue.scalar).toBe(true);
+
+  // scalar: false is preserved (not dropped)
+  const withScalarFalse = not({...base, scalar: false});
+  assert(withScalarFalse.type === 'correlatedSubquery');
+  expect(withScalarFalse.op).toBe('NOT EXISTS');
+  expect(withScalarFalse.scalar).toBe(false);
+
+  // scalar: undefined is not present
+  const withScalarUndefined = not({...base});
+  assert(withScalarUndefined.type === 'correlatedSubquery');
+  expect('scalar' in withScalarUndefined).toBe(false);
+
+  // both flip and scalar preserved together
+  const withBoth = not({...base, flip: false, scalar: true});
+  assert(withBoth.type === 'correlatedSubquery');
+  expect(withBoth.op).toBe('NOT EXISTS');
+  expect(withBoth.flip).toBe(false);
+  expect(withBoth.scalar).toBe(true);
+});
+
 test('bound methods/properties', () => {
   type Exists = ConstructorParameters<typeof ExpressionBuilder>[0];
   const mock = vi.fn<Exists>();

@@ -805,6 +805,79 @@ test('EXISTS with both flip and scalar options', () => {
   );
 });
 
+test('EXISTS with explicit flip: false', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: false,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".whereExists('owner', {flip: false})"`,
+  );
+});
+
+test('EXISTS with explicit scalar: false', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      scalar: false,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".whereExists('owner', {scalar: false})"`,
+  );
+});
+
+test('EXISTS with flip: false and scalar: false', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: false,
+      scalar: false,
+      related: {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+          alias: 'zsubq_owner',
+        },
+      },
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".whereExists('owner', {flip: false, scalar: false})"`,
+  );
+});
+
 test('round trip', () => {
   const randomizer = generateMersenne53Randomizer(42);
   const rng = () => randomizer.next();

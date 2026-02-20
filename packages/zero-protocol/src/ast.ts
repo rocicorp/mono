@@ -500,7 +500,12 @@ function cmpCondition(a: Condition, b: Condition): number {
     if (b.type !== 'correlatedSubquery') {
       return -1; // Order subquery before conjuctions/disjuctions
     }
-    return cmpRelated(a.related, b.related) || compareUTF8MaybeNull(a.op, b.op);
+    return (
+      cmpRelated(a.related, b.related) ||
+      compareUTF8MaybeNull(a.op, b.op) ||
+      cmpOptionalBool(a.flip, b.flip) ||
+      cmpOptionalBool(a.scalar, b.scalar)
+    );
   }
   if (b.type === 'correlatedSubquery') {
     return -1; // Order correlatedSubquery before conjuctions/disjuctions
@@ -591,4 +596,13 @@ function compareUTF8MaybeNull(a: string | null, b: string | null): number {
     return 1;
   }
   return 0;
+}
+
+function cmpOptionalBool(
+  a: boolean | undefined,
+  b: boolean | undefined,
+): number {
+  // undefined < false < true
+  const toNum = (v: boolean | undefined) => (v === undefined ? 0 : v ? 2 : 1);
+  return toNum(a) - toNum(b);
 }

@@ -2114,3 +2114,180 @@ test('scalar option throws on two-hop relationship', () => {
     'scalar option only supports one-hop relationships',
   );
 });
+
+describe('whereExists with scalar option', () => {
+  test('basic scalar exists', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(ast(issueQuery.whereExists('owner', {scalar: true})))
+      .toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
+            },
+            "subquery": {
+              "alias": "zsubq_owner",
+              "table": "user",
+            },
+            "system": "client",
+          },
+          "scalar": true,
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('scalar with where condition on subquery', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.whereExists('owner', q => q.where('name', 'Alice'), {
+          scalar: true,
+        }),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
+            },
+            "subquery": {
+              "alias": "zsubq_owner",
+              "table": "user",
+              "where": {
+                "left": {
+                  "name": "name",
+                  "type": "column",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "Alice",
+                },
+                "type": "simple",
+              },
+            },
+            "system": "client",
+          },
+          "scalar": true,
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('scalar in and combinator', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery
+          .whereExists('owner', q => q.where('name', 'Alice'), {scalar: true})
+          .where('title', 'LIKE', '%bug%'),
+      ).where,
+    ).toMatchObject({
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
+        },
+        {
+          type: 'simple',
+          op: 'LIKE',
+        },
+      ],
+    });
+  });
+
+  test('not(exists(..., {scalar: true}))', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.where(({not, exists}) =>
+          not(exists('owner', q => q.where('name', 'Alice'), {scalar: true})),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "NOT EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
+            },
+            "subquery": {
+              "alias": "zsubq_owner",
+              "table": "user",
+              "where": {
+                "left": {
+                  "name": "name",
+                  "type": "column",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "Alice",
+                },
+                "type": "simple",
+              },
+            },
+            "system": "client",
+          },
+          "scalar": true,
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('chained with where', () => {
+    const issueQuery = newQuery(schema, 'issue');
+
+    const q = issueQuery
+      .whereExists('owner', q => q.where('name', 'Alice'), {scalar: true})
+      .where('closed', false);
+
+    expect(ast(q).where).toMatchObject({
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
+        },
+        {
+          type: 'simple',
+          op: '=',
+        },
+      ],
+    });
+  });
+});

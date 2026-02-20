@@ -163,11 +163,11 @@ function transformExistsCondition(
 
   // Build options string for flip and scalar
   const optionParts: string[] = [];
-  if (condition.flip) {
-    optionParts.push('flip: true');
+  if (condition.flip !== undefined) {
+    optionParts.push(`flip: ${condition.flip}`);
   }
-  if (condition.scalar) {
-    optionParts.push('scalar: true');
+  if (condition.scalar !== undefined) {
+    optionParts.push(`scalar: ${condition.scalar}`);
   }
   const optionsStr =
     optionParts.length > 0 ? `, {${optionParts.join(', ')}}` : '';
