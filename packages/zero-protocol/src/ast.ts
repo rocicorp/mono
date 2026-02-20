@@ -322,11 +322,6 @@ export type CorrelatedSubqueryCondition = {
   related: CorrelatedSubquery;
   op: CorrelatedSubqueryConditionOperator;
   flip?: boolean | undefined;
-  /**
-   * When true, indicates this correlated subquery should be implemented
-   * as a scalar subquery rather than as EXISTS. This is an implementation hint;
-   * the logical semantics are equivalent to EXISTS.
-   */
   scalar?: boolean | undefined;
   [planIdSymbol]?: number | undefined;
 };
