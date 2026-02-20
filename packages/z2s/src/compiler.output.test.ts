@@ -1309,3 +1309,95 @@ test('related w/o junction edge', () => {
     }
   `);
 });
+
+test('scalar subquery with EXISTS generates = operator', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        related: [],
+        where: {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
+          related: {
+            correlation: {
+              parentField: ['ownerId'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'user',
+              alias: 'zsubq_owner',
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'name'},
+                right: {type: 'literal', value: 'Alice'},
+              },
+            },
+          },
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
+        FROM "issue" AS "issue_0"
+        WHERE "issue_0"."ownerId" = (SELECT "user_1"."id" FROM "user" AS "user_1" WHERE "user_1"."name" = $1::text COLLATE "ucs_basic" ORDER BY "user_1"."id" COLLATE "ucs_basic" ASC NULLS FIRST LIMIT 1)
+         
+        ORDER BY "issue_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "Alice",
+      ],
+    }
+  `);
+});
+
+test('scalar subquery with NOT EXISTS generates IS NOT operator', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        related: [],
+        where: {
+          type: 'correlatedSubquery',
+          op: 'NOT EXISTS',
+          scalar: true,
+          related: {
+            correlation: {
+              parentField: ['ownerId'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'user',
+              alias: 'zsubq_owner',
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'name'},
+                right: {type: 'literal', value: 'Alice'},
+              },
+            },
+          },
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
+        FROM "issue" AS "issue_0"
+        WHERE "issue_0"."ownerId" IS NOT (SELECT "user_1"."id" FROM "user" AS "user_1" WHERE "user_1"."name" = $1::text COLLATE "ucs_basic" ORDER BY "user_1"."id" COLLATE "ucs_basic" ASC NULLS FIRST LIMIT 1)
+         
+        ORDER BY "issue_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [
+        "Alice",
+      ],
+    }
+  `);
+});

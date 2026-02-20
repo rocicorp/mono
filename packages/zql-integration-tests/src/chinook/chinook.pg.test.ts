@@ -147,27 +147,20 @@ describe(
           {
             name: 'Scalar subquery: tracks for album by title',
             createQuery: q =>
-              q.track.where(({cmp, scalar}) =>
-                cmp(
-                  'albumId',
-                  scalar(q.album.where('title', 'Riot Act'), 'id'),
-                ),
-              ),
+              q.track.whereExists('album', a => a.where('title', 'Riot Act'), {
+                scalar: true,
+              }),
           },
           // Note: IS NOT scalar subquery is not tested here because it rewrites to
           // NOT EXISTS which is not supported on the memory backend.
           {
             name: 'Scalar subquery: with and combinator',
             createQuery: q =>
-              q.track.where(({and, cmp, scalar}) =>
-                and(
-                  cmp(
-                    'albumId',
-                    scalar(q.album.where('title', 'Riot Act'), 'id'),
-                  ),
-                  cmp('name', 'LIKE', '%Mine%'),
-                ),
-              ),
+              q.track
+                .whereExists('album', a => a.where('title', 'Riot Act'), {
+                  scalar: true,
+                })
+                .where('name', 'LIKE', '%Mine%'),
           },
           {
             name: 'Prefix like',

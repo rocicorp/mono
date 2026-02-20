@@ -6,8 +6,6 @@ import {type AnyQuery} from './query.ts';
 import {newStaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
-const userQuery = newQuery(schema, 'user');
-
 function ast(q: AnyQuery) {
   return asQueryInternals(q).ast;
 }
@@ -29,7 +27,6 @@ describe('building the AST', () => {
       {
         "table": "issue",
         "where": {
-          "flip": undefined,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -44,7 +41,6 @@ describe('building the AST', () => {
               "alias": "zsubq_labels",
               "table": "issueLabel",
               "where": {
-                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1404,7 +1400,6 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
-            "flip": undefined,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -1431,7 +1426,6 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
-          "flip": undefined,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1462,7 +1456,6 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
-            "flip": undefined,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -1506,7 +1499,6 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
-          "flip": undefined,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1565,7 +1557,6 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
-          "flip": undefined,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1580,7 +1571,6 @@ describe('exists', () => {
               "alias": "zsubq_labels",
               "table": "issueLabel",
               "where": {
-                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1623,7 +1613,6 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
-              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1643,7 +1632,6 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
-              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1723,7 +1711,6 @@ describe('exists', () => {
               "alias": "zsubq_labels",
               "table": "issueLabel",
               "where": {
-                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1767,7 +1754,6 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
-              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1787,7 +1773,6 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
-              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1807,7 +1792,6 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
-              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1822,7 +1806,6 @@ describe('exists', () => {
                   "alias": "zsubq_labels",
                   "table": "issueLabel",
                   "where": {
-                    "flip": undefined,
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
@@ -2032,7 +2015,6 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
-              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2064,7 +2046,6 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
-              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2126,56 +2107,41 @@ test('one in schema should not imply limit 1 in the ast -- the user needs to get
   });
 });
 
-describe('scalar subquery via cmp + scalar', () => {
-  test('scalar with default = op', () => {
+test('scalar option throws on two-hop relationship', () => {
+  const issueQuery = newQuery(schema, 'issue');
+
+  expect(() => issueQuery.whereExists('labels', {scalar: true})).toThrow(
+    'scalar option only supports one-hop relationships',
+  );
+});
+
+describe('whereExists with scalar option', () => {
+  test('basic scalar exists', () => {
     const issueQuery = newQuery(schema, 'issue');
 
-    expect(
-      ast(
-        issueQuery.where(({cmp, scalar}) =>
-          cmp('ownerId', scalar(userQuery, 'id')),
-        ),
-      ),
-    ).toMatchInlineSnapshot(`
+    expect(ast(issueQuery.whereExists('owner', {scalar: true})))
+      .toMatchInlineSnapshot(`
       {
         "table": "issue",
         "where": {
-          "childField": "id",
-          "op": "=",
-          "parentField": "ownerId",
-          "subquery": {
-            "alias": "zsubq_scalar_user",
-            "limit": 1,
-            "table": "user",
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
+            },
+            "subquery": {
+              "alias": "zsubq_owner",
+              "table": "user",
+            },
+            "system": "client",
           },
-          "type": "scalarSubquery",
-        },
-      }
-    `);
-  });
-
-  test('scalar with IS NOT op', () => {
-    const issueQuery = newQuery(schema, 'issue');
-
-    expect(
-      ast(
-        issueQuery.where(({cmp, scalar}) =>
-          cmp('ownerId', 'IS NOT', scalar(userQuery, 'id')),
-        ),
-      ),
-    ).toMatchInlineSnapshot(`
-      {
-        "table": "issue",
-        "where": {
-          "childField": "id",
-          "op": "IS NOT",
-          "parentField": "ownerId",
-          "subquery": {
-            "alias": "zsubq_scalar_user",
-            "limit": 1,
-            "table": "user",
-          },
-          "type": "scalarSubquery",
+          "scalar": true,
+          "type": "correlatedSubquery",
         },
       }
     `);
@@ -2186,78 +2152,44 @@ describe('scalar subquery via cmp + scalar', () => {
 
     expect(
       ast(
-        issueQuery.where(({cmp, scalar}) =>
-          cmp('ownerId', scalar(userQuery.where('name', 'Alice'), 'id')),
-        ),
+        issueQuery.whereExists('owner', q => q.where('name', 'Alice'), {
+          scalar: true,
+        }),
       ),
     ).toMatchInlineSnapshot(`
       {
         "table": "issue",
         "where": {
-          "childField": "id",
-          "op": "=",
-          "parentField": "ownerId",
-          "subquery": {
-            "alias": "zsubq_scalar_user",
-            "limit": 1,
-            "table": "user",
-            "where": {
-              "left": {
-                "name": "name",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "Alice",
-              },
-              "type": "simple",
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
-          },
-          "type": "scalarSubquery",
-        },
-      }
-    `);
-  });
-
-  test('scalar with IS NOT and where condition', () => {
-    const issueQuery = newQuery(schema, 'issue');
-
-    expect(
-      ast(
-        issueQuery.where(({cmp, scalar}) =>
-          cmp(
-            'ownerId',
-            'IS NOT',
-            scalar(userQuery.where('name', 'Alice'), 'id'),
-          ),
-        ),
-      ),
-    ).toMatchInlineSnapshot(`
-      {
-        "table": "issue",
-        "where": {
-          "childField": "id",
-          "op": "IS NOT",
-          "parentField": "ownerId",
-          "subquery": {
-            "alias": "zsubq_scalar_user",
-            "limit": 1,
-            "table": "user",
-            "where": {
-              "left": {
-                "name": "name",
-                "type": "column",
+            "subquery": {
+              "alias": "zsubq_owner",
+              "table": "user",
+              "where": {
+                "left": {
+                  "name": "name",
+                  "type": "column",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "Alice",
+                },
+                "type": "simple",
               },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "Alice",
-              },
-              "type": "simple",
             },
+            "system": "client",
           },
-          "type": "scalarSubquery",
+          "scalar": true,
+          "type": "correlatedSubquery",
         },
       }
     `);
@@ -2268,21 +2200,17 @@ describe('scalar subquery via cmp + scalar', () => {
 
     expect(
       ast(
-        issueQuery.where(({and, cmp, scalar}) =>
-          and(
-            cmp('ownerId', scalar(userQuery.where('name', 'Alice'), 'id')),
-            cmp('title', 'LIKE', '%bug%'),
-          ),
-        ),
+        issueQuery
+          .whereExists('owner', q => q.where('name', 'Alice'), {scalar: true})
+          .where('title', 'LIKE', '%bug%'),
       ).where,
     ).toMatchObject({
       type: 'and',
       conditions: [
         {
-          type: 'scalarSubquery',
-          op: '=',
-          parentField: 'ownerId',
-          childField: 'id',
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
         },
         {
           type: 'simple',
@@ -2292,97 +2220,49 @@ describe('scalar subquery via cmp + scalar', () => {
     });
   });
 
-  test('not(cmp(..., scalar(...)))', () => {
+  test('not(exists(..., {scalar: true}))', () => {
     const issueQuery = newQuery(schema, 'issue');
 
     expect(
       ast(
-        issueQuery.where(({not, cmp, scalar}) =>
-          not(cmp('ownerId', scalar(userQuery.where('name', 'Alice'), 'id'))),
+        issueQuery.where(({not, exists}) =>
+          not(exists('owner', q => q.where('name', 'Alice'), {scalar: true})),
         ),
       ),
     ).toMatchInlineSnapshot(`
       {
         "table": "issue",
         "where": {
-          "childField": "id",
-          "op": "IS NOT",
-          "parentField": "ownerId",
-          "subquery": {
-            "alias": "zsubq_scalar_user",
-            "limit": 1,
-            "table": "user",
-            "where": {
-              "left": {
-                "name": "name",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "Alice",
-              },
-              "type": "simple",
+          "op": "NOT EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
-          },
-          "type": "scalarSubquery",
-        },
-      }
-    `);
-  });
-});
-
-describe('whereScalar', () => {
-  test('basic (no callback)', () => {
-    const issueQuery = newQuery(schema, 'issue');
-
-    expect(ast(issueQuery.whereScalar('owner'))).toMatchInlineSnapshot(`
-      {
-        "table": "issue",
-        "where": {
-          "childField": "id",
-          "op": "=",
-          "parentField": "ownerId",
-          "subquery": {
-            "alias": "zsubq_owner",
-            "limit": 1,
-            "table": "user",
-          },
-          "type": "scalarSubquery",
-        },
-      }
-    `);
-  });
-
-  test('with callback', () => {
-    const issueQuery = newQuery(schema, 'issue');
-
-    expect(ast(issueQuery.whereScalar('owner', q => q.where('name', 'Alice'))))
-      .toMatchInlineSnapshot(`
-      {
-        "table": "issue",
-        "where": {
-          "childField": "id",
-          "op": "=",
-          "parentField": "ownerId",
-          "subquery": {
-            "alias": "zsubq_owner",
-            "limit": 1,
-            "table": "user",
-            "where": {
-              "left": {
-                "name": "name",
-                "type": "column",
+            "subquery": {
+              "alias": "zsubq_owner",
+              "table": "user",
+              "where": {
+                "left": {
+                  "name": "name",
+                  "type": "column",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "Alice",
+                },
+                "type": "simple",
               },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "Alice",
-              },
-              "type": "simple",
             },
+            "system": "client",
           },
-          "type": "scalarSubquery",
+          "scalar": true,
+          "type": "correlatedSubquery",
         },
       }
     `);
@@ -2392,17 +2272,16 @@ describe('whereScalar', () => {
     const issueQuery = newQuery(schema, 'issue');
 
     const q = issueQuery
-      .whereScalar('owner', q => q.where('name', 'Alice'))
+      .whereExists('owner', q => q.where('name', 'Alice'), {scalar: true})
       .where('closed', false);
 
     expect(ast(q).where).toMatchObject({
       type: 'and',
       conditions: [
         {
-          type: 'scalarSubquery',
-          op: '=',
-          parentField: 'ownerId',
-          childField: 'id',
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          scalar: true,
         },
         {
           type: 'simple',
@@ -2410,13 +2289,5 @@ describe('whereScalar', () => {
         },
       ],
     });
-  });
-
-  test('two-hop relationship throws', () => {
-    const issueQuery = newQuery(schema, 'issue');
-
-    expect(() => issueQuery.whereScalar('labels')).toThrow(
-      'whereScalar only supports one-hop relationships',
-    );
   });
 });
