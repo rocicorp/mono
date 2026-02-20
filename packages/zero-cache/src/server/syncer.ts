@@ -65,6 +65,11 @@ export default function runWorker(
   startOtelAuto(createLogContext(config, {worker: 'syncer'}, false));
   const lc = createLogContext(config, {worker: 'syncer'}, true);
   initEventSink(lc, config);
+  lc.info?.(
+    `view-syncer litestream backupURL=${
+      config.litestream.backupURL ?? '(none)'
+    } replicaFile=${config.replica.file}`,
+  );
 
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
