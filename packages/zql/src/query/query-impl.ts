@@ -501,8 +501,8 @@ export class QueryImpl<
           subquery: subQuery.#ast,
         },
         op: 'EXISTS',
-        ...(flip ? {flip} : {}),
-        ...(scalar ? {scalar} : {}),
+        ...(flip !== undefined ? {flip} : {}),
+        ...(scalar !== undefined ? {scalar} : {}),
       };
     }
 
@@ -551,12 +551,12 @@ export class QueryImpl<
                 subquery: asQueryImpl(queryToDest).#ast,
               },
               op: 'EXISTS',
-              ...(flip ? {flip} : {}),
+              ...(flip !== undefined ? {flip} : {}),
             },
           },
         },
         op: 'EXISTS',
-        ...(flip ? {flip} : {}),
+        ...(flip !== undefined ? {flip} : {}),
       };
     }
 
