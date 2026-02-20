@@ -8,6 +8,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {getValueAtPath} from '../../../shared/src/object-traversal.ts';
 import type {
+  BaseDefaultSchema,
   DefaultContext,
   DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
@@ -610,7 +611,7 @@ export function createQuery<
 export function defineQueries<
   // let QD infer freely so defaults aren't erased by a QueryDefinitions<any, any> constraint
   const QD,
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
 >(
   defs: QD & AssertQueryDefinitions<QD>,
 ): QueryRegistry<EnsureQueryDefinitions<QD>, S>;
@@ -618,7 +619,7 @@ export function defineQueries<
 export function defineQueries<
   const TBase,
   const TOverrides,
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
 >(
   base:
     | QueryRegistry<EnsureQueryDefinitions<TBase>, S>

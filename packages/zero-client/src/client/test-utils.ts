@@ -360,12 +360,7 @@ export function zeroForTest<
 ): TestZero<S, MD, C> {
   // Special case kvStore. If not present we default to 'mem'. This allows
   // passing `undefined` to get the default behavior.
-  const newOptions = {...options};
-  if (!('kvStore' in options)) {
-    newOptions.kvStore = 'mem';
-  }
-
-  return new TestZero({
+  const newOptions = {
     cacheURL: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: options.userID ?? 'test-user-id-' + testZeroCounter++,
@@ -378,8 +373,11 @@ export function zeroForTest<
           throw new Error(`Unexpected update needed: ${reason.type}`);
         }
       : undefined,
-    ...newOptions,
-  } satisfies ZeroOptions<S, MD, C>);
+    kvStore: options.kvStore ?? 'mem',
+    ...options,
+  } satisfies ZeroOptions<S, MD, C>;
+
+  return new TestZero(newOptions);
 }
 
 export async function waitForUpstreamMessage(
