@@ -1,5 +1,7 @@
 import {expectTypeOf, test} from 'vitest';
 import type {
+  BaseDefaultContext,
+  BaseDefaultSchema,
   DefaultContext,
   DefaultSchema,
   DefaultTypes,
@@ -29,11 +31,25 @@ test('DefaultSchema uses registered schema and falls back to Schema', () => {
   expectTypeOf<DefaultSchema>().toEqualTypeOf<Schema>();
 });
 
+test('BaseDefaultSchema uses registered schema and falls back to Schema', () => {
+  expectTypeOf<
+    BaseDefaultSchema<RegisteredTypes>
+  >().toEqualTypeOf<CustomSchema>();
+  expectTypeOf<BaseDefaultSchema>().toEqualTypeOf<Schema>();
+});
+
 test('DefaultContext uses registered context with undefined and defaults to unknown', () => {
   expectTypeOf<DefaultContext<RegisteredTypes>>().toEqualTypeOf<{
     readonly userId: string;
   }>();
-  expectTypeOf<DefaultContext>().toEqualTypeOf<unknown>();
+  expectTypeOf<DefaultContext>().toBeUnknown();
+});
+
+test('BaseDefaultContext uses registered context and falls back to any', () => {
+  expectTypeOf<BaseDefaultContext<RegisteredTypes>>().toEqualTypeOf<
+    Readonly<CustomContext>
+  >();
+  expectTypeOf<BaseDefaultContext>().toBeAny();
 });
 
 test('InferTransactionFromDbProvider extracts transaction argument type', () => {

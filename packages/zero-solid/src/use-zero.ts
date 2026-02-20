@@ -12,10 +12,11 @@ import {
 } from 'solid-js';
 import {
   Zero,
+  type BaseDefaultContext,
+  type BaseDefaultSchema,
   type CustomMutatorDefs,
   type DefaultContext,
   type DefaultSchema,
-  type Schema,
   type ZeroOptions,
 } from './zero.ts';
 
@@ -28,21 +29,21 @@ const ZeroContext = createContext<
  * @deprecated Use {@linkcode ZeroProvider} instead of managing your own Zero instance.
  */
 export function createZero<
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = DefaultContext,
+  Context extends BaseDefaultContext = DefaultContext,
 >(options: ZeroOptions<S, MD, Context>): Zero<S, MD, Context> {
   const opts = {
     ...options,
     batchViewUpdates: batch,
   };
-  return new Zero(opts);
+  return new Zero<S, MD, Context>(opts);
 }
 
 export function useZero<
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = DefaultContext,
+  Context extends BaseDefaultContext = DefaultContext,
 >(): () => Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
 
@@ -64,9 +65,9 @@ export function useZero<
  * }
  */
 export function createUseZero<
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = DefaultContext,
+  Context extends BaseDefaultContext = DefaultContext,
 >() {
   return () => useZero<S, MD, Context>();
 }
@@ -74,9 +75,9 @@ export function createUseZero<
 const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
-  S extends Schema = DefaultSchema,
+  S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = DefaultContext,
+  Context extends BaseDefaultContext = DefaultContext,
 >(
   props: {
     children: JSX.Element;

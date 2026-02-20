@@ -16,6 +16,8 @@ import {
 import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
 import {useZero} from './use-zero.ts';
 import {
+  type BaseDefaultContext,
+  type BaseDefaultSchema,
   type DefaultContext,
   type DefaultSchema,
   type Falsy,
@@ -24,7 +26,6 @@ import {
   type QueryOrQueryRequest,
   type QueryResultDetails,
   type ReadonlyJSONValue,
-  type Schema,
   type TTL,
 } from './zero.ts';
 
@@ -62,9 +63,9 @@ export function createQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
+  TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
+  TContext extends BaseDefaultContext = DefaultContext,
 >(
   querySignal: Accessor<
     QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
@@ -79,9 +80,9 @@ export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
+  TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
+  TContext extends BaseDefaultContext = DefaultContext,
 >(
   querySignal: Accessor<
     QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
@@ -94,9 +95,9 @@ export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
+  TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
+  TContext extends BaseDefaultContext = DefaultContext,
 >(
   querySignal: Accessor<
     | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
@@ -110,9 +111,9 @@ export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends Schema = DefaultSchema,
+  TSchema extends BaseDefaultSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = DefaultContext,
+  TContext extends BaseDefaultContext = DefaultContext,
 >(
   querySignal: Accessor<
     | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
