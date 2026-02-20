@@ -119,6 +119,11 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
 
   const isViewSyncer =
     changeStreamer.mode === 'discover' || changeStreamer.uri !== undefined;
+  lc.info?.(
+    `litestream restore startup role=${
+      isViewSyncer ? 'view-syncer' : 'replication-manager'
+    } configuredBackupURL=${config.litestream.backupURL ?? '(none)'}`,
+  );
 
   // Fire off a snapshot reservation to the current replication-manager
   // (if there is one).
@@ -128,6 +133,9 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
     // The return value is required by view-syncers ...
     snapshotStatus = await firstMessage;
     lc.info?.(`restoring backup from ${snapshotStatus.backupURL}`);
+    lc.info?.(
+      `view-syncer snapshot status replicaVersion=${snapshotStatus.replicaVersion} minWatermark=${snapshotStatus.minWatermark} backupURL=${snapshotStatus.backupURL}`,
+    );
   } else {
     // but it is also useful to pause change-log cleanup when a new
     // replication-manager is starting up. In this case, the request is
@@ -140,6 +148,9 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
     config,
     'debug', // Include all output from `litestream restore`, as it's minimal.
     snapshotStatus?.backupURL,
+  );
+  lc.info?.(
+    `running litestream restore with backupURL=${env['ZERO_LITESTREAM_BACKUP_URL']} replicaFile=${config.replica.file}`,
   );
   const {restoreParallelism: parallelism} = config.litestream;
   const proc = spawn(

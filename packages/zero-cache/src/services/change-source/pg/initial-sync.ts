@@ -108,6 +108,17 @@ export async function initialSync(
           }
           if (e.code === PG_CONFIGURATION_LIMIT_EXCEEDED) {
             const slotExpression = replicationSlotExpression(shard);
+            const inactiveBefore = await sql<{slot: string}[]>`
+              SELECT slot_name as slot
+                FROM pg_replication_slots
+                WHERE slot_name LIKE ${slotExpression} AND NOT active
+                ORDER BY slot_name`;
+            lc.warn?.(
+              `slot limit exceeded for ${slotExpression}; inactive candidates before drop: ${inactiveBefore.map(
+                ({slot}) => slot,
+              )}`,
+              e,
+            );
 
             const dropped = await sql<{slot: string}[]>`
               SELECT slot_name as slot, pg_drop_replication_slot(slot_name) 
@@ -232,10 +243,31 @@ export async function initialSync(
     // orphaned replication slot to avoid running out of slots in
     // pathological cases that result in repeated failures.
     lc.warn?.(`dropping replication slot ${slotName}`, e);
+    const slotBefore = await sql<{slot: string; active: boolean}[]>`
+      SELECT slot_name as slot, active
+      FROM pg_replication_slots
+      WHERE slot_name = ${slotName}`;
+    lc.warn?.(
+      `orphaned slot cleanup pre-state for ${slotName}: ${JSON.stringify(
+        slotBefore,
+      )}`,
+    );
     await sql`
       SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
         WHERE slot_name = ${slotName};
-    `.catch(e => lc.warn?.(`Unable to drop replication slot ${slotName}`, e));
+    `
+      .then(async () => {
+        const slotAfter = await sql<{slot: string}[]>`
+          SELECT slot_name as slot
+          FROM pg_replication_slots
+          WHERE slot_name = ${slotName}`;
+        lc.warn?.(
+          `orphaned slot cleanup post-state for ${slotName}: ${JSON.stringify(
+            slotAfter,
+          )}`,
+        );
+      })
+      .catch(e => lc.warn?.(`Unable to drop replication slot ${slotName}`, e));
     await statusPublisher.publishAndThrowError(lc, 'Initializing', e);
   } finally {
     statusPublisher.stop();
