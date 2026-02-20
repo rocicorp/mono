@@ -67,6 +67,10 @@ export class RunningState {
     );
   }
 
+  get signal(): AbortSignal {
+    return this.#controller.signal;
+  }
+
   /**
    * Returns `true` until {@link stop()} has been called.
    *
