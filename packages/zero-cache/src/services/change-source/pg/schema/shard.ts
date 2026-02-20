@@ -198,18 +198,45 @@ export function shardSetup(
   `;
 }
 
-export function dropShard(appID: string, shardID: string | number): string {
+export async function dropShard(
+  lc: LogContext,
+  sql: PostgresDB,
+  appID: string,
+  shardID: string | number,
+): Promise<void> {
   const schema = `${appID}_${shardID}`;
   const metadataPublication = metadataPublicationName(appID, shardID);
   const defaultPublication = defaultPublicationName(appID, shardID);
 
+  // Log any peer replicas with active slots that will be wiped by dropping
+  // the shard schema. This is useful for diagnosing races during rolling
+  // deploys where multiple instances are running concurrently.
+  try {
+    const active = await sql<{slot: string; version: string}[]>`
+      SELECT slot, version FROM ${sql(schema)}.replicas r
+        WHERE EXISTS (
+          SELECT 1 FROM pg_replication_slots WHERE slot_name = r.slot
+        )
+        
+  `;
+    for (const {slot, version} of active) {
+      lc.warn?.(
+        `Dropping peer replica with active replication slot ${slot} at version ${version}`,
+      );
+    }
+  } catch (e) {
+    lc.warn?.(
+      `Error checking for active replicas in shard ${schema} before dropping it: ${e}`,
+    );
+  }
+
   // DROP SCHEMA ... CASCADE does not drop dependent PUBLICATIONS,
   // so PUBLICATIONs must be dropped explicitly.
-  return /*sql*/ `
+  await sql.unsafe(/*sql*/ `
     DROP PUBLICATION IF EXISTS ${id(defaultPublication)};
     DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
     DROP SCHEMA IF EXISTS ${id(schema)} CASCADE;
-  `;
+  `);
 }
 
 const internalShardConfigSchema = v.object({

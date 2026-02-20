@@ -34,7 +34,7 @@ export async function decommissionShard(
       lc.debug?.(
         `Dropped replication slot(s) ${dropped.map(({slotName}) => slotName)}`,
       );
-      await sql.unsafe(dropShard(appID, shardID));
+      await dropShard(lc, sql, appID, shardID);
       lc.debug?.(`Dropped upstream shard schema ${shard} and event triggers`);
     }
   });

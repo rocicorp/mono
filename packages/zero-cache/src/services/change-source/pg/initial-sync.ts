@@ -280,7 +280,7 @@ async function ensurePublishedTables(
         `some configured publications [${publications}] are missing: ` +
           `[${exists.flat()}]. resyncing`,
       );
-      await sql.unsafe(dropShard(shard.appID, shard.shardNum));
+      await dropShard(lc, sql, shard.appID, shard.shardNum);
       return ensurePublishedTables(lc, sql, shard, false);
     }
   }

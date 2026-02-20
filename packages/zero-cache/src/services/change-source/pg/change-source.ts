@@ -165,7 +165,7 @@ async function checkAndUpdateUpstream(
     .sort();
   if (!deepEqual(requested, replicated)) {
     lc.warn?.(`Dropping shard to change publications to: [${requested}]`);
-    await sql.unsafe(dropShard(shard.appID, shard.shardNum));
+    await dropShard(lc, sql, shard.appID, shard.shardNum);
     throw new AutoResetSignal(
       `Requested publications [${requested}] do not match configured ` +
         `publications: [${replicated}]`,
