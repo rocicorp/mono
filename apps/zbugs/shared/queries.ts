@@ -55,8 +55,10 @@ function labelsOrderByName({
     orderBy?: 'asc' | 'desc' | undefined;
   };
 }) {
-  let q = builder.label.whereScalar('project', q =>
-    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+  let q = builder.label.whereExists(
+    'project',
+    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+    {scalar: true},
   );
   if (orderBy !== undefined) {
     q = q.orderBy('name', orderBy);
@@ -103,8 +105,10 @@ export const queries = defineQueries({
     ({ctx: auth, args: {userID, projectName}}) =>
       applyIssuePermissions(
         builder.issue
-          .whereScalar('project', q =>
-            q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+          .whereExists(
+            'project',
+            q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+            {scalar: true},
           )
           .related('labels')
           .related('viewState', q => q.where('userID', userID))
@@ -147,14 +151,18 @@ export const queries = defineQueries({
           );
         } else if (filter === 'creators') {
           q = q.whereExists('createdIssues', i =>
-            i.whereScalar('project', q =>
-              q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+            i.whereExists(
+              'project',
+              q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+              {scalar: true},
             ),
           );
         } else if (filter === 'assignees') {
           q = q.whereExists('assignedIssues', i =>
-            i.whereScalar('project', q =>
-              q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+            i.whereExists(
+              'project',
+              q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+              {scalar: true},
             ),
           );
         } else {
@@ -390,8 +398,10 @@ export function buildListQuery(args: ListQueryArgs) {
 
   const {projectName = ZERO_PROJECT_NAME} = listContext;
 
-  q = q.whereScalar('project', q =>
-    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+  q = q.whereExists(
+    'project',
+    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+    {scalar: true},
   );
 
   const {sortField, sortDirection} = listContext;
@@ -411,16 +421,10 @@ export function buildListQuery(args: ListQueryArgs) {
   }
 
   const {open, creator, assignee, labels, textFilter} = listContext;
-  q = q.where(({and, cmp, exists, or, scalar}) =>
+  q = q.where(({and, cmp, exists, or}) =>
     and(
       // oxlint-disable-next-line eqeqeq
       open != null ? cmp('open', open) : undefined,
-      creator
-        ? cmp('creatorID', scalar(builder.user.where('login', creator), 'id'))
-        : undefined,
-      assignee
-        ? cmp('assigneeID', scalar(builder.user.where('login', assignee), 'id'))
-        : undefined,
       textFilter
         ? or(
             cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
@@ -432,17 +436,34 @@ export function buildListQuery(args: ListQueryArgs) {
         : undefined,
       ...(labels ?? []).map(label =>
         exists('issueLabels', q =>
-          q.whereScalar('label', q =>
-            q
-              .where('name', label)
-              .whereScalar('project', q =>
-                q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-              ),
+          q.whereExists(
+            'label',
+            q =>
+              q
+                .where('name', label)
+                .whereExists(
+                  'project',
+                  q =>
+                    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                  {scalar: true},
+                ),
+            {scalar: true},
           ),
         ),
       ),
     ),
   );
+
+  if (creator) {
+    q = q.whereExists('creator', q => q.where('login', creator), {
+      scalar: true,
+    });
+  }
+  if (assignee) {
+    q = q.whereExists('assignee', q => q.where('login', assignee), {
+      scalar: true,
+    });
+  }
 
   return applyIssuePermissions(q, role);
 }
