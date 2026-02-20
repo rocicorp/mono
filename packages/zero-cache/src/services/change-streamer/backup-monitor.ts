@@ -171,11 +171,12 @@ export class BackupMonitor implements Service {
         // not an error.
         return;
       }
+      // Treat exceptions from fetch (e.g. network errors) as non-fatal, and simply
+      // log them and skip the watermark check until the next interval.
       this.#lc.warn?.(`unable to fetch metrics at ${this.#metricsEndpoint}`, e);
       return;
     }
     if (!resp.ok) {
-      // Normally we should throw Error but we just log this in the caller.
       this.#lc.warn?.(
         `unable to fetch metrics at ${this.#metricsEndpoint}: ${await resp.text()}`,
       );
