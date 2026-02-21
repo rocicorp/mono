@@ -135,6 +135,121 @@ export class BTreeWrite extends BTreeRead {
     });
   }
 
+  /**
+   * Inserts multiple key-value pairs into the BTree efficiently.
+   * The entries array must be sorted by key.
+   * @param entries - Array of [key, value] tuples, must be sorted by key
+   * @returns Promise that resolves when all entries are inserted
+   */
+  putMany(
+    entries: ReadonlyArray<readonly [string, FrozenJSONValue]>,
+  ): Promise<void> {
+    return this.#lock.withLock(async () => {
+      if (entries.length === 0) {
+        return;
+      }
+
+      // Validate sortedness and convert to sized entries in one pass
+      const sizedEntries: Entry<FrozenJSONValue>[] = entries.map(
+        ([k, v], i) => {
+          if (i > 0) {
+            assert(
+              entries[i - 1][0] < k,
+              `putMany entries must be sorted and unique`,
+            );
+          }
+          return [k, v, this.getEntrySize(k, v)];
+        },
+      );
+
+      // Compute content size constraints
+      const headerSize = this.chunkHeaderSize;
+      const contentMin = this.minSize - headerSize;
+      const contentMax = this.maxSize - headerSize;
+
+      // Fast path: if tree is empty, use bulk loading algorithm
+      if (this.rootHash === emptyHash) {
+        // Build leaf nodes
+        const leafPartitions = partition(
+          sizedEntries,
+          e => e[2],
+          contentMin,
+          contentMax,
+        );
+
+        if (leafPartitions.length === 0) {
+          return;
+        }
+
+        if (leafPartitions.length === 1) {
+          const leaf = this.newDataNodeImpl(leafPartitions[0]);
+          this.rootHash = leaf.hash;
+          return;
+        }
+
+        // Build tree bottom-up - reuse array to avoid allocations
+        let currentLevel: Array<DataNodeImpl | InternalNodeImpl | Entry<Hash>> =
+          leafPartitions.map(entries => this.newDataNodeImpl(entries));
+        let level = 0;
+
+        while (currentLevel.length > 1) {
+          level++;
+
+          // Create entries pointing to current level nodes - reuse array
+          const parentEntriesLength = currentLevel.length;
+          for (let i = 0; i < parentEntriesLength; i++) {
+            currentLevel[i] = createNewInternalEntryForNode(
+              currentLevel[i] as DataNodeImpl | InternalNodeImpl,
+              this.getEntrySize,
+            );
+          }
+
+          // Partition parent entries
+          const parentPartitions = partition(
+            currentLevel as Entry<Hash>[],
+            e => e[2],
+            contentMin,
+            contentMax,
+          );
+
+          // Create internal nodes
+          currentLevel = parentPartitions.map(entries =>
+            this.newInternalNodeImpl(entries, level),
+          );
+        }
+
+        this.rootHash = (
+          currentLevel[0] as DataNodeImpl | InternalNodeImpl
+        ).hash;
+        return;
+      }
+
+      // Slow path: merge with existing tree
+      const oldRootNode = await this.getNode(this.rootHash);
+      const rootNode = await oldRootNode.putMany(sizedEntries, this);
+
+      // We do the rebalancing in the parent so we need to do it here as well.
+      if (rootNode.getChildNodeSize(this) > this.maxSize) {
+        const partitions = partition(
+          rootNode.entries,
+          e => e[2],
+          contentMin,
+          contentMax,
+        );
+        const {level} = rootNode;
+        const entries: Entry<Hash>[] = partitions.map(entries => {
+          const node = this.newNodeImpl(entries, level);
+          return createNewInternalEntryForNode(node, this.getEntrySize);
+        });
+        const newRoot = this.newInternalNodeImpl(entries, level + 1);
+        this.rootHash = newRoot.hash;
+        return;
+      }
+
+      this.rootHash = rootNode.hash;
+    });
+  }
+
   del(key: string): Promise<boolean> {
     return this.#lock.withLock(async () => {
       const oldRootNode = await this.getNode(this.rootHash);
