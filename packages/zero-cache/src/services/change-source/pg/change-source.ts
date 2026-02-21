@@ -412,9 +412,9 @@ class PostgresChangeSource implements ChangeSource {
           `replication slot.`,
       );
     }
-    // Clean up the replicas table.
+    // Clear the state of the older replicas.
     const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
-    await sql`DELETE FROM ${sql(replicasTable)} WHERE slot != ${slotToKeep}`;
+    await sql`DELETE FROM ${sql(replicasTable)} WHERE slot < ${slotToKeep}`;
 
     const pids = result.filter(({pid}) => pid !== null).map(({pid}) => pid);
     if (pids.length) {
