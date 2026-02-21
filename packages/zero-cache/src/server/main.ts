@@ -146,7 +146,7 @@ export default async function runWorker(
       'message',
       () => {
         processes.addSubprocess(
-          startReplicaBackupProcess(config),
+          startReplicaBackupProcess(lc, config),
           'supporting',
           'litestream',
         );
