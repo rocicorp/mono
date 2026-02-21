@@ -31,6 +31,8 @@ export type ChangeLogEntry = {
   change: Change;
 };
 
+type FullChangeLogEntry = ChangeLogEntry & {pos: number};
+
 function createChangeLogTable(shard: ShardID) {
   // Note: The "change" column used to be JSONB, but that was problematic in that
   // it does not handle the NULL unicode character.
@@ -220,10 +222,26 @@ export async function ensureReplicationConfig(
     }
     // Initialize (or re-initialize TRUNCATED) tables
     if (results.length === 0 || stmts.length > 0) {
+      // The storer uses the earliest changeLog entry as the safe watermark
+      // from which subscribers can be resumed. These initial entries ensure
+      // that subscribers can start from a freshly synced replica, even if
+      // new changes have been replicated and not purged from the changeLog.
+      //
+      // TODO: Replace this with an explicit `firstWatermark` column in the
+      //       change db.
+      const watermark = replicaConfig.replicaVersion;
+      const initialTx: FullChangeLogEntry[] = [
+        {watermark, pos: 0, change: {tag: 'begin'}},
+        {watermark, pos: 1, change: {tag: 'commit'}},
+      ];
+
       stmts.push(
         sql`INSERT INTO ${sql(schema)}."replicationConfig" ${sql(replicaConfig)}`,
         sql`INSERT INTO ${sql(schema)}."replicationState"  ${sql(replicationState)} 
               ON CONFLICT (lock) DO UPDATE SET ${sql(replicationState)}`,
+        ...initialTx.map(
+          change => sql`INSERT INTO ${sql(schema)}."changeLog" ${sql(change)}`,
+        ),
       );
       return Promise.all(stmts);
     }
