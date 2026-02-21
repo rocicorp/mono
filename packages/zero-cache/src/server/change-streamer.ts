@@ -42,6 +42,7 @@ export default async function runWorker(
       protocol,
       startupDelayMs,
       backPressureLimitHeapProportion,
+      queueSizeBackPressureThreshold,
     },
     upstream,
     change,
@@ -101,6 +102,7 @@ export default async function runWorker(
         subscriptionState,
         autoReset ?? false,
         backPressureLimitHeapProportion,
+        queueSizeBackPressureThreshold,
         setTimeout,
       );
       break;

@@ -578,6 +578,17 @@ export const zeroOptions = {
         `throughput.`,
       ],
     },
+
+    queueSizeBackPressureThreshold: {
+      type: v.number().optional(),
+      desc: [
+        `Optional queued change count threshold for applying back pressure.`,
+        ``,
+        `If set, back pressure is applied when either the estimated queued bytes exceeds`,
+        `{bold backPressureLimitHeapProportion} threshold or the number of queued changes exceeds`,
+        `this threshold.`,
+      ],
+    },
   },
 
   taskID: {

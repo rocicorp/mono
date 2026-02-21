@@ -61,11 +61,11 @@ describe('change-streamer/service', () => {
     acks = new Queue();
     setTimeoutFn = vi.fn();
 
-    streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
-      'change.streamer:12345',
+	    streamer = await initializeStreamer(
+	      lc,
+	      shard,
+	      'task-id',
+	      'change.streamer:12345',
       'ws',
       sql,
       {
@@ -76,11 +76,11 @@ describe('change-streamer/service', () => {
             acks: {push: status => acks.enqueue(status)},
           }),
       },
-      replicaConfig,
-      true,
-      0.04,
-      setTimeoutFn as unknown as typeof setTimeout,
-    );
+	      replicaConfig,
+	      true,
+	      0.04,
+	      setTimeoutFn as unknown as typeof setTimeout,
+	    );
     streamerDone = streamer.run();
 
     return async () => {
@@ -899,18 +899,18 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
     };
-    const streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
-      'change.streamer:12345',
-      'ws',
-      sql,
-      source,
-      replicaConfig,
-      true,
-      0.04,
-    );
+	    const streamer = await initializeStreamer(
+	      lc,
+	      shard,
+	      'task-id',
+	      'change.streamer:12345',
+	      'ws',
+	      sql,
+	      source,
+	      replicaConfig,
+	      true,
+	      0.04,
+	    );
     void streamer.run();
 
     expect(await hasRetried).toBe(true);
@@ -924,18 +924,18 @@ describe('change-streamer/service', () => {
         return resolver().promise;
       }),
     };
-    let streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
-      'change.streamer:12345',
+	    let streamer = await initializeStreamer(
+	      lc,
+	      shard,
+	      'task-id',
+	      'change.streamer:12345',
       'ws',
       sql,
       source,
-      replicaConfig,
-      true,
-      0.04,
-    );
+	      replicaConfig,
+	      true,
+	      0.04,
+	    );
     void streamer.run();
 
     expect(await requests.dequeue()).toBe(REPLICA_VERSION);
@@ -946,18 +946,18 @@ describe('change-streamer/service', () => {
       UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '04';
     `.simple();
 
-    streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
+	    streamer = await initializeStreamer(
+	      lc,
+	      shard,
+	      'task-id',
       'change.streamer:12345',
       'ws',
       sql,
       source,
-      replicaConfig,
-      true,
-      0.04,
-    );
+	      replicaConfig,
+	      true,
+	      0.04,
+	    );
     void streamer.run();
 
     expect(await requests.dequeue()).toBe('04');
@@ -980,18 +980,18 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
     };
-    const streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
+	    const streamer = await initializeStreamer(
+	      lc,
+	      shard,
+	      'task-id',
       'change.streamer:12345',
       'ws',
       sql,
       source,
-      replicaConfig,
-      true,
-      0.04,
-    );
+	      replicaConfig,
+	      true,
+	      0.04,
+	    );
     void streamer.run();
 
     changes.fail(new Error('doh'));
@@ -1017,18 +1017,18 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
     };
-    const streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
+	    const streamer = await initializeStreamer(
+	      lc,
+	      shard,
+	      'task-id',
       'change.streamer:54321',
       'ws',
       sql,
       source,
-      replicaConfig,
-      true,
-      0.04,
-    );
+	      replicaConfig,
+	      true,
+	      0.04,
+	    );
     void streamer.run();
 
     // Stream down a big (1MB) transaction, which should take time to commit.
@@ -1088,18 +1088,18 @@ describe('change-streamer/service', () => {
           }),
         ),
     };
-    const streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
+	    const streamer = await initializeStreamer(
+	      lc,
+	      shard,
+	      'task-id',
       'change.streamer:54321',
       'ws',
       sql,
       source,
-      replicaConfig,
-      true,
-      0.04,
-    );
+	      replicaConfig,
+	      true,
+	      0.04,
+	    );
     void streamer.run();
 
     const sub = await streamer.subscribe({
