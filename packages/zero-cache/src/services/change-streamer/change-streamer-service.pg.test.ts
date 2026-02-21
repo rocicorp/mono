@@ -175,6 +175,8 @@ describe('change-streamer/service', () => {
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
+      'commit',
+      'begin',
       'insert',
       'insert',
       'commit',
@@ -260,6 +262,8 @@ describe('change-streamer/service', () => {
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
+      'commit',
+      'begin',
       'insert',
       'insert',
       'commit',
@@ -340,6 +344,8 @@ describe('change-streamer/service', () => {
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
+      'commit',
+      'begin',
       'insert',
       'insert',
       'commit',
@@ -417,6 +423,8 @@ describe('change-streamer/service', () => {
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
+      'commit',
+      'begin',
       'insert',
       'insert',
       'commit',
@@ -492,10 +500,12 @@ describe('change-streamer/service', () => {
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
+      'commit',
+      'begin',
       'insert',
       'commit',
     ]);
-    const insert = logEntries[1].change;
+    const insert = logEntries[3].change;
     assert(insert.tag === 'insert');
     expect(insert.new).toEqual({
       id: 'hello',
@@ -616,7 +626,7 @@ describe('change-streamer/service', () => {
 
     expect(await streamer.getChangeLogState()).toEqual({
       replicaVersion: '01',
-      minWatermark: '03',
+      minWatermark: '01',
     });
 
     // Start two subscribers: one at 06 and one at 04
@@ -642,7 +652,7 @@ describe('change-streamer/service', () => {
 
     expect(
       await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
-    ).toEqual([['03'], ['04'], ['05'], ['06'], ['07'], ['08']]);
+    ).toEqual([['01'], ['01'], ['03'], ['04'], ['05'], ['06'], ['07'], ['08']]);
 
     expect(setTimeoutFn).toHaveBeenCalledTimes(1);
     expect(setTimeoutFn.mock.calls[0][1]).toBe(30000);
@@ -1017,6 +1027,8 @@ describe('change-streamer/service', () => {
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
+      'commit',
+      'begin',
       'insert',
       'commit',
     ]);
@@ -1061,6 +1073,8 @@ describe('change-streamer/service', () => {
       ChangeLogEntry[]
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'commit',
       'begin',
       'insert',
       'commit',
@@ -1119,9 +1133,10 @@ describe('change-streamer/service', () => {
     await streamerDone;
 
     // Nothing should be committed
-    expect(await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`).toEqual(
-      [],
-    );
+    expect(await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`).toEqual([
+      {watermark: '01'},
+      {watermark: '01'},
+    ]);
   });
 
   test('shutdown on unexpected storage error', async () => {
@@ -1140,7 +1155,11 @@ describe('change-streamer/service', () => {
     // Commit should not have succeeded
     expect(
       await sql`SELECT watermark, pos FROM "zoro_3/cdc"."changeLog"`,
-    ).toEqual([{watermark: '05', pos: 3n}]);
+    ).toEqual([
+      {watermark: '01', pos: 0n},
+      {watermark: '01', pos: 1n},
+      {watermark: '05', pos: 3n},
+    ]);
   });
 
   test('transaction aborted on unexpected termination', async () => {
