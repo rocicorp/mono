@@ -867,10 +867,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     `.values();
     expect(slots1).toHaveLength(2);
 
-    const replicas1 = await upstream.unsafe(`
+    const replicas2 = await upstream.unsafe(`
       SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
     `);
-    expect(replicas1).toHaveLength(2);
+    expect(replicas2).toHaveLength(2);
 
     // The original stream should still be active and receiving changes.
     const downstream1 = drainToQueue(changes1);
@@ -904,12 +904,16 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {tableCopyWorkers: 5},
     );
 
-    // There should now be 3 replication slot2.
+    // There should now be 3 replication slots.
     const slots2 = await upstream<{slot: string}[]>`
         SELECT slot_name as slot FROM pg_replication_slots
           WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
       `.values();
     expect(slots2).toHaveLength(3);
+    const replicas3 = await upstream.unsafe(`
+      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
+    `);
+    expect(replicas3).toHaveLength(3);
 
     // Starting a subscription on the new slot should kill the old
     // subscription and drop the first replication slot.
@@ -937,11 +941,12 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     changes2.cancel();
 
-    // Verify that the replica rows have been cleaned up.
-    const replicas2 = await upstream.unsafe(`
+    // Verify that the older replica state has been cleaned up.
+    // The newer replica state should remain.
+    const replicasAfterTakeover = await upstream.unsafe(`
       SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
     `);
-    expect(replicas2).toEqual(replicas1.slice(1));
+    expect(replicasAfterTakeover).toEqual(replicas3.slice(1));
 
     // Verify that the two latter slots remain. (Use waitFor to reduce
     // flakiness because the drop is non-transactional.)
