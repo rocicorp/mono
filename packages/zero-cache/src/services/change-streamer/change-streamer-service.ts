@@ -486,6 +486,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     minWatermark: string;
   }> {
     const minWatermark = await this.#storer.getMinWatermarkForCatchup();
+    if (!minWatermark) {
+      this.#lc.warn?.(
+        `Unexpected empty changeLog. Resync if "Local replica watermark" errors arise`,
+      );
+    }
     return {
       replicaVersion: this.#replicaVersion,
       minWatermark: minWatermark ?? this.#replicaVersion,

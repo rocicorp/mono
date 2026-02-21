@@ -111,7 +111,7 @@ describe('change-streamer/storer', () => {
     });
 
     test('purge', async () => {
-      expect(await storer.purgeRecordsBefore('02')).toBe(0);
+      expect(await storer.purgeRecordsBefore('02')).toBe(2);
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
@@ -806,6 +806,8 @@ describe('change-streamer/storer', () => {
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
+        {watermark: '00', pos: 0n},
+        {watermark: '00', pos: 1n},
         {watermark: '03', pos: 0n},
         {watermark: '03', pos: 1n},
         {watermark: '03', pos: 2n},
@@ -1202,6 +1204,22 @@ describe('change-streamer/storer', () => {
         Result [
           {
             "change": {
+              "tag": "begin",
+            },
+            "pos": 0n,
+            "precommit": null,
+            "watermark": "00",
+          },
+          {
+            "change": {
+              "tag": "commit",
+            },
+            "pos": 1n,
+            "precommit": null,
+            "watermark": "00",
+          },
+          {
+            "change": {
               "foo": "bar",
               "tag": "begin",
             },
@@ -1406,6 +1424,22 @@ describe('change-streamer/storer', () => {
         await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
       ).toMatchInlineSnapshot(`
         Result [
+          {
+            "change": {
+              "tag": "begin",
+            },
+            "pos": 0n,
+            "precommit": null,
+            "watermark": "00",
+          },
+          {
+            "change": {
+              "tag": "commit",
+            },
+            "pos": 1n,
+            "precommit": null,
+            "watermark": "00",
+          },
           {
             "change": {
               "foo": "bar",

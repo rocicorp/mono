@@ -59,7 +59,10 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['rezo_8/cdc.changeLog']: [],
+      ['rezo_8/cdc.changeLog']: [
+        {watermark: '183', pos: 0n, change: {tag: 'begin'}, precommit: null},
+        {watermark: '183', pos: 1n, change: {tag: 'commit'}, precommit: null},
+      ],
     });
 
     await sql`
@@ -104,6 +107,8 @@ describe('change-streamer/schema/tables', () => {
         },
       ],
       ['rezo_8/cdc.changeLog']: [
+        {watermark: '183', pos: 0n, change: {tag: 'begin'}, precommit: null},
+        {watermark: '183', pos: 1n, change: {tag: 'commit'}, precommit: null},
         {
           watermark: '184',
           pos: 1n,
@@ -221,7 +226,10 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['rezo_8/cdc.changeLog']: [],
+      ['rezo_8/cdc.changeLog']: [
+        {watermark: '1g8', pos: 0n, change: {tag: 'begin'}, precommit: null},
+        {watermark: '1g8', pos: 1n, change: {tag: 'commit'}, precommit: null},
+      ],
       ['rezo_8/cdc.tableMetadata']: [],
       ['rezo_8/cdc.backfilling']: [],
     });
