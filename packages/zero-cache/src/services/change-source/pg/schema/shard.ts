@@ -268,7 +268,7 @@ export async function getReplicaAtVersion(
     // log out all the replicas and the joined shardConfig
     const allReplicas = await sql`
       SELECT * FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true`;
-    lc.debug?.(`Replica not found in: ${JSON.stringify(allReplicas)}`);
+    lc.info?.(`Replica not found in: ${JSON.stringify(allReplicas)}`);
     return null;
   }
   return v.parse(result[0], replicaSchema, 'passthrough');

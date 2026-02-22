@@ -213,8 +213,12 @@ function replicaIsValid(
   }
 }
 
-export function startReplicaBackupProcess(config: ZeroConfig): ChildProcess {
+export function startReplicaBackupProcess(
+  lc: LogContext,
+  config: ZeroConfig,
+): ChildProcess {
   const {litestream, env} = getLitestream(config);
+  lc.info?.(`starting litestream backup to ${config.litestream.backupURL}`);
   return spawn(litestream, ['replicate'], {
     env,
     stdio: 'inherit',
