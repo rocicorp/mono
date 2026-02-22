@@ -322,12 +322,31 @@ class PostgresChangeSource implements ChangeSource {
 
     // Note: `slot_name <= slotToKeep` uses a string compare of the millisecond
     // timestamp, which works until it exceeds 13 digits (sometime in 2286).
-    const result = await sql<{slot: string; pid: string | null}[]>`
-    SELECT slot_name as slot, pg_terminate_backend(active_pid), active_pid as pid
+    const result = await sql<
+      {slot: string; pid: string | null; terminated: boolean | null}[]
+    >`
+    SELECT slot_name as slot, pg_terminate_backend(active_pid) as terminated, active_pid as pid
       FROM pg_replication_slots 
       WHERE (slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName})
             AND slot_name <= ${slotToKeep}`;
+    this.#lc.info?.(`terminated replication slots: ${JSON.stringify(result)}`);
     if (result.length === 0) {
+      const shardSlots = await sql<
+        {
+          slot: string;
+          active: boolean;
+          pid: string | null;
+        }[]
+      >`
+      SELECT slot_name as slot, active, active_pid as pid
+        FROM pg_replication_slots
+        WHERE slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName}
+        ORDER BY slot_name`;
+      this.#lc.warn?.(
+        `slot ${slotToKeep} not found while cleaning subscribers; shard slots at time of failure: ${JSON.stringify(
+          shardSlots,
+        )}`,
+      );
       throw new AbortError(
         `replication slot ${slotToKeep} is missing. A different ` +
           `replication-manager should now be running on a new ` +
@@ -336,7 +355,23 @@ class PostgresChangeSource implements ChangeSource {
     }
     // Clear the state of the older replicas.
     const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
-    await sql`DELETE FROM ${sql(replicasTable)} WHERE slot < ${slotToKeep}`;
+    const replicasBefore = await sql<{slot: string; version: string}[]>`
+      SELECT slot, version FROM ${sql(replicasTable)} ORDER BY slot`;
+    this.#lc.info?.(
+      `replicas before cleanup (slotToKeep=${slotToKeep}): ${JSON.stringify(
+        replicasBefore,
+      )}`,
+    );
+    await sql<{slot: string; version: string}[]>`
+      DELETE FROM ${sql(replicasTable)}
+        WHERE slot < ${slotToKeep}`;
+    const replicasAfter = await sql<{slot: string; version: string}[]>`
+      SELECT slot, version FROM ${sql(replicasTable)} ORDER BY slot`;
+    this.#lc.info?.(
+      `replicas after cleanup (slotToKeep=${slotToKeep}): ${JSON.stringify(
+        replicasAfter,
+      )}`,
+    );
 
     const pids = result.filter(({pid}) => pid !== null).map(({pid}) => pid);
     if (pids.length) {
