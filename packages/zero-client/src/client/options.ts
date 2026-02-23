@@ -5,13 +5,15 @@ import type {
   BaseDefaultContext,
   BaseDefaultSchema,
   DefaultContext,
-  DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
-type ZeroOptionsBase<
+/**
+ * Configuration for {@linkcode Zero}.
+ */
+export type ZeroOptions<
   S extends BaseDefaultSchema,
   MD extends CustomMutatorDefs | undefined,
   C extends BaseDefaultContext,
@@ -319,21 +321,11 @@ type ZeroOptionsBase<
    * Context is passed to queries when they are executed.
    */
   context?: C | undefined;
-};
-
-/**
- * Configuration for {@linkcode Zero}.
- */
-export type ZeroOptions<
-  S extends BaseDefaultSchema = DefaultSchema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  C extends BaseDefaultContext = DefaultContext,
-> = ZeroOptionsBase<S, MD, C> &
-  (unknown extends DefaultContext
-    ? {}
-    : {
-        context: C;
-      });
+} & (unknown extends DefaultContext
+  ? {}
+  : {
+      context: C;
+    });
 
 /**
  * @deprecated Use {@link ZeroOptions} instead.
