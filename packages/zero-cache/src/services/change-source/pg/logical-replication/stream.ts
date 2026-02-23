@@ -211,17 +211,19 @@ function parseStreamMessage(
   buffer: Buffer,
   parser: PgoutputParser,
 ): StreamMessage | null {
-  // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-XLOGDATA
+  // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-START-REPLICATION
   if (buffer[0] !== 0x77 && buffer[0] !== 0x6b) {
     lc.warn?.('Unknown message', buffer[0]);
     return null;
   }
   const lsn = buffer.readBigUInt64BE(1);
   if (buffer[0] === 0x77) {
-    // XLogData
+    // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-XLOGDATA
+    // (Byte 25 is where the WAL data begins)
     return [lsn, parser.parse(buffer.subarray(25))];
   }
-  // Primary keepalive message: shouldRespond
+  // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-PRIMARY-KEEPALIVE-MESSAGE
+  // (Byte 17: shouldRespond)
   const shouldRespond = buffer.readInt8(17) !== 0;
   return [lsn, {tag: 'keepalive', shouldRespond}];
 }

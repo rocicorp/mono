@@ -33,7 +33,7 @@ export class Forwarder {
    */
   async forward(entry: WatermarkedChange) {
     const [type] = entry[1];
-    const results = [...this.#active.values()].map(sub => sub.send(entry));
+    const results = Array.from(this.#active.values(), sub => sub.send(entry));
     switch (type) {
       case 'begin':
         // While in a Transaction, all added subscribers are "queued" so that no
