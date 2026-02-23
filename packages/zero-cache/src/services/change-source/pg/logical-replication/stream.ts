@@ -127,7 +127,7 @@ export async function subscribe(
       // Don't log the shutdown signal. This is the expected way for upstream
       // to close the connection (and will be logged downstream).
       (e instanceof postgres.PostgresError && e.code === PG_ADMIN_SHUTDOWN) ||
-      lc.error?.(`error from ${db.options.host}`, e),
+      lc.warn?.(`error from ${db.options.host}`, e),
   );
 
   pipe({
