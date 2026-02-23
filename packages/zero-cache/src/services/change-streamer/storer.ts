@@ -184,7 +184,7 @@ export class Storer implements Service {
     this.#queue.enqueue(['ready', resolve]);
     await ready;
 
-    const [[{lastWatermark}], backfillRequests] = await this.#db.begin(
+    const [[{lastWatermark}], result] = await this.#db.begin(
       Mode.READONLY,
       sql => [
         sql<{lastWatermark: string}[]>`
@@ -193,7 +193,7 @@ export class Storer implements Service {
         // Formats a BackfillRequest using json_object_agg() to construct the
         // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
         // to make it optional and possibly `null`.
-        sql<BackfillRequest[]>`
+        sql`
         SELECT 
             json_build_object(
               'schema', b."schema",
@@ -206,11 +206,14 @@ export class Storer implements Service {
           LEFT JOIN ${this.#cdc('tableMetadata')} as t
           ON (b."schema" = t."schema" AND b."table" = t."table")
           GROUP BY b."schema", b."table", t."metadata"
-        `.then(result => v.parse(result, backfillRequestsSchema)),
+        `,
       ],
     );
 
-    return {lastWatermark, backfillRequests};
+    return {
+      lastWatermark,
+      backfillRequests: v.parse(result, backfillRequestsSchema),
+    };
   }
 
   async getMinWatermarkForCatchup(): Promise<string | null> {
@@ -696,7 +699,7 @@ export class Storer implements Service {
           relation: {schema, name: table, rowKey},
           columns,
         } = change;
-        const cols = [...rowKey.columns, columns];
+        const cols = [...rowKey.columns, ...columns];
         stmts.push(
           sql`DELETE FROM ${this.#cdc('backfilling')}
                 WHERE "schema" = ${schema} AND "table" = ${table} AND "column" IN ${sql(cols)}`,

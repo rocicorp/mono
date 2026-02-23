@@ -597,7 +597,7 @@ class MissingRowKeyError extends BackfillStreamError {
 
 /**
  * Error type for backfill stream implementations to throw indicating that
- * the backfill request failed to due a schema incompatibility error. This
+ * the backfill request failed due to a schema incompatibility error. This
  * type of error does not need exponential backoff, as the retry happens
  * naturally once the invalidating schema change is processed and committed.
  */

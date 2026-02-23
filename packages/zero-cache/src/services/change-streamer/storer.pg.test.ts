@@ -223,6 +223,7 @@ describe('change-streamer/storer', () => {
             backfill: {
               a: {fooID: 987, barID: 'zoo'},
               b: {fooID: 843, barID: 'ozz'},
+              d: {fooID: 777, barID: 'zoz'},
             },
           },
         ],
@@ -244,6 +245,10 @@ describe('change-streamer/storer', () => {
                   "b": {
                     "barID": "ozz",
                     "fooID": 843,
+                  },
+                  "d": {
+                    "barID": "zoz",
+                    "fooID": 777,
                   },
                 },
                 "table": {
@@ -294,6 +299,10 @@ describe('change-streamer/storer', () => {
                   "b": {
                     "barID": "ozz",
                     "fooID": 843,
+                  },
+                  "d": {
+                    "barID": "zoz",
+                    "fooID": 777,
                   },
                 },
                 "table": {
@@ -391,6 +400,10 @@ describe('change-streamer/storer', () => {
                     "barID": "ozz",
                     "fooID": 843,
                   },
+                  "d": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
                 },
                 "table": {
                   "metadata": null,
@@ -466,6 +479,10 @@ describe('change-streamer/storer', () => {
                   "b": {
                     "barID": "ozz",
                     "fooID": 843,
+                  },
+                  "d": {
+                    "barID": "zoz",
+                    "fooID": 777,
                   },
                 },
                 "table": {
@@ -548,6 +565,10 @@ describe('change-streamer/storer', () => {
                     "barID": "zoo",
                     "fooID": 987,
                   },
+                  "d": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
                   "newName": {
                     "barID": "ozz",
                     "fooID": 843,
@@ -626,6 +647,10 @@ describe('change-streamer/storer', () => {
                     "barID": "zoo",
                     "fooID": 987,
                   },
+                  "d": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
                 },
                 "table": {
                   "metadata": {
@@ -645,7 +670,7 @@ describe('change-streamer/storer', () => {
           }
         `);
 
-      // Set the other backfilling column to completed
+      // Set the other backfilling columns to completed
       storer.store([
         '110',
         ['begin', messages.begin(), {commitWatermark: '110'}],
@@ -661,7 +686,7 @@ describe('change-streamer/storer', () => {
               name: 'bar',
               rowKey: {columns: ['a']},
             },
-            columns: [],
+            columns: ['d'],
             watermark: '0f',
           },
         ],
@@ -792,11 +817,11 @@ describe('change-streamer/storer', () => {
 
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [],
-          "lastWatermark": "112",
-        }
-      `);
+          {
+            "backfillRequests": Result [],
+            "lastWatermark": "112",
+          }
+        `);
     });
 
     test('non-owner purge prevented', async () => {
