@@ -5,6 +5,7 @@ import type {
   BaseDefaultContext,
   BaseDefaultSchema,
   DefaultContext,
+  DefaultSchema,
 } from '../../../zero-types/src/default-types.ts';
 import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -14,9 +15,9 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
  * Configuration for {@linkcode Zero}.
  */
 export type ZeroOptions<
-  S extends BaseDefaultSchema,
-  MD extends CustomMutatorDefs | undefined,
-  C extends BaseDefaultContext,
+  S extends BaseDefaultSchema = DefaultSchema,
+  MD extends CustomMutatorDefs | undefined = undefined,
+  C extends BaseDefaultContext = DefaultContext,
 > = {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
