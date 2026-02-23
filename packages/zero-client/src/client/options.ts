@@ -11,10 +11,13 @@ import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.
 import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
-type ZeroOptionsBase<
-  S extends BaseDefaultSchema,
-  MD extends CustomMutatorDefs | undefined,
-  C extends BaseDefaultContext,
+/**
+ * Configuration for {@linkcode Zero}.
+ */
+export type ZeroOptions<
+  S extends BaseDefaultSchema = DefaultSchema,
+  MD extends CustomMutatorDefs | undefined = undefined,
+  C extends BaseDefaultContext = DefaultContext,
 > = {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -319,21 +322,11 @@ type ZeroOptionsBase<
    * Context is passed to queries when they are executed.
    */
   context?: C | undefined;
-};
-
-/**
- * Configuration for {@linkcode Zero}.
- */
-export type ZeroOptions<
-  S extends BaseDefaultSchema = DefaultSchema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  C extends BaseDefaultContext = DefaultContext,
-> = ZeroOptionsBase<S, MD, C> &
-  (unknown extends DefaultContext
-    ? {}
-    : {
-        context: C;
-      });
+} & (unknown extends DefaultContext
+  ? {}
+  : {
+      context: C;
+    });
 
 /**
  * @deprecated Use {@link ZeroOptions} instead.
