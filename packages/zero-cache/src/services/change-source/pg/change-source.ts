@@ -328,10 +328,23 @@ class PostgresChangeSource implements ChangeSource {
         for await (const [lsn, msg] of messages) {
           // Note: no reservation is needed for pushStatus().
           if (msg.tag === 'keepalive') {
+            const watermark = majorVersionToString(lsn);
+            if (msg.shouldRespond) {
+              acker.expectDownstreamAck(watermark);
+            } else {
+              // Keepalives with shouldRespond = false are sent to the
+              // multiplexer for Listeners, but for efficiency they are not
+              // sent downstream to the change-streamer. Ack them here if
+              // the change-streamer is caught up. This updates the
+              // replication slot's `confirmed_flush_lsn` more quickly
+              // (rather than waiting for the periodic shouldRespond), which
+              // is useful for monitoring replication slot lag.
+              acker.ackIfDownstreamIsCaughtUp(watermark);
+            }
             changes.pushStatus([
               'status',
               {ack: msg.shouldRespond},
-              {watermark: majorVersionToString(lsn)},
+              {watermark},
             ]);
 
             // If we're not in a transaction but the last reservation was kept
@@ -352,6 +365,13 @@ class PostgresChangeSource implements ChangeSource {
 
           let lastChange: ChangeStreamMessage | undefined;
           for (const change of await changeMaker.makeChanges(lsn, msg)) {
+            if (change[0] === 'begin') {
+              // Mark the commit watermark as being expected so that any
+              // intermediate shouldRespond=false watermarks, which will be
+              // at the commitWatermark, are *not* acked, as the ack must come
+              // from change-streamer after it commits the transaction.
+              acker.expectDownstreamAck(change[2].commitWatermark);
+            }
             await changes.push(change); // Allow the change-streamer to push back.
             lastChange = change;
           }
@@ -543,40 +563,34 @@ class PostgresChangeSource implements ChangeSource {
 // Exported for testing.
 export class Acker {
   #acks: Sink<bigint>;
-  #keepaliveTimer: NodeJS.Timeout | undefined;
+  #waitingForDownstreamAck: string | null = null;
 
   constructor(acks: Sink<bigint>) {
     this.#acks = acks;
   }
 
-  keepalive() {
-    // Sets a timeout to send a standby status update in response to
-    // a primary keepalive message.
-    //
-    // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-PRIMARY-KEEPALIVE-MESSAGE
-    //
-    // A primary keepalive message is streamed to the change-streamer as a
-    // 'status' message, which in turn responds with an ack. However, in the
-    // event that the change-streamer is backed up processing preceding
-    // changes, this timeout will fire to send a status update that does not
-    // change the confirmed flush position. This timeout must be shorter than
-    // the `wal_sender_timeout`, which defaults to 60 seconds.
-    //
-    // https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT
-    this.#keepaliveTimer ??= setTimeout(() => this.#sendAck(), 1000);
+  expectDownstreamAck(watermark: string) {
+    this.#waitingForDownstreamAck = watermark;
   }
 
   ack(watermark: LexiVersion) {
+    if (
+      this.#waitingForDownstreamAck &&
+      this.#waitingForDownstreamAck <= watermark
+    ) {
+      this.#waitingForDownstreamAck = null;
+    }
     this.#sendAck(watermark);
   }
 
-  #sendAck(watermark?: LexiVersion) {
-    clearTimeout(this.#keepaliveTimer);
-    this.#keepaliveTimer = undefined;
+  ackIfDownstreamIsCaughtUp(watermark: string) {
+    if (this.#waitingForDownstreamAck === null) {
+      this.#sendAck(watermark);
+    }
+  }
 
-    // Note: Sending '0/0' means "keep alive but do not update confirmed_flush_lsn"
-    // https://github.com/postgres/postgres/blob/3edc67d337c2e498dad1cd200e460f7c63e512e6/src/backend/replication/walsender.c#L2457
-    const lsn = watermark ? majorVersionFromString(watermark) : 0n;
+  #sendAck(watermark: LexiVersion) {
+    const lsn = majorVersionFromString(watermark);
     this.#acks.push(lsn);
   }
 }
