@@ -231,6 +231,17 @@ function getIncrementalMigrations(
         lc.info?.(`Upgraded DDL event triggers`);
       },
     },
+
+    // Add initialSyncContext column to replicas table.
+    15: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas
+            ADD COLUMN "initialSyncContext" JSON,
+            ADD COLUMN "subscriberContext" JSON
+        `;
+      },
+    },
   };
 }
 

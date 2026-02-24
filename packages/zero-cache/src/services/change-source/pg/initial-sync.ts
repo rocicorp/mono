@@ -7,6 +7,7 @@ import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
+import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {
@@ -58,12 +59,16 @@ export type InitialSyncOptions = {
   profileCopy?: boolean | undefined;
 };
 
+/** Server context to store with the initial sync metadata for debugging. */
+export type ServerContext = JSONObject;
+
 export async function initialSync(
   lc: LogContext,
   shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
   syncOptions: InitialSyncOptions,
+  context: ServerContext,
 ) {
   if (!ALLOWED_APP_ID_CHARACTERS.test(shard.appID)) {
     throw new Error(
@@ -130,7 +135,7 @@ export async function initialSync(
     const {snapshot_name: snapshot, consistent_point: lsn} = slot;
     const initialVersion = toStateVersionString(lsn);
 
-    initReplicationState(tx, publications, initialVersion);
+    initReplicationState(tx, publications, initialVersion, context);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
@@ -205,7 +210,14 @@ export async function initialSync(
       const index = performance.now() - indexStart;
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
-      await addReplica(sql, shard, slotName, initialVersion, published);
+      await addReplica(
+        sql,
+        shard,
+        slotName,
+        initialVersion,
+        published,
+        context,
+      );
 
       const elapsed = performance.now() - start;
       lc.info?.(

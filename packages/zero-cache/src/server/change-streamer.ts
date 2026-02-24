@@ -1,6 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
+import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
@@ -71,6 +72,8 @@ export default async function runWorker(
 
   let changeStreamer: ChangeStreamerService | undefined;
 
+  const context = getServerContext(config);
+
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
@@ -82,12 +85,14 @@ export default async function runWorker(
               shard,
               replica.file,
               initialSync,
+              context,
             )
           : await initializeCustomChangeSource(
               lc,
               upstream.db,
               shard,
               replica.file,
+              context,
             );
 
       changeStreamer = await initializeStreamer(

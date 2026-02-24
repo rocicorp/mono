@@ -44,6 +44,7 @@ import {
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import {BackfillManager} from '../common/backfill-manager.ts';
 import {ChangeStreamMultiplexer} from '../common/change-stream-multiplexer.ts';
+import {initReplica} from '../common/replica-schema.ts';
 import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
   ColumnAdd,
@@ -59,7 +60,11 @@ import type {
 } from '../protocol/current/downstream.ts';
 import type {ColumnMetadata, TableMetadata} from './backfill-metadata.ts';
 import {streamBackfill} from './backfill-stream.ts';
-import {type InitialSyncOptions} from './initial-sync.ts';
+import {
+  initialSync,
+  type InitialSyncOptions,
+  type ServerContext,
+} from './initial-sync.ts';
 import type {
   Message,
   MessageMessage,
@@ -86,7 +91,6 @@ import {
   type Replica,
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
-import {initSyncSchema} from './sync-schema.ts';
 
 /**
  * Initializes a Postgres change source, including the initial sync of the
@@ -99,14 +103,13 @@ export async function initializePostgresChangeSource(
   shard: ShardConfig,
   replicaDbFile: string,
   syncOptions: InitialSyncOptions,
+  context: ServerContext,
 ): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
-  await initSyncSchema(
+  await initReplica(
     lc,
     `replica-${shard.appID}-${shard.shardNum}`,
-    shard,
     replicaDbFile,
-    upstreamURI,
-    syncOptions,
+    (log, tx) => initialSync(log, shard, tx, upstreamURI, syncOptions, context),
   );
 
   const replica = new Database(lc, replicaDbFile);
@@ -129,6 +132,7 @@ export async function initializePostgresChangeSource(
       upstreamURI,
       shard,
       upstreamReplica,
+      context,
     );
 
     return {subscriptionState, changeSource};
@@ -141,7 +145,11 @@ async function checkAndUpdateUpstream(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardConfig,
-  {replicaVersion, publications: subscribed}: SubscriptionState,
+  {
+    replicaVersion,
+    publications: subscribed,
+    initialSyncContext,
+  }: SubscriptionState,
 ) {
   // Perform any shard schema updates
   await updateShardSchema(lc, sql, shard, replicaVersion);
@@ -151,6 +159,7 @@ async function checkAndUpdateUpstream(
     sql,
     shard,
     replicaVersion,
+    initialSyncContext,
   );
   if (!upstreamReplica) {
     throw new AutoResetSignal(
@@ -227,17 +236,20 @@ class PostgresChangeSource implements ChangeSource {
   readonly #upstreamUri: string;
   readonly #shard: ShardID;
   readonly #replica: Replica;
+  readonly #context: ServerContext;
 
   constructor(
     lc: LogContext,
     upstreamUri: string,
     shard: ShardID,
     replica: Replica,
+    context: ServerContext,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
     this.#shard = shard;
     this.#replica = replica;
+    this.#context = context;
   }
 
   async startStream(
@@ -305,7 +317,7 @@ class PostgresChangeSource implements ChangeSource {
       this.#upstreamUri,
     );
 
-    void (async function () {
+    void (async () => {
       try {
         let reservation: ReservationState | null = null;
         let inTransaction = false;
@@ -366,7 +378,13 @@ class PostgresChangeSource implements ChangeSource {
       } catch (e) {
         // Note: no need to worry about reservations here since downstream
         //       is being completely canceled.
-        changes.fail(translateError(e));
+        const err = translateError(e);
+        if (err instanceof ShutdownSignal) {
+          // Log the new state of the replica to surface information about the
+          // server that sent the shutdown signal, if any.
+          await this.#logCurrentReplicaInfo();
+        }
+        changes.fail(err);
       }
     })();
 
@@ -382,6 +400,27 @@ class PostgresChangeSource implements ChangeSource {
     };
   }
 
+  async #logCurrentReplicaInfo() {
+    const db = pgClient(this.#lc, this.#upstreamUri);
+    try {
+      const replica = await getReplicaAtVersion(
+        this.#lc,
+        db,
+        this.#shard,
+        this.#replica.version,
+      );
+      if (replica) {
+        this.#lc.info?.(
+          `Shutdown signal from replica@${this.#replica.version}: ${stringify(replica.subscriberContext)}`,
+        );
+      }
+    } catch (e) {
+      this.#lc.warn?.(`error logging replica info`, e);
+    } finally {
+      await db.end();
+    }
+  }
+
   /**
    * Stops replication slots associated with this shard, and returns
    * a `cleanup` task that drops any slot other than the specified
@@ -392,64 +431,67 @@ class PostgresChangeSource implements ChangeSource {
    * that will soon take over the slot.
    */
   async #stopExistingReplicationSlotSubscribers(
-    sql: PostgresDB,
+    db: PostgresDB,
     slotToKeep: string,
   ): Promise<{cleanup: Promise<void>}> {
     const slotExpression = replicationSlotExpression(this.#shard);
     const legacySlotName = legacyReplicationSlot(this.#shard);
 
-    // Note: `slot_name <= slotToKeep` uses a string compare of the millisecond
-    // timestamp, which works until it exceeds 13 digits (sometime in 2286).
-    const result = await sql<
-      {slot: string; pid: string | null; terminated: boolean | null}[]
-    >`
-    SELECT slot_name as slot, pg_terminate_backend(active_pid) as terminated, active_pid as pid
-      FROM pg_replication_slots 
-      WHERE (slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName})
-            AND slot_name <= ${slotToKeep}`;
-    this.#lc.info?.(`terminated replication slots: ${JSON.stringify(result)}`);
-    if (result.length === 0) {
-      const shardSlots = await sql<
-        {
-          slot: string;
-          active: boolean;
-          pid: string | null;
-        }[]
-      >`
-      SELECT slot_name as slot, active, active_pid as pid
-        FROM pg_replication_slots
-        WHERE slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName}
-        ORDER BY slot_name`;
-      this.#lc.warn?.(
-        `slot ${slotToKeep} not found while cleaning subscribers; shard slots at time of failure: ${JSON.stringify(
-          shardSlots,
+    const result = await db.begin(async sql => {
+      // Note: `slot_name <= slotToKeep` uses a string compare of the millisecond
+      // timestamp, which works until it exceeds 13 digits (sometime in 2286).
+      const result = await sql<
+        {slot: string; pid: string | null; terminated: boolean | null}[]
+      > /*sql*/ `
+      SELECT slot_name as slot, pg_terminate_backend(active_pid) as terminated, active_pid as pid
+        FROM pg_replication_slots 
+        WHERE (slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName})
+              AND slot_name <= ${slotToKeep}`;
+      this.#lc.info?.(
+        `terminated replication slots: ${JSON.stringify(result)}`,
+      );
+      const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
+      const replicasBefore = await sql`
+        SELECT slot, version, "initialSyncContext", "subscriberContext" 
+          FROM ${sql(replicasTable)} ORDER BY slot`;
+
+      if (result.length === 0) {
+        const shardSlots = await sql`
+        SELECT slot_name as slot, active, active_pid as pid
+          FROM pg_replication_slots
+          WHERE slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName}
+          ORDER BY slot_name`;
+        this.#lc.warn?.(
+          `slot ${slotToKeep} not found while cleaning subscribers`,
+          {slots: shardSlots, replicas: replicasBefore},
+        );
+        throw new AbortError(
+          `replication slot ${slotToKeep} is missing. A different ` +
+            `replication-manager should now be running on a new ` +
+            `replication slot.`,
+        );
+      }
+      // Clear the state of the older replicas.
+      this.#lc.info?.(
+        `replicas before cleanup (slotToKeep=${slotToKeep}): ${JSON.stringify(
+          replicasBefore,
         )}`,
       );
-      throw new AbortError(
-        `replication slot ${slotToKeep} is missing. A different ` +
-          `replication-manager should now be running on a new ` +
-          `replication slot.`,
+      await sql`
+        DELETE FROM ${sql(replicasTable)} WHERE slot < ${slotToKeep}`;
+      await sql`
+        UPDATE ${sql(replicasTable)} 
+          SET "subscriberContext" = ${this.#context}
+          WHERE slot = ${slotToKeep}`;
+      const replicasAfter = await sql<{slot: string; version: string}[]>`
+      SELECT slot, version FROM ${sql(replicasTable)} ORDER BY slot`;
+      this.#lc.info?.(
+        `replicas after cleanup (slotToKeep=${slotToKeep}): ${JSON.stringify(
+          replicasAfter,
+        )}`,
       );
-    }
-    // Clear the state of the older replicas.
-    const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
-    const replicasBefore = await sql<{slot: string; version: string}[]>`
-      SELECT slot, version FROM ${sql(replicasTable)} ORDER BY slot`;
-    this.#lc.info?.(
-      `replicas before cleanup (slotToKeep=${slotToKeep}): ${JSON.stringify(
-        replicasBefore,
-      )}`,
-    );
-    await sql<{slot: string; version: string}[]>`
-      DELETE FROM ${sql(replicasTable)}
-        WHERE slot < ${slotToKeep}`;
-    const replicasAfter = await sql<{slot: string; version: string}[]>`
-      SELECT slot, version FROM ${sql(replicasTable)} ORDER BY slot`;
-    this.#lc.info?.(
-      `replicas after cleanup (slotToKeep=${slotToKeep}): ${JSON.stringify(
-        replicasAfter,
-      )}`,
-    );
+      return result;
+    });
 
     const pids = result.filter(({pid}) => pid !== null).map(({pid}) => pid);
     if (pids.length) {
@@ -460,7 +502,7 @@ class PostgresChangeSource implements ChangeSource {
       .map(({slot}) => slot);
     return {
       cleanup: otherSlots.length
-        ? this.#dropReplicationSlots(sql, otherSlots)
+        ? this.#dropReplicationSlots(db, otherSlots)
         : promiseVoid,
     };
   }
