@@ -4,6 +4,7 @@ import {getHostIp} from './network.ts';
 import type {NormalizedZeroConfig} from './normalize.ts';
 
 export type ServerContext = {
+  appID: string;
   taskID: string;
   hostIP: string;
   hostname: string;
@@ -19,6 +20,7 @@ export type ServerContext = {
  */
 export function getServerContext(config: NormalizedZeroConfig): ServerContext {
   const context: ServerContext = {
+    appID: config.app.id,
     taskID: config.taskID,
     hostIP: getHostIp(createSilentLogContext()),
     hostname: hostname(),
