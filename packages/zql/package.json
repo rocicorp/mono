@@ -16,7 +16,6 @@
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
     "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/prettier-config": "^0.4.0",
     "@standard-schema/spec": "^1.0.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
@@ -25,7 +24,6 @@
     "zero-protocol": "0.0.0",
     "zero-types": "0.0.0"
   },
-  "prettier": "@rocicorp/prettier-config",
   "dependencies": {
     "@rocicorp/resolver": "^1.0.2",
     "compare-utf8": "^0.1.1"

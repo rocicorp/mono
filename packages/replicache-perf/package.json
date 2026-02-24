@@ -12,7 +12,6 @@
   },
   "type": "module",
   "dependencies": {
-    "@rocicorp/prettier-config": "^0.4.0",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.2",
     "command-line-args": "^6.0.1",
@@ -28,6 +27,5 @@
     "typescript": "~5.9.3",
     "vite": "7.2.7",
     "xbytes": "^1.7.0"
-  },
-  "prettier": "@rocicorp/prettier-config"
+  }
 }

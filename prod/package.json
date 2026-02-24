@@ -8,6 +8,11 @@
     "check-format": "prettier --check ."
   },
   "prettier": {
+    "singleQuote": true,
+    "trailingComma": "all",
+    "arrowParens": "avoid",
+    "bracketSpacing": false,
+    "quoteProps": "consistent",
     "overrides": [
       {
         "files": [

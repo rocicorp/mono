@@ -16,9 +16,7 @@
     "pidusage": "^4.0.0"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.4.0",
     "@types/pidusage": "^2.0.5",
     "shared": "0.0.0"
-  },
-  "prettier": "@rocicorp/prettier-config"
+  }
 }
