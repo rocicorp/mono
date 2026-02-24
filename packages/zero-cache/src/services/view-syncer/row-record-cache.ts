@@ -15,6 +15,7 @@ import {
   type PostgresDB,
   type PostgresTransaction,
 } from '../../types/pg.ts';
+import {JSON as PG_JSON} from '../../types/pg-types.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import {checkVersion, type CVRFlushStats} from './cvr-store.ts';
@@ -402,20 +403,25 @@ export class RowRecordCache {
       }
     }
     if (rowRecordRows.length) {
+      const clientGroupIDs = rowRecordRows.map(r => r.clientGroupID);
+      const schemas = rowRecordRows.map(r => r.schema);
+      const tables = rowRecordRows.map(r => r.table);
+      const rowKeys = rowRecordRows.map(r => r.rowKey);
+      const rowVersions = rowRecordRows.map(r => r.rowVersion);
+      const patchVersions = rowRecordRows.map(r => r.patchVersion);
+      const refCounts = rowRecordRows.map(r => r.refCounts);
       pending.push(
         tx`
   INSERT INTO ${this.#cvr('rows')}(
       "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
-  ) SELECT
-      "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
-    FROM json_to_recordset(${rowRecordRows}) AS x(
-      "clientGroupID" TEXT,
-      "schema" TEXT,
-      "table" TEXT,
-      "rowKey" JSONB,
-      "rowVersion" TEXT,
-      "patchVersion" TEXT,
-      "refCounts" JSONB
+  ) SELECT * FROM unnest(
+      ${tx.array(clientGroupIDs)}::text[],
+      ${tx.array(schemas)}::text[],
+      ${tx.array(tables)}::text[],
+      ${tx.array(rowKeys, PG_JSON)}::jsonb[],
+      ${tx.array(rowVersions)}::text[],
+      ${tx.array(patchVersions)}::text[],
+      ${tx.array(refCounts, PG_JSON)}::jsonb[]
   ) ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
     DO UPDATE SET "rowVersion" = excluded."rowVersion",
       "patchVersion" = excluded."patchVersion",

@@ -6,12 +6,11 @@ import type {RowKey, RowKeyType} from '../types/row-key.ts';
 /**
  * Efficient lookup of multiple rows from a table from row keys.
  *
- * This uses the temporary VALUES table strategy:
+ * This uses `unnest` to create a virtual keys table:
  *
  * ```sql
- * WITH keys(col1, col2) AS (VALUES
- *   (val1::type1, val2::type2),
- *   -- etc. for each key --
+ * WITH keys(col1, col2) AS (
+ *   SELECT * FROM unnest($1::type1[], $2::type2[])
  * )
  * SELECT * from <table> JOIN keys USING (col1, col2);
  * ```
@@ -30,18 +29,25 @@ export function lookupRowsWithKeys(
   const cols = colNames
     .map(col => db`${db(col)}`)
     .flatMap((c, i) => (i ? [db`,`, c] : c));
-  // Explicit types must be declared for each value, e.g. `( $1::int4, $2::text )`.
-  // See https://github.com/porsager/postgres/issues/842
-  const colType = (col: string) =>
-    db.unsafe(typeNameByOID[rowKeyType[col].typeOid]);
-  const values = Array.from(rowKeys, row =>
-    colNames
-      .map(col => db`${row[col]}::${colType(col)}`)
-      .flatMap((v, i) => (i ? [db`,`, v] : v)),
-  ).flatMap((tuple, i) => (i ? [db`),(`, ...tuple.flat()] : tuple));
+
+  // Collect values into per-column arrays for unnest.
+  const columnArrays: unknown[][] = colNames.map(() => []);
+  for (const row of rowKeys) {
+    for (let i = 0; i < colNames.length; i++) {
+      columnArrays[i].push(row[colNames[i]]);
+    }
+  }
+
+  const unnestArgs = colNames
+    .map((col, i) => {
+      const oid = rowKeyType[col].typeOid;
+      const typeName = typeNameByOID[oid];
+      return db`${db.array(columnArrays[i], oid)}::${db.unsafe(typeName)}[]`;
+    })
+    .flatMap((v, i) => (i ? [db`,`, v] : v));
 
   return db`
-    WITH keys (${cols}) AS (VALUES (${values}))
+    WITH keys (${cols}) AS (SELECT * FROM unnest(${unnestArgs}))
     SELECT * FROM ${db(schema)}.${db(table)} JOIN keys USING (${cols});
   `;
 }
