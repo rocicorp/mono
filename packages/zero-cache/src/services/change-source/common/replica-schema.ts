@@ -159,7 +159,8 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   10: {
     migrateSchema: (_, db) => {
       db.exec(/*sql*/ `
-        ALTER TABLE "_zero.replicationConfig" ADD COLUMN "initialSyncContext" TEXT;
+        ALTER TABLE "_zero.replicationConfig" 
+          ADD COLUMN "initialSyncContext" TEXT DEFAULT '{}';
       `);
     },
   },

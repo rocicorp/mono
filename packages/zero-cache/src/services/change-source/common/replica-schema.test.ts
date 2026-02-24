@@ -74,6 +74,12 @@ describe('replica-schema-migrations', () => {
         CREATE_V1_REPLICATION_CONFIG_TABLE +
         CREATE_V6_COLUMN_METADATA_TABLE,
       replicaPreState: {
+        ['_zero.replicationConfig']: [
+          {
+            replicaVersion: '123',
+            publications: '["foo_publication"]',
+          },
+        ],
         ['_zero.column_metadata']: [
           {
             character_max_length: null,
@@ -87,6 +93,13 @@ describe('replica-schema-migrations', () => {
         ],
       },
       replicaPostState: {
+        ['_zero.replicationConfig']: [
+          {
+            replicaVersion: '123',
+            publications: '["foo_publication"]',
+            initialSyncContext: '{}',
+          },
+        ],
         ['_zero.column_metadata']: [
           {
             character_max_length: null,
