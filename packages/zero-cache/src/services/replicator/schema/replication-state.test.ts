@@ -9,7 +9,7 @@ import {
 import {
   getAscendingEvents,
   getReplicationState,
-  getSubscriptionState,
+  getSubscriptionStateAndContext,
   initReplicationState,
   recordEvent,
   updateReplicationWatermark,
@@ -78,7 +78,7 @@ describe('replicator/schema/replication-state', () => {
   });
 
   test('subscription state', () => {
-    expect(getSubscriptionState(db)).toEqual({
+    expect(getSubscriptionStateAndContext(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
       initialSyncContext: {foo: 'bar'},
@@ -105,7 +105,7 @@ describe('replicator/schema/replication-state', () => {
     expect(getReplicationState(db)).toEqual({
       stateVersion: '0f',
     });
-    expect(getSubscriptionState(db)).toEqual({
+    expect(getSubscriptionStateAndContext(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
       initialSyncContext: {foo: 'bar'},
@@ -124,7 +124,7 @@ describe('replicator/schema/replication-state', () => {
     expect(getReplicationState(db)).toEqual({
       stateVersion: '0r',
     });
-    expect(getSubscriptionState(db)).toEqual({
+    expect(getSubscriptionStateAndContext(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
       initialSyncContext: {foo: 'bar'},

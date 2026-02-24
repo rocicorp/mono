@@ -38,8 +38,9 @@ import {
 import type {Sink} from '../../../types/streams.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
-  getSubscriptionState,
+  getSubscriptionStateAndContext,
   type SubscriptionState,
+  type SubscriptionStateAndContext,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import {BackfillManager} from '../common/backfill-manager.ts';
@@ -113,7 +114,9 @@ export async function initializePostgresChangeSource(
   );
 
   const replica = new Database(lc, replicaDbFile);
-  const subscriptionState = getSubscriptionState(new StatementRunner(replica));
+  const subscriptionState = getSubscriptionStateAndContext(
+    new StatementRunner(replica),
+  );
   replica.close();
 
   // Check that upstream is properly setup, and throw an AutoReset to re-run
@@ -149,7 +152,7 @@ async function checkAndUpdateUpstream(
     replicaVersion,
     publications: subscribed,
     initialSyncContext,
-  }: SubscriptionState,
+  }: SubscriptionStateAndContext,
 ) {
   // Perform any shard schema updates
   await updateShardSchema(lc, sql, shard, replicaVersion);

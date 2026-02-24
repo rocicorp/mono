@@ -8,12 +8,12 @@ export const DEFAULT_PREFERRED_PREFIXES = [
 ] as const;
 
 export function getHostIp(
-  lc: LogContext,
+  lc?: LogContext,
   preferredPrefixes: readonly string[] = DEFAULT_PREFERRED_PREFIXES,
 ) {
   const interfaces = networkInterfaces();
   const preferred = getPreferredIp(interfaces, preferredPrefixes);
-  lc.info?.(`network interfaces`, {preferred, interfaces});
+  lc?.info?.(`network interfaces`, {preferred, interfaces});
   return preferred;
 }
 

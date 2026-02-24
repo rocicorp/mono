@@ -1,5 +1,4 @@
 import {hostname} from 'node:os';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {getHostIp} from './network.ts';
 import type {NormalizedZeroConfig} from './normalize.ts';
 
@@ -22,7 +21,7 @@ export function getServerContext(config: NormalizedZeroConfig): ServerContext {
   const context: ServerContext = {
     appID: config.app.id,
     taskID: config.taskID,
-    hostIP: getHostIp(createSilentLogContext()),
+    hostIP: getHostIp(),
     hostname: hostname(),
     timestamp: new Date().toISOString(),
 

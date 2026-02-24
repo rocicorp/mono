@@ -7,7 +7,6 @@
 
 import {
   jsonObjectSchema,
-  parse,
   stringify,
   type JSONObject,
 } from '../../../../../shared/src/bigint-json.ts';
@@ -76,16 +75,34 @@ const subscriptionStateSchema = v
   .object({
     replicaVersion: v.string(),
     publications: v.string(),
+    watermark: v.string(),
+  })
+  .map(s => ({
+    ...s,
+    publications: v.parse(JSON.parse(s.publications), stringArray),
+  }));
+
+export type SubscriptionState = v.Infer<typeof subscriptionStateSchema>;
+
+const subscriptionStateAndContextSchema = v
+  .object({
+    replicaVersion: v.string(),
+    publications: v.string(),
     initialSyncContext: v.string(),
     watermark: v.string(),
   })
   .map(s => ({
     ...s,
     publications: v.parse(JSON.parse(s.publications), stringArray),
-    initialSyncContext: v.parse(parse(s.initialSyncContext), jsonObjectSchema),
+    initialSyncContext: v.parse(
+      JSON.parse(s.initialSyncContext),
+      jsonObjectSchema,
+    ),
   }));
 
-export type SubscriptionState = v.Infer<typeof subscriptionStateSchema>;
+export type SubscriptionStateAndContext = v.Infer<
+  typeof subscriptionStateAndContextSchema
+>;
 
 const replicationStateSchema = v.object({
   stateVersion: v.string(),
@@ -154,13 +171,25 @@ export function getAscendingEvents(db: Database) {
 
 export function getSubscriptionState(db: StatementRunner): SubscriptionState {
   const result = db.get(/*sql*/ `
-      SELECT c.replicaVersion, c.publications, c.initialSyncContext, 
-             s.stateVersion as watermark
+      SELECT c.replicaVersion, c.publications, s.stateVersion as watermark
         FROM "_zero.replicationConfig" as c
         JOIN "_zero.replicationState" as s
         ON c.lock = s.lock
     `);
   return v.parse(result, subscriptionStateSchema);
+}
+
+export function getSubscriptionStateAndContext(
+  db: StatementRunner,
+): SubscriptionStateAndContext {
+  const result = db.get(/*sql*/ `
+      SELECT c.replicaVersion, c.publications, c.initialSyncContext,
+        s.stateVersion as watermark
+        FROM "_zero.replicationConfig" as c
+        JOIN "_zero.replicationState" as s
+        ON c.lock = s.lock
+    `);
+  return v.parse(result, subscriptionStateAndContextSchema);
 }
 
 export function updateReplicationWatermark(
