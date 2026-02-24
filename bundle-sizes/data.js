@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1771429904846,
+  "lastUpdate": 1771927002698,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55169,6 +55169,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/746bb50e6602b213c5587be024e4d8cce2382691"
         },
         "date": 1771429892461,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 304492,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54890,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111765,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31995,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "198982749+Copilot@users.noreply.github.com",
+            "name": "Copilot",
+            "username": "Copilot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc32aa9044b032f430dd2fa765f1be48d5545978",
+          "message": "Remove @rocicorp/prettier-config dependency (#5595)\n\n`@rocicorp/prettier-config` is a trivial wrapper around 5 prettier\nsettings. Inline the config directly instead of taking an external\ndependency.\n\n## Changes\n\n- Add root `.prettierrc` with the settings previously exported by\n`@rocicorp/prettier-config`:\n  ```json\n  {\n    \"singleQuote\": true,\n    \"trailingComma\": \"all\",\n    \"arrowParens\": \"avoid\",\n    \"bracketSpacing\": false,\n    \"quoteProps\": \"consistent\"\n  }\n  ```\n- Remove `\"prettier\": \"@rocicorp/prettier-config\"` and\n`@rocicorp/prettier-config` devDependency from all `package.json` files\n— prettier discovers the root `.prettierrc` automatically via directory\ntraversal\n- Merge base settings into `prod/package.json`'s existing prettier\nconfig (which has YAML-specific overrides) to preserve equivalent\nbehavior\n\n> [!WARNING]\n>\n> <details>\n> <summary>Firewall rules blocked me from connecting to one or more\naddresses (expand for details)</summary>\n>\n> #### I tried to connect to the following addresses, but was blocked by\nfirewall rules:\n>\n> - `checkpoint.prisma.io`\n> - Triggering command: `/opt/hostedtoolcache/node/24.13.0/x64/bin/node\n/opt/hostedtoolcache/node/24.13.0/x64/bin/node\n/home/REDACTED/work/mono/mono/node_modules/prisma/build/child\n{&#34;product&#34;:&#34;prisma&#34;,&#34;version&#34;:&#34;7.2.0&#34;,&#34;cli_install_type&#34;:&#34;local&#34;,&#34;information&#34;:&#34;&#34;,&#34;local_timestamp&#34;:&#34;2026-02-24T08:29:14Z&#34;,&#34;project_hash&#34;:&#34;4d170c0b&#34;,&#34;cli_path&#34;:&#34;/home/REDACTED/work/mono/mono/node_modules/.bin/prisma&#34;,&#34;cli_path_hash&#34;:&#34;2ea86ac5&#34;,&#34;endpoint&#34;:&#34;h`\n(dns block)\n>\n> If you need me to access, download, or install something from one of\nthese locations, you can either:\n>\n> - Configure [Actions setup\nsteps](https://gh.io/copilot/actions-setup-steps) to set up my\nenvironment, which run before the firewall is enabled\n> - Add the appropriate URLs or hosts to the custom allowlist in this\nrepository's [Copilot coding agent\nsettings](https://github.com/rocicorp/mono/settings/copilot/coding_agent)\n(admins only)\n>\n> </details>\n\n<!-- START COPILOT ORIGINAL PROMPT -->\n\n\n\n<details>\n\n<summary>Original prompt</summary>\n\n> Can you get rid of the dependency on `@rocicorp/prettier-config`. All\nit does is export this:\n> \n> ```json\n> {\n>   \"singleQuote\": true,\n>   \"trailingComma\": \"all\",\n>   \"arrowParens\": \"avoid\",\n>   \"bracketSpacing\": false,\n>   \"quoteProps\": \"consistent\"\n> }\n> ```\n> \n> The user has attached the following file paths as relevant context:\n>  - AGENTS.md\n>  - CLAUDE.md\n\n\n</details>\n\n\n\n<!-- START COPILOT CODING AGENT SUFFIX -->\n\nCreated from [VS\nCode](https://code.visualstudio.com/docs/copilot/copilot-coding-agent).\n\n<!-- START COPILOT CODING AGENT TIPS -->\n---\n\n✨ Let Copilot coding agent [set things up for\nyou](https://github.com/rocicorp/mono/issues/new?title=✨+Set+up+Copilot+instructions&body=Configure%20instructions%20for%20this%20repository%20as%20documented%20in%20%5BBest%20practices%20for%20Copilot%20coding%20agent%20in%20your%20repository%5D%28https://gh.io/copilot-coding-agent-tips%29%2E%0A%0A%3COnboard%20this%20repo%3E&assignees=copilot)\n— coding agent works faster and does higher quality work when set up for\nyour repo.\n\n---------\n\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\nCo-authored-by: Erik Arvidsson <arv@roci.dev>",
+          "timestamp": "2026-02-24T09:06:07Z",
+          "tree_id": "d40f8704fc70ffb4ce2dcc91746c26d0799b0537",
+          "url": "https://github.com/rocicorp/mono/commit/cc32aa9044b032f430dd2fa765f1be48d5545978"
+        },
+        "date": 1771926990517,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
