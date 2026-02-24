@@ -2919,18 +2919,24 @@ test('duplicate relationship alias uses last-writer-wins', () => {
   const result = sink.fetch();
 
   // User 1 (aaron) has userStates: HI - no CA, so filtered to empty
-  const user1 = result.find(n => n.row.id === 1);
-  expect(user1?.relationships.states).toEqual([]);
+  const user1 = result.find(n => n !== 'yield' && n.row.id === 1);
+  expect(user1 !== 'yield' && user1?.relationships.states).toEqual([]);
 
   // User 3 (greg) has userStates: AZ, CA - filtered to just CA
-  const user3 = result.find(n => n.row.id === 3);
-  expect(user3?.relationships.states.length).toBe(1);
-  expect(user3?.relationships.states[0].row.stateCode).toBe('CA');
+  const user3 = result.find(n => n !== 'yield' && n.row.id === 3);
+  expect(user3 !== 'yield' && user3?.relationships.states.length).toBe(1);
+  const user3State = user3 !== 'yield' && user3?.relationships.states[0];
+  expect(user3State !== 'yield' && user3State && user3State.row.stateCode).toBe(
+    'CA',
+  );
 
   // User 6 (darick) has userStates: CA - filtered to CA
-  const user6 = result.find(n => n.row.id === 6);
-  expect(user6?.relationships.states.length).toBe(1);
-  expect(user6?.relationships.states[0].row.stateCode).toBe('CA');
+  const user6 = result.find(n => n !== 'yield' && n.row.id === 6);
+  expect(user6 !== 'yield' && user6?.relationships.states.length).toBe(1);
+  const user6State = user6 !== 'yield' && user6?.relationships.states[0];
+  expect(user6State !== 'yield' && user6State && user6State.row.stateCode).toBe(
+    'CA',
+  );
 
   // Verify push also works correctly - only the filtered relationship exists
   // Add a userState that doesn't match the filter - should not propagate

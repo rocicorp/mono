@@ -943,6 +943,7 @@ describe('poke handler', () => {
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
 
     expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
+    expect(onPokeErrorStub).toHaveBeenCalledWith('error in poke');
 
     const timeoutCallback1 = setTimeoutStub.mock
       .calls[1][0] as () => Promise<void>;
@@ -950,6 +951,82 @@ describe('poke handler', () => {
     // poke 2 cleared so replicachePokeStub not called
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
+  });
+
+  test('onPokeError receives the actual error for non-cookie errors', async () => {
+    const onPokeErrorStub = vi.fn();
+    const replicachePokeStub = vi.fn();
+    const clientID = 'c1';
+    const logContext = new LogContext('error');
+    const pokeHandler = new PokeHandler(
+      replicachePokeStub,
+      onPokeErrorStub,
+      clientID,
+      schema,
+      logContext,
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
+    );
+
+    pokeHandler.handlePokeStart({pokeID: 'poke1', baseCookie: '1'});
+    pokeHandler.handlePokePart({
+      pokeID: 'poke1',
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {issue_id: 'i1', title: 'test'},
+        },
+      ],
+    });
+    pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
+
+    const ivmError = new Error('node does not exist');
+    replicachePokeStub.mockRejectedValue(ivmError);
+
+    const timeoutCallback = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    await timeoutCallback();
+
+    expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
+    expect(onPokeErrorStub).toHaveBeenCalledWith(ivmError);
+  });
+
+  test('onPokeError receives the actual error for cookie mismatch errors', async () => {
+    const onPokeErrorStub = vi.fn();
+    const replicachePokeStub = vi.fn();
+    const clientID = 'c1';
+    const logContext = new LogContext('error');
+    const pokeHandler = new PokeHandler(
+      replicachePokeStub,
+      onPokeErrorStub,
+      clientID,
+      schema,
+      logContext,
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
+    );
+
+    pokeHandler.handlePokeStart({pokeID: 'poke1', baseCookie: '1'});
+    pokeHandler.handlePokePart({
+      pokeID: 'poke1',
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {issue_id: 'i1', title: 'test'},
+        },
+      ],
+    });
+    pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
+
+    const cookieError = new Error('unexpected base cookie for poke: {...}');
+    replicachePokeStub.mockRejectedValue(cookieError);
+
+    const timeoutCallback = setTimeoutStub.mock
+      .calls[0][0] as () => Promise<void>;
+    await timeoutCallback();
+
+    expect(onPokeErrorStub).toHaveBeenCalledTimes(1);
+    expect(onPokeErrorStub).toHaveBeenCalledWith(cookieError);
   });
 
   test('cookie gap during mergePoke calls onPokeError and clears', async () => {

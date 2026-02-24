@@ -2297,17 +2297,23 @@ test('duplicate relationship alias uses last-writer-wins', () => {
     lc,
     testLogConfig,
     'candidate_job_connections',
-    {id: {type: 'string'}, candidate_id: {type: 'string'}, job_id: {type: 'string'}},
+    {
+      id: {type: 'string'},
+      candidate_id: {type: 'string'},
+      job_id: {type: 'string'},
+    },
     ['id'],
   );
 
   // Add user AND cjc BEFORE pipeline
   // The cjc has job_id='other-job', which won't match the filter 'target-job'
   consume(users.push({type: 'add', row: {id: 'user-1', name: 'Test User'}}));
-  consume(candidateJobConnections.push({
-    type: 'add',
-    row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
-  }));
+  consume(
+    candidateJobConnections.push({
+      type: 'add',
+      row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
+    }),
+  );
 
   const sources = {users, candidate_job_connections: candidateJobConnections};
   const delegate = new TestBuilderDelegate(sources);
@@ -2383,10 +2389,12 @@ test('duplicate relationship alias uses last-writer-wins', () => {
   // Delete the cjc - should NOT throw because only the filtered Join exists,
   // and the filtered source connection filters out the remove (predicate fails)
   expect(() => {
-    consume(candidateJobConnections.push({
-      type: 'remove',
-      row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
-    }));
+    consume(
+      candidateJobConnections.push({
+        type: 'remove',
+        row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
+      }),
+    );
     view.flush();
   }).not.toThrow();
 });
@@ -2404,15 +2412,21 @@ test('unique relationship aliases work correctly', () => {
     lc,
     testLogConfig,
     'candidate_job_connections',
-    {id: {type: 'string'}, candidate_id: {type: 'string'}, job_id: {type: 'string'}},
+    {
+      id: {type: 'string'},
+      candidate_id: {type: 'string'},
+      job_id: {type: 'string'},
+    },
     ['id'],
   );
 
   consume(users.push({type: 'add', row: {id: 'user-1', name: 'Test User'}}));
-  consume(candidateJobConnections.push({
-    type: 'add',
-    row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
-  }));
+  consume(
+    candidateJobConnections.push({
+      type: 'add',
+      row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
+    }),
+  );
 
   const sources = {users, candidate_job_connections: candidateJobConnections};
   const delegate = new TestBuilderDelegate(sources);
@@ -2488,10 +2502,12 @@ test('unique relationship aliases work correctly', () => {
 
   // Delete should work fine with unique aliases
   expect(() => {
-    consume(candidateJobConnections.push({
-      type: 'remove',
-      row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
-    }));
+    consume(
+      candidateJobConnections.push({
+        type: 'remove',
+        row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
+      }),
+    );
     view.flush();
   }).not.toThrow();
 
