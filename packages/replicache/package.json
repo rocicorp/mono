@@ -38,7 +38,6 @@
   },
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/prettier-config": "^0.4.0",
     "@rocicorp/zero-sqlite3": "^1.0.15",
     "@types/command-line-usage": "^5.0.2",
     "@vitest/runner": "4.0.15",
@@ -100,6 +99,5 @@
   "files": [
     "out",
     "!*.tsbuildinfo"
-  ],
-  "prettier": "@rocicorp/prettier-config"
+  ]
 }

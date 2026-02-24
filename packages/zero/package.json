@@ -78,7 +78,6 @@
   },
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/prettier-config": "^0.4.0",
     "@vitest/runner": "4.0.15",
     "analyze-query": "0.0.0",
     "ast-to-zql": "0.0.0",
@@ -196,6 +195,5 @@
   "files": [
     "out",
     "!*.tsbuildinfo"
-  ],
-  "prettier": "@rocicorp/prettier-config"
+  ]
 }

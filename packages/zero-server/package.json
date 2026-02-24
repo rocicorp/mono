@@ -16,12 +16,10 @@
     "test:pg17": "vitest run --project='*17*'",
     "test:pg17:watch": "vitest watch --project='*17*'"
   },
-  "prettier": "@rocicorp/prettier-config",
   "dependencies": {
     "@rocicorp/logger": "^5.4.0"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.4.0",
     "@prisma/adapter-pg": "^7.2.0",
     "@vitest/runner": "4.0.15",
     "@prisma/client": "^7.2.0",
