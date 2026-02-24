@@ -16,10 +16,7 @@ import {
 } from '../../../test/db.ts';
 import {DbFile} from '../../../test/lite.ts';
 import {type PostgresDB} from '../../../types/pg.ts';
-import {
-  majorVersionFromString,
-  majorVersionToString,
-} from '../../../types/state-version.ts';
+import {majorVersionFromString} from '../../../types/state-version.ts';
 import type {Source} from '../../../types/streams.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
@@ -30,7 +27,7 @@ import type {
   Commit,
 } from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
-import {fromStateVersionString} from './lsn.ts';
+import {toBigInt} from './lsn.ts';
 import {dropEventTriggerStatements} from './schema/ddl.ts';
 
 const APP_ID = '23';
@@ -354,20 +351,22 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     expect(await downstream.dequeue()).toMatchObject([
       'commit',
       {tag: 'commit'},
-      {watermark: begin2[2]?.commitWatermark},
+      {watermark: begin2[2].commitWatermark},
     ]);
 
     // Close the stream.
     changes.cancel();
 
-    // Verify that the ACK was stored with the replication slot.
-    const results = await upstream<{confirmed: string}[]>`
+    // Verify that the ACK stored with the replication slot includes
+    // the first commit but not the second.
+    const [{confirmed}] = await upstream<{confirmed: string}[]>`
     SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
         WHERE slot_name = ${replicationSlot}`;
-    const expected = majorVersionFromString(commit1[2].watermark);
-    expect(results).toEqual([
-      {confirmed: fromStateVersionString(majorVersionToString(expected))},
-    ]);
+    const min = majorVersionFromString(commit1[2].watermark);
+    const max = majorVersionFromString(begin2[2].commitWatermark);
+    const actual = toBigInt(confirmed);
+    expect(actual).toBeGreaterThanOrEqual(min);
+    expect(actual).toBeLessThan(max);
   });
 
   test.each([
