@@ -75,39 +75,29 @@ function seededNanoid(size = 21): string {
   return id;
 }
 
-// --- Pareto/Power-law distribution helpers ---
-/**
- * Assigns numItems to buckets using power-law distribution.
- * Lower alpha = more uniform, higher alpha = more skewed.
- * Returns array where result[i] = bucket index for item i.
- */
-function assignWithPareto(
-  numItems: number,
-  numBuckets: number,
-  alpha = 2,
-): Uint32Array {
-  const result = new Uint32Array(numItems);
-  for (let i = 0; i < numItems; i++) {
-    result[i] = Math.floor(Math.pow(rng(), alpha) * numBuckets);
+// --- Deterministic per-index helpers (avoid large pre-allocated arrays) ---
+
+/** Derive a deterministic issue ID for a given index without storing all IDs. */
+function issueIDForIndex(i: number): string {
+  const idRng = mulberry32(SEED ^ (i * 2654435761)); // Knuth multiplicative hash
+  let id = '';
+  for (let j = 0; j < 21; j++) {
+    id += NANOID_ALPHABET[Math.floor(idRng() * NANOID_ALPHABET.length)];
   }
-  return result;
+  return id;
 }
 
-/**
- * Distributes totalItems across numBuckets with Pareto distribution.
- * Returns array where result[i] = count for bucket i.
- */
-function distributeWithPareto(
-  numBuckets: number,
-  totalItems: number,
-  alpha = 2,
-): Uint32Array {
-  const result = new Uint32Array(numBuckets);
-  for (let i = 0; i < totalItems; i++) {
-    const idx = Math.floor(Math.pow(rng(), alpha) * numBuckets);
-    result[idx]++;
-  }
-  return result;
+/** Derive the project index for a given issue index (Pareto distribution). */
+function projectForIssue(i: number, numBuckets: number, alpha = 2): number {
+  const r = mulberry32(SEED ^ ((i + 1) * 2246822519))(); // single draw
+  return Math.floor(Math.pow(r, alpha) * numBuckets);
+}
+
+/** Derive the comment count for a given issue index (exponential distribution matching mean). */
+function commentsForIssue(i: number, mean: number): number {
+  const r = mulberry32(SEED ^ ((i + 2) * 3266489917))(); // single draw
+  // Exponential distribution: -mean * ln(1 - r), floored
+  return Math.floor(-mean * Math.log(1 - r * 0.9999));
 }
 
 // --- Template types ---
@@ -564,20 +554,6 @@ async function main() {
   }
   await labelWriter.close();
 
-  // --- Pre-compute distributions ---
-  // oxlint-disable-next-line no-console
-  console.log('\nPre-computing distributions...');
-
-  // Assign issues to projects using Pareto distribution (some projects get many more issues)
-  const issueProjects = assignWithPareto(NUM_ISSUES, allProjects.length, 2);
-
-  // Distribute comments across issues using Pareto distribution (some issues get many comments)
-  const totalComments = Math.floor(NUM_ISSUES * COMMENTS_PER_ISSUE);
-  const commentsPerIssue = distributeWithPareto(NUM_ISSUES, totalComments, 2);
-
-  // Calculate total issueLabels (average LABELS_PER_ISSUE per issue)
-  const totalIssueLabels = Math.floor(NUM_ISSUES * LABELS_PER_ISSUE);
-
   // --- Generate issues ---
   // oxlint-disable-next-line no-console
   console.log(`\nGenerating ${NUM_ISSUES.toLocaleString()} issues...`);
@@ -597,12 +573,6 @@ async function main() {
     endDate.getDate(),
   );
 
-  // Pre-generate all issue IDs so comments and labels can reference them
-  const issueIDs = new Array<string>(NUM_ISSUES);
-  for (let i = 0; i < NUM_ISSUES; i++) {
-    issueIDs[i] = seededNanoid();
-  }
-
   for (let i = 0; i < NUM_ISSUES; i++) {
     if (i % 100000 === 0) {
       // oxlint-disable-next-line no-console
@@ -611,8 +581,8 @@ async function main() {
       );
     }
 
-    const issueID = issueIDs[i];
-    const projectIdx = issueProjects[i];
+    const issueID = issueIDForIndex(i);
+    const projectIdx = projectForIssue(i, allProjects.length, 2);
     const project = allProjects[projectIdx];
     const cat = categories[project.categoryIndex];
 
@@ -662,9 +632,7 @@ async function main() {
 
   // --- Generate comments ---
   // oxlint-disable-next-line no-console
-  console.log(
-    `\nGenerating ${totalComments.toLocaleString()} comments (avg ${COMMENTS_PER_ISSUE} per issue)...`,
-  );
+  console.log(`\nGenerating comments (avg ${COMMENTS_PER_ISSUE} per issue)...`);
 
   const commentWriter = new ShardedCSVWriter(
     OUTPUT_DIR,
@@ -682,12 +650,12 @@ async function main() {
       );
     }
 
-    const issueID = issueIDs[issueIdx];
-    const projectIdx = issueProjects[issueIdx];
+    const issueID = issueIDForIndex(issueIdx);
+    const projectIdx = projectForIssue(issueIdx, allProjects.length, 2);
     const project = allProjects[projectIdx];
     const cat = categories[project.categoryIndex];
 
-    const numComments = commentsPerIssue[issueIdx];
+    const numComments = commentsForIssue(issueIdx, COMMENTS_PER_ISSUE);
 
     // Issue created timestamp (use faker for realistic spread)
     const issueCreated = faker.date
@@ -723,7 +691,7 @@ async function main() {
   // --- Generate issueLabels ---
   // oxlint-disable-next-line no-console
   console.log(
-    `\nGenerating ~${totalIssueLabels.toLocaleString()} issueLabels (avg ${LABELS_PER_ISSUE} per issue)...`,
+    `\nGenerating issueLabels (avg ${LABELS_PER_ISSUE} per issue)...`,
   );
 
   const issueLabelWriter = new ShardedCSVWriter(
@@ -742,8 +710,8 @@ async function main() {
       );
     }
 
-    const issueID = issueIDs[issueIdx];
-    const projectIdx = issueProjects[issueIdx];
+    const issueID = issueIDForIndex(issueIdx);
+    const projectIdx = projectForIssue(issueIdx, allProjects.length, 2);
     const project = allProjects[projectIdx];
 
     // Uniform distribution: 1-3 labels per issue (or fewer if project has fewer labels)
