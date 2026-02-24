@@ -1,5 +1,6 @@
 import {beforeEach, describe, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   DbFile,
   expectMatchingObjectsInTables,
@@ -288,8 +289,9 @@ describe('replica-schema-migrations', () => {
         ...c.replicaPreState,
       });
 
-      await initReplica(lc, 'test', replicaFile.path, async (_, db) => {
+      await initReplica(lc, 'test', replicaFile.path, (_, db) => {
         initReplicationState(db, ['foo_publication'], '123', {context: 'bar'});
+        return promiseVoid;
       });
 
       expectMatchingObjectsInTables(replica, {
