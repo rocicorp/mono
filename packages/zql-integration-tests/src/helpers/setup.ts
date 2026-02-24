@@ -39,6 +39,7 @@ export async function fillPgAndSync(
     sqlite,
     getConnectionURI(pg),
     {tableCopyWorkers: 1},
+    {},
   );
 
   return {pg, sqlite};

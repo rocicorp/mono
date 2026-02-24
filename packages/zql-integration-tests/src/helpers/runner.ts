@@ -137,6 +137,7 @@ async function makeDatabases<TSchema extends Schema>(
     sqlite,
     getConnectionURI(pg),
     {tableCopyWorkers: 1},
+    {},
   );
 
   const memory = Object.fromEntries(

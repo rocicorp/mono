@@ -132,6 +132,7 @@ beforeAll(async () => {
     sqlite,
     getConnectionURI(pg),
     {tableCopyWorkers: 1},
+    {},
   );
 
   queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
