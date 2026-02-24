@@ -143,11 +143,15 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       },
       replicaDbFile.path,
       {tableCopyWorkers: 5},
+      {test: 'context'},
     ));
 
-    [{slot: replicationSlot}] = await upstream<{slot: string}[]>`
-    SELECT slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
-  `;
+    const [{slot, initialSyncContext, subscriberContext}] = await upstream`
+      SELECT * FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
+    `;
+    expect(initialSyncContext).toEqual({test: 'context'});
+    expect(subscriberContext).toBeNull();
+    replicationSlot = slot;
   }
 
   async function withTriggers() {
@@ -212,6 +216,11 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     const {changes, acks} = await startStream('00');
     const downstream = drainToQueue(changes);
+
+    const [{subscriberContext}] = await upstream`
+      SELECT * FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
+    `;
+    expect(subscriberContext).toEqual({test: 'context'});
 
     await upstream.begin(async tx => {
       await tx`INSERT INTO foo(id) VALUES('hello')`;
@@ -858,17 +867,20 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       },
       replicaFile2.path,
       {tableCopyWorkers: 5},
+      {test: 'context'},
     );
 
     // Initial sync should have created a second replication slot.
     const slots1 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
         WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
+        ORDER BY slot_name
     `.values();
     expect(slots1).toHaveLength(2);
 
     const replicas2 = await upstream.unsafe(`
       SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
+        ORDER BY slot
     `);
     expect(replicas2).toHaveLength(2);
 
@@ -902,12 +914,14 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       },
       replicaFile3.path,
       {tableCopyWorkers: 5},
+      {test: 'context'},
     );
 
     // There should now be 3 replication slots.
     const slots2 = await upstream<{slot: string}[]>`
         SELECT slot_name as slot FROM pg_replication_slots
           WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
+          ORDER BY slot_name
       `.values();
     expect(slots2).toHaveLength(3);
     const replicas3 = await upstream.unsafe(`
@@ -944,7 +958,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     // Verify that the older replica state has been cleaned up.
     // The newer replica state should remain.
     const replicasAfterTakeover = await upstream.unsafe(`
-      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
+      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas ORDER BY slot
     `);
     expect(replicasAfterTakeover).toEqual(replicas3.slice(1));
 
@@ -955,6 +969,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         const slots3 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
         WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
+        ORDER BY slot_name
     `.values();
         expect(slots3).toEqual(slots2.slice(1));
       },
@@ -981,6 +996,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         },
         replicaDbFile.path,
         {tableCopyWorkers: 5},
+        {test: 'context'},
       );
     } catch (e) {
       err = e;

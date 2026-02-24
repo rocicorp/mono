@@ -28,6 +28,8 @@ import {UnsupportedTableSchemaError} from './schema/validation.ts';
 const APP_ID = '1';
 const SHARD_NUM = 18;
 
+const TEST_CONTEXT = {foo: 'bar'};
+
 const ZERO_PERMISSIONS_SPEC: PublishedTableSpec = {
   columns: {
     permissions: {
@@ -328,6 +330,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       replicatedData: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}_${SHARD_NUM}.mutations`]: [],
+        ['_zero.replicationConfig']: [
+          {
+            replicaVersion: expect.any(String),
+            publications: `["_${APP_ID}_metadata_${SHARD_NUM}","_${APP_ID}_public_${SHARD_NUM}"]`,
+            initialSyncContext: '{"foo":"bar"}',
+          },
+        ],
         ['_zero.column_metadata']: [
           {
             character_max_length: null,
@@ -2594,6 +2603,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           replica,
           getConnectionURI(upstream),
           {tableCopyWorkers: 3},
+          TEST_CONTEXT,
         );
 
         const config = await upstream.unsafe(
@@ -2607,6 +2617,9 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           `SELECT * FROM "${APP_ID}_${SHARD_NUM}"."replicas"`,
         );
         expect(replicas).toHaveLength(i + 1);
+        for (const replica of replicas) {
+          expect(replica).toMatchObject({initialSyncContext: TEST_CONTEXT});
+        }
         const tableSpecs = Object.entries(c.published)
           .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
           .map(([_, spec]) => spec);
@@ -2714,9 +2727,16 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
     let result;
     try {
-      await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
-        tableCopyWorkers: 1,
-      });
+      await initialSync(
+        lc,
+        shardConfig,
+        replica,
+        getConnectionURI(upstream),
+        {
+          tableCopyWorkers: 1,
+        },
+        TEST_CONTEXT,
+      );
     } catch (e) {
       result = e;
     }
@@ -2753,9 +2773,16 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
     await sql.unsafe(corruption);
 
-    await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
-      tableCopyWorkers: 1,
-    });
+    await initialSync(
+      lc,
+      shardConfig,
+      replica,
+      getConnectionURI(upstream),
+      {
+        tableCopyWorkers: 1,
+      },
+      TEST_CONTEXT,
+    );
 
     expectMatchingObjectsInTables(replica, {
       [`${APP_ID}_${SHARD_NUM}.clients`]: [],
@@ -2779,6 +2806,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         replica,
         getConnectionURI(upstream),
         {tableCopyWorkers: 1},
+        TEST_CONTEXT,
       );
     } catch (e) {
       result = e;

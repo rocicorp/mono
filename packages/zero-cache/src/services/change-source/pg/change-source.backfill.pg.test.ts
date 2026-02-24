@@ -28,6 +28,8 @@ const APP_ID = 'bf';
 const PG_15_UP = 150000;
 const PG_18_UP = 180000;
 
+const TEST_CONTEXT = {boo: 'far'};
+
 describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
@@ -102,6 +104,7 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
         },
         replicaDbFile.path,
         {tableCopyWorkers: 5},
+        TEST_CONTEXT,
       )
     ).changeSource;
     const stream = await source.startStream('00');

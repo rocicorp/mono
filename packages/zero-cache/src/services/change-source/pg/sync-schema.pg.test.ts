@@ -14,20 +14,28 @@ import {
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
+import {initReplica} from '../common/replica-schema.ts';
+import {initialSync} from './initial-sync.ts';
 import {replicationSlotExpression} from './schema/shard.ts';
-import {initSyncSchema} from './sync-schema.ts';
 
 const APP_ID = 'zeroz';
 const SHARD_NUM = 9;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 9,
-  schemaVersion: 9,
+  dataVersion: 10,
+  schemaVersion: 10,
   minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
 const WATERMARK_REGEX = /[0-9a-z]{4,}/;
+
+const TEST_CONTEXT = {
+  taskID: 'foo-bar',
+  hostIP: '1.2.3.4',
+  hostname: 'foo.bar',
+  timestamp: 123,
+};
 
 describe('change-streamer/pg/sync-schema', () => {
   type Case = {
@@ -111,13 +119,21 @@ describe('change-streamer/pg/sync-schema', () => {
           publications: c.requestedPublications ?? [],
         };
 
-        await initSyncSchema(
+        await initReplica(
           createSilentLogContext(),
           'test',
-          shard,
           replicaFile.path,
-          getConnectionURI(upstream),
-          {tableCopyWorkers: 5},
+          (log, tx) =>
+            initialSync(
+              log,
+              shard,
+              tx,
+              getConnectionURI(upstream),
+              {
+                tableCopyWorkers: 5,
+              },
+              TEST_CONTEXT,
+            ),
         );
 
         await expectTables(upstream, c.upstreamPostState);
