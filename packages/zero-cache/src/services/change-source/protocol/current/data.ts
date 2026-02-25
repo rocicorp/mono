@@ -27,6 +27,9 @@ export const beginSchema = v.object({
   //
   // If absent, the format is assumed to be 'p' (parsed JSON objects/values).
   json: v.literalUnion('p', 's').optional(),
+
+  // Directs the change-streamer to skip the ACK for the corresponding commit.
+  skipAck: v.boolean().optional(),
 });
 
 export const commitSchema = v.object({

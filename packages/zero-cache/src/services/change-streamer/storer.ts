@@ -30,7 +30,10 @@ import {
   type TableMetadata,
 } from '../change-source/protocol/current.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
-import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import type {
+  DownstreamStatusMessage,
+  UpstreamStatusMessage,
+} from '../change-source/protocol/current/status.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
@@ -59,7 +62,7 @@ type QueueEntry =
     ]
   | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
-  | UpstreamStatusMessage
+  | DownstreamStatusMessage
   | ['abort']
   | 'stop';
 
@@ -68,6 +71,7 @@ type PendingTransaction = {
   preCommitWatermark: string;
   pos: number;
   startingReplicationState: Promise<ReplicationState>;
+  ack: boolean;
 };
 
 const backfillRequestsSchema = v.array(backfillRequestSchema);
@@ -278,7 +282,7 @@ export class Storer implements Service {
     this.#queue.enqueue(['abort']);
   }
 
-  status(s: UpstreamStatusMessage) {
+  status(s: DownstreamStatusMessage) {
     this.#queue.enqueue(s);
   }
 
@@ -393,6 +397,7 @@ export class Storer implements Service {
           preCommitWatermark: watermark,
           pos: 0,
           startingReplicationState: promise,
+          ack: !change.skipAck,
         };
         tx.pool.run(this.#db);
         // Pipeline a read of the current ReplicationState,
@@ -473,10 +478,11 @@ export class Storer implements Service {
           throw e;
         }
 
-        tx = null;
-
         // ACK the LSN to the upstream Postgres.
-        this.#onConsumed(['commit', change, {watermark}]);
+        if (tx.ack) {
+          this.#onConsumed(['commit', change, {watermark}]);
+        }
+        tx = null;
 
         // Before beginning the next transaction, open a READONLY snapshot to
         // concurrently catchup any queued subscribers.
