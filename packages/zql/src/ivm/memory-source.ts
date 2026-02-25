@@ -17,7 +17,7 @@ import {
   type NoSubqueryCondition,
 } from '../builder/filter.ts';
 import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';
-import type {Change} from './change.ts';
+import type {Change, EditChange} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
@@ -49,6 +49,10 @@ import type {
   SourceInput,
 } from './source.ts';
 import type {Stream} from './stream.ts';
+
+// Shared frozen sentinel for nodes with no relationships. Avoids allocating
+// a fresh {} on every node creation in the fetch and push hot paths.
+const EMPTY_RELATIONSHIPS: Record<string, never> = Object.freeze({});
 
 export type Overlay = {
   epoch: number;
@@ -535,31 +539,34 @@ function* genPush(
       unreachable(change);
   }
 
+  // Reuse a small set of objects across the connection loop below to avoid
+  // allocating fresh Node/Change objects per connection per push. The row
+  // fields are overwritten before each use. This is safe because filterPush
+  // and its downstream consumers process each change synchronously within
+  // the generator chain -- yield* completes fully before the next iteration
+  // mutates the objects. In a workload with 135 connections, this eliminates
+  // thousands of short-lived allocations per push cycle.
+  const placeholder: Row = {};
+  const reuseNode: Node = {row: placeholder, relationships: EMPTY_RELATIONSHIPS};
+  const reuseOldNode: Node = {row: placeholder, relationships: EMPTY_RELATIONSHIPS};
+  const reuseAddRemove: {type: 'add' | 'remove'; node: Node} = {type: 'add', node: reuseNode};
+  const reuseEdit: EditChange = {type: 'edit', oldNode: reuseOldNode, node: reuseNode};
+
   for (const conn of connections) {
     const {output, filters, input} = conn;
     if (output) {
       conn.lastPushedEpoch = pushEpoch;
       setOverlay({epoch: pushEpoch, change});
-      const outputChange: Change =
-        change.type === 'edit'
-          ? {
-              type: change.type,
-              oldNode: {
-                row: change.oldRow,
-                relationships: {},
-              },
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            }
-          : {
-              type: change.type,
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            };
+      let outputChange: Change;
+      if (change.type === 'edit') {
+        reuseOldNode.row = change.oldRow;
+        reuseNode.row = change.row;
+        outputChange = reuseEdit;
+      } else {
+        reuseNode.row = change.row;
+        reuseAddRemove.type = change.type;
+        outputChange = reuseAddRemove;
+      }
       yield* filterPush(outputChange, output, input, filters?.predicate);
       yield undefined;
     }
@@ -739,7 +746,7 @@ export function* generateWithOverlayInner(
       const cmp = compare(overlays.add, row);
       if (cmp < 0) {
         addOverlayYielded = true;
-        yield {row: overlays.add, relationships: {}};
+        yield {row: overlays.add, relationships: EMPTY_RELATIONSHIPS};
       }
     }
 
@@ -750,11 +757,11 @@ export function* generateWithOverlayInner(
         continue;
       }
     }
-    yield {row, relationships: {}};
+    yield {row, relationships: EMPTY_RELATIONSHIPS};
   }
 
   if (!addOverlayYielded && overlays.add) {
-    yield {row: overlays.add, relationships: {}};
+    yield {row: overlays.add, relationships: EMPTY_RELATIONSHIPS};
   }
 }
 
