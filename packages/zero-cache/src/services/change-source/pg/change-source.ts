@@ -389,7 +389,6 @@ class PostgresChangeSource implements ChangeSource {
           // server that sent the shutdown signal, if any.
           await this.#logCurrentReplicaInfo();
         }
-        // await changeMaker.close();
         changes.fail(err);
       }
     })();
@@ -810,12 +809,6 @@ class ChangeMaker {
     }
 
     return changes;
-  }
-
-  async close() {
-    clearTimeout(this.#replicaIdentityTimer);
-    this.#replicaIdentityTimer = undefined;
-    await this.#upstreamDB.end();
   }
 
   /**
