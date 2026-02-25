@@ -161,7 +161,10 @@ export async function markResetRequired(sql: PostgresDB, shard: ShardID) {
 export async function ensureReplicationConfig(
   lc: LogContext,
   db: PostgresDB,
-  subscriptionState: SubscriptionState,
+  subscriptionState: Pick<
+    SubscriptionState,
+    'publications' | 'replicaVersion' | 'watermark'
+  >,
   shard: ShardID,
   autoReset: boolean,
 ) {

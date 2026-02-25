@@ -60,6 +60,7 @@ describe('decommission', () => {
       replica,
       getConnectionURI(upstream),
       {tableCopyWorkers: 5},
+      {test: 'context'},
     );
     await initChangeStreamerSchema(lc, cdc, SHARD_ID);
     await initViewSyncerSchema(lc, cvr, SHARD_ID);

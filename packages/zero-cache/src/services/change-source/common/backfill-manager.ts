@@ -242,7 +242,7 @@ export class BackfillManager implements Cancelable, Listener {
 
       void changeStream.push([
         'begin',
-        {tag: 'begin', json: this.#jsonFormat},
+        {tag: 'begin', json: this.#jsonFormat, skipAck: true},
         {commitWatermark: tx},
       ]);
       return (backfillTx = tx);

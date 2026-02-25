@@ -21,8 +21,8 @@ const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 14,
-  schemaVersion: 14,
+  dataVersion: 15,
+  schemaVersion: 15,
   minSafeVersion: 1,
   lock: 'v',
 } as const;
@@ -65,6 +65,8 @@ describe('change-streamer/pg/schema/init', () => {
             slot: `${APP_ID}_${SHARD_NUM}_1234`,
             version: '2dhf29ef',
             initialSchema: {tables: [], indexes: []},
+            initialSyncContext: {foo: 'bar'},
+            subscriberContext: null,
           },
         ],
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
@@ -209,6 +211,7 @@ describe('change-streamer/pg/schema/init', () => {
             c.newReplica[0],
             c.newReplica[1],
             {tables: [], indexes: []},
+            {foo: 'bar'},
           );
         }
       }

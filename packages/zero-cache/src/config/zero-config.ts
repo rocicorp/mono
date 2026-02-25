@@ -20,6 +20,7 @@ import {
   ALLOWED_APP_ID_CHARACTERS,
   INVALID_APP_ID_MESSAGE,
 } from '../types/shards.ts';
+import {DEFAULT_PREFERRED_PREFIXES} from './network.ts';
 import {
   assertNormalized,
   isDevelopmentMode,
@@ -528,10 +529,7 @@ export const zeroOptions = {
     },
 
     discoveryInterfacePreferences: {
-      type: v.array(v.string()).default([
-        'eth', // linux
-        'en', // macbooks
-      ]),
+      type: v.array(v.string()).default([...DEFAULT_PREFERRED_PREFIXES]),
       desc: [
         `The name prefixes to prefer when introspecting the network interfaces to determine`,
         `the externally reachable IP address for change-streamer discovery. This defaults`,

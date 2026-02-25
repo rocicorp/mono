@@ -30,7 +30,6 @@
     "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.4.0",
     "@vitest/browser-playwright": "^4.0.15",
     "@vitest/coverage-v8": "4.0.15",
     "@vitest/runner": "4.0.15",
@@ -41,6 +40,5 @@
     "tsx": "^4.21.0",
     "turbo": "^2.4.4",
     "vitest": "4.0.15"
-  },
-  "prettier": "@rocicorp/prettier-config"
+  }
 }

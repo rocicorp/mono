@@ -43,5 +43,6 @@ export async function writeChinook(pg: PostgresDB, replica: Database) {
     replica,
     getConnectionURI(pg),
     {tableCopyWorkers: 1},
+    {},
   );
 }

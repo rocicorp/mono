@@ -5,6 +5,11 @@
  * after the logical replication handoff when initial data synchronization has completed.
  */
 
+import {
+  jsonObjectSchema,
+  stringify,
+  type JSONObject,
+} from '../../../../../shared/src/bigint-json.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import type {StatementRunner} from '../../../db/statements.ts';
@@ -29,16 +34,22 @@ export const CREATE_RUNTIME_EVENTS_TABLE = `
 `;
 
 const CREATE_REPLICATION_STATE_SCHEMA =
-  // replicaVersion   : A value identifying the version at which the initial sync happened, i.e.
-  //                    the version at which all rows were copied, and to `_0_version` was set.
-  //                    This value is used to distinguish data from other replicas (e.g. if a
-  //                    replica is reset or if there are ever multiple replicas).
-  // publications     : JSON stringified array of publication names
-  // lock             : Auto-magic column for enforcing single-row semantics.
-  `
+  // replicaVersion     : A value identifying the version at which the initial sync happened, i.e.
+  //                      the version at which all rows were copied, and to `_0_version` was set.
+  //                      This value is used to distinguish data from other replicas (e.g. if a
+  //                      replica is reset or if there are ever multiple replicas).
+  // publications       : JSON stringified array of publication names
+  // initialSyncContext : Metadata related to the context of when and how the replica was initially
+  //                      synced. This corresponds with the same column stored in upstream and is
+  //                      used for debugging replica version mismatches, which can arise from a number
+  //                      of misconfigurations, such as dueling replication-managers, or restores of
+  //                      stale litestream backups.
+  // lock               : Auto-magic column for enforcing single-row semantics.
+  /*sql*/ `
   CREATE TABLE "_zero.replicationConfig" (
     replicaVersion TEXT NOT NULL,
     publications TEXT NOT NULL,
+    initialSyncContext TEXT DEFAULT '{}',
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
   ` +
@@ -73,6 +84,26 @@ const subscriptionStateSchema = v
 
 export type SubscriptionState = v.Infer<typeof subscriptionStateSchema>;
 
+const subscriptionStateAndContextSchema = v
+  .object({
+    replicaVersion: v.string(),
+    publications: v.string(),
+    initialSyncContext: v.string(),
+    watermark: v.string(),
+  })
+  .map(s => ({
+    ...s,
+    publications: v.parse(JSON.parse(s.publications), stringArray),
+    initialSyncContext: v.parse(
+      JSON.parse(s.initialSyncContext),
+      jsonObjectSchema,
+    ),
+  }));
+
+export type SubscriptionStateAndContext = v.Infer<
+  typeof subscriptionStateAndContextSchema
+>;
+
 const replicationStateSchema = v.object({
   stateVersion: v.string(),
 });
@@ -83,6 +114,7 @@ export function initReplicationState(
   db: Database,
   publications: string[],
   watermark: string,
+  initialSyncContext: JSONObject = {},
   createTables = true,
 ) {
   if (createTables) {
@@ -91,9 +123,13 @@ export function initReplicationState(
   db.prepare(
     `
     INSERT INTO "_zero.replicationConfig" 
-       (replicaVersion, publications) VALUES (?, ?)
+       (replicaVersion, publications, initialSyncContext) VALUES (?, ?, ?)
     `,
-  ).run(watermark, JSON.stringify(publications.sort()));
+  ).run(
+    watermark,
+    JSON.stringify(publications.sort()),
+    stringify(initialSyncContext),
+  );
   db.prepare(
     `
     INSERT INTO "_zero.replicationState" (stateVersion) VALUES (?)
@@ -134,15 +170,26 @@ export function getAscendingEvents(db: Database) {
 }
 
 export function getSubscriptionState(db: StatementRunner): SubscriptionState {
-  const result = db.get(
-    `
+  const result = db.get(/*sql*/ `
       SELECT c.replicaVersion, c.publications, s.stateVersion as watermark
         FROM "_zero.replicationConfig" as c
         JOIN "_zero.replicationState" as s
         ON c.lock = s.lock
-    `,
-  );
+    `);
   return v.parse(result, subscriptionStateSchema);
+}
+
+export function getSubscriptionStateAndContext(
+  db: StatementRunner,
+): SubscriptionStateAndContext {
+  const result = db.get(/*sql*/ `
+      SELECT c.replicaVersion, c.publications, c.initialSyncContext,
+        s.stateVersion as watermark
+        FROM "_zero.replicationConfig" as c
+        JOIN "_zero.replicationState" as s
+        ON c.lock = s.lock
+    `);
+  return v.parse(result, subscriptionStateAndContextSchema);
 }
 
 export function updateReplicationWatermark(

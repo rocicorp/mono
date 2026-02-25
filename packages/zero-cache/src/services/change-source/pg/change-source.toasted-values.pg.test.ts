@@ -83,6 +83,7 @@ describe.skip('toasted values', {timeout: 30000, retry: 3}, () => {
       },
       replicaDbFile.path,
       {tableCopyWorkers: 5},
+      {test: 'context'},
     ));
   }
 

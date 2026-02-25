@@ -17,6 +17,10 @@ import {initializeCustomChangeSource} from './change-source.ts';
 
 const APP_ID = 'bongo';
 
+const TEST_CONTEXT = {
+  taskID: 'foo-bar',
+};
+
 describe('change-source/custom', () => {
   let lc: LogContext;
   let downstream: Promise<Sink<ChangeStreamMessage>>;
@@ -226,6 +230,7 @@ describe('change-source/custom', () => {
       changeSourceURI,
       {appID: APP_ID, shardNum: 0, publications: ['b', 'a']},
       replicaDbFile.path,
+      TEST_CONTEXT,
     );
 
     expectTables(replicaDbFile.connect(lc), {
@@ -237,6 +242,7 @@ describe('change-source/custom', () => {
           lock: 1,
           replicaVersion: '123',
           publications: '["a","b"]',
+          initialSyncContext: '{"taskID":"foo-bar"}',
         },
       ],
       ['_zero.changeLog2']: [
@@ -390,6 +396,7 @@ describe('change-source/custom', () => {
         changeSourceURI,
         {appID: APP_ID, shardNum: 0, publications: ['b', 'a']},
         replicaDbFile.path,
+        TEST_CONTEXT,
       ),
     ).rejects.toThrowError(AutoResetSignal);
   });

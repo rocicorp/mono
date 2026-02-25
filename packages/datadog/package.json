@@ -6,7 +6,6 @@
   "devDependencies": {
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/prettier-config": "^0.4.0",
     "@vitest/runner": "4.0.15",
     "shared": "0.0.0",
     "typescript": "~5.9.3",
@@ -20,6 +19,5 @@
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "oxlint --type-aware src/"
-  },
-  "prettier": "@rocicorp/prettier-config"
+  }
 }

@@ -1,13 +1,5 @@
-import {afterEach, beforeEach, expect, test, vi} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {Acker} from './change-source.ts';
-
-beforeEach(() => {
-  vi.useFakeTimers();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 test('acker', () => {
   const sink = {push: vi.fn()};
@@ -19,19 +11,42 @@ test('acker', () => {
     expect(sink.push.mock.calls[acks - 1][0]).toBe(expected);
   };
 
+  const expectNoAck = () => {
+    expect(sink.push).toBeCalledTimes(acks);
+  };
+
   const acker = new Acker(sink);
 
-  acker.keepalive();
+  acker.onChange(['status', {ack: false}, {watermark: '0a'}]);
+  expectAck(10n);
+
+  acker.onChange(['begin', {tag: 'begin'}, {commitWatermark: '0b'}]);
   acker.ack('0b');
   expectAck(11n);
 
-  // Should be a no-op (i.e. no '0/0' sent).
-  vi.advanceTimersToNextTimer();
+  acker.onChange(['status', {ack: false}, {watermark: '0c'}]);
+  expectAck(12n);
+
+  acker.onChange(['begin', {tag: 'begin'}, {commitWatermark: '0d'}]);
+
+  // This should be dropped because we are awaiting 0d
+  acker.onChange(['status', {ack: false}, {watermark: '0e'}]);
+  expectNoAck();
+
+  // Now we are awaiting 0f
+  acker.onChange(['status', {ack: true}, {watermark: '0f'}]);
   acker.ack('0d');
   expectAck(13n);
 
-  // Keepalive ('0/0') is sent if no ack is sent before the timer fires.
-  acker.keepalive();
-  vi.advanceTimersToNextTimer();
-  expectAck(0n);
+  // Still not caught up, so dropped
+  acker.onChange(['status', {ack: false}, {watermark: '0g'}]);
+  expectNoAck();
+
+  // Downstream is now caught up.
+  acker.ack('0f');
+  expectAck(15n);
+
+  // Now that downstream is caught up, this should respond
+  acker.onChange(['status', {ack: false}, {watermark: '0h'}]);
+  expectAck(17n);
 });

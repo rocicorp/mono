@@ -50,6 +50,7 @@ describe('change-source/pg', () => {
         'zro_0_1234',
         '0wdfj02',
         {tables: [], indexes: []},
+        {foo: 'bar'},
       );
     });
 
@@ -74,6 +75,8 @@ describe('change-source/pg', () => {
           slot: 'zro_0_1234',
           version: '0wdfj02',
           initialSchema: {tables: [], indexes: []},
+          initialSyncContext: {foo: 'bar'},
+          subscriberContext: null,
         },
       ],
       ['zro_0.clients']: [],
