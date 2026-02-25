@@ -87,6 +87,8 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     CREATE UNIQUE INDEX bar_idx ON my.bar (a);
     ALTER TABLE my.bar REPLICA IDENTITY USING INDEX bar_idx;
 
+    CREATE TABLE not_in_publication(a INT PRIMARY KEY);
+
     CREATE PUBLICATION zero_zero FOR TABLES IN SCHEMA my;
     `);
 
@@ -127,6 +129,19 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       ALTER TABLE my.boo REPLICA IDENTITY FULL;
       `,
     );
+  }
+
+  async function getConfirmedFlushLSN(): Promise<bigint> {
+    const [{confirmed}] = await upstream<{confirmed: string}[]> /*sql*/ `
+      SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
+          WHERE slot_name = ${replicationSlot}`;
+    return toBigInt(confirmed);
+  }
+
+  async function getCurrentLSN(): Promise<bigint> {
+    const [{lsn}] = await upstream<{lsn: string}[]> /*sql*/ `
+      SELECT pg_current_wal_lsn() as lsn`;
+    return toBigInt(lsn);
   }
 
   async function startReplication() {
@@ -359,12 +374,9 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     // Verify that the ACK stored with the replication slot includes
     // the first commit but not the second.
-    const [{confirmed}] = await upstream<{confirmed: string}[]>`
-    SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
-        WHERE slot_name = ${replicationSlot}`;
     const min = majorVersionFromString(commit1[2].watermark);
     const max = majorVersionFromString(begin2[2].commitWatermark);
-    const actual = toBigInt(confirmed);
+    const actual = await getConfirmedFlushLSN();
     expect(actual).toBeGreaterThanOrEqual(min);
     expect(actual).toBeLessThan(max);
   });
@@ -416,6 +428,73 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {watermark: begin1[2]?.commitWatermark},
     ]);
     acks.push(['status', {ack: true}, commit1[2]]);
+  });
+
+  test.each([
+    [withTriggers],
+    [withoutTriggers],
+    [replicaIdentityFullWithTriggers],
+    [replicaIdentityFullWithoutTriggers],
+  ])('automatic acks for non-publication LSN advancement', async init => {
+    await init();
+    const {replicaVersion} = getSubscriptionState(
+      new StatementRunner(replicaDbFile.connect(lc)),
+    );
+
+    const {changes, acks} = await startStream('00');
+    const downstream = drainToQueue(changes);
+
+    await upstream`INSERT INTO my.boo (a) VALUES ('b')`;
+
+    const begin = (await downstream.dequeue()) as Begin;
+    expect(begin).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    expect(begin[2].commitWatermark > replicaVersion).toBe(true);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {a: 'b'},
+      },
+    ]);
+    const commit = (await downstream.dequeue()) as Commit;
+    expect(commit).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin[2].commitWatermark},
+    ]);
+
+    // Advance the WAL with non-publication entries.
+    await upstream`INSERT INTO not_in_publication(a) 
+       VALUES (1), (2), (3), (4), (5)`;
+
+    // Until the ack is sent, the confirmed_flush_lsn should not reflect
+    // the received transaction.
+    expect(await getConfirmedFlushLSN()).toBeLessThan(
+      majorVersionFromString(commit[2].watermark),
+    );
+
+    // Once the ack is sent, the slot should advance.
+    acks.push(['status', {ack: true}, commit[2]]);
+    await vi.waitFor(async () => {
+      expect(await getConfirmedFlushLSN()).toBeGreaterThanOrEqual(
+        majorVersionFromString(commit[2].watermark),
+      );
+    });
+
+    // Advance the WAL with non-publication entries again.
+    await upstream`INSERT INTO not_in_publication(a) 
+       VALUES (6), (7), (8), (9), (10)`;
+
+    // This time these should be automatically ack'ed since the
+    // slot is caught up with the publication.
+    const newLSN = await getCurrentLSN();
+    await vi.waitFor(async () => {
+      expect(await getConfirmedFlushLSN()).toBeGreaterThanOrEqual(newLSN);
+    });
   });
 
   test.each([
