@@ -433,6 +433,8 @@ function arrayViewFactory<
     updateTTL,
   );
   v.onDestroy = onDestroy;
-  onTransactionCommit(() => v.flush());
+  onTransactionCommit(() => {
+    v.flush();
+  });
   return v;
 }
