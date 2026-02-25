@@ -1,3 +1,4 @@
+import {compareUTF8} from 'compare-utf8';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
@@ -84,6 +85,9 @@ export type Connection = {
     | undefined;
   readonly debug?: DebugDelegate | undefined;
   lastPushedEpoch: number;
+  pkConstraint: Constraint | undefined;
+  indexCache: Map<string, Index>;
+  requestedSortKey: string;
 };
 
 /**
@@ -98,6 +102,7 @@ export class MemorySource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   readonly #primaryKey: PrimaryKey;
   readonly #primaryIndexSort: Ordering;
+  readonly #primaryIndexKey: string;
   readonly #indexes: Map<string, Index> = new Map();
   readonly #connections: Connection[] = [];
 
@@ -114,8 +119,9 @@ export class MemorySource implements Source {
     this.#columns = columns;
     this.#primaryKey = primaryKey;
     this.#primaryIndexSort = primaryKey.map(k => [k, 'asc']);
+    this.#primaryIndexKey = JSON.stringify(this.#primaryIndexSort);
     const comparator = makeBoundComparator(this.#primaryIndexSort);
-    this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
+    this.#indexes.set(this.#primaryIndexKey, {
       comparator,
       data: primaryIndexData ?? new BTreeSet<Row>(comparator),
       usedBy: new Set(),
@@ -176,6 +182,7 @@ export class MemorySource implements Source {
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
 
+    const requestedSortKey = sort.map(p => `${p[0]}:${p[1]}`).join('|');
     const connection: Connection = {
       input,
       output: undefined,
@@ -189,6 +196,12 @@ export class MemorySource implements Source {
           }
         : undefined,
       lastPushedEpoch: 0,
+      pkConstraint: primaryKeyConstraintFromFilters(
+        transformedFilters.filters,
+        this.#primaryKey,
+      ),
+      indexCache: new Map(),
+      requestedSortKey,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -211,7 +224,7 @@ export class MemorySource implements Source {
   }
 
   #getPrimaryIndex(): Index {
-    const index = this.#indexes.get(JSON.stringify(this.#primaryIndexSort));
+    const index = this.#indexes.get(this.#primaryIndexKey);
     assert(index, 'Primary index not found');
     return index;
   }
@@ -258,10 +271,8 @@ export class MemorySource implements Source {
     const connectionComparator = (r1: Row, r2: Row) =>
       compareRows(r1, r2) * (req.reverse ? -1 : 1);
 
-    const pkConstraint = primaryKeyConstraintFromFilters(
-      conn.filters?.condition,
-      this.#primaryKey,
-    );
+    // Patch 7: Use cached pkConstraint from connection instead of recomputing
+    const pkConstraint = conn.pkConstraint;
     // The primary key constraint will be more limiting than the constraint
     // so swap out to that if it exists.
     const fetchOrPkConstraint = pkConstraint ?? req.constraint;
@@ -277,15 +288,27 @@ export class MemorySource implements Source {
     // For the special case of constraining by PK, we don't need to worry about
     // any requested sort since there can only be one result. Otherwise we also
     // need the index sorted by the requested sort.
-    if (
+    const includeRequestedSort =
       this.#primaryKey.length > 1 ||
       !fetchOrPkConstraint ||
-      !constraintMatchesPrimaryKey(fetchOrPkConstraint, this.#primaryKey)
-    ) {
+      !constraintMatchesPrimaryKey(fetchOrPkConstraint, this.#primaryKey);
+    if (includeRequestedSort) {
       indexSort.push(...requestedSort);
     }
 
-    const index = this.#getOrCreateIndex(indexSort, conn);
+    // Patch 4: Cache index lookup per connection
+    let constraintShapeKey = '';
+    if (fetchOrPkConstraint) {
+      for (const key of Object.keys(fetchOrPkConstraint)) {
+        constraintShapeKey += key + '|';
+      }
+    }
+    const indexCacheKey = `${constraintShapeKey}::${includeRequestedSort ? conn.requestedSortKey : 'pk'}`;
+    let index = conn.indexCache.get(indexCacheKey);
+    if (!index) {
+      index = this.#getOrCreateIndex(indexSort, conn);
+      conn.indexCache.set(indexCacheKey, index);
+    }
     const {data, comparator: compare} = index;
     const indexComparator = (r1: Row, r2: Row) =>
       compare(r1, r2) * (req.reverse ? -1 : 1);
