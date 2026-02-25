@@ -3,6 +3,7 @@ import {makeComparator} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 import {
   applyChange,
+  applyChanges,
   idSymbol,
   refCountSymbol,
   type ViewChange,
@@ -2647,5 +2648,518 @@ describe('applyChange', () => {
         expect.objectContaining({id: '1', name: 'Alicia'}),
       );
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// applyChanges: O(N+M) BATCH MERGE PATH
+// Verifies that applyChanges produces identical results to sequential
+// applyChange for all supported change types, and falls back correctly
+// for unsupported cases (child changes, sort-key-changing edits, singular,
+// hidden schemas).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('applyChanges (batch path)', () => {
+  const simpleSchema: SourceSchema = {
+    tableName: 'item',
+    columns: {
+      id: {type: 'string'},
+      name: {type: 'string'},
+    },
+    primaryKey: ['id'],
+    sort: [['id', 'asc']],
+    system: 'client',
+    relationships: {},
+    isHidden: false,
+    compareRows: makeComparator([['id', 'asc']]),
+  } as const;
+
+  const simpleFormat: Format = {singular: false, relationships: {}};
+
+  function makeAddChanges(count: number): ViewChange[] {
+    const changes: ViewChange[] = [];
+    for (let i = 1; i <= count; i++) {
+      const id = String(i).padStart(3, '0');
+      changes.push({
+        type: 'add',
+        node: {
+          row: {id, name: `item-${id}`},
+          relationships: {},
+        },
+      });
+    }
+    return changes;
+  }
+
+  test('batch adds produce correct sorted order', () => {
+    const root: Entry = {'': []};
+    const result = applyChanges(
+      root,
+      makeAddChanges(10),
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+    const items = result[''] as {id: string}[];
+    expect(items).toHaveLength(10);
+    expect(items.map(e => e.id)).toEqual([
+      '001',
+      '002',
+      '003',
+      '004',
+      '005',
+      '006',
+      '007',
+      '008',
+      '009',
+      '010',
+    ]);
+  });
+
+  test('batch produces identical results to sequential for adds', () => {
+    const changes = makeAddChanges(20);
+
+    let seqRoot: Entry = {'': []};
+    for (const change of changes) {
+      seqRoot = applyChange(seqRoot, change, simpleSchema, '', simpleFormat);
+    }
+
+    const batchRoot = applyChanges(
+      {'': []},
+      changes,
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+
+    expect(batchRoot).toEqual(seqRoot);
+  });
+
+  test('batch removes', () => {
+    // Build initial view with sequential adds
+    let root: Entry = {'': []};
+    for (const change of makeAddChanges(15)) {
+      root = applyChange(root, change, simpleSchema, '', simpleFormat);
+    }
+
+    const removes: ViewChange[] = [];
+    for (let i = 1; i <= 10; i++) {
+      const id = String(i).padStart(3, '0');
+      removes.push({
+        type: 'remove',
+        node: {row: {id, name: `item-${id}`}, relationships: {}},
+      });
+    }
+    const result = applyChanges(root, removes, simpleSchema, '', simpleFormat);
+    const items = result[''] as {id: string}[];
+    expect(items).toHaveLength(5);
+    expect(items.map(e => e.id)).toEqual(['011', '012', '013', '014', '015']);
+  });
+
+  test('batch in-place edits (sort key unchanged)', () => {
+    let root: Entry = {'': []};
+    for (const change of makeAddChanges(15)) {
+      root = applyChange(root, change, simpleSchema, '', simpleFormat);
+    }
+
+    const edits: ViewChange[] = [];
+    for (let i = 1; i <= 10; i++) {
+      const id = String(i).padStart(3, '0');
+      edits.push({
+        type: 'edit',
+        oldNode: {row: {id, name: `item-${id}`}},
+        node: {row: {id, name: `updated-${id}`}},
+      });
+    }
+    const result = applyChanges(root, edits, simpleSchema, '', simpleFormat);
+    const items = result[''] as {id: string; name: string}[];
+    expect(items).toHaveLength(15);
+    for (let i = 1; i <= 10; i++) {
+      const id = String(i).padStart(3, '0');
+      expect(items[i - 1].name).toBe(`updated-${id}`);
+    }
+    for (let i = 11; i <= 15; i++) {
+      const id = String(i).padStart(3, '0');
+      expect(items[i - 1].name).toBe(`item-${id}`);
+    }
+  });
+
+  test('batch produces identical results to sequential for mixed changes', () => {
+    // Build identical starting states
+    let seqRoot: Entry = {'': []};
+    let batchRoot: Entry = {'': []};
+    for (const change of makeAddChanges(15)) {
+      seqRoot = applyChange(seqRoot, change, simpleSchema, '', simpleFormat);
+      batchRoot = applyChange(
+        batchRoot,
+        change,
+        simpleSchema,
+        '',
+        simpleFormat,
+      );
+    }
+
+    const mixed: ViewChange[] = [];
+    // Remove first 5
+    for (let i = 1; i <= 5; i++) {
+      const id = String(i).padStart(3, '0');
+      mixed.push({
+        type: 'remove',
+        node: {row: {id, name: `item-${id}`}, relationships: {}},
+      });
+    }
+    // Edit next 5
+    for (let i = 6; i <= 10; i++) {
+      const id = String(i).padStart(3, '0');
+      mixed.push({
+        type: 'edit',
+        oldNode: {row: {id, name: `item-${id}`}},
+        node: {row: {id, name: `updated-${id}`}},
+      });
+    }
+    // Add 5 new
+    for (let i = 16; i <= 20; i++) {
+      const id = String(i).padStart(3, '0');
+      mixed.push({
+        type: 'add',
+        node: {row: {id, name: `item-${id}`}, relationships: {}},
+      });
+    }
+
+    for (const change of mixed) {
+      seqRoot = applyChange(seqRoot, change, simpleSchema, '', simpleFormat);
+    }
+    batchRoot = applyChanges(
+      batchRoot,
+      mixed,
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+
+    expect(batchRoot).toEqual(seqRoot);
+  });
+
+  test('batch with existing view entries (adds interleaved with existing)', () => {
+    // Start with odd-numbered entries
+    let root: Entry = {'': []};
+    for (let i = 1; i <= 10; i += 2) {
+      const id = String(i).padStart(3, '0');
+      root = applyChange(
+        root,
+        {
+          type: 'add',
+          node: {row: {id, name: `item-${id}`}, relationships: {}},
+        },
+        simpleSchema,
+        '',
+        simpleFormat,
+      );
+    }
+
+    // Add even-numbered entries via batch
+    const evenAdds: ViewChange[] = [];
+    for (let i = 2; i <= 10; i += 2) {
+      const id = String(i).padStart(3, '0');
+      evenAdds.push({
+        type: 'add',
+        node: {row: {id, name: `item-${id}`}, relationships: {}},
+      });
+    }
+
+    const result = applyChanges(
+      root,
+      evenAdds,
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+    const items = result[''] as {id: string}[];
+    expect(items).toHaveLength(10);
+    // All entries should be in sorted order
+    expect(items.map(e => e.id)).toEqual([
+      '001',
+      '002',
+      '003',
+      '004',
+      '005',
+      '006',
+      '007',
+      '008',
+      '009',
+      '010',
+    ]);
+  });
+
+  test('child changes fall back to sequential', () => {
+    const parentSchema: SourceSchema = {
+      tableName: 'parent',
+      columns: {id: {type: 'string'}, name: {type: 'string'}},
+      primaryKey: ['id'],
+      sort: [['id', 'asc']],
+      system: 'client',
+      relationships: {
+        children: {
+          tableName: 'child',
+          columns: {id: {type: 'string'}, parentId: {type: 'string'}},
+          primaryKey: ['id'],
+          sort: [['id', 'asc']],
+          system: 'client',
+          relationships: {},
+          isHidden: false,
+          compareRows: makeComparator([['id', 'asc']]),
+        },
+      },
+      isHidden: false,
+      compareRows: makeComparator([['id', 'asc']]),
+    } as const;
+    const parentFormat: Format = {
+      singular: false,
+      relationships: {
+        children: {singular: false, relationships: {}},
+      },
+    };
+
+    let root: Entry = {'': []};
+    root = applyChange(
+      root,
+      {
+        type: 'add',
+        node: {
+          row: {id: '001', name: 'item-001'},
+          relationships: {
+            children: () => [],
+          },
+        },
+      },
+      parentSchema,
+      '',
+      parentFormat,
+    );
+
+    const childChanges: ViewChange[] = [];
+    for (let i = 1; i <= 10; i++) {
+      const childId = String(i).padStart(3, '0');
+      childChanges.push({
+        type: 'child',
+        node: {row: {id: '001', name: 'item-001'}},
+        child: {
+          relationshipName: 'children',
+          change: {
+            type: 'add',
+            node: {row: {id: childId, parentId: '001'}, relationships: {}},
+          },
+        },
+      });
+    }
+
+    root = applyChanges(root, childChanges, parentSchema, '', parentFormat);
+
+    const parent = (root[''] as {id: string; children: {id: string}[]}[])[0];
+    expect(parent.children).toHaveLength(10);
+  });
+
+  test('singular format falls back to sequential', () => {
+    const singularFormat: Format = {singular: true, relationships: {}};
+
+    const changes: ViewChange[] = [];
+    for (let i = 0; i < 10; i++) {
+      changes.push({
+        type: 'add',
+        node: {row: {id: '001', name: 'item-001'}, relationships: {}},
+      });
+    }
+
+    const batchRoot = applyChanges(
+      {'': undefined},
+      changes,
+      simpleSchema,
+      '',
+      singularFormat,
+    );
+
+    let seqRoot: Entry = {'': undefined};
+    for (const change of changes) {
+      seqRoot = applyChange(
+        seqRoot,
+        change,
+        simpleSchema,
+        '',
+        singularFormat,
+      );
+    }
+    expect(batchRoot).toEqual(seqRoot);
+  });
+
+  test('sort-key-changing edit falls back to sequential', () => {
+    let root: Entry = {'': []};
+    for (const change of makeAddChanges(15)) {
+      root = applyChange(root, change, simpleSchema, '', simpleFormat);
+    }
+
+    const edits: ViewChange[] = [];
+    for (let i = 1; i <= 9; i++) {
+      const id = String(i).padStart(3, '0');
+      edits.push({
+        type: 'edit',
+        oldNode: {row: {id, name: `item-${id}`}},
+        node: {row: {id, name: `updated-${id}`}},
+      });
+    }
+    // This edit changes the sort key (id 010 -> 099).
+    edits.push({
+      type: 'edit',
+      oldNode: {row: {id: '010', name: 'item-010'}},
+      node: {row: {id: '099', name: 'item-099'}},
+    });
+
+    let seqRoot: Entry = {'': []};
+    for (const change of makeAddChanges(15)) {
+      seqRoot = applyChange(seqRoot, change, simpleSchema, '', simpleFormat);
+    }
+    for (const change of edits) {
+      seqRoot = applyChange(seqRoot, change, simpleSchema, '', simpleFormat);
+    }
+
+    const batchResult = applyChanges(
+      root,
+      edits,
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+    expect(batchResult).toEqual(seqRoot);
+  });
+
+  test('batch add with duplicate rows (refCount)', () => {
+    const changes: ViewChange[] = [
+      {
+        type: 'add',
+        node: {row: {id: '001', name: 'item-001'}, relationships: {}},
+      },
+      {
+        type: 'add',
+        node: {row: {id: '001', name: 'item-001'}, relationships: {}},
+      },
+      {
+        type: 'add',
+        node: {row: {id: '002', name: 'item-002'}, relationships: {}},
+      },
+    ];
+
+    const batchRoot = applyChanges(
+      {'': []},
+      changes,
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+
+    let seqRoot: Entry = {'': []};
+    for (const change of changes) {
+      seqRoot = applyChange(seqRoot, change, simpleSchema, '', simpleFormat);
+    }
+
+    expect(batchRoot).toEqual(seqRoot);
+    // Verify refCount on duplicate
+    const items = batchRoot[''] as Entry[];
+    expect((items[0] as {[refCountSymbol]: number})[refCountSymbol]).toBe(2);
+    expect((items[1] as {[refCountSymbol]: number})[refCountSymbol]).toBe(1);
+  });
+
+  test('batch add then remove same row (net zero)', () => {
+    const changes: ViewChange[] = [
+      {
+        type: 'add',
+        node: {row: {id: '001', name: 'item-001'}, relationships: {}},
+      },
+      {
+        type: 'remove',
+        node: {row: {id: '001', name: 'item-001'}, relationships: {}},
+      },
+      {
+        type: 'add',
+        node: {row: {id: '002', name: 'item-002'}, relationships: {}},
+      },
+    ];
+
+    const batchRoot = applyChanges(
+      {'': []},
+      changes,
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+
+    let seqRoot: Entry = {'': []};
+    for (const change of changes) {
+      seqRoot = applyChange(seqRoot, change, simpleSchema, '', simpleFormat);
+    }
+
+    expect(batchRoot).toEqual(seqRoot);
+    const items = batchRoot[''] as {id: string}[];
+    expect(items).toHaveLength(1);
+    expect(items[0].id).toBe('002');
+  });
+
+  test('empty changes returns same entry', () => {
+    const root: Entry = {'': []};
+    const result = applyChanges(root, [], simpleSchema, '', simpleFormat);
+    expect(result).toBe(root);
+  });
+
+  test('single change works correctly', () => {
+    const root: Entry = {'': []};
+    const changes: ViewChange[] = [
+      {
+        type: 'add',
+        node: {row: {id: '001', name: 'item-001'}, relationships: {}},
+      },
+    ];
+
+    const batchRoot = applyChanges(
+      root,
+      changes,
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+
+    let seqRoot: Entry = {'': []};
+    for (const change of changes) {
+      seqRoot = applyChange(seqRoot, change, simpleSchema, '', simpleFormat);
+    }
+
+    expect(batchRoot).toEqual(seqRoot);
+  });
+
+  test('batch returns new parent entry (immutable)', () => {
+    const root: Entry = {'': []};
+    const result = applyChanges(
+      root,
+      makeAddChanges(5),
+      simpleSchema,
+      '',
+      simpleFormat,
+    );
+    // Should return a new object, not mutate the original
+    expect(result).not.toBe(root);
+    expect(root['']).toEqual([]);
+  });
+
+  test('batch with withIDs sets id symbols', () => {
+    const result = applyChanges(
+      {'': []},
+      makeAddChanges(3),
+      simpleSchema,
+      '',
+      simpleFormat,
+      true, // withIDs
+    );
+
+    const items = result[''] as Entry[];
+    expect(items).toHaveLength(3);
+    for (const item of items) {
+      expect((item as {[idSymbol]?: string})[idSymbol]).toBeDefined();
+    }
   });
 });

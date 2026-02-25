@@ -175,12 +175,16 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #hydrate() {
     this.#dirty = true;
-    // During hydration, expand and apply nodes immediately
+    // Collect all initial adds into a single batch for O(N+M) application
+    // instead of per-row O(N) splice.
+    const initialAdds: ViewChange[] = [];
     for (const node of skipYields(this.#input.fetch({}))) {
-      const expanded = expandNode(node);
+      initialAdds.push({type: 'add', node: expandNode(node)});
+    }
+    if (initialAdds.length > 0) {
       this.#root = applyChanges(
         this.#root,
-        [{type: 'add', node: expanded}],
+        initialAdds,
         this.#schema,
         '',
         this.#format,
