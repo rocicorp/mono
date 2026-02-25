@@ -1,4 +1,3 @@
-import {compareUTF8} from 'compare-utf8';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
