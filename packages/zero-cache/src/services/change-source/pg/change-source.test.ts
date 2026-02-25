@@ -11,6 +11,10 @@ test('acker', () => {
     expect(sink.push.mock.calls[acks - 1][0]).toBe(expected);
   };
 
+  const expectNoAck = () => {
+    expect(sink.push).toBeCalledTimes(acks);
+  };
+
   const acker = new Acker(sink);
 
   acker.onChange(['status', {ack: false}, {watermark: '0a'}]);
@@ -27,6 +31,7 @@ test('acker', () => {
 
   // This should be dropped because we are awaiting 0d
   acker.onChange(['status', {ack: false}, {watermark: '0e'}]);
+  expectNoAck();
 
   // Now we are awaiting 0f
   acker.onChange(['status', {ack: true}, {watermark: '0f'}]);
@@ -35,6 +40,7 @@ test('acker', () => {
 
   // Still not caught up, so dropped
   acker.onChange(['status', {ack: false}, {watermark: '0g'}]);
+  expectNoAck();
 
   // Downstream is now caught up.
   acker.ack('0f');
