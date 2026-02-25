@@ -84,8 +84,11 @@ export type Connection = {
     | undefined;
   readonly debug?: DebugDelegate | undefined;
   lastPushedEpoch: number;
+  /** Pre-computed on connect so #fetch avoids re-deriving it every call. */
   pkConstraint: Constraint | undefined;
+  /** Per-connection cache of constraint+sort -> Index to skip Map lookups. */
   indexCache: Map<string, Index>;
+  /** Stringified sort key for this connection, cached to build index cache keys cheaply. */
   requestedSortKey: string;
 };
 
@@ -101,6 +104,7 @@ export class MemorySource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   readonly #primaryKey: PrimaryKey;
   readonly #primaryIndexSort: Ordering;
+  /** Cached JSON key for the primary index to avoid repeated JSON.stringify. */
   readonly #primaryIndexKey: string;
   readonly #indexes: Map<string, Index> = new Map();
   readonly #connections: Connection[] = [];
@@ -270,7 +274,6 @@ export class MemorySource implements Source {
     const connectionComparator = (r1: Row, r2: Row) =>
       compareRows(r1, r2) * (req.reverse ? -1 : 1);
 
-    // Patch 7: Use cached pkConstraint from connection instead of recomputing
     const pkConstraint = conn.pkConstraint;
     // The primary key constraint will be more limiting than the constraint
     // so swap out to that if it exists.
@@ -295,7 +298,6 @@ export class MemorySource implements Source {
       indexSort.push(...requestedSort);
     }
 
-    // Patch 4: Cache index lookup per connection
     let constraintShapeKey = '';
     if (fetchOrPkConstraint) {
       for (const key of Object.keys(fetchOrPkConstraint)) {
