@@ -497,6 +497,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     };
   }
 
+  /**
+   * Makes a best effort to purge the change log. In the event of a database
+   * error, exceptions will be logged and swallowed, so this method is safe
+   * to run in a timeout.
+   */
   async #purgeOldChanges(): Promise<void> {
     const initial = [...this.#initialWatermarks];
     if (initial.length === 0) {
@@ -522,6 +527,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#lc.info?.(`Purged ${deleted} changes before ${earliestInitial}`);
         this.#initialWatermarks.delete(earliestInitial);
       }
+    } catch (e) {
+      this.#lc.warn?.(`error purging change log`, e);
     } finally {
       if (this.#initialWatermarks.size) {
         // If there are unpurged watermarks to check, schedule the next purge.
