@@ -121,7 +121,11 @@ describe('backfill-manager', () => {
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
     expect(await drainChanges(5)).toMatchObject([
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.01'},
+      ],
       [
         'data',
         {
@@ -253,7 +257,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '125.01'},
+      ],
       [
         'data',
         {
@@ -374,7 +382,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '130'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '130.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '130.01'},
+      ],
       [
         'data',
         {
@@ -555,7 +567,11 @@ describe('backfill-manager', () => {
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
     expect((await drainChanges(15)).slice(-3)).toMatchObject([
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '125.01'},
+      ],
       [
         'data',
         {
@@ -653,7 +669,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '125.01'},
+      ],
       [
         'data',
         {
@@ -757,7 +777,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '125.01'},
+      ],
       [
         'data',
         {
@@ -864,7 +888,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '125.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '125.01'},
+      ],
       [
         'data',
         {
@@ -1001,7 +1029,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '140.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '140.01'},
+      ],
       [
         'data',
         {
@@ -1296,7 +1328,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '140.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '140.01'},
+      ],
       [
         'data',
         {
@@ -1322,7 +1358,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '140.01'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '140.02'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '140.02'},
+      ],
       [
         'data',
         {
@@ -1401,7 +1441,11 @@ describe('backfill-manager', () => {
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
     expect(await drainChanges(3)).toMatchObject([
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.01'},
+      ],
       [
         'data',
         {
@@ -1514,7 +1558,11 @@ describe('backfill-manager', () => {
     changeStream.pushStatus(['status', {ack: false}, {watermark: '188'}]);
 
     expect(await drainChanges(4)).toMatchObject([
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.01'},
+      ],
       [
         'data',
         {
@@ -1631,7 +1679,11 @@ describe('backfill-manager', () => {
     // Each 'backfill' message is wrapped in a separate transaction because
     // the backfill-manager yielded the stream between every message.
     expect(await drainChanges(15)).toMatchObject([
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '141.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '141.01'},
+      ],
       [
         'data',
         {
@@ -1647,7 +1699,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '141.01'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '142.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '142.01'},
+      ],
       [
         'data',
         {
@@ -1663,7 +1719,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '142.01'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '143.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '143.01'},
+      ],
       [
         'data',
         {
@@ -1679,7 +1739,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '143.01'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '144.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '144.01'},
+      ],
       [
         'data',
         {
@@ -1695,7 +1759,11 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '144.01'}],
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '145.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '145.01'},
+      ],
       [
         'data',
         {
@@ -1758,7 +1826,11 @@ describe('backfill-manager', () => {
     changeStream.release('131');
 
     expect(await drainChanges(8)).toMatchObject([
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.01'},
+      ],
       [
         'data',
         {
@@ -1777,7 +1849,11 @@ describe('backfill-manager', () => {
       ['begin', {tag: 'begin'}, {commitWatermark: '131'}],
       ['commit', {tag: 'commit'}, {watermark: '131'}],
 
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '131.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '131.01'},
+      ],
       [
         'data',
         {
@@ -1840,7 +1916,11 @@ describe('backfill-manager', () => {
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
     expect(await drainChanges(6)).toMatchObject([
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.01'},
+      ],
       [
         'data',
         {
@@ -1856,7 +1936,11 @@ describe('backfill-manager', () => {
       ],
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
 
-      ['begin', {tag: 'begin', json: 'p'}, {commitWatermark: '123.02'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '123.02'},
+      ],
       [
         'data',
         {

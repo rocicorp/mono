@@ -44,7 +44,10 @@ import {
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
 import {BackfillManager} from '../common/backfill-manager.ts';
-import {ChangeStreamMultiplexer} from '../common/change-stream-multiplexer.ts';
+import {
+  ChangeStreamMultiplexer,
+  type Listener,
+} from '../common/change-stream-multiplexer.ts';
 import {initReplica} from '../common/replica-schema.ts';
 import type {BackfillRequest, JSONObject} from '../protocol/current.ts';
 import type {
@@ -297,6 +300,7 @@ class PostgresChangeSource implements ChangeSource {
       [...shardConfig.publications],
       clientStart,
     );
+    const acker = new Acker(acks);
 
     // The ChangeStreamMultiplexer facilitates cooperative streaming from
     // the main replication stream and backfill streams initiated by the
@@ -307,10 +311,8 @@ class PostgresChangeSource implements ChangeSource {
     );
     changes
       .addProducers(messages, backfillManager)
-      .addListeners(backfillManager);
+      .addListeners(backfillManager, acker);
     backfillManager.run(clientWatermark, backfillRequests);
-
-    const acker = new Acker(acks);
 
     const changeMaker = new ChangeMaker(
       this.#lc,
@@ -328,23 +330,10 @@ class PostgresChangeSource implements ChangeSource {
         for await (const [lsn, msg] of messages) {
           // Note: no reservation is needed for pushStatus().
           if (msg.tag === 'keepalive') {
-            const watermark = majorVersionToString(lsn);
-            if (msg.shouldRespond) {
-              acker.expectDownstreamAck(watermark);
-            } else {
-              // Keepalives with shouldRespond = false are sent to the
-              // multiplexer for Listeners, but for efficiency they are not
-              // sent downstream to the change-streamer. Ack them here if
-              // the change-streamer is caught up. This updates the
-              // replication slot's `confirmed_flush_lsn` more quickly
-              // (rather than waiting for the periodic shouldRespond), which
-              // is useful for monitoring replication slot lag.
-              acker.ackIfDownstreamIsCaughtUp(watermark);
-            }
             changes.pushStatus([
               'status',
               {ack: msg.shouldRespond},
-              {watermark},
+              {watermark: majorVersionToString(lsn)},
             ]);
 
             // If we're not in a transaction but the last reservation was kept
@@ -365,13 +354,6 @@ class PostgresChangeSource implements ChangeSource {
 
           let lastChange: ChangeStreamMessage | undefined;
           for (const change of await changeMaker.makeChanges(lsn, msg)) {
-            if (change[0] === 'begin') {
-              // Mark the commit watermark as being expected so that any
-              // intermediate shouldRespond=false watermarks, which will be
-              // at the commitWatermark, are *not* acked, as the ack must come
-              // from change-streamer after it commits the transaction.
-              acker.expectDownstreamAck(change[2].commitWatermark);
-            }
             await changes.push(change); // Allow the change-streamer to push back.
             lastChange = change;
           }
@@ -561,7 +543,7 @@ class PostgresChangeSource implements ChangeSource {
 }
 
 // Exported for testing.
-export class Acker {
+export class Acker implements Listener {
   #acks: Sink<bigint>;
   #waitingForDownstreamAck: string | null = null;
 
@@ -569,7 +551,35 @@ export class Acker {
     this.#acks = acks;
   }
 
-  expectDownstreamAck(watermark: string) {
+  onChange(change: ChangeStreamMessage): void {
+    switch (change[0]) {
+      case 'status':
+        const {watermark} = change[2];
+        if (change[1].ack) {
+          this.#expectDownstreamAck(watermark);
+        } else {
+          // Keepalives with shouldRespond = false are sent to Listeners,
+          // but for efficiency they are not sent downstream to the
+          // change-streamer. Ack them here if the change-streamer is caught
+          // up. This updates the replication slot's `confirmed_flush_lsn`
+          // more quickly (rather than waiting for the periodic shouldRespond),
+          // which is useful for monitoring replication slot lag.
+          this.#ackIfDownstreamIsCaughtUp(watermark);
+        }
+        break;
+      case 'begin':
+        // Mark the commit watermark as being expected so that any intermediate
+        // shouldRespond=false watermarks, which will be at the
+        // commitWatermark, are *not* acked, as the ack must come from
+        // change-streamer after it commits the transaction.
+        if (!change[1].skipAck) {
+          this.#expectDownstreamAck(change[2].commitWatermark);
+        }
+        break;
+    }
+  }
+
+  #expectDownstreamAck(watermark: string) {
     this.#waitingForDownstreamAck = watermark;
   }
 
@@ -583,7 +593,7 @@ export class Acker {
     this.#sendAck(watermark);
   }
 
-  ackIfDownstreamIsCaughtUp(watermark: string) {
+  #ackIfDownstreamIsCaughtUp(watermark: string) {
     if (this.#waitingForDownstreamAck === null) {
       this.#sendAck(watermark);
     }
