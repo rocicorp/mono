@@ -494,8 +494,19 @@ export function applyChangeInternal<M extends Mutate>(
 
 /**
  * Batch apply multiple changes to an Entry tree.
- * For small batches or complex cases, falls back to sequential applyChange.
- * Future optimization: O(N + K) batch processing for large K.
+ *
+ * Attempts an O(N+M) merge-sort batch path first: sort the changes by row key,
+ * then walk the existing view array and the sorted changes simultaneously,
+ * producing a new merged array in a single pass.
+ *
+ * Falls back to sequential applyChange for unsupported cases:
+ *   - child changes (require recursive descent into nested relationships)
+ *   - sort-key-changing edits (require positional remove + reinsert)
+ *   - singular format (single entry, not an array)
+ *   - hidden schema (junction table collapsing)
+ *
+ * Benchmarks show the batch path is faster at every batch size (even 2),
+ * so there is no threshold gate.
  */
 export function applyChanges(
   parentEntry: Entry,
@@ -506,6 +517,22 @@ export function applyChanges(
   withIDs: WithIDs = false,
   mutate: Mutate = false,
 ): Entry {
+  if (changes.length > 0) {
+    const batchResult = applyChangesBatch(
+      parentEntry as MetaEntry<typeof mutate>,
+      changes,
+      schema,
+      relationship,
+      format,
+      withIDs,
+      mutate,
+    );
+    if (batchResult !== undefined) {
+      return batchResult;
+    }
+  }
+
+  // Fallback: sequential application
   let result = parentEntry;
   for (const change of changes) {
     result = applyChange(
@@ -519,6 +546,256 @@ export function applyChanges(
     );
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Batch merge path
+// ---------------------------------------------------------------------------
+
+type RowChange =
+  | {kind: 'add'; row: Row; node: ViewNode; order: number}
+  | {kind: 'remove'; row: Row; order: number}
+  | {kind: 'edit'; row: Row; change: EditViewChange; order: number};
+
+/**
+ * Try to batch-apply `changes` via O(N+M) merge. Returns the new parent entry
+ * on success, or `undefined` if the changes contain unsupported types that
+ * require the sequential path.
+ */
+function applyChangesBatch<M extends Mutate>(
+  parentEntry: MetaEntry<M>,
+  changes: ViewChange[],
+  schema: SourceSchema,
+  relationship: string,
+  format: Format,
+  withIDs: WithIDs,
+  mutate: M,
+): MetaEntry<M> | undefined {
+  if (schema.isHidden || format.singular) {
+    return undefined;
+  }
+
+  const rowChanges = collectBatchableRowChanges(changes, schema);
+  if (rowChanges === undefined) {
+    return undefined;
+  }
+
+  const view = getChildEntryList(parentEntry, relationship);
+  const merged = mergeBatch(
+    view,
+    rowChanges,
+    schema,
+    format.relationships,
+    withIDs,
+  );
+
+  return setRelation(mutate, parentEntry, relationship, merged);
+}
+
+/**
+ * Extract and sort row-level changes. Returns `undefined` if any change
+ * is unsupported for batching (child changes, sort-key-changing edits).
+ */
+function collectBatchableRowChanges(
+  changes: ViewChange[],
+  schema: SourceSchema,
+): RowChange[] | undefined {
+  const rowChanges: RowChange[] = [];
+  for (let i = 0; i < changes.length; i++) {
+    const change = changes[i];
+    switch (change.type) {
+      case 'add':
+        rowChanges.push({
+          kind: 'add',
+          row: change.node.row,
+          node: change.node,
+          order: i,
+        });
+        break;
+      case 'remove':
+        rowChanges.push({
+          kind: 'remove',
+          row: change.node.row,
+          order: i,
+        });
+        break;
+      case 'edit':
+        // Sort-key-changing edits require positional splicing; bail out.
+        if (schema.compareRows(change.oldNode.row, change.node.row) !== 0) {
+          return undefined;
+        }
+        rowChanges.push({
+          kind: 'edit',
+          row: change.oldNode.row,
+          change,
+          order: i,
+        });
+        break;
+      case 'child':
+        // Child changes require recursive descent; bail out.
+        return undefined;
+      default:
+        unreachable(change);
+    }
+  }
+  rowChanges.sort((a, b) => {
+    const cmp = schema.compareRows(a.row, b.row);
+    if (cmp !== 0) {
+      return cmp;
+    }
+    // Stable: preserve original change order within the same row.
+    return a.order - b.order;
+  });
+  return rowChanges;
+}
+
+/**
+ * O(N+M) merge of existing view entries with sorted row changes.
+ * Always produces a fresh array (both mutate and immutable modes get a new
+ * array since we are constructing it from scratch).
+ */
+function mergeBatch(
+  view: MetaEntryList<Mutate>,
+  rowChanges: RowChange[],
+  schema: SourceSchema,
+  childFormats: Record<string, Format>,
+  withIDs: WithIDs,
+): MutableMetaEntryList {
+  const merged: MutableMetaEntryList = [];
+  let vi = 0;
+  let ci = 0;
+
+  while (vi < view.length || ci < rowChanges.length) {
+    if (vi >= view.length) {
+      // Only changes left
+      const {entry, nextIndex} = applyRowChangeGroup(
+        undefined,
+        rowChanges,
+        ci,
+        schema,
+        childFormats,
+        withIDs,
+      );
+      if (entry !== undefined) {
+        merged.push(entry);
+      }
+      ci = nextIndex;
+      continue;
+    }
+    if (ci >= rowChanges.length) {
+      // Only view entries left
+      merged.push(view[vi] as MutableMetaEntry);
+      vi++;
+      continue;
+    }
+
+    const cmp = schema.compareRows(
+      view[vi] as Row,
+      rowChanges[ci].row,
+    );
+    if (cmp < 0) {
+      // Existing entry sorts before next change: keep it
+      merged.push(view[vi] as MutableMetaEntry);
+      vi++;
+    } else if (cmp > 0) {
+      // Change sorts before next existing entry: apply without existing
+      const {entry, nextIndex} = applyRowChangeGroup(
+        undefined,
+        rowChanges,
+        ci,
+        schema,
+        childFormats,
+        withIDs,
+      );
+      if (entry !== undefined) {
+        merged.push(entry);
+      }
+      ci = nextIndex;
+    } else {
+      // Same row key: apply changes to existing entry
+      const {entry, nextIndex} = applyRowChangeGroup(
+        view[vi] as MutableMetaEntry,
+        rowChanges,
+        ci,
+        schema,
+        childFormats,
+        withIDs,
+      );
+      if (entry !== undefined) {
+        merged.push(entry);
+      }
+      vi++;
+      ci = nextIndex;
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Process all consecutive changes for the same row key starting at
+ * `startIndex`. Returns the resulting entry (or `undefined` if the row was
+ * removed) and the next index to continue from.
+ */
+function applyRowChangeGroup(
+  existingEntry: MutableMetaEntry | undefined,
+  rowChanges: RowChange[],
+  startIndex: number,
+  schema: SourceSchema,
+  childFormats: Record<string, Format>,
+  withIDs: WithIDs,
+): {entry: MutableMetaEntry | undefined; nextIndex: number} {
+  const targetRow = rowChanges[startIndex].row;
+  let entry = existingEntry;
+  let i = startIndex;
+
+  while (
+    i < rowChanges.length &&
+    schema.compareRows(rowChanges[i].row, targetRow) === 0
+  ) {
+    const rowChange = rowChanges[i];
+    switch (rowChange.kind) {
+      case 'add': {
+        if (entry === undefined) {
+          entry = makeNewMetaEntry(rowChange.row, schema, withIDs, 1);
+          initializeRelationshipsForNewEntryIfAny(
+            entry,
+            rowChange.node,
+            schema,
+            childFormats,
+            withIDs,
+          );
+        } else {
+          // Duplicate add: increment refCount (always mutable on the
+          // entry we own inside the merge buffer).
+          entry = setRefCount(true, entry, entry[refCountSymbol] + 1);
+        }
+        break;
+      }
+      case 'remove': {
+        assert(entry !== undefined, 'node does not exist');
+        const rc = entry[refCountSymbol];
+        if (rc === 1) {
+          entry = undefined;
+        } else {
+          entry = setRefCount(true, entry, rc - 1);
+        }
+        break;
+      }
+      case 'edit': {
+        assert(entry !== undefined, 'node does not exist');
+        // Apply edit. We can use the mutable `applyEdit` variant because the
+        // entry is owned by our merge buffer (no external refs to preserve).
+        entry = applyEdit(entry, rowChange.change, schema, withIDs, true);
+        break;
+      }
+      default:
+        unreachable(rowChange);
+    }
+    i++;
+  }
+
+  return {entry, nextIndex: i};
 }
 
 function applyEdit<M extends Mutate>(
