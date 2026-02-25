@@ -7,7 +7,7 @@ import {emptyArray} from '../../../shared/src/sentinels.ts';
 import {MeasurePushOperator} from './measure-push-operator.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
 
-const PUSH_COUNT = 41_000;
+const PUSH_COUNTS = [2_000, 15_000, 40_000] as const;
 
 const change: Change = {type: 'add', node: {} as Node};
 
@@ -47,24 +47,27 @@ function pushN(operator: MeasurePushOperator, n: number): void {
 	}
 }
 
-describe('MeasurePushOperator sampling overhead (41k pushes)', () => {
-	bench('sampleRate=1 (measure every push, default)', () => {
-		const op = makeOperator();
-		pushN(op, PUSH_COUNT);
-	});
+for (const count of PUSH_COUNTS) {
+	const label = count.toLocaleString();
+	describe(`MeasurePushOperator sampling overhead (${label} pushes)`, () => {
+		bench('sampleRate=1 (default, every push measured)', () => {
+			const op = makeOperator();
+			pushN(op, count);
+		});
 
-	bench('disableMetrics: true (no measurement)', () => {
-		const op = makeOperator({disableMetrics: true});
-		pushN(op, PUSH_COUNT);
-	});
+		bench('sampleRate=0.01 (measure 1 in 100)', () => {
+			const op = makeOperator({metricsSampleRate: 0.01});
+			pushN(op, count);
+		});
 
-	bench('sampleRate=0.01 (measure 1 in 100)', () => {
-		const op = makeOperator({metricsSampleRate: 0.01});
-		pushN(op, PUSH_COUNT);
-	});
+		bench('disableMetrics: true (no measurement)', () => {
+			const op = makeOperator({disableMetrics: true});
+			pushN(op, count);
+		});
 
-	bench('sampleRate=0 (disabled)', () => {
-		const op = makeOperator({metricsSampleRate: 0});
-		pushN(op, PUSH_COUNT);
+		bench('sampleRate=0 (disabled)', () => {
+			const op = makeOperator({metricsSampleRate: 0});
+			pushN(op, count);
+		});
 	});
-});
+}
