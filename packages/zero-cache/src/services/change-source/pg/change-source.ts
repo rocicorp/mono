@@ -389,6 +389,7 @@ class PostgresChangeSource implements ChangeSource {
           // server that sent the shutdown signal, if any.
           await this.#logCurrentReplicaInfo();
         }
+        // await changeMaker.close();
         changes.fail(err);
       }
     })();
@@ -612,7 +613,7 @@ type ReplicationError = {
   lastLogTime: number;
 };
 
-const SET_REPLICA_IDENTITY_DELAY_MS = 500;
+const SET_REPLICA_IDENTITY_DELAY_MS = 50;
 
 class ChangeMaker {
   readonly #lc: LogContext;
@@ -809,6 +810,12 @@ class ChangeMaker {
     }
 
     return changes;
+  }
+
+  async close() {
+    clearTimeout(this.#replicaIdentityTimer);
+    this.#replicaIdentityTimer = undefined;
+    await this.#upstreamDB.end();
   }
 
   /**
