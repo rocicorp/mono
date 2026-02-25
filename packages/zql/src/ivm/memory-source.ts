@@ -1,4 +1,9 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {
+  assert,
+  assertNumber,
+  assertString,
+  unreachable,
+} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {once} from '../../../shared/src/iterables.ts';
@@ -25,6 +30,7 @@ import {
   type Constraint,
 } from './constraint.ts';
 import {
+  compareStringUTF8Fast,
   compareValues,
   makeComparator,
   valuesEqual,
@@ -801,37 +807,57 @@ type MinValue = typeof minValue;
 const maxValue = Symbol('max-value');
 type MaxValue = typeof maxValue;
 
+/**
+ * Compares two Bound values, handling minValue/maxValue sentinels,
+ * null, and delegating to type-specific comparison. This merges the
+ * logic of compareBounds + compareValues into a single function that
+ * V8 can inline at the call site (well within TurboFan's 460-bytecode
+ * inlining threshold).
+ */
+function compareBoundValue(a: Bound, b: Bound): number {
+  if (a === b) return 0;
+  if (a === minValue) return -1;
+  if (b === minValue) return 1;
+  if (a === maxValue) return 1;
+  if (b === maxValue) return -1;
+  const aN: Value = a ?? null;
+  const bN: Value = b ?? null;
+  if (aN === null) return bN === null ? 0 : -1;
+  if (bN === null) return 1;
+  if (typeof a === 'string') {
+    assertString(b);
+    return compareStringUTF8Fast(a, b);
+  }
+  if (typeof a === 'number') {
+    assertNumber(b);
+    return a - (b as number);
+  }
+  return compareValues(aN, bN);
+}
+
+/**
+ * Creates a comparator for RowBound values used in BTree index scans.
+ *
+ * For single-key sorts (the common case), returns a direct comparator
+ * that avoids the multi-key loop. The actual comparison logic lives in
+ * compareBoundValue, which V8 inlines at the call site.
+ */
 function makeBoundComparator(sort: Ordering) {
+  if (sort.length === 1) {
+    const key = sort[0][0];
+    const dir = sort[0][1];
+    const cmp = (a: RowBound, b: RowBound) => compareBoundValue(a[key], b[key]);
+    return dir === 'asc' ? cmp : (a: RowBound, b: RowBound) => -cmp(a, b);
+  }
   return (a: RowBound, b: RowBound) => {
-    // Hot! Do not use destructuring
     for (const entry of sort) {
-      const key = entry[0];
-      const cmp = compareBounds(a[key], b[key]);
+      const cmp = compareBoundValue(a[entry[0]], b[entry[0]]);
       if (cmp !== 0) {
         return entry[1] === 'asc' ? cmp : -cmp;
       }
     }
     return 0;
   };
-}
-
-function compareBounds(a: Bound, b: Bound): number {
-  if (a === b) {
-    return 0;
-  }
-  if (a === minValue) {
-    return -1;
-  }
-  if (b === minValue) {
-    return 1;
-  }
-  if (a === maxValue) {
-    return 1;
-  }
-  if (b === maxValue) {
-    return -1;
-  }
-  return compareValues(a, b);
 }
 
 function* generateRows(
