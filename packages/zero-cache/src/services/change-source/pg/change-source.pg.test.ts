@@ -489,7 +489,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     await upstream`INSERT INTO not_in_publication(a) 
        VALUES (6), (7), (8), (9), (10)`;
 
-    // This time tese should be automatically ack'ed since the
+    // This time these should be automatically ack'ed since the
     // slot is caught up with the publication.
     const newLSN = await getCurrentLSN();
     await vi.waitFor(async () => {
