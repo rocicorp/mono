@@ -154,23 +154,15 @@ test('single-format', () => {
 
   // trying to add another element should be an error
   // pipeline should have been configured with a limit of one
-  // With batched change application, the error is thrown when changes are applied
-  // (at flush() or .data access), not at push() time.
-  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
-  expect(() => view.flush()).toThrow(
+  // Changes are applied immediately in push(), so the error is thrown at push time.
+  expect(() => consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}))).toThrow(
     "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
   );
 
   // Adding the same element is not an error in the ArrayView but it is an error
   // in the Source. This case is tested in view-apply-change.ts.
 
-  // Note: After the failed flush, the pending change is still there. Let's verify
-  // that accessing .data also throws (auto-flush safety net).
-  expect(() => view.data).toThrow(
-    "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
-  );
-
-  // The listener's data is still the old value since the flush failed
+  // The listener's data is still the old value since the push failed
   expect(data).toEqual({a: 1, b: 'a'});
   expect(callCount).toBe(1);
 
