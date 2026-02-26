@@ -14,20 +14,21 @@ import type {
 // ──────────────────────────────────────────────────────────────────────────────
 // Navigation race condition tests
 //
-// These reproduce the data disappearance bug when rapidly navigating with
-// key={location.pathname} on a Suspense boundary.
+// These test a data disappearance bug when rapidly navigating with
+// key={location.pathname} on a Suspense boundary, fixed in this PR by
+// clearing stale destroy timers in ViewWrapper.subscribeReactInternals.
 //
-// Root cause: ViewWrapper.subscribeReactInternals schedules a 10ms setTimeout
-// on each unsubscribe, but never invalidates stale timers when a new subscriber
-// is added. With rapid navigation (unsub every 2-3ms), accumulated timers
-// eventually fire during a gap between unsubscribe and resubscribe, destroying
-// the view even though it was actively used since the timer was scheduled.
+// Before the fix, each unsubscribe scheduled an independent 10ms setTimeout.
+// Rapid unsub/resub cycles accumulated stale timers that could fire during
+// a gap between unsubscribe and resubscribe, destroying the view even though
+// it was actively used since the timer was scheduled. This caused the
+// QueryManager to send a `del` to the server (maxRecentQueries=0 evicts
+// immediately), and if the server's acknowledgment raced with the subsequent
+// `put`, the view could get stuck at resultType='unknown' with empty data.
 //
-// Additionally, when maxRecentQueries=0 (default), destroying a view
-// immediately evicts the query from the QueryManager, sending a `del` to the
-// server. Re-materialization sends a `put`, but if the server's response to
-// the `del` (removing g/<hash> from IDB) races with the `put`, the view can
-// get stuck at resultType='unknown' with empty data forever.
+// The fix: track the pending destroy timer in ViewWrapper and clearTimeout()
+// when a new subscriber is added, ensuring stale timers from prior
+// unsubscribe cycles cannot fire.
 // ──────────────────────────────────────────────────────────────────────────────
 
 type Listener = (data: unknown, resultType: ResultType, error?: ErroredQuery) => void;
@@ -169,32 +170,21 @@ describe('Navigation: ViewStore destroy + re-create lifecycle', () => {
     cleanup2();
   });
 
-  //   BUG: Rapid navigation accumulates stale destroy timers.
+  //   Regression test for stale destroy timer race condition.
   //
-  //   Timeline with 3ms between each unsub/resub:
-  //     t=0:  subscribe
+  //   Before fix, this timeline caused data loss:
   //     t=0:  unsub() → timer T0 fires at t=10
-  //     t=3:  subscribe
-  //     t=3:  unsub() → timer T1 fires at t=13
-  //     t=6:  subscribe
-  //     t=6:  unsub() → timer T2 fires at t=16
-  //     t=9:  subscribe
-  //     t=9:  unsub() → timer T3 fires at t=19
-  //     t=12: advancing time... T0 fires! listeners=0 → DESTROYS VIEW
+  //     t=3:  resub → unsub → timer T1 fires at t=13
+  //     t=6:  resub → unsub → timer T2 fires at t=16
+  //     t=9:  resub → unsub → timer T3 fires at t=19
+  //     t=12: T0 fires, listeners=0 → DESTROYED VIEW (stale timer!)
   //
-  //   T0 was scheduled at t=0 but fires at t=10 during a gap where no
-  //   listener is active (between unsub at t=9 and resub at t=12).
-  //   The timer's `#reactInternals.size > 0` check passes because
-  //   size IS 0 at that moment, even though subscribers have come and
-  //   gone since T0 was scheduled. The timer has no generation counter
-  //   to detect that the world has changed since it was created.
+  //   T0 was scheduled at t=0 but fired at t=10 during a gap where no
+  //   listener was active. The timer's `#reactInternals.size > 0` check
+  //   saw size=0 (correct at that instant) but didn't know subscribers
+  //   had come and gone 3 times since T0 was scheduled.
   //
-  //   Fix: clear pending destroy timers when a new subscriber is added,
-  //   or use a generation counter to invalidate stale timers.
-  //
-  //   FAILS on main: stale timer T0 fires and destroys the view even
-  //   though it was actively used (subscribed/unsubscribed 3 times)
-  //   between when T0 was scheduled and when it fires.
+  //   Fixed by clearing pending destroy timer on subscribe. See use-query.tsx.
   test('rapid navigation spam: data preserved across 5 unsub/resub cycles', () => {
     const viewStore = new ViewStore();
     const query = newMockQuery('nav-spam');
@@ -221,9 +211,9 @@ describe('Navigation: ViewStore destroy + re-create lifecycle', () => {
     unsub();
   });
 
-  //   Same race condition but with 2ms gaps (faster navigation).
-  //   Even with very fast navigation, the 4th cycle crosses the 10ms
-  //   boundary of the first timer, destroying the view.
+  //   Same regression test with 2ms gaps (faster navigation).
+  //   Before fix, the 5th cycle crossed the 10ms boundary of the first
+  //   timer, destroying the view. Fixed by clearing timer on subscribe.
   test('rapid navigation spam at 2ms intervals: data preserved', () => {
     const viewStore = new ViewStore();
     const query = newMockQuery('nav-spam-fast');
