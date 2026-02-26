@@ -5,12 +5,9 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {
-  disableStatementTimeout,
-  type PostgresDB,
-  type PostgresTransaction,
-} from '../types/pg.ts';
+import {type PostgresDB, type PostgresTransaction} from '../types/pg.ts';
 import type * as Mode from './mode-enum.ts';
+import {runTx} from './run-transaction.ts';
 
 type Mode = Enum<typeof Mode>;
 
@@ -186,7 +183,6 @@ export class TransactionPool {
       const start = performance.now();
       try {
         lc.debug?.('started transaction');
-        disableStatementTimeout(tx);
 
         let last: Promise<void> = promiseVoid;
 
@@ -235,8 +231,7 @@ export class TransactionPool {
     };
 
     this.#workers.push(
-      db
-        .begin(this.#mode, worker)
+      runTx(db, worker, {mode: this.#mode})
         .catch(e => {
           if (e instanceof RollbackSignal) {
             // A RollbackSignal is used to gracefully rollback the postgres.js

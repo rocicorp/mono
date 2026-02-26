@@ -32,6 +32,7 @@ import {
 } from '../../auth/write-authorizer.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import * as Mode from '../../db/mode-enum.ts';
+import {runTx} from '../../db/run-transaction.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
@@ -233,24 +234,28 @@ export async function processMutation(
     let errorMode = false;
     for (let i = 0; i < MAX_SERIALIZATION_ATTEMPTS; i++) {
       try {
-        await db.begin(Mode.SERIALIZABLE, async tx => {
-          // Simulates a concurrent request for testing. In production this is a noop.
-          const done = onTxStart?.();
-          try {
-            return await processMutationWithTx(
-              lc,
-              tx,
-              authData,
-              shard,
-              clientGroupID,
-              mutation,
-              errorMode,
-              writeAuthorizer,
-            );
-          } finally {
-            await done;
-          }
-        });
+        await runTx(
+          db,
+          async tx => {
+            // Simulates a concurrent request for testing. In production this is a noop.
+            const done = onTxStart?.();
+            try {
+              return await processMutationWithTx(
+                lc,
+                tx,
+                authData,
+                shard,
+                clientGroupID,
+                mutation,
+                errorMode,
+                writeAuthorizer,
+              );
+            } finally {
+              await done;
+            }
+          },
+          {mode: Mode.SERIALIZABLE},
+        );
         if (errorMode) {
           lc.debug?.('Ran mutation successfully in error mode');
         }

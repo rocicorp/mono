@@ -5,16 +5,13 @@ import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
+import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
 } from '../../observability/metrics.ts';
-import {
-  disableStatementTimeout,
-  type PostgresDB,
-  type PostgresTransaction,
-} from '../../types/pg.ts';
+import {type PostgresDB, type PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import {checkVersion, type CVRFlushStats} from './cvr-store.ts';
@@ -161,6 +158,7 @@ export class RowRecordCache {
     }
     const start = Date.now();
     const r = resolver<CustomKeyMap<RowID, RowRecord>>();
+    r.promise.catch(() => {});
     // Set this.#cache immediately (before await) so that only one db
     // query is made even if there are multiple callers.
     this.#cache = r.promise;
@@ -228,6 +226,10 @@ export class RowRecordCache {
     // Initiate a flush if not already flushing.
     if (!flushed && this.#flushing === null) {
       this.#flushing = resolver();
+      // The #flush() method handles propagating errors to #failService.
+      // Attach a rejection handler to this promise to avoid unhandled
+      // rejections.
+      this.#flushing.promise.catch(() => {});
       this.#setTimeout(() => this.#flush(), 0);
     }
     return cache.size;
@@ -239,11 +241,9 @@ export class RowRecordCache {
       while (this.#pendingRowsVersion !== this.#flushedRowsVersion) {
         const start = performance.now();
 
-        const {rows, rowsVersion} = await this.#db.begin(
-          Mode.READ_COMMITTED,
+        const {rows, rowsVersion} = await runTx(
+          this.#db,
           tx => {
-            disableStatementTimeout(tx);
-
             // Note: This code block is synchronous, guaranteeing that the
             // #pendingRowsVersion is consistent with the #pending rows.
             const rows = this.#pending.size;
@@ -258,6 +258,7 @@ export class RowRecordCache {
             this.#pending.clear();
             return {rows, rowsVersion};
           },
+          {mode: Mode.READ_COMMITTED},
         );
         const elapsed = performance.now() - start;
         this.#lc.debug?.(

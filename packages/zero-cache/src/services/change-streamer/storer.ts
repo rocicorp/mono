@@ -10,12 +10,9 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
+import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import {
-  disableStatementTimeout,
-  type PostgresDB,
-  type PostgresTransaction,
-} from '../../types/pg.ts';
+import {type PostgresDB, type PostgresTransaction} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {
   backfillRequestSchema,
@@ -188,8 +185,8 @@ export class Storer implements Service {
     this.#queue.enqueue(['ready', resolve]);
     await ready;
 
-    const [[{lastWatermark}], result] = await this.#db.begin(
-      Mode.READONLY,
+    const [[{lastWatermark}], result] = await runTx(
+      this.#db,
       sql => [
         sql<{lastWatermark: string}[]>`
         SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`,
@@ -212,6 +209,7 @@ export class Storer implements Service {
           GROUP BY b."schema", b."table", t."metadata"
         `,
       ],
+      {mode: Mode.READONLY},
     );
 
     return {
@@ -229,28 +227,30 @@ export class Storer implements Service {
   }
 
   purgeRecordsBefore(watermark: string): Promise<number> {
-    return this.#db.begin(Mode.SERIALIZABLE, async sql => {
-      disableStatementTimeout(sql);
-
-      // Check ownership before performing the purge. The server is expected to
-      // exit immediately when an ownership change is detected, but checking
-      // explicitly guards against race conditions.
-      const [{owner}] = await sql<ReplicationState[]>`
+    return runTx(
+      this.#db,
+      async sql => {
+        // Check ownership before performing the purge. The server is expected to
+        // exit immediately when an ownership change is detected, but checking
+        // explicitly guards against race conditions.
+        const [{owner}] = await sql<ReplicationState[]>`
         SELECT * FROM ${this.#cdc('replicationState')}`;
-      if (owner !== this.#taskID) {
-        this.#lc.warn?.(
-          `Ignoring change log purge request (${watermark}) while not owner`,
-        );
-        return 0;
-      }
+        if (owner !== this.#taskID) {
+          this.#lc.warn?.(
+            `Ignoring change log purge request (${watermark}) while not owner`,
+          );
+          return 0;
+        }
 
-      const [{deleted}] = await sql<{deleted: bigint}[]>`
+        const [{deleted}] = await sql<{deleted: bigint}[]>`
         WITH purged AS (
           DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
-      return Number(deleted);
-    });
+        return Number(deleted);
+      },
+      {mode: Mode.SERIALIZABLE}, // TODO: remove SERIALIZABLE
+    );
   }
 
   /**

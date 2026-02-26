@@ -3,11 +3,8 @@ import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {
-  disableStatementTimeout,
-  type PostgresDB,
-  type PostgresTransaction,
-} from '../types/pg.ts';
+import {type PostgresDB, type PostgresTransaction} from '../types/pg.ts';
+import {runTx} from './run-transaction.ts';
 
 type Operations = (log: LogContext, tx: PostgresTransaction) => Promise<void>;
 
@@ -84,7 +81,7 @@ export async function runSchemaMigrations(
       `Checking schema for compatibility with ${debugName} at schema v${codeVersion}`,
     );
 
-    let versions = await db.begin(async tx => {
+    let versions = await runTx(db, async tx => {
       const versions = await ensureVersionHistory(tx, schemaName);
       if (codeVersion < versions.minSafeVersion) {
         throw new Error(
@@ -115,9 +112,7 @@ export async function runSchemaMigrations(
           );
           void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
-          versions = await db.begin(async tx => {
-            disableStatementTimeout(tx);
-
+          versions = await runTx(db, async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
             let versions = await ensureVersionHistory(tx, schemaName);
             if (versions.dataVersion < dest) {

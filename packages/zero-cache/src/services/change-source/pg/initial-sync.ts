@@ -21,6 +21,7 @@ import {
   mapPostgresToLiteIndex,
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
+import {runTx} from '../../../db/run-transaction.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {
@@ -140,10 +141,14 @@ export async function initialSync(
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
     // Retrieve the published schema at the consistent_point.
-    const published = await sql.begin(Mode.READONLY, async tx => {
-      await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
-      return getPublicationInfo(tx, publications);
-    });
+    const published = await runTx(
+      sql,
+      async tx => {
+        await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
+        return getPublicationInfo(tx, publications);
+      },
+      {mode: Mode.READONLY},
+    );
     // Note: If this throws, initial-sync is aborted.
     validatePublications(lc, published);
 

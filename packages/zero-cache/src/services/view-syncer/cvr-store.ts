@@ -19,6 +19,7 @@ import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
 import {clampTTL, DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
+import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
@@ -272,8 +273,9 @@ export class CVRStore {
       profileID: null,
     };
 
-    const [instance, clientsRows, queryRows, desiresRows] =
-      await this.#db.begin(Mode.READONLY, tx => {
+    const [instance, clientsRows, queryRows, desiresRows] = await runTx(
+      this.#db,
+      tx => {
         lc.debug?.(`CVR tx started after ${Date.now() - start} ms`);
         return [
           tx<
@@ -313,7 +315,9 @@ export class CVRStore {
           FROM ${this.#cvr('desires')}
           WHERE "clientGroupID" = ${id}`,
         ];
-      });
+      },
+      {mode: Mode.READONLY},
+    );
     lc.debug?.(
       `CVR tx completed after ${Date.now() - start} ms ` +
         `(${clientsRows.length} clients, ${queryRows.length} queries, ${desiresRows.length} desires)`,
@@ -1007,88 +1011,92 @@ export class CVRStore {
     // Use an async callback so we can await the version/ownership check and
     // validate it INSIDE the transaction. If validation fails, the exception
     // causes postgres.js to ROLLBACK, ensuring no writes are committed on error.
-    const results = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
-      lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
+    const results = await runTx(
+      this.#db,
+      async tx => {
+        lc.debug?.(`flush tx begun after ${Date.now() - start} ms`);
 
-      // Acquire row-level lock and validate version/ownership before queuing writes.
-      // Throwing here (inside the begin callback) rolls back the transaction so that
-      // no writes are committed when concurrent modification or ownership errors occur.
-      await this.#checkVersionAndOwnership(
-        lc,
-        tx,
-        expectedCurrentVersion,
-        lastConnectTime,
-      );
+        // Acquire row-level lock and validate version/ownership before queuing writes.
+        // Throwing here (inside the begin callback) rolls back the transaction so that
+        // no writes are committed when concurrent modification or ownership errors occur.
+        await this.#checkVersionAndOwnership(
+          lc,
+          tx,
+          expectedCurrentVersion,
+          lastConnectTime,
+        );
 
-      const writeQueries = [];
-      if (this.#pendingInstanceWrite) {
-        writeQueries.push(this.#pendingInstanceWrite(tx, lastConnectTime));
-        stats.instances++;
-        stats.statements++;
-      }
-      for (const write of this.#writes) {
-        stats.clients += write.stats.clients ?? 0;
-        stats.rows += write.stats.rows ?? 0;
+        const writeQueries = [];
+        if (this.#pendingInstanceWrite) {
+          writeQueries.push(this.#pendingInstanceWrite(tx, lastConnectTime));
+          stats.instances++;
+          stats.statements++;
+        }
+        for (const write of this.#writes) {
+          stats.clients += write.stats.clients ?? 0;
+          stats.rows += write.stats.rows ?? 0;
 
-        writeQueries.push(write.write(tx, lastConnectTime));
-        stats.statements++;
-      }
+          writeQueries.push(write.write(tx, lastConnectTime));
+          stats.statements++;
+        }
 
-      // Batch flush config writes
-      // Flush queries first (desires depend on queries via foreign key)
-      const hasQueryUpdates =
-        this.#pendingQueryUpdates.size > 0 ||
-        this.#pendingQueryPartialUpdates.size > 0;
+        // Batch flush config writes
+        // Flush queries first (desires depend on queries via foreign key)
+        const hasQueryUpdates =
+          this.#pendingQueryUpdates.size > 0 ||
+          this.#pendingQueryPartialUpdates.size > 0;
 
-      const desireFlush = this.#flushDesires(tx, lc);
+        const desireFlush = this.#flushDesires(tx, lc);
 
-      let queryFlushes: PendingQuery<Row[]>[] = [];
-      if (hasQueryUpdates) {
-        queryFlushes = this.#flushQueries(tx, lc);
+        let queryFlushes: PendingQuery<Row[]>[] = [];
+        if (hasQueryUpdates) {
+          queryFlushes = this.#flushQueries(tx, lc);
 
-        // Count both full updates and partial-only updates
-        const partialOnlyCount = Array.from(
-          this.#pendingQueryPartialUpdates.keys(),
-        ).filter(key => !this.#pendingQueryUpdates.has(key)).length;
+          // Count both full updates and partial-only updates
+          const partialOnlyCount = Array.from(
+            this.#pendingQueryPartialUpdates.keys(),
+          ).filter(key => !this.#pendingQueryUpdates.has(key)).length;
 
-        stats.queries = this.#pendingQueryUpdates.size + partialOnlyCount;
-        stats.statements +=
-          (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
-          (partialOnlyCount > 0 ? 1 : 0);
+          stats.queries = this.#pendingQueryUpdates.size + partialOnlyCount;
+          stats.statements +=
+            (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
+            (partialOnlyCount > 0 ? 1 : 0);
 
-        if (desireFlush) {
+          if (desireFlush) {
+            stats.desires = this.#pendingDesireUpdates.size;
+            stats.statements++;
+          }
+        } else if (desireFlush) {
           stats.desires = this.#pendingDesireUpdates.size;
           stats.statements++;
         }
-      } else if (desireFlush) {
-        stats.desires = this.#pendingDesireUpdates.size;
-        stats.statements++;
-      }
 
-      const rowUpdates = this.#rowCache.executeRowUpdates(
-        tx,
-        cvr.version,
-        this.#pendingRowRecordUpdates,
-        'allow-defer',
-        lc,
-      );
-      stats.statements += rowUpdates.length;
+        const rowUpdates = this.#rowCache.executeRowUpdates(
+          tx,
+          cvr.version,
+          this.#pendingRowRecordUpdates,
+          'allow-defer',
+          lc,
+        );
+        stats.statements += rowUpdates.length;
 
-      // Pipeline writes now that the version check has passed.
-      const pipelined = [
-        ...writeQueries,
-        ...queryFlushes,
-        ...(desireFlush ? [desireFlush] : []),
-        ...rowUpdates,
-      ];
+        // Pipeline writes now that the version check has passed.
+        const pipelined = [
+          ...writeQueries,
+          ...queryFlushes,
+          ...(desireFlush ? [desireFlush] : []),
+          ...rowUpdates,
+        ];
 
-      lc.debug?.(`returning ${pipelined.length} queries for pipelining`);
+        lc.debug?.(`returning ${pipelined.length} queries for pipelining`);
 
-      // Explicitly await all pipelined queries. When the begin callback is async,
-      // postgres.js does not call Promise.all() on the return value the way it does
-      // for sync callbacks, so we must do it ourselves.
-      return Promise.all(pipelined);
-    });
+        // Explicitly await all pipelined queries. When the begin callback is async,
+        // postgres.js does not call Promise.all() on the return value the way it does
+        // for sync callbacks, so we must do it ourselves.
+        return Promise.all(pipelined);
+      },
+      {mode: Mode.READ_COMMITTED},
+    );
 
     lc.debug?.(`flush tx completed after ${Date.now() - start} ms`);
 

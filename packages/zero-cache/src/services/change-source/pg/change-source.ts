@@ -22,6 +22,7 @@ import {
   mapPostgresToLiteColumn,
   UnsupportedColumnDefaultError,
 } from '../../../db/pg-to-lite.ts';
+import {runTx} from '../../../db/run-transaction.ts';
 import type {ColumnSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
@@ -442,7 +443,7 @@ class PostgresChangeSource implements ChangeSource {
     const slotExpression = replicationSlotExpression(this.#shard);
     const legacySlotName = legacyReplicationSlot(this.#shard);
 
-    const result = await db.begin(async sql => {
+    const result = await runTx(db, async sql => {
       // Note: `slot_name <= slotToKeep` uses a string compare of the millisecond
       // timestamp, which works until it exceeds 13 digits (sometime in 2286).
       const result = await sql<
