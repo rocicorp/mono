@@ -169,8 +169,13 @@ export class Storer implements Service {
       ownerProtocol === 'ws'
         ? ownerAddress
         : `${ownerProtocol}://${ownerAddress}`;
+    this.#lc.info?.(`assuming ownership at ${addressWithProtocol}`);
+    const start = performance.now();
     await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner, ownerAddress: addressWithProtocol})}`;
-    this.#lc.info?.(`assumed ownership at ${addressWithProtocol}`);
+    const elapsed = (performance.now() - start).toFixed(2);
+    this.#lc.info?.(
+      `assumed ownership at ${addressWithProtocol} (${elapsed} ms)`,
+    );
   }
 
   async getStartStreamInitializationParameters(): Promise<{
