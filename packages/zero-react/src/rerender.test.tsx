@@ -1,6 +1,10 @@
 import React, {memo, useSyncExternalStore} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {consume} from '../../zql/src/ivm/stream.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
+import {schema} from '../../zql/src/query/test/test-schemas.ts';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {ViewStore} from './use-query.tsx';
 import type {
@@ -285,5 +289,124 @@ describe('React.memo child render counting', () => {
     expect(parentRenders.current).toBeGreaterThan(rendersAfterData);
     expect(childRenders['1']).toBe(child1After);
     expect(childRenders['2']).toBeGreaterThan(1);
+  });
+});
+
+//   issue1 ─── owner:Alice        edit comment1       issue1' ─── owner:Alice (same ref)
+//           ├── comment1            ──────────►               ├── comment1' (new ref)
+//           └── comment2                                      └── comment2 (same ref)
+//   issue2 ─── owner:Bob                               issue2 (same ref, unrelated)
+//           └── comment3                                     └── comment3 (same ref)
+//
+//   <IssueRow issue={issue1}>  re-renders (descendant changed)
+//   <IssueRow issue={issue2}>  skips (React.memo, same ref)
+describe('End-to-end: real IVM pipeline to React.memo', () => {
+  let root: Root;
+  let element: HTMLDivElement;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    element = document.createElement('div');
+    document.body.appendChild(element);
+    root = createRoot(element);
+  });
+
+  afterEach(() => {
+    root.unmount();
+    document.body.removeChild(element);
+  });
+
+  test('editing a comment only re-renders the parent issue, not unrelated issues', async () => {
+    const queryDelegate = new QueryDelegateImpl();
+    const userSource = queryDelegate.getSource('user');
+    const issueSource = queryDelegate.getSource('issue');
+    const commentSource = queryDelegate.getSource('comment');
+
+    consume(userSource.push({type: 'add', row: {id: 'u1', name: 'Alice', metadata: null}}));
+    consume(userSource.push({type: 'add', row: {id: 'u2', name: 'Bob', metadata: null}}));
+    consume(issueSource.push({type: 'add', row: {id: 'i1', title: 'Bug', description: 'd1', closed: false, ownerId: 'u1', createdAt: 1}}));
+    consume(issueSource.push({type: 'add', row: {id: 'i2', title: 'Feature', description: 'd2', closed: false, ownerId: 'u2', createdAt: 2}}));
+    consume(commentSource.push({type: 'add', row: {id: 'c1', authorId: 'u1', issueId: 'i1', text: 'first', createdAt: 1}}));
+    consume(commentSource.push({type: 'add', row: {id: 'c2', authorId: 'u2', issueId: 'i1', text: 'second', createdAt: 2}}));
+    consume(commentSource.push({type: 'add', row: {id: 'c3', authorId: 'u2', issueId: 'i2', text: 'third', createdAt: 3}}));
+
+    const issueQuery = newQuery(schema, 'issue')
+      .related('owner')
+      .related('comments');
+
+    const view = queryDelegate.materialize(issueQuery);
+
+    // Wire the real TypedView to useSyncExternalStore
+    type IssueRow = {id: string; title: string; comments: Array<{id: string; text: string}>; owner: {name: string} | undefined};
+    let snapshot: unknown[] = [];
+    const subscribers = new Set<() => void>();
+    view.addListener(data => {
+      snapshot = data as unknown[];
+      for (const cb of subscribers) cb();
+    });
+    const subscribe = (cb: () => void) => {
+      subscribers.add(cb);
+      return () => { subscribers.delete(cb); };
+    };
+    const getSnapshot = () => snapshot;
+
+    const issueRenders: Record<string, number> = {};
+
+    const IssueRowComponent = memo(function IssueRowComponent({issue}: {issue: IssueRow}) {
+      issueRenders[issue.id] = (issueRenders[issue.id] ?? 0) + 1;
+      const commentTexts = issue.comments.map(c => c.text).join(', ');
+      return (
+        <div data-testid={`issue-${issue.id}`}>
+          {issue.title} by {issue.owner?.name}: [{commentTexts}]
+        </div>
+      );
+    });
+
+    function IssueList() {
+      const issues = useSyncExternalStore(subscribe, getSnapshot, getSnapshot) as IssueRow[];
+      return (
+        <div>
+          {issues.map(issue => (
+            <IssueRowComponent key={issue.id} issue={issue} />
+          ))}
+        </div>
+      );
+    }
+
+    root.render(<IssueList />);
+
+    // Wait for hydration render
+    await expect
+      .poll(() => element.querySelector('[data-testid="issue-i1"]')?.textContent)
+      .toContain('Bug');
+    await expect
+      .poll(() => element.querySelector('[data-testid="issue-i2"]')?.textContent)
+      .toContain('Feature');
+
+    const issue1RendersAfterHydration = issueRenders['i1'] ?? 0;
+    const issue2RendersAfterHydration = issueRenders['i2'] ?? 0;
+    expect(issue1RendersAfterHydration).toBeGreaterThanOrEqual(1);
+    expect(issue2RendersAfterHydration).toBeGreaterThanOrEqual(1);
+
+    // Edit comment1's text via the real source
+    consume(commentSource.push({
+      type: 'edit',
+      oldRow: {id: 'c1', authorId: 'u1', issueId: 'i1', text: 'first', createdAt: 1},
+      row: {id: 'c1', authorId: 'u1', issueId: 'i1', text: 'first-EDITED', createdAt: 1},
+    }));
+    queryDelegate.commit();
+
+    // Wait for the edit to appear in the DOM
+    await expect
+      .poll(() => element.querySelector('[data-testid="issue-i1"]')?.textContent)
+      .toContain('first-EDITED');
+
+    // issue1's component MUST have re-rendered (its comment changed)
+    expect(issueRenders['i1']).toBeGreaterThan(issue1RendersAfterHydration);
+
+    // issue2's component must NOT have re-rendered (unrelated, React.memo skips)
+    expect(issueRenders['i2']).toBe(issue2RendersAfterHydration);
+
+    view.destroy();
   });
 });
