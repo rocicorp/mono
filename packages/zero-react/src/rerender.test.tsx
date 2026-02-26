@@ -15,57 +15,59 @@ import type {
   Zero,
 } from './zero.ts';
 
-function newMockQuery(query: string, singular = false): Query<string, Schema> {
-  return {
-    [queryInternalsTag]: true,
-    hash: () => query,
-    format: {singular},
-  } as unknown as QueryImpl<string, Schema>;
-}
+type Listener = (data: unknown, resultType: ResultType, error?: ErroredQuery) => void;
 
 type MockView = {
-  listeners: Set<
-    (data: unknown, resultType: ResultType, error?: ErroredQuery) => void
-  >;
-  addListener(
-    cb: (data: unknown, resultType: ResultType, error?: ErroredQuery) => void,
-  ): () => void;
+  listeners: Set<Listener>;
+  addListener(cb: Listener): () => void;
   destroy(): void;
   updateTTL(): void;
 };
 
-function newView(): MockView {
+function newMockQuery(hash: string, singular = false): Query<string, Schema> {
   return {
-    listeners: new Set(),
-    addListener(cb) {
-      this.listeners.add(cb);
-      return () => { this.listeners.delete(cb); };
-    },
-    destroy() { this.listeners.clear(); },
-    updateTTL() {},
-  };
+    [queryInternalsTag]: true,
+    hash: () => hash,
+    format: {singular},
+  } as unknown as QueryImpl<string, Schema>;
 }
 
 function newMockZero(clientID: string): Zero<Schema, undefined, unknown> {
-  const view = newView();
   return {
     clientID,
-    materialize: vi.fn().mockImplementation(() => view),
+    materialize: vi.fn().mockImplementation(() => ({
+      listeners: new Set(),
+      addListener(cb: Listener) {
+        this.listeners.add(cb);
+        return () => { this.listeners.delete(cb); };
+      },
+      destroy() { this.listeners.clear(); },
+      updateTTL() {},
+    } satisfies MockView)),
   } as unknown as Zero<Schema, undefined, unknown>;
 }
 
-function getListeners(zero: Zero<Schema, undefined, unknown>, index = 0) {
-  const result = vi.mocked(zero.materialize).mock.results[index]?.value as MockView | undefined;
-  if (!result) throw new Error('materialize was not called');
-  return result.listeners;
+function emit(zero: Zero<Schema, undefined, unknown>, data: unknown, resultType: ResultType = 'unknown') {
+  const mock = vi.mocked(zero.materialize).mock.results[0]?.value as MockView | undefined;
+  if (!mock) throw new Error('materialize not called');
+  mock.listeners.forEach(cb => cb(data, resultType));
 }
 
-function createView(viewStore: ViewStore, suffix: string) {
-  const q = newMockQuery(`q-${suffix}`);
-  const zero = newMockZero(`client-${suffix}`);
-  const view = viewStore.getView(zero, q, true, 'forever');
+function mockViewStore(suffix: string) {
+  const viewStore = new ViewStore();
+  const query = newMockQuery(`q-${suffix}`);
+  const zero = newMockZero(`c-${suffix}`);
+  const view = viewStore.getView(zero, query, true, 'forever');
   const cleanup = view.subscribeReactInternals(() => {});
-  return {view, zero, q, cleanup};
+  return {view, zero, cleanup};
+}
+
+function snapData(view: {getSnapshot: () => readonly [unknown, ...unknown[]]}) {
+  return view.getSnapshot()[0];
+}
+
+function snapLength(view: {getSnapshot: () => readonly [unknown, ...unknown[]]}) {
+  return (snapData(view) as unknown[]).length;
 }
 
 describe('Snapshot identity', () => {
@@ -74,70 +76,63 @@ describe('Snapshot identity', () => {
 
   //   getSnapshot()  -->  ref1
   //   getSnapshot()  -->  ref1  (same, no data change)
-  //   listener([row])
+  //   emit([row])
   //   getSnapshot()  -->  ref2  (new, data changed)
   //   getSnapshot()  -->  ref2  (same, no further change)
-  test('getSnapshot returns same reference without data changes, new reference after', () => {
-    const viewStore = new ViewStore();
-    const {view, zero, cleanup} = createView(viewStore, 'identity');
+  test('same reference without changes, new reference after data', () => {
+    const {view, zero, cleanup} = mockViewStore('identity');
 
     expect(view.getSnapshot()).toBe(view.getSnapshot());
 
-    getListeners(zero).forEach(cb => cb([{id: '1'}], 'unknown'));
+    emit(zero, [{id: '1'}]);
     const withData = view.getSnapshot();
-
     expect(view.getSnapshot()).toBe(withData);
 
-    getListeners(zero).forEach(cb => cb([{id: '1'}, {id: '2'}], 'unknown'));
+    emit(zero, [{id: '1'}, {id: '2'}]);
     expect(view.getSnapshot()).not.toBe(withData);
 
     cleanup();
   });
 
   //   getSnapshot()  -->  [[], {type:'unknown'}]  (sentinel A)
-  //   listener([])
+  //   emit([])
   //   getSnapshot()  -->  [[], {type:'unknown'}]  (sentinel A, same ref)
   test('empty snapshots use sentinel objects (no spurious re-renders)', () => {
-    const viewStore = new ViewStore();
-    const {view, zero, cleanup} = createView(viewStore, 'sentinel');
+    const {view, zero, cleanup} = mockViewStore('sentinel');
 
     const empty1 = view.getSnapshot();
-    getListeners(zero).forEach(cb => cb([], 'unknown'));
-    const empty2 = view.getSnapshot();
-
-    expect(empty1).toBe(empty2);
+    emit(zero, []);
+    expect(view.getSnapshot()).toBe(empty1);
 
     const qSingular = newMockQuery('singular', true);
-    const zeroSingular = newMockZero('client-singular');
+    const zeroSingular = newMockZero('c-singular');
+    const viewStore = new ViewStore();
     const singular = viewStore.getView(zeroSingular, qSingular, true, 'forever');
     const cleanupSingular = singular.subscribeReactInternals(() => {});
 
     const s1 = singular.getSnapshot();
-    getListeners(zeroSingular).forEach(cb => cb(undefined, 'unknown'));
+    emit(zeroSingular, undefined);
     expect(singular.getSnapshot()).toBe(s1);
 
     cleanup();
     cleanupSingular();
   });
 
-  //   listener([row1, row2])  -->  snap1 = [row1, row2]
-  //   listener([row1, row2'])  -->  snap2 = [row1, row2']
+  //   emit([row1, row2])    -->  snap1
+  //   emit([row1, row2'])   -->  snap2
   //
   //   snap2[0]:  same ref as row1 (unchanged)
   //   snap2[1]:  row2' (new ref, changed)
-  test('row identity preserved in snapshot: unchanged rows keep same reference', () => {
-    const viewStore = new ViewStore();
-    const {view, zero, cleanup} = createView(viewStore, 'row-identity');
-    const listeners = getListeners(zero);
+  test('unchanged rows keep same reference in snapshot', () => {
+    const {view, zero, cleanup} = mockViewStore('row-id');
 
     const row1 = {id: '1', name: 'Alice'};
-    const row2 = {id: '2', name: 'Bob'};
-    listeners.forEach(cb => cb([row1, row2], 'unknown'));
+    emit(zero, [row1, {id: '2', name: 'Bob'}]);
 
     const row2Updated = {id: '2', name: 'Bob Updated'};
-    listeners.forEach(cb => cb([row1, row2Updated], 'unknown'));
+    emit(zero, [row1, row2Updated]);
 
-    const data = view.getSnapshot()[0] as Array<{id: string; name: string}>;
+    const data = snapData(view) as Array<{id: string; name: string}>;
     expect(data[0]).toBe(row1);
     expect(data[1]).toBe(row2Updated);
 
@@ -149,68 +144,54 @@ describe('No data flash (data to empty to data)', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  //   listener([row1])         -->  snap = [row1]   (has data)
-  //   listener([row1, row2])   -->  snap = [row1, row2]
-  //
+  //   emit([row1])         -->  snap has data
+  //   emit([row1, row2])   -->  snap still has data
   //   At no point should snap become [] between these two updates.
   test('snapshot never goes empty between data updates', () => {
-    const viewStore = new ViewStore();
-    const {view, zero, cleanup} = createView(viewStore, 'flash');
-    const listeners = getListeners(zero);
+    const {view, zero, cleanup} = mockViewStore('flash');
 
-    const snapshots: unknown[] = [];
-    view.subscribeReactInternals(() => {
-      snapshots.push((view.getSnapshot()[0] as unknown[]).length);
-    });
+    const lengths: number[] = [];
+    view.subscribeReactInternals(() => { lengths.push(snapLength(view)); });
 
-    listeners.forEach(cb => cb([{id: '1'}], 'unknown'));
-    listeners.forEach(cb => cb([{id: '1'}, {id: '2'}], 'unknown'));
+    emit(zero, [{id: '1'}]);
+    emit(zero, [{id: '1'}, {id: '2'}]);
 
     let hadData = false;
-    for (const len of snapshots) {
-      if ((len as number) > 0) hadData = true;
+    for (const len of lengths) {
+      if (len > 0) hadData = true;
       if (hadData) expect(len).toBeGreaterThan(0);
     }
 
     cleanup();
   });
 
-  //   listener([row])  -->  snap = [row]
-  //   unsubscribe
-  //   ... 15ms (past 10ms cleanup timeout) ...
-  //   getSnapshot()  -->  snap = [row]  (stale data preserved, not empty)
-  test('stale snapshot preserved after view destroy (no empty flash on remount)', () => {
-    const viewStore = new ViewStore();
-    const {view, zero, cleanup} = createView(viewStore, 'destroy-flash');
+  //   emit([row])  -->  snap has data
+  //   unsubscribe + 15ms  -->  view destroyed
+  //   getSnapshot()  -->  snap still has data (stale, not empty)
+  test('stale snapshot preserved after view destroy', () => {
+    const {view, zero, cleanup} = mockViewStore('destroy');
 
-    getListeners(zero).forEach(cb => cb([{id: '1'}], 'complete'));
-    expect((view.getSnapshot()[0] as unknown[]).length).toBe(1);
+    emit(zero, [{id: '1'}], 'complete');
+    expect(snapLength(view)).toBe(1);
 
     cleanup();
     vi.advanceTimersByTime(15);
 
-    expect((view.getSnapshot()[0] as unknown[]).length).toBe(1);
+    expect(snapLength(view)).toBe(1);
   });
 
-  //   listener([row])   -->  snap = [row]
-  //   listener([])       -->  snap = []     (legitimate empty)
-  //   listener([row2])  -->  snap = [row2]
-  //
-  //   Verifies that transitioning through empty is visible (not masked)
-  //   when the server genuinely returns empty then non-empty.
+  //   emit([row])   -->  [1]
+  //   emit([])      -->  [0]  (legitimate empty)
+  //   emit([row2])  -->  [1]
   test('legitimate empty transition is visible (not masked)', () => {
-    const viewStore = new ViewStore();
-    const {view, zero, cleanup} = createView(viewStore, 'legit-empty');
-    const listeners = getListeners(zero);
+    const {view, zero, cleanup} = mockViewStore('legit-empty');
 
     const lengths: number[] = [];
-    view.subscribeReactInternals(() => {
-      lengths.push((view.getSnapshot()[0] as unknown[]).length);
-    });
+    view.subscribeReactInternals(() => { lengths.push(snapLength(view)); });
 
-    listeners.forEach(cb => cb([{id: '1'}], 'unknown'));
-    listeners.forEach(cb => cb([], 'complete'));
-    listeners.forEach(cb => cb([{id: '2'}], 'complete'));
+    emit(zero, [{id: '1'}]);
+    emit(zero, [], 'complete');
+    emit(zero, [{id: '2'}], 'complete');
 
     expect(lengths).toEqual([1, 0, 1]);
 
@@ -218,38 +199,33 @@ describe('No data flash (data to empty to data)', () => {
   });
 });
 
-describe('React.memo child render counting', () => {
+describe('React.memo render counting', () => {
   let root: Root;
   let element: HTMLDivElement;
-  let unique = 0;
+  const cleanups: Array<() => void> = [];
 
   beforeEach(() => {
     vi.useRealTimers();
     element = document.createElement('div');
     document.body.appendChild(element);
     root = createRoot(element);
-    unique++;
   });
 
   afterEach(() => {
+    for (const fn of cleanups) fn();
+    cleanups.length = 0;
     root.unmount();
     document.body.removeChild(element);
   });
 
-  //   Parent (useQuery)
-  //     |
-  //     +-- ChildRow(row1)  React.memo  <-- same ref, skip re-render
+  //   Parent (useSyncExternalStore)
+  //     +-- ChildRow(row1)  React.memo  <-- same ref, skip
   //     +-- ChildRow(row2)  React.memo  <-- new ref, re-renders
-  //
-  //   listener([row1, row2])    -->  both children render
-  //   listener([row1, row2'])   -->  only row2 child re-renders
-  test('only the changed row child re-renders; unchanged rows skip', async () => {
-    const viewStore = new ViewStore();
-    const q = newMockQuery(`react-memo-${unique}`);
-    const zero = newMockZero(`client-memo-${unique}`);
+  test('mock view: only the changed row child re-renders', async () => {
+    const {view: viewRef, zero} = mockViewStore('memo');
+
     const parentRenders = {current: 0};
     const childRenders: Record<string, number> = {};
-
     type Row = {id: string; name: string};
 
     const ChildRow = memo(function ChildRow({row}: {row: Row}) {
@@ -258,7 +234,6 @@ describe('React.memo child render counting', () => {
     });
 
     function Parent() {
-      const viewRef = viewStore.getView(zero, q, true, 'forever');
       const [data] = useSyncExternalStore(
         viewRef.subscribeReactInternals,
         viewRef.getSnapshot,
@@ -274,52 +249,29 @@ describe('React.memo child render counting', () => {
     await expect.poll(() => parentRenders.current).toBeGreaterThanOrEqual(1);
 
     const row1 = {id: '1', name: 'Alice'};
-    const row2 = {id: '2', name: 'Bob'};
-    getListeners(zero).forEach(cb => cb([row1, row2], 'unknown'));
+    emit(zero, [row1, {id: '2', name: 'Bob'}]);
 
     await expect.poll(() => element.querySelector('[data-testid="row-1"]')?.textContent).toBe('Alice');
-
     const rendersAfterData = parentRenders.current;
     const child1After = childRenders['1'] ?? 0;
 
-    getListeners(zero).forEach(cb => cb([row1, {id: '2', name: 'Bob Updated'}], 'unknown'));
+    emit(zero, [row1, {id: '2', name: 'Bob Updated'}]);
 
     await expect.poll(() => element.querySelector('[data-testid="row-2"]')?.textContent).toBe('Bob Updated');
-
     expect(parentRenders.current).toBeGreaterThan(rendersAfterData);
     expect(childRenders['1']).toBe(child1After);
     expect(childRenders['2']).toBeGreaterThan(1);
   });
-});
 
-//   issue1 ─── owner:Alice        edit comment1       issue1' ─── owner:Alice (same ref)
-//           ├── comment1            ──────────►               ├── comment1' (new ref)
-//           └── comment2                                      └── comment2 (same ref)
-//   issue2 ─── owner:Bob                               issue2 (same ref, unrelated)
-//           └── comment3                                     └── comment3 (same ref)
-//
-//   <IssueRow issue={issue1}>  re-renders (descendant changed)
-//   <IssueRow issue={issue2}>  skips (React.memo, same ref)
-describe('End-to-end: real IVM pipeline to React.memo', () => {
-  let root: Root;
-  let element: HTMLDivElement;
-  let viewToCleanup: {destroy(): void} | undefined;
-
-  beforeEach(() => {
-    vi.useRealTimers();
-    element = document.createElement('div');
-    document.body.appendChild(element);
-    root = createRoot(element);
-  });
-
-  afterEach(() => {
-    viewToCleanup?.destroy();
-    viewToCleanup = undefined;
-    root.unmount();
-    document.body.removeChild(element);
-  });
-
-  test('editing a comment only re-renders the parent issue, not unrelated issues', async () => {
+  //   issue1 ─── owner:Alice        edit comment1       issue1' ─── owner:Alice (same ref)
+  //           ├── comment1            ──────────►               ├── comment1' (new ref)
+  //           └── comment2                                      └── comment2 (same ref)
+  //   issue2 ─── owner:Bob                               issue2 (same ref, unrelated)
+  //           └── comment3                                     └── comment3 (same ref)
+  //
+  //   <IssueRow issue={issue1}>  re-renders (descendant changed)
+  //   <IssueRow issue={issue2}>  skips (React.memo, same ref)
+  test('real IVM pipeline: editing a comment only re-renders the parent issue', async () => {
     const queryDelegate = new QueryDelegateImpl({callGot: true});
     const userSource = queryDelegate.getSource('user');
     const issueSource = queryDelegate.getSource('issue');
@@ -333,14 +285,11 @@ describe('End-to-end: real IVM pipeline to React.memo', () => {
     consume(commentSource.push({type: 'add', row: {id: 'c2', authorId: 'u2', issueId: 'i1', text: 'second', createdAt: 2}}));
     consume(commentSource.push({type: 'add', row: {id: 'c3', authorId: 'u2', issueId: 'i2', text: 'third', createdAt: 3}}));
 
-    const issueQuery = newQuery(schema, 'issue')
-      .related('owner')
-      .related('comments');
+    const view = queryDelegate.materialize(
+      newQuery(schema, 'issue').related('owner').related('comments'),
+    );
+    cleanups.push(() => view.destroy());
 
-    const view = queryDelegate.materialize(issueQuery);
-    viewToCleanup = view;
-
-    // Wire the real TypedView to useSyncExternalStore
     type IssueRow = {id: string; title: string; comments: Array<{id: string; text: string}>; owner: {name: string} | undefined};
     let snapshot: unknown[] = [];
     const subscribers = new Set<() => void>();
@@ -348,17 +297,14 @@ describe('End-to-end: real IVM pipeline to React.memo', () => {
       snapshot = data as unknown[];
       for (const cb of subscribers) cb();
     });
-    const subscribe = (cb: () => void) => {
-      subscribers.add(cb);
-      return () => { subscribers.delete(cb); };
-    };
+    const subscribe = (cb: () => void) => { subscribers.add(cb); return () => { subscribers.delete(cb); }; };
     const getSnapshot = () => snapshot;
 
     const issueRenders: Record<string, number> = {};
 
     const IssueRowComponent = memo(function IssueRowComponent({issue}: {issue: IssueRow}) {
       issueRenders[issue.id] = (issueRenders[issue.id] ?? 0) + 1;
-      const commentTexts = issue.comments.map(c => c.text).join(', ');
+      const commentTexts = issue.comments.map(comment => comment.text).join(', ');
       return (
         <div data-testid={`issue-${issue.id}`}>
           {issue.title} by {issue.owner?.name}: [{commentTexts}]
@@ -370,29 +316,21 @@ describe('End-to-end: real IVM pipeline to React.memo', () => {
       const issues = useSyncExternalStore(subscribe, getSnapshot, getSnapshot) as IssueRow[];
       return (
         <div>
-          {issues.map(issue => (
-            <IssueRowComponent key={issue.id} issue={issue} />
-          ))}
+          {issues.map(issue => <IssueRowComponent key={issue.id} issue={issue} />)}
         </div>
       );
     }
 
     root.render(<IssueList />);
 
-    // Wait for hydration render
-    await expect
-      .poll(() => element.querySelector('[data-testid="issue-i1"]')?.textContent)
-      .toContain('Bug');
-    await expect
-      .poll(() => element.querySelector('[data-testid="issue-i2"]')?.textContent)
-      .toContain('Feature');
+    await expect.poll(() => element.querySelector('[data-testid="issue-i1"]')?.textContent).toContain('Bug');
+    await expect.poll(() => element.querySelector('[data-testid="issue-i2"]')?.textContent).toContain('Feature');
 
-    const issue1RendersAfterHydration = issueRenders['i1'] ?? 0;
-    const issue2RendersAfterHydration = issueRenders['i2'] ?? 0;
-    expect(issue1RendersAfterHydration).toBeGreaterThanOrEqual(1);
-    expect(issue2RendersAfterHydration).toBeGreaterThanOrEqual(1);
+    const issue1After = issueRenders['i1'] ?? 0;
+    const issue2After = issueRenders['i2'] ?? 0;
+    expect(issue1After).toBeGreaterThanOrEqual(1);
+    expect(issue2After).toBeGreaterThanOrEqual(1);
 
-    // Edit comment1's text via the real source
     consume(commentSource.push({
       type: 'edit',
       oldRow: {id: 'c1', authorId: 'u1', issueId: 'i1', text: 'first', createdAt: 1},
@@ -400,15 +338,9 @@ describe('End-to-end: real IVM pipeline to React.memo', () => {
     }));
     queryDelegate.commit();
 
-    // Wait for the edit to appear in the DOM
-    await expect
-      .poll(() => element.querySelector('[data-testid="issue-i1"]')?.textContent)
-      .toContain('first-EDITED');
+    await expect.poll(() => element.querySelector('[data-testid="issue-i1"]')?.textContent).toContain('first-EDITED');
 
-    // issue1's component MUST have re-rendered (its comment changed)
-    expect(issueRenders['i1']).toBeGreaterThan(issue1RendersAfterHydration);
-
-    // issue2's component must NOT have re-rendered (unrelated, React.memo skips)
-    expect(issueRenders['i2']).toBe(issue2RendersAfterHydration);
+    expect(issueRenders['i1']).toBeGreaterThan(issue1After);
+    expect(issueRenders['i2']).toBe(issue2After);
   });
 });
