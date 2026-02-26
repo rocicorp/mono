@@ -833,7 +833,9 @@ describe('change-streamer/storer', () => {
       } catch (e) {
         result = e;
       }
-      expect(result).toMatchInlineSnapshot(`[AbortError: aborting changeLog purge to 06 because ownership has been taken by different-task-id]`);
+      expect(result).toMatchInlineSnapshot(
+        `[AbortError: aborting changeLog purge to 06 because ownership has been taken by different-task-id]`,
+      );
 
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
