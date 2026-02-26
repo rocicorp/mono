@@ -1,8 +1,7 @@
-import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {getHeapStatistics} from 'node:v8';
-import postgres, {type PendingQuery, type Row} from 'postgres';
+import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
@@ -227,30 +226,25 @@ export class Storer implements Service {
   }
 
   purgeRecordsBefore(watermark: string): Promise<number> {
-    return runTx(
-      this.#db,
-      async sql => {
-        // Check ownership before performing the purge. The server is expected to
-        // exit immediately when an ownership change is detected, but checking
-        // explicitly guards against race conditions.
-        const [{owner}] = await sql<ReplicationState[]>`
-        SELECT * FROM ${this.#cdc('replicationState')}`;
-        if (owner !== this.#taskID) {
-          this.#lc.warn?.(
-            `Ignoring change log purge request (${watermark}) while not owner`,
-          );
-          return 0;
-        }
-
-        const [{deleted}] = await sql<{deleted: bigint}[]>`
+    return runTx(this.#db, async sql => {
+      const [{deleted}] = await sql<{deleted: bigint}[]>`
         WITH purged AS (
           DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
-        return Number(deleted);
-      },
-      {mode: Mode.SERIALIZABLE}, // TODO: remove SERIALIZABLE
-    );
+
+      // Before committing the purge, check that this process is still the
+      // owner. This is done after the DELETE to minimize the amount of time
+      // that writes to the changeLog are delayed.
+      const [{owner}] = await sql<ReplicationState[]>`
+        SELECT * FROM ${this.#cdc('replicationState')} FOR SHARE`;
+      if (owner !== this.#taskID) {
+        throw new AbortError(
+          `aborting changeLog purge to ${watermark} because ownership has been taken by ${owner}`,
+        );
+      }
+      return Number(deleted);
+    });
   }
 
   /**
@@ -392,7 +386,7 @@ export class Storer implements Service {
         tx = {
           pool: new TransactionPool(
             this.#lc.withContext('watermark', watermark),
-            Mode.SERIALIZABLE,
+            Mode.READ_COMMITTED,
           ),
           preCommitWatermark: watermark,
           pos: 0,
@@ -400,11 +394,11 @@ export class Storer implements Service {
           ack: !change.skipAck,
         };
         tx.pool.run(this.#db);
-        // Pipeline a read of the current ReplicationState,
-        // which will be checked before committing.
+        // Acquire a lock on the replicationState row to detect and/or prevent
+        // a concurrent ownership change.
         void tx.pool.process(tx => {
-          tx<ReplicationState[]>`
-          SELECT * FROM ${this.#cdc('replicationState')}`.then(
+          tx<ReplicationState[]> /*sql*/ `
+          SELECT * FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
             ([result]) => resolve(result),
             reject,
           );
@@ -454,29 +448,7 @@ export class Storer implements Service {
           tx.pool.setDone();
         }
 
-        try {
-          await tx.pool.done();
-        } catch (e) {
-          if (
-            e instanceof postgres.PostgresError &&
-            e.code === PG_SERIALIZATION_FAILURE
-          ) {
-            // Ownership change happened after the replicationState was read in 'begin'.
-            let ownerInfo: string;
-            try {
-              const [{owner}] = await this.#db<ReplicationState[]>`
-                SELECT * FROM ${this.#cdc('replicationState')}`;
-              ownerInfo = `ownership was concurrently assumed by ${owner}`;
-            } catch {
-              ownerInfo = `ownership was concurrently changed (failed to read current owner)`;
-            }
-            throw new AbortError(
-              `changeLog ${ownerInfo} (serialization failure)`,
-              {cause: e},
-            );
-          }
-          throw e;
-        }
+        await tx.pool.done();
 
         // ACK the LSN to the upstream Postgres.
         if (tx.ack) {
@@ -512,19 +484,24 @@ export class Storer implements Service {
 
     // Ensure that the transaction has started (and is thus holding a snapshot
     // of the database) before continuing on to commit more changes. This is
-    // done by waiting for a no-op task to be processed by the pool, which
-    // indicates that the BEGIN statement has been sent to the database.
-    await reader.processReadTask(() => {});
+    // done by performing a single read on the db, which determines the
+    // snapshot for the REPEATABLE_READ transaction.
+    const [{lastWatermark}] = await reader.processReadTask(
+      sql => sql<ReplicationState[]>`
+        SELECT * FROM ${this.#cdc('replicationState')}
+      `,
+    );
 
     // Run the actual catchup queries in the background. Errors are handled in
     // #catchup() by disconnecting the associated subscriber.
-    void Promise.all(subs.map(sub => this.#catchup(sub, reader))).finally(() =>
-      reader.setDone(),
-    );
+    void Promise.all(
+      subs.map(sub => this.#catchup(sub, lastWatermark, reader)),
+    ).finally(() => reader.setDone());
   }
 
   async #catchup(
     {subscriber: sub, mode}: SubscriberAndMode,
+    lastWatermark: string,
     reader: TransactionPool,
   ) {
     try {
@@ -537,9 +514,10 @@ export class Storer implements Service {
         let count = 0;
         let lastBatchConsumed: Promise<unknown> | undefined;
 
-        for await (const entries of tx<ChangeEntry[]>`
+        for await (const entries of tx<ChangeEntry[]> /*sql*/ `
           SELECT watermark, change FROM ${this.#cdc('changeLog')}
            WHERE watermark >= ${sub.watermark}
+             AND watermark <= ${lastWatermark}
            ORDER BY watermark, pos`.cursor(2000)) {
           // Wait for the last batch of entries to be consumed by the
           // subscriber before sending down the current batch. This pipelining

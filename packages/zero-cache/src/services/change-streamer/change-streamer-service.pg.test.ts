@@ -1212,67 +1212,37 @@ describe('change-streamer/service', () => {
     });
   });
 
-  test('ownership takeover during tx', async () => {
+  test('ownership takeover not possible during tx', async () => {
     changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0d'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
-    changes.push(['commit', {tag: 'commit'}, {watermark: '0d'}]);
 
-    changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0f'}]);
-    changes.push(['data', messages.insert('foo', {id: 'world'})]);
-
-    // Wait for the ack of the first commit.
-    await expectAcks('0d');
-
-    // Let the next transaction begin, reading the old owner.
+    // Let the next transaction begin, acquiring the lock.
     await sleep(10);
 
-    // Take over ownership.
-    await sql`
-      UPDATE "zoro_3/cdc"."replicationState" 
-        SET "owner" = 'other-task', "ownerAddress" = 'change.streamer2:9876'`;
-    // The commit should fail (with a SERIALIZATION error).
-    changes.push(['commit', {tag: 'commit'}, {watermark: '0f'}]);
+    // Verify that the lock is held.
+    let result;
+    try {
+      result = await sql`
+        SELECT owner FROM "zoro_3/cdc"."replicationState" FOR UPDATE NOWAIT`;
+    } catch (e) {
+      result = e;
+    }
+    expect(result).toMatchInlineSnapshot(
+      `[PostgresError: could not obtain lock on row in relation "replicationState"]`,
+    );
+    // The commit should release the lock.
+    changes.push(['commit', {tag: 'commit'}, {watermark: '0d'}]);
 
-    await streamerDone;
-
-    // Only the first changes should be committed.
     expect(
-      await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
+      await sql`
+      SELECT owner FROM "zoro_3/cdc"."replicationState" FOR UPDATE`,
     ).toMatchInlineSnapshot(`
       Result [
-        [
-          "01",
-          "begin",
-        ],
-        [
-          "01",
-          "commit",
-        ],
-        [
-          "0d",
-          "begin",
-        ],
-        [
-          "0d",
-          "insert",
-        ],
-        [
-          "0d",
-          "commit",
-        ],
+        {
+          "owner": "task-id",
+        },
       ]
     `);
-
-    await expectTables(sql, {
-      ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'other-task',
-          ownerAddress: 'change.streamer2:9876',
-          lastWatermark: '0d',
-        },
-      ],
-    });
   });
 
   test('reset required', async () => {
@@ -1286,7 +1256,8 @@ describe('change-streamer/service', () => {
   test('reset required if backup is behind', async () => {
     await sql`
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
-    `;
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '03';
+    `.simple();
 
     void streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,

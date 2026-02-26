@@ -523,8 +523,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           `At least one client is behind backup (${earliestCurrent} < ${earliestInitial})`,
         );
       } else {
+        const start = performance.now();
+        this.#lc.info?.(`Purging changes before ${earliestInitial} ...`);
         const deleted = await this.#storer.purgeRecordsBefore(earliestInitial);
-        this.#lc.info?.(`Purged ${deleted} changes before ${earliestInitial}`);
+        const elapsed = (performance.now() - start).toFixed(2);
+        this.#lc.info?.(
+          `Purged ${deleted} changes before ${earliestInitial} (${elapsed} ms)`,
+        );
         this.#initialWatermarks.delete(earliestInitial);
       }
     } catch (e) {
