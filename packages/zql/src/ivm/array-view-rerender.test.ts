@@ -80,6 +80,12 @@ function parentChildJoin(parentInput: Input, childInput: Input) {
   });
 }
 
+type ParentEntry = {
+  id: number;
+  name: string;
+  children: ChildRow[];
+};
+
 function parentChildView(join: Input) {
   const view = new ArrayView(
     join,
@@ -90,20 +96,20 @@ function parentChildView(join: Input) {
     true,
     () => {},
   );
-  type ParentEntry = {
-    id: number;
-    name: string;
-    children: ChildRow[];
-  };
   let data: unknown[] = [];
   view.addListener(entries => {
     assertArray(entries);
     data = [...entries];
   });
-  return {view, getData: () => data, asParent: (i: number) => data[i] as ParentEntry};
+  return {view, getData: () => data, asParent: (idx: number) => data[idx] as ParentEntry};
 }
 
 describe('ArrayView: flat list identity preservation', () => {
+  //   [A, B, C]  --edit B-->  [A, B', C]
+  //    |     |                  |      |
+  //    same  same               same   same
+  //          |                         |
+  //       different              new ref (edited)
   test('edit: unchanged siblings keep reference, edited row gets new reference', () => {
     const ms = flatSource([
       {id: 1, text: 'A'},
@@ -122,6 +128,9 @@ describe('ArrayView: flat list identity preservation', () => {
     expect(getData()[2]).toBe(refC);
   });
 
+  //   [A, B]  --add C-->  [A, B, C]
+  //    |  |                 |  |
+  //   same same            same same
   test('add: existing rows keep reference', () => {
     const ms = flatSource([{id: 1, text: 'A'}, {id: 2, text: 'B'}]);
     const {view, getData} = flatView(ms);
@@ -135,6 +144,9 @@ describe('ArrayView: flat list identity preservation', () => {
     expect(getData()).toHaveLength(3);
   });
 
+  //   [A, B, C]  --remove B-->  [A, C]
+  //    |     |                    |  |
+  //   same  same                 same same
   test('remove: remaining rows keep reference', () => {
     const ms = flatSource([
       {id: 1, text: 'A'},
@@ -152,6 +164,11 @@ describe('ArrayView: flat list identity preservation', () => {
     expect(getData()[1]).toBe(refC);
   });
 
+  //   [A, B, C]  --edit B, add D-->  [A, B', C, D]
+  //    |     |                         |      |
+  //   same  same                      same   same
+  //          |                               |
+  //       new ref                         new ref
   test('multiple pushes before single flush preserve identity correctly', () => {
     const ms = flatSource([
       {id: 1, text: 'A'},
@@ -159,13 +176,14 @@ describe('ArrayView: flat list identity preservation', () => {
       {id: 3, text: 'C'},
     ]);
     const {view, getData} = flatView(ms);
-    const [refA, , refC] = getData();
+    const [refA, refB, refC] = getData();
 
     consume(ms.push({type: 'edit', oldRow: {id: 2, text: 'B'}, row: {id: 2, text: 'B-edited'}}));
     consume(ms.push({type: 'add', row: {id: 4, text: 'D'}}));
     view.flush();
 
     expect(getData()[0]).toBe(refA);
+    expect(getData()[1]).not.toBe(refB);
     expect(getData()[1]).toEqual(expect.objectContaining({id: 2, text: 'B-edited'}));
     expect(getData()[2]).toBe(refC);
     expect(getData()).toHaveLength(4);
@@ -173,6 +191,16 @@ describe('ArrayView: flat list identity preservation', () => {
 });
 
 describe('ArrayView: child changes bubble new references up to ancestors', () => {
+  //   parent1 ─┬─ [child1, child2]     edit child1     parent1' ─┬─ [child1', child2]
+  //            │                         ────────►                │
+  //   parent2 ─┴─ [child3]                              parent2  ─┴─ [child3]
+  //                                                      same ref       same ref
+  //
+  //   parent1:  new ref (descendant changed)
+  //   child1:   new ref (edited)
+  //   child2:   same ref (unchanged)
+  //   parent2:  same ref (unrelated)
+  //   child3:   same ref (unrelated)
   test('child edit gives parent a new reference; unrelated parent keeps reference', () => {
     const {parentSource, childSource} = parentChildSources(
       [{id: 1, name: 'parent1'}, {id: 2, name: 'parent2'}],
@@ -202,24 +230,21 @@ describe('ArrayView: child changes bubble new references up to ancestors', () =>
     }));
     view.flush();
 
-    // Parent1 MUST have new ref (descendant changed)
     expect(getData()[0]).not.toBe(refParent1);
-    // Children array MUST have new ref
     expect(asParent(0).children).not.toBe(refChildrenArray);
-    // Edited child MUST have new ref
     expect(asParent(0).children[0]).not.toBe(refChild1);
     expect(asParent(0).children[0]).toEqual(
       expect.objectContaining({id: 10, text: 'child1-edited'}),
     );
-
-    // Unchanged sibling child keeps ref
     expect(asParent(0).children[1]).toBe(refChild2);
-    // Unrelated parent2 keeps ref
     expect(getData()[1]).toBe(refParent2);
-    // Unrelated child3 keeps ref
     expect(asParent(1).children[0]).toBe(refChild3);
   });
 
+  //   parent1 ─── [child1]     add child2     parent1' ─── [child1, child2]
+  //                              ────────►
+  //   parent1:  new ref (children changed)
+  //   child1:   same ref (unchanged)
   test('child add gives parent a new reference; existing children keep reference', () => {
     const {parentSource, childSource} = parentChildSources(
       [{id: 1, name: 'parent1'}],
@@ -242,6 +267,10 @@ describe('ArrayView: child changes bubble new references up to ancestors', () =>
     expect(asParent(0).children[0]).toBe(refChild1);
   });
 
+  //   parent1 ─── [child1, child2]     remove child1     parent1' ─── [child2]
+  //                                      ────────────►
+  //   parent1:  new ref (children changed)
+  //   child2:   same ref (unchanged)
   test('child remove gives parent a new reference; remaining children keep reference', () => {
     const {parentSource, childSource} = parentChildSources(
       [{id: 1, name: 'parent1'}],
@@ -267,8 +296,13 @@ describe('ArrayView: child changes bubble new references up to ancestors', () =>
     expect(asParent(0).children[0]).toBe(refChild2);
   });
 
+  //   gp1 ─── p1 ─┬─ c1       edit c1       gp1' ─── p1' ─┬─ c1'
+  //                └─ c2        ──────►                      └─ c2  (same ref)
+  //   gp2                                     gp2  (same ref)
+  //
+  //   gp1: new ref    p1: new ref    c1: new ref (edited)
+  //   gp2: same ref                  c2: same ref (unchanged)
   test('grandchild edit bubbles new reference through all 3 levels', () => {
-    // grandparent → parent → child (3-level chained Join)
     const gpSource = createSource(
       lc, testLogConfig, 'grandparents',
       {id: {type: 'number'}, name: {type: 'string'}}, ['id'],
@@ -307,10 +341,21 @@ describe('ArrayView: child changes bubble new references up to ancestors', () =>
       system: 'client',
     });
 
-    type GpEntry = {id: number; name: string; parents: Array<{id: number; children: Array<{id: number; text: string}>}>};
+    type ChildEntry = {id: number; pId: number; text: string};
+    type MidEntry = {id: number; gpId: number; name: string; children: ChildEntry[]};
+    type GpEntry = {id: number; name: string; parents: MidEntry[]};
+
     const view = new ArrayView(
       gpJoin,
-      {singular: false, relationships: {parents: {singular: false, relationships: {children: {singular: false, relationships: {}}}}}},
+      {
+        singular: false,
+        relationships: {
+          parents: {
+            singular: false,
+            relationships: {children: {singular: false, relationships: {}}},
+          },
+        },
+      },
       true,
       () => {},
     );
@@ -336,19 +381,80 @@ describe('ArrayView: child changes bubble new references up to ancestors', () =>
 
     const newGp1 = data[0] as GpEntry;
 
-    // Entire ancestor chain gets new references
     expect(data[0]).not.toBe(refGp1);
     expect(newGp1.parents[0]).not.toBe(refP1);
     expect(newGp1.parents[0].children[0]).not.toBe(refC1);
     expect(newGp1.parents[0].children[0]).toEqual(expect.objectContaining({text: 'c1-EDITED'}));
-
-    // Unchanged nodes keep references
     expect(newGp1.parents[0].children[1]).toBe(refC2);
     expect(data[1]).toBe(refGp2);
+  });
+
+  //   parent1 ─── child(.one())       edit child       parent1' ─── child'(.one())
+  //                                     ────────►
+  //   parent1: new ref (singular child changed)
+  //   child:   new ref (edited)
+  test('singular relationship: child edit gives parent a new reference', () => {
+    const parentSource = createSource(
+      lc, testLogConfig, 'parents',
+      {id: {type: 'number'}, name: {type: 'string'}}, ['id'],
+    );
+    const childSource = createSource(
+      lc, testLogConfig, 'children',
+      {id: {type: 'number'}, parentId: {type: 'number'}, text: {type: 'string'}}, ['id'],
+    );
+
+    consume(parentSource.push({type: 'add', row: {id: 1, name: 'parent1'}}));
+    consume(childSource.push({type: 'add', row: {id: 10, parentId: 1, text: 'only-child'}}));
+
+    const join = new Join({
+      parent: parentSource.connect([['id', 'asc']]),
+      child: childSource.connect([['id', 'asc']]),
+      parentKey: ['id'],
+      childKey: ['parentId'],
+      relationshipName: 'child',
+      hidden: false,
+      system: 'client',
+    });
+
+    const view = new ArrayView(
+      join,
+      {
+        singular: false,
+        relationships: {child: {singular: true, relationships: {}}},
+      },
+      true,
+      () => {},
+    );
+
+    type SingularParent = {id: number; name: string; child: ChildRow | undefined};
+
+    let data: unknown[] = [];
+    view.addListener(entries => {
+      assertArray(entries);
+      data = [...entries];
+    });
+
+    const refParent = data[0];
+    const parent = data[0] as SingularParent;
+    const refChild = parent.child;
+    expect(refChild).toEqual(expect.objectContaining({id: 10, text: 'only-child'}));
+
+    consume(childSource.push({
+      type: 'edit',
+      oldRow: {id: 10, parentId: 1, text: 'only-child'},
+      row: {id: 10, parentId: 1, text: 'only-child-EDITED'},
+    }));
+    view.flush();
+
+    const newParent = data[0] as SingularParent;
+    expect(data[0]).not.toBe(refParent);
+    expect(newParent.child).not.toBe(refChild);
+    expect(newParent.child).toEqual(expect.objectContaining({text: 'only-child-EDITED'}));
   });
 });
 
 describe('ArrayView: flush and data behavior', () => {
+  //   push(A), push(B), push(C), push(D), push(E)  -->  flush()  -->  listener fires ONCE
   test('listener fires exactly once per flush, not per push', () => {
     const ms = flatSource([{id: 1, text: 'A'}]);
     const {view} = flatView(ms);
@@ -357,8 +463,8 @@ describe('ArrayView: flush and data behavior', () => {
     view.addListener(() => { callCount++; });
     expect(callCount).toBe(1);
 
-    for (let i = 2; i <= 6; i++) {
-      consume(ms.push({type: 'add', row: {id: i, text: String(i)}}));
+    for (let idx = 2; idx <= 6; idx++) {
+      consume(ms.push({type: 'add', row: {id: idx, text: String(idx)}}));
     }
     expect(callCount).toBe(1);
 
@@ -366,6 +472,7 @@ describe('ArrayView: flush and data behavior', () => {
     expect(callCount).toBe(2);
   });
 
+  //   push(add B)  -->  view.data  -->  [A, B] (no flush needed)
   test('.data reflects changes immediately without flush (no buffering)', () => {
     const ms = flatSource([{id: 1, text: 'A'}]);
     const {view} = flatView(ms);
