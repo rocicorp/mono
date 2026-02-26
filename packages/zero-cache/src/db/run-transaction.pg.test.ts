@@ -34,33 +34,19 @@ describe('db/run-transaction', () => {
   });
 
   test('idle in transaction session timeout', async () => {
+    expect(await db`SHOW idle_in_transaction_session_timeout`)
+      .toMatchInlineSnapshot(`
+      Result [
+        {
+          "idle_in_transaction_session_timeout": "0",
+        },
+      ]
+    `);
     expect(await runTx(db, tx => tx`SHOW idle_in_transaction_session_timeout`))
       .toMatchInlineSnapshot(`
       Result [
         {
           "idle_in_transaction_session_timeout": "1min",
-        },
-      ]
-    `);
-    expect(
-      await runTx(db, tx => tx`SHOW idle_in_transaction_session_timeout`, {
-        idleInTransactionTimeoutMs: 125_000,
-      }),
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "idle_in_transaction_session_timeout": "125s",
-        },
-      ]
-    `);
-    expect(
-      await runTx(db, tx => tx`SHOW idle_in_transaction_session_timeout`, {
-        idleInTransactionTimeoutMs: 30_000,
-      }),
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "idle_in_transaction_session_timeout": "30s",
         },
       ]
     `);

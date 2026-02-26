@@ -9,13 +9,12 @@ type Mode = Enum<typeof Mode>;
 // as an emergency measure and is explicitly not made available as a server
 // option. This value is function of how the zero-cache uses transactions, and
 // should never need to be "tuned" or adjusted for different environments.
-const DEFAULT_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = parseInt(
+const IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = parseInt(
   process.env.ZERO_IDLE_IN_TRANSACTION_SESSION_TIMEOUT ?? '60000',
 );
 
 export type TransactionOptions = {
   mode?: Mode;
-  idleInTransactionTimeoutMs?: number;
 };
 
 /**
@@ -34,7 +33,6 @@ export function runTx<T>(
     // Explicitly default to the Postgres default to override any custom
     // `default_transaction_isolation`.
     mode = READ_COMMITTED,
-    idleInTransactionTimeoutMs = DEFAULT_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS,
   } = opts;
   return db.begin(mode, sql => {
     // Disable any statement_timeout for the current transaction. By default,
@@ -54,7 +52,7 @@ export function runTx<T>(
     // transactions is added to our logical replication layer).
     void sql
       .unsafe(
-        /*sql*/ `SET LOCAL idle_in_transaction_session_timeout = ${idleInTransactionTimeoutMs}`,
+        /*sql*/ `SET LOCAL idle_in_transaction_session_timeout = ${IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS}`,
       )
       .execute();
 
