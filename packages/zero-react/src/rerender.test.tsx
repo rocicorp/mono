@@ -303,6 +303,7 @@ describe('React.memo child render counting', () => {
 describe('End-to-end: real IVM pipeline to React.memo', () => {
   let root: Root;
   let element: HTMLDivElement;
+  let viewToCleanup: {destroy(): void} | undefined;
 
   beforeEach(() => {
     vi.useRealTimers();
@@ -312,12 +313,14 @@ describe('End-to-end: real IVM pipeline to React.memo', () => {
   });
 
   afterEach(() => {
+    viewToCleanup?.destroy();
+    viewToCleanup = undefined;
     root.unmount();
     document.body.removeChild(element);
   });
 
   test('editing a comment only re-renders the parent issue, not unrelated issues', async () => {
-    const queryDelegate = new QueryDelegateImpl();
+    const queryDelegate = new QueryDelegateImpl({callGot: true});
     const userSource = queryDelegate.getSource('user');
     const issueSource = queryDelegate.getSource('issue');
     const commentSource = queryDelegate.getSource('comment');
@@ -335,6 +338,7 @@ describe('End-to-end: real IVM pipeline to React.memo', () => {
       .related('comments');
 
     const view = queryDelegate.materialize(issueQuery);
+    viewToCleanup = view;
 
     // Wire the real TypedView to useSyncExternalStore
     type IssueRow = {id: string; title: string; comments: Array<{id: string; text: string}>; owner: {name: string} | undefined};
@@ -406,7 +410,5 @@ describe('End-to-end: real IVM pipeline to React.memo', () => {
 
     // issue2's component must NOT have re-rendered (unrelated, React.memo skips)
     expect(issueRenders['i2']).toBe(issue2RendersAfterHydration);
-
-    view.destroy();
   });
 });
