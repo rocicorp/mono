@@ -13,6 +13,7 @@ import {
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {validator} from '../../../zero-schema/src/name-mapper.ts';
 import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
+import {runTx} from '../db/run-transaction.ts';
 import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';
 import {
   ensureGlobalTables,
@@ -128,7 +129,7 @@ async function deployPermissions(
   try {
     await ensureGlobalTables(db, shard);
 
-    const {hash, changed} = await db.begin(async tx => {
+    const {hash, changed} = await runTx(db, async tx => {
       if (force) {
         colorConsole.warn(`--force specified. Skipping validation.`);
       } else {
