@@ -10,8 +10,6 @@ import {createSource} from './test/source-factory.ts';
 
 const lc = createSilentLogContext();
 
-// Shared helpers to eliminate boilerplate across tests.
-
 function flatSource(rows: Array<{id: number; text: string}>) {
   const ms = createSource(
     lc,
@@ -105,8 +103,6 @@ function parentChildView(join: Input) {
   return {view, getData: () => data, asParent: (i: number) => data[i] as ParentEntry};
 }
 
-// ─── Flat list identity ─────────────────────────────────────────────────────
-
 describe('ArrayView: flat list identity preservation', () => {
   test('edit: unchanged siblings keep reference, edited row gets new reference', () => {
     const ms = flatSource([
@@ -175,11 +171,6 @@ describe('ArrayView: flat list identity preservation', () => {
     expect(getData()).toHaveLength(4);
   });
 });
-
-// ─── Relationship change propagation ────────────────────────────────────────
-// The immutability optimization preserves identity for UNCHANGED nodes.
-// These tests verify the other direction: when a descendant changes, ancestors
-// MUST get new references so React re-renders them.
 
 describe('ArrayView: child changes bubble new references up to ancestors', () => {
   test('child edit gives parent a new reference; unrelated parent keeps reference', () => {
@@ -356,8 +347,6 @@ describe('ArrayView: child changes bubble new references up to ancestors', () =>
     expect(data[1]).toBe(refGp2);
   });
 });
-
-// ─── ArrayView behavior ─────────────────────────────────────────────────────
 
 describe('ArrayView: flush and data behavior', () => {
   test('listener fires exactly once per flush, not per push', () => {

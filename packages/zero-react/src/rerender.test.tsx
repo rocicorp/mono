@@ -11,8 +11,6 @@ import type {
   Zero,
 } from './zero.ts';
 
-// ─── Test helpers ───────────────────────────────────────────────────────────
-
 function newMockQuery(query: string, singular = false): Query<string, Schema> {
   return {
     [queryInternalsTag]: true,
@@ -65,8 +63,6 @@ function createView(viewStore: ViewStore, suffix: string) {
   const cleanup = view.subscribeReactInternals(() => {});
   return {view, zero, q, cleanup};
 }
-
-// ─── Snapshot identity ──────────────────────────────────────────────────────
 
 describe('Snapshot identity', () => {
   beforeEach(() => { vi.useFakeTimers(); });
@@ -139,8 +135,6 @@ describe('Snapshot identity', () => {
   });
 });
 
-// ─── Data flash prevention ──────────────────────────────────────────────────
-
 describe('No data flash (data→empty→data)', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
@@ -182,8 +176,6 @@ describe('No data flash (data→empty→data)', () => {
     expect((view.getSnapshot()[0] as unknown[]).length).toBe(1);
   });
 });
-
-// ─── React.memo render counting ─────────────────────────────────────────────
 
 describe('React.memo child render counting', () => {
   let root: Root;
