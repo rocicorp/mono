@@ -233,7 +233,10 @@ export class WatchSubscription implements Subscription<Diff | undefined> {
         }
 
         // For the initial run, we need to get the "diffs" for the whole tree.
-        assert(diffs === undefined);
+        assert(
+          diffs === undefined,
+          'Expected diffs to be undefined on initial run',
+        );
 
         const newDiff: DiffOperation<Key>[] = [];
         for await (const entry of tx.scan({prefix, indexName}).entries()) {
@@ -245,7 +248,7 @@ export class WatchSubscription implements Subscription<Diff | undefined> {
         }
         diff = newDiff;
       } else {
-        assert(diffs);
+        assert(diffs, 'Expected diffs to be defined for non-initial run');
         const maybeDiff = diffs.get(indexName ?? '') ?? [];
         diff = convertInternalDiff(maybeDiff);
       }

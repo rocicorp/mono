@@ -56,7 +56,10 @@ test('getSource', () => {
   );
 
   const source = context.getSource('users');
-  assert(source instanceof MemorySource);
+  assert(
+    source instanceof MemorySource,
+    'Expected source to be a MemorySource instance',
+  );
   expect(source.tableSchema).toMatchInlineSnapshot(`
     {
       "columns": {

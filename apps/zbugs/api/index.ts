@@ -307,7 +307,10 @@ async function maybeVerifyAuth(
     return undefined;
   }
 
-  assert(authorization.toLowerCase().startsWith('bearer '));
+  assert(
+    authorization.toLowerCase().startsWith('bearer '),
+    'Expected Authorization header to start with "Bearer "',
+  );
   authorization = authorization.substring('Bearer '.length);
 
   const jwk = process.env.VITE_PUBLIC_JWK;

@@ -508,7 +508,10 @@ describe('types/subscription', () => {
       cleanup,
       consumed: m => consumed.add(m),
     });
-    assert(subscription.pipeline);
+    assert(
+      subscription.pipeline,
+      'Expected subscription pipeline to be defined',
+    );
 
     for (let i = 0; i < 5; i++) {
       const {result} = subscription.push(i);

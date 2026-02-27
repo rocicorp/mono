@@ -37,7 +37,10 @@ function assertIndexedDBDatabaseRecord(
   for (const [name, db] of Object.entries(value)) {
     assertString(name);
     assertIndexedDBDatabase(db);
-    assert(name === db.name);
+    assert(
+      name === db.name,
+      () => `Expected record key "${name}" to match db.name "${db.name}"`,
+    );
   }
 }
 

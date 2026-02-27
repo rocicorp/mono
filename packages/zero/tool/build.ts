@@ -78,7 +78,7 @@ function getWorkerEntryPoints(): Record<string, string> {
   const entryPoints: Record<string, string> = {};
 
   for (const url of Object.values(workerUrls)) {
-    assert(url instanceof URL);
+    assert(url instanceof URL, 'Expected worker URL to be a URL instance');
 
     const worker = basename(url.pathname);
 

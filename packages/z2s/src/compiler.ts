@@ -523,7 +523,10 @@ function literalValueComparison(
         true,
       );
     case 'literal': {
-      assert(plural === Array.isArray(valuePos.value));
+      assert(
+        plural === Array.isArray(valuePos.value),
+        'Expected plural flag to match whether value is an array',
+      );
       if (Array.isArray(valuePos.value)) {
         if (valuePos.value.length > 0) {
           // If the array is non-empty base its type on its first
@@ -617,7 +620,10 @@ export function pullTablesForJunction(
     'Too many related tables for a junction edge',
   );
   const otherRelationship = relationship.subquery.related[0];
-  assert(!otherRelationship.hidden);
+  assert(
+    !otherRelationship.hidden,
+    'Expected junction edge relationship to not be hidden',
+  );
   return [
     {
       table: makeTable(spec, relationship.subquery.table),

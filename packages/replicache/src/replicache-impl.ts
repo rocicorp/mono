@@ -1212,7 +1212,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       }
 
       const clientGroupID = await this.#clientGroupIDPromise;
-      assert(clientGroupID);
+      assert(clientGroupID, 'Expected clientGroupID to be defined');
       this.#onPersist({clientID, clientGroupID});
     });
   }
@@ -1270,7 +1270,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   async disableClientGroup(): Promise<void> {
     const clientGroupID = await this.#clientGroupIDPromise;
-    assert(clientGroupID);
+    assert(clientGroupID, 'Expected clientGroupID to be defined');
     this.isClientGroupDisabled = true;
     await withWrite(this.perdag, dagWrite =>
       disableClientGroup(clientGroupID, dagWrite),

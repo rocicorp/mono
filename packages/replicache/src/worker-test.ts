@@ -27,12 +27,15 @@ async function testGetHasScanOnEmptyDB(name: string) {
       ) => {
         const {key, value} = args;
         await tx.set(key, value);
-        assert((await tx.has(key)) === true);
+        assert((await tx.has(key)) === true, 'Expected key to exist after set');
         const v = await tx.get(key);
-        assert(deepEqual(v, value));
+        assert(deepEqual(v, value), 'Expected get value to equal set value');
 
-        assert((await tx.del(key)) === true);
-        assert((await tx.has(key)) === false);
+        assert((await tx.del(key)) === true, 'Expected del to return true');
+        assert(
+          (await tx.has(key)) === false,
+          'Expected key to not exist after del',
+        );
       },
     },
   });
@@ -54,11 +57,17 @@ async function testGetHasScanOnEmptyDB(name: string) {
   }
 
   async function t(tx: ReadTransaction) {
-    assert((await tx.get('key')) === undefined);
-    assert((await tx.has('key')) === false);
+    assert(
+      (await tx.get('key')) === undefined,
+      'Expected get to return undefined for missing key',
+    );
+    assert(
+      (await tx.has('key')) === false,
+      'Expected has to return false for missing key',
+    );
 
     const scanItems = await asyncIterableToArray(tx.scan());
-    assert(scanItems.length === 0);
+    assert(scanItems.length === 0, 'Expected scan items to be empty');
   }
 
   await rep.query(t);

@@ -79,7 +79,7 @@ export async function initClientWithClientID(
   indexes: IndexDefinitions,
   formatVersion: FormatVersion,
 ): Promise<void> {
-  assert(formatVersion >= FormatVersion.DD31);
+  assert(formatVersion >= FormatVersion.DD31, 'Expected formatVersion >= DD31');
   await initClientV6(
     clientID,
     new LogContext(),

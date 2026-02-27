@@ -9,12 +9,12 @@ export function formatEmojiCreatorList(
   emojis: Emoji[],
   currentUserID: string,
 ): string {
-  assert(emojis.length > 0);
+  assert(emojis.length > 0, 'Expected at least one emoji');
   const names = emojis
     .filter(emoji => emoji.creator !== undefined)
     .map(emoji => {
       const {creator} = emoji;
-      assert(creator);
+      assert(creator, 'Expected emoji creator to be defined');
       if (emoji.creatorID === currentUserID) {
         return 'you';
       }

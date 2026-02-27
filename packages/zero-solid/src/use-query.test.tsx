@@ -217,7 +217,7 @@ test('useQuery gets an error', async () => {
   await new Promise(r => setTimeout(r, 0));
 
   const r = resultType();
-  assert(r.type === 'error');
+  assert(r.type === 'error', 'Expected result type to be error');
   expect(r.error).toEqual({
     message: 'Something went wrong',
     details: {something: 'went wrong'},

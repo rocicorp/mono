@@ -445,7 +445,10 @@ describe('view-syncer/service', () => {
   });
 
   test('analyze-query with custom query name and args', async () => {
-    assert(customQueryTransformer);
+    assert(
+      customQueryTransformer,
+      'Expected customQueryTransformer to be defined',
+    );
 
     const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
 
@@ -543,7 +546,10 @@ describe('view-syncer/service', () => {
     });
 
     test('returns error response when custom query transformation fails', async () => {
-      assert(customQueryTransformer);
+      assert(
+        customQueryTransformer,
+        'Expected customQueryTransformer to be defined',
+      );
 
       const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
 
@@ -582,7 +588,10 @@ describe('view-syncer/service', () => {
     });
 
     test('returns error response when custom query transformation returns error result', async () => {
-      assert(customQueryTransformer);
+      assert(
+        customQueryTransformer,
+        'Expected customQueryTransformer to be defined',
+      );
 
       const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
 

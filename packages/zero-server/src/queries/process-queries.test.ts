@@ -52,7 +52,10 @@ describe('handleGetQueriesRequest', () => {
 
     expect(cb).toHaveBeenCalledWith('namesByFoo', [{foo: 'bar'}]);
     expect(result[0]).toBe('transformed');
-    assert(result[0] === 'transformed');
+    assert(
+      result[0] === 'transformed',
+      `Expected result type to be 'transformed'`,
+    );
     const [response] = result[1];
     assert(!('error' in response));
     expect(response).toEqual({
@@ -177,7 +180,10 @@ describe('handleGetQueriesRequest', () => {
 
     expect(cb).toHaveBeenCalledTimes(2);
     expect(result[0]).toBe('transformed');
-    assert(result[0] === 'transformed');
+    assert(
+      result[0] === 'transformed',
+      `Expected result type to be 'transformed'`,
+    );
     const [first, second] = result[1];
     expect(first).toEqual({
       error: 'app',
@@ -205,7 +211,10 @@ describe('handleGetQueriesRequest', () => {
     ]);
 
     expect(result[0]).toBe('transformed');
-    assert(result[0] === 'transformed');
+    assert(
+      result[0] === 'transformed',
+      `Expected result type to be 'transformed'`,
+    );
     const [response] = result[1];
     expect(response).toEqual({
       error: 'app',
@@ -232,7 +241,10 @@ describe('handleGetQueriesRequest', () => {
     ]);
 
     expect(result[0]).toBe('transformed');
-    assert(result[0] === 'transformed');
+    assert(
+      result[0] === 'transformed',
+      `Expected result type to be 'transformed'`,
+    );
     const [response] = result[1];
     expect(response).toEqual({
       error: 'app',
@@ -258,7 +270,10 @@ describe('handleGetQueriesRequest', () => {
     ]);
 
     expect(result[0]).toBe('transformed');
-    assert(result[0] === 'transformed');
+    assert(
+      result[0] === 'transformed',
+      `Expected result type to be 'transformed'`,
+    );
     const [response] = result[1];
     expect(response).toEqual({
       error: 'parse',
@@ -294,7 +309,10 @@ describe('handleGetQueriesRequest', () => {
 
     expect(cb).toHaveBeenCalledTimes(2);
     expect(result[0]).toBe('transformed');
-    assert(result[0] === 'transformed');
+    assert(
+      result[0] === 'transformed',
+      `Expected result type to be 'transformed'`,
+    );
     const [first, second] = result[1];
     expect(first).toEqual({
       error: 'parse',
@@ -333,7 +351,10 @@ describe('handleGetQueriesRequest', () => {
       ]);
 
       expect(result[0]).toBe('transformFailed');
-      assert(result[0] === 'transformFailed');
+      assert(
+        result[0] === 'transformFailed',
+        `Expected result type to be 'transformFailed'`,
+      );
       expect(result[1]).toEqual({
         reason: ErrorReason.Internal,
         kind: expect.any(String),
@@ -503,7 +524,10 @@ describe('handleTransformRequest', () => {
 
     expect(cb).toHaveBeenCalledTimes(2);
     expect(result[0]).toBe('transformed');
-    assert(result[0] === 'transformed');
+    assert(
+      result[0] === 'transformed',
+      `Expected result type to be 'transformed'`,
+    );
     const [first, second] = result[1];
     expect(first).toEqual({
       error: 'app',

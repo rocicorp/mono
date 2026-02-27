@@ -218,6 +218,8 @@ function gatherDatabaseInfoForCollect(
     db.replicacheFormatVersion === FormatVersion.DD31 ||
       db.replicacheFormatVersion === FormatVersion.V6 ||
       db.replicacheFormatVersion === FormatVersion.V7,
+    () =>
+      `Expected replicacheFormatVersion to be DD31, V6, or V7, got ${db.replicacheFormatVersion}`,
   );
   return canDatabaseBeCollectedAndGetDeletedClientIDs(
     enableMutationRecovery,
