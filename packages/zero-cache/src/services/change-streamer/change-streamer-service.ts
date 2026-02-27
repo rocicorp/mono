@@ -309,12 +309,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     // Once this change-streamer acquires "ownership" of the change DB,
     // it is safe to start the storer.
     await this.#storer.assumeOwnership();
-    // The storer will, in turn, detect changes to ownership and stop
-    // the change-streamer appropriately.
-    this.#storer
-      .run()
-      .then(() => this.stop())
-      .catch(e => this.stop(e));
 
     // The threshold in (estimated number of) bytes to send() on subscriber
     // websockets before `await`-ing the I/O buffers to be ready for more.
@@ -331,6 +325,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           lastWatermark,
           backfillRequests,
         );
+        this.#storer.run().catch(e => stream.changes.cancel(e));
+
         this.#stream = stream;
         this.#state.resetBackoff();
         watermark = null;
@@ -407,7 +403,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         ]);
       }
 
-      await this.#state.backoff(this.#lc, err);
+      // Backoff and drain any pending entries in the storer before reconnecting.
+      await Promise.all([
+        this.#storer.stop(),
+        this.#state.backoff(this.#lc, err),
+      ]);
     }
     this.#lc.info?.('ChangeStreamer stopped');
   }
@@ -523,8 +523,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           `At least one client is behind backup (${earliestCurrent} < ${earliestInitial})`,
         );
       } else {
+        this.#lc.info?.(`Purging changes before ${earliestInitial} ...`);
+        const start = performance.now();
         const deleted = await this.#storer.purgeRecordsBefore(earliestInitial);
-        this.#lc.info?.(`Purged ${deleted} changes before ${earliestInitial}`);
+        const elapsed = (performance.now() - start).toFixed(2);
+        this.#lc.info?.(
+          `Purged ${deleted} changes before ${earliestInitial} (${elapsed} ms)`,
+        );
         this.#initialWatermarks.delete(earliestInitial);
       }
     } catch (e) {

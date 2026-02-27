@@ -91,7 +91,10 @@ describe('types/subscription', () => {
     expect(await subscription.push(6).result).toBe('unconsumed');
   });
 
-  test('fail', async () => {
+  test.each([
+    ['fail', true],
+    ['cancel', false],
+  ])('fail or cancel: %s', async (_, fail) => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
     const results: Promise<Result>[] = [];
@@ -119,7 +122,11 @@ describe('types/subscription', () => {
         received.push(m);
         if (j++ === 2) {
           expect(subscription.active).toBe(true);
-          subscription.fail(failure);
+          if (fail) {
+            subscription.fail(failure);
+          } else {
+            subscription.cancel(failure);
+          }
           expect(subscription.active).toBe(false);
         }
       }
