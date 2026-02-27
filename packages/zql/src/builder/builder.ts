@@ -647,7 +647,10 @@ function applyCorrelatedSubqueryCondition(
   delegate: BuilderDelegate,
   name: string,
 ): FilterInput {
-  assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
+  assert(
+    condition.op === 'EXISTS' || condition.op === 'NOT EXISTS',
+    'Expected EXISTS or NOT EXISTS operator',
+  );
   if (condition.related.subquery.limit === 0) {
     if (condition.op === 'EXISTS') {
       const filter = new Filter(input, () => false);

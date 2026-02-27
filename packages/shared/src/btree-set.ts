@@ -200,7 +200,10 @@ function valuesFromReversed<K>(
   let [nodeQueue, nodeIndex, leaf] =
     findPath(highestKey, root, comparator) ||
     findPath(maxKey, root, comparator)!;
-  assert(!nodeQueue[0] || leaf === nodeQueue[0][nodeIndex[0]]);
+  assert(
+    !nodeQueue[0] || leaf === nodeQueue[0][nodeIndex[0]],
+    'BTreeSet: leaf node mismatch in iteration',
+  );
   let i = indexOf(highestKey, leaf.keys, 0, comparator);
   if (
     inclusive &&

@@ -577,7 +577,7 @@ export function asQueryImpl<
   TSchema extends Schema,
   TReturn,
 >(q: Query<TTable, TSchema, TReturn>): QueryImpl<TTable, TSchema, TReturn> {
-  assert(q instanceof QueryImpl);
+  assert(q instanceof QueryImpl, 'Expected QueryImpl instance');
   return q;
 }
 

@@ -154,7 +154,7 @@ type PipeOptions<T> = {
 
 export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
   bufferMessages ??= 0;
-  assert(bufferMessages >= 0);
+  assert(bufferMessages >= 0, 'bufferMessages must be non-negative');
   const pending: Promise<unknown>[] = [];
 
   pipeline(
