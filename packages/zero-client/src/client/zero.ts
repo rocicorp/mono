@@ -1814,13 +1814,13 @@ export class Zero<
 
   async #pusher(req: PushRequest, requestID: string): Promise<PusherResult> {
     // The deprecation of pushVersion 0 predates zero-client
-    assert(req.pushVersion === 1);
+    assert(req.pushVersion === 1, 'Expected pushVersion 1');
     // If we are connecting we wait until we are connected.
     await this.#connectResolver.promise;
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.(`pushing ${req.mutations.length} mutations`);
     const socket = this.#socket;
-    assert(socket);
+    assert(socket, 'Expected socket to be connected for push');
 
     const isMutationRecoveryPush =
       req.clientGroupID !== (await this.clientGroupID);
@@ -1955,7 +1955,7 @@ export class Zero<
             throwIfConnectionError(this.#connectionManager.state);
 
             // Now we have a new socket, update lc with the new wsid.
-            assert(this.#socket);
+            assert(this.#socket, 'Expected socket after reconnection');
             lc = getLogContext();
 
             lc.debug?.('Connected successfully');
@@ -2159,7 +2159,7 @@ export class Zero<
 
   async #puller(req: PullRequest, requestID: string): Promise<PullerResult> {
     // The deprecation of pushVersion 0 predates zero-client
-    assert(req.pullVersion === 1);
+    assert(req.pullVersion === 1, 'Expected pullVersion 1');
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.('Pull', req);
     // Pull request for this instance's client group.  A no-op response is
@@ -2177,7 +2177,10 @@ export class Zero<
     // If we are connecting we wait until we are connected.
     await this.#connectResolver.promise;
     const socket = this.#socket;
-    assert(socket);
+    assert(
+      socket,
+      'Expected socket to be connected for mutation recovery pull',
+    );
     // Mutation recovery pull.
     lc.debug?.('Pull is for mutation recovery');
     const cookie = valita.parse(
@@ -2282,7 +2285,7 @@ export class Zero<
     this.#onPong = resolve;
     const pingMessage: PingMessage = ['ping', {}];
     const t0 = performance.now();
-    assert(this.#socket);
+    assert(this.#socket, 'Expected socket to be connected for ping');
     send(this.#socket, pingMessage);
 
     const raceResult = await promiseRace({

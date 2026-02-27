@@ -103,7 +103,7 @@ export function asQuery<
 >(
   queryInternals: QueryInternals<TTable, TSchema, TReturn>,
 ): Query<TTable, TSchema, TReturn> {
-  assert(queryInternalsTag in queryInternals);
+  assert(queryInternalsTag in queryInternals, 'Expected query internals tag');
   return queryInternals as unknown as Query<TTable, TSchema, TReturn>;
 }
 

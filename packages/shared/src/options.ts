@@ -245,7 +245,7 @@ export function parseOptionsAdvanced<T extends Options>(
     if (terminalTypes.size > 1) {
       throw new TypeError(`${env} has mixed types ${[...terminalTypes]}`);
     }
-    assert(terminalTypes.size === 1);
+    assert(terminalTypes.size === 1, 'Expected exactly one terminal type');
     const terminalType = [...terminalTypes][0];
 
     if (processEnv[env]) {

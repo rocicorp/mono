@@ -434,7 +434,7 @@ export class QueryManager implements InspectorDelegate {
       this.#recentQueries.add(astHash);
       if (this.#recentQueries.size > this.#recentQueriesMaxSize) {
         const lruQueryID = this.#recentQueries.values().next().value;
-        assert(lruQueryID);
+        assert(lruQueryID, 'Expected LRU query ID to exist');
         this.#queries.delete(lruQueryID);
         this.#recentQueries.delete(lruQueryID);
         this.#queryMetrics.delete(lruQueryID);
