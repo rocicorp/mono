@@ -276,6 +276,21 @@ export class TableSource implements Source {
     const query = this.#requestToSQL(req, connection.filters?.condition, sort);
     const sqlAndBindings = format(query);
 
+    this.#stmts.cache.use(
+      `EXPLAIN QUERY PLAN ${sqlAndBindings.text}`,
+      cached => {
+        const planRows = cached.statement.all<{detail: string}>(
+          ...sqlAndBindings.values,
+        );
+        console.log(`\n[TableSource] Query plan for ${this.#table}:`);
+        console.log(`  SQL: ${sqlAndBindings.text}`);
+        console.log(`  bindings: ${JSON.stringify(sqlAndBindings.values)}`);
+        for (const row of planRows) {
+          console.log(`  ${row.detail}`);
+        }
+      },
+    );
+
     const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
     try {
       cachedStatement.statement.safeIntegers(true);
@@ -339,6 +354,7 @@ export class TableSource implements Source {
     debug: DebugDelegate | undefined,
   ): IterableIterator<Row> {
     let result;
+    let count = 0;
     try {
       do {
         result = timeSampled(
@@ -356,8 +372,17 @@ export class TableSource implements Source {
         const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
         debug?.rowVended(this.#table, query, row);
         yield row;
+        count++;
+        if (count % 100 === 0) {
+          console.log(
+            `[TableSource] ${this.#table}: emitted ${count} rows (query: ${query})`,
+          );
+        }
       } while (!result.done);
     } finally {
+      console.log(
+        `[TableSource] ${this.#table}: done, total ${count} rows`,
+      );
       rowIterator.return?.();
     }
   }
