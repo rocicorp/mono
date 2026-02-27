@@ -999,6 +999,59 @@ describe('change-streamer/service', () => {
     expect(await hasRetried).toBe(true);
   });
 
+  test('retry on unexpected storage error', async () => {
+    const {promise: hasRetried, resolve: retried} = resolver<true>();
+    const source = {
+      startStream: vi
+        .fn()
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            initialWatermark: '01',
+            changes,
+            acks: () => {},
+          }),
+        )
+        .mockImplementation(() => {
+          retried(true);
+          return resolver().promise;
+        }),
+    };
+    const streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      source,
+      replicaConfig,
+      true,
+      0.04,
+    );
+    void streamer.run();
+
+    // Insert unexpected data simulating that the stream and store are not in the expected state.
+    await sql`INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
+      VALUES ('05', 3, ${{conflicting: 'entry'}})`;
+
+    changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.push(['data', messages.insert('foo', {id: 'world'})]);
+    changes.push(['commit', messages.commit(), {watermark: '05'}]);
+
+    // The streamer should have started a new stream.
+    expect(await hasRetried).toBe(true);
+
+    // Commit should not have succeeded
+    expect(
+      await sql`SELECT watermark, pos FROM "zoro_3/cdc"."changeLog"`,
+    ).toEqual([
+      {watermark: '01', pos: 0n},
+      {watermark: '01', pos: 1n},
+      {watermark: '05', pos: 3n},
+    ]);
+  });
+
   test('retries at right watermark', async () => {
     const {promise: hasRetried, resolve: retried} = resolver<true>();
     const changes = Subscription.create<ChangeStreamMessage>();
@@ -1290,29 +1343,6 @@ describe('change-streamer/service', () => {
     expect(await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`).toEqual([
       {watermark: '01'},
       {watermark: '01'},
-    ]);
-  });
-
-  test('shutdown on unexpected storage error', async () => {
-    // Insert unexpected data simulating that the stream and store are not in the expected state.
-    await sql`INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
-      VALUES ('05', 3, ${{conflicting: 'entry'}})`;
-
-    changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
-    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
-    changes.push(['data', messages.insert('foo', {id: 'world'})]);
-    changes.push(['commit', messages.commit(), {watermark: '05'}]);
-
-    // Streamer should be shut down because of the error.
-    await streamerDone;
-
-    // Commit should not have succeeded
-    expect(
-      await sql`SELECT watermark, pos FROM "zoro_3/cdc"."changeLog"`,
-    ).toEqual([
-      {watermark: '01', pos: 0n},
-      {watermark: '01', pos: 1n},
-      {watermark: '05', pos: 3n},
     ]);
   });
 

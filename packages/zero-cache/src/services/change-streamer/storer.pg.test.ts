@@ -166,6 +166,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
 
+      await storer.allProcessed();
       expect(
         await storer.getStartStreamInitializationParameters(),
       ).toMatchObject({lastWatermark: '08', backfillRequests: []});
@@ -196,6 +197,7 @@ describe('change-streamer/storer', () => {
       storer.store(['09', ['commit', messages.commit(), {watermark: '09'}]]);
 
       // No backfillRequests should be present.
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
         {
@@ -232,6 +234,7 @@ describe('change-streamer/storer', () => {
 
       // The table should appear in the backfillRequests, with null metadata
       // since none was ever specified.
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -286,6 +289,7 @@ describe('change-streamer/storer', () => {
 
       // Now the original table shows up in the backfillRequests, with its
       // table metadata.
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -362,6 +366,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0c', ['commit', messages.commit(), {watermark: '0c'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -442,6 +447,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0d', ['commit', messages.commit(), {watermark: '0d'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -531,6 +537,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0e', ['commit', messages.commit(), {watermark: '0e'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -613,6 +620,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0f', ['commit', messages.commit(), {watermark: '0f'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -693,6 +701,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['110', ['commit', messages.commit(), {watermark: '110'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -765,6 +774,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['111', ['commit', messages.commit(), {watermark: '111'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -815,6 +825,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['112', ['commit', messages.commit(), {watermark: '112'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
