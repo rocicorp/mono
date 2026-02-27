@@ -182,13 +182,6 @@ export class Storer implements Service {
     lastWatermark: string;
     backfillRequests: BackfillRequest[];
   }> {
-    // Before starting or restarting a stream from the change source,
-    // wait for all queued changes to be processed so that we pick up
-    // from the right spot.
-    const {promise: ready, resolve} = resolver();
-    this.#queue.enqueue(['ready', resolve]);
-    await ready;
-
     const [[{lastWatermark}], result] = await runTx(
       this.#db,
       sql => [
@@ -331,17 +324,36 @@ export class Storer implements Service {
     }
   }
 
+  #stopped = promiseVoid;
+
+  /**
+   * Runs the storer loop until {@link stop()} is called, or an error is thrown.
+   * Once {@link run()} completes, it can be called again.
+   */
   async run() {
+    assert(!this.#running, `storer is already running`);
+
+    const {promise: stopped, resolve: signalStopped} = resolver();
     this.#running = true;
+    this.#stopped = stopped;
+
+    this.#lc.info?.('starting storer');
     try {
       await this.#processQueue();
     } finally {
-      this.#running = false;
       // Release any pending backpressure so the upstream can proceed
       if (this.#readyForMore !== null) {
         this.#readyForMore.resolve();
         this.#readyForMore = null;
       }
+      const unprocessed = this.#queue.drain();
+      if (unprocessed.length) {
+        this.#lc.warn?.(
+          `dropped ${unprocessed.length} entries from the changeLog queue`,
+        );
+      }
+      this.#running = false;
+      signalStopped();
       this.#lc.info?.('storer stopped');
     }
   }
@@ -725,9 +737,24 @@ export class Storer implements Service {
     `;
   }
 
+  /**
+   * Waits until all currently queued entries have been processed.
+   * This is only used in tests.
+   */
+  async allProcessed() {
+    if (this.#running) {
+      const {promise, resolve} = resolver();
+      this.#queue.enqueue(['ready', resolve]);
+      await promise;
+    }
+  }
+
   stop() {
-    this.#queue.enqueue('stop');
-    return promiseVoid;
+    if (this.#running) {
+      this.#lc.info?.(`draining ${this.#queue.size()} changeLog entries`);
+      this.#queue.enqueue('stop');
+    }
+    return this.#stopped;
   }
 }
 
