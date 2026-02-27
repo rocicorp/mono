@@ -34,8 +34,10 @@ export type Source<T> = AsyncIterable<T> & {
    * Immediately terminates all current iterations (i.e. {@link AsyncIterator.next next()})
    * will return `{value: undefined, done: true}`), and prevents any subsequent iterations
    * from yielding any values.
+   *
+   * @param err Terminate the iteration by throwing the `err` instead.
    */
-  cancel: () => void;
+  cancel: (err?: Error) => void;
 
   /**
    * The presence of a `pipeline` iterable allows the usual "consumed-on-iterate" semantics

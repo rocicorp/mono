@@ -202,9 +202,15 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
   /**
    * Cancels the subscription immediately, cleans up, and terminates any iteration.
+   * This is intended for the consumer to call when it is no longer interested
+   * in the subscription.
+   *
+   * @param err If an `err` is specified, an iteration over the Subscription /
+   *        Sink will throw the `err`. Otherwise, the iteration will break. This
+   *        is equivalent to the producer calling {@link fail()}.
    */
-  cancel() {
-    this.#terminate('canceled');
+  cancel(err?: Error) {
+    this.#terminate(err ?? 'canceled');
   }
 
   /** Fails the subscription, cleans up, and throws from any iteration. */
