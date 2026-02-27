@@ -206,8 +206,8 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
    * in the subscription.
    *
    * @param err If an `err` is specified, an iteration over the Subscription /
-   *        Sink will throw the `err`. Otherwise, the iteration will break. This
-   *        is equivalent to the producer calling {@link fail()}.
+   *        Sink will throw the `err` (equivalent to the producer calling
+   *       {@link fail()}). If undefined, the iteration will exit gracefully.
    */
   cancel(err?: Error) {
     this.#terminate(err ?? 'canceled');
