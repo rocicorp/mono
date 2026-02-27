@@ -9,6 +9,7 @@ import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {equals} from '../../../../../shared/src/set-utils.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,
@@ -289,6 +290,10 @@ async function ensurePublishedTables(
   const {publications} = await getInternalShardConfig(sql, shard);
 
   if (validate) {
+    let valid = false;
+    const nonInternalPublications = publications.filter(
+      p => !p.startsWith('_'),
+    );
     const exists = await sql`
       SELECT pubname FROM pg_publication WHERE pubname IN ${sql(publications)}
       `.values();
@@ -297,6 +302,17 @@ async function ensurePublishedTables(
         `some configured publications [${publications}] are missing: ` +
           `[${exists.flat()}]. resyncing`,
       );
+    } else if (
+      !equals(new Set(shard.publications), new Set(nonInternalPublications))
+    ) {
+      lc.warn?.(
+        `requested publications [${shard.publications}] differ from previous` +
+          `publications [${nonInternalPublications}]. resyncing`,
+      );
+    } else {
+      valid = true;
+    }
+    if (!valid) {
       await sql.unsafe(dropShard(shard.appID, shard.shardNum));
       return ensurePublishedTables(lc, sql, shard, false);
     }
