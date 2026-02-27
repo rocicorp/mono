@@ -43,7 +43,7 @@ import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {explainQueries} from './explain-queries.ts';
-import {runAst} from './run-ast.ts';
+import {runAst} from '../../zero-cache/src/services/run-ast.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -234,16 +234,25 @@ let result: AnalyzeQueryResult;
 
 if (config.ast) {
   // the user likely has a transformed AST since the wire and storage formats are the transformed AST
-  result = await runAst(lc, clientSchema, JSON.parse(config.ast), true, {
-    applyPermissions: config.applyPermissions,
-    authData: config.authData,
-    clientToServerMapper,
-    permissions,
-    syncedRows: config.outputSyncedRows,
-    db,
-    tableSpecs,
-    host,
-  });
+  result = await runAst(
+    lc,
+    clientSchema,
+    JSON.parse(config.ast),
+    true,
+    {
+      applyPermissions: config.applyPermissions,
+      auth: config.authData
+        ? {type: 'jwt' as const, raw: '', decoded: JSON.parse(config.authData)}
+        : undefined,
+      clientToServerMapper,
+      permissions,
+      syncedRows: config.outputSyncedRows,
+      db,
+      tableSpecs,
+      host,
+    },
+    async () => {},
+  );
 } else if (config.query) {
   result = await runQuery(config.query);
 } else if (config.hash) {
@@ -267,16 +276,25 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   const q: Query<string, Schema, PullRow<string, Schema>> = f(z);
 
   const ast = asQueryInternals(q).ast;
-  return runAst(lc, clientSchema, ast, false, {
-    applyPermissions: config.applyPermissions,
-    authData: config.authData,
-    clientToServerMapper,
-    permissions,
-    syncedRows: config.outputSyncedRows,
-    db,
-    tableSpecs,
-    host,
-  });
+  return runAst(
+    lc,
+    clientSchema,
+    ast,
+    false,
+    {
+      applyPermissions: config.applyPermissions,
+      auth: config.authData
+        ? {type: 'jwt' as const, raw: '', decoded: JSON.parse(config.authData)}
+        : undefined,
+      clientToServerMapper,
+      permissions,
+      syncedRows: config.outputSyncedRows,
+      db,
+      tableSpecs,
+      host,
+    },
+    async () => {},
+  );
 }
 
 async function runHash(hash: string) {
@@ -294,16 +312,25 @@ async function runHash(hash: string) {
   const ast = rows[0].clientAST as AST;
   colorConsole.log(await formatOutput(ast.table + astToZQL(ast)));
 
-  return runAst(lc, clientSchema, ast, true, {
-    applyPermissions: config.applyPermissions,
-    authData: config.authData,
-    clientToServerMapper,
-    permissions,
-    syncedRows: config.outputSyncedRows,
-    db,
-    tableSpecs,
-    host,
-  });
+  return runAst(
+    lc,
+    clientSchema,
+    ast,
+    true,
+    {
+      applyPermissions: config.applyPermissions,
+      auth: config.authData
+        ? {type: 'jwt' as const, raw: '', decoded: JSON.parse(config.authData)}
+        : undefined,
+      clientToServerMapper,
+      permissions,
+      syncedRows: config.outputSyncedRows,
+      db,
+      tableSpecs,
+      host,
+    },
+    async () => {},
+  );
 }
 
 if (config.outputSyncedRows) {
