@@ -109,6 +109,7 @@ function makeFactories(
           deleteClients: vi.fn(),
           inspect: vi.fn(),
           updateAuth: vi.fn(),
+          forceReset: vi.fn(),
           keepalive: () => true,
           stop() {
             stopped.resolve();

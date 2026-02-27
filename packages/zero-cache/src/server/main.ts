@@ -182,6 +182,14 @@ export default async function runWorker(
     }
     syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
   }
+
+  parent.onMessageType('resetClientGroups', payload => {
+    lc.info?.('broadcasting resetClientGroups to syncers');
+    for (const syncer of syncers) {
+      syncer.send(['resetClientGroups', payload]);
+    }
+  });
+
   let mutator: Worker | undefined;
   if (clientConnectionBifurcated) {
     mutator = loadWorker(MUTATOR_URL, 'supporting', 'mutator');

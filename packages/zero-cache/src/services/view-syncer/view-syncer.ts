@@ -139,6 +139,8 @@ export interface ViewSyncer {
   ): Promise<AuthUpdateResult>;
   updateAuth(ctx: SyncContext, msg: UpdateAuthMessage): Promise<void>;
   clearAuth(): void;
+
+  forceReset(reason: string): void;
 }
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
@@ -2115,6 +2117,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#initialized.reject('shut down before initialization completed');
     this.#stateChanges.cancel();
     return this.#stopped.promise;
+  }
+
+  forceReset(reason: string): void {
+    this.#lc.info?.(`force-resetting view-syncer: ${reason}`);
+    this.#stateChanges.fail(new ClientNotFoundError(`Force reset: ${reason}`));
   }
 
   async #cleanup(err?: unknown) {

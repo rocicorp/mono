@@ -127,6 +127,26 @@ export class Syncer implements SingletonService {
     );
 
     setActiveClientGroupsGetter(() => this.#viewSyncers.size);
+
+    parent.onMessageType('resetClientGroups', (payload: unknown) => {
+      const {ids} = payload as {ids: string[] | undefined};
+      this.#resetClientGroups(ids);
+    });
+  }
+
+  #resetClientGroups(ids: string[] | undefined) {
+    const idSet = ids ? new Set(ids) : undefined;
+    let count = 0;
+    for (const vs of this.#viewSyncers.getServices()) {
+      if (!idSet || idSet.has(vs.id)) {
+        vs.forceReset('admin resetz request');
+        count++;
+      }
+    }
+    this.#lc.info?.(
+      `resetClientGroups: reset ${count} view-syncers` +
+        (ids ? ` (requested: ${ids.join(', ')})` : ' (all)'),
+    );
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {

@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import {handleHeapzRequest} from '../../services/heapz.ts';
 import {HttpService, type Options} from '../../services/http-service.ts';
+import {handleResetzRequest} from '../../services/resetz.ts';
 import {handleStatzRequest} from '../../services/statz.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import type {Worker} from '../../types/processes.ts';
@@ -26,6 +27,9 @@ export class ZeroDispatcher extends HttpService {
       );
       fastify.get('/heapz', (req, res) =>
         handleHeapzRequest(lc, config, req, res),
+      );
+      fastify.post('/resetz', (req, res) =>
+        handleResetzRequest(lc, config, req, res, getWorker),
       );
       installWebSocketHandoff(lc, this.#handoff, fastify.server);
     });
