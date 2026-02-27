@@ -24,7 +24,6 @@
     "shared": "0.0.0",
     "zero-client": "0.0.0",
     "zero-schema": "0.0.0",
-    "zero-types": "0.0.0",
     "zql": "0.0.0"
   }
 }
