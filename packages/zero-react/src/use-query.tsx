@@ -515,6 +515,7 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
   readonly #zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize'>;
   readonly #singular: boolean;
+  #destroyTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     query: Query<TTable, TSchema, TReturn>,
@@ -595,13 +596,23 @@ class ViewWrapper<
 
   subscribeReactInternals = (internals: () => void): (() => void) => {
     this.#reactInternals.add(internals);
+    // Cancel any pending destroy timer from a previous unsubscribe.
+    // Without this, rapid unsub/resub cycles accumulate stale timers
+    // that can fire during a gap between unsubscribe and resubscribe,
+    // destroying the view even though it was actively used.
+    if (this.#destroyTimer !== undefined) {
+      clearTimeout(this.#destroyTimer);
+      this.#destroyTimer = undefined;
+    }
     this.#materializeIfNeeded();
     return () => {
       this.#reactInternals.delete(internals);
 
       // only schedule a cleanup task if we have no listeners left
       if (this.#reactInternals.size === 0) {
-        setTimeout(() => {
+        this.#destroyTimer = setTimeout(() => {
+          this.#destroyTimer = undefined;
+
           // We already destroyed the view
           if (this.#view === undefined) {
             return;
