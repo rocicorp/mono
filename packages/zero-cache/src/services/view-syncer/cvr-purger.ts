@@ -1,7 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {READ_COMMITTED} from '../../db/mode-enum.ts';
-import {disableStatementTimeout, type PostgresDB} from '../../types/pg.ts';
+import {runTx} from '../../db/run-transaction.ts';
+import {type PostgresDB} from '../../types/pg.ts';
 import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import {RunningState} from '../running-state.ts';
 import type {Service} from '../service.ts';
@@ -100,56 +101,56 @@ export class CVRPurger implements Service {
   purgeInactiveCVRs(
     maxCVRs: number,
   ): Promise<{purged: number; remaining: number}> {
-    return this.#db.begin(READ_COMMITTED, async sql => {
-      disableStatementTimeout(sql);
-
-      const now = Date.now();
-      const threshold = now - this.#inactivityThresholdMs;
-      const tombstonePurgeThreshold = now - this.#tombstonePurgeThresholdMs;
-      // Implementation note: `FOR UPDATE` will prevent a syncer from
-      // concurrently updating the CVR, since the update also performs
-      // a `SELECT ... FOR UPDATE`, instead causing that update to
-      // fail, which will cause the client to create a new CVR.
-      //
-      // `SKIP LOCKED` will skip over CVRs that a syncer is already
-      // in the process of updating. In this manner, an in-progress
-      // update effectively excludes the CVR from the purge.
-      const ids = (
-        await sql<{clientGroupID: string}[]>`
+    return runTx(
+      this.#db,
+      async sql => {
+        const now = Date.now();
+        const threshold = now - this.#inactivityThresholdMs;
+        const tombstonePurgeThreshold = now - this.#tombstonePurgeThresholdMs;
+        // Implementation note: `FOR UPDATE` will prevent a syncer from
+        // concurrently updating the CVR, since the update also performs
+        // a `SELECT ... FOR UPDATE`, instead causing that update to
+        // fail, which will cause the client to create a new CVR.
+        //
+        // `SKIP LOCKED` will skip over CVRs that a syncer is already
+        // in the process of updating. In this manner, an in-progress
+        // update effectively excludes the CVR from the purge.
+        const ids = (
+          await sql<{clientGroupID: string}[]>`
           SELECT "clientGroupID" FROM ${sql(this.#schema)}.instances
             WHERE NOT "deleted" AND "lastActive" < ${threshold}
             ORDER BY "lastActive" ASC
             LIMIT ${maxCVRs}
             FOR UPDATE SKIP LOCKED
       `.values()
-      ).flat();
+        ).flat();
 
-      if (ids.length > 0) {
-        // Explicitly delete rows from cvr tables from "bottom" up. Relying on
-        // foreign key cascading deletes can be suboptimal when the foreign key
-        // is not a prefix of the primary key (e.g. the "desires" foreign key
-        // reference to the "queries" table is not a prefix of the "desires"
-        // primary key).
-        const stmts = [
-          'desires',
-          'queries',
-          'clients',
-          'rows',
-          'rowsVersion',
-        ].map(table =>
-          sql`
+        if (ids.length > 0) {
+          // Explicitly delete rows from cvr tables from "bottom" up. Relying on
+          // foreign key cascading deletes can be suboptimal when the foreign key
+          // is not a prefix of the primary key (e.g. the "desires" foreign key
+          // reference to the "queries" table is not a prefix of the "desires"
+          // primary key).
+          const stmts = [
+            'desires',
+            'queries',
+            'clients',
+            'rows',
+            'rowsVersion',
+          ].map(table =>
+            sql`
             DELETE FROM ${sql(this.#schema)}.${sql(table)} 
               WHERE "clientGroupID" IN ${sql(ids)}`.execute(),
-        );
-        // Tombstones are written for the `instances` rows, preserving the
-        // "profileID" and "lastActive" columns for computing usage stats.
-        //
-        // For backwards compatibility (i.e. older zero-caches that do not
-        // check the "deleted" column) reset the "version" to '00' to trigger
-        // the ClientNotFound error via
-        // view-syncer.ts:checkClientAndCVRVersions()
-        stmts.push(
-          sql`
+          );
+          // Tombstones are written for the `instances` rows, preserving the
+          // "profileID" and "lastActive" columns for computing usage stats.
+          //
+          // For backwards compatibility (i.e. older zero-caches that do not
+          // check the "deleted" column) reset the "version" to '00' to trigger
+          // the ClientNotFound error via
+          // view-syncer.ts:checkClientAndCVRVersions()
+          stmts.push(
+            sql`
             UPDATE ${sql(this.#schema)}.instances
               SET "deleted" = TRUE, 
                   "version" = '00', 
@@ -159,24 +160,26 @@ export class CVRPurger implements Service {
                   "grantedAt" = NULL,
                   "clientSchema" = NULL
               WHERE "clientGroupID" IN ${sql(ids)}`.execute(),
-        );
-        // Tombstone rows are deleted after the tombstonePurgeThreshold.
-        stmts.push(
-          sql`
+          );
+          // Tombstone rows are deleted after the tombstonePurgeThreshold.
+          stmts.push(
+            sql`
             DELETE FROM ${sql(this.#schema)}.instances
               WHERE "deleted" AND "lastActive" < ${tombstonePurgeThreshold}
           `.execute(),
-        );
-        await Promise.all(stmts);
-      }
+          );
+          await Promise.all(stmts);
+        }
 
-      const [{remaining}] = await sql<[{remaining: bigint}]>`
+        const [{remaining}] = await sql<[{remaining: bigint}]>`
         SELECT COUNT(*) AS remaining FROM ${sql(this.#schema)}.instances
           WHERE NOT "deleted" AND "lastActive" < ${threshold}
       `;
 
-      return {purged: ids.length, remaining: Number(remaining)};
-    });
+        return {purged: ids.length, remaining: Number(remaining)};
+      },
+      {mode: READ_COMMITTED},
+    );
   }
 
   stop(): Promise<void> {

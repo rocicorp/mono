@@ -1,9 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
-import type postgres from 'postgres';
+import {resolver} from '@rocicorp/resolver';
+import postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {type PgTest, test} from '../test/db.ts';
-import type {PostgresDB} from '../types/pg.ts';
+import {postgresTypeConfig, type PostgresDB} from '../types/pg.ts';
 import {
   type IncrementalMigrationMap,
   type Migration,
@@ -183,7 +184,7 @@ describe('db/migration', () => {
       },
     },
     {
-      name: 'only updates version for successful migrations',
+      name: 'failed migration rolls back entire transaction',
       preSchema: {
         dataVersion: 12,
         schemaVersion: 12,
@@ -193,12 +194,13 @@ describe('db/migration', () => {
         13: {migrateData: logMigrationHistory('successful')},
         14: {migrateData: () => Promise.reject('fails to get to 14')},
       },
+      // With single transaction, failed migration rolls back everything
       postSchema: {
-        dataVersion: 13,
-        schemaVersion: 13,
+        dataVersion: 12,
+        schemaVersion: 12,
         minSafeVersion: 6,
       },
-      expectedMigrationHistory: [{event: 'successful-at(12)'}],
+      expectedMigrationHistory: [],
       expectedErr: 'fails to get to 14',
     },
   ];
@@ -247,4 +249,107 @@ describe('db/migration', () => {
       );
     });
   }
+
+  test<PgTest>('concurrent migrations are serialized by advisory lock', async ({
+    testDBs,
+  }) => {
+    // This test verifies that concurrent calls to runSchemaMigrations
+    // are serialized using pg_advisory_lock, preventing race conditions
+    // during rolling deployments.
+    //
+    // We need two separate database connections because advisory locks
+    // are session-based and reentrant within the same connection.
+
+    const db1 = await testDBs.create('migration_concurrent_test');
+    await db1`CREATE TABLE "MigrationHistory" (event TEXT)`;
+
+    // Create a second connection to the same database
+    const {host, port, user: username, pass, database} = db1.options;
+    const db2: PostgresDB = postgres({
+      host: host[0],
+      port: port[0],
+      username,
+      password: pass ?? undefined,
+      database,
+      ...postgresTypeConfig(),
+    });
+
+    try {
+      const migration1AcquiredLock = resolver<void>();
+      const migration1CanProceed = resolver<void>();
+
+      const events: string[] = [];
+
+      // Migration 1: signals when it starts its schema migration,
+      // then waits for permission to proceed
+      const migration1 = runSchemaMigrations(
+        createSilentLogContext(),
+        'migration-1',
+        schemaName,
+        db1,
+        {
+          migrateSchema: async () => {
+            events.push('migration1-schema');
+            migration1AcquiredLock.resolve();
+            await migration1CanProceed.promise;
+          },
+        },
+        {1: {}},
+      );
+
+      // Wait for migration 1 to acquire the lock and start its migration
+      await migration1AcquiredLock.promise;
+
+      // Migration 2: will block on advisory lock, then see schema is already
+      // at version 1 and skip the setup (this is correct behavior)
+      const migration2Promise = runSchemaMigrations(
+        createSilentLogContext(),
+        'migration-2',
+        schemaName,
+        db2,
+        {
+          migrateSchema: () => {
+            // This should NOT be called because migration 1 already migrated
+            events.push('migration2-schema');
+            return Promise.resolve();
+          },
+        },
+        {1: {}},
+      );
+
+      // Give migration 2 a chance to try to acquire the lock
+      await new Promise(r => setTimeout(r, 50));
+
+      // Migration 2 should be blocked on the advisory lock, so only
+      // migration 1's schema event should have fired
+      expect(events).toEqual(['migration1-schema']);
+
+      // Let migration 1 complete and release the lock
+      migration1CanProceed.resolve();
+      await migration1;
+      events.push('migration1-done');
+
+      // Now migration 2 can proceed (it will skip migrateSchema since
+      // the schema is already at version 1)
+      await migration2Promise;
+      events.push('migration2-done');
+
+      // Verify the migrations completed in order
+      expect(events).toEqual([
+        'migration1-schema',
+        'migration1-done',
+        'migration2-done',
+      ]);
+
+      // Verify final state is correct
+      expect(await getVersionHistory(db1, schemaName)).toEqual({
+        dataVersion: 1,
+        schemaVersion: 1,
+        minSafeVersion: 0,
+      });
+    } finally {
+      await db2.end();
+      await testDBs.drop(db1);
+    }
+  });
 });

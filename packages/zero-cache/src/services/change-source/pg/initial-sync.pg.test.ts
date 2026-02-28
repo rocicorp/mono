@@ -2790,6 +2790,52 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     });
   });
 
+  test('different requested publications', async () => {
+    const lc = createSilentLogContext();
+    const sql = upstream;
+    await sql`
+      CREATE TABLE foo(id int4 PRIMARY KEY);
+      INSERT INTO foo(id) VALUES (1);
+
+      CREATE TABLE bar(id int4 PRIMARY KEY);
+      INSERT INTO bar(id) VALUES (1);
+
+      CREATE PUBLICATION pub_1 for TABLE foo;
+      CREATE PUBLICATION pub_2 for TABLE bar;
+    `.simple();
+
+    const replica = new Database(lc, ':memory:');
+
+    // Simulate a (partial) previous sync with pub_1 only.
+    await ensureShardSchema(lc, upstream, {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: ['pub_1'],
+    });
+
+    // initial-sync with pub_1 and pub_2
+    await initialSync(
+      lc,
+      {
+        appID: APP_ID,
+        shardNum: SHARD_NUM,
+        publications: ['pub_1', 'pub_2'],
+      },
+      replica,
+      getConnectionURI(upstream),
+      {
+        tableCopyWorkers: 1,
+      },
+      TEST_CONTEXT,
+    );
+
+    expectMatchingObjectsInTables(replica, {
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+      foo: [{id: 1}],
+      bar: [{id: 1}],
+    });
+  });
+
   test.each([
     'UPPERCASE',
     'dashes-not-allowed',

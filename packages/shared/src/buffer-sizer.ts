@@ -19,10 +19,22 @@ export class BufferSizer {
     maxBufferSizeMs: number;
     adjustBufferSizeIntervalMs: number;
   }) {
-    assert(options.minBufferSizeMs <= options.maxBufferSizeMs);
-    assert(options.initialBufferSizeMs >= options.minBufferSizeMs);
-    assert(options.initialBufferSizeMs <= options.maxBufferSizeMs);
-    assert(options.adjustBufferSizeIntervalMs > 0);
+    assert(
+      options.minBufferSizeMs <= options.maxBufferSizeMs,
+      'minBufferSizeMs must be <= maxBufferSizeMs',
+    );
+    assert(
+      options.initialBufferSizeMs >= options.minBufferSizeMs,
+      'initialBufferSizeMs must be >= minBufferSizeMs',
+    );
+    assert(
+      options.initialBufferSizeMs <= options.maxBufferSizeMs,
+      'initialBufferSizeMs must be <= maxBufferSizeMs',
+    );
+    assert(
+      options.adjustBufferSizeIntervalMs > 0,
+      'adjustBufferSizeIntervalMs must be positive',
+    );
     this.#initialBufferSizeMs = options.initialBufferSizeMs;
     this.#minBufferSizeMs = options.minBufferSizeMs;
     this.#maxBufferSizeMs = options.maxBufferSizeMs;

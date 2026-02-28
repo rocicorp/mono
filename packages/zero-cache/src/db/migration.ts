@@ -3,11 +3,8 @@ import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {
-  disableStatementTimeout,
-  type PostgresDB,
-  type PostgresTransaction,
-} from '../types/pg.ts';
+import {type PostgresDB, type PostgresTransaction} from '../types/pg.ts';
+import {runTx} from './run-transaction.ts';
 
 type Operations = (log: LogContext, tx: PostgresTransaction) => Promise<void>;
 
@@ -69,23 +66,32 @@ export async function runSchemaMigrations(
   incrementalMigrationMap: IncrementalMigrationMap,
 ): Promise<void> {
   log = log.withContext('initSchema', schemaName);
-  try {
-    const versionMigrations = sorted(incrementalMigrationMap);
-    assert(
-      versionMigrations.length,
-      `Must specify at least one version migration`,
-    );
-    assert(
-      versionMigrations[0][0] > 0,
-      `Versions must be non-zero positive numbers`,
-    );
-    const codeVersion = versionMigrations[versionMigrations.length - 1][0];
-    log.info?.(
-      `Checking schema for compatibility with ${debugName} at schema v${codeVersion}`,
-    );
 
-    let versions = await db.begin(async tx => {
-      const versions = await ensureVersionHistory(tx, schemaName);
+  const versionMigrations = sorted(incrementalMigrationMap);
+  assert(
+    versionMigrations.length,
+    `Must specify at least one version migration`,
+  );
+  assert(
+    versionMigrations[0][0] > 0,
+    `Versions must be non-zero positive numbers`,
+  );
+  const codeVersion = versionMigrations[versionMigrations.length - 1][0];
+
+  log.info?.(
+    `Checking schema for compatibility with ${debugName} at schema v${codeVersion}`,
+  );
+
+  try {
+    await runTx(db, async tx => {
+      // Acquire advisory lock to prevent concurrent migrations from racing.
+      // This can happen during rolling deployments when multiple pods start
+      // up simultaneously. The lock auto-releases when the transaction ends.
+      const lockName = `migrate-schema:${schemaName}`;
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
+
+      let versions = await ensureVersionHistory(tx, schemaName);
+
       if (codeVersion < versions.minSafeVersion) {
         throw new Error(
           `Cannot run ${debugName} at schema v${codeVersion} because rollback limit is v${versions.minSafeVersion}`,
@@ -96,15 +102,17 @@ export async function runSchemaMigrations(
         log.info?.(
           `Data is at v${versions.dataVersion}. Resetting to v${codeVersion}`,
         );
-        return updateVersionHistory(log, tx, schemaName, versions, codeVersion);
+        await updateVersionHistory(log, tx, schemaName, versions, codeVersion);
+        return;
       }
-      return versions;
-    });
 
-    if (versions.dataVersion < codeVersion) {
+      if (versions.dataVersion === codeVersion) {
+        return;
+      }
+
       const migrations =
         versions.dataVersion === 0
-          ? // For the empty database v0, only run the setup migration.
+          ? // For an empty database (v0), only run the setup migration.
             ([[codeVersion, setupMigration]] as const)
           : versionMigrations;
 
@@ -113,45 +121,25 @@ export async function runSchemaMigrations(
           log.info?.(
             `Migrating schema from v${versions.dataVersion} to v${dest}`,
           );
-          void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
-
-          versions = await db.begin(async tx => {
-            disableStatementTimeout(tx);
-
-            // Fetch meta from within the transaction to make the migration atomic.
-            let versions = await ensureVersionHistory(tx, schemaName);
-            if (versions.dataVersion < dest) {
-              versions = await runMigration(
-                log,
-                schemaName,
-                tx,
-                versions,
-                dest,
-                migration,
-              );
-              assert(
-                versions.dataVersion === dest,
-                () =>
-                  `Migration did not reach target version: expected ${dest}, got ${versions.dataVersion}`,
-              );
-            }
-            return versions;
-          });
+          void log.flush();
+          versions = await runMigration(
+            log,
+            schemaName,
+            tx,
+            versions,
+            dest,
+            migration,
+          );
         }
       }
-    }
+    });
 
-    assert(
-      versions.dataVersion === codeVersion,
-      () =>
-        `Final dataVersion (${versions.dataVersion}) does not match codeVersion (${codeVersion})`,
-    );
     log.info?.(`Running ${debugName} at schema v${codeVersion}`);
   } catch (e) {
     log.error?.('Error in ensureSchemaMigrated', e);
     throw e;
   } finally {
-    void log.flush(); // Flush the logs but do not block server progress on it.
+    void log.flush();
   }
 }
 
@@ -228,7 +216,7 @@ export async function getVersionHistory(
   create = false,
 ): Promise<VersionHistory | null> {
   const exists = await sql`
-  SELECT nspname, relname FROM pg_class 
+  SELECT nspname, relname FROM pg_class
     JOIN pg_namespace ON relnamespace = pg_namespace.oid
     WHERE nspname = ${schemaName} AND relname = ${'versionHistory'}`;
 
@@ -240,7 +228,7 @@ export async function getVersionHistory(
     }
   }
   const rows = await sql`
-    SELECT "dataVersion", "schemaVersion", "minSafeVersion" 
+    SELECT "dataVersion", "schemaVersion", "minSafeVersion"
        FROM ${sql(schemaName)}."versionHistory"`;
 
   if (rows.length === 0) {

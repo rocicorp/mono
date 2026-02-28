@@ -760,7 +760,7 @@ test('correlate', () => {
         zql: 'child_table',
       }),
     ),
-  ).toThrow('Assertion failed');
+  ).toThrow('zip: arrays must have equal length');
 });
 
 test('simple', () => {

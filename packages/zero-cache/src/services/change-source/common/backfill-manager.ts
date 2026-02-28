@@ -213,7 +213,7 @@ export class BackfillManager implements Cancelable, Listener {
     const beginTxFor = async (
       msg: MessageBackfill | BackfillCompleted,
     ): Promise<string | null> => {
-      assert(backfillTx === null);
+      assert(backfillTx === null, 'Expected no active backfill transaction');
       const lastWatermark = await changeStream.reserve('backfill');
 
       // After obtaining the changeStream reservation, check if the stream
@@ -223,7 +223,7 @@ export class BackfillManager implements Cancelable, Listener {
         (msg.tag === 'backfill' && msg.watermark < state.minWatermark)
       ) {
         if (state.canceledReason === undefined) {
-          assert(msg.tag === 'backfill'); // TypeScript should have figured this out.
+          assert(msg.tag === 'backfill', 'Expected backfill message tag'); // TypeScript should have figured this out.
           this.#stopRunningBackfill(
             `row key change at ${state.minWatermark} ` +
               `postdates backfill watermark at ${msg.watermark}`,

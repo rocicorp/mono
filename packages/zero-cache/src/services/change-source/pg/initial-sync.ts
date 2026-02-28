@@ -9,6 +9,7 @@ import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {equals} from '../../../../../shared/src/set-utils.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,
@@ -21,6 +22,7 @@ import {
   mapPostgresToLiteIndex,
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
+import {runTx} from '../../../db/run-transaction.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {
@@ -140,10 +142,14 @@ export async function initialSync(
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
     // Retrieve the published schema at the consistent_point.
-    const published = await sql.begin(Mode.READONLY, async tx => {
-      await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
-      return getPublicationInfo(tx, publications);
-    });
+    const published = await runTx(
+      sql,
+      async tx => {
+        await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
+        return getPublicationInfo(tx, publications);
+      },
+      {mode: Mode.READONLY},
+    );
     // Note: If this throws, initial-sync is aborted.
     validatePublications(lc, published);
 
@@ -284,6 +290,10 @@ async function ensurePublishedTables(
   const {publications} = await getInternalShardConfig(sql, shard);
 
   if (validate) {
+    let valid = false;
+    const nonInternalPublications = publications.filter(
+      p => !p.startsWith('_'),
+    );
     const exists = await sql`
       SELECT pubname FROM pg_publication WHERE pubname IN ${sql(publications)}
       `.values();
@@ -292,6 +302,17 @@ async function ensurePublishedTables(
         `some configured publications [${publications}] are missing: ` +
           `[${exists.flat()}]. resyncing`,
       );
+    } else if (
+      !equals(new Set(shard.publications), new Set(nonInternalPublications))
+    ) {
+      lc.warn?.(
+        `requested publications [${shard.publications}] differ from previous` +
+          `publications [${nonInternalPublications}]. resyncing`,
+      );
+    } else {
+      valid = true;
+    }
+    if (!valid) {
       await sql.unsafe(dropShard(shard.appID, shard.shardNum));
       return ensurePublishedTables(lc, sql, shard, false);
     }

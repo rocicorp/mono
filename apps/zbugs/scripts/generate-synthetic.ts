@@ -39,20 +39,44 @@ const SEED = parseInt(process.env.SEED ?? '42', 10);
 const SKIP_USERS = process.env.SKIP_USERS === 'true';
 const TEMPLATES_DIR = path.join(__dirname, '../db/seed-data/templates');
 
-// --- Seeded PRNG (mulberry32) ---
-function mulberry32(seed: number): () => number {
-  let s = seed | 0;
+// --- Seeded PRNG (xoshiro128** — 128-bit state, period 2^128-1) ---
+// SplitMix32 expands a single 32-bit seed into the 4×32-bit xoshiro state.
+function xoshiro128ss(seed: number): () => number {
+  // SplitMix32 to initialize state
+  let z = seed | 0;
+  function splitmix32(): number {
+    z = (z + 0x9e3779b9) | 0;
+    let t = z ^ (z >>> 16);
+    t = Math.imul(t, 0x21f0aaad);
+    t = t ^ (t >>> 15);
+    t = Math.imul(t, 0x735a2d97);
+    t = t ^ (t >>> 15);
+    return t >>> 0;
+  }
+  let s0 = splitmix32();
+  let s1 = splitmix32();
+  let s2 = splitmix32();
+  let s3 = splitmix32();
+
   return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    const result = Math.imul(s1 * 5, 9);
+    const r = (((result << 7) | (result >>> 25)) * 9) >>> 0;
+
+    const t = s1 << 9;
+    s2 ^= s0;
+    s3 ^= s1;
+    s1 ^= s2;
+    s0 ^= s3;
+    s2 ^= t;
+    s3 = ((s3 << 11) | (s3 >>> 21)) >>> 0;
+
+    return r / 4294967296;
   };
 }
 
-const rng = mulberry32(SEED);
+const rng = xoshiro128ss(SEED);
 
-// Seed faker for reproducibility (use same SEED as mulberry32)
+// Seed faker for reproducibility (use same SEED as xoshiro128ss)
 faker.seed(SEED);
 
 function randomInt(min: number, max: number): number {
@@ -79,7 +103,7 @@ function seededNanoid(size = 21): string {
 
 /** Derive a deterministic issue ID for a given index without storing all IDs. */
 function issueIDForIndex(i: number): string {
-  const idRng = mulberry32(SEED ^ (i * 2654435761)); // Knuth multiplicative hash
+  const idRng = xoshiro128ss(SEED ^ (i * 2654435761)); // Knuth multiplicative hash
   let id = '';
   for (let j = 0; j < 21; j++) {
     id += NANOID_ALPHABET[Math.floor(idRng() * NANOID_ALPHABET.length)];
@@ -89,13 +113,13 @@ function issueIDForIndex(i: number): string {
 
 /** Derive the project index for a given issue index (Pareto distribution). */
 function projectForIssue(i: number, numBuckets: number, alpha = 2): number {
-  const r = mulberry32(SEED ^ ((i + 1) * 2246822519))(); // single draw
+  const r = xoshiro128ss(SEED ^ ((i + 1) * 2246822519))(); // single draw
   return Math.floor(Math.pow(r, alpha) * numBuckets);
 }
 
 /** Derive the comment count for a given issue index (exponential distribution matching mean). */
 function commentsForIssue(i: number, mean: number): number {
-  const r = mulberry32(SEED ^ ((i + 2) * 3266489917))(); // single draw
+  const r = xoshiro128ss(SEED ^ ((i + 2) * 3266489917))(); // single draw
   // Exponential distribution: -mean * ln(1 - r), floored
   return Math.floor(-mean * Math.log(1 - r * 0.9999));
 }

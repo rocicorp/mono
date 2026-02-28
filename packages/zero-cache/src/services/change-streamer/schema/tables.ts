@@ -4,7 +4,8 @@ import type postgres from 'postgres';
 import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
-import {disableStatementTimeout, type PostgresDB} from '../../../types/pg.ts';
+import {runTx} from '../../../db/run-transaction.ts';
+import {type PostgresDB} from '../../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../../types/shards.ts';
 import type {
   BackfillID,
@@ -177,9 +178,7 @@ export async function ensureReplicationConfig(
   };
   const schema = cdcSchema(shard);
 
-  await db.begin(async sql => {
-    disableStatementTimeout(sql);
-
+  await runTx(db, async sql => {
     const stmts: PendingQuery<Row[]>[] = [];
     const results = await sql<
       {
