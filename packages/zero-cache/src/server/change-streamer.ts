@@ -7,6 +7,7 @@ import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
+import {initializeNoopChangeSource} from '../services/change-source/noop/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
@@ -78,22 +79,24 @@ export default async function runWorker(
     try {
       // Note: This performs initial sync of the replica if necessary.
       const {changeSource, subscriptionState} =
-        upstream.type === 'pg'
-          ? await initializePostgresChangeSource(
-              lc,
-              upstream.db,
-              shard,
-              replica.file,
-              initialSync,
-              context,
-            )
-          : await initializeCustomChangeSource(
-              lc,
-              upstream.db,
-              shard,
-              replica.file,
-              context,
-            );
+        upstream.type === 'noop'
+          ? await initializeNoopChangeSource(lc, replica.file, shard)
+          : upstream.type === 'pg'
+            ? await initializePostgresChangeSource(
+                lc,
+                upstream.db!,
+                shard,
+                replica.file,
+                initialSync,
+                context,
+              )
+            : await initializeCustomChangeSource(
+                lc,
+                upstream.db!,
+                shard,
+                replica.file,
+                context,
+              );
 
       changeStreamer = await initializeStreamer(
         lc,
@@ -110,7 +113,7 @@ export default async function runWorker(
       );
       break;
     } catch (e) {
-      if (first && e instanceof AutoResetSignal) {
+      if (first && e instanceof AutoResetSignal && upstream.type !== 'noop') {
         lc.warn?.(`resetting replica ${replica.file}`, e);
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.

@@ -52,7 +52,10 @@ export default async function runWorker(
   const processes = new ProcessManager(lc, parent);
 
   const {numSyncWorkers: numSyncers} = config;
-  if (config.upstream.maxConns < numSyncers) {
+  if (
+    config.upstream.type !== 'noop' &&
+    config.upstream.maxConns < numSyncers
+  ) {
     throw new Error(
       `Insufficient upstream connections (${config.upstream.maxConns}) for ${numSyncers} syncers.` +
         `Increase ZERO_UPSTREAM_MAX_CONNS or decrease ZERO_NUM_SYNC_WORKERS (which defaults to available cores).`,
@@ -69,8 +72,12 @@ export default async function runWorker(
     numSyncers === 0
       ? []
       : [
-          '--upstream-max-conns-per-worker',
-          String(Math.floor(config.upstream.maxConns / numSyncers)),
+          ...(config.upstream.type !== 'noop'
+            ? [
+                '--upstream-max-conns-per-worker',
+                String(Math.floor(config.upstream.maxConns / numSyncers)),
+              ]
+            : []),
           '--cvr-max-conns-per-worker',
           String(Math.floor(config.cvr.maxConns / numSyncers)),
         ];

@@ -306,20 +306,23 @@ export type AuthConfig = Config<typeof authOptions>;
 export const zeroOptions = {
   upstream: {
     db: {
-      type: v.string(),
+      type: v.string().optional(),
       desc: [
         `The "upstream" authoritative postgres database.`,
         `In the future we will support other types of upstream besides PG.`,
+        `Required for {bold pg} and {bold custom} upstream types.`,
+        `Not used for {bold noop} upstream type.`,
       ],
     },
 
     type: {
-      type: v.literalUnion('pg', 'custom').default('pg'),
+      type: v.literalUnion('pg', 'custom', 'noop').default('pg'),
       desc: [
         `The meaning of the {bold upstream-db} depends on the upstream type:`,
         `* {bold pg}: The connection database string, e.g. "postgres://..."`,
         `* {bold custom}: The base URI of the change source "endpoint, e.g.`,
         `          "https://my-change-source.dev/changes/v0/stream?apiKey=..."`,
+        `* {bold noop}: No upstream; runs against an existing replica file read-only.`,
       ],
       hidden: true, // TODO: Unhide when ready to officially support.
     },

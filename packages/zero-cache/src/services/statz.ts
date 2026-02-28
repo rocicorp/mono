@@ -15,6 +15,9 @@ import {getReplicationState} from './replicator/schema/replication-state.ts';
 
 async function upstreamStats(lc: LogContext, config: ZeroConfig) {
   const schema = upstreamSchema(getShardID(config));
+  if (!config.upstream.db) {
+    return {};
+  }
   const sql = pgClient(lc, config.upstream.db);
   try {
     return await getPgStats([

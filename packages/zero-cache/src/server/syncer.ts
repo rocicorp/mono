@@ -14,7 +14,8 @@ import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
-import {MutagenService} from '../services/mutagen/mutagen.ts';
+import {type Mutagen, MutagenService} from '../services/mutagen/mutagen.ts';
+import type {Service} from '../services/service.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
@@ -72,7 +73,12 @@ export default function runWorker(
 
   const {cvr, upstream} = config;
   assert(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set');
-  assert(upstream.maxConnsPerWorker, 'upstream.maxConnsPerWorker must be set');
+  if (upstream.type !== 'noop') {
+    assert(
+      upstream.maxConnsPerWorker,
+      'upstream.maxConnsPerWorker must be set',
+    );
+  }
 
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
@@ -82,14 +88,16 @@ export default function runWorker(
     connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
 
-  const upstreamDB = pgClient(lc, upstream.db, {
-    max: upstream.maxConnsPerWorker,
-    connection: {['application_name']: `zero-sync-worker-${pid}-upstream`},
-  });
+  const upstreamDB = upstream.db
+    ? pgClient(lc, upstream.db, {
+        max: upstream.maxConnsPerWorker!,
+        connection: {['application_name']: `zero-sync-worker-${pid}-upstream`},
+      })
+    : undefined;
 
   const dbWarmup = Promise.allSettled([
     warmupConnections(lc, cvrDB, 'cvr'),
-    warmupConnections(lc, upstreamDB, 'upstream'),
+    ...(upstreamDB ? [warmupConnections(lc, upstreamDB, 'upstream')] : []),
   ]);
 
   const tmpDir = config.storageDBTmpDir ?? tmpdir();
@@ -170,8 +178,19 @@ export default function runWorker(
     );
   };
 
-  const mutagenFactory = (id: string) =>
-    new MutagenService(
+  const mutagenFactory = (id: string): Mutagen & Service => {
+    if (!upstreamDB) {
+      return {
+        id,
+        processMutation: () => Promise.resolve(undefined),
+        ref() {},
+        unref() {},
+        hasRefs: () => false,
+        run: () => Promise.resolve(),
+        stop: () => Promise.resolve(),
+      };
+    }
+    return new MutagenService(
       lc.withContext('component', 'mutagen').withContext('clientGroupID', id),
       shard,
       id,
@@ -179,6 +198,7 @@ export default function runWorker(
       config,
       writeAuthzStorage,
     );
+  };
 
   const pusherFactory =
     config.push.url === undefined && config.mutate.url === undefined

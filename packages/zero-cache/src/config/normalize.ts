@@ -94,11 +94,21 @@ export function normalizeZeroConfig(
   }
 
   if (!config.change.db) {
+    if (!config.upstream.db) {
+      throw new Error(
+        `ZERO_CHANGE_DB must be set when ZERO_UPSTREAM_DB is not provided (e.g. with noop upstream type).`,
+      );
+    }
     config.change.db = config.upstream.db;
     env['ZERO_CHANGE_DB'] = config.upstream.db;
   }
 
   if (!config.cvr.db) {
+    if (!config.upstream.db) {
+      throw new Error(
+        `ZERO_CVR_DB must be set when ZERO_UPSTREAM_DB is not provided (e.g. with noop upstream type).`,
+      );
+    }
     config.cvr.db = config.upstream.db;
     env['ZERO_CVR_DB'] = config.upstream.db;
   }

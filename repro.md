@@ -32,3 +32,9 @@ npx tsx packages/zero/src/analyze-query.ts \
 ```
 
 hmm,... run zero with replica and no upstream?
+
+- table source shouldn't re-print same plan
+- should print AST of received query before table source plans
+  - can marry back?
+- remove queries from zbugs?
+  - till offender goes away?

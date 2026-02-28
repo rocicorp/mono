@@ -151,19 +151,23 @@ export const queries = defineQueries({
           );
         } else if (filter === 'creators') {
           q = q.whereExists('createdIssues', i =>
-            i.whereExists(
-              'project',
-              q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-              {scalar: true},
-            ),
+            i
+              .whereExists(
+                'project',
+                q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                {scalar: true},
+              )
+              .orderBy('modified', 'desc'),
           );
         } else if (filter === 'assignees') {
           q = q.whereExists('assignedIssues', i =>
-            i.whereExists(
-              'project',
-              q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-              {scalar: true},
-            ),
+            i
+              .whereExists(
+                'project',
+                q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                {scalar: true},
+              )
+              .orderBy('modified', 'desc'),
           );
         } else {
           throw new QueryError(
@@ -235,9 +239,7 @@ export const queries = defineQueries({
       idValue: z.union([z.string(), z.number()]),
     }),
     ({ctx: auth, args: {listContext, idField, idValue}}) =>
-      buildListQuery({role: auth?.role, listContext})
-        .where(idField, idValue)
-        .one(),
+      builder.issue.where(({or}) => or()),
   ),
 
   emojiChange: defineQuery(idValidator, ({args: subjectID}) =>
@@ -311,7 +313,7 @@ export const queries = defineQueries({
             and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
           );
         } else if (filter === 'creators') {
-          q = q.whereExists('createdIssues');
+          // q = q.whereExists('createdIssues');
         } else {
           throw new QueryError(
             `Unknown filter: ${filter}`,
