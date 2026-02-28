@@ -3,13 +3,7 @@ import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
-import type {
-  ErroredQuery,
-  Query,
-  ResultType,
-  Schema,
-  Zero,
-} from './zero.ts';
+import type {ErroredQuery, Query, ResultType, Schema, Zero} from './zero.ts';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Navigation race condition tests
@@ -31,7 +25,11 @@ import type {
 // unsubscribe cycles cannot fire.
 // ──────────────────────────────────────────────────────────────────────────────
 
-type Listener = (data: unknown, resultType: ResultType, error?: ErroredQuery) => void;
+type Listener = (
+  data: unknown,
+  resultType: ResultType,
+  error?: ErroredQuery,
+) => void;
 
 type MockView = {
   listeners: Set<Listener>;
@@ -51,27 +49,47 @@ function newMockQuery(hash: string, singular = false): Query<string, Schema> {
 function newMockZero(clientID: string): Zero<Schema, undefined, unknown> {
   return {
     clientID,
-    materialize: vi.fn().mockImplementation(() => ({
-      listeners: new Set(),
-      addListener(cb: Listener) {
-        this.listeners.add(cb);
-        return () => { this.listeners.delete(cb); };
-      },
-      destroy() { this.listeners.clear(); },
-      updateTTL() {},
-    } satisfies MockView)),
+    materialize: vi.fn().mockImplementation(
+      () =>
+        ({
+          listeners: new Set(),
+          addListener(cb: Listener) {
+            this.listeners.add(cb);
+            return () => {
+              this.listeners.delete(cb);
+            };
+          },
+          destroy() {
+            this.listeners.clear();
+          },
+          updateTTL() {},
+        }) satisfies MockView,
+    ),
   } as unknown as Zero<Schema, undefined, unknown>;
 }
 
-function emit(zero: Zero<Schema, undefined, unknown>, data: unknown, resultType: ResultType = 'unknown') {
-  const mock = vi.mocked(zero.materialize).mock.results[0]?.value as MockView | undefined;
+function emit(
+  zero: Zero<Schema, undefined, unknown>,
+  data: unknown,
+  resultType: ResultType = 'unknown',
+) {
+  const mock = vi.mocked(zero.materialize).mock.results[0]?.value as
+    | MockView
+    | undefined;
   if (!mock) throw new Error('materialize not called');
   mock.listeners.forEach(cb => cb(data, resultType));
 }
 
 /** Emit on the Nth materialized view (0-indexed). Useful after destroy + re-materialize. */
-function emitNth(zero: Zero<Schema, undefined, unknown>, n: number, data: unknown, resultType: ResultType = 'unknown') {
-  const mock = vi.mocked(zero.materialize).mock.results[n]?.value as MockView | undefined;
+function emitNth(
+  zero: Zero<Schema, undefined, unknown>,
+  n: number,
+  data: unknown,
+  resultType: ResultType = 'unknown',
+) {
+  const mock = vi.mocked(zero.materialize).mock.results[n]?.value as
+    | MockView
+    | undefined;
   if (!mock) throw new Error(`materialize call #${n} not found`);
   mock.listeners.forEach(cb => cb(data, resultType));
 }
@@ -80,13 +98,19 @@ function snapData(view: {getSnapshot: () => readonly [unknown, ...unknown[]]}) {
   return view.getSnapshot()[0];
 }
 
-function snapLength(view: {getSnapshot: () => readonly [unknown, ...unknown[]]}) {
+function snapLength(view: {
+  getSnapshot: () => readonly [unknown, ...unknown[]];
+}) {
   return (snapData(view) as unknown[]).length;
 }
 
 describe('Navigation: ViewStore destroy + re-create lifecycle', () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   //   emit(data)  -->  snap has data
   //   unsubscribe  -->  10ms timer starts
@@ -288,7 +312,10 @@ describe('Navigation: ViewStore destroy + re-create lifecycle', () => {
     // Phase 1: User on assignment page, data loaded
     const viewA = viewStore.getView(zero, queryA, true, 'forever');
     const unsubA = viewA.subscribeReactInternals(() => {});
-    emit(zero, [{id: 't1', score: 85}, {id: 't2', score: 92}]);
+    emit(zero, [
+      {id: 't1', score: 85},
+      {id: 't2', score: 92},
+    ]);
     expect(snapLength(viewA)).toBe(2);
 
     // Phase 2: Navigate to student detail (within 10ms)
@@ -333,7 +360,15 @@ describe('Navigation: ViewStore destroy + re-create lifecycle', () => {
 
     // Server eventually sends data to the new view
     const lastIdx = vi.mocked(zero.materialize).mock.results.length - 1;
-    emitNth(zero, lastIdx, [{id: 't1', score: 85}, {id: 't2', score: 92}], 'complete');
+    emitNth(
+      zero,
+      lastIdx,
+      [
+        {id: 't1', score: 85},
+        {id: 't2', score: 92},
+      ],
+      'complete',
+    );
     expect(snapLength(viewA3)).toBe(2);
 
     unsubA3();
@@ -384,7 +419,11 @@ describe('Navigation: React key-based remount', () => {
       const rows = (data ?? []) as Row[];
       return (
         <div data-testid="data">
-          {rows.map(r => <div key={r.id} data-testid={`row-${r.id}`}>{r.name}</div>)}
+          {rows.map(r => (
+            <div key={r.id} data-testid={`row-${r.id}`}>
+              {r.name}
+            </div>
+          ))}
         </div>
       );
     }
@@ -399,8 +438,13 @@ describe('Navigation: React key-based remount', () => {
     await expect.poll(() => renderCounts.current).toBeGreaterThanOrEqual(1);
 
     // Emit data
-    emit(zero, [{id: '1', name: 'Alice'}, {id: '2', name: 'Bob'}]);
-    await expect.poll(() => element.querySelector('[data-testid="row-1"]')?.textContent).toBe('Alice');
+    emit(zero, [
+      {id: '1', name: 'Alice'},
+      {id: '2', name: 'Bob'},
+    ]);
+    await expect
+      .poll(() => element.querySelector('[data-testid="row-1"]')?.textContent)
+      .toBe('Alice');
 
     // Change key — this unmounts and remounts the entire Suspense subtree
     root.render(
@@ -410,8 +454,12 @@ describe('Navigation: React key-based remount', () => {
     );
 
     // Data should still be visible after remount (ViewWrapper reused within 10ms)
-    await expect.poll(() => element.querySelector('[data-testid="row-1"]')?.textContent).toBe('Alice');
-    await expect.poll(() => element.querySelector('[data-testid="row-2"]')?.textContent).toBe('Bob');
+    await expect
+      .poll(() => element.querySelector('[data-testid="row-1"]')?.textContent)
+      .toBe('Alice');
+    await expect
+      .poll(() => element.querySelector('[data-testid="row-2"]')?.textContent)
+      .toBe('Bob');
 
     // Only one materialize call (ViewWrapper was reused)
     expect(zero.materialize).toHaveBeenCalledTimes(1);
@@ -446,7 +494,7 @@ describe('Navigation: React key-based remount', () => {
         view.getSnapshot,
       );
       renderCounts.current++;
-      const assignment = data as Assignment | undefined;
+      const assignment = data as unknown as Assignment | undefined;
       snapshots.push(assignment);
       const trackers = assignment?.problem_trackers ?? [];
       return (
@@ -478,11 +526,18 @@ describe('Navigation: React key-based remount', () => {
       ],
     };
     emit(zero, assignmentData, 'complete');
-    await expect.poll(() => element.querySelector('[data-testid="tracker-pt1"]')?.textContent).toBe('85');
+    await expect
+      .poll(
+        () => element.querySelector('[data-testid="tracker-pt1"]')?.textContent,
+      )
+      .toBe('85');
 
     // Navigate away (key change simulating route change)
     root.render(
-      <React.Suspense key="/assignments/abc/students/s1" fallback={<div>Loading...</div>}>
+      <React.Suspense
+        key="/assignments/abc/students/s1"
+        fallback={<div>Loading...</div>}
+      >
         <AssignmentPage />
       </React.Suspense>,
     );
@@ -495,9 +550,21 @@ describe('Navigation: React key-based remount', () => {
     );
 
     // Data should be preserved (ViewWrapper reused within 10ms)
-    await expect.poll(() => element.querySelector('[data-testid="tracker-pt1"]')?.textContent).toBe('85');
-    await expect.poll(() => element.querySelector('[data-testid="tracker-pt2"]')?.textContent).toBe('92');
-    await expect.poll(() => element.querySelector('[data-testid="tracker-pt3"]')?.textContent).toBe('none');
+    await expect
+      .poll(
+        () => element.querySelector('[data-testid="tracker-pt1"]')?.textContent,
+      )
+      .toBe('85');
+    await expect
+      .poll(
+        () => element.querySelector('[data-testid="tracker-pt2"]')?.textContent,
+      )
+      .toBe('92');
+    await expect
+      .poll(
+        () => element.querySelector('[data-testid="tracker-pt3"]')?.textContent,
+      )
+      .toBe('none');
 
     // Only one materialize (ViewWrapper was never destroyed)
     expect(zero.materialize).toHaveBeenCalledTimes(1);
