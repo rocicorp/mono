@@ -1,10 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {getLocal, type Mockttp} from 'mockttp';
 import {beforeEach, expect, test} from 'vitest';
+import {gunzipSync} from 'zlib';
 import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {initEventSink, publishCriticalEvent} from './events.ts';
 
 let sink: Mockttp;
@@ -50,13 +52,14 @@ test('publish with backoff', async () => {
     expect(r.headers).toMatchObject({
       'ce-baz': '123',
       'ce-foo': 'bar',
+      'ce-datacontentencoding': 'gzip',
       'ce-id': expect.any(String),
       'ce-source': 'my-task-id',
       'ce-specversion': '1.0',
       'ce-time': '2024-08-14T03:02:01.000Z',
       'ce-type': 'my-type',
       'connection': 'keep-alive',
-      'content-type': 'application/json; charset=utf-8',
+      'content-type': 'text/plain',
       'host': 'localhost:8000',
       'transfer-encoding': 'chunked',
     });
@@ -66,16 +69,27 @@ test('publish with backoff', async () => {
   expect(r.headers).toMatchObject({
     'ce-baz': '123',
     'ce-foo': 'bar',
+    'ce-datacontentencoding': 'gzip',
     'ce-id': expect.any(String),
     'ce-source': 'my-task-id',
     'ce-specversion': '1.0',
     'ce-time': '2024-08-14T03:02:01.000Z',
     'ce-type': 'my-type',
     'connection': 'keep-alive',
-    'content-type': 'application/json; charset=utf-8',
+    'content-type': 'text/plain',
     'host': 'localhost:8000',
     'transfer-encoding': 'chunked',
   });
+
+  const body = must(await r.body.getText());
+  expect(body).toMatchInlineSnapshot(
+    `"H4sIAAAAAAAAE6tWKqksSFWyUsqt1AWzdJRKMnNBAkYGRia6Bha6hiYhBsZWBkZWBoZ6BgYGUUq1AJwctUI0AAAA"`,
+  );
+  expect(
+    gunzipSync(Buffer.from(body, 'base64')).toString(),
+  ).toMatchInlineSnapshot(
+    `"{"type":"my-type","time":"2024-08-14T03:02:01.000Z"}"`,
+  );
 
   expect(logSink.messages[0][2]).toMatchObject([
     'Publishing CloudEvent: my-type',
@@ -94,16 +108,15 @@ test('publish with backoff', async () => {
   expect(logSink.messages[3][2]).toMatchObject([
     'Published CloudEvent: my-type',
     {
-      type: 'my-type',
-      time: '2024-08-14T03:02:01.000Z',
-      source: 'my-task-id',
-      specversion: '1.0',
-      data: {
-        time: '2024-08-14T03:02:01.000Z',
+      event: {
+        datacontentencoding: 'gzip',
         type: 'my-type',
+        time: '2024-08-14T03:02:01.000Z',
+        source: 'my-task-id',
+        specversion: '1.0',
+        foo: 'bar',
+        baz: 123,
       },
-      foo: 'bar',
-      baz: 123,
     },
   ]);
 });
