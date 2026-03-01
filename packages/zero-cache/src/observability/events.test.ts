@@ -82,8 +82,8 @@ test('publish with backoff', async () => {
   });
 
   const body = must(await r.body.getText());
-  expect(body).toMatchInlineSnapshot(
-    `"H4sIAAAAAAAAE6tWKqksSFWyUsqt1AWzdJRKMnNBAkYGRia6Bha6hiYhBsZWBkZWBoZ6BgYGUUq1AJwctUI0AAAA"`,
+  expect(body).toEqual(
+    `H4sIAAAAAAAAE6tWKqksSFWyUsqt1AWzdJRKMnNBAkYGRia6Bha6hiYhBsZWBkZWBoZ6BgYGUUq1AJwctUI0AAAA`,
   );
   expect(
     gunzipSync(Buffer.from(body, 'base64')).toString(),
