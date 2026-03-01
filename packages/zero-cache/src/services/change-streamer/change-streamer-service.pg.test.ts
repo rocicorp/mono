@@ -965,6 +965,7 @@ describe('change-streamer/service', () => {
 
   test('retry on change stream error', async () => {
     const {promise: hasRetried, resolve: retried} = resolver<true>();
+    const changes = Subscription.create<ChangeStreamMessage>();
     const source = {
       startStream: vi
         .fn()
@@ -1001,6 +1002,7 @@ describe('change-streamer/service', () => {
 
   test('retry on unexpected storage error', async () => {
     const {promise: hasRetried, resolve: retried} = resolver<true>();
+    const changes = Subscription.create<ChangeStreamMessage>();
     const source = {
       startStream: vi
         .fn()
