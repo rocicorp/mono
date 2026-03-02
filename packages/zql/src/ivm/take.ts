@@ -735,7 +735,7 @@ function getTakeStateKey(
   return JSON.stringify(['take', ...partitionValues]);
 }
 
-function constraintMatchesPartitionKey(
+export function constraintMatchesPartitionKey(
   constraint: Constraint | undefined,
   partitionKey: PartitionKey | undefined,
 ): boolean {
