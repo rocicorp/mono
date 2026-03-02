@@ -455,13 +455,16 @@ IVM Pipeline:     Source(comments, sort=[id,asc], skipOrderByInSQL=true)
 - Remove: old PK is in set → remove, forward
 - Add: new partition may or may not have room → handled per-partition ✓
 
-### 5. Cap's fetch during push processing
+### 7. Cap's fetch during push processing — consistency
 
 When Exists re-fetches during push (e.g., to check size after a child change):
 - Join calls Cap's fetch with constraint matching the parent's join key
 - Cap reads from source (which includes the overlay for the in-progress push)
 - Cap yields only rows whose PK is in its stored set
-- This is consistent because Cap updates its PK set before forwarding the push downstream
+- Consistency is maintained by the ordering of set updates vs output pushes:
+  - During remove(A) processing: set = {B, C}, size=2 (A removed, replacement D not yet added)
+  - During add(D) processing: set = {B, C, D}, size=3 (D now in set)
+  - Downstream never sees D before being told about it
 
 ### 6. Flipped EXISTS
 
@@ -511,3 +514,13 @@ When Cap has a partition key but receives a fetch without a matching constraint:
    - Cap operator unit tests (fetch, push add/remove/edit/child, partitioned)
    - `completeOrdering` test for EXISTS children not getting ordering
 6. EXPLAIN QUERY PLAN verification: EXISTS child queries should no longer show "USE TEMP B-TREE FOR ORDER BY"
+
+## Follow-ups
+
+- **Verify FlippedJoin ordering assumptions with unordered EXISTS children.** FlippedJoin has a hard dependency on ordering — it uses a k-way merge over parent iterators (lines 199-220) and binary search for removed child re-insertion (lines 150-156). The design removes ordering from the *child* pipeline, and FlippedJoin depends on *parent* ordering, so this should be safe. But trace through `applyFilterWithFlips` in builder.ts to confirm the unordered pipeline always feeds into FlippedJoin as the child input, never the parent.
+
+- **Audit of IVM operator ordering assumptions.** Full audit of which operators assume ordered input:
+  - **Hard dependency**: Take (bound tracking, `compareRows`, reverse fetches — replaced by Cap), Skip (bound + comparator — not used in EXISTS children).
+  - **Soft/partial**: Join (split-push overlay optimization, ~line 274 — not correctness), FlippedJoin (hard on *parent* ordering, child can be unordered), JoinUtils (overlay positioning), UnionFanIn (k-way merge — not used in EXISTS children).
+  - **No dependency**: Filter (stateless predicate), Exists (pure counting), FanOut (pass-through), ViewApplyChange (`compareRows` only for equality), MemorySource (internal BTree, no upstream requirement).
+  - **Conclusion**: The EXISTS child pipeline (Source → Filter → Cap → nested joins) is safe. Skip would break if present but EXISTS children don't use offset. Join/FlippedJoin are safe as long as unordered input is the child side.
