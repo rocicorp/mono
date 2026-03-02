@@ -96,6 +96,38 @@ export function multCost(base: CostEstimate, factor: number): CostEstimate {
   };
 }
 
+/**
+ * Creates a cost model that returns specific rows per table.
+ * - `rows`: row count returned when filters are present
+ * - `totalRows`: row count returned when filters are absent (defaults to `rows`)
+ *
+ * PlannerConnection computes selectivity as rows/totalRows when both
+ * limit and filters are provided, so specifying both values lets tests
+ * control the connection's selectivity.
+ */
+export function createTableCostModel(
+  config: Record<
+    string,
+    {rows: number; totalRows?: number | undefined; fanout?: number | undefined}
+  >,
+): ConnectionCostModel {
+  return (
+    table: string,
+    _sort: Ordering,
+    filters: Condition | undefined,
+    _constraint: PlannerConstraint | undefined,
+  ): CostModelCost => {
+    const entry = config[table] ?? {rows: 100};
+    const f = entry.fanout ?? 1;
+    const rows = filters ? entry.rows : (entry.totalRows ?? entry.rows);
+    return {
+      startupCost: 0,
+      rows,
+      fanout: () => ({fanout: f, confidence: 'high' as const}),
+    };
+  };
+}
+
 // ============================================================================
 // Test Factories
 // ============================================================================
@@ -138,6 +170,60 @@ export function createJoin(options?: {
 
   const parent = createConnection(parentTable);
   const child = createConnection(childTable);
+
+  const join = new PlannerJoin(
+    parent,
+    child,
+    parentConstraint,
+    childConstraint,
+    flippable,
+    planId,
+  );
+
+  return {parent, child, join};
+}
+
+/**
+ * Creates a PlannerJoin using a custom cost model per table.
+ * Allows testing with different rows/selectivity for parent and child.
+ */
+export function createJoinWithModel(options: {
+  parentTable: string;
+  childTable: string;
+  parentConstraint: PlannerConstraint;
+  childConstraint: PlannerConstraint;
+  costModel: ConnectionCostModel;
+  flippable?: boolean;
+  planId?: number;
+  childFilters?: Condition;
+  childLimit?: number;
+}): {
+  parent: PlannerConnection;
+  child: PlannerConnection;
+  join: PlannerJoin;
+} {
+  const {
+    parentTable,
+    childTable,
+    parentConstraint,
+    childConstraint,
+    costModel,
+    flippable = true,
+    planId = 0,
+    childFilters,
+    childLimit,
+  } = options;
+
+  const parentSource = new PlannerSource(parentTable, costModel);
+  const childSource = new PlannerSource(childTable, costModel);
+  const parent = parentSource.connect(DEFAULT_SORT, undefined, true);
+  const child = childSource.connect(
+    DEFAULT_SORT,
+    childFilters,
+    false,
+    undefined,
+    childLimit,
+  );
 
   const join = new PlannerJoin(
     parent,

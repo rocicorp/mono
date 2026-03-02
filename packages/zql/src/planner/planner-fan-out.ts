@@ -83,6 +83,20 @@ export class PlannerFanOut {
     return ret;
   }
 
+  /**
+   * Returns the estimated row count by delegating to the input node.
+   */
+  getReturnedRows(branchPattern: number[]): number {
+    return this.#input.getReturnedRows(branchPattern);
+  }
+
+  /**
+   * Returns the selectivity by delegating to the input node.
+   */
+  getSelectivity(): number {
+    return this.#input.getSelectivity();
+  }
+
   convertToUFO(): void {
     this.#type = 'UFO';
   }

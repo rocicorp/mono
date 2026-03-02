@@ -262,6 +262,27 @@ export class PlannerJoin {
     this.#type = this.#initialType;
   }
 
+  /**
+   * Returns the estimated row count for a given branch pattern.
+   * Semi-join: parent rows * child selectivity.
+   * Flipped join: parent rows * child returned rows.
+   */
+  getReturnedRows(branchPattern: number[]): number {
+    const parentRows = this.#parent.getReturnedRows(branchPattern);
+    if (this.#type === 'semi') {
+      return parentRows * this.#child.getSelectivity();
+    }
+    return parentRows * this.#child.getReturnedRows(branchPattern);
+  }
+
+  /**
+   * Returns the combined selectivity of this join.
+   * This is the product of parent and child selectivities.
+   */
+  getSelectivity(): number {
+    return this.#parent.getSelectivity() * this.#child.getSelectivity();
+  }
+
   estimateCost(
     /**
      * This argument is to deal with consecutive `andExists` statements.
@@ -311,13 +332,27 @@ export class PlannerJoin {
     const child = this.#child.estimateCost(1, branchPattern, planDebugger);
 
     const fanoutFactor = child.fanout(Object.keys(this.#childConstraint));
+
+    // Scope-adjusted selectivity: the child's global selectivity can be
+    // misleading when the parent already constrains the scope significantly.
+    // E.g., if child has 416K/200M = 0.2% selectivity globally, but the
+    // parent only returns 10M rows with fanout 2, the effective scope is
+    // 20M rows and selectivity is 416K/20M = 2.08% — a 10x difference.
+    let effectiveChildSelectivity = child.selectivity;
+    const parentReturnedRows = this.#parent.getReturnedRows(branchPattern);
+    if (parentReturnedRows > 0 && fanoutFactor.fanout > 0) {
+      const scopeRows = parentReturnedRows * fanoutFactor.fanout;
+      const scopeAdjusted = Math.min(1, child.returnedRows / scopeRows);
+      effectiveChildSelectivity = Math.max(child.selectivity, scopeAdjusted);
+    }
+
     // Factor in how many child rows match a parent row.
     // E.g., if an issue has 10 comments on average then we're more
     // likely to hit a comment compared to if an issue has 1 comment on average.
     // If an index is all nulls (no parents match any children)
     // this will collapse to 0.
     const scaledChildSelectivity =
-      1 - Math.pow(1 - child.selectivity, fanoutFactor.fanout);
+      1 - Math.pow(1 - effectiveChildSelectivity, fanoutFactor.fanout);
 
     // Why do we not need fanout in the other direction?
     // E.g., for an `inventory -> film` flipped-join, if each film has 100 inventories (100 copies)
@@ -366,8 +401,8 @@ export class PlannerJoin {
         cost:
           parent.cost +
           parent.scanEst * (child.startupCost + child.cost + child.scanEst),
-        returnedRows: parent.returnedRows * child.selectivity,
-        selectivity: child.selectivity * parent.selectivity,
+        returnedRows: parent.returnedRows * effectiveChildSelectivity,
+        selectivity: effectiveChildSelectivity * parent.selectivity,
         limit: parent.limit,
         fanout: parent.fanout,
       };

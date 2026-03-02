@@ -316,6 +316,28 @@ export class PlannerConnection {
     return this.#sort;
   }
 
+  /**
+   * Returns the estimated row count for a given branch pattern
+   * without full cost computation or cache interference.
+   * Used by PlannerJoin to scope child selectivity estimates.
+   */
+  getReturnedRows(branchPattern: number[]): number {
+    const key = branchPattern.join(',');
+    const cached = this.#cachedConstraintCosts.get(key);
+    if (cached) return cached.returnedRows;
+    const constraint = this.#constraints.get(key);
+    const merged = mergeConstraints(this.#baseConstraints, constraint);
+    return this.#model(this.table, this.#sort, this.#filters, merged).rows;
+  }
+
+  /**
+   * Returns this connection's selectivity.
+   * Used by parent joins for scope-adjusted selectivity computation.
+   */
+  getSelectivity(): number {
+    return this.selectivity;
+  }
+
   /** Get estimated cost for each constraint branch. */
   getConstraintCostsForDebug(): Record<string, CostEstimate> {
     const record: Record<string, CostEstimate> = {};

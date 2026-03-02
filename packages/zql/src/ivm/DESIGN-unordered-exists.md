@@ -85,11 +85,13 @@ return sql`${query} ${orderByToSQL(order, !!reverse)}`;
 ```
 
 This always appends `ORDER BY`. For EXISTS children with a correlation key constraint like `WHERE issueID = ?`, SQLite's query planner now must:
+
 1. Use the `issueID` index to find matching rows
 2. Sort those rows by `id` (PK) to satisfy ORDER BY
 3. Return the first 3
 
 Without ORDER BY, SQLite would:
+
 1. Use the `issueID` index
 2. Return the first 3 matching rows directly (no sort)
 
@@ -159,16 +161,19 @@ class Cap implements Operator {
 #### Fetch
 
 **Initial fetch** (no state for this partition):
+
 - Read up to `limit` rows from input
 - Store their PKs in `CapState`
 - Yield each row
 
 **Subsequent fetch** (has state):
+
 - Read from input
 - Yield only rows whose PK is in the stored set
 - Stop after yielding all in-scope rows
 
 **Unpartitioned fetch with partition key** (nested sub-query case — same as Take's maxBound path at line 128-149):
+
 - Iterate input rows
 - For each row, look up its partition's CapState
 - Yield if the row's PK is in that partition's stored set
@@ -176,11 +181,13 @@ class Cap implements Operator {
 #### Push
 
 **`add`**:
+
 - Look up partition state. If no state, drop (partition not hydrated).
 - If `size < limit`: add PK to set, `size++`, forward the add to output.
 - If `size === limit`: drop. Cap is full, and without ordering there's no "better" row to swap in.
 
 **`remove`**:
+
 - Look up partition state. If no state, drop.
 - If PK is not in set: drop (row was never in scope).
 - If PK is in stored set:
@@ -198,11 +205,13 @@ class Cap implements Operator {
 **No `#rowHiddenFromFetch` needed**: The replacement is added to the PK set AFTER the remove is forwarded to output. During remove processing, if downstream re-fetches through Cap, the replacement is not in the set and won't be yielded. After the add is forwarded, the replacement IS in the set and will be yielded. This naturally maintains consistency without hiding rows.
 
 **`edit`**:
+
 - Look up partition state. If no state, drop.
 - If old row's PK is in stored set: forward the edit. (PK doesn't change in edits — edits that change correlation keys are split into remove+add by the source.)
 - If not in set: drop.
 
 **`child`**:
+
 - Look up partition state. If no state, drop.
 - If the change's row PK is in stored set: forward.
 - If not in set: drop.
@@ -237,15 +246,15 @@ This is O(position_of_last_in_scope_row) rather than O(source_size). Since in-sc
 
 #### Key Differences from Take
 
-| Aspect | Take | Cap |
-|--------|------|-----|
-| Requires ordering | Yes | No |
-| Bound tracking | Yes (row comparison) | No (PK set membership) |
-| Refill on remove | Yes (ordered fetch for next row) | Yes (unordered fetch for any row not in set) |
-| Reverse fetch | Yes | No |
-| `#rowHiddenFromFetch` | Yes | No (natural ordering of set updates handles this) |
-| Edit handling | Complex (6 sub-cases based on old/new vs bound) | Simple (in set → forward, else drop) |
-| State size per partition | 2 values (size + bound row) | size + up to N PKs |
+| Aspect                   | Take                                            | Cap                                               |
+| ------------------------ | ----------------------------------------------- | ------------------------------------------------- |
+| Requires ordering        | Yes                                             | No                                                |
+| Bound tracking           | Yes (row comparison)                            | No (PK set membership)                            |
+| Refill on remove         | Yes (ordered fetch for next row)                | Yes (unordered fetch for any row not in set)      |
+| Reverse fetch            | Yes                                             | No                                                |
+| `#rowHiddenFromFetch`    | Yes                                             | No (natural ordering of set updates handles this) |
+| Edit handling            | Complex (6 sub-cases based on old/new vs bound) | Simple (in set → forward, else drop)              |
+| State size per partition | 2 values (size + bound row)                     | size + up to N PKs                                |
 
 ### Changes to `completeOrdering`
 
@@ -261,7 +270,10 @@ if (condition.type === 'correlatedSubquery') {
       ...condition.related,
       // Still recursively process nested related/where INSIDE the child,
       // but don't add ordering to the child's own orderBy
-      subquery: completeOrderingInSubquery(condition.related.subquery, getPrimaryKey),
+      subquery: completeOrderingInSubquery(
+        condition.related.subquery,
+        getPrimaryKey,
+      ),
     },
   };
 }
@@ -274,15 +286,19 @@ function completeOrderingInSubquery(ast, getPrimaryKey) {
   return {
     ...ast,
     // Don't touch ast.orderBy — leave it undefined for EXISTS children
-    ...(ast.related ? {
-      related: ast.related.map(r => ({
-        ...r,
-        subquery: completeOrdering(r.subquery, getPrimaryKey), // nested subqueries still get full ordering
-      })),
-    } : undefined),
-    ...(ast.where ? {
-      where: completeOrderingInCondition(ast.where, getPrimaryKey),
-    } : undefined),
+    ...(ast.related
+      ? {
+          related: ast.related.map(r => ({
+            ...r,
+            subquery: completeOrdering(r.subquery, getPrimaryKey), // nested subqueries still get full ordering
+          })),
+        }
+      : undefined),
+    ...(ast.where
+      ? {
+          where: completeOrderingInCondition(ast.where, getPrimaryKey),
+        }
+      : undefined),
   };
 }
 ```
@@ -297,14 +313,20 @@ When building EXISTS child pipelines (`applyCorrelatedSubQuery` for `fromConditi
 
 When `unordered` is true:
 
-1. **Source connection**: Pass PK-only ordering to `source.connect()`. Sources need *some* ordering for internal data structures (MemorySource uses BTreeSet). PK index always exists. But mark the connection to skip ORDER BY in SQL (see source changes below).
+1. **Source connection**: Pass PK-only ordering to `source.connect()`. Sources need _some_ ordering for internal data structures (MemorySource uses BTreeSet). PK index always exists. But mark the connection to skip ORDER BY in SQL (see source changes below).
 
 ```typescript
 const ordering = unordered
   ? source.tableSchema.primaryKey.map(k => [k, 'asc'] as const)
   : must(ast.orderBy);
 
-const conn = source.connect(ordering, ast.where, splitEditKeys, delegate.debug, unordered);
+const conn = source.connect(
+  ordering,
+  ast.where,
+  splitEditKeys,
+  delegate.debug,
+  unordered,
+);
 ```
 
 2. **Use Cap instead of Take**: When `ast.limit !== undefined`:
@@ -312,10 +334,20 @@ const conn = source.connect(ordering, ast.where, splitEditKeys, delegate.debug, 
 ```typescript
 if (ast.limit !== undefined) {
   if (unordered) {
-    const cap = new Cap(end, delegate.createStorage(capName), ast.limit, partitionKey);
+    const cap = new Cap(
+      end,
+      delegate.createStorage(capName),
+      ast.limit,
+      partitionKey,
+    );
     // ...
   } else {
-    const take = new Take(end, delegate.createStorage(takeName), ast.limit, partitionKey);
+    const take = new Take(
+      end,
+      delegate.createStorage(takeName),
+      ast.limit,
+      partitionKey,
+    );
     // ...
   }
 }
@@ -353,7 +385,7 @@ export function buildSelectQuery(
   columns: Record<string, SchemaValue>,
   constraint: Constraint | undefined,
   filters: NoSubqueryCondition | undefined,
-  order: Ordering | undefined,  // now optional
+  order: Ordering | undefined, // now optional
   reverse: boolean | undefined,
   start: Start | undefined,
 ) {
@@ -458,6 +490,7 @@ IVM Pipeline:     Source(comments, sort=[id,asc], skipOrderByInSQL=true)
 ### 7. Cap's fetch during push processing — consistency
 
 When Exists re-fetches during push (e.g., to check size after a child change):
+
 - Join calls Cap's fetch with constraint matching the parent's join key
 - Cap reads from source (which includes the overlay for the in-progress push)
 - Cap yields only rows whose PK is in its stored set
@@ -473,6 +506,7 @@ The child pipeline for flipped EXISTS is built the same way. Cap applies identic
 ### 7. Nested sub-queries (unpartitioned fetch)
 
 When Cap has a partition key but receives a fetch without a matching constraint:
+
 - Must iterate all source rows and check each row's partition state
 - This is the same pattern as Take's `maxBound` path (take.ts lines 128-149)
 - Performance: potentially slow but this case is rare (nested sub-queries only)
@@ -488,18 +522,18 @@ When Cap has a partition key but receives a fetch without a matching constraint:
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `packages/zql/src/ivm/cap.ts` | **NEW** — Cap operator |
-| `packages/zql/src/ivm/cap.test.ts` | **NEW** — Cap tests |
-| `packages/zql/src/query/complete-ordering.ts` | Skip ordering for EXISTS children |
-| `packages/zql/src/query/complete-ordering.test.ts` | Update/add tests |
-| `packages/zql/src/builder/builder.ts` | Use Cap for EXISTS children, pass unordered flag |
-| `packages/zql/src/ivm/source.ts` | Add `skipOrderByInSQL` to `connect()` |
-| `packages/zqlite/src/table-source.ts` | Honor `skipOrderByInSQL` flag |
-| `packages/zqlite/src/query-builder.ts` | Handle optional ordering |
-| `packages/zql/src/ivm/memory-source.ts` | Accept `skipOrderByInSQL` param (no-op) |
-| `packages/zql/src/ivm/exists.ts` | Update early-return comment |
+| File                                               | Change                                           |
+| -------------------------------------------------- | ------------------------------------------------ |
+| `packages/zql/src/ivm/cap.ts`                      | **NEW** — Cap operator                           |
+| `packages/zql/src/ivm/cap.test.ts`                 | **NEW** — Cap tests                              |
+| `packages/zql/src/query/complete-ordering.ts`      | Skip ordering for EXISTS children                |
+| `packages/zql/src/query/complete-ordering.test.ts` | Update/add tests                                 |
+| `packages/zql/src/builder/builder.ts`              | Use Cap for EXISTS children, pass unordered flag |
+| `packages/zql/src/ivm/source.ts`                   | Add `skipOrderByInSQL` to `connect()`            |
+| `packages/zqlite/src/table-source.ts`              | Honor `skipOrderByInSQL` flag                    |
+| `packages/zqlite/src/query-builder.ts`             | Handle optional ordering                         |
+| `packages/zql/src/ivm/memory-source.ts`            | Accept `skipOrderByInSQL` param (no-op)          |
+| `packages/zql/src/ivm/exists.ts`                   | Update early-return comment                      |
 
 ## Verification
 
@@ -517,10 +551,10 @@ When Cap has a partition key but receives a fetch without a matching constraint:
 
 ## Follow-ups
 
-- **Verify FlippedJoin ordering assumptions with unordered EXISTS children.** FlippedJoin has a hard dependency on ordering — it uses a k-way merge over parent iterators (lines 199-220) and binary search for removed child re-insertion (lines 150-156). The design removes ordering from the *child* pipeline, and FlippedJoin depends on *parent* ordering, so this should be safe. But trace through `applyFilterWithFlips` in builder.ts to confirm the unordered pipeline always feeds into FlippedJoin as the child input, never the parent.
+- **Verify FlippedJoin ordering assumptions with unordered EXISTS children.** FlippedJoin has a hard dependency on ordering — it uses a k-way merge over parent iterators (lines 199-220) and binary search for removed child re-insertion (lines 150-156). The design removes ordering from the _child_ pipeline, and FlippedJoin depends on _parent_ ordering, so this should be safe. But trace through `applyFilterWithFlips` in builder.ts to confirm the unordered pipeline always feeds into FlippedJoin as the child input, never the parent.
 
 - **Audit of IVM operator ordering assumptions.** Full audit of which operators assume ordered input:
   - **Hard dependency**: Take (bound tracking, `compareRows`, reverse fetches — replaced by Cap), Skip (bound + comparator — not used in EXISTS children).
-  - **Soft/partial**: Join (split-push overlay optimization, ~line 274 — not correctness), FlippedJoin (hard on *parent* ordering, child can be unordered), JoinUtils (overlay positioning), UnionFanIn (k-way merge — not used in EXISTS children).
+  - **Soft/partial**: Join (split-push overlay optimization, ~line 274 — not correctness), FlippedJoin (hard on _parent_ ordering, child can be unordered), JoinUtils (overlay positioning), UnionFanIn (k-way merge — not used in EXISTS children).
   - **No dependency**: Filter (stateless predicate), Exists (pure counting), FanOut (pass-through), ViewApplyChange (`compareRows` only for equality), MemorySource (internal BTree, no upstream requirement).
   - **Conclusion**: The EXISTS child pipeline (Source → Filter → Cap → nested joins) is safe. Skip would break if present but EXISTS children don't use offset. Join/FlippedJoin are safe as long as unordered input is the child side.

@@ -78,6 +78,41 @@ export class PlannerFanIn {
     }
   }
 
+  /**
+   * Returns the estimated row count.
+   * FI: max of inputs (all branches share one fetch).
+   * UFI: sum of inputs (each branch fetches independently).
+   */
+  getReturnedRows(branchPattern: number[]): number {
+    if (this.#type === 'FI') {
+      const updatedPattern = [0, ...branchPattern];
+      let max = 0;
+      for (const input of this.#inputs) {
+        max = Math.max(max, input.getReturnedRows(updatedPattern));
+      }
+      return max;
+    }
+    let sum = 0;
+    let i = 0;
+    for (const input of this.#inputs) {
+      sum += input.getReturnedRows([i, ...branchPattern]);
+      i++;
+    }
+    return sum;
+  }
+
+  /**
+   * Returns the selectivity.
+   * OR branches: P(A OR B) = 1 - (1-A)(1-B)
+   */
+  getSelectivity(): number {
+    let noMatchProb = 1.0;
+    for (const input of this.#inputs) {
+      noMatchProb *= 1 - input.getSelectivity();
+    }
+    return 1 - noMatchProb;
+  }
+
   estimateCost(
     downstreamChildSelectivity: number,
     branchPattern: number[],

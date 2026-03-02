@@ -435,6 +435,9 @@ export function buildListQuery(args: ListQueryArgs) {
           )
         : undefined,
       ...(labels ?? []).map(label =>
+        // FML. we be flipping when there are ~400k matches!
+        // but... 400k matches is very few in a dataset of 100M....
+        // so... flip might be ok but now we need a better join algorithm?
         exists('issueLabels', q =>
           q.whereExists(
             'label',
