@@ -283,20 +283,20 @@ export class TableSource implements Source {
     );
     const sqlAndBindings = format(query);
 
-    this.#stmts.cache.use(
-      `EXPLAIN QUERY PLAN ${sqlAndBindings.text}`,
-      cached => {
-        const planRows = cached.statement.all<{detail: string}>(
-          ...sqlAndBindings.values,
-        );
-        console.log(`\n[TableSource] Query plan for ${this.#table}:`);
-        console.log(`  SQL: ${sqlAndBindings.text}`);
-        console.log(`  bindings: ${JSON.stringify(sqlAndBindings.values)}`);
-        for (const row of planRows) {
-          console.log(`  ${row.detail}`);
-        }
-      },
-    );
+    // this.#stmts.cache.use(
+    //   `EXPLAIN QUERY PLAN ${sqlAndBindings.text}`,
+    //   cached => {
+    //     const planRows = cached.statement.all<{detail: string}>(
+    //       ...sqlAndBindings.values,
+    //     );
+    //     console.log(`\n[TableSource] Query plan for ${this.#table}:`);
+    //     console.log(`  SQL: ${sqlAndBindings.text}`);
+    //     console.log(`  bindings: ${JSON.stringify(sqlAndBindings.values)}`);
+    //     for (const row of planRows) {
+    //       console.log(`  ${row.detail}`);
+    //     }
+    //   },
+    // );
 
     const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
     try {
@@ -380,16 +380,16 @@ export class TableSource implements Source {
         debug?.rowVended(this.#table, query, row);
         yield row;
         count++;
-        if (count % 100 === 0) {
-          console.log(
-            `[TableSource] ${this.#table}: emitted ${count} rows (query: ${query})`,
-          );
-        }
+        // if (count % 100 === 0) {
+        //   console.log(
+        //     `[TableSource] ${this.#table}: emitted ${count} rows (query: ${query})`,
+        //   );
+        // }
       } while (!result.done);
     } finally {
-      console.log(
-        `[TableSource] ${this.#table}: done, total ${count} rows`,
-      );
+      // console.log(
+      //   `[TableSource] ${this.#table}: done, total ${count} rows`,
+      // );
       rowIterator.return?.();
     }
   }
