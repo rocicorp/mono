@@ -300,16 +300,6 @@ describe('completeOrdering', () => {
               },
               "subquery": {
                 "alias": "zsubq_labels",
-                "orderBy": [
-                  [
-                    "issueId",
-                    "asc",
-                  ],
-                  [
-                    "labelId",
-                    "asc",
-                  ],
-                ],
                 "table": "issueLabel",
                 "where": {
                   "op": "EXISTS",
@@ -324,12 +314,6 @@ describe('completeOrdering', () => {
                     },
                     "subquery": {
                       "alias": "zsubq_zhidden_labels",
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
                       "table": "label",
                     },
                     "system": "client",
@@ -469,12 +453,6 @@ describe('completeOrdering', () => {
                   },
                   "subquery": {
                     "alias": "zsubq_owner",
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
                     "table": "user",
                   },
                   "system": "client",
@@ -508,12 +486,6 @@ describe('completeOrdering', () => {
                       },
                       "subquery": {
                         "alias": "zsubq_comments",
-                        "orderBy": [
-                          [
-                            "id",
-                            "asc",
-                          ],
-                        ],
                         "table": "comment",
                       },
                       "system": "client",

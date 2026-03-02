@@ -8590,15 +8590,15 @@ suite('test overlay on many:many (no junction) pushes', () => {
               Symbol(rc): 1,
             },
             {
-              "id": "u3",
-              "name": "Aaron",
-              "num": 3,
-              Symbol(rc): 1,
-            },
-            {
               "id": "u2",
               "name": "Aaron",
               "num": 5,
+              Symbol(rc): 1,
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "num": 3,
               Symbol(rc): 1,
             },
           ],
@@ -8615,15 +8615,15 @@ suite('test overlay on many:many (no junction) pushes', () => {
               Symbol(rc): 1,
             },
             {
-              "id": "u3",
-              "name": "Aaron",
-              "num": 3,
-              Symbol(rc): 1,
-            },
-            {
               "id": "u2",
               "name": "Aaron",
               "num": 5,
+              Symbol(rc): 1,
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "num": 3,
               Symbol(rc): 1,
             },
           ],
@@ -8706,17 +8706,17 @@ suite('test overlay on many:many (no junction) pushes', () => {
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u3",
+                      "id": "u2",
                       "name": "Aaron",
-                      "num": 3,
+                      "num": 5,
                     },
                   },
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u2",
+                      "id": "u3",
                       "name": "Aaron",
-                      "num": 5,
+                      "num": 3,
                     },
                   },
                 ],
@@ -8837,17 +8837,17 @@ suite('test overlay on many:many (no junction) pushes', () => {
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u3",
+                      "id": "u2",
                       "name": "Aaron",
-                      "num": 3,
+                      "num": 5,
                     },
                   },
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u2",
+                      "id": "u3",
                       "name": "Aaron",
-                      "num": 5,
+                      "num": 3,
                     },
                   },
                 ],
@@ -8871,17 +8871,17 @@ suite('test overlay on many:many (no junction) pushes', () => {
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u3",
+                      "id": "u2",
                       "name": "Aaron",
-                      "num": 3,
+                      "num": 5,
                     },
                   },
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u2",
+                      "id": "u3",
                       "name": "Aaron",
-                      "num": 5,
+                      "num": 3,
                     },
                   },
                 ],

@@ -223,6 +223,7 @@ export class TableSource implements Source {
     filters?: Condition,
     splitEditKeys?: Set<string>,
     debug?: DebugDelegate,
+    skipOrderByInSQL?: boolean,
   ) {
     const transformedFilters = transformFilters(filters);
     const input: SourceInput = {
@@ -253,6 +254,7 @@ export class TableSource implements Source {
         : undefined,
       compareRows: makeComparator(sort),
       lastPushedEpoch: 0,
+      skipOrderByInSQL,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -273,7 +275,12 @@ export class TableSource implements Source {
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
-    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
+    const query = this.#requestToSQL(
+      req,
+      connection.filters?.condition,
+      sort,
+      connection.skipOrderByInSQL ?? false,
+    );
     const sqlAndBindings = format(query);
 
     this.#stmts.cache.use(
@@ -513,13 +520,14 @@ export class TableSource implements Source {
     request: FetchRequest,
     filters: NoSubqueryCondition | undefined,
     order: Ordering,
+    skipOrderByInSQL = false,
   ): SQLQuery {
     return buildSelectQuery(
       this.#table,
       this.#columns,
       request.constraint,
       filters,
-      order,
+      skipOrderByInSQL ? undefined : order,
       request.reverse,
       request.start,
     );

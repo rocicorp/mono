@@ -58,7 +58,10 @@ function completeOrderingInCondition<C extends Condition | undefined>(
       ...condition,
       related: {
         ...condition.related,
-        subquery: completeOrdering(condition.related.subquery, getPrimaryKey),
+        subquery: completeOrderingInSubquery(
+          condition.related.subquery,
+          getPrimaryKey,
+        ),
       },
     };
   }
@@ -68,6 +71,38 @@ function completeOrderingInCondition<C extends Condition | undefined>(
     conditions: condition.conditions.map(c =>
       completeOrderingInCondition(c, getPrimaryKey),
     ),
+  };
+}
+
+/**
+ * For EXISTS child subqueries, we don't complete the ordering on the direct
+ * child AST (leave orderBy untouched/undefined) because ordering is
+ * irrelevant for existence checks. This allows the Cap operator to be used
+ * instead of Take, and SQLite can skip ORDER BY for much faster query plans.
+ *
+ * However, we still process nested related/where inside the child so that
+ * any deeper subqueries get their ordering completed normally.
+ */
+function completeOrderingInSubquery(
+  ast: AST,
+  getPrimaryKey: (tableName: string) => PrimaryKey,
+): AST {
+  return {
+    ...ast,
+    // Don't touch ast.orderBy — leave undefined for EXISTS children
+    ...(ast.related
+      ? {
+          related: ast.related.map(r => ({
+            ...r,
+            subquery: completeOrdering(r.subquery, getPrimaryKey),
+          })),
+        }
+      : undefined),
+    ...(ast.where
+      ? {
+          where: completeOrderingInCondition(ast.where, getPrimaryKey),
+        }
+      : undefined),
   };
 }
 

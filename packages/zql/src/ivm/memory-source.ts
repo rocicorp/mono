@@ -80,6 +80,7 @@ export type Connection = {
     | undefined;
   readonly debug?: DebugDelegate | undefined;
   lastPushedEpoch: number;
+  skipOrderByInSQL?: boolean | undefined;
 };
 
 /**
@@ -157,6 +158,8 @@ export class MemorySource implements Source {
     sort: Ordering,
     filters?: Condition,
     splitEditKeys?: Set<string>,
+    _debug?: DebugDelegate,
+    _skipOrderByInSQL?: boolean,
   ): SourceInput {
     const transformedFilters = transformFilters(filters);
 
