@@ -171,7 +171,10 @@ describe('MutationTracker', () => {
     expect(onFatalError).toHaveBeenCalledTimes(1);
     const fatalError = onFatalError.mock.calls[0][0];
     expect(fatalError).toBeInstanceOf(ProtocolError);
-    assert(isServerError(fatalError));
+    assert(
+      isServerError(fatalError),
+      'Expected fatalError to be a ServerError',
+    );
     expect(fatalError.kind).toBe(ErrorKind.PushFailed);
   });
 
@@ -994,7 +997,10 @@ describe('MutationTracker', () => {
     expect(onFatalError).toHaveBeenCalledTimes(1);
     const fatalError = onFatalError.mock.calls[0][0];
     expect(fatalError).toBeInstanceOf(ProtocolError);
-    assert(isServerError(fatalError));
+    assert(
+      isServerError(fatalError),
+      'Expected fatalError to be a ServerError',
+    );
     expect(fatalError.kind).toBe(ErrorKind.PushFailed);
     expect(fatalError.message).toContain('Unsupported push version');
   });
@@ -1013,7 +1019,10 @@ describe('MutationTracker', () => {
     expect(onFatalError).toHaveBeenCalledTimes(1);
     const fatalError = onFatalError.mock.calls[0][0];
     expect(fatalError).toBeInstanceOf(ProtocolError);
-    assert(isServerError(fatalError));
+    assert(
+      isServerError(fatalError),
+      'Expected fatalError to be a ServerError',
+    );
     expect(fatalError.kind).toBe(ErrorKind.PushFailed);
     expect(fatalError.message).toContain('Unsupported schema version');
   });
@@ -1033,7 +1042,10 @@ describe('MutationTracker', () => {
     expect(onFatalError).toHaveBeenCalledTimes(1);
     const fatalError = onFatalError.mock.calls[0][0];
     expect(fatalError).toBeInstanceOf(ProtocolError);
-    assert(isServerError(fatalError));
+    assert(
+      isServerError(fatalError),
+      'Expected fatalError to be a ServerError',
+    );
     expect(fatalError.kind).toBe(ErrorKind.PushFailed);
     expect(fatalError.message).toContain('ZeroPusher error');
     expect(fatalError.message).toContain('pusher failed');

@@ -790,7 +790,7 @@ function maybeShowToastForEmoji(
 ) {
   const toastID = emoji.id;
   const {creator} = emoji;
-  assert(creator);
+  assert(creator, 'Expected emoji creator to be defined');
 
   // We ony show toasts for emojis in the issue itself. Not for emojis in comments.
   if (emoji.subjectID !== issue.id || !emojiElement) {

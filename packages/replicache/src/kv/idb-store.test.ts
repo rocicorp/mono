@@ -53,7 +53,10 @@ describe('reopening IDB', () => {
 
     store = new IDBStore(name);
     const result = openSpy.mock.results[0];
-    assert(result.type === 'return');
+    assert(
+      result.type === 'return',
+      () => `Expected result.type to be 'return', got '${result.type}'`,
+    );
     const req = result.value;
     idb = new Promise((resolve, reject) => {
       req.addEventListener('success', () => resolve(req.result));

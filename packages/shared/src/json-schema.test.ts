@@ -15,7 +15,7 @@ test('json schema', () => {
     }
 
     if (message !== undefined) {
-      assert(ex instanceof TypeError);
+      assert(ex instanceof TypeError, 'Expected ex to be a TypeError');
       expect(ex.message).toBe(message);
     } else {
       expect(ex).toBe(undefined);
@@ -59,7 +59,7 @@ test('json object schema', () => {
     }
 
     if (message !== undefined) {
-      assert(ex instanceof TypeError);
+      assert(ex instanceof TypeError, 'Expected ex to be a TypeError');
       expect(ex.message).toBe(message);
     } else {
       expect(ex).toBe(undefined);

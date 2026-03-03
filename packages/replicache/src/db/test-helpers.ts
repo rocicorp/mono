@@ -151,7 +151,10 @@ async function addSnapshot(
   expect(chain).to.have.length.greaterThan(0);
   const lc = new LogContext();
   await withWriteNoImplicitCommit(store, async dagWrite => {
-    assert(formatVersion >= FormatVersion.DD31);
+    assert(
+      formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
     const w = await newWriteSnapshotDD31(
       await mustGetHeadHash(headName, dagWrite),
       lastMutationIDs ?? {
@@ -211,7 +214,10 @@ export class ChainBuilder {
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    assert(this.formatVersion >= FormatVersion.DD31);
+    assert(
+      this.formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
     assertSnapshotCommitDD31(commit);
     return commit;
   }
@@ -230,7 +236,10 @@ export class ChainBuilder {
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    assert(this.formatVersion >= FormatVersion.DD31);
+    assert(
+      this.formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
     assertLocalCommitDD31(commit);
 
     return commit;
@@ -254,7 +263,10 @@ export class ChainBuilder {
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    assert(this.formatVersion >= FormatVersion.DD31);
+    assert(
+      this.formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
     assertSnapshotCommitDD31(commit);
     return commit;
   }
@@ -277,7 +289,7 @@ export class ChainBuilder {
 
   get headHash(): Hash {
     const lastCommit = this.chain.at(-1);
-    assert(lastCommit);
+    assert(lastCommit, 'Expected chain to have at least one commit');
     return lastCommit.chunk.hash;
   }
 }
@@ -295,7 +307,7 @@ export async function initDB(
     dagWrite,
     formatVersion,
   );
-  assert(formatVersion >= FormatVersion.DD31);
+  assert(formatVersion >= FormatVersion.DD31, 'Expected formatVersion >= DD31');
   const meta = {
     basisHash,
     type: MetaType.SnapshotDD31,

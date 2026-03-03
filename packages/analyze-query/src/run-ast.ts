@@ -93,7 +93,10 @@ export async function runAst(
     if (rowChange === 'yield') {
       continue;
     }
-    assert(rowChange.type === 'add');
+    assert(
+      rowChange.type === 'add',
+      () => `Expected rowChange type 'add', got '${rowChange.type}'`,
+    );
 
     let rows: Row[] = rowsByTable[rowChange.table];
     const s = rowChange.table + '.' + JSON.stringify(rowChange.row);

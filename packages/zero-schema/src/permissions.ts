@@ -289,7 +289,10 @@ class CallTracker {
     if (prop === toStaticParam) {
       return target[toStaticParam];
     }
-    assert(typeof prop === 'string');
+    assert(
+      typeof prop === 'string',
+      () => `Expected prop to be a string, got ${typeof prop}`,
+    );
     const path = [...this.#path, prop];
     return new Proxy(
       {

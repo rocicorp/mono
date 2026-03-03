@@ -304,7 +304,7 @@ const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
 export function getInternalReplicacheImplForTesting(
   z: object,
 ): ReplicacheImpl<MutatorDefs> {
-  assert(TESTING);
+  assert(TESTING, 'Expected TESTING to be true');
   return must(internalReplicacheImplMap.get(z));
 }
 

@@ -3214,7 +3214,10 @@ describe('Disconnect on hide', () => {
     const changeVisibilityState = (
       newVisibilityState: DocumentVisibilityState,
     ) => {
-      assert(visibilityState !== newVisibilityState);
+      assert(
+        visibilityState !== newVisibilityState,
+        'Expected visibility state to change',
+      );
       visibilityState = newVisibilityState;
       document.dispatchEvent(new Event('visibilitychange'));
     };
@@ -3277,7 +3280,7 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
   });
   expect(z.connectionStatus).toBe(ConnectionStatus.Error);
   const msg = z.testLogSink.messages.at(-1);
-  assert(msg);
+  assert(msg, 'Expected log sink to have at least one message');
 
   expect(msg[0]).toBe('error');
 
@@ -3374,7 +3377,10 @@ describe('Downstream handler errors', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(z.connectionStatus).toBe(ConnectionStatus.Error);
 
-    assert(z.connectionState.name === ConnectionStatus.Error);
+    assert(
+      z.connectionState.name === ConnectionStatus.Error,
+      'Expected connection state to be Error',
+    );
     const {reason} = z.connectionState;
     expect(reason).toBeInstanceOf(ClientError);
     expect(reason.kind).toBe(ClientErrorKind.Internal);
@@ -3440,8 +3446,8 @@ describe('Mutation responses poked down', () => {
     await vi.advanceTimersByTimeAsync(100);
     const result = await mutation.server;
     expect(result.type).toBe('error');
-    assert(result.type === 'error');
-    assert(result.error.type === 'app');
+    assert(result.type === 'error', 'Expected result type to be error');
+    assert(result.error.type === 'app', 'Expected error type to be app');
     expect(result.error.message).toBe('...test ');
     expect(result.error.details).toBeUndefined();
 
@@ -4305,7 +4311,10 @@ describe('WebSocket event error handling', () => {
 
     await z.waitForConnectionStatus(ConnectionStatus.Error);
     expect(z.connectionStatus).toBe(ConnectionStatus.Error);
-    assert(z.connectionState.name === ConnectionStatus.Error);
+    assert(
+      z.connectionState.name === ConnectionStatus.Error,
+      'Expected connection state to be Error after onOpen failure',
+    );
     const {reason} = z.connectionState;
     expect(reason).toBeInstanceOf(ClientError);
     expect(reason.kind).toBe(ClientErrorKind.Internal);
@@ -4332,7 +4341,10 @@ describe('WebSocket event error handling', () => {
 
     await z.waitForConnectionStatus(ConnectionStatus.Error);
     expect(z.connectionStatus).toBe(ConnectionStatus.Error);
-    assert(z.connectionState.name === ConnectionStatus.Error);
+    assert(
+      z.connectionState.name === ConnectionStatus.Error,
+      'Expected connection state to be Error after onClose failure',
+    );
     const {reason} = z.connectionState;
     expect(reason).toBeInstanceOf(ClientError);
     expect(reason.kind).toBe(ClientErrorKind.Internal);
@@ -4364,7 +4376,7 @@ test('socket close code 1006 is logged as info, not error', async () => {
     ([, , args]) => Array.isArray(args) && args[0] === 'Got socket close event',
   );
   expect(closeLog).toBeDefined();
-  assert(closeLog);
+  assert(closeLog, 'Expected close log entry to be defined');
   expect(closeLog[0]).toBe('info');
   expect(closeLog[2][1]).toEqual({code: 1006, reason: '', wasClean: false});
 

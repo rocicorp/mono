@@ -894,7 +894,10 @@ async function setupPersistTest() {
       formatVersion,
       true,
     );
-    assert(clientGroupID === undefined || c.clientGroupID === clientGroupID);
+    assert(
+      clientGroupID === undefined || c.clientGroupID === clientGroupID,
+      'Expected consistent clientGroupID across clients',
+    );
     clientGroupID = c.clientGroupID;
     return {
       clientID: cID,

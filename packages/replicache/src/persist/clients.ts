@@ -334,7 +334,10 @@ export function initClientV6(
 
     // Now we create a new client and client group that we fork from the found
     // snapshot.
-    assert(res.type === FIND_MATCHING_CLIENT_TYPE_FORK);
+    assert(
+      res.type === FIND_MATCHING_CLIENT_TYPE_FORK,
+      'Expected result type to be FORK',
+    );
 
     const {snapshot} = res;
 

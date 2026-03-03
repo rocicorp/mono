@@ -358,7 +358,10 @@ export function maybeEndPull<M extends LocalMeta>(
     const localMutations = await localMutations_1(mainHeadHash, dagRead);
     for (const commit of localMutations) {
       let cid = clientID;
-      assert(commitIsLocalDD31(commit));
+      assert(
+        commitIsLocalDD31(commit),
+        'Expected commit to be a local DD31 commit',
+      );
       cid = commit.meta.clientID;
 
       if (

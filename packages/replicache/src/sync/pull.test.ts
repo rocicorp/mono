@@ -677,7 +677,10 @@ describe('maybe end try pull', () => {
         );
 
         // Add snapshot and replayed commits to the sync chain.
-        assert(formatVersion >= FormatVersion.DD31);
+        assert(
+          formatVersion >= FormatVersion.DD31,
+          'Expected formatVersion >= DD31',
+        );
         const w = await newWriteSnapshotDD31(
           b.chain[0].chunk.hash,
           {[clientID]: 0},
@@ -830,7 +833,10 @@ function makeFakePuller(options: FakePullerArgs): Puller {
       };
     }
 
-    assert(isPullRequestV1(options.expPullReq));
+    assert(
+      isPullRequestV1(options.expPullReq),
+      'Expected expPullReq to be a PullRequestV1',
+    );
     assertPullResponseV1(resp);
     return {
       response: resp,
@@ -868,7 +874,10 @@ describe('changed keys', () => {
           },
         };
 
-        assert(formatVersion >= FormatVersion.DD31);
+        assert(
+          formatVersion >= FormatVersion.DD31,
+          'Expected formatVersion >= DD31',
+        );
         await b.addGenesis(clientID, indexDefinitions);
         await b.addSnapshot([], clientID, undefined, undefined);
       } else {
@@ -887,7 +896,10 @@ describe('changed keys', () => {
 
       const newCookie = 'new_cookie';
 
-      assert(formatVersion >= FormatVersion.DD31);
+      assert(
+        formatVersion >= FormatVersion.DD31,
+        'Expected formatVersion >= DD31',
+      );
       const expPullReq: PullRequestV1 = {
         profileID,
         clientGroupID,
@@ -908,7 +920,10 @@ describe('changed keys', () => {
         err: undefined,
       });
 
-      assert(formatVersion >= FormatVersion.DD31);
+      assert(
+        formatVersion >= FormatVersion.DD31,
+        'Expected formatVersion >= DD31',
+      );
       const pullResult = await beginPullV1(
         profileID,
         clientID,

@@ -165,7 +165,7 @@ export class SetOfConstraint {
 
   constructor() {
     // Only used in testing
-    assert(TESTING);
+    assert(TESTING, 'SetOfConstraint is only available in testing');
   }
 
   #indexOf(value: Constraint): number {

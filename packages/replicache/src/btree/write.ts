@@ -64,13 +64,13 @@ export class BTreeWrite extends BTreeRead {
   }
 
   #addToModified(node: DataNodeImpl | InternalNodeImpl): void {
-    assert(node.isMutable);
+    assert(node.isMutable, 'Expected node to be mutable');
     this.#modified.set(node.hash, node);
     this._cache.set(node.hash, node);
   }
 
   updateNode(node: DataNodeImpl | InternalNodeImpl): void {
-    assert(node.isMutable);
+    assert(node.isMutable, 'Expected node to be mutable');
     this.#modified.delete(node.hash);
     node.hash = newRandomHash();
     this.#addToModified(node);

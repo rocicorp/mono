@@ -63,9 +63,15 @@ export class Write extends Read {
 
     // TODO(arv): if (DEBUG) { ...
     if (basis === undefined) {
-      assert(meta.basisHash === emptyHash);
+      assert(
+        meta.basisHash === emptyHash,
+        'Expected basisHash to be emptyHash when basis is undefined',
+      );
     } else {
-      assert(meta.basisHash === basis.chunk.hash);
+      assert(
+        meta.basisHash === basis.chunk.hash,
+        'Expected meta.basisHash to equal basis.chunk.hash',
+      );
     }
   }
 
@@ -123,7 +129,10 @@ export class Write extends Read {
     const meta = this.#meta;
     switch (meta.type) {
       case MetaType.LocalDD31: {
-        assert(this.#formatVersion >= FormatVersion.DD31);
+        assert(
+          this.#formatVersion >= FormatVersion.DD31,
+          'Expected formatVersion >= DD31 for LocalDD31 commit',
+        );
         const {
           basisHash,
           mutationID,
@@ -149,7 +158,10 @@ export class Write extends Read {
       }
 
       case MetaType.SnapshotDD31: {
-        assert(this.#formatVersion > FormatVersion.DD31);
+        assert(
+          this.#formatVersion > FormatVersion.DD31,
+          'Expected formatVersion > DD31 for SnapshotDD31 commit',
+        );
         const {basisHash, lastMutationIDs, cookieJSON} = meta;
         commit = commitNewSnapshotDD31(
           this.#dagWrite.createChunk,
@@ -219,7 +231,7 @@ export class Write extends Read {
         continue;
       }
       const basisIndex = basisIndexes.get(name);
-      assert(index !== basisIndex);
+      assert(index !== basisIndex, 'Expected index to differ from basisIndex');
 
       const indexDiffResult = await (basisIndex
         ? diff(basisIndex.map, index.map)
@@ -261,7 +273,10 @@ export async function newWriteLocal(
   const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
   const mutationID = await basis.getNextMutationID(clientID, dagWrite);
   const indexes = readIndexesForWrite(basis, dagWrite, formatVersion);
-  assert(formatVersion >= FormatVersion.DD31);
+  assert(
+    formatVersion >= FormatVersion.DD31,
+    'Expected formatVersion >= DD31 for newWriteLocal',
+  );
   return new Write(
     dagWrite,
     bTreeWrite,

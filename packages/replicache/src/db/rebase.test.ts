@@ -439,7 +439,7 @@ async function testThrowsErrorOnClientIDMismatch(
   variant: 'commit' | 'putCommit',
   formatVersion: FormatVersion,
 ) {
-  assert(formatVersion >= FormatVersion.DD31);
+  assert(formatVersion >= FormatVersion.DD31, 'Expected formatVersion >= DD31');
   const clientID = 'test_client_id';
   const store = new TestStore();
   const b = new ChainBuilder(store, undefined, formatVersion);

@@ -90,7 +90,7 @@ export class ReplicationMessages<
 
   #relationOrFail(table: string): MessageRelation {
     const relation = this.#tables.get(table);
-    assert(relation); // Type parameters should guarantee this.
+    assert(relation, `Expected relation for table "${table}" to be defined`);
     return relation;
   }
 

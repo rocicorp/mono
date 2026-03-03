@@ -82,7 +82,7 @@ function storeThatErrorsInOpen(lc: LogContext, name: string) {
   const store = newIDBStoreWithMemFallback(lc, name);
   expect(store).toBeInstanceOf(IDBStoreWithMemFallback);
 
-  assert(openRequest.onerror);
+  assert(openRequest.onerror, 'Expected openRequest.onerror to be defined');
   openRequest.onerror(new Event('error'));
   return store;
 }

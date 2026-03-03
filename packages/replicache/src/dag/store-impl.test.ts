@@ -344,9 +344,9 @@ describe('write', () => {
 
       await withRead(store, async dagRead => {
         const h = await dagRead.getHead('test');
-        assert(h);
+        assert(h, 'Expected head "test" to be defined');
         const c = await dagRead.getChunk(h);
-        assert(c);
+        assert(c, 'Expected chunk for head hash to be defined');
         expect(c.hash).toBe(h);
         expect(c.data).toEqual(data);
       });
@@ -358,7 +358,10 @@ describe('write', () => {
       const hasher = () =>
         (counter++).toString().padStart(32, 'testhash') as unknown as Hash;
       const testHash = (hash: Hash) => {
-        assert(hash.toString().startsWith(prefix));
+        assert(
+          hash.toString().startsWith(prefix),
+          () => `Expected hash to start with '${prefix}', got '${hash}'`,
+        );
       };
 
       await t(hasher, testHash);

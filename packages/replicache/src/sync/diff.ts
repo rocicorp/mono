@@ -104,7 +104,10 @@ export async function addDiffsForIndexes(
 
     const newIndex = newIndexes.get(oldIndexName);
     if (newIndex !== undefined) {
-      assert(newIndex !== oldIndex);
+      assert(
+        newIndex !== oldIndex,
+        'Expected newIndex to differ from oldIndex',
+      );
       const diffs = await btreeDiff(oldIndex.map, newIndex.map);
       newIndexes.delete(oldIndexName);
       diffsMap.set(oldIndexName, diffs);

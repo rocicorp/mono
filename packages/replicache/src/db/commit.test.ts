@@ -42,7 +42,10 @@ describe('base snapshot', () => {
     });
 
     await b.addLocal(clientID);
-    assert(formatVersion >= FormatVersion.DD31);
+    assert(
+      formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
     await b.addLocal(clientID);
     genesisHash = b.chain[0].chunk.hash;
     await withRead(store, async dagRead => {
@@ -99,7 +102,10 @@ describe('local mutations', () => {
     });
 
     await b.addLocal(clientID);
-    assert(formatVersion >= FormatVersion.DD31);
+    assert(
+      formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
 
     await b.addLocal(clientID);
 
@@ -207,7 +213,10 @@ describe('chain', () => {
 
     await b.addSnapshot(undefined, clientID);
     await b.addLocal(clientID);
-    assert(formatVersion >= FormatVersion.DD31);
+    assert(
+      formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
     await b.addLocal(clientID);
 
     const headHash = b.chain[b.chain.length - 1].chunk.hash;
