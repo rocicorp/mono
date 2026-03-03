@@ -70,10 +70,20 @@ export type ReplicatedIndex = {
   unique: boolean;
 };
 
+export type DownloadStatus = {
+  table: string;
+  columns: string[];
+  totalRows: number;
+  totalBytes?: number | undefined;
+
+  rows: number;
+};
+
 export type ReplicationState = {
   tables: ReplicatedTable[];
   indexes: ReplicatedIndex[];
   replicaSize?: number | undefined;
+  downloadStatus?: DownloadStatus[] | undefined;
 };
 
 export type ReplicationStage = 'Initializing' | 'Indexing' | 'Replicating';

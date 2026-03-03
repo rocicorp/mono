@@ -4,6 +4,7 @@ import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
+import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
 import {
   createLiteIndexStatement,
   createLiteTableStatement,
@@ -67,6 +68,7 @@ export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
 export type CommitResult = {
   watermark: string;
+  completedBackfill: DownloadStatus | undefined;
   schemaUpdated: boolean;
   changeLogUpdated: boolean;
 };
@@ -224,11 +226,7 @@ export class ChangeProcessor {
       this.#currentTx = null;
 
       assert(watermark, 'watermark is required for commit messages');
-      const {schemaUpdated, changeLogUpdated} = tx.processCommit(
-        msg,
-        watermark,
-      );
-      return {watermark, schemaUpdated, changeLogUpdated};
+      return tx.processCommit(msg, watermark);
     }
 
     if (msg.tag === 'rollback') {
@@ -848,7 +846,9 @@ class TransactionProcessor {
     );
   }
 
-  processBackfillCompleted({relation, columns}: BackfillCompleted) {
+  #completedBackfill: DownloadStatus | undefined;
+
+  processBackfillCompleted({relation, columns, status}: BackfillCompleted) {
     const tableName = liteTableName(relation);
     const rowKeyCols = relation.rowKey.columns;
     const cols = [...rowKeyCols, ...columns];
@@ -860,6 +860,9 @@ class TransactionProcessor {
     // Given that new columns are being exposed for every row in the table, bump the
     // row version for all rows.
     this.#bumpVersions(tableName);
+    if (status) {
+      this.#completedBackfill = {table: tableName, columns: cols, ...status};
+    }
     this.#lc.info?.(`finished backfilling ${tableName}`);
 
     // Note that there is no need to clear the backfillingColumnVersions values
@@ -873,10 +876,7 @@ class TransactionProcessor {
     // no backfills are in progress).
   }
 
-  processCommit(
-    commit: MessageCommit,
-    watermark: string,
-  ): {schemaUpdated: boolean; changeLogUpdated: boolean} {
+  processCommit(commit: MessageCommit, watermark: string): CommitResult {
     if (watermark !== this.#version) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
@@ -902,6 +902,8 @@ class TransactionProcessor {
     this.#lc.debug?.(`Committed tx@${this.#version} (${elapsedMs} ms)`);
 
     return {
+      watermark,
+      completedBackfill: this.#completedBackfill,
       schemaUpdated: this.#schemaChanged,
       changeLogUpdated: this.#numChangeLogEntries > 0,
     };

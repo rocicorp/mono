@@ -3,6 +3,7 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
+import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import {
   PROTOCOL_VERSION,
   type ChangeStreamer,
@@ -97,6 +98,8 @@ export class IncrementalSyncer {
           `Replicating from ${watermark}`,
         );
 
+        let backfillStatus: DownloadStatus | undefined;
+
         for await (const message of downstream) {
           this.#replicationEvents.add(1);
           switch (message[0]) {
@@ -110,8 +113,50 @@ export class IncrementalSyncer {
               this.stop(lc, message[1]);
               break;
             default: {
+              const msg = message[1];
+              if (msg.tag === 'backfill' && msg.status) {
+                const {status} = msg;
+                if (!backfillStatus) {
+                  // Start publishing the status every 3 seconds.
+                  backfillStatus = status;
+                  statusPublisher?.publish(
+                    lc,
+                    'Replicating',
+                    `Backfilling ${msg.relation.name} table`,
+                    3000,
+                    () =>
+                      backfillStatus
+                        ? {
+                            downloadStatus: [
+                              {
+                                ...backfillStatus,
+                                table: msg.relation.name,
+                                columns: [
+                                  ...msg.relation.rowKey.columns,
+                                  ...msg.columns,
+                                ],
+                              },
+                            ],
+                          }
+                        : {},
+                  );
+                }
+                backfillStatus = status; // Update the current status
+              }
+
               const result = processor.processMessage(lc, message);
-              if (result?.schemaUpdated) {
+              if (result?.completedBackfill) {
+                // Publish the final status
+                const status = result.completedBackfill;
+                statusPublisher?.publish(
+                  lc,
+                  'Replicating',
+                  `Backfilled ${status.table} table`,
+                  0,
+                  () => ({downloadStatus: [status]}),
+                );
+                backfillStatus = undefined;
+              } else if (result?.schemaUpdated) {
                 statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
               }
               if (result?.watermark && result?.changeLogUpdated) {
@@ -128,6 +173,7 @@ export class IncrementalSyncer {
       } finally {
         downstream?.cancel();
         unregister();
+        statusPublisher?.stop();
       }
       await this.#state.backoff(lc, err);
     }
