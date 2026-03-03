@@ -848,11 +848,8 @@ describe('handleMutateRequest', () => {
         recordedResults,
       } = createTrackingDatabase({
         // Fail both attempts for mutationID 2
-        [errorProviderKey]: ({
-          mutationID,
-        }: {
-          mutationID: number | undefined;
-        }) => (mutationID === 2 ? new Error(errorMsg) : undefined),
+        [errorProviderKey]: ({mutationID}: {mutationID: number | undefined}) =>
+          mutationID === 2 ? new Error(errorMsg) : undefined,
       });
 
       const response = await handleMutateRequest(
