@@ -117,7 +117,7 @@ export class IncrementalSyncer {
               if (msg.tag === 'backfill' && msg.status) {
                 const {status} = msg;
                 if (!backfillStatus) {
-                  // Publish the current status every 5 seconds
+                  // Start publishing the status every 3 seconds.
                   backfillStatus = status;
                   statusPublisher?.publish(
                     lc,
@@ -140,28 +140,25 @@ export class IncrementalSyncer {
                           }
                         : {},
                   );
-                } else if (status.rows < status.totalRows) {
-                  backfillStatus = status; // Update the current status
-                } else {
-                  backfillStatus = undefined;
-
-                  // Publish the final status
-                  const finalStatus = {
-                    ...status,
-                    table: msg.relation.name,
-                    columns: [...msg.relation.rowKey.columns, ...msg.columns],
-                  };
-                  statusPublisher?.publish(
-                    lc,
-                    'Replicating',
-                    `Backfilled ${msg.relation.name} table`,
-                    0,
-                    () => ({downloadStatus: [finalStatus]}),
-                  );
                 }
+                backfillStatus = status; // Update the current status
               }
 
               const result = processor.processMessage(lc, message);
+              if (result?.completedBackfill) {
+                // Publish the final status
+                const status = result.completedBackfill;
+                statusPublisher?.publish(
+                  lc,
+                  'Replicating',
+                  `Backfilled ${status.table} table`,
+                  0,
+                  () => ({downloadStatus: [status]}),
+                );
+                backfillStatus = undefined;
+              } else if (result?.schemaUpdated) {
+                statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
+              }
               if (result?.watermark && result?.changeLogUpdated) {
                 void this.#notifier.notifySubscribers({state: 'version-ready'});
               }
