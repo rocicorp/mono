@@ -1425,8 +1425,14 @@ function takeTest(t: TakeTest): TakeTestResults {
   const {partitionKey} = t;
   const take = new Take(snitch, storage, t.limit, partitionKey);
   if (t.partitionKey === undefined) {
-    assert(t.partitionValues.length === 1);
-    assert(t.partitionValues[0] === undefined);
+    assert(
+      t.partitionValues.length === 1,
+      'Expected exactly one partition value when partitionKey is undefined',
+    );
+    assert(
+      t.partitionValues[0] === undefined,
+      'Expected partition value to be undefined when partitionKey is undefined',
+    );
   }
   const results: TakeTestResults = {
     partitions: [],

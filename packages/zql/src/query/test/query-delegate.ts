@@ -110,7 +110,7 @@ export class QueryDelegateImpl<TContext = undefined> extends QueryDelegateBase {
     const query = this.addedServerQueries.find(({ast: otherAST}) =>
       deepEqual(otherAST, ast),
     );
-    assert(query);
+    assert(query, 'Expected matching server query for updateServerQuery');
     query.ttl = ttl;
   }
 
@@ -120,7 +120,7 @@ export class QueryDelegateImpl<TContext = undefined> extends QueryDelegateBase {
         name === customQueryID.name &&
         (args === undefined || deepEqual(args, customQueryID.args)),
     );
-    assert(query);
+    assert(query, 'Expected matching server query for updateCustomQuery');
     query.ttl = ttl;
   }
 

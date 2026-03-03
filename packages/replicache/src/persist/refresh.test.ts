@@ -192,7 +192,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(refreshResult);
+    assert(refreshResult, 'Expected refreshResult to be defined');
     expect(Object.fromEntries(refreshResult.diffs)).toEqual({});
     const hashes = [
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
@@ -242,7 +242,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(refreshResult);
+    assert(refreshResult, 'Expected refreshResult to be defined');
     const hashes = [
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     ];
@@ -279,7 +279,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(refreshResult);
+    assert(refreshResult, 'Expected refreshResult to be defined');
 
     expect(Object.fromEntries(refreshResult.diffs)).toEqual({
       '': [
@@ -390,7 +390,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(refreshResult);
+    assert(refreshResult, 'Expected refreshResult to be defined');
     expect(Object.fromEntries(refreshResult.diffs)).toEqual({
       '': [
         {
@@ -454,7 +454,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(refreshResult);
+    assert(refreshResult, 'Expected refreshResult to be defined');
     expect(Object.fromEntries(refreshResult.diffs)).toEqual({
       '': [
         {
@@ -831,7 +831,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(refreshResult);
+    assert(refreshResult, 'Expected refreshResult to be defined');
     expect(Object.fromEntries(refreshResult.diffs)).toEqual({
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });

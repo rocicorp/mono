@@ -183,7 +183,10 @@ function recoverMutationsFromPerdag(
   options: MutationRecoveryOptions,
   perdag: Store,
 ): Promise<void> {
-  assert(database.replicacheFormatVersion >= FormatVersion.DD31);
+  assert(
+    database.replicacheFormatVersion >= FormatVersion.DD31,
+    'Expected replicacheFormatVersion >= DD31 for mutation recovery',
+  );
   return recoverMutationsFromPerdagDD31(database, options, perdag);
 }
 
@@ -278,7 +281,10 @@ async function recoverMutationsOfClientGroupDD31(
   options: MutationRecoveryOptions,
   formatVersion: FormatVersion,
 ): Promise<ClientGroupMap | undefined> {
-  assert(database.replicacheFormatVersion >= FormatVersion.DD31);
+  assert(
+    database.replicacheFormatVersion >= FormatVersion.DD31,
+    'Expected replicacheFormatVersion >= DD31 for client group mutation recovery',
+  );
 
   const {
     delegate,
@@ -348,8 +354,11 @@ async function recoverMutationsOfClientGroupDD31(
     const pushSucceeded = await wrapInOnlineCheck(async () => {
       const {result: pusherResult} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
-          assert(clientID);
-          assert(lazyDagForOtherClientGroup);
+          assert(clientID, 'Expected clientID to be defined');
+          assert(
+            lazyDagForOtherClientGroup,
+            'Expected lazyDagForOtherClientGroup to be defined',
+          );
           const pusherResult = await push(
             requestID,
             lazyDagForOtherClientGroup,
@@ -407,7 +416,7 @@ async function recoverMutationsOfClientGroupDD31(
     const pullSucceeded = await wrapInOnlineCheck(async () => {
       const {result: beginPullResponse} = await wrapInReauthRetries(
         async (requestID: string, requestLc: LogContext) => {
-          assert(clientID);
+          assert(clientID, 'Expected clientID to be defined');
           const beginPullResponse = await beginPullV1(
             await delegate.profileID,
             clientID,
@@ -457,7 +466,10 @@ async function recoverMutationsOfClientGroupDD31(
 
     // TODO(arv): Refactor to make pullResponse a const.
     // pullResponse must be non undefined because pullSucceeded is true.
-    assert(okPullResponse);
+    assert(
+      okPullResponse,
+      'Expected okPullResponse to be defined after successful pull',
+    );
     lc.debug?.(
       `Client group ${selfClientGroupID} recovered mutations for client group ${clientGroupID}.  Details`,
       {
@@ -474,7 +486,7 @@ async function recoverMutationsOfClientGroupDD31(
         return clientGroups;
       }
 
-      assert(okPullResponse);
+      assert(okPullResponse, 'Expected okPullResponse to be defined');
       const lastServerAckdMutationIDsUpdates: Record<ClientID, number> = {};
       let anyMutationIDsUpdated = false;
       for (const [clientID, lastMutationIDChange] of Object.entries(

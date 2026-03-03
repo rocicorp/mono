@@ -448,8 +448,14 @@ describe('MutatorProxy', () => {
 
       expect(serverResult.type).toBe('error');
 
-      assert(serverResult.type === 'error');
-      assert(serverResult.error.type === 'app');
+      assert(
+        serverResult.type === 'error',
+        'Expected server result type to be error',
+      );
+      assert(
+        serverResult.error.type === 'app',
+        'Expected server error type to be app',
+      );
 
       expect(serverResult.error.message).toBe('validation error');
       expect(serverResult.error.details).toEqual({

@@ -457,7 +457,7 @@ test.skip('Parameterized get deep read only object/array [type checking only]', 
     mutators: {
       mut: async (tx: WriteTransaction) => {
         const v = await tx.get<T>('x');
-        assert(v);
+        assert(v, 'Expected value for key "x" to be defined');
         // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
         v.x = [42];
         // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -467,7 +467,7 @@ test.skip('Parameterized get deep read only object/array [type checking only]', 
   });
   await rep.query(async tx => {
     const v = await tx.get<T>('x');
-    assert(v);
+    assert(v, 'Expected value for key "x" to be defined');
     // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
     v.x = [42];
     // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)

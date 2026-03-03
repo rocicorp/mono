@@ -504,8 +504,11 @@ describe('integration', {timeout: 30000}, () => {
   type Envs = [NodeJS.ProcessEnv] | [NodeJS.ProcessEnv, NodeJS.ProcessEnv];
 
   async function startZero(envs: Envs) {
-    assert(zeros.length === 0);
-    assert(zerosExited.length === 0);
+    assert(zeros.length === 0, 'Expected zeros to be empty before starting');
+    assert(
+      zerosExited.length === 0,
+      'Expected zerosExited to be empty before starting',
+    );
 
     let i = 0;
     for (const env of envs) {

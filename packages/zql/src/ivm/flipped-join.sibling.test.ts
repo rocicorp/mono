@@ -1097,8 +1097,11 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
 });
 
 function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
-  assert(t.sources.length > 0);
-  assert(t.joins.length === t.sources.length - 1);
+  assert(t.sources.length > 0, 'Expected at least one source');
+  assert(
+    t.joins.length === t.sources.length - 1,
+    'Expected joins.length to equal sources.length - 1',
+  );
 
   const log: SnitchMessage[] = [];
 

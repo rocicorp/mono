@@ -21,7 +21,7 @@ const t = <T>(s: v.Type<T>, val: unknown, message?: string) => {
   }
 
   if (message !== undefined) {
-    assert(ex instanceof TypeError);
+    assert(ex instanceof TypeError, 'Expected ex to be a TypeError');
     expect(ex.message).toBe(message);
 
     expect(r1.ok).toBe(false);

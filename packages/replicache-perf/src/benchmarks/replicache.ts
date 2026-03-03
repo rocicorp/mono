@@ -140,7 +140,10 @@ export function benchmarkRefresh(opts: {
   numMutationsRebased: number;
   indexes?: number;
 }): Benchmark {
-  assert(opts.numKeysPerMutation < opts.numKeysPersisted);
+  assert(
+    opts.numKeysPerMutation < opts.numKeysPersisted,
+    'Expected numKeysPerMutation to be less than numKeysPersisted',
+  );
   const repName = makeRepName();
   const repsToClose: ReplicacheImpl[] = [];
   return {
@@ -687,9 +690,17 @@ export function benchmarkWriteSubRead(opts: {
 
       subs.forEach(c => c());
 
-      assert(onDataCallCount === numSubsTotal + numSubsDirty);
+      assert(
+        onDataCallCount === numSubsTotal + numSubsDirty,
+        () =>
+          `Expected onDataCallCount (${onDataCallCount}) to equal numSubsTotal + numSubsDirty (${numSubsTotal + numSubsDirty})`,
+      );
       for (const [changeKey, changeValue] of Object.entries(changes)) {
-        assert(deepEqual(changeValue, dataFromSubscribe[changeKey]));
+        assert(
+          deepEqual(changeValue, dataFromSubscribe[changeKey]),
+          () =>
+            `Expected subscription data for key '${changeKey}' to match the change value`,
+        );
       }
     },
   };
@@ -720,7 +731,7 @@ function benchmarkTmcw(kind: 'populate' | 'persist'): Benchmark {
         },
       }));
 
-      assert(updates);
+      assert(updates, 'Expected updates to be defined');
 
       // Wait for init.
       await rep.clientGroupID;

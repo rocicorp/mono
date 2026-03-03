@@ -103,8 +103,11 @@ class RefCountUpdates {
     );
 
     if (this.#isLazyDelegate) {
-      assert(this.#delegate.areRefsCounted);
-      assert(this.#refsCounted);
+      assert(
+        this.#delegate.areRefsCounted,
+        'Expected delegate.areRefsCounted to be defined',
+      );
+      assert(this.#refsCounted, 'Expected refsCounted to be defined');
       let refCountsUpdated;
       do {
         refCountsUpdated = false;

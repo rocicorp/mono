@@ -1104,8 +1104,8 @@ describe('getQuery', () => {
     expect(query1).toBe(queries.getUser);
     expect(query2).toBe(queries.nested.getBar);
 
-    assert(query1);
-    assert(query2);
+    assert(query1, 'Expected query1 to be defined');
+    assert(query2, 'Expected query2 to be defined');
 
     // The runtime of this property is not the same as the type.
     expect(query1['~']).toEqual('Query');

@@ -81,7 +81,10 @@ describe('dag with only memory-only hashes gathers everything', () => {
 
     await mb.addLocal(clientID);
     await testGatheredChunks();
-    assert(formatVersion >= FormatVersion.DD31);
+    assert(
+      formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
 
     await mb.addSnapshot(undefined, clientID);
     await testGatheredChunks();
@@ -126,7 +129,10 @@ describe('dag with some persisted hashes and some memory-only hashes on top', ()
         originalHash: null,
         timestamp: 42,
       };
-      assert(formatVersion >= FormatVersion.DD31);
+      assert(
+        formatVersion >= FormatVersion.DD31,
+        'Expected formatVersion >= DD31',
+      );
       const meta = {
         type: MetaType.LocalDD31,
         ...metaBase,
@@ -195,7 +201,10 @@ describe('dag with some permanent hashes and some memory-only hashes on top w in
     });
 
     mb.chain = pb.chain.slice();
-    assert(formatVersion >= FormatVersion.DD31);
+    assert(
+      formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
     await mb.addLocal(clientID, [['c', {name: 'c-name'}]]);
 
     await withRead(memdag, async dagRead => {
