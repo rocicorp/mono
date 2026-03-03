@@ -16,6 +16,7 @@ import {SchemaIncompatibilityError} from '../common/backfill-manager.ts';
 import type {
   BackfillCompleted,
   BackfillRequest,
+  DownloadStatus,
   JSONValue,
   MessageBackfill,
 } from '../protocol/current.ts';
@@ -25,7 +26,8 @@ import {
 } from './backfill-metadata.ts';
 import {
   createReplicationSlot,
-  makeSelectPublishedStmt,
+  makeDownloadStatements,
+  type DownloadStatements,
 } from './initial-sync.ts';
 import {toStateVersionString} from './lsn.ts';
 import {getPublicationInfo} from './schema/published.ts';
@@ -86,7 +88,7 @@ export async function* streamBackfill(
       lc,
       tx,
       backfill,
-      makeSelectPublishedStmt(tableSpec, cols),
+      makeDownloadStatements(tableSpec, cols),
       cols.map(col => types.getTypeParser(tableSpec.columns[col].typeOID)),
       flushThresholdBytes,
     );
@@ -120,18 +122,32 @@ async function* stream(
   lc: LogContext,
   tx: TransactionPool,
   backfill: BackfillParams,
-  selectStmt: string,
+  {select, getTotalRows, getTotalBytes}: DownloadStatements,
   colParsers: TypeParser[],
   flushThresholdBytes: number,
 ): AsyncGenerator<MessageBackfill | BackfillCompleted> {
   const start = performance.now();
-  lc.info?.(`Starting backfill copy stream:`, selectStmt);
+  const [rows, bytes] = await tx.processReadTask(sql =>
+    Promise.all([
+      sql.unsafe<{totalRows: bigint}[]>(getTotalRows),
+      sql.unsafe<{totalBytes: bigint}[]>(getTotalBytes),
+    ]),
+  );
+  const status: DownloadStatus = {
+    rows: 0,
+    totalRows: Number(rows[0].totalRows),
+    totalBytes: Number(bytes[0].totalBytes),
+  };
+
+  let elapsed = (performance.now() - start).toFixed(3);
+  lc.info?.(`Computed total rows and bytes for: ${select} (${elapsed} ms)`, {
+    status,
+  });
   const copyStream = await tx.processReadTask(sql =>
-    sql.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
+    sql.unsafe(`COPY (${select}) TO STDOUT`).readable(),
   );
 
   const tsvParser = new TsvParser();
-  let totalRows = 0;
   let totalBytes = 0;
   let totalMsgs = 0;
   let rowValues: JSONValue[][] = [];
@@ -140,7 +156,7 @@ async function* stream(
   const logFlushed = () => {
     lc.debug?.(
       `Flushed ${rowValues.length} rows, ${bufferedBytes} bytes ` +
-        `(total: rows=${totalRows}, msgs=${totalMsgs}, bytes=${totalBytes})`,
+        `(total: rows=${status.rows}, msgs=${totalMsgs}, bytes=${totalBytes})`,
     );
   };
 
@@ -155,7 +171,7 @@ async function* stream(
 
       if (++col === colParsers.length) {
         rowValues.push(row);
-        totalRows++;
+        status.rows++;
         row = Array.from({length: colParsers.length});
         col = 0;
       }
@@ -164,7 +180,7 @@ async function* stream(
     totalBytes += chunk.byteLength;
 
     if (bufferedBytes >= flushThresholdBytes) {
-      yield {tag: 'backfill', ...backfill, rowValues};
+      yield {tag: 'backfill', ...backfill, rowValues, status};
       totalMsgs++;
       logFlushed();
       rowValues = [];
@@ -174,16 +190,16 @@ async function* stream(
 
   // Flush the last batch of rows.
   if (rowValues.length > 0) {
-    yield {tag: 'backfill', ...backfill, rowValues};
+    yield {tag: 'backfill', ...backfill, rowValues, status};
     totalMsgs++;
     logFlushed();
   }
 
-  yield {tag: 'backfill-completed', ...backfill};
-  const elapsed = performance.now() - start;
+  yield {tag: 'backfill-completed', ...backfill, status};
+  elapsed = (performance.now() - start).toFixed(3);
   lc.info?.(
-    `Finished streaming ${totalRows} rows, ${totalMsgs} msgs, ${totalBytes} bytes ` +
-      `(${elapsed.toFixed(3)} ms)`,
+    `Finished streaming ${status.rows} rows, ${totalMsgs} msgs, ${totalBytes} bytes ` +
+      `(${elapsed} ms)`,
   );
 }
 

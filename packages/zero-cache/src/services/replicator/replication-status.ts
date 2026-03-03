@@ -5,6 +5,7 @@ import type {
   ReplicatedIndex,
   ReplicatedTable,
   ReplicationStage,
+  ReplicationState,
   ReplicationStatusEvent,
   Status,
 } from '../../../../zero-events/src/status.ts';
@@ -14,7 +15,6 @@ import type {LiteTableSpec} from '../../db/specs.ts';
 import {
   makeErrorDetails,
   publishCriticalEvent,
-  publishEvent,
 } from '../../observability/events.ts';
 
 const byKeys = (a: [string, unknown], b: [string, unknown]) =>
@@ -22,10 +22,12 @@ const byKeys = (a: [string, unknown], b: [string, unknown]) =>
 
 export class ReplicationStatusPublisher {
   readonly #db: Database;
+  readonly #publish: typeof publishCriticalEvent;
   #timer: NodeJS.Timeout | undefined;
 
-  constructor(db: Database) {
+  constructor(db: Database, publishFn = publishCriticalEvent) {
     this.#db = db;
+    this.#publish = publishFn;
   }
 
   publish(
@@ -33,16 +35,29 @@ export class ReplicationStatusPublisher {
     stage: ReplicationStage,
     description?: string,
     interval = 0,
+    extraState?: () => Partial<ReplicationState>,
+    now = new Date(),
   ): this {
     this.stop();
-    publishEvent(
+    const event = replicationStatusEvent(
       lc,
-      replicationStatusEvent(lc, this.#db, stage, 'OK', description),
+      this.#db,
+      stage,
+      'OK',
+      description,
+      now,
     );
+    if (event.state) {
+      event.state = {
+        ...event.state,
+        ...extraState?.(),
+      };
+    }
+    void this.#publish(lc, event);
 
     if (interval) {
       this.#timer = setInterval(
-        () => this.publish(lc, stage, description, interval),
+        () => this.publish(lc, stage, description, interval, extraState),
         interval,
       );
     }
@@ -56,7 +71,7 @@ export class ReplicationStatusPublisher {
   ): Promise<never> {
     this.stop();
     const event = replicationStatusError(lc, stage, 'ERROR', this.#db);
-    await publishCriticalEvent(lc, event);
+    await this.#publish(lc, event);
     throw e;
   }
 
@@ -106,6 +121,7 @@ export function replicationStatusEvent(
   description?: string,
   now = new Date(),
 ): ReplicationStatusEvent {
+  const start = performance.now();
   try {
     return {
       type: 'zero/events/status/replication/v1',
@@ -135,6 +151,9 @@ export function replicationStatusEvent(
         replicaSize: 0,
       },
     };
+  } finally {
+    const elapsed = (performance.now() - start).toFixed(3);
+    lc.debug?.(`computed schema for replication event (${elapsed} ms)`);
   }
 }
 
@@ -143,8 +162,6 @@ function getReplicatedTables(db: Database): ReplicatedTable[] {
   const clientSchema = computeZqlSpecs(
     createSilentLogContext(), // avoid logging warnings about indexes
     db,
-    // TODO: Consider exposing backfilling columns with an indication
-    //       of backfill status.
     {includeBackfillingColumns: false},
     new Map(),
     fullTables,

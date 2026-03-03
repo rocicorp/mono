@@ -3,6 +3,7 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
+import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import {
   PROTOCOL_VERSION,
   type ChangeStreamer,
@@ -97,6 +98,8 @@ export class IncrementalSyncer {
           `Replicating from ${watermark}`,
         );
 
+        let backfillStatus: DownloadStatus | undefined;
+
         for await (const message of downstream) {
           this.#replicationEvents.add(1);
           switch (message[0]) {
@@ -110,10 +113,55 @@ export class IncrementalSyncer {
               this.stop(lc, message[1]);
               break;
             default: {
-              const result = processor.processMessage(lc, message);
-              if (result?.schemaUpdated) {
-                statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
+              const msg = message[1];
+              if (msg.tag === 'backfill' && msg.status) {
+                const {status} = msg;
+                if (!backfillStatus) {
+                  // Publish the current status every 5 seconds
+                  backfillStatus = status;
+                  statusPublisher?.publish(
+                    lc,
+                    'Replicating',
+                    `Backfilling ${msg.relation.name} table`,
+                    3000,
+                    () =>
+                      backfillStatus
+                        ? {
+                            downloadStatus: [
+                              {
+                                ...backfillStatus,
+                                table: msg.relation.name,
+                                columns: [
+                                  ...msg.relation.rowKey.columns,
+                                  ...msg.columns,
+                                ],
+                              },
+                            ],
+                          }
+                        : {},
+                  );
+                } else if (status.rows < status.totalRows) {
+                  backfillStatus = status; // Update the current status
+                } else {
+                  backfillStatus = undefined;
+
+                  // Publish the final status
+                  const finalStatus = {
+                    ...status,
+                    table: msg.relation.name,
+                    columns: [...msg.relation.rowKey.columns, ...msg.columns],
+                  };
+                  statusPublisher?.publish(
+                    lc,
+                    'Replicating',
+                    `Backfilled ${msg.relation.name} table`,
+                    0,
+                    () => ({downloadStatus: [finalStatus]}),
+                  );
+                }
               }
+
+              const result = processor.processMessage(lc, message);
               if (result?.watermark && result?.changeLogUpdated) {
                 void this.#notifier.notifySubscribers({state: 'version-ready'});
               }
@@ -128,6 +176,7 @@ export class IncrementalSyncer {
       } finally {
         downstream?.cancel();
         unregister();
+        statusPublisher?.stop();
       }
       await this.#state.backoff(lc, err);
     }

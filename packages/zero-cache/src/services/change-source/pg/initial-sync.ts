@@ -10,6 +10,7 @@ import postgres from 'postgres';
 import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
+import type {DownloadStatus} from '../../../../../zero-events/src/status.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,
@@ -180,16 +181,24 @@ export async function initialSync(
     );
     try {
       createLiteTables(tx, tables, initialVersion);
+      const downloads = await Promise.all(
+        tables.map(spec =>
+          copiers.processReadTask((db, lc) =>
+            getInitialDownloadState(lc, db, spec),
+          ),
+        ),
+      );
       statusPublisher.publish(
         lc,
         'Initializing',
         `Copying ${numTables} upstream tables at version ${initialVersion}`,
         5000,
+        () => ({downloadStatus: downloads.map(({status}) => status)}),
       );
 
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
-        tables.map(table =>
+        downloads.map(table =>
           copiers.processReadTask((db, lc) =>
             copy(lc, table, copyPool, db, tx),
           ),
@@ -410,31 +419,79 @@ const MB = 1024 * 1024;
 const MAX_BUFFERED_ROWS = 10_000;
 const BUFFERED_SIZE_THRESHOLD = 8 * MB;
 
-export function makeSelectPublishedStmt(
+export type DownloadStatements = {
+  select: string;
+  getTotalRows: string;
+  getTotalBytes: string;
+};
+
+export function makeDownloadStatements(
   table: PublishedTableSpec,
-  columns: string[],
-) {
+  cols: string[],
+): DownloadStatements {
   const filterConditions = Object.values(table.publications)
     .map(({rowFilter}) => rowFilter)
     .filter(f => !!f); // remove nulls
-  return (
-    /*sql*/ `
-    SELECT ${columns.map(id).join(',')} FROM ${id(table.schema)}.${id(table.name)}` +
-    (filterConditions.length === 0
+  const where =
+    filterConditions.length === 0
       ? ''
-      : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`)
-  );
+      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
+  const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)} ${where}`;
+  const totalBytes = `(${cols.map(col => `SUM(COALESCE(pg_column_size(${id(col)}), 0))`).join(' + ')})`;
+  const stmts = {
+    select: /*sql*/ `SELECT ${cols.map(id).join(',')} ${fromTable}`,
+    getTotalRows: /*sql*/ `SELECT COUNT(*) AS "totalRows" ${fromTable}`,
+    getTotalBytes: /*sql*/ `SELECT ${totalBytes} AS "totalBytes" ${fromTable}`,
+  };
+  return stmts;
+}
+
+type DownloadState = {
+  spec: PublishedTableSpec;
+  status: DownloadStatus;
+};
+
+async function getInitialDownloadState(
+  lc: LogContext,
+  sql: PostgresDB,
+  spec: PublishedTableSpec,
+): Promise<DownloadState> {
+  const start = performance.now();
+  const table = liteTableName(spec);
+  const columns = Object.keys(spec.columns);
+  const stmts = makeDownloadStatements(spec, columns);
+  const rowsResult = sql
+    .unsafe<{totalRows: bigint}[]>(stmts.getTotalRows)
+    .execute();
+  const bytesResult = sql
+    .unsafe<{totalBytes: bigint}[]>(stmts.getTotalBytes)
+    .execute();
+
+  const state: DownloadState = {
+    spec,
+    status: {
+      table,
+      columns,
+      rows: 0,
+      totalRows: Number((await rowsResult)[0].totalRows),
+      totalBytes: Number((await bytesResult)[0].totalBytes),
+    },
+  };
+  const elapsed = (performance.now() - start).toFixed(3);
+  lc.info?.(`Computed initial download state for ${table} (${elapsed} ms)`, {
+    state: state.status,
+  });
+  return state;
 }
 
 async function copy(
   lc: LogContext,
-  table: PublishedTableSpec,
+  {spec: table, status}: DownloadState,
   dbClient: PostgresDB,
   from: PostgresTransaction,
   to: Database,
 ) {
   const start = performance.now();
-  let rows = 0;
   let flushTime = 0;
 
   const tableName = liteTableName(table);
@@ -455,7 +512,7 @@ async function copy(
     insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
   );
 
-  const selectStmt = makeSelectPublishedStmt(table, columnNames);
+  const {select} = makeDownloadStatements(table, columnNames);
   const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 
@@ -485,7 +542,7 @@ async function copy(
       pendingValues[i] = undefined as unknown as LiteValueType;
     }
     pendingSize = 0;
-    rows += flushedRows;
+    status.rows += flushedRows;
 
     const elapsed = performance.now() - start;
     flushTime += elapsed;
@@ -494,7 +551,7 @@ async function copy(
     );
   }
 
-  lc.info?.(`Starting copy stream of ${tableName}:`, selectStmt);
+  lc.info?.(`Starting copy stream of ${tableName}:`, select);
   const pgParsers = await getTypeParsers(dbClient, {returnJsonAsString: true});
   const parsers = columnSpecs.map(c => {
     const pgParse = pgParsers.getTypeParser(c.typeOID);
@@ -510,7 +567,7 @@ async function copy(
   let col = 0;
 
   await pipeline(
-    await from.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
+    await from.unsafe(`COPY (${select}) TO STDOUT`).readable(),
     new Writable({
       highWaterMark: BUFFERED_SIZE_THRESHOLD,
 
@@ -554,8 +611,8 @@ async function copy(
 
   const elapsed = performance.now() - start;
   lc.info?.(
-    `Finished copying ${rows} rows into ${tableName} ` +
+    `Finished copying ${status.rows} rows into ${tableName} ` +
       `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
   );
-  return {rows, flushTime};
+  return {rows: status.rows, flushTime};
 }
