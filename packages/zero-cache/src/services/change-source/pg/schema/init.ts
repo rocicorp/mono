@@ -223,14 +223,8 @@ function getIncrementalMigrations(
     },
 
     // Upgrade DDL trigger to log more info to PG logs.
-    14: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(lc, sql, {...shard, publications});
-        lc.info?.(`Upgraded DDL event triggers`);
-      },
-    },
+    // (subsumed by v16)
+    14: {},
 
     // Add initialSyncContext column to replicas table.
     15: {
@@ -240,6 +234,17 @@ function getIncrementalMigrations(
             ADD COLUMN "initialSyncContext" JSON,
             ADD COLUMN "subscriberContext" JSON
         `;
+      },
+    },
+
+    // Upgrade DDL trigger to fire on all ALTER TABLE statements
+    // to catch the *removal* of a table from the published set.
+    16: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
       },
     },
   };

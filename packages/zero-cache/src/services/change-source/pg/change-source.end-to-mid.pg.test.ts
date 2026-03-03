@@ -64,6 +64,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     );
 
     CREATE SCHEMA IF NOT EXISTS my;
+    CREATE SCHEMA IF NOT EXISTS private;
 
     CREATE UNIQUE INDEX foo_key ON foo (id);
     CREATE PUBLICATION zero_some_public FOR TABLE foo (id, int);
@@ -1233,6 +1234,25 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           {
             tag: 'drop-table',
             id: {schema: 'public', name: 'boo'},
+          },
+        ],
+      ],
+      {},
+      [],
+      [],
+    ],
+    [
+      'remove table from published schema',
+      `ALTER TABLE your.bar SET SCHEMA private`,
+      [
+        [
+          {
+            tag: 'drop-index',
+            id: {schema: 'your', name: 'bar_pkey'},
+          },
+          {
+            tag: 'drop-table',
+            id: {schema: 'your', name: 'bar'},
           },
         ],
       ],

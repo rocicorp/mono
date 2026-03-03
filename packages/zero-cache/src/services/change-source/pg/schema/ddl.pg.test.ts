@@ -90,7 +90,6 @@ describe('change-source/tables/ddl', () => {
     CREATE TABLE pub.yoo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
 
     CREATE TABLE private.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
-    CREATE TABLE private.yoo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
 
     CREATE INDEX foo_custom_index ON pub.foo (description, name);
     CREATE INDEX yoo_custom_index ON pub.yoo (description, name);
@@ -502,6 +501,22 @@ describe('change-source/tables/ddl', () => {
               unique: true,
             },
           ),
+        },
+      },
+    ],
+    [
+      'remove table from published schema',
+      `ALTER TABLE pub.yoo SET SCHEMA private`,
+      {
+        context: {
+          query: 'ALTER TABLE pub.yoo SET SCHEMA private',
+        },
+        type: 'ddlUpdate',
+        version: 1,
+        event: {tag: 'ALTER TABLE'},
+        schema: {
+          tables: dropped(DDL_START.schema.tables, 2, 1),
+          indexes: dropped(DDL_START.schema.indexes, 5, 3),
         },
       },
     ],
@@ -1338,28 +1353,8 @@ describe('change-source/tables/ddl', () => {
       [/ignoring CREATE INDEX .*private.foo_name_index/],
     ],
     [
-      'ALTER TABLE private.foo RENAME TO food',
-      [/ignoring ALTER TABLE .*private.food/],
-    ],
-    [
-      'ALTER TABLE private.foo ADD username TEXT UNIQUE',
-      [/ignoring ALTER TABLE .*private.foo/],
-    ],
-    [
-      `ALTER TABLE private.foo ADD bar text DEFAULT 'boo'`,
-      [/ignoring ALTER TABLE .*private.foo/],
-    ],
-    [
-      `ALTER TABLE private.foo ALTER name SET DEFAULT 'alice'`,
-      [/ignoring ALTER TABLE .*private.foo/],
-    ],
-    [
       `ALTER TABLE private.foo RENAME name to handle`,
       [/ignoring ALTER TABLE .*private.foo.handle/],
-    ],
-    [
-      `ALTER TABLE private.foo drop description`,
-      [/ignoring ALTER TABLE .*private.foo/],
     ],
     [
       `ALTER PUBLICATION nonzeropub ADD TABLE pub.yoo`,

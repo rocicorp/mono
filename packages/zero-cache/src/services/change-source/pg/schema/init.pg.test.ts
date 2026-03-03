@@ -21,8 +21,8 @@ const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 15,
-  schemaVersion: 15,
+  dataVersion: 16,
+  schemaVersion: 16,
   minSafeVersion: 1,
   lock: 'v',
 } as const;
