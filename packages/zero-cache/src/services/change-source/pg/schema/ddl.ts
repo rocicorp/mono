@@ -171,7 +171,12 @@ BEGIN
 
   -- Filter DDL updates that are not relevant to the shard (i.e. publications) when possible.
 
-  IF target.object_type = 'table' OR target.object_type = 'table column' THEN
+  -- Note: ALTER TABLE statements may *remove* the table from the set of published
+  --       tables, and there is no way to determine if the table "used to be" in the
+  --       set. Thus, all ALTER TABLE statements must produce a ddl update, similar to
+  --       any DROP * statement.
+  IF (target.object_type = 'table' AND tag != 'ALTER TABLE') 
+     OR target.object_type = 'table column' THEN
     SELECT ns.nspname AS "schema", c.relname AS "name" FROM pg_class AS c
       JOIN pg_namespace AS ns ON c.relnamespace = ns.oid
       JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = c.relname
