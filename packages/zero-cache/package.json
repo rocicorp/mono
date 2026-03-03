@@ -71,7 +71,7 @@
     "zqlite": "0.0.0"
   },
   "devDependencies": {
-    "@rocicorp/zero-events": "0.0.3",
+    "@rocicorp/zero-events": "0.0.4",
     "@testcontainers/postgresql": "^10.9.0",
     "@types/node": "^22.10.5",
     "@types/pg-format": "^1.0.5",
