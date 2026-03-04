@@ -118,6 +118,10 @@
       "types": "./out/zero/src/zero.d.ts",
       "default": "./out/zero/src/zero.js"
     },
+    "./ast-to-zql": {
+      "types": "./out/ast-to-zql/src/ast-to-zql.d.ts",
+      "default": "./out/ast-to-zql/src/ast-to-zql.js"
+    },
     "./bindings": {
       "types": "./out/zero/src/bindings.d.ts",
       "default": "./out/zero/src/bindings.js"
