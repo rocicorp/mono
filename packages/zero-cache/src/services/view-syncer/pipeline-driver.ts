@@ -14,8 +14,8 @@ import {
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
 import {
-  type Input,
   skipYields,
+  type Input,
   type Storage,
 } from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
@@ -135,6 +135,7 @@ export class PipelineDriver {
   readonly #logConfig: LogConfig;
   readonly #config: ZeroConfig | undefined;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
+  readonly #allTableNames = new Set<string>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   readonly #yieldThresholdMs: () => number;
   #streamer: Streamer | null = null;
@@ -214,6 +215,7 @@ export class PipelineDriver {
     }
     this.#pipelines.clear();
     this.#tables.clear();
+    this.#allTableNames.clear();
     this.#initAndResetCommon(clientSchema);
   }
 
@@ -233,6 +235,10 @@ export class PipelineDriver {
       this.#tableSpecs,
       fullTables,
     );
+    this.#allTableNames.clear();
+    for (const table of fullTables.keys()) {
+      this.#allTableNames.add(table);
+    }
     const primaryKeys = this.#primaryKeys ?? new Map<string, PrimaryKey>();
     this.#primaryKeys = primaryKeys;
     primaryKeys.clear();
@@ -593,7 +599,10 @@ export class PipelineDriver {
       this.initialized(),
       'Pipeline driver must be initialized before advancing',
     );
-    const diff = this.#snapshotter.advance(this.#tableSpecs);
+    const diff = this.#snapshotter.advance(
+      this.#tableSpecs,
+      this.#allTableNames,
+    );
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
       `advance ${prev.version} => ${curr.version}: ${changes} changes`,
