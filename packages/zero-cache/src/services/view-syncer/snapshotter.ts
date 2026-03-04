@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
-import {must} from '../../../../shared/src/must.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
@@ -170,9 +169,12 @@ export class Snapshotter {
    * on `prev` before each iteration, and (2) rollback to the save point after
    * the iteration.
    */
-  advance(tables: Map<string, LiteAndZqlSpec>): SnapshotDiff {
+  advance(
+    syncableTables: Map<string, LiteAndZqlSpec>,
+    allTableNames: Set<string>,
+  ): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
-    return new Diff(this.#appID, tables, prev, curr);
+    return new Diff(this.#appID, syncableTables, allTableNames, prev, curr);
   }
 
   advanceWithoutDiff() {
@@ -379,19 +381,22 @@ class Snapshot {
 
 class Diff implements SnapshotDiff {
   readonly #permissionsTable: string;
-  readonly tables: Map<string, LiteAndZqlSpec>;
+  readonly #syncableTables: Map<string, LiteAndZqlSpec>;
+  readonly #allTableNames: Set<string>;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
 
   constructor(
     appID: string,
-    tables: Map<string, LiteAndZqlSpec>,
+    syncableTables: Map<string, LiteAndZqlSpec>,
+    allTableNames: Set<string>,
     prev: Snapshot,
     curr: Snapshot,
   ) {
     this.#permissionsTable = `${appID}.permissions`;
-    this.tables = tables;
+    this.#syncableTables = syncableTables;
+    this.#allTableNames = allTableNames;
     this.prev = prev;
     this.curr = curr;
     this.changes = curr.numChangesSince(prev.version);
@@ -432,7 +437,14 @@ class Diff implements SnapshotDiff {
                 `table ${table} has been truncated`,
               );
             }
-            const {tableSpec, zqlSpec} = must(this.tables.get(table));
+            const specs = this.#syncableTables.get(table);
+            if (!specs) {
+              if (this.#allTableNames.has(table)) {
+                continue; // skip change log entries for non-syncable tables.
+              }
+              throw new Error(`change for unknown table ${table}`);
+            }
+            const {tableSpec, zqlSpec} = specs;
 
             assert(rowKey !== null, 'rowKey must be present for row changes');
             const nextValue =

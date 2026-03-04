@@ -67,7 +67,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     db = dbFile.connect(lc);
     initReplicationState(db, ['zero_data'], '123');
-    db.exec(`
+    db.exec(/*sql*/ `
       CREATE TABLE "${mutationsTableName}" (
         "clientGroupID"  TEXT,
         "clientID"       TEXT,
@@ -124,19 +124,22 @@ describe('view-syncer/pipeline-driver', () => {
 
       INSERT INTO "uniques" (id, name, _0_version) VALUES ('foo', 'bar', '123');
       INSERT INTO "uniques" (id, name, _0_version) VALUES ('boo', 'dar', '123');
+
+      CREATE TABLE backfilling (id TEXT PRIMARY KEY, _0_version TEXT NOT NULL);
       `);
 
-    // Initialize ColumnMetadata and mark a column as being backfilled,
+    // Initialize ColumnMetadata and mark columns/tables as being backfilled,
     // to verify that it does not appear in the pipeline results.
     populateFromExistingTables(db, listTables(db, false));
-    db.prepare(
-      /*sql*/ `
+    db.exec(/*sql*/ `
       UPDATE "_zero.column_metadata" 
         SET backfill = '{"upstreamID":123}'
         WHERE table_name = 'comments' 
-         AND column_name = 'stillBeingBackfilled'
-      `,
-    ).run();
+         AND column_name = 'stillBeingBackfilled';
+      UPDATE "_zero.column_metadata" 
+        SET backfill = '{"upstreamID":456}'
+        WHERE table_name = 'backfilling' ;
+      `);
     replicator = fakeReplicator(lc, db);
   });
 
@@ -418,6 +421,7 @@ describe('view-syncer/pipeline-driver', () => {
     comments: 'id',
     issueLabels: ['issueID', 'labelID'],
     uniques: 'id',
+    backfilling: 'id',
     [mutationsTableName]: ['clientGroupID', 'clientID', 'mutationID'],
   });
 
@@ -672,6 +676,7 @@ describe('view-syncer/pipeline-driver', () => {
         issueID: '4',
         upvotes: BigInt(Number.MAX_SAFE_INTEGER),
       }),
+      messages.insert('backfilling', {id: 123}), // should be ignored
       messages.insert('issues', {id: '4', closed: 0}),
     );
 
