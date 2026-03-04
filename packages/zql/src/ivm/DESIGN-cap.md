@@ -146,3 +146,9 @@ pks.push(replacementPK);
 this.#storage.set(capStateKey, {size: newSize + 1, pks});   // replacement now in pks
 yield* this.#output.push({type: 'add', node: replacement}, this);
 ```
+
+## Known Limitation: Unpartitioned Fetch Fan-Out
+
+The unpartitioned fetch path (see Fetch section above) scans all source rows matching the fetch constraint and filters by PK set membership. This is problematic when the constraint has high fan-out — e.g., a bot that has commented on every issue. When that bot's author row changes, the `{authorID: botId}` scan touches millions of comment rows just to find the handful in Cap's tracked sets.
+
+In practice, the pipeline timeout mechanism handles this: if a push exceeds the time budget, the pipeline is destroyed and re-hydrated from scratch.

@@ -144,19 +144,38 @@ export class Cap implements Operator {
 
     let size = 0;
     const pks: string[] = [];
-    for (const inputNode of this.#input.fetch(req)) {
-      if (inputNode === 'yield') {
-        yield 'yield';
-        continue;
+    let downstreamEarlyReturn = true;
+    let exceptionThrown = false;
+    try {
+      for (const inputNode of this.#input.fetch(req)) {
+        if (inputNode === 'yield') {
+          yield 'yield';
+          continue;
+        }
+        yield inputNode;
+        pks.push(serializePK(inputNode.row, this.#primaryKey));
+        size++;
+        if (size === this.#limit) {
+          break;
+        }
       }
-      yield inputNode;
-      pks.push(serializePK(inputNode.row, this.#primaryKey));
-      size++;
-      if (size === this.#limit) {
-        break;
+      downstreamEarlyReturn = false;
+    } catch (e) {
+      exceptionThrown = true;
+      throw e;
+    } finally {
+      if (!exceptionThrown) {
+        this.#storage.set(capStateKey, {size, pks});
+        // If it becomes necessary to support downstream early return, this
+        // assert should be removed, and replaced with code that consumes
+        // the input stream until limit is reached or the input stream is
+        // exhausted so that capState is properly hydrated.
+        assert(
+          !downstreamEarlyReturn,
+          'Unexpected early return prevented full hydration',
+        );
       }
     }
-    this.#storage.set(capStateKey, {size, pks});
   }
 
   *push(change: Change): Stream<'yield'> {
@@ -238,6 +257,13 @@ export class Cap implements Operator {
   }
 
   *#pushEditChange(change: EditChange): Stream<'yield'> {
+    assert(
+      !this.#partitionKey ||
+        this.#partitionKey.every(
+          key => change.oldNode.row[key] === change.node.row[key],
+        ),
+      'Unexpected change of partition key',
+    );
     const capStateKey = getCapStateKey(this.#partitionKey, change.oldNode.row);
     const capState = this.#storage.get(capStateKey);
     if (!capState) {
