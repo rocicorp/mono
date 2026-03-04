@@ -3,7 +3,7 @@ import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {type Change, type EditChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
-import type {Node} from './data.ts';
+import type {Comparator, Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -14,7 +14,11 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
-import {constraintMatchesPartitionKey, type PartitionKey} from './take.ts';
+import {
+  constraintMatchesPartitionKey,
+  makePartitionKeyComparator,
+  type PartitionKey,
+} from './take.ts';
 
 type CapState = {
   size: number;
@@ -48,6 +52,7 @@ export class Cap implements Operator {
   readonly #storage: CapStorage;
   readonly #limit: number;
   readonly #partitionKey: PartitionKey | undefined;
+  readonly #partitionKeyComparator: Comparator | undefined;
   readonly #primaryKey: PrimaryKey;
 
   #output: Output = throwOutput;
@@ -64,6 +69,8 @@ export class Cap implements Operator {
     this.#storage = storage as CapStorage;
     this.#limit = limit;
     this.#partitionKey = partitionKey;
+    this.#partitionKeyComparator =
+      partitionKey && makePartitionKeyComparator(partitionKey);
     this.#primaryKey = input.getSchema().primaryKey;
   }
 
@@ -258,10 +265,8 @@ export class Cap implements Operator {
 
   *#pushEditChange(change: EditChange): Stream<'yield'> {
     assert(
-      !this.#partitionKey ||
-        this.#partitionKey.every(
-          key => change.oldNode.row[key] === change.node.row[key],
-        ),
+      !this.#partitionKeyComparator ||
+        this.#partitionKeyComparator(change.oldNode.row, change.node.row) === 0,
       'Unexpected change of partition key',
     );
     const capStateKey = getCapStateKey(this.#partitionKey, change.oldNode.row);
