@@ -93,21 +93,16 @@ export class Cap implements Operator {
       if (capState.size === 0) {
         return;
       }
-      // Counted early-stop: iterate input, yield rows whose PK is in stored set
-      const pkSet = new Set(capState.pks);
-      let remaining = pkSet.size;
-      for (const inputNode of this.#input.fetch(req)) {
-        if (inputNode === 'yield') {
-          yield inputNode;
-          continue;
-        }
-        const pk = serializePK(inputNode.row, this.#primaryKey);
-        if (pkSet.has(pk)) {
-          yield inputNode;
-          remaining--;
-          if (remaining === 0) {
-            return;
+      // PK-based point lookups: fetch each tracked row by its PK directly,
+      // rather than scanning the partition and filtering.
+      for (const pk of capState.pks) {
+        const constraint = deserializePKToConstraint(pk, this.#primaryKey);
+        for (const inputNode of this.#input.fetch({constraint})) {
+          if (inputNode === 'yield') {
+            yield inputNode;
+            continue;
           }
+          yield inputNode;
         }
       }
       return;
@@ -281,4 +276,16 @@ function getCapStateKey(
 
 function serializePK(row: Row, primaryKey: PrimaryKey): string {
   return JSON.stringify(primaryKey.map(k => row[k]));
+}
+
+function deserializePKToConstraint(
+  pk: string,
+  primaryKey: PrimaryKey,
+): Constraint {
+  const values = JSON.parse(pk) as Value[];
+  const constraint: Record<string, Value> = {};
+  for (let i = 0; i < primaryKey.length; i++) {
+    constraint[primaryKey[i]] = values[i];
+  }
+  return constraint;
 }
