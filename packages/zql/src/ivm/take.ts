@@ -753,7 +753,9 @@ export function constraintMatchesPartitionKey(
   return true;
 }
 
-function makePartitionKeyComparator(partitionKey: PartitionKey): Comparator {
+export function makePartitionKeyComparator(
+  partitionKey: PartitionKey,
+): Comparator {
   return (a, b) => {
     for (const key of partitionKey) {
       const cmp = compareValues(a[key], b[key]);
