@@ -58,7 +58,7 @@ The ordering invariant in the pipeline exists so that operators can make decisio
 - **Exists** counts child rows — order irrelevant
 - **Join/FlippedJoin** depend on *parent* ordering, not child ordering
 
-The only operators with hard ordering dependencies (Take, Skip) are not present downstream of Cap.
+Within Cap's subgraph (the EXISTS child pipeline), no operator depends on Cap's output ordering. Cap feeds into a Join as the child input, and from there changes flow as opaque `child` type changes on the parent pipeline. Operators with hard ordering dependencies (Take, Skip) may exist on the parent side but they operate on parent ordering, not child ordering.
 
 ## Consistency During Push
 
