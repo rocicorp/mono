@@ -216,10 +216,14 @@ export class Cap implements Operator {
       }
 
       if (replacement) {
+        // Store state WITHOUT replacement during remove forward,
+        // matching Take's pattern of hiding in-flight changes from re-fetches.
+        this.#storage.set(capStateKey, {size: newSize, pks});
+        yield* this.#output.push(change, this);
+        // Now add replacement to set and forward the add.
         const replacementPK = serializePK(replacement.row, this.#primaryKey);
         pks.push(replacementPK);
         this.#storage.set(capStateKey, {size: newSize + 1, pks});
-        yield* this.#output.push(change, this);
         yield* this.#output.push({type: 'add', node: replacement}, this);
       } else {
         this.#storage.set(capStateKey, {size: newSize, pks});
