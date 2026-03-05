@@ -171,6 +171,7 @@ export async function initialSync(
     const copyPool = pgClient(lc, upstreamURI, {
       max: numWorkers,
       connection: {['application_name']: 'initial-sync-copy-worker'},
+      ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
     });
     const copiers = startTableCopyWorkers(
       lc,
