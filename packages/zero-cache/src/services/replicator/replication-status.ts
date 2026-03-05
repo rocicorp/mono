@@ -70,7 +70,7 @@ export class ReplicationStatusPublisher {
     e: unknown,
   ): Promise<never> {
     this.stop();
-    const event = replicationStatusError(lc, stage, 'ERROR', this.#db);
+    const event = replicationStatusError(lc, stage, e, this.#db);
     await this.#publish(lc, event);
     throw e;
   }
