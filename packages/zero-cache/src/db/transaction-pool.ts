@@ -711,7 +711,10 @@ interface TaskRunner {
 // TODO: Get rid of the timeout stuff. It's no longer needed.
 const IDLE_TIMEOUT_MS = 5_000;
 
-const KEEPALIVE_TIMEOUT_MS = 60_000;
+// This must be less than IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS
+// in run-transaction.ts (1 minute), so that pooled transactions
+// aren't inadvertently killed by PG for being idle.
+const KEEPALIVE_TIMEOUT_MS = 30_000;
 
 const KEEPALIVE_TASK: Task = tx => [tx`SELECT 1`.simple()];
 
