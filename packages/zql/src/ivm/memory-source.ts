@@ -1,4 +1,9 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {
+  assert,
+  assertNumber,
+  assertString,
+  unreachable,
+} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {once} from '../../../shared/src/iterables.ts';
@@ -17,7 +22,7 @@ import {
   type NoSubqueryCondition,
 } from '../builder/filter.ts';
 import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';
-import type {Change} from './change.ts';
+import type {Change, EditChange} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
@@ -25,6 +30,7 @@ import {
   type Constraint,
 } from './constraint.ts';
 import {
+  compareStringUTF8Fast,
   compareValues,
   makeComparator,
   valuesEqual,
@@ -49,6 +55,10 @@ import type {
   SourceInput,
 } from './source.ts';
 import type {Stream} from './stream.ts';
+
+// Shared frozen sentinel for nodes with no relationships. Avoids allocating
+// a fresh {} on every node creation in the fetch and push hot paths.
+const EMPTY_RELATIONSHIPS: Record<string, never> = Object.freeze({});
 
 export type Overlay = {
   epoch: number;
@@ -80,6 +90,12 @@ export type Connection = {
     | undefined;
   readonly debug?: DebugDelegate | undefined;
   lastPushedEpoch: number;
+  /** Pre-computed on connect so #fetch avoids re-deriving it every call. */
+  pkConstraint: Constraint | undefined;
+  /** Per-connection cache of constraint+sort -> Index to skip Map lookups. */
+  indexCache: Map<string, Index>;
+  /** Stringified sort key for this connection, cached to build index cache keys cheaply. */
+  requestedSortKey: string;
 };
 
 /**
@@ -94,6 +110,8 @@ export class MemorySource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   readonly #primaryKey: PrimaryKey;
   readonly #primaryIndexSort: Ordering;
+  /** Cached JSON key for the primary index to avoid repeated JSON.stringify. */
+  readonly #primaryIndexKey: string;
   readonly #indexes: Map<string, Index> = new Map();
   readonly #connections: Connection[] = [];
 
@@ -110,8 +128,9 @@ export class MemorySource implements Source {
     this.#columns = columns;
     this.#primaryKey = primaryKey;
     this.#primaryIndexSort = primaryKey.map(k => [k, 'asc']);
+    this.#primaryIndexKey = JSON.stringify(this.#primaryIndexSort);
     const comparator = makeBoundComparator(this.#primaryIndexSort);
-    this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
+    this.#indexes.set(this.#primaryIndexKey, {
       comparator,
       data: primaryIndexData ?? new BTreeSet<Row>(comparator),
       usedBy: new Set(),
@@ -172,6 +191,7 @@ export class MemorySource implements Source {
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
 
+    const requestedSortKey = sort.map(p => `${p[0]}:${p[1]}`).join('|');
     const connection: Connection = {
       input,
       output: undefined,
@@ -185,6 +205,12 @@ export class MemorySource implements Source {
           }
         : undefined,
       lastPushedEpoch: 0,
+      pkConstraint: primaryKeyConstraintFromFilters(
+        transformedFilters.filters,
+        this.#primaryKey,
+      ),
+      indexCache: new Map(),
+      requestedSortKey,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -207,7 +233,7 @@ export class MemorySource implements Source {
   }
 
   #getPrimaryIndex(): Index {
-    const index = this.#indexes.get(JSON.stringify(this.#primaryIndexSort));
+    const index = this.#indexes.get(this.#primaryIndexKey);
     assert(index, 'Primary index not found');
     return index;
   }
@@ -254,10 +280,7 @@ export class MemorySource implements Source {
     const connectionComparator = (r1: Row, r2: Row) =>
       compareRows(r1, r2) * (req.reverse ? -1 : 1);
 
-    const pkConstraint = primaryKeyConstraintFromFilters(
-      conn.filters?.condition,
-      this.#primaryKey,
-    );
+    const pkConstraint = conn.pkConstraint;
     // The primary key constraint will be more limiting than the constraint
     // so swap out to that if it exists.
     const fetchOrPkConstraint = pkConstraint ?? req.constraint;
@@ -273,15 +296,26 @@ export class MemorySource implements Source {
     // For the special case of constraining by PK, we don't need to worry about
     // any requested sort since there can only be one result. Otherwise we also
     // need the index sorted by the requested sort.
-    if (
+    const includeRequestedSort =
       this.#primaryKey.length > 1 ||
       !fetchOrPkConstraint ||
-      !constraintMatchesPrimaryKey(fetchOrPkConstraint, this.#primaryKey)
-    ) {
+      !constraintMatchesPrimaryKey(fetchOrPkConstraint, this.#primaryKey);
+    if (includeRequestedSort) {
       indexSort.push(...requestedSort);
     }
 
-    const index = this.#getOrCreateIndex(indexSort, conn);
+    let constraintShapeKey = '';
+    if (fetchOrPkConstraint) {
+      for (const key of Object.keys(fetchOrPkConstraint)) {
+        constraintShapeKey += key + '|';
+      }
+    }
+    const indexCacheKey = `${constraintShapeKey}::${includeRequestedSort ? conn.requestedSortKey : 'pk'}`;
+    let index = conn.indexCache.get(indexCacheKey);
+    if (!index) {
+      index = this.#getOrCreateIndex(indexSort, conn);
+      conn.indexCache.set(indexCacheKey, index);
+    }
     const {data, comparator: compare} = index;
     const indexComparator = (r1: Row, r2: Row) =>
       compare(r1, r2) * (req.reverse ? -1 : 1);
@@ -535,31 +569,34 @@ function* genPush(
       unreachable(change);
   }
 
+  // Reuse a small set of objects across the connection loop below to avoid
+  // allocating fresh Node/Change objects per connection per push. The row
+  // fields are overwritten before each use. This is safe because filterPush
+  // and its downstream consumers process each change synchronously within
+  // the generator chain -- yield* completes fully before the next iteration
+  // mutates the objects. In a workload with 135 connections, this eliminates
+  // thousands of short-lived allocations per push cycle.
+  const placeholder: Row = {};
+  const reuseNode: Node = {row: placeholder, relationships: EMPTY_RELATIONSHIPS};
+  const reuseOldNode: Node = {row: placeholder, relationships: EMPTY_RELATIONSHIPS};
+  const reuseAddRemove: {type: 'add' | 'remove'; node: Node} = {type: 'add', node: reuseNode};
+  const reuseEdit: EditChange = {type: 'edit', oldNode: reuseOldNode, node: reuseNode};
+
   for (const conn of connections) {
     const {output, filters, input} = conn;
     if (output) {
       conn.lastPushedEpoch = pushEpoch;
       setOverlay({epoch: pushEpoch, change});
-      const outputChange: Change =
-        change.type === 'edit'
-          ? {
-              type: change.type,
-              oldNode: {
-                row: change.oldRow,
-                relationships: {},
-              },
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            }
-          : {
-              type: change.type,
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            };
+      let outputChange: Change;
+      if (change.type === 'edit') {
+        reuseOldNode.row = change.oldRow;
+        reuseNode.row = change.row;
+        outputChange = reuseEdit;
+      } else {
+        reuseNode.row = change.row;
+        reuseAddRemove.type = change.type;
+        outputChange = reuseAddRemove;
+      }
       yield* filterPush(outputChange, output, input, filters?.predicate);
       yield undefined;
     }
@@ -739,7 +776,7 @@ export function* generateWithOverlayInner(
       const cmp = compare(overlays.add, row);
       if (cmp < 0) {
         addOverlayYielded = true;
-        yield {row: overlays.add, relationships: {}};
+        yield {row: overlays.add, relationships: EMPTY_RELATIONSHIPS};
       }
     }
 
@@ -750,11 +787,11 @@ export function* generateWithOverlayInner(
         continue;
       }
     }
-    yield {row, relationships: {}};
+    yield {row, relationships: EMPTY_RELATIONSHIPS};
   }
 
   if (!addOverlayYielded && overlays.add) {
-    yield {row: overlays.add, relationships: {}};
+    yield {row: overlays.add, relationships: EMPTY_RELATIONSHIPS};
   }
 }
 
@@ -770,37 +807,57 @@ type MinValue = typeof minValue;
 const maxValue = Symbol('max-value');
 type MaxValue = typeof maxValue;
 
+/**
+ * Compares two Bound values, handling minValue/maxValue sentinels,
+ * null, and delegating to type-specific comparison. This merges the
+ * logic of compareBounds + compareValues into a single function that
+ * V8 can inline at the call site (well within TurboFan's 460-bytecode
+ * inlining threshold).
+ */
+function compareBoundValue(a: Bound, b: Bound): number {
+  if (a === b) return 0;
+  if (a === minValue) return -1;
+  if (b === minValue) return 1;
+  if (a === maxValue) return 1;
+  if (b === maxValue) return -1;
+  const aN: Value = a ?? null;
+  const bN: Value = b ?? null;
+  if (aN === null) return bN === null ? 0 : -1;
+  if (bN === null) return 1;
+  if (typeof a === 'string') {
+    assertString(b);
+    return compareStringUTF8Fast(a, b);
+  }
+  if (typeof a === 'number') {
+    assertNumber(b);
+    return a - (b as number);
+  }
+  return compareValues(aN, bN);
+}
+
+/**
+ * Creates a comparator for RowBound values used in BTree index scans.
+ *
+ * For single-key sorts (the common case), returns a direct comparator
+ * that avoids the multi-key loop. The actual comparison logic lives in
+ * compareBoundValue, which V8 inlines at the call site.
+ */
 function makeBoundComparator(sort: Ordering) {
+  if (sort.length === 1) {
+    const key = sort[0][0];
+    const dir = sort[0][1];
+    const cmp = (a: RowBound, b: RowBound) => compareBoundValue(a[key], b[key]);
+    return dir === 'asc' ? cmp : (a: RowBound, b: RowBound) => -cmp(a, b);
+  }
   return (a: RowBound, b: RowBound) => {
-    // Hot! Do not use destructuring
     for (const entry of sort) {
-      const key = entry[0];
-      const cmp = compareBounds(a[key], b[key]);
+      const cmp = compareBoundValue(a[entry[0]], b[entry[0]]);
       if (cmp !== 0) {
         return entry[1] === 'asc' ? cmp : -cmp;
       }
     }
     return 0;
   };
-}
-
-function compareBounds(a: Bound, b: Bound): number {
-  if (a === b) {
-    return 0;
-  }
-  if (a === minValue) {
-    return -1;
-  }
-  if (b === minValue) {
-    return 1;
-  }
-  if (a === maxValue) {
-    return 1;
-  }
-  if (b === maxValue) {
-    return -1;
-  }
-  return compareValues(a, b);
 }
 
 function* generateRows(
