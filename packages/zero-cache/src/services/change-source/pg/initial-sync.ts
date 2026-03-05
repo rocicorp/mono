@@ -206,6 +206,7 @@ export async function initialSync(
         ),
       );
       void copyProfiler?.stopAndDispose(lc, 'initial-copy');
+      copiers.setDone();
 
       const total = rowCounts.reduce(
         (acc, curr) => ({
@@ -241,14 +242,8 @@ export async function initialSync(
           `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
       );
     } finally {
-      copiers.setDone();
-      if (platform() === 'win32') {
-        // Workaround a Node bug in Windows in which certain COPY streams result
-        // in hanging the connection, which causes this await to never resolve.
-        void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
-      } else {
-        await copyPool.end();
-      }
+      // All meaningful errors are handled at the processReadTask() call site.
+      void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
     }
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
