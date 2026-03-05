@@ -2,6 +2,8 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {getDefaultHighWaterMark} from 'node:stream';
 import {unreachable} from '../../../../shared/src/asserts.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {publishCriticalEvent} from '../../observability/events.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {
   min,
@@ -20,7 +22,10 @@ import {
   type ChangeStreamControl,
   type ChangeStreamData,
 } from '../change-source/protocol/current/downstream.ts';
-import {publishReplicationError} from '../replicator/replication-status.ts';
+import {
+  publishReplicationError,
+  replicationStatusError,
+} from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
@@ -407,6 +412,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       await Promise.all([
         this.#storer.stop(),
         this.#state.backoff(this.#lc, err),
+        this.#state.retryDelay > 5000
+          ? publishCriticalEvent(
+              this.#lc,
+              replicationStatusError(this.#lc, 'Replicating', err),
+            )
+          : promiseVoid,
       ]);
     }
     this.#lc.info?.('ChangeStreamer stopped');
