@@ -279,9 +279,7 @@ export async function handleMutateRequest<
 
       const transactProxy: TransactFn<D> = async innerCb => {
         mutationPhase = 'transactionPending';
-        const result = await transactor.transact(m, (tx, name, args) =>
-          applicationErrorWrapper(() => innerCb(tx, name, args)),
-        );
+        const result = await transactor.transact(m, innerCb);
         mutationPhase = 'postCommit';
         return result;
       };
@@ -395,21 +393,26 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
           };
         }
 
-        if (isApplicationError(error)) {
-          appError = error;
-          this.#lc.warn?.(
-            `Application error processing mutation ${mutation.id} for client ${mutation.clientID}`,
-            appError,
+        if (appError !== undefined) {
+          // Retry also failed → internal error, cannot skip mutation
+          this.#lc.error?.(
+            `Retry also failed for mutation ${mutation.id} for client ${mutation.clientID}`,
+            error,
           );
-          continue;
+          throw error;
         }
 
-        this.#lc.error?.(
-          `Unexpected error processing mutation ${mutation.id} for client ${mutation.clientID}`,
-          error,
+        // First attempt failed → store error and retry without mutator
+        const originalError =
+          error instanceof DatabaseTransactionError
+            ? (error.cause ?? error)
+            : error;
+        appError = wrapWithApplicationError(originalError);
+        this.#lc.warn?.(
+          `Error processing mutation ${mutation.id} for client ${mutation.clientID}, retrying without mutator`,
+          appError,
         );
-
-        throw error;
+        continue;
       }
     }
   };
@@ -452,11 +455,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             this.#lc.debug?.(
               `Executing mutator '${mutation.name}' (id=${mutation.id})`,
             );
-            try {
-              await cb(dbTx, mutation.name, mutation.args[0]);
-            } catch (appError) {
-              throw wrapWithApplicationError(appError);
-            }
+            await cb(dbTx, mutation.name, mutation.args[0]);
           } else {
             const mutationResult = makeAppErrorResponse(mutation, appError);
             await transactionHooks.writeMutationResult(mutationResult);
