@@ -68,6 +68,7 @@ export async function* streamBackfill(
   const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE} = opts;
   const db = pgClient(lc, upstreamURI, {
     connection: {['application_name']: 'backfill-stream'},
+    ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
   });
   const tx = new TransactionPool(lc, READONLY).run(db);
   try {
