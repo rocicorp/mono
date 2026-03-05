@@ -779,7 +779,7 @@ export class Zero<
 
     this.#pokeHandler = new PokeHandler(
       poke => this.#rep.poke(poke),
-      () => this.#onPokeError(),
+      e => this.#onPokeError(e),
       rep.clientID,
       schema,
       this.#lc,
@@ -1773,7 +1773,7 @@ export class Zero<
     this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
   }
 
-  #onPokeError(): void {
+  #onPokeError(error: unknown): void {
     const lc = this.#lc;
     lc.info?.(
       'poke error, disconnecting?',
@@ -1784,11 +1784,17 @@ export class Zero<
     // async poke above. Only disconnect if we are not already
     // disconnected.
     if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
+      const errorStr = String(error);
+      const isBaseCookieError = errorStr.includes('unexpected base cookie');
       this.#disconnect(
         lc,
         new ClientError({
-          kind: ClientErrorKind.UnexpectedBaseCookie,
-          message: 'Server returned unexpected base cookie during sync',
+          kind: isBaseCookieError
+            ? ClientErrorKind.UnexpectedBaseCookie
+            : ClientErrorKind.Internal,
+          message: isBaseCookieError
+            ? 'Server returned unexpected base cookie during sync'
+            : `Poke processing error: ${errorStr}`,
         }),
       );
     }

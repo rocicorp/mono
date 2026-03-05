@@ -4,7 +4,10 @@ import {assertArray, unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import {buildPipeline} from '../builder/builder.ts';
+import {TestBuilderDelegate} from '../builder/test-builder-delegate.ts';
 import type {ResultType} from '../query/typed-view.ts';
 import {ArrayView} from './array-view.ts';
 import type {Change} from './change.ts';
@@ -2085,4 +2088,242 @@ test('error state persists through flush operations', async () => {
   // Should still be in error state
   expect(lastResultType).toBe('error');
   expect(callCount).toBeGreaterThan(callsAfterError);
+});
+
+/**
+ * Tests that duplicate relationship aliases are handled via LWW (last writer wins).
+ *
+ * When the same alias is used for two related subqueries, only the last one
+ * is used - earlier ones are dropped. This is consistent with other LWW
+ * behaviors like limit(5).limit(10) where the second limit wins.
+ */
+test('duplicate relationship alias uses last-writer-wins', () => {
+  const users = createSource(
+    lc,
+    testLogConfig,
+    'users',
+    {id: {type: 'string'}, name: {type: 'string'}},
+    ['id'],
+  );
+
+  const candidateJobConnections = createSource(
+    lc,
+    testLogConfig,
+    'candidate_job_connections',
+    {
+      id: {type: 'string'},
+      candidate_id: {type: 'string'},
+      job_id: {type: 'string'},
+    },
+    ['id'],
+  );
+
+  // Add user AND cjc BEFORE pipeline
+  // The cjc has job_id='other-job', which won't match the filter 'target-job'
+  consume(users.push({type: 'add', row: {id: 'user-1', name: 'Test User'}}));
+  consume(
+    candidateJobConnections.push({
+      type: 'add',
+      row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
+    }),
+  );
+
+  const sources = {users, candidate_job_connections: candidateJobConnections};
+  const delegate = new TestBuilderDelegate(sources);
+
+  // Build query with DUPLICATE alias "candidate_applications"
+  // The second (filtered) one should win via LWW
+  const ast: AST = {
+    table: 'users',
+    orderBy: [['id', 'asc']],
+    related: [
+      // First: unfiltered - will be DROPPED due to LWW
+      {
+        system: 'client',
+        correlation: {
+          parentField: ['id'],
+          childField: ['candidate_id'],
+        },
+        subquery: {
+          table: 'candidate_job_connections',
+          alias: 'candidate_applications',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      // Second: filtered - WINS via LWW
+      {
+        system: 'client',
+        correlation: {
+          parentField: ['id'],
+          childField: ['candidate_id'],
+        },
+        subquery: {
+          table: 'candidate_job_connections',
+          alias: 'candidate_applications',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'simple',
+            left: {type: 'column', name: 'job_id'},
+            right: {type: 'literal', value: 'target-job'},
+            op: '=',
+          },
+        },
+      },
+    ],
+  };
+
+  const pipeline = buildPipeline(ast, delegate, 'test-query');
+
+  const view = new ArrayView(
+    pipeline,
+    {
+      singular: false,
+      relationships: {
+        candidate_applications: {singular: false, relationships: {}},
+      },
+    },
+    true,
+    () => {},
+  );
+
+  let data: unknown[] = [];
+  view.addListener(entries => {
+    assertArray(entries);
+    data = [...entries];
+  });
+
+  // Verify initial state - user exists with empty candidate_applications
+  // (cjc-1 doesn't match the filter, and only the filtered relationship exists)
+  expect(data).toHaveLength(1);
+  const user = data[0] as {id: string; candidate_applications: unknown[]};
+  expect(user.id).toBe('user-1');
+  expect(user.candidate_applications).toHaveLength(0);
+
+  // Delete the cjc - should NOT throw because only the filtered Join exists,
+  // and the filtered source connection filters out the remove (predicate fails)
+  expect(() => {
+    consume(
+      candidateJobConnections.push({
+        type: 'remove',
+        row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
+      }),
+    );
+    view.flush();
+  }).not.toThrow();
+});
+
+test('unique relationship aliases work correctly', () => {
+  const users = createSource(
+    lc,
+    testLogConfig,
+    'users',
+    {id: {type: 'string'}, name: {type: 'string'}},
+    ['id'],
+  );
+
+  const candidateJobConnections = createSource(
+    lc,
+    testLogConfig,
+    'candidate_job_connections',
+    {
+      id: {type: 'string'},
+      candidate_id: {type: 'string'},
+      job_id: {type: 'string'},
+    },
+    ['id'],
+  );
+
+  consume(users.push({type: 'add', row: {id: 'user-1', name: 'Test User'}}));
+  consume(
+    candidateJobConnections.push({
+      type: 'add',
+      row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
+    }),
+  );
+
+  const sources = {users, candidate_job_connections: candidateJobConnections};
+  const delegate = new TestBuilderDelegate(sources);
+
+  // Build query with UNIQUE aliases
+  const ast: AST = {
+    table: 'users',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {
+          parentField: ['id'],
+          childField: ['candidate_id'],
+        },
+        subquery: {
+          table: 'candidate_job_connections',
+          alias: 'all_applications',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      {
+        system: 'client',
+        correlation: {
+          parentField: ['id'],
+          childField: ['candidate_id'],
+        },
+        subquery: {
+          table: 'candidate_job_connections',
+          alias: 'this_job_application',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'simple',
+            left: {type: 'column', name: 'job_id'},
+            right: {type: 'literal', value: 'target-job'},
+            op: '=',
+          },
+        },
+      },
+    ],
+  };
+
+  const pipeline = buildPipeline(ast, delegate, 'test-query');
+
+  const view = new ArrayView(
+    pipeline,
+    {
+      singular: false,
+      relationships: {
+        all_applications: {singular: false, relationships: {}},
+        this_job_application: {singular: false, relationships: {}},
+      },
+    },
+    true,
+    () => {},
+  );
+
+  let data: unknown[] = [];
+  view.addListener(entries => {
+    assertArray(entries);
+    data = [...entries];
+  });
+
+  expect(data).toHaveLength(1);
+  const user = data[0] as {
+    id: string;
+    all_applications: unknown[];
+    this_job_application: unknown[];
+  };
+  expect(user.id).toBe('user-1');
+  expect(user.all_applications).toHaveLength(1);
+  expect(user.this_job_application).toHaveLength(0);
+
+  // Delete should work fine with unique aliases
+  expect(() => {
+    consume(
+      candidateJobConnections.push({
+        type: 'remove',
+        row: {id: 'cjc-1', candidate_id: 'user-1', job_id: 'other-job'},
+      }),
+    );
+    view.flush();
+  }).not.toThrow();
+
+  const userAfter = data[0] as {all_applications: unknown[]};
+  expect(userAfter.all_applications).toHaveLength(0);
 });
