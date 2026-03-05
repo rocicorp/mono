@@ -182,6 +182,53 @@ test('add should allow replacing equal entry', () => {
   ]);
 });
 
+suite('class-based iterators', () => {
+  test('forward iterator produces same results as spread', () => {
+    const t = new BTreeSet<number>((a, b) => a - b);
+    for (let i = 0; i < 100; i++) {
+      t.add(i);
+    }
+    const forward = [...t.valuesFrom()];
+    expect(forward).toEqual(Array.from({length: 100}, (_, i) => i));
+  });
+
+  test('reverse iterator produces same results as spread', () => {
+    const t = new BTreeSet<number>((a, b) => a - b);
+    for (let i = 0; i < 100; i++) {
+      t.add(i);
+    }
+    const reversed = [...t.valuesReversed()];
+    expect(reversed).toEqual(
+      Array.from({length: 100}, (_, i) => 99 - i),
+    );
+  });
+
+  test('empty tree iterator returns done immediately', () => {
+    const t = new BTreeSet<number>((a, b) => a - b);
+    const fwd = t.values();
+    expect(fwd.next()).toEqual({done: true, value: undefined});
+    const rev = t.valuesReversed();
+    expect(rev.next()).toEqual({done: true, value: undefined});
+  });
+
+  test('single element tree works', () => {
+    const t = new BTreeSet<number>((a, b) => a - b);
+    t.add(42);
+    expect([...t.values()]).toEqual([42]);
+    expect([...t.valuesReversed()]).toEqual([42]);
+  });
+
+  test('iterator protocol: [Symbol.iterator] returns self', () => {
+    const t = new BTreeSet<number>((a, b) => a - b);
+    t.add(1);
+    t.add(2);
+    const fwd = t.values();
+    expect(fwd[Symbol.iterator]()).toBe(fwd);
+    const rev = t.valuesReversed();
+    expect(rev[Symbol.iterator]()).toBe(rev);
+  });
+});
+
 suite('fast-check', () => {
   test('OrderedSet Property-based Tests (large)', () => {
     assert(
