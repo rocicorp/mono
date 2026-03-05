@@ -230,19 +230,24 @@ export class TransactionPool {
       }
     };
 
-    this.#workers.push(
-      runTx(db, worker, {mode: this.#mode})
-        .catch(e => {
-          if (e instanceof RollbackSignal) {
-            // A RollbackSignal is used to gracefully rollback the postgres.js
-            // transaction block. It should not be thrown up to the application.
-            lc.debug?.('aborted transaction');
-          } else {
-            throw e;
-          }
-        })
-        .finally(() => this.#numWorkers--),
-    );
+    const workerTx = runTx(db, worker, {mode: this.#mode})
+      .catch(e => {
+        if (e instanceof RollbackSignal) {
+          // A RollbackSignal is used to gracefully rollback the postgres.js
+          // transaction block. It should not be thrown up to the application.
+          lc.debug?.('aborted transaction');
+        } else {
+          throw e;
+        }
+      })
+      .finally(() => this.#numWorkers--);
+
+    // Attach a rejection handler immediately to prevent unhandledRejections.
+    // The application will handle errors when it awaits processReadTask()
+    // or done().
+    workerTx.catch(() => {});
+
+    this.#workers.push(workerTx);
 
     // After adding the worker, enqueue a terminal signal if we are in either of the
     // terminal states (both of which prevent more tasks from being enqueued), to ensure
@@ -708,15 +713,24 @@ interface TaskRunner {
   rejected(reason: unknown): void;
 }
 
-// TODO: Get rid of the timeout stuff. It's no longer needed.
 const IDLE_TIMEOUT_MS = 5_000;
 
-// This must be less than IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS
-// in run-transaction.ts (1 minute), so that pooled transactions
-// aren't inadvertently killed by PG for being idle.
-const KEEPALIVE_TIMEOUT_MS = 30_000;
+// The keepalive interval is settable by ZERO_TRANSACTION_POOL_KEEPALIVE_MS
+// as an emergency measure and is explicitly not made available as a server
+// option. This value is function of how the zero-cache uses transactions, and
+// should never need to be "tuned" or adjusted for different environments.
+//
+// Note that it must be shorter than IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS
+// with sufficient buffering to account for when the process is blocked by
+// synchronous calls (e.g. to the replica).
+const KEEPALIVE_TIMEOUT_MS = parseInt(
+  process.env.ZERO_TRANSACTION_POOL_KEEPALIVE_MS ?? '5000',
+);
 
-const KEEPALIVE_TASK: Task = tx => [tx`SELECT 1`.simple()];
+const KEEPALIVE_TASK: Task = (tx, lc) => {
+  lc.debug?.(`sending tx keepalive`);
+  return [tx`SELECT 1`.simple()];
+};
 
 type TimeoutTask = {
   timeoutMs: number;
