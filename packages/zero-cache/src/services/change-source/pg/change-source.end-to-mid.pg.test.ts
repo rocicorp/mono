@@ -1735,6 +1735,74 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
       [],
     ],
+    [
+      'change primary key columns in single ALTER TABLE (same constraint name)',
+      `
+      CREATE TABLE my.pktest (
+        old_a TEXT NOT NULL,
+        old_b TEXT NOT NULL,
+        CONSTRAINT pktest_pkey PRIMARY KEY (old_a, old_b)
+      );
+      ALTER TABLE my.pktest
+        DROP CONSTRAINT pktest_pkey,
+        DROP COLUMN old_b,
+        ADD COLUMN new_b TEXT NOT NULL DEFAULT 'x',
+        ADD CONSTRAINT pktest_pkey PRIMARY KEY (old_a, new_b);
+      `,
+      [
+        // First transaction: CREATE TABLE
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        // Second transaction: compound ALTER TABLE
+        // The index name "pktest_pkey" exists in both before and after
+        // but with different columns, so it must be detected as modified.
+        [
+          {tag: 'drop-index'},
+          {tag: 'update-table-metadata'},
+          {tag: 'drop-column'},
+          {tag: 'add-column'},
+          {tag: 'create-index'},
+        ],
+      ],
+      {},
+      [
+        {
+          name: 'my.pktest',
+          columns: {
+            old_a: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            new_b: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              elemPgTypeClass: null,
+              notNull: false,
+              pos: 4,
+            },
+          },
+        },
+      ],
+      [
+        {
+          tableName: 'my.pktest',
+          name: 'my.pktest_pkey',
+          columns: {old_a: 'ASC', new_b: 'ASC'},
+          unique: true,
+        },
+      ],
+    ],
   ] satisfies [
     name: string,
     statements: string,
