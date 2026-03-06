@@ -44,7 +44,7 @@
     "@floating-ui/react": "^0.26.28",
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
-    "@rocicorp/zero": "0.26.1",
+    "@rocicorp/zero": "0.26.1-canary.10",
     "@rocicorp/zero-virtual": "^0.1.1",
     "@schickling/fps-meter": "^0.1.2",
     "@tanstack/react-virtual": "^3.13.19",
