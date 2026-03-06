@@ -256,8 +256,8 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   #removeFromConsuming(entry: Entry<M>) {
     const pos = this.#consuming.indexOf(entry);
     if (pos === 0) {
-      // In the common case where consume() is called in the same order,
-      // as it is dequeued, use shift() as it is faster than splice()
+      // In the common case, where consume() is called in the same order in
+      // which items were dequeued, use shift(), as it is faster than splice().
       this.#consuming.shift();
     } else if (pos > 0) {
       this.#consuming.splice(pos, 1);
