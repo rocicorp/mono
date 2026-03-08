@@ -62,6 +62,7 @@ export async function initializeStreamer(
   subscriptionState: SubscriptionState,
   autoReset: boolean,
   backPressureLimitHeapProportion: number,
+  flowControlConsensusPaddingSeconds: number,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
@@ -86,6 +87,7 @@ export async function initializeStreamer(
     changeSource,
     autoReset,
     backPressureLimitHeapProportion,
+    flowControlConsensusPaddingSeconds,
     setTimeoutFn,
   );
 }
@@ -283,6 +285,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     source: ChangeSource,
     autoReset: boolean,
     backPressureLimitHeapProportion: number,
+    flowControlConsensusPaddingSeconds: number,
     setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
@@ -303,13 +306,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       err => this.stop(err),
       backPressureLimitHeapProportion,
     );
-    this.#forwarder = new Forwarder();
+    this.#forwarder = new Forwarder(lc, {
+      flowControlConsensusPaddingSeconds,
+    });
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
   }
 
   async run() {
     this.#lc.info?.('starting change stream');
+
+    this.#forwarder.startProgressMonitor();
 
     // Once this change-streamer acquires "ownership" of the change DB,
     // it is safe to start the storer.
@@ -367,9 +374,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
               break;
           }
 
-          unflushedBytes += this.#storer.store([watermark, change]);
-          const sent = this.#forwarder.forward([watermark, change]);
-          if (unflushedBytes >= flushBytesThreshold) {
+          const entry: WatermarkedChange = [watermark, change];
+          unflushedBytes += this.#storer.store(entry);
+          if (unflushedBytes < flushBytesThreshold) {
+            // pipeline changes until flushBytesThreshold
+            this.#forwarder.forward(entry);
+          } else {
             // Wait for messages to clear socket buffers to ensure that they
             // make their way to subscribers. Without this `await`, the
             // messages end up being buffered in this process, which:
@@ -377,7 +387,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             // (2) prevents subscribers from processing the messages as they
             //     arrive, instead getting them in a large batch after being
             //     idle while they were queued (causing further delays).
-            await sent;
+            await this.#forwarder.forwardWithFlowControl(entry);
             unflushedBytes = 0;
           }
 
@@ -420,6 +430,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           : promiseVoid,
       ]);
     }
+
+    this.#forwarder.stopProgressMonitor();
     this.#lc.info?.('ChangeStreamer stopped');
   }
 

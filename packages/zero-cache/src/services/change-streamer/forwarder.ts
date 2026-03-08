@@ -1,11 +1,57 @@
+import type {LogContext} from '@rocicorp/logger';
 import {joinIterables, wrapIterable} from '../../../../shared/src/iterables.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current.ts';
+import {Broadcast} from './broadcast.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import type {Subscriber} from './subscriber.ts';
 
+export type ProgressMonitorOptions = {
+  flowControlConsensusPaddingSeconds: number;
+};
+
 export class Forwarder {
+  readonly #lc: LogContext;
+  readonly #progressMonitorOptions: ProgressMonitorOptions;
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
   #inTransaction = false;
+
+  #currentBroadcast: Broadcast | undefined;
+  #progressMonitor: NodeJS.Timeout | undefined;
+
+  constructor(
+    lc: LogContext,
+    opts: ProgressMonitorOptions = {flowControlConsensusPaddingSeconds: 1},
+  ) {
+    this.#lc = lc.withContext('component', 'progress-monitor');
+    this.#progressMonitorOptions = opts;
+  }
+
+  startProgressMonitor() {
+    clearInterval(this.#progressMonitor);
+    this.#progressMonitor = setInterval(this.#trackProgress, 1000);
+  }
+
+  readonly #trackProgress = () => {
+    const now = performance.now();
+    for (const sub of this.#active) {
+      sub.sampleProcessRate(now);
+    }
+
+    const {flowControlConsensusPaddingSeconds} = this.#progressMonitorOptions;
+    // A negative number disables early flow control release.
+    if (flowControlConsensusPaddingSeconds >= 0) {
+      this.#currentBroadcast?.checkProgress(
+        this.#lc,
+        flowControlConsensusPaddingSeconds * 1000,
+        now,
+      );
+    }
+  };
+
+  stopProgressMonitor() {
+    clearInterval(this.#progressMonitor);
+  }
 
   /**
    * `add()` is called in lock step with `Storer.catchup()` so that the
@@ -30,10 +76,37 @@ export class Forwarder {
    * `forward()` is called in lockstep with `Storer.store()` so that the
    * two components have an equivalent interpretation of whether a Transaction is
    * currently being streamed.
+   *
+   * This version of forward is fire-and-forget, with no flow control. The
+   * change-streamer should call and await {@link forwardWithFlowControl()}
+   * occasionally to avoid memory blowup.
    */
-  async forward(entry: WatermarkedChange) {
-    const [type] = entry[1];
-    const results = Array.from(this.#active.values(), sub => sub.send(entry));
+  forward(entry: WatermarkedChange) {
+    Broadcast.withoutTracking(this.#active.values(), entry);
+    this.#updateActiveSubscribers(entry[1]);
+  }
+
+  /**
+   * The flow-control-aware equivalent of {@link forward()}, returning a
+   * Promise that resolves when replication should continue.
+   */
+  async forwardWithFlowControl(entry: WatermarkedChange) {
+    const broadcast = new Broadcast(this.#active.values(), entry);
+    this.#updateActiveSubscribers(entry[1]);
+
+    // set for progress tracking
+    this.#currentBroadcast = broadcast;
+
+    await broadcast.done;
+
+    // Technically #currentBroadcast may have changed, so only
+    // unset if it if is still the same.
+    if (this.#currentBroadcast === broadcast) {
+      this.#currentBroadcast = undefined;
+    }
+  }
+
+  #updateActiveSubscribers([type]: ChangeStreamData) {
     switch (type) {
       case 'begin':
         // While in a Transaction, all added subscribers are "queued" so that no
@@ -57,7 +130,6 @@ export class Forwarder {
         this.#queued.clear();
         break;
     }
-    await Promise.all(results);
   }
 
   getAcks(): Set<string> {
