@@ -79,6 +79,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       true,
       0.04,
+      1,
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
@@ -910,6 +911,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       true,
       0.04,
+      1,
     );
     void streamer.run();
 
@@ -935,6 +937,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       true,
       0.04,
+      1,
     );
     void streamer.run();
 
@@ -957,6 +960,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       true,
       0.04,
+      1,
     );
     void streamer.run();
 
@@ -992,6 +996,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       true,
       0.04,
+      1,
     );
     void streamer.run();
 
@@ -1029,6 +1034,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       true,
       0.04,
+      1,
     );
     void streamer.run();
 
@@ -1083,6 +1089,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       true,
       0.04,
+      1,
     );
     void streamer.run();
 
@@ -1154,6 +1161,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       true,
       0.04,
+      1,
     );
     void streamer.run();
 

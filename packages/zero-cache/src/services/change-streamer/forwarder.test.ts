@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {Forwarder} from './forwarder.ts';
 import {createSubscriber} from './test-utils.ts';
@@ -7,7 +8,7 @@ describe('change-streamer/forwarder', () => {
   const messages = new ReplicationMessages({issues: 'id'});
 
   test('in transaction queueing', () => {
-    const forwarder = new Forwarder();
+    const forwarder = new Forwarder(createSilentLogContext());
 
     const [sub1, stream1] = createSubscriber('00', true);
     const [sub2, stream2] = createSubscriber('00', true);
@@ -15,18 +16,21 @@ describe('change-streamer/forwarder', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    void forwarder.forward([
+    forwarder.forward([
       '11',
       ['begin', messages.begin(), {commitWatermark: '13'}],
     ]);
     forwarder.add(sub2);
-    void forwarder.forward(['12', ['data', messages.truncate('issues')]]);
-    void forwarder.forward([
+    void forwarder.forwardWithFlowControl([
+      '12',
+      ['data', messages.truncate('issues')],
+    ]);
+    void forwarder.forwardWithFlowControl([
       '13',
       ['commit', messages.commit(), {watermark: '13'}],
     ]);
     forwarder.add(sub3);
-    void forwarder.forward([
+    forwarder.forward([
       '14',
       ['begin', messages.begin(), {commitWatermark: '15'}],
     ]);
@@ -149,7 +153,7 @@ describe('change-streamer/forwarder', () => {
   });
 
   test('in transaction queueing, rolled back', () => {
-    const forwarder = new Forwarder();
+    const forwarder = new Forwarder(createSilentLogContext());
 
     const [sub1, stream1] = createSubscriber('00', true);
     const [sub2, stream2] = createSubscriber('00', true);
@@ -162,10 +166,13 @@ describe('change-streamer/forwarder', () => {
       ['begin', messages.begin(), {commitWatermark: '14'}],
     ]);
     forwarder.add(sub2);
-    void forwarder.forward(['12', ['data', messages.truncate('issues')]]);
-    void forwarder.forward(['13', ['rollback', messages.rollback()]]);
+    forwarder.forward(['12', ['data', messages.truncate('issues')]]);
+    void forwarder.forwardWithFlowControl([
+      '13',
+      ['rollback', messages.rollback()],
+    ]);
     forwarder.add(sub3);
-    void forwarder.forward([
+    forwarder.forward([
       '14',
       ['begin', messages.begin(), {commitWatermark: '15'}],
     ]);

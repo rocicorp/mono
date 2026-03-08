@@ -43,6 +43,7 @@ export default async function runWorker(
       protocol,
       startupDelayMs,
       backPressureLimitHeapProportion,
+      flowControlConsensusPaddingSeconds,
     },
     upstream,
     change,
@@ -106,6 +107,7 @@ export default async function runWorker(
         subscriptionState,
         autoReset ?? false,
         backPressureLimitHeapProportion,
+        flowControlConsensusPaddingSeconds,
         setTimeout,
       );
       break;
