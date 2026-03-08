@@ -65,6 +65,7 @@ export interface Source {
     filters?: Condition,
     splitEditKeys?: Set<string>,
     debug?: DebugDelegate,
+    skipOrderByInSQL?: boolean,
   ): SourceInput;
 
   /**

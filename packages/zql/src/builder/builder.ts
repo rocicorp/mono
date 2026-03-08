@@ -19,6 +19,7 @@ import type {
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {Cap} from '../ivm/cap.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';
@@ -258,6 +259,7 @@ function buildPipelineInternal(
   queryID: string,
   name: string,
   partitionKey?: CompoundKey,
+  unordered?: boolean,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -288,11 +290,15 @@ function buildPipelineInternal(
       }
     }
   }
+  const ordering = unordered
+    ? source.tableSchema.primaryKey.map(k => [k, 'asc'] as const)
+    : must(ast.orderBy);
   const conn = source.connect(
-    must(ast.orderBy),
+    ordering,
     ast.where,
     splitEditKeys,
     delegate.debug,
+    unordered,
   );
 
   let end: Input = delegate.decorateSourceInput(conn, queryID);
@@ -333,15 +339,27 @@ function buildPipelineInternal(
   }
 
   if (ast.limit !== undefined) {
-    const takeName = `${name}:take`;
-    const take = new Take(
-      end,
-      delegate.createStorage(takeName),
-      ast.limit,
-      partitionKey,
-    );
-    delegate.addEdge(end, take);
-    end = delegate.decorateInput(take, takeName);
+    if (unordered) {
+      const capName = `${name}:cap`;
+      const cap = new Cap(
+        end,
+        delegate.createStorage(capName),
+        ast.limit,
+        partitionKey,
+      );
+      delegate.addEdge(end, cap);
+      end = delegate.decorateInput(cap, capName);
+    } else {
+      const takeName = `${name}:take`;
+      const take = new Take(
+        end,
+        delegate.createStorage(takeName),
+        ast.limit,
+        partitionKey,
+      );
+      delegate.addEdge(end, take);
+      end = delegate.decorateInput(take, takeName);
+    }
   }
 
   if (ast.related) {
@@ -450,6 +468,7 @@ function applyFilterWithFlips(
         '',
         `${name}.${sq.subquery.alias}`,
         sq.correlation.childField,
+        true,
       );
       const flippedJoin = new FlippedJoin({
         parent: end,
@@ -624,6 +643,7 @@ function applyCorrelatedSubQuery(
     queryID,
     `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
+    fromCondition,
   );
 
   const joinName = `${name}:join(${sq.subquery.alias})`;

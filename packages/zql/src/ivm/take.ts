@@ -735,7 +735,7 @@ function getTakeStateKey(
   return JSON.stringify(['take', ...partitionValues]);
 }
 
-function constraintMatchesPartitionKey(
+export function constraintMatchesPartitionKey(
   constraint: Constraint | undefined,
   partitionKey: PartitionKey | undefined,
 ): boolean {
@@ -753,7 +753,9 @@ function constraintMatchesPartitionKey(
   return true;
 }
 
-function makePartitionKeyComparator(partitionKey: PartitionKey): Comparator {
+export function makePartitionKeyComparator(
+  partitionKey: PartitionKey,
+): Comparator {
   return (a, b) => {
     for (const key of partitionKey) {
       const cmp = compareValues(a[key], b[key]);

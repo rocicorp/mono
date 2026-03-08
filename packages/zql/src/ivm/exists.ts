@@ -244,9 +244,8 @@ export class Exists implements FilterOperator {
   }
 
   *#fetchExists(node: Node): Generator<'yield', boolean> {
-    // While it seems like this should be able to fetch just 1 node
-    // to check for exists, we can't because Take does not support
-    // early return during initial fetch.
+    // Cap (used for EXISTS child pipelines) supports early return
+    // during initial fetch, so this iterates at most `limit` rows.
     return (yield* this.#fetchSize(node)) > 0;
   }
 
