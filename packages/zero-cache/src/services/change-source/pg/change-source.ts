@@ -854,6 +854,18 @@ class ChangeMaker {
       }
 
       const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
+
+      // Detect modified indexes (same name, different definition).
+      // This happens when a constraint is dropped and recreated with the
+      // same name in a single ALTER TABLE statement.
+      const keptIdx = intersection(prevIdx, nextIdx);
+      for (const id of keptIdx) {
+        if (!deepEqual(prevIdx.get(id), nextIdx.get(id))) {
+          droppedIdx.add(id);
+          createdIdx.add(id);
+        }
+      }
+
       for (const id of droppedIdx) {
         const {schema, name} = must(prevIdx.get(id));
         changes.push({tag: 'drop-index', id: {schema, name}});
