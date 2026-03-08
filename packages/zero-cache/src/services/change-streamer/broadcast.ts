@@ -34,9 +34,9 @@ export class Broadcast {
   #isDone = false;
 
   readonly #watermark: string;
-  readonly #start: number;
   readonly #majority: number;
 
+  readonly #start = performance.now();
   #latestCompleted = Number.MAX_VALUE;
 
   /**
@@ -47,15 +47,14 @@ export class Broadcast {
     this.#pending = new Set(subscribers);
     this.#completed = [];
     this.#watermark = change[0];
-    this.#start = performance.now();
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
 
     for (const sub of this.#pending) {
-      const entries = sub.numPending + 1; // add one for the entry
+      const changes = sub.numPending + 1; // add one for this `change`
       void sub
         .send(change)
         .catch(() => {})
-        .finally(() => this.#markCompleted(sub, entries));
+        .finally(() => this.#markCompleted(sub, changes));
     }
 
     // set done if there are no subscribers (mainly for tests)
@@ -64,9 +63,9 @@ export class Broadcast {
     }
   }
 
-  #markCompleted(sub: Subscriber, processed: number) {
+  #markCompleted(sub: Subscriber, changes: number) {
     const elapsed = (this.#latestCompleted = performance.now()) - this.#start;
-    this.#completed.push({sub, changes: processed, elapsed});
+    this.#completed.push({sub, changes, elapsed});
     this.#pending.delete(sub);
     if (this.#pending.size === 0) {
       this.#setDone();
@@ -127,17 +126,17 @@ export class Broadcast {
    *   have finished.
    *
    * In other words, the subscribers themselves are used to determine the
-   * timeout of each batch of changes; they majority determines this when
-   * they complete, upon which a timeout is logically started. In the
-   * common case, the remaining subscribers finish soon afterward and the
-   * timeout never elapses. However, in pathological cases where a minority
+   * timeout of each batch of changes; the majority determines this when
+   * they complete, upon which a timeout is logically started.
+   *
+   * In the common case, the remaining subscribers finish soon afterward and
+   * the timeout never elapses. However, in pathological cases where a minority
    * of subscribers have a disproportionate amount of load, some will still
    * be processing (or otherwise unresponsive). These subscribers are given
    * a bounded amount of time to catch up at each flushed batch, up to the
    * timeout interval. This guarantees eventual catchup because the
    * subscribers with a backlog of changes necessarily have a higher
-   * processing rate than the subscribers that finish before the timeout
-   * interval starts.
+   * processing rate than the subscribers that finished (and are made to wait).
    *
    * ### Not implemented: Broken connection detection
    *
