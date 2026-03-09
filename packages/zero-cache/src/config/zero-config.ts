@@ -576,6 +576,24 @@ export const zeroOptions = {
         `throughput.`,
       ],
     },
+
+    flowControlConsensusPaddingSeconds: {
+      type: v.number().default(1),
+      desc: [
+        `During periodic flow control checks (every 64kb), the amount of time to wait after the`,
+        `majority of subscribers have acked, after which replication will continue even if`,
+        `some subscribers have yet to ack. (Note that this is not a timeout for the {italic entire} send,`,
+        `but a timeout that starts {italic after} the majority of receivers have acked.)`,
+        ``,
+        `This allows a bounded amount of time for backlogged subscribers to catch up on each flush`,
+        `without forcing all subscribers to wait for the entire backlog to be processed. It is also`,
+        `useful for mitigating the effect of unresponsive subscribers due to severed websocket`,
+        `connections (until liveness checks disconnect them).`,
+        ``,
+        `Set this to a negative number to disable early flow control releases. (Not recommended, but`,
+        `available as an emergency measure.)`,
+      ],
+    },
   },
 
   taskID: {
