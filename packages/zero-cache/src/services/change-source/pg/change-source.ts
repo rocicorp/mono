@@ -23,7 +23,11 @@ import {
   UnsupportedColumnDefaultError,
 } from '../../../db/pg-to-lite.ts';
 import {runTx} from '../../../db/run-transaction.ts';
-import type {ColumnSpec, PublishedTableSpec} from '../../../db/specs.ts';
+import type {
+  ColumnSpec,
+  PublishedIndexSpec,
+  PublishedTableSpec,
+} from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
@@ -854,6 +858,28 @@ class ChangeMaker {
       }
 
       const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
+
+      // Detect modified indexes (same name, different definition).
+      // This happens when a constraint is dropped and recreated with the
+      // same name in a single ALTER TABLE statement.
+      // Note: We compare using stable column attnums rather than names,
+      // because table/column renames change the index spec cosmetically
+      // (tableName, column keys) without the index actually being recreated.
+      const keptIdx = intersection(prevIdx, nextIdx);
+      for (const id of keptIdx) {
+        if (
+          isIndexStructurallyChanged(
+            must(prevIdx.get(id)),
+            must(nextIdx.get(id)),
+            prevTbl,
+            nextTbl,
+          )
+        ) {
+          droppedIdx.add(id);
+          createdIdx.add(id);
+        }
+      }
+
       for (const id of droppedIdx) {
         const {schema, name} = must(prevIdx.get(id));
         changes.push({tag: 'drop-index', id: {schema, name}});
@@ -1170,6 +1196,86 @@ function specsByID(published: PublishedSchema) {
     new Map(published.tables.map(t => [t.oid, t])),
     new Map(published.indexes.map(i => [idString(i), i])),
   ] as const;
+}
+
+/**
+ * Determines if an index was structurally changed (e.g. constraint dropped
+ * and recreated with different columns) vs cosmetically changed (e.g. the
+ * index spec changed because the table or a column was renamed).
+ *
+ * Compares boolean properties directly and resolves column names to their
+ * stable attnums (pg_attribute `attnum`) for the column comparison.
+ */
+function isIndexStructurallyChanged(
+  prev: PublishedIndexSpec,
+  next: PublishedIndexSpec,
+  prevTables: Map<number, PublishedTableWithReplicaIdentity>,
+  nextTables: Map<number, PublishedTableWithReplicaIdentity>,
+): boolean {
+  if (
+    prev.unique !== next.unique ||
+    prev.isPrimaryKey !== next.isPrimaryKey ||
+    prev.isReplicaIdentity !== next.isReplicaIdentity ||
+    prev.isImmediate !== next.isImmediate
+  ) {
+    return true;
+  }
+
+  const prevTable = findTableBySchemaAndName(
+    prevTables,
+    prev.schema,
+    prev.tableName,
+  );
+  const nextTable = findTableBySchemaAndName(
+    nextTables,
+    next.schema,
+    next.tableName,
+  );
+  if (!prevTable || !nextTable) {
+    // Can't resolve tables; conservatively treat as changed.
+    return true;
+  }
+
+  const prevEntries = Object.entries(prev.columns);
+  const nextEntries = Object.entries(next.columns);
+  if (prevEntries.length !== nextEntries.length) {
+    return true;
+  }
+
+  // Resolve column names → attnums and compare.
+  const prevByAttnum = new Map<number | undefined, string>(
+    prevEntries.map(([name, dir]) => [prevTable.columns[name]?.pos, dir]),
+  );
+  const nextByAttnum = new Map<number | undefined, string>(
+    nextEntries.map(([name, dir]) => [nextTable.columns[name]?.pos, dir]),
+  );
+
+  if (prevByAttnum.has(undefined) || nextByAttnum.has(undefined)) {
+    // Column not found in table spec; conservatively treat as changed.
+    return true;
+  }
+  if (prevByAttnum.size !== nextByAttnum.size) {
+    return true;
+  }
+  for (const [attnum, dir] of prevByAttnum) {
+    if (nextByAttnum.get(attnum) !== dir) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findTableBySchemaAndName(
+  tables: Map<number, PublishedTableWithReplicaIdentity>,
+  schema: string,
+  name: string,
+): PublishedTableWithReplicaIdentity | undefined {
+  for (const table of tables.values()) {
+    if (table.schema === schema && table.name === name) {
+      return table;
+    }
+  }
+  return undefined;
 }
 
 function columnsByID(
