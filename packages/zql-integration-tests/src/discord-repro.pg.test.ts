@@ -116,19 +116,19 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
         title: 'Test Issue 1',
         description: 'Description for issue 1',
         closed: false,
-        ownerId: 'user1',
+        owner_id: 'user1',
+        createdAt: 982355920000,
       },
       row: {
         id: 'issue1',
         title: 'Test Issue 1',
         description: 'Description for issue 1',
         closed: true,
-        ownerId: 'user1',
+        owner_id: 'user1',
+        createdAt: 982355920000,
       },
     }),
   );
 
-  expect(mapResultToClientNames(view.data, schema, 'issue')).toEqual(
-    queryDelegate.materialize(q).data,
-  );
+  expect(view.data).toEqual(queryDelegate.materialize(q).data);
 });

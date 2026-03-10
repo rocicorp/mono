@@ -32,6 +32,7 @@ import {Join} from '../ivm/join.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
+import {Cap} from '../ivm/cap.ts';
 import {Take} from '../ivm/take.ts';
 import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
@@ -258,6 +259,7 @@ function buildPipelineInternal(
   queryID: string,
   name: string,
   partitionKey?: CompoundKey,
+  isNonFlippedExistsChild?: boolean | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -288,8 +290,18 @@ function buildPipelineInternal(
       }
     }
   }
+  if (isNonFlippedExistsChild) {
+    assert(ast.start === undefined, 'EXISTS subqueries must not have start');
+    assert(
+      ast.related === undefined,
+      'EXISTS subqueries must not have related',
+    );
+  }
+
   const conn = source.connect(
-    must(ast.orderBy),
+    // exists pipelines are unordered — orderBy is ignored here.
+    // Non-exists pipelines always have orderBy completed with PKs.
+    isNonFlippedExistsChild ? undefined : must(ast.orderBy),
     ast.where,
     splitEditKeys,
     delegate.debug,
@@ -333,15 +345,32 @@ function buildPipelineInternal(
   }
 
   if (ast.limit !== undefined) {
-    const takeName = `${name}:take`;
-    const take = new Take(
-      end,
-      delegate.createStorage(takeName),
-      ast.limit,
-      partitionKey,
-    );
-    delegate.addEdge(end, take);
-    end = delegate.decorateInput(take, takeName);
+    // We end `exists` pipelines with `cap`
+    // The reason is that `cap` does not care about the order of the pipeline.
+    // This allows SQLite to chose the order and never end up creating temp b-trees.
+    // The problem with SQLite creating a temp b-tree is it will incur a scan of the entire
+    // result set where exists only needs the first row.
+    if (isNonFlippedExistsChild) {
+      const capName = `${name}:cap`;
+      const cap = new Cap(
+        end,
+        delegate.createStorage(capName),
+        ast.limit,
+        partitionKey,
+      );
+      delegate.addEdge(end, cap);
+      end = delegate.decorateInput(cap, capName);
+    } else {
+      const takeName = `${name}:take`;
+      const take = new Take(
+        end,
+        delegate.createStorage(takeName),
+        ast.limit,
+        partitionKey,
+      );
+      delegate.addEdge(end, take);
+      end = delegate.decorateInput(take, takeName);
+    }
   }
 
   if (ast.related) {
@@ -455,6 +484,7 @@ function applyFilterWithFlips(
         '',
         `${name}.${sq.subquery.alias}`,
         sq.correlation.childField,
+        false,
       );
       const flippedJoin = new FlippedJoin({
         parent: end,
@@ -629,6 +659,7 @@ function applyCorrelatedSubQuery(
     queryID,
     `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
+    fromCondition,
   );
 
   const joinName = `${name}:join(${sq.subquery.alias})`;

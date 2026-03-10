@@ -118,6 +118,71 @@ export function* generateWithOverlay(
   );
 }
 
+export function generateWithOverlayNoYieldUnordered(
+  stream: Stream<Node>,
+  overlay: Change,
+  schema: SourceSchema,
+): Stream<Node> {
+  return generateWithOverlayUnordered(stream, overlay, schema) as Stream<Node>;
+}
+
+export function* generateWithOverlayUnordered(
+  stream: Stream<Node | 'yield'>,
+  overlay: Change,
+  schema: SourceSchema,
+): Stream<Node | 'yield'> {
+  // Eager inject
+  if (overlay.type === 'remove') {
+    yield overlay.node;
+  } else if (overlay.type === 'edit') {
+    yield overlay.oldNode;
+  }
+
+  // Stream with inline suppress
+  let suppressed = false;
+  for (const node of stream) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
+    if (!suppressed) {
+      if (overlay.type === 'add' || overlay.type === 'edit') {
+        if (
+          rowEqualsForCompoundKey(overlay.node.row, node.row, schema.primaryKey)
+        ) {
+          suppressed = true;
+          continue;
+        }
+      }
+      if (overlay.type === 'child') {
+        if (
+          rowEqualsForCompoundKey(overlay.node.row, node.row, schema.primaryKey)
+        ) {
+          suppressed = true;
+          yield {
+            row: node.row,
+            relationships: {
+              ...node.relationships,
+              [overlay.child.relationshipName]: () =>
+                generateWithOverlay(
+                  node.relationships[overlay.child.relationshipName](),
+                  overlay.child.change,
+                  schema.relationships[overlay.child.relationshipName],
+                ),
+            },
+          };
+          continue;
+        }
+      }
+    }
+    yield node;
+  }
+  assert(
+    suppressed || overlay.type === 'remove',
+    'overlayGenerator: overlay was never applied to any fetched node',
+  );
+}
+
 export function rowEqualsForCompoundKey(
   a: Row,
   b: Row,

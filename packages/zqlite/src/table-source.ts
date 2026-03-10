@@ -21,6 +21,7 @@ import {
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
+  generateWithOverlayUnordered,
   generateWithStart,
   genPushAndWriteWithSplitEdit,
   type Connection,
@@ -205,12 +206,12 @@ export class TableSource implements Source {
     );
   }
 
-  #getSchema(connection: Connection): SourceSchema {
+  #getSchema(connection: Connection, unordered: boolean): SourceSchema {
     return {
       tableName: this.#table,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
-      sort: connection.sort,
+      sort: unordered ? undefined : connection.sort,
       relationships: {},
       isHidden: false,
       system: 'client',
@@ -219,12 +220,17 @@ export class TableSource implements Source {
   }
 
   connect(
-    sort: Ordering,
+    sort: Ordering | undefined,
     filters?: Condition,
     splitEditKeys?: Set<string>,
     debug?: DebugDelegate,
   ) {
     const transformedFilters = transformFilters(filters);
+    const unordered = sort === undefined;
+    // PK comparator is used for source-level overlay matching (remove by PK
+    // equality) even when no ordering is requested.
+    const primaryKeySort: Ordering = this.#primaryKey.map(k => [k, 'asc']);
+
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
@@ -251,11 +257,13 @@ export class TableSource implements Source {
             predicate: createPredicate(transformedFilters.filters),
           }
         : undefined,
-      compareRows: makeComparator(sort),
+      compareRows: sort ? makeComparator(sort) : makeComparator(primaryKeySort),
       lastPushedEpoch: 0,
     };
-    const schema = this.#getSchema(connection);
-    assertOrderingIncludesPK(sort, this.#primaryKey);
+    const schema = this.#getSchema(connection, unordered);
+    if (!unordered) {
+      assertOrderingIncludesPK(sort, this.#primaryKey);
+    }
 
     this.#connections.push(connection);
     return input;
@@ -277,20 +285,39 @@ export class TableSource implements Source {
     const sqlAndBindings = format(query);
 
     const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
+    cachedStatement.statement.safeIntegers(true);
+    const rowIterator = cachedStatement.statement.iterate<Row>(
+      ...sqlAndBindings.values,
+    );
     try {
-      cachedStatement.statement.safeIntegers(true);
-      const rowIterator = cachedStatement.statement.iterate<Row>(
-        ...sqlAndBindings.values,
-      );
-
-      const comparator = makeComparator(sort, req.reverse);
-
       debug?.initQuery(this.#table, sqlAndBindings.text);
 
-      yield* generateWithStart(
-        generateWithYields(
-          generateWithOverlay(
-            req.start?.row,
+      if (sort) {
+        const comparator = makeComparator(sort, req.reverse);
+        yield* generateWithStart(
+          generateWithYields(
+            generateWithOverlay(
+              req.start?.row,
+              this.#mapFromSQLiteTypes(
+                this.#columns,
+                rowIterator,
+                sqlAndBindings.text,
+                debug,
+              ),
+              req.constraint,
+              this.#overlay,
+              connection.lastPushedEpoch,
+              comparator,
+              connection.filters?.predicate,
+            ),
+            this.#shouldYield,
+          ),
+          req.start,
+          comparator,
+        );
+      } else {
+        yield* generateWithYields(
+          generateWithOverlayUnordered(
             this.#mapFromSQLiteTypes(
               this.#columns,
               rowIterator,
@@ -300,15 +327,20 @@ export class TableSource implements Source {
             req.constraint,
             this.#overlay,
             connection.lastPushedEpoch,
-            comparator,
+            this.#primaryKey,
             connection.filters?.predicate,
           ),
           this.#shouldYield,
-        ),
-        req.start,
-        comparator,
-      );
+        );
+      }
     } finally {
+      // Ensure the SQLite iterate() is closed. Normally #mapFromSQLiteTypes
+      // closes it via its own finally block, but if the generator chain is
+      // returned before #mapFromSQLiteTypes was ever started (e.g., the
+      // unordered overlay yielded an add row before iterating the source),
+      // the SQLite iterator would remain active and lock the connection.
+      // Calling return() on an already-closed iterator is a safe no-op.
+      rowIterator.return?.();
       if (debug) {
         let totalNvisit = 0;
         let i = 0;
@@ -487,7 +519,7 @@ export class TableSource implements Source {
   #requestToSQL(
     request: FetchRequest,
     filters: NoSubqueryCondition | undefined,
-    order: Ordering,
+    order: Ordering | undefined,
   ): SQLQuery {
     return buildSelectQuery(
       this.#table,

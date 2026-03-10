@@ -31,6 +31,7 @@ export class UnionFanIn implements Operator {
     this.#inputs = inputs;
     const fanOutSchema = fanOut.getSchema();
     fanOut.setFanIn(this);
+    assert(fanOutSchema.sort !== undefined, 'UnionFanIn requires sorted input');
 
     const schema: Writable<SourceSchema> = {
       tableName: fanOutSchema.tableName,
