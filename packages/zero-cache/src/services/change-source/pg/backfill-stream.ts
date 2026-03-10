@@ -10,8 +10,8 @@ import {READONLY} from '../../../db/mode-enum.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
 import {getTypeParsers, type TypeParser} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
-import {TransactionPool} from '../../../db/transaction-pool.ts';
-import {pgClient} from '../../../types/pg.ts';
+import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
+import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {SchemaIncompatibilityError} from '../common/backfill-manager.ts';
 import type {
   BackfillCompleted,
@@ -70,9 +70,15 @@ export async function* streamBackfill(
     connection: {['application_name']: 'backfill-stream'},
     ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
   });
-  const tx = new TransactionPool(lc, READONLY).run(db);
+  let tx: TransactionPool | undefined;
+  let watermark: string;
   try {
-    const watermark = await setSnapshot(lc, upstreamURI, tx, slot);
+    ({tx, watermark} = await createSnapshotTransaction(
+      lc,
+      upstreamURI,
+      db,
+      slot,
+    ));
     const {tableSpec, backfill} = await validateSchema(
       tx,
       publications,
@@ -110,9 +116,7 @@ export async function* streamBackfill(
     }
     throw e;
   } finally {
-    tx.setDone();
-    // errors are already thrown and handled from processReadTask()
-    void tx.done().catch(() => {});
+    tx?.setDone();
     // Workaround postgres.js hanging at the end of some COPY commands:
     // https://github.com/porsager/postgres/issues/499
     void db.end().catch(e => lc.warn?.(`error closing backfill connection`, e));
@@ -213,10 +217,10 @@ async function* stream(
  *  transaction; this is the only way to get set a transaction at a specific
  *  LSN.)
  */
-async function setSnapshot(
+async function createSnapshotTransaction(
   lc: LogContext,
   upstreamURI: string,
-  tx: TransactionPool,
+  db: PostgresDB,
   slotNamePrefix: string,
 ) {
   const replicationSession = pgClient(lc, upstreamURI, {
@@ -228,16 +232,14 @@ async function setSnapshot(
     const {snapshot_name: snapshot, consistent_point: lsn} =
       await createReplicationSlot(lc, replicationSession, tempSlot);
 
-    await tx.processReadTask(sql =>
-      sql.unsafe(`SET TRANSACTION SNAPSHOT '${snapshot}'`),
-    );
-    // Once the snapshot has been set, the replication session and slot can
-    // be closed / dropped.
+    const {init, imported} = importSnapshot(snapshot);
+    const tx = new TransactionPool(lc, READONLY, init).run(db);
+    await imported;
     await replicationSession.unsafe(`DROP_REPLICATION_SLOT "${tempSlot}"`);
 
     const watermark = toStateVersionString(lsn);
     lc.info?.(`Opened snapshot transaction at LSN ${lsn} (${watermark})`);
-    return watermark;
+    return {tx, watermark};
   } catch (e) {
     // In the event of a failure, clean up the replication slot if created.
     await replicationSession.unsafe(
