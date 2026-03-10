@@ -6,6 +6,7 @@ import type {Source} from '../../types/streams.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
+import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
 export type ReplicaState = {
@@ -56,6 +57,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #incrementalSyncer: IncrementalSyncer;
+  readonly #worker: WriteWorkerClient;
 
   constructor(
     lc: LogContext,
@@ -63,19 +65,22 @@ export class ReplicatorService implements Replicator, Service {
     id: string,
     mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
-    replica: Database,
+    statusDb: Database,
+    worker: WriteWorkerClient,
     publishReplicationStatus: boolean,
   ) {
     this.id = id;
     this.#lc = lc
       .withContext('component', 'replicator')
       .withContext('serviceID', this.id);
+    this.#worker = worker;
 
     this.#incrementalSyncer = new IncrementalSyncer(
       taskID,
       `${taskID}/${id}`,
       changeStreamer,
-      replica,
+      statusDb,
+      worker,
       mode,
       publishReplicationStatus,
     );
@@ -93,8 +98,9 @@ export class ReplicatorService implements Replicator, Service {
     return this.#incrementalSyncer.subscribe();
   }
 
-  stop() {
+  async stop() {
     this.#incrementalSyncer.stop(this.#lc);
+    await this.#worker.stop();
     return promiseVoid;
   }
 }
