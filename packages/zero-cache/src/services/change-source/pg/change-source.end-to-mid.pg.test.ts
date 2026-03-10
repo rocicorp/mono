@@ -1735,6 +1735,75 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
       [],
     ],
+    [
+      'change primary key columns in single ALTER TABLE (same constraint name)',
+      `
+      CREATE TABLE your.pktest (
+        old_a TEXT NOT NULL,
+        old_b TEXT NOT NULL,
+        CONSTRAINT pktest_pkey PRIMARY KEY (old_a, old_b)
+      );
+      ALTER TABLE your.pktest
+        DROP CONSTRAINT pktest_pkey,
+        DROP COLUMN old_b,
+        ADD COLUMN new_b TEXT NOT NULL DEFAULT 'x',
+        ADD CONSTRAINT pktest_pkey PRIMARY KEY (old_a, new_b);
+      `,
+      [
+        // Both statements execute in one DDL event. The CREATE TABLE
+        // creates the index "pktest_pkey", and the ALTER TABLE drops and
+        // recreates it with different columns. The index name is the same
+        // before and after, so it must be detected as structurally modified.
+        [
+          {tag: 'create-table'},
+          {tag: 'create-index'},
+          {tag: 'drop-index'},
+          {tag: 'update-table-metadata'},
+          {tag: 'drop-column'},
+          {tag: 'add-column'},
+          {tag: 'create-index'},
+        ],
+      ],
+      {},
+      [
+        {
+          name: 'your.pktest',
+          columns: {
+            old_a: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            new_b: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              elemPgTypeClass: null,
+              dflt: "'x'",
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              elemPgTypeClass: null,
+              notNull: false,
+              pos: 2,
+            },
+          },
+        },
+      ],
+      [
+        {
+          tableName: 'your.pktest',
+          name: 'your.pktest_pkey',
+          columns: {old_a: 'ASC', new_b: 'ASC'},
+          unique: true,
+        },
+      ],
+    ],
   ] satisfies [
     name: string,
     statements: string,
