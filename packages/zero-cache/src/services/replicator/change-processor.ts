@@ -21,7 +21,6 @@ import {
   mapPostgresToLiteColumn,
   mapPostgresToLiteIndex,
 } from '../../db/pg-to-lite.ts';
-import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
@@ -40,6 +39,7 @@ import type {
   ColumnAdd,
   ColumnDrop,
   ColumnUpdate,
+  Identifier,
   IndexCreate,
   IndexDrop,
   MessageBackfill,
@@ -94,7 +94,7 @@ export class ChangeProcessor {
   // The TransactionProcessor lazily loads table specs into this Map,
   // and reloads them after a schema change. It is cached here to avoid
   // reading them from the DB on every transaction.
-  readonly #tableSpecs = new Map<string, LiteTableSpec>();
+  readonly #tableSpecs = new Map<string, LiteTableSpecWithReplicationStatus>();
 
   #currentTx: TransactionProcessor | null = null;
 
@@ -548,7 +548,7 @@ class TransactionProcessor {
 
   processCreateTable(create: TableCreate) {
     if (create.metadata) {
-      this.#tableMetadata.set(create.spec, create.metadata);
+      this.#tableMetadata.setUpstreamMetadata(create.spec, create.metadata);
     }
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createLiteTableStatement(table));
@@ -578,7 +578,7 @@ class TransactionProcessor {
   }
 
   processTableMetadata(msg: TableUpdateMetadata) {
-    this.#tableMetadata.set(msg.table, msg.new);
+    this.#tableMetadata.setUpstreamMetadata(msg.table, msg.new);
   }
 
   processRenameTable(rename: TableRename) {
@@ -591,14 +591,14 @@ class TransactionProcessor {
     // Rename in metadata table
     this.#columnMetadata.renameTable(oldName, newName);
 
-    this.#bumpVersions(newName);
+    this.#bumpVersions(rename.new);
     this.#logResetOp(oldName);
     this.#lc.info?.(rename.tag, oldName, newName);
   }
 
   processAddColumn(msg: ColumnAdd) {
     if (msg.tableMetadata) {
-      this.#tableMetadata.set(msg.table, msg.tableMetadata);
+      this.#tableMetadata.setUpstreamMetadata(msg.table, msg.tableMetadata);
     }
     const table = liteTableName(msg.table);
     const {name} = msg.column;
@@ -615,7 +615,7 @@ class TransactionProcessor {
     } else {
       // Make the new column visible immediately if it's not being backfilled.
       // Otherwise, the version bump will happen with the backfill is complete.
-      this.#bumpVersions(table);
+      this.#bumpVersions(msg.table);
     }
     this.#lc.info?.(msg.tag, table, msg.column);
   }
@@ -680,7 +680,7 @@ class TransactionProcessor {
       msg.new.spec,
     );
 
-    this.#bumpVersions(table);
+    this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, msg.new);
   }
 
@@ -692,7 +692,7 @@ class TransactionProcessor {
     // Delete from metadata table
     this.#columnMetadata.deleteColumn(table, column);
 
-    this.#bumpVersions(table);
+    this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, column);
   }
 
@@ -735,12 +735,9 @@ class TransactionProcessor {
     this.#lc.info?.(drop.tag, name);
   }
 
-  #bumpVersions(table: string) {
-    this.#db.run(
-      `UPDATE ${id(table)} SET ${id(ZERO_VERSION_COLUMN_NAME)} = ?`,
-      this.#version,
-    );
-    this.#logResetOp(table);
+  #bumpVersions(table: Identifier) {
+    this.#tableMetadata.setMinRowVersion(table, this.#version);
+    this.#logResetOp(liteTableName(table));
   }
 
   /**
@@ -859,7 +856,7 @@ class TransactionProcessor {
     }
     // Given that new columns are being exposed for every row in the table, bump the
     // row version for all rows.
-    this.#bumpVersions(tableName);
+    this.#bumpVersions(relation);
     if (status) {
       this.#completedBackfill = {table: tableName, columns: cols, ...status};
     }

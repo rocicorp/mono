@@ -48,7 +48,10 @@ import {
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
-import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
+import {
+  getSubscriptionState,
+  ZERO_VERSION_COLUMN_NAME,
+} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
@@ -463,7 +466,12 @@ export class PipelineDriver {
         },
       });
 
-      yield* hydrateInternal(input, queryID, must(this.#primaryKeys));
+      yield* hydrateInternal(
+        input,
+        queryID,
+        must(this.#primaryKeys),
+        this.#tableSpecs,
+      );
 
       for (const {table, row} of companionRows) {
         const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
@@ -805,7 +813,7 @@ export class PipelineDriver {
 
   #startAccumulating() {
     assert(this.#streamer === null, 'Streamer already started');
-    this.#streamer = new Streamer(must(this.#primaryKeys));
+    this.#streamer = new Streamer(must(this.#primaryKeys), this.#tableSpecs);
   }
 
   #stopAccumulating(): Streamer {
@@ -818,9 +826,14 @@ export class PipelineDriver {
 
 class Streamer {
   readonly #primaryKeys: Map<string, PrimaryKey>;
+  readonly #tableSpecs: Map<string, LiteAndZqlSpec>;
 
-  constructor(primaryKeys: Map<string, PrimaryKey>) {
+  constructor(
+    primaryKeys: Map<string, PrimaryKey>,
+    tableSpecs: Map<string, LiteAndZqlSpec>,
+  ) {
     this.#primaryKeys = primaryKeys;
+    this.#tableSpecs = tableSpecs;
   }
 
   readonly #changes: [
@@ -897,6 +910,7 @@ class Streamer {
     const {tableName: table, system} = schema;
 
     const primaryKey = must(this.#primaryKeys.get(table));
+    const spec = must(this.#tableSpecs.get(table)).tableSpec;
 
     // We do not sync rows gathered by the permissions
     // system to the client.
@@ -909,8 +923,18 @@ class Streamer {
         yield node;
         continue;
       }
-      const {relationships, row} = node;
+      const {relationships} = node;
+      let {row} = node;
       const rowKey = getRowKey(primaryKey, row);
+      if (op !== 'remove') {
+        const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
+        if (
+          typeof rowVersion === 'string' &&
+          rowVersion < (spec.minRowVersion ?? '00')
+        ) {
+          row = {...row, [ZERO_VERSION_COLUMN_NAME]: spec.minRowVersion};
+        }
+      }
 
       yield {
         type: op,
@@ -951,13 +975,13 @@ export function* hydrate(
   input: Input,
   hash: string,
   clientSchema: ClientSchema,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
 ): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
-  const streamer = new Streamer(buildPrimaryKeys(clientSchema)).accumulate(
-    hash,
-    input.getSchema(),
-    toAdds(res),
-  );
+  const streamer = new Streamer(
+    buildPrimaryKeys(clientSchema),
+    tableSpecs,
+  ).accumulate(hash, input.getSchema(), toAdds(res));
   yield* streamer.stream();
 }
 
@@ -965,9 +989,10 @@ export function* hydrateInternal(
   input: Input,
   hash: string,
   primaryKeys: Map<string, PrimaryKey>,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
 ): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
-  const streamer = new Streamer(primaryKeys).accumulate(
+  const streamer = new Streamer(primaryKeys, tableSpecs).accumulate(
     hash,
     input.getSchema(),
     toAdds(res),

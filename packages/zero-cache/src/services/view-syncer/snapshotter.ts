@@ -6,7 +6,10 @@ import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
-import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
+import type {
+  LiteAndZqlSpec,
+  LiteTableSpecWithKeysAndVersion,
+} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {
   normalizedKeyOrder,
@@ -324,7 +327,7 @@ class Snapshot {
     };
   }
 
-  getRow(table: LiteTableSpecWithKeys, rowKey: JSONValue) {
+  getRow(table: LiteTableSpecWithKeysAndVersion, rowKey: JSONValue) {
     const key = normalizedKeyOrder(rowKey as RowKey);
     const conds = Object.keys(key).map(c => `${id(c)}=?`);
     const cols = Object.keys(table.columns);
@@ -342,7 +345,11 @@ class Snapshot {
     }
   }
 
-  getRows(table: LiteTableSpecWithKeys, keys: PrimaryKey[], row: RowValue) {
+  getRows(
+    table: LiteTableSpecWithKeysAndVersion,
+    keys: PrimaryKey[],
+    row: RowValue,
+  ) {
     // Filter out keys where any column is NULL. This is both correct and
     // critical for performance:
     // 1. Correctness: NULL values can't violate uniqueness (NULL != NULL in SQL)
@@ -445,6 +452,20 @@ class Diff implements SnapshotDiff {
               throw new Error(`change for unknown table ${table}`);
             }
             const {tableSpec, zqlSpec} = specs;
+
+            // Sanity check: All change log ops should have a stateVersion
+            // greater than minRowVersion in the table metadata. This is a
+            // mini-proof that the overlay does not need to be applied to
+            // rows produced in incremental catchup, based on the invariant in
+            // change-processor's #bumpVersions(), whereby the setting of the
+            // minRowVersion is always followed by a RESET OP, meaning that
+            // subsequent change-log traversal happens at a later version.
+            assert(
+              (tableSpec.minRowVersion ?? '') < stateVersion,
+              () =>
+                `unexpected change @${stateVersion} for table ${table} with ` +
+                `minRowVersion ${tableSpec.minRowVersion}: ${op}(${rowKey})`,
+            );
 
             assert(rowKey !== null, 'rowKey must be present for row changes');
             const nextValue =

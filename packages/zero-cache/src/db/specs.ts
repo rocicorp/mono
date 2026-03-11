@@ -67,7 +67,10 @@ export type MutableLiteTableSpec = v.Infer<typeof liteTableSpec>;
 
 export type LiteTableSpec = Readonly<MutableLiteTableSpec>;
 
-export type LiteTableSpecWithKeys = Omit<LiteTableSpec, 'primaryKey'> & {
+export type LiteTableSpecWithKeysAndVersion = Omit<
+  LiteTableSpec,
+  'primaryKey'
+> & {
   /**
    * All keys associated with a unique index.  Includes indexes with
    * nullable columns.
@@ -86,10 +89,17 @@ export type LiteTableSpecWithKeys = Omit<LiteTableSpec, 'primaryKey'> & {
    * columns, i.e. suitable as a primary key.
    */
   allPotentialPrimaryKeys: PrimaryKey[];
+
+  /**
+   * The minimum `_0_version` value for every row in the table. If this is
+   * present, `_0_version` value in the row itself should only be used if
+   * it is greater (i.e. later) than the `minRowVersion`.
+   */
+  minRowVersion: string | null;
 };
 
 export type LiteAndZqlSpec = {
-  tableSpec: LiteTableSpecWithKeys;
+  tableSpec: LiteTableSpecWithKeysAndVersion;
   zqlSpec: Record<string, SchemaValue>;
 };
 

@@ -5,6 +5,7 @@ import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import type {JWTAuth} from '../../zero-cache/src/auth/auth.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
@@ -40,7 +41,7 @@ export async function runAst(
   isTransformed: boolean,
   options: RunAstOptions,
 ): Promise<AnalyzeQueryResult> {
-  const {clientToServerMapper, permissions, host} = options;
+  const {clientToServerMapper, permissions, host, db} = options;
   const result: AnalyzeQueryResult = {
     warnings: [],
     syncedRows: undefined,
@@ -89,7 +90,15 @@ export async function runAst(
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
   const seenByTable: Set<string> = new Set();
-  for (const rowChange of hydrate(pipeline, hashOfAST(ast), clientSchema)) {
+  const tableSpecs = computeZqlSpecs(lc, db, {
+    includeBackfillingColumns: false,
+  });
+  for (const rowChange of hydrate(
+    pipeline,
+    hashOfAST(ast),
+    clientSchema,
+    tableSpecs,
+  )) {
     if (rowChange === 'yield') {
       continue;
     }
