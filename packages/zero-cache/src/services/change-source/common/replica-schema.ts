@@ -188,4 +188,29 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       `);
     },
   },
+
+  12: {
+    migrateSchema: (_, db) => {
+      // Bring back the "metadata" column removed in v11, but as a NULL-able column.
+      // It is needed for backwards compatibility.
+      db.exec(/*sql*/ `
+        ALTER TABLE "_zero.tableMetadata"
+          ADD COLUMN "metadata" TEXT;
+      `);
+    },
+
+    migrateData: (_, db) => {
+      // For rollback then roll forward, re-copy anything written to metadata.
+      db.exec(/*sql*/ `
+        UPDATE "_zero.tableMetadata" 
+          SET "upstreamMetadata" = COALESCE("metadata", "upstreamMetadata"),
+              "metadata" = NULL;
+      `);
+    },
+  },
 };
+
+// Referenced in tests.
+export const CURRENT_SCHEMA_VERSION = Object.keys(
+  schemaVersionMigrationMap,
+).reduce((prev, curr) => Math.max(prev, parseInt(curr)), 0);
