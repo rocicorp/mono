@@ -10,13 +10,14 @@ import {initReplicationState} from '../../replicator/schema/replication-state.ts
 import {
   CREATE_V6_COLUMN_METADATA_TABLE,
   CREATE_V7_CHANGE_LOG,
+  CREATE_V9_TABLE_METADATA_TABLE,
   initReplica,
 } from './replica-schema.ts';
 
 // Update as necessary.
-const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 10,
-  schemaVersion: 10,
+export const CURRENT_SCHEMA_VERSIONS = {
+  dataVersion: 11,
+  schemaVersion: 11,
   minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
@@ -275,6 +276,37 @@ describe('replica-schema-migrations', () => {
           },
         ],
         ['_zero.tableMetadata']: [],
+      },
+    },
+    {
+      fromVersion: 9,
+      desc: 'add table metadata',
+      replicaSetup:
+        `
+        CREATE TABLE users("userID" "INTEGER|NOT_NULL", password TEXT, handle TEXT);
+      ` +
+        CREATE_V1_REPLICATION_CONFIG_TABLE +
+        CREATE_V6_COLUMN_METADATA_TABLE +
+        CREATE_V7_CHANGE_LOG +
+        CREATE_V9_TABLE_METADATA_TABLE,
+      replicaPreState: {
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'foo',
+            table: 'bar',
+            metadata: '{"foo":"bar"}',
+          },
+        ],
+      },
+      replicaPostState: {
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'foo',
+            table: 'bar',
+            minRowVersion: '00',
+            upstreamMetadata: '{"foo":"bar"}',
+          },
+        ],
       },
     },
   ];

@@ -28,6 +28,7 @@ import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../replicator/schema/table-metadata.ts';
 import {zeroSchema} from './mutagen-test-shared.ts';
 import {processMutation} from './mutagen.ts';
 
@@ -145,6 +146,7 @@ async function createUpstreamTables(db: PostgresDB) {
 }
 
 function createReplicaTables(db: Database) {
+  db.exec(CREATE_TABLE_METADATA_TABLE);
   db.exec(sqlSchema);
 }
 

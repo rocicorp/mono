@@ -26,6 +26,7 @@ import type {Database} from '../../../zqlite/src/db.ts';
 import {resolveSimpleScalarSubqueries} from '../../../zqlite/src/resolve-scalar-subqueries.ts';
 import type {JWTAuth} from '../auth/auth.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
+import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {hydrate} from './view-syncer/pipeline-driver.ts';
 
@@ -51,7 +52,7 @@ export async function runAst(
   options: RunAstOptions,
   yieldProcess: () => Promise<void>,
 ): Promise<AnalyzeQueryResult> {
-  const {clientToServerMapper, permissions, host} = options;
+  const {clientToServerMapper, permissions, host, db} = options;
   const result: AnalyzeQueryResult = {
     warnings: [],
     syncedRows: undefined,
@@ -131,6 +132,7 @@ export async function runAst(
     pipeline,
     hashOfAST(resolvedAst),
     clientSchema,
+    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}),
   )) {
     if (rowChange === 'yield') {
       await yieldProcess();

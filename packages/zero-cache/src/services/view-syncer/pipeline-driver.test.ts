@@ -947,12 +947,30 @@ describe('view-syncer/pipeline-driver', () => {
       messages.addColumn('issues', 'newColumn', {dataType: 'TEXT', pos: 0}),
     );
 
+    // Update one of the rows after the schema change.
+    replicator.processTransaction('135', messages.update('issues', {id: '2'}));
+
     pipelines.advanceWithoutDiff();
     pipelines.reset(clientSchema);
 
     expect(pipelines.queries()).toEqual(new Map());
 
-    // The newColumn should be reflected after a reset.
+    // Under the hood, the row versions are the same but the minRowVersion is
+    // bumped in the tableMetadata.
+    expect(
+      db.prepare(`SELECT id, _0_version FROM issues ORDER BY id`).all(),
+    ).toMatchObject([
+      {id: '1', _0_version: '123'},
+      {id: '2', _0_version: '135'},
+      {id: '3', _0_version: '123'},
+    ]);
+
+    expect(
+      db.prepare(`SELECT minRowVersion FROM "_zero.tableMetadata"`).get(),
+    ).toMatchObject({minRowVersion: '134'});
+
+    // The newColumn should be reflected after a reset, with the bumped
+    // minRowVersion for older rows.
     expect([
       ...pipelines.addQuery(
         'hash1',
@@ -979,7 +997,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryID": "queryID1",
           "row": {
-            "_0_version": "134",
+            "_0_version": "135",
             "closed": true,
             "id": "2",
             "newColumn": null,

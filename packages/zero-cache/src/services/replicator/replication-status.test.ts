@@ -7,6 +7,7 @@ import {
   replicationStatusEvent,
   ReplicationStatusPublisher,
 } from './replication-status.ts';
+import {CREATE_TABLE_METADATA_TABLE} from './schema/table-metadata.ts';
 
 describe('replicator/replication-status', () => {
   let lc: LogContext;
@@ -15,6 +16,7 @@ describe('replicator/replication-status', () => {
   beforeEach(() => {
     lc = createSilentLogContext();
     replica = new Database(createSilentLogContext(), ':memory:');
+    replica.exec(CREATE_TABLE_METADATA_TABLE);
   });
 
   test('initializing', () => {
@@ -67,7 +69,7 @@ describe('replicator/replication-status', () => {
               "unique": true,
             },
           ],
-          "replicaSize": 20480,
+          "replicaSize": 28672,
           "tables": [
             {
               "columns": [
@@ -158,7 +160,7 @@ describe('replicator/replication-status', () => {
               "unique": true,
             },
           ],
-          "replicaSize": 20480,
+          "replicaSize": 28672,
           "tables": [
             {
               "columns": [
@@ -232,7 +234,7 @@ describe('replicator/replication-status', () => {
               "unique": true,
             },
           ],
-          "replicaSize": 12288,
+          "replicaSize": 20480,
           "tables": [
             {
               "columns": [
@@ -332,7 +334,7 @@ describe('replicator/replication-status', () => {
             },
           ],
           "indexes": [],
-          "replicaSize": 0,
+          "replicaSize": 12288,
           "tables": [],
         },
         "status": "OK",

@@ -23,8 +23,8 @@ const SHARD_NUM = 9;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 10,
-  schemaVersion: 10,
+  dataVersion: 11,
+  schemaVersion: 11,
   minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };

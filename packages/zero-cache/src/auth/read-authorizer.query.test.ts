@@ -45,6 +45,7 @@ import {
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../services/replicator/schema/table-metadata.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
 
@@ -521,6 +522,7 @@ beforeEach(() => {
   replica.exec(`
     CREATE TABLE "app.permissions" (permissions JSON, hash TEXT);
   `);
+  replica.exec(CREATE_TABLE_METADATA_TABLE);
   const permsJSON = JSON.stringify(permissions);
   replica
     .prepare(`INSERT INTO "app.permissions" (permissions, hash) VALUES (?, ?)`)

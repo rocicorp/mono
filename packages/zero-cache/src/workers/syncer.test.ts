@@ -49,6 +49,7 @@ import {
 } from '../server/anonymous-otel-start.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../services/replicator/schema/table-metadata.ts';
 import type {ActivityBasedService} from '../services/service.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
@@ -65,6 +66,7 @@ sqlite.exec(`
 CREATE TABLE "test-app.permissions" (permissions, hash);
 INSERT INTO "test-app.permissions" (permissions, hash) VALUES (null, 'test-hash');
 `);
+sqlite.exec(CREATE_TABLE_METADATA_TABLE);
 
 // ------------------------------
 // Test helpers
@@ -82,6 +84,7 @@ function makeFactories(
 ) {
   const storageDb = new Database(lc, ':memory:');
   storageDb.prepare(CREATE_STORAGE_TABLE).run();
+  storageDb.exec(CREATE_TABLE_METADATA_TABLE);
   const writeAuthzStorage = new DatabaseStorage(storageDb);
 
   return {
