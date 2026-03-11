@@ -28,6 +28,9 @@ import type {
  *   able to compute the state of the metadata at arbitrary points
  *   in the past).
  *
+ * `metadata`: the previous name of the `upstreamMetadata` column,
+ *   kept for backwards compatibility.
+ *
  * This tracking is done:
  * 1. at the Change DB level, by the change-streamer
  * 2. at the replica level, in order to support the eventual configuration
@@ -40,6 +43,7 @@ export const CREATE_TABLE_METADATA_TABLE = /*sql*/ `
     "table"            TEXT NOT NULL,
     "minRowVersion"    TEXT NOT NULL DEFAULT "00",
     "upstreamMetadata" TEXT,
+    "metadata"         TEXT,  -- deprecated
     PRIMARY KEY ("schema", "table")
   );
 `;

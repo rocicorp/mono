@@ -38,12 +38,14 @@ describe('table-metadata', () => {
     expect(dumpTable()).toMatchInlineSnapshot(`
       [
         {
+          "metadata": null,
           "minRowVersion": "123",
           "schema": "internal",
           "table": "bar",
           "upstreamMetadata": null,
         },
         {
+          "metadata": null,
           "minRowVersion": "00",
           "schema": "public",
           "table": "foo",
@@ -69,12 +71,14 @@ describe('table-metadata', () => {
     expect(dumpTable()).toMatchInlineSnapshot(`
       [
         {
+          "metadata": null,
           "minRowVersion": "123",
           "schema": "internal",
           "table": "bar",
           "upstreamMetadata": "{"rowKey":{"columns":["a","b"]}}",
         },
         {
+          "metadata": null,
           "minRowVersion": "2b8a",
           "schema": "public",
           "table": "foo",
@@ -97,12 +101,14 @@ describe('table-metadata', () => {
     expect(dumpTable()).toMatchInlineSnapshot(`
       [
         {
+          "metadata": null,
           "minRowVersion": "123",
           "schema": "public",
           "table": "boo",
           "upstreamMetadata": "{"rowKey":{"columns":["a","b"]}}",
         },
         {
+          "metadata": null,
           "minRowVersion": "2b8a",
           "schema": "public",
           "table": "foo",
@@ -122,6 +128,7 @@ describe('table-metadata', () => {
     expect(dumpTable()).toMatchInlineSnapshot(`
       [
         {
+          "metadata": null,
           "minRowVersion": "123",
           "schema": "public",
           "table": "boo",

@@ -14,17 +14,16 @@ import {
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
-import {initReplica} from '../common/replica-schema.ts';
+import {CURRENT_SCHEMA_VERSION, initReplica} from '../common/replica-schema.ts';
 import {initialSync} from './initial-sync.ts';
 import {replicationSlotExpression} from './schema/shard.ts';
 
 const APP_ID = 'zeroz';
 const SHARD_NUM = 9;
 
-// Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 11,
-  schemaVersion: 11,
+  dataVersion: CURRENT_SCHEMA_VERSION,
+  schemaVersion: CURRENT_SCHEMA_VERSION,
   minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
