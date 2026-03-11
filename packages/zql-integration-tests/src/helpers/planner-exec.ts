@@ -570,6 +570,9 @@ export async function createPlannerInfrastructure(config: {
           pipeline,
           hashOfAST(astWithFlips),
           clientSchemaFrom(schema).clientSchema,
+          computeZqlSpecs(createSilentLogContext(), dbs.sqlite, {
+            includeBackfillingColumns: false,
+          }),
         )) {
           // Consume rows to execute the query
         }
