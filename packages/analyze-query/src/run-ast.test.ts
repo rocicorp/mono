@@ -1,12 +1,13 @@
 import {beforeEach, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../../zero-cache/src/services/replicator/schema/table-metadata.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../zero-protocol/src/client-schema.ts';
 import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {runAst, type RunAstOptions} from './run-ast.ts';
-import type {ClientSchema} from '../../zero-protocol/src/client-schema.ts';
 
 const minimalClientSchema: ClientSchema = {tables: {}};
 
@@ -71,6 +72,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
   };
   const isTransformed = true;
   const db = new Database(lc, ':memory:');
+  db.exec(CREATE_TABLE_METADATA_TABLE);
 
   const host = createMockHost(true);
 
@@ -92,7 +94,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
   expect(result1).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1003,
+      "end": 1017,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -100,7 +102,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
         },
       },
       "readRows": undefined,
-      "start": 1002,
+      "start": 1004,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -125,7 +127,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
   expect(result2).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1005,
+      "end": 1031,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -146,7 +148,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
           ],
         },
       },
-      "start": 1004,
+      "start": 1018,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -171,7 +173,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
   expect(result3).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1007,
+      "end": 1045,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -179,7 +181,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
         },
       },
       "readRows": undefined,
-      "start": 1006,
+      "start": 1032,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -194,6 +196,7 @@ test('runAst returns empty object for vendedRowCounts when no debug tracking', a
   };
   const isTransformed = true;
   const db = new Database(lc, ':memory:');
+  db.exec(CREATE_TABLE_METADATA_TABLE);
 
   const host = createMockHost(false); // No debug
 
@@ -214,11 +217,11 @@ test('runAst returns empty object for vendedRowCounts when no debug tracking', a
   expect(result).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1003,
+      "end": 1017,
       "readRowCount": 0,
       "readRowCountsByQuery": {},
       "readRows": undefined,
-      "start": 1002,
+      "start": 1004,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -233,6 +236,7 @@ test('runAst basic structure and functionality', async () => {
   };
   const isTransformed = true;
   const db = new Database(lc, ':memory:');
+  db.exec(CREATE_TABLE_METADATA_TABLE);
 
   const host = createMockHost(true);
 
@@ -253,7 +257,7 @@ test('runAst basic structure and functionality', async () => {
   expect(result).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1003,
+      "end": 1017,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -261,7 +265,7 @@ test('runAst basic structure and functionality', async () => {
         },
       },
       "readRows": undefined,
-      "start": 1002,
+      "start": 1004,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -333,6 +337,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
   };
   const isTransformed = true;
   const db = new Database(lc, ':memory:');
+  db.exec(CREATE_TABLE_METADATA_TABLE);
   const host = createMockHost(false);
 
   const options: RunAstOptions = {
@@ -402,6 +407,7 @@ test('runAst handles case where all synced rows are duplicates', async () => {
   };
   const isTransformed = true;
   const db = new Database(lc, ':memory:');
+  db.exec(CREATE_TABLE_METADATA_TABLE);
   const host = createMockHost(false);
 
   const options: RunAstOptions = {
