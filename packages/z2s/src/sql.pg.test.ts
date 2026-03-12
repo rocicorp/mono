@@ -100,6 +100,62 @@ describe('SQL builder with PostgreSQL', () => {
       tags: ['tag1', 'tag2'],
     });
   });
+
+  test.each([
+    {label: 'empty string', type: 'json', value: ''},
+    {label: 'empty string', type: 'jsonb', value: ''},
+    {label: 'non-empty string', type: 'json', value: 'same'},
+    {label: 'non-empty string', type: 'jsonb', value: 'same'},
+  ] as const)(
+    'writes equal $label values correctly when text is formatted before $type',
+    async ({label: _label, type, value}) => {
+      const table = `mixed_values_${type}`;
+      await pg.unsafe(`
+        DROP TABLE IF EXISTS "${table}";
+        CREATE TABLE "${table}" (
+          summary TEXT NOT NULL,
+          content ${type.toUpperCase()} NOT NULL
+        );
+      `);
+
+      const stmt = formatPgInternalConvert(sql`
+        INSERT INTO ${sql.ident(table)} (summary, content)
+        VALUES (${sqlConvertArg('text', value)}, ${sqlConvertArg(type, value)})
+        RETURNING summary, content
+      `);
+      const result = await pg.unsafe(stmt.text, stmt.values as JSONValue[]);
+
+      expect(result).toEqual([{summary: value, content: value}]);
+    },
+  );
+
+  test.each([
+    {label: 'empty string', type: 'json', value: ''},
+    {label: 'empty string', type: 'jsonb', value: ''},
+    {label: 'non-empty string', type: 'json', value: 'same'},
+    {label: 'non-empty string', type: 'jsonb', value: 'same'},
+  ] as const)(
+    'writes equal $label values correctly when $type is formatted before text',
+    async ({label: _label, type, value}) => {
+      const table = `mixed_values_${type}`;
+      await pg.unsafe(`
+        DROP TABLE IF EXISTS "${table}";
+        CREATE TABLE "${table}" (
+          summary TEXT NOT NULL,
+          content ${type.toUpperCase()} NOT NULL
+        );
+      `);
+
+      const stmt = formatPgInternalConvert(sql`
+        INSERT INTO ${sql.ident(table)} (content, summary)
+        VALUES (${sqlConvertArg(type, value)}, ${sqlConvertArg('text', value)})
+        RETURNING content, summary
+      `);
+      const result = await pg.unsafe(stmt.text, stmt.values as JSONValue[]);
+
+      expect(result).toEqual([{content: value, summary: value}]);
+    },
+  );
 });
 
 const pluralComparison = {
