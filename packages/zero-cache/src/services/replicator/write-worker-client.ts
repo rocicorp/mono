@@ -26,9 +26,26 @@ export interface WriteWorkerClient {
 }
 
 // Wire protocol types — errors are passed directly via structured clone
-export type Method = 'init' | 'getSubscriptionState' | 'processMessage' | 'abort' | 'stop';
+export type Method =
+  | 'init'
+  | 'getSubscriptionState'
+  | 'processMessage'
+  | 'abort'
+  | 'stop';
 export type Request = {method: Method; args: unknown[]};
-export type Response = {result?: unknown; error?: unknown};
+
+export type ResultMap = {
+  init: void;
+  getSubscriptionState: SubscriptionState;
+  processMessage: CommitResult | null;
+  abort: void;
+  stop: void;
+};
+
+export type Response<M extends Method = Method> =
+  | {method: M; result: ResultMap[M]; error?: undefined}
+  | {method: M; error: unknown; result?: undefined};
+
 export type PushError = {pushError: Error};
 
 export function applyPragmas(db: Database, pragmas: PragmaConfig) {
@@ -66,7 +83,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
       const r = this.#pending;
       if (!r) return; // stale abort response
       this.#pending = null;
-      if (msg.error) {
+      if (msg.error !== undefined) {
         r.reject(
           msg.error instanceof Error ? msg.error : new Error(String(msg.error)),
         );
@@ -98,10 +115,13 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     }
   }
 
-  #call(method: Method, args: unknown[]): Promise<unknown> {
+  #call<M extends Method>(method: M, args: unknown[]): Promise<ResultMap[M]> {
     assert(this.#pending === null, `concurrent call: ${method}`);
-    const {promise, resolve, reject} = resolver<unknown>();
-    this.#pending = {resolve, reject};
+    const {promise, resolve, reject} = resolver<ResultMap[M]>();
+    this.#pending = {resolve, reject} as {
+      resolve: (v: unknown) => void;
+      reject: (e: Error) => void;
+    };
     this.#worker.postMessage({method, args} satisfies Request);
     return promise;
   }
@@ -111,17 +131,15 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     mode: ChangeProcessorMode,
     pragmas: PragmaConfig,
   ): Promise<void> {
-    return this.#call('init', [dbPath, mode, pragmas]) as Promise<void>;
+    return this.#call('init', [dbPath, mode, pragmas]);
   }
 
   getSubscriptionState(): Promise<SubscriptionState> {
-    return this.#call('getSubscriptionState', []) as Promise<SubscriptionState>;
+    return this.#call('getSubscriptionState', []);
   }
 
   processMessage(downstream: ChangeStreamData): Promise<CommitResult | null> {
-    return this.#call('processMessage', [
-      downstream,
-    ]) as Promise<CommitResult | null>;
+    return this.#call('processMessage', [downstream]);
   }
 
   abort(): void {
