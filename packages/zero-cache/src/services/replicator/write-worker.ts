@@ -1,3 +1,4 @@
+import {must} from '../../../../shared/src/must.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
@@ -27,7 +28,7 @@ let mode: ChangeProcessorMode | undefined;
 const port = parentPort;
 
 function createProcessor() {
-  processor = new ChangeProcessor(runner!, mode!, (_lc, err) => {
+  processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
     port.postMessage({
       pushError: err instanceof Error ? err : new Error(String(err)),
     } satisfies PushError);
@@ -47,17 +48,17 @@ const api: API = {
   },
 
   getSubscriptionState() {
-    return getSubscriptionState(runner!);
+    return getSubscriptionState(must(runner));
   },
 
   processMessage(downstream: ChangeStreamData) {
     const lc = createSilentLogContext();
-    return processor!.processMessage(lc, downstream);
+    return must(processor).processMessage(lc, downstream);
   },
 
   abort() {
     const lc = createSilentLogContext();
-    processor!.abort(lc);
+    must(processor).abort(lc);
     createProcessor();
   },
 
