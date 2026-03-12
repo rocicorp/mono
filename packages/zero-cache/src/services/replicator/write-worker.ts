@@ -7,8 +7,10 @@ import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
   applyPragmas,
+  type ArgsMap,
   type Method,
   type PragmaConfig,
+  type ResultMap,
   type WriteError,
   type Request,
   type Response,
@@ -35,7 +37,7 @@ function createProcessor() {
   });
 }
 
-type API = Record<Method, (...args: never[]) => unknown>;
+type API = {[M in Method]: (...args: ArgsMap[M]) => ResultMap[M]};
 
 const api: API = {
   init(dbPath: string, cpMode: ChangeProcessorMode, pragmas: PragmaConfig) {
@@ -72,7 +74,11 @@ const api: API = {
 
 port.on('message', (msg: Request) => {
   try {
-    const result = api[msg.method](...(msg.args as Parameters<API[Method]>));
+    // TS can't narrow msg.method + msg.args together; cast at the spread site.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = (api[msg.method] as (...args: any[]) => unknown)(
+      ...msg.args,
+    );
     // abort is fire-and-forget — no pending slot on the client side.
     if (msg.method !== 'abort') {
       port.postMessage({method: msg.method, result} as Response);

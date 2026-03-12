@@ -32,7 +32,15 @@ export type Method =
   | 'processMessage'
   | 'abort'
   | 'stop';
-export type Request = {method: Method; args: unknown[]};
+export type ArgsMap = {
+  init: [string, ChangeProcessorMode, PragmaConfig];
+  getSubscriptionState: [];
+  processMessage: [ChangeStreamData];
+  abort: [];
+  stop: [];
+};
+
+export type Request<M extends Method = Method> = {method: M; args: ArgsMap[M]};
 
 export type ResultMap = {
   init: void;
@@ -115,7 +123,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     }
   }
 
-  #call<M extends Method>(method: M, args: unknown[]): Promise<ResultMap[M]> {
+  #call<M extends Method>(method: M, args: ArgsMap[M]): Promise<ResultMap[M]> {
     assert(this.#pending === null, `concurrent call: ${method}`);
     const {promise, resolve, reject} = resolver<ResultMap[M]>();
     this.#pending = {resolve, reject} as {
