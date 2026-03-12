@@ -46,7 +46,7 @@ export type Response<M extends Method = Method> =
   | {method: M; result: ResultMap[M]; error?: undefined}
   | {method: M; error: unknown; result?: undefined};
 
-export type PushError = {pushError: Error};
+export type WriteError = {writeError: Error};
 
 export function applyPragmas(db: Database, pragmas: PragmaConfig) {
   db.pragma(`busy_timeout = ${pragmas.busyTimeout}`);
@@ -70,12 +70,12 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
   constructor(workerUrl: URL) {
     this.#worker = new Worker(workerUrl);
 
-    this.#worker.on('message', (msg: Response | PushError) => {
-      if ('pushError' in msg) {
+    this.#worker.on('message', (msg: Response | WriteError) => {
+      if ('writeError' in msg) {
         const error =
-          msg.pushError instanceof Error
-            ? msg.pushError
-            : new Error(String(msg.pushError));
+          msg.writeError instanceof Error
+            ? msg.writeError
+            : new Error(String(msg.writeError));
         this.#rejectAll(error);
         this.#errorHandler(error);
         return;

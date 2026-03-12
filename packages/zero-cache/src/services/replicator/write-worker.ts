@@ -9,7 +9,7 @@ import {
   applyPragmas,
   type Method,
   type PragmaConfig,
-  type PushError,
+  type WriteError,
   type Request,
   type Response,
 } from './write-worker-client.ts';
@@ -30,8 +30,8 @@ const port = parentPort;
 function createProcessor() {
   processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
     port.postMessage({
-      pushError: err instanceof Error ? err : new Error(String(err)),
-    } satisfies PushError);
+      writeError: err instanceof Error ? err : new Error(String(err)),
+    } satisfies WriteError);
   });
 }
 
