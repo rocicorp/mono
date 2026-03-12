@@ -1,3 +1,4 @@
+import {assert} from '../../../../shared/src/asserts.ts';
 import {resolver} from '@rocicorp/resolver';
 import {Worker} from 'node:worker_threads';
 import type {Database} from '../../../../zqlite/src/db.ts';
@@ -15,8 +16,6 @@ type ErrorHandler = (err: Error) => void;
 
 /**
  * Interface for a write worker that processes replication messages.
- * The main implementation uses a real worker_thread for non-blocking writes.
- * A synchronous in-process implementation is used for tests.
  */
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
@@ -27,8 +26,8 @@ export interface WriteWorkerClient {
 }
 
 // Wire protocol types — errors are passed directly via structured clone
-export type Request = {id: number; method: string; args: unknown[]};
-export type Response = {id: number; result?: unknown; error?: unknown};
+export type Request = {method: string; args: unknown[]};
+export type Response = {result?: unknown; error?: unknown};
 export type PushError = {pushError: Error};
 
 export function applyPragmas(db: Database, pragmas: PragmaConfig) {
@@ -40,16 +39,13 @@ export function applyPragmas(db: Database, pragmas: PragmaConfig) {
 }
 
 /**
- * Production implementation that delegates SQLite writes to a worker_thread,
+ * Delegates SQLite writes to a worker_thread,
  * keeping the main event loop free for WebSocket heartbeats and IPC.
  */
 export class ThreadWriteWorkerClient implements WriteWorkerClient {
   readonly #worker: Worker;
-  readonly #pending = new Map<
-    number,
-    {resolve: (v: unknown) => void; reject: (e: Error) => void}
-  >();
-  #nextID = 0;
+  #pending: {resolve: (v: unknown) => void; reject: (e: Error) => void} | null =
+    null;
   #errorHandler: ErrorHandler = () => {};
   #terminated = false;
 
@@ -66,9 +62,9 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
         this.#errorHandler(error);
         return;
       }
-      const r = this.#pending.get(msg.id);
-      if (!r) return;
-      this.#pending.delete(msg.id);
+      const r = this.#pending;
+      if (!r) return; // stale abort response
+      this.#pending = null;
       if (msg.error) {
         r.reject(
           msg.error instanceof Error ? msg.error : new Error(String(msg.error)),
@@ -94,17 +90,18 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
   }
 
   #rejectAll(err: Error) {
-    for (const [, r] of this.#pending) {
+    const r = this.#pending;
+    if (r) {
+      this.#pending = null;
       r.reject(err);
     }
-    this.#pending.clear();
   }
 
   #call(method: string, args: unknown[]): Promise<unknown> {
-    const id = ++this.#nextID;
+    assert(this.#pending === null, `concurrent call: ${method}`);
     const {promise, resolve, reject} = resolver<unknown>();
-    this.#pending.set(id, {resolve, reject});
-    this.#worker.postMessage({id, method, args} satisfies Request);
+    this.#pending = {resolve, reject};
+    this.#worker.postMessage({method, args} satisfies Request);
     return promise;
   }
 
@@ -127,7 +124,9 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
   }
 
   abort(): void {
-    void this.#call('abort', []).catch(() => {});
+    if (!this.#terminated) {
+      this.#worker.postMessage({method: 'abort', args: []} satisfies Request);
+    }
   }
 
   async stop(): Promise<void> {

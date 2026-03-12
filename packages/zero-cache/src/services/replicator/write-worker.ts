@@ -71,8 +71,13 @@ const api: API = {
 port.on('message', (msg: Request) => {
   try {
     const result = api[msg.method](...(msg.args as Parameters<API[string]>));
-    port.postMessage({id: msg.id, result} satisfies Response);
+    // abort is fire-and-forget — no pending slot on the client side.
+    if (msg.method !== 'abort') {
+      port.postMessage({result} satisfies Response);
+    }
   } catch (e) {
-    port.postMessage({id: msg.id, error: e} satisfies Response);
+    if (msg.method !== 'abort') {
+      port.postMessage({error: e} satisfies Response);
+    }
   }
 });
