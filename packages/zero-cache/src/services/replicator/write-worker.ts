@@ -6,6 +6,7 @@ import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
   applyPragmas,
+  type Method,
   type PragmaConfig,
   type PushError,
   type Request,
@@ -33,7 +34,7 @@ function createProcessor() {
   });
 }
 
-type API = Record<string, (...args: never[]) => unknown>;
+type API = Record<Method, (...args: never[]) => unknown>;
 
 const api: API = {
   init(dbPath: string, cpMode: ChangeProcessorMode, pragmas: PragmaConfig) {
@@ -70,7 +71,7 @@ const api: API = {
 
 port.on('message', (msg: Request) => {
   try {
-    const result = api[msg.method](...(msg.args as Parameters<API[string]>));
+    const result = api[msg.method](...(msg.args as Parameters<API[Method]>));
     // abort is fire-and-forget — no pending slot on the client side.
     if (msg.method !== 'abort') {
       port.postMessage({result} satisfies Response);

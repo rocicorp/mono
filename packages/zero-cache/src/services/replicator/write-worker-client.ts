@@ -26,7 +26,8 @@ export interface WriteWorkerClient {
 }
 
 // Wire protocol types — errors are passed directly via structured clone
-export type Request = {method: string; args: unknown[]};
+export type Method = 'init' | 'getSubscriptionState' | 'processMessage' | 'abort' | 'stop';
+export type Request = {method: Method; args: unknown[]};
 export type Response = {result?: unknown; error?: unknown};
 export type PushError = {pushError: Error};
 
@@ -97,7 +98,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     }
   }
 
-  #call(method: string, args: unknown[]): Promise<unknown> {
+  #call(method: Method, args: unknown[]): Promise<unknown> {
     assert(this.#pending === null, `concurrent call: ${method}`);
     const {promise, resolve, reject} = resolver<unknown>();
     this.#pending = {resolve, reject};
