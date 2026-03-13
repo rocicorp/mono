@@ -13,7 +13,10 @@ import {ChangeStreamerHttpServer} from '../services/change-streamer/change-strea
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
 import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
-import {AutoResetSignal, CHANGE_STREAMER_APP_NAME} from '../services/change-streamer/schema/tables.ts';
+import {
+  AutoResetSignal,
+  CHANGE_STREAMER_APP_NAME,
+} from '../services/change-streamer/schema/tables.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {replicationStatusError} from '../services/replicator/replication-status.ts';
 import {pgClient} from '../types/pg.ts';
