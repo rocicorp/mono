@@ -440,7 +440,7 @@ export class CVRStore {
       }
     }
 
-    lc.debug?.(
+    lc.info?.(
       `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
 
@@ -1152,7 +1152,7 @@ export class CVRStore {
       );
       if (stats) {
         const elapsed = performance.now() - start;
-        lc.debug?.(
+        lc.info?.(
           `flushed cvr@${versionString(cvr.version)} ` +
             `${JSON.stringify(stats)} in (${elapsed} ms)`,
         );

@@ -176,7 +176,7 @@ export class RowRecordCache {
           cache.set(rowRecord.id, rowRecord);
         }
       }
-      this.#lc.debug?.(
+      this.#lc.info?.(
         `Loaded ${cache.size} row records in ${Date.now() - start} ms`,
       );
       r.resolve(cache);
@@ -261,7 +261,7 @@ export class RowRecordCache {
           {mode: Mode.READ_COMMITTED},
         );
         const elapsed = performance.now() - start;
-        this.#lc.debug?.(
+        this.#lc.info?.(
           `flushed ${rows} rows@${versionString(rowsVersion)} (${elapsed} ms)`,
         );
         this.#recordAsyncFlushStats(rows, elapsed);
@@ -269,12 +269,13 @@ export class RowRecordCache {
         // Note: apply() may have called while the transaction was committing,
         //       which will result in looping to commit the next #pendingRowsVersion.
       }
-      this.#lc.debug?.(
+      this.#lc.info?.(
         `up to date rows@${versionToNullableCookie(this.#flushedRowsVersion)}`,
       );
       flushing.resolve();
       this.#flushing = null;
     } catch (e) {
+      this.#lc.info?.(`row record flush failed`, e);
       flushing.reject(e);
       this.#failService(e);
     }
@@ -355,7 +356,7 @@ export class RowRecordCache {
     }
 
     const totalMs = Date.now() - startMs;
-    lc.debug?.(
+    lc.info?.(
       `finished row catchup (flush: ${flushMs} ms, total: ${totalMs} ms)`,
     );
   }
@@ -423,7 +424,7 @@ export class RowRecordCache {
       "refCounts" = excluded."refCounts"
     `,
       );
-      lc.debug?.(
+      lc.info?.(
         `flushing ${rowUpdates.size} rows (${rowRecordRows.length} inserts, ${
           rowUpdates.size - rowRecordRows.length
         } deletes)`,

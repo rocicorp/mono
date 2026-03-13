@@ -632,12 +632,18 @@ export class PipelineDriver {
       this.#hydrateContext === null,
       'Cannot advance while hydration is in progress',
     );
+    const totalHydrationTimeMs = this.totalHydrationTimeMs();
     this.#advanceContext = {
       timer,
-      totalHydrationTimeMs: this.totalHydrationTimeMs(),
+      totalHydrationTimeMs,
       numChanges,
       pos: 0,
     };
+    this.#lc.info?.(
+      `starting pipeline advancement of ${numChanges} changes with an ` +
+        `advancement time limited based on total hydration time of ` +
+        `${totalHydrationTimeMs} ms.`,
+    );
     try {
       for (const {table, prevValues, nextValue} of diff) {
         // Advance progress is checked each time a row is fetched
