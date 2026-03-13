@@ -351,7 +351,8 @@ export async function terminateChangeDBLockHolders(
         SELECT unnest(pg_blocking_pids(blocked.pid))
           FROM unnest(${blockedPids}::int[]) AS blocked(pid)
       )
-      AND application_name = ${CHANGE_STREAMER_APP_NAME}`;
+      AND application_name = ${CHANGE_STREAMER_APP_NAME}
+      AND pid != ALL(${blockedPids}::int[])`;
 
   if (terminated.length === 0) {
     lc.info?.(`no ${CHANGE_STREAMER_APP_NAME} blockers found to terminate`);
