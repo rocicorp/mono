@@ -106,9 +106,12 @@ export class IncrementalSyncer {
           this.#replicationEvents.add(1);
           switch (message[0]) {
             case 'status':
+              // Used for checking if a replica can be caught up. Not
+              // relevant here.
               lc.debug?.(`Received initial status`, message[1]);
               break;
             case 'error':
+              // Unrecoverable error. Stop the service.
               this.stop(lc, message[1]);
               break;
             default: {
@@ -116,6 +119,7 @@ export class IncrementalSyncer {
               if (msg.tag === 'backfill' && msg.status) {
                 const {status} = msg;
                 if (!backfillStatus) {
+                  // Start publishing the status every 3 seconds.
                   backfillStatus = status;
                   statusPublisher?.publish(
                     lc,
@@ -139,7 +143,7 @@ export class IncrementalSyncer {
                         : {},
                   );
                 }
-                backfillStatus = status;
+                backfillStatus = status; // Update the current status
               }
 
               const result = await this.#worker.processMessage(
@@ -177,6 +181,7 @@ export class IncrementalSyncer {
       return;
     }
     if (result.completedBackfill) {
+      // Publish the final status
       const status = result.completedBackfill;
       statusPublisher?.publish(
         lc,
