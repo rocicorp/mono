@@ -44,6 +44,7 @@ import {
   AutoResetSignal,
   ensureReplicationConfig,
   markResetRequired,
+  terminateChangeDBLockHolders,
 } from './schema/tables.ts';
 import {Storer} from './storer.ts';
 import {Subscriber} from './subscriber.ts';
@@ -67,13 +68,25 @@ export async function initializeStreamer(
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
   await initChangeStreamerSchema(lc, changeDB, shard);
-  await ensureReplicationConfig(
-    lc,
-    changeDB,
-    subscriptionState,
-    shard,
-    autoReset,
-  );
+
+  // Race ensureReplicationConfig against a timeout. If it takes too long
+  // (e.g., TRUNCATE blocked by old storer catchup reads), terminate the
+  // blocking backends so the new replication-manager can proceed.
+  const timer = setTimeoutFn(async () => {
+    lc.info?.('ensureReplicationConfig blocked, terminating lock holders');
+    await terminateChangeDBLockHolders(lc, changeDB, shard);
+  }, LOCK_HOLDER_TERMINATE_TIMEOUT_MS);
+  try {
+    await ensureReplicationConfig(
+      lc,
+      changeDB,
+      subscriptionState,
+      shard,
+      autoReset,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   const {replicaVersion} = subscriptionState;
   return new ChangeStreamerImpl(
@@ -587,4 +600,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 // `services/running-state.ts`. This allows the `zero-cache` [3] to reconnect
 // so that the `change-streamer` can track its progress and know when it has
 // surpassed the initial watermark of the backup [1].
+// The time to wait for ensureReplicationConfig to complete before
+// terminating blocking backends. If the TRUNCATE is blocked by
+// old storer catchup reads, this timeout triggers identification
+// and termination of the blocking backends.
+const LOCK_HOLDER_TERMINATE_TIMEOUT_MS = 5_000;
+
 const CLEANUP_DELAY_MS = DEFAULT_MAX_RETRY_DELAY_MS * 3;

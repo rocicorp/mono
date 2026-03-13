@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import postgres from 'postgres';
 import {beforeEach, describe, expect, vi, type Mock} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -82,6 +83,9 @@ describe('change-streamer/service', () => {
       1,
       setTimeoutFn as unknown as typeof setTimeout,
     );
+    // Clear the mock so the lock holder termination timer registered
+    // during initializeStreamer doesn't affect subsequent assertions.
+    setTimeoutFn.mockClear();
     streamerDone = streamer.run();
 
     return async () => {
@@ -1409,5 +1413,108 @@ describe('change-streamer/service', () => {
 
     // No more messages should have been sent
     await verifyNoMoreChanges(msgs);
+  });
+  test('initializeStreamer terminates lock holders blocking ensureReplicationConfig', async () => {
+    // Stop the streamer created by beforeEach so we can reinitialize.
+    await streamer.stop();
+
+    // The beforeEach already initialized the CDC tables with REPLICA_VERSION '01'.
+    // Add some changeLog data.
+    await sql`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
+        VALUES ('03', 0, '{"tag":"begin"}'::json),
+               ('03', 1, '{"tag":"commit"}'::json)
+    `.simple();
+
+    // Create multiple blocker connections simulating old storer catchup reads.
+    const {host, port, user: username, pass, database} = sql.options;
+    const NUM_BLOCKERS = 3;
+    const blockerConns: postgres.Sql[] = [];
+    const blockerTxDone: Promise<void>[] = [];
+    const readyPromises: Promise<void>[] = [];
+
+    for (let i = 0; i < NUM_BLOCKERS; i++) {
+      const conn = postgres({
+        host: host[0],
+        port: port[0],
+        username,
+        password: pass ?? undefined,
+        database,
+        connection: {['application_name']: 'zero-change-streamer'},
+      });
+      blockerConns.push(conn);
+
+      const {promise: ready, resolve: resolveReady} = resolver<void>();
+      readyPromises.push(ready);
+
+      const txDone = conn.begin(async tx => {
+        await tx`SELECT * FROM "zoro_3/cdc"."changeLog"`;
+        resolveReady();
+        await new Promise<void>(() => {}); // Keep tx open.
+      });
+      blockerTxDone.push(txDone.catch(() => {}));
+    }
+
+    await Promise.all(readyPromises);
+
+    // Create a new subscription state with a different replicaVersion.
+    // This will cause ensureReplicationConfig to TRUNCATE the CDC tables.
+    const replica2 = new Database(lc, ':memory:');
+    initReplicationState(replica2, ['zero_data'], '0a');
+    const newConfig = getSubscriptionState(new StatementRunner(replica2));
+
+    const newChanges = Subscription.create<ChangeStreamMessage>();
+
+    // Use real setTimeout with a short delay (100ms) so the lock holder
+    // termination fires quickly when the TRUNCATE blocks.
+    const shortSetTimeout = ((fn: () => void, ms: number) =>
+      setTimeout(fn, Math.min(ms, 100))) as typeof setTimeout;
+
+    let newStreamer: ChangeStreamerService | undefined;
+    try {
+      // initializeStreamer should block on TRUNCATE, then the setTimeout
+      // will fire and terminate the blockers, allowing it to complete.
+      newStreamer = await initializeStreamer(
+        lc,
+        shard,
+        'new-task-id',
+        'change.streamer:12345',
+        'ws',
+        sql,
+        {
+          startStream: () =>
+            Promise.resolve({
+              initialWatermark: '0a',
+              changes: newChanges,
+              acks: {push: () => {}},
+            }),
+        },
+        newConfig,
+        true,
+        0.04,
+        1,
+        shortSetTimeout,
+      );
+
+      // Verify the CDC tables were re-initialized with the new version.
+      await expectTables(sql, {
+        ['zoro_3/cdc.changeLog']: [
+          {watermark: '0a', pos: 0n, change: {tag: 'begin'}, precommit: null},
+          {watermark: '0a', pos: 1n, change: {tag: 'commit'}, precommit: null},
+        ],
+        ['zoro_3/cdc.replicationConfig']: [
+          {
+            replicaVersion: '0a',
+            publications: ['zero_data'],
+            resetRequired: null,
+            lock: 1,
+          },
+        ],
+      });
+    } finally {
+      await newStreamer?.stop();
+      await Promise.allSettled(blockerTxDone);
+      await Promise.all(blockerConns.map(c => c.end()));
+    }
   });
 });

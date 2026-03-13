@@ -269,3 +269,67 @@ export async function ensureReplicationConfig(
 export class AutoResetSignal extends AbortError {
   readonly name = 'AutoResetSignal';
 }
+
+/**
+ * Terminates zero-cache backends that are blocking the current backend
+ * from acquiring locks on CDC tables (e.g., during TRUNCATE).
+ *
+ * This is used during change-DB takeover when the new replication-manager's
+ * `ensureReplicationConfig` needs to TRUNCATE tables, but the old
+ * replication-manager's storer is still reading from them (e.g., large
+ * catchup cursors).
+ *
+ * The function:
+ * 1. Finds backends waiting for a lock on a TRUNCATE in {schema}
+ * 2. Uses `pg_blocking_pids()` to identify which backends are blocking them
+ * 3. Terminates blocking backends that have `application_name = 'zero-change-streamer'`
+ *
+ * Must be called on a **separate connection** from the one that is blocked,
+ * since the blocked connection is inside a pending transaction.
+ */
+export async function terminateChangeDBLockHolders(
+  lc: LogContext,
+  db: PostgresDB,
+  shard: ShardID,
+) {
+  const schema = cdcSchema(shard);
+
+  // Step 1: Find backends that are blocked waiting for a lock,
+  // whose query involves a TRUNCATE on this shard's CDC schema.
+  const blocked = await db<{pid: number}[]>`
+    SELECT pid FROM pg_stat_activity
+      WHERE wait_event_type = 'Lock'
+        AND query LIKE ${'%TRUNCATE%' + schema + '%'}`;
+
+  if (blocked.length === 0) {
+    lc.info?.('no blocked TRUNCATE backends found');
+    return;
+  }
+
+  const blockedPids = blocked.map(r => r.pid);
+  lc.info?.(`found blocked TRUNCATE backends: ${JSON.stringify(blockedPids)}`);
+
+  // Step 2: For each blocked backend, find and terminate its blockers
+  // that are zero-change-streamer connections.
+  const terminated = await db<
+    {pid: number; applicationName: string; query: string; terminated: boolean}[]
+  >`
+    SELECT pid, application_name as "applicationName", query,
+           pg_terminate_backend(pid) as terminated
+      FROM pg_stat_activity
+      WHERE pid = ANY(
+        SELECT unnest(pg_blocking_pids(blocked.pid))
+          FROM unnest(${blockedPids}::int[]) AS blocked(pid)
+      )
+      AND application_name = 'zero-change-streamer'`;
+
+  if (terminated.length === 0) {
+    lc.info?.('no zero-change-streamer blockers found to terminate');
+  } else {
+    for (const {pid, applicationName, query, terminated: ok} of terminated) {
+      lc.info?.(
+        `terminated blocking backend pid=${pid} app=${applicationName} ok=${ok} query=${query.slice(0, 200)}`,
+      );
+    }
+  }
+}
