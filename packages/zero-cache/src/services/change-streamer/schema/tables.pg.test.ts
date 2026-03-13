@@ -2,7 +2,6 @@ import postgres from 'postgres';
 import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import {sleep} from '../../../../../shared/src/sleep.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {expectTables, type PgTest, test} from '../../../test/db.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
@@ -12,7 +11,6 @@ import {
   ensureReplicationConfig,
   markResetRequired,
   setupCDCTables,
-  terminateChangeDBLockHolders,
 } from './tables.ts';
 
 describe('change-streamer/schema/tables', () => {
@@ -314,49 +312,27 @@ describe('change-streamer/schema/tables', () => {
     // Wait for all blockers to have acquired their read locks.
     await Promise.all(readyPromises);
 
-    // Now attempt a TRUNCATE with a short lock_timeout.
-    // It should fail because the blockers hold conflicting locks.
-    await expect(
-      sql.begin(async tx => {
-        await tx.unsafe(`SET LOCAL lock_timeout = '1s'`);
-        await tx`TRUNCATE TABLE "rezo_8/cdc"."changeLog"`;
-      }),
-    ).rejects.toThrow(/lock/i);
-
-    // Call terminateChangeDBLockHolders from a separate connection.
-    // But first, we need the TRUNCATE to be *blocked* (not timed out)
-    // so that pg_stat_activity shows it with wait_event_type = 'Lock'.
-    // Start ensureReplicationConfig (which does TRUNCATE) without a lock_timeout.
-    const configDone = ensureReplicationConfig(
-      lc,
-      sql,
-      {
-        replicaVersion: '1g8',
-        publications: ['zero_data', 'zero_metadata'],
-        watermark: '1g8',
-      },
-      shard,
-      true,
-    );
-
-    // Give the TRUNCATE time to show up as blocked in pg_stat_activity.
-    await sleep(500);
-
-    // Create a separate connection to call terminateChangeDBLockHolders.
-    const terminatorConn = postgres({
-      host: host[0],
-      port: port[0],
-      username,
-      password: pass ?? undefined,
-      database,
-    }) as unknown as PostgresDB;
+    // Use a short timeout (100ms) so the lock holder termination fires
+    // quickly when the TRUNCATE blocks inside ensureReplicationConfig.
+    const shortSetTimeout = ((fn: () => void, ms: number) =>
+      setTimeout(fn, Math.min(ms, 100))) as typeof setTimeout;
 
     try {
-      await terminateChangeDBLockHolders(lc, terminatorConn, shard);
-
-      // The ensureReplicationConfig should now complete since blockers
-      // were terminated.
-      await configDone;
+      // ensureReplicationConfig will TRUNCATE (different replicaVersion),
+      // block on the read locks, then the short timer fires and terminates
+      // the blocking backends, allowing the TRUNCATE to proceed.
+      await ensureReplicationConfig(
+        lc,
+        sql,
+        {
+          replicaVersion: '1g8',
+          publications: ['zero_data', 'zero_metadata'],
+          watermark: '1g8',
+        },
+        shard,
+        true,
+        shortSetTimeout,
+      );
 
       // Verify the tables were properly re-initialized.
       await expectTables(sql, {
@@ -379,7 +355,6 @@ describe('change-streamer/schema/tables', () => {
 
       // Clean up all connections.
       await Promise.all(blockerConns.map(c => c.end()));
-      await (terminatorConn as unknown as postgres.Sql).end();
     }
   });
 });
