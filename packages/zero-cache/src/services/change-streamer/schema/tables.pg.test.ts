@@ -307,19 +307,22 @@ describe('change-streamer/schema/tables', () => {
         // Keep the transaction open until terminated.
         await new Promise<void>(() => {});
       });
-      blockerTxDone.push(txDone.catch(() => {}));
+      txDone.catch(() => {}); // Prevent unhandled rejection.
+      blockerTxDone.push(txDone);
     }
 
     // Wait for all blockers to have acquired their read locks.
     await Promise.all(readyPromises);
 
-    // Use a short timeout (100ms) so the lock holder termination fires
-    // quickly when the TRUNCATE blocks inside ensureReplicationConfig.
-    const shortSetTimeout = ((fn: () => void, ms: number) =>
-      setTimeout(fn, Math.min(ms, 100))) as typeof setTimeout;
+    // Wrap setTimeout to capture the scheduled delay and fire quickly (10ms).
+    let scheduledMs: number | undefined;
+    const shortSetTimeout = ((fn: () => void, ms: number) => {
+      scheduledMs = ms;
+      return setTimeout(fn, 10);
+    }) as typeof setTimeout;
 
     // The connection doing the TRUNCATE needs application_name =
-    // 'zero-change-streamer' to match the terminateChangeDBLockHolders query.
+    // CHANGE_STREAMER_APP_NAME to match the terminateChangeDBLockHolders query.
     const truncateConn = postgres({
       host: host[0],
       port: port[0],
@@ -346,6 +349,9 @@ describe('change-streamer/schema/tables', () => {
         shortSetTimeout,
       );
 
+      // Verify the timer was scheduled for the production timeout.
+      expect(scheduledMs).toBe(5_000);
+
       // Verify the tables were properly re-initialized.
       await expectTables(sql, {
         ['rezo_8/cdc.changeLog']: [
@@ -362,8 +368,12 @@ describe('change-streamer/schema/tables', () => {
         ],
       });
     } finally {
-      // Wait for blocker transactions to finish (they error due to termination).
-      await Promise.allSettled(blockerTxDone);
+      // Verify all blocker transactions were terminated.
+      const results = await Promise.allSettled(blockerTxDone);
+      for (const result of results) {
+        expect(result.status).toBe('rejected');
+      }
+      expect(results).toHaveLength(NUM_BLOCKERS);
 
       // Clean up all connections.
       await Promise.all(blockerConns.map(c => c.end()));
