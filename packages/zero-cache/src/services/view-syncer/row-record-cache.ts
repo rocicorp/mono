@@ -275,6 +275,7 @@ export class RowRecordCache {
       flushing.resolve();
       this.#flushing = null;
     } catch (e) {
+      this.#lc.info?.(`row record flush failed`, e);
       flushing.reject(e);
       this.#failService(e);
     }
@@ -355,7 +356,7 @@ export class RowRecordCache {
     }
 
     const totalMs = Date.now() - startMs;
-    lc.debug?.(
+    lc.info?.(
       `finished row catchup (flush: ${flushMs} ms, total: ${totalMs} ms)`,
     );
   }
