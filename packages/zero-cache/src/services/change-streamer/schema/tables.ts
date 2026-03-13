@@ -293,6 +293,8 @@ export async function ensureReplicationConfig(
 // and termination of the blocking backends.
 const LOCK_HOLDER_TERMINATE_TIMEOUT_MS = 5_000;
 
+export const CHANGE_STREAMER_APP_NAME = 'zero-change-streamer';
+
 export class AutoResetSignal extends AbortError {
   readonly name = 'AutoResetSignal';
 }
@@ -326,6 +328,7 @@ export async function terminateChangeDBLockHolders(
   const blocked = await db<{pid: number}[]>`
     SELECT pid FROM pg_stat_activity
       WHERE wait_event_type = 'Lock'
+        AND application_name = ${CHANGE_STREAMER_APP_NAME}
         AND query LIKE ${'%TRUNCATE%' + schema + '%'}`;
 
   if (blocked.length === 0) {
@@ -348,10 +351,10 @@ export async function terminateChangeDBLockHolders(
         SELECT unnest(pg_blocking_pids(blocked.pid))
           FROM unnest(${blockedPids}::int[]) AS blocked(pid)
       )
-      AND application_name = 'zero-change-streamer'`;
+      AND application_name = ${CHANGE_STREAMER_APP_NAME}`;
 
   if (terminated.length === 0) {
-    lc.info?.('no zero-change-streamer blockers found to terminate');
+    lc.info?.(`no ${CHANGE_STREAMER_APP_NAME} blockers found to terminate`);
   } else {
     for (const {pid, applicationName, query, terminated: ok} of terminated) {
       lc.info?.(

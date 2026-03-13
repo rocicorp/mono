@@ -8,6 +8,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {
   AutoResetSignal,
+  CHANGE_STREAMER_APP_NAME,
   ensureReplicationConfig,
   markResetRequired,
   setupCDCTables,
@@ -291,7 +292,7 @@ describe('change-streamer/schema/tables', () => {
         username,
         password: pass ?? undefined,
         database,
-        connection: {['application_name']: 'zero-change-streamer'},
+        connection: {['application_name']: CHANGE_STREAMER_APP_NAME},
       });
       blockerConns.push(conn);
 
@@ -317,13 +318,24 @@ describe('change-streamer/schema/tables', () => {
     const shortSetTimeout = ((fn: () => void, ms: number) =>
       setTimeout(fn, Math.min(ms, 100))) as typeof setTimeout;
 
+    // The connection doing the TRUNCATE needs application_name =
+    // 'zero-change-streamer' to match the terminateChangeDBLockHolders query.
+    const truncateConn = postgres({
+      host: host[0],
+      port: port[0],
+      username,
+      password: pass ?? undefined,
+      database,
+      connection: {['application_name']: CHANGE_STREAMER_APP_NAME},
+    }) as unknown as PostgresDB;
+
     try {
       // ensureReplicationConfig will TRUNCATE (different replicaVersion),
       // block on the read locks, then the short timer fires and terminates
       // the blocking backends, allowing the TRUNCATE to proceed.
       await ensureReplicationConfig(
         lc,
-        sql,
+        truncateConn,
         {
           replicaVersion: '1g8',
           publications: ['zero_data', 'zero_metadata'],
@@ -355,6 +367,7 @@ describe('change-streamer/schema/tables', () => {
 
       // Clean up all connections.
       await Promise.all(blockerConns.map(c => c.end()));
+      await (truncateConn as unknown as postgres.Sql).end();
     }
   });
 });
