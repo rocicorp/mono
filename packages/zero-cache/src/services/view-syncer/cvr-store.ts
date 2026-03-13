@@ -440,7 +440,7 @@ export class CVRStore {
       }
     }
 
-    lc.debug?.(
+    lc.info?.(
       `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
 
@@ -1006,7 +1006,7 @@ export class CVRStore {
     // changes (i.e. changes to the CVR contents) to flush.
     this.putInstance(cvr);
     const start = Date.now();
-    lc.debug?.('flush tx beginning');
+    lc.info?.('flush tx beginning');
 
     // Use an async callback so we can await the version/ownership check and
     // validate it INSIDE the transaction. If validation fails, the exception
@@ -1098,7 +1098,7 @@ export class CVRStore {
       {mode: Mode.READ_COMMITTED},
     );
 
-    lc.debug?.(`flush tx completed after ${Date.now() - start} ms`);
+    lc.info?.(`flush tx completed after ${Date.now() - start} ms`);
 
     // Calculate how many row update queries were in the pipeline.
     // Note: the version check was awaited separately and is not in the results array.
