@@ -640,7 +640,9 @@ export class PipelineDriver {
       pos: 0,
     };
     this.#lc.info?.(
-      `starting pipeline advancement of ${numChanges} changes with a processing time limit of ${totalHydrationTimeMs}.`,
+      `starting pipeline advancement of ${numChanges} changes with an ` +
+        `advancement time limited based on total hydration time of ` +
+        `${totalHydrationTimeMs} ms.`,
     );
     try {
       for (const {table, prevValues, nextValue} of diff) {
