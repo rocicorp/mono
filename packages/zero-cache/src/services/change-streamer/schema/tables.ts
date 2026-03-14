@@ -287,10 +287,8 @@ export async function ensureReplicationConfig(
   });
 }
 
-// The time to wait for ensureReplicationConfig to complete before
-// terminating blocking backends. If the TRUNCATE is blocked by
-// old storer catchup reads, this timeout triggers identification
-// and termination of the blocking backends.
+// The time to wait for a TRUNCATE in ensureReplicationConfig before
+// terminating blocking backends via terminateChangeDBLockHolders.
 const LOCK_HOLDER_TERMINATE_TIMEOUT_MS = 5_000;
 
 export const CHANGE_STREAMER_APP_NAME = 'zero-change-streamer';
