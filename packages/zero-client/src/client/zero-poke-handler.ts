@@ -46,7 +46,7 @@ type PokeAccumulator = {
  */
 export class PokeHandler {
   readonly #replicachePoke: (poke: PokeInternal) => Promise<void>;
-  readonly #onPokeError: () => void;
+  readonly #onPokeError: (error: unknown) => void;
   readonly #clientID: ClientID;
   readonly #lc: LogContext;
   #receivingPoke: Omit<PokeAccumulator, 'pokeEnd'> | undefined = undefined;
@@ -62,7 +62,7 @@ export class PokeHandler {
 
   constructor(
     replicachePoke: (poke: PokeInternal) => Promise<void>,
-    onPokeError: () => void,
+    onPokeError: (error: unknown) => void,
     clientID: ClientID,
     schema: Schema,
     lc: LogContext,
@@ -203,7 +203,7 @@ export class PokeHandler {
       this.#lc.error?.('clearing due to unexpected poke error', e);
     }
     this.#clear();
-    this.#onPokeError();
+    this.#onPokeError(e);
   }
 
   #clear() {

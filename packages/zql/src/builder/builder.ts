@@ -345,7 +345,12 @@ function buildPipelineInternal(
   }
 
   if (ast.related) {
+    // Dedupe by alias - last one wins (LWW), like limit(5).limit(10)
+    const byAlias = new Map<string, CorrelatedSubquery>();
     for (const csq of ast.related) {
+      byAlias.set(csq.subquery.alias ?? '', csq);
+    }
+    for (const csq of byAlias.values()) {
       end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, false);
     }
   }
