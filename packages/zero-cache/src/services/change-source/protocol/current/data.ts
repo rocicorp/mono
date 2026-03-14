@@ -27,6 +27,9 @@ export const beginSchema = v.object({
   //
   // If absent, the format is assumed to be 'p' (parsed JSON objects/values).
   json: v.literalUnion('p', 's').optional(),
+
+  // Directs the change-streamer to skip the ACK for the corresponding commit.
+  skipAck: v.boolean().optional(),
 });
 
 export const commitSchema = v.object({
@@ -242,6 +245,14 @@ export const dropIndexSchema = v.object({
   id: identifierSchema,
 });
 
+export const downloadStatusSchema = v.object({
+  rows: v.number(),
+  totalRows: v.number(),
+  totalBytes: v.number().optional(),
+});
+
+export type DownloadStatus = v.Infer<typeof downloadStatusSchema>;
+
 // A batch of rows from a single table containing column values
 // to be backfilled.
 export const backfillSchema = v.object({
@@ -270,6 +281,10 @@ export const backfillSchema = v.object({
   // ]
   // ```
   rowValues: v.array(v.array(jsonValueSchema)),
+
+  // Optionally includes the progress of the backfill operation,
+  // for display purposes.
+  status: downloadStatusSchema.optional(),
 });
 
 // Indicates that the backfill for the specified columns have
@@ -288,6 +303,10 @@ export const backfillCompletedSchema = v.object({
   // stream, and in particular, the commit watermark of the backfill change's
   // enclosing transaction.
   watermark: v.string(),
+
+  // Optionally includes the final status of the backfill operation,
+  // for display purposes.
+  status: downloadStatusSchema.optional(),
 });
 
 export type MessageBegin = v.Infer<typeof beginSchema>;

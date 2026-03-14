@@ -157,7 +157,10 @@ export class CVRUpdater {
   }
 
   protected _setVersion(version: CVRVersion) {
-    assert(cmpVersions(this._cvr.version, version) < 0);
+    assert(
+      cmpVersions(this._cvr.version, version) < 0,
+      'Expected new version to be greater than current version',
+    );
     this._cvr.version = version;
     return version;
   }
@@ -738,7 +741,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * generated from {@link received} are sent.
    */
   #assertNewVersion(): CVRVersion {
-    assert(cmpVersions(this._orig.version, this._cvr.version) < 0);
+    assert(
+      cmpVersions(this._orig.version, this._cvr.version) < 0,
+      'Expected CVR version to have been bumped above original',
+    );
     return this._cvr.version;
   }
 

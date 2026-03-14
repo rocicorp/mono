@@ -6,6 +6,7 @@ import {
   ColumnMetadataStore,
   CREATE_COLUMN_METADATA_TABLE,
 } from '../services/replicator/schema/column-metadata.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../services/replicator/schema/table-metadata.ts';
 import {
   computeZqlSpecs,
   listIndexes,
@@ -58,6 +59,7 @@ describe('lite/tables', () => {
           },
           primaryKey: ['clientID'],
           backfilling: [],
+          minRowVersion: null,
         },
       ],
     },
@@ -164,6 +166,7 @@ describe('lite/tables', () => {
           },
           primaryKey: ['user_id'],
           backfilling: [],
+          minRowVersion: null,
         },
       ],
     },
@@ -217,6 +220,7 @@ describe('lite/tables', () => {
           },
           primaryKey: ['org_id', 'component_id', 'issue_id'],
           backfilling: [],
+          minRowVersion: null,
         },
       ],
     },
@@ -225,6 +229,7 @@ describe('lite/tables', () => {
   for (const c of cases) {
     test(c.name, () => {
       const db = new Database(createSilentLogContext(), ':memory:');
+      db.exec(CREATE_TABLE_METADATA_TABLE);
       db.exec(c.setupQuery);
 
       const tables = listTables(db);
@@ -321,6 +326,7 @@ describe('lite/indexes', () => {
   for (const c of cases) {
     test(c.name, () => {
       const db = new Database(createSilentLogContext(), ':memory:');
+      db.exec(CREATE_TABLE_METADATA_TABLE);
       db.exec(c.setupQuery);
 
       const tables = listIndexes(db);
@@ -332,6 +338,7 @@ describe('lite/indexes', () => {
 describe('computeZqlSpec', () => {
   function t(setup: string) {
     const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
     db.exec(setup);
     return [
       ...computeZqlSpecs(createSilentLogContext(), db, {
@@ -391,6 +398,90 @@ describe('computeZqlSpec', () => {
                 "pos": 4,
               },
             },
+            "minRowVersion": null,
+            "name": "foo",
+            "primaryKey": [
+              "b",
+            ],
+            "uniqueKeys": [
+              [
+                "b",
+              ],
+            ],
+          },
+          "zqlSpec": {
+            "a": {
+              "type": "number",
+            },
+            "b": {
+              "type": "number",
+            },
+            "c": {
+              "type": "number",
+            },
+            "d": {
+              "type": "number",
+            },
+          },
+        },
+      ]
+    `);
+  });
+
+  test('min row version', () => {
+    expect(
+      t(`
+    CREATE TABLE nopk(a INT, b INT, c INT, d INT);
+    CREATE TABLE foo(a INT, b "INT|NOT_NULL", c INT, d INT);
+    CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
+    INSERT INTO "_zero.tableMetadata" ("schema", "table", "minRowVersion")
+      VALUES ('public', 'foo', '123');
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "allPotentialPrimaryKeys": [
+              [
+                "b",
+              ],
+            ],
+            "backfilling": [],
+            "columns": {
+              "a": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "elemPgTypeClass": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "b": {
+                "characterMaximumLength": null,
+                "dataType": "INT|NOT_NULL",
+                "dflt": null,
+                "elemPgTypeClass": null,
+                "notNull": false,
+                "pos": 2,
+              },
+              "c": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "elemPgTypeClass": null,
+                "notNull": false,
+                "pos": 3,
+              },
+              "d": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "elemPgTypeClass": null,
+                "notNull": false,
+                "pos": 4,
+              },
+            },
+            "minRowVersion": "123",
             "name": "foo",
             "primaryKey": [
               "b",
@@ -454,6 +545,7 @@ describe('computeZqlSpec', () => {
                 "pos": 2,
               },
             },
+            "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
               "b",
@@ -522,6 +614,7 @@ describe('computeZqlSpec', () => {
                 "pos": 4,
               },
             },
+            "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
               "a",
@@ -609,6 +702,7 @@ describe('computeZqlSpec', () => {
                 "pos": 4,
               },
             },
+            "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
               "a",
@@ -698,6 +792,7 @@ describe('computeZqlSpec', () => {
                 "pos": 4,
               },
             },
+            "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
               "a",
@@ -786,6 +881,7 @@ describe('computeZqlSpec', () => {
                 "pos": 4,
               },
             },
+            "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
               "b",
@@ -874,6 +970,7 @@ describe('computeZqlSpec', () => {
                 "pos": 4,
               },
             },
+            "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
               "c",
@@ -990,6 +1087,7 @@ describe('computeZqlSpec', () => {
                 "pos": 5,
               },
             },
+            "minRowVersion": null,
             "name": "funk",
             "primaryKey": [
               "id",
@@ -1042,6 +1140,7 @@ describe('computeZqlSpec', () => {
 describe('metadata table integration', () => {
   test('fallback: reads from column types when metadata table does not exist', () => {
     const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
 
     // Create table with pipe notation in column types
     db.exec(`
@@ -1065,6 +1164,7 @@ describe('metadata table integration', () => {
 
   test('reads from metadata table when available', () => {
     const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
 
     // Create metadata table
     db.exec(CREATE_COLUMN_METADATA_TABLE);
@@ -1121,6 +1221,7 @@ describe('metadata table integration', () => {
 
   test('exclude backfilling columns from zqlspecs', () => {
     const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
 
     // Create metadata table
     db.exec(CREATE_COLUMN_METADATA_TABLE);
@@ -1193,6 +1294,7 @@ describe('metadata table integration', () => {
               "pos": 2,
             },
           },
+          "minRowVersion": null,
           "name": "users",
           "primaryKey": [
             "id",
@@ -1255,6 +1357,7 @@ describe('metadata table integration', () => {
               "pos": 2,
             },
           },
+          "minRowVersion": null,
           "name": "users",
           "primaryKey": [
             "id",
@@ -1282,6 +1385,7 @@ describe('metadata table integration', () => {
 
   test('exclude backfilling table from zqlspecs', () => {
     const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
 
     // Create metadata table
     db.exec(CREATE_COLUMN_METADATA_TABLE);
@@ -1381,6 +1485,7 @@ describe('metadata table integration', () => {
               "pos": 2,
             },
           },
+          "minRowVersion": null,
           "name": "users",
           "primaryKey": [
             "id",
@@ -1408,6 +1513,7 @@ describe('metadata table integration', () => {
 
   test('partial metadata: reads from metadata table for some columns, fallback for others', () => {
     const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
 
     // Create metadata table
     db.exec(CREATE_COLUMN_METADATA_TABLE);
@@ -1450,6 +1556,7 @@ describe('metadata table integration', () => {
 
   test('enum arrays with metadata table', () => {
     const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
 
     // Create metadata table
     db.exec(CREATE_COLUMN_METADATA_TABLE);

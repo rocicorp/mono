@@ -38,7 +38,10 @@ export class TestBuilderDelegate implements BuilderDelegate {
   }
 
   createStorage(name: string): Storage {
-    assert(!Object.hasOwn(this.#storage, name));
+    assert(
+      !Object.hasOwn(this.#storage, name),
+      () => `Storage "${name}" already exists`,
+    );
     const storage = new MemoryStorage();
     this.#storage[name] = storage;
     return storage;

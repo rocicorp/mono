@@ -186,7 +186,7 @@ export function parseBTreeNode(
   assertArray(v);
   assertDeepFrozen(v);
   // Be relaxed about what we accept.
-  assert(v.length >= 2);
+  assert(v.length >= 2, 'Expected node array to have at least 2 elements');
   const [level, entries] = v;
   assertNumber(level);
   assertArray(entries);
@@ -213,7 +213,7 @@ function assertEntry(
 ): asserts entry is Entry<Hash | JSONValue> {
   assertArray(entry);
   // Be relaxed about what we accept.
-  assert(entry.length >= 3);
+  assert(entry.length >= 3, 'Expected entry array to have at least 3 elements');
   assertString(entry[0]);
   f(entry[1]);
   assertNumber(entry[2]);
@@ -231,7 +231,7 @@ function convertNonV7Entry(
   getSizeOfEntry: <K, V>(key: K, value: V) => number,
 ): Entry<Hash | JSONValue> {
   assertArray(entry);
-  assert(entry.length >= 2);
+  assert(entry.length >= 2, 'Expected entry array to have at least 2 elements');
   assertString(entry[0]);
   f(entry[1]);
   const entrySize = getSizeOfEntry(entry[0], entry[1]);
@@ -604,7 +604,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       return new InternalNodeImpl(entries, newRandomHash(), level - 1, true);
     }
 
-    assert(level === 1);
+    assert(level === 1, 'Expected level to be 1');
     const entries: Entry<FrozenJSONValue>[] = [];
     for (const child of output as DataNodeImpl[]) {
       entries.push(...child.entries);

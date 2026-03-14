@@ -190,7 +190,7 @@ describe('fetching from a table source', () => {
     const rows = out.fetch(fetchArgs);
     expect(
       rows.map(r => {
-        assert(r !== 'yield');
+        assert(r !== 'yield', 'Expected row result, not yield');
         return r.row;
       }),
     ).toEqual(expectedRows);

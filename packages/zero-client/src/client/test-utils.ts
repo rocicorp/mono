@@ -118,12 +118,12 @@ export class TestZero<
   }
 
   get connectionStatus(): ConnectionStatus {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     return this[exposedToTestingSymbol].connectionManager().state.name;
   }
 
   get connectionState(): ConnectionManagerState {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     return this[exposedToTestingSymbol].connectionManager().state;
   }
 
@@ -151,7 +151,7 @@ export class TestZero<
   }
 
   [createLogOptionsSymbol](options: {consoleLogLevel: LogLevel}): LogOptions {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     return {
       logLevel: options.consoleLogLevel,
       logSink: new TestLogSink(),
@@ -159,9 +159,12 @@ export class TestZero<
   }
 
   get testLogSink(): TestLogSink {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     const {logSink} = this[exposedToTestingSymbol].logOptions;
-    assert(logSink instanceof TestLogSink);
+    assert(
+      logSink instanceof TestLogSink,
+      'Expected logSink to be a TestLogSink instance',
+    );
     return logSink;
   }
 
@@ -185,7 +188,7 @@ export class TestZero<
 
   async triggerMessage(data: Downstream): Promise<void> {
     const socket = await this.socket;
-    assert(!socket.closed);
+    assert(!socket.closed, 'Expected socket to be open');
     socket.dispatchEvent(
       new MessageEvent('message', {data: JSON.stringify(data)}),
     );
@@ -281,22 +284,22 @@ export class TestZero<
   declare [exposedToTestingSymbol]: TestingContext;
 
   get pusher() {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     return this[exposedToTestingSymbol].pusher;
   }
 
   get puller() {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     return this[exposedToTestingSymbol].puller;
   }
 
   set reload(r: () => void) {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     this[exposedToTestingSymbol].setReload(r);
   }
 
   get queryDelegate() {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     return this[exposedToTestingSymbol].queryDelegate();
   }
 
@@ -327,7 +330,7 @@ export class TestZero<
    * want to simulate that all queries have been fully synced from the server.
    */
   async markAllQueriesAsGot(): Promise<void> {
-    assert(TESTING);
+    assert(TESTING, 'Expected TESTING to be true');
     const queryManager = this[exposedToTestingSymbol].queryManager();
     const gotQueriesPatch = Array.from(
       queryManager.getAllNonGotQueryHashes(),
@@ -468,6 +471,6 @@ export function queryID<
   R,
 >(query: Query<T, S, R>): string {
   const id = asQueryInternals(query).customQueryID;
-  assert(id !== undefined);
+  assert(id !== undefined, 'Expected query to have a customQueryID');
   return hashOfNameAndArgs(id.name, id.args);
 }

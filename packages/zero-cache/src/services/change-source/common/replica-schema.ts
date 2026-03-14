@@ -13,7 +13,6 @@ import {
   CREATE_RUNTIME_EVENTS_TABLE,
   recordEvent,
 } from '../../replicator/schema/replication-state.ts';
-import {CREATE_TABLE_METADATA_TABLE} from '../../replicator/schema/table-metadata.ts';
 
 export async function initReplica(
   log: LogContext,
@@ -88,6 +87,15 @@ export const CREATE_V7_CHANGE_LOG = /*sql*/ `
   );
 `;
 
+export const CREATE_V9_TABLE_METADATA_TABLE = /*sql*/ `
+  CREATE TABLE "_zero.tableMetadata" (
+    "schema"    TEXT NOT NULL,
+    "table"     TEXT NOT NULL,
+    "metadata"  TEXT NOT NULL,
+    PRIMARY KEY ("schema", "table")
+  );
+`;
+
 export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   // There's no incremental migration from v1. Just reset the replica.
   4: {
@@ -138,7 +146,7 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       // versions but did not initialize the table for new replicas.
       db.exec(/*sql*/ `DELETE FROM "_zero.column_metadata"`);
 
-      const tables = listTables(db, false);
+      const tables = listTables(db, false, false);
       populateFromExistingTables(db, tables);
     },
   },
@@ -151,8 +159,58 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
           ADD COLUMN "backfillingColumnVersions" TEXT DEFAULT '{}';
         ALTER TABLE "_zero.column_metadata"
           ADD COLUMN backfill TEXT;
-      ` + CREATE_TABLE_METADATA_TABLE,
+      ` + CREATE_V9_TABLE_METADATA_TABLE,
       );
     },
   },
+
+  10: {
+    migrateSchema: (_, db) => {
+      db.exec(/*sql*/ `
+        ALTER TABLE "_zero.replicationConfig" 
+          ADD COLUMN "initialSyncContext" TEXT DEFAULT '{}';
+      `);
+    },
+  },
+
+  11: {
+    migrateSchema: (_, db) => {
+      db.exec(/*sql*/ `
+        ALTER TABLE "_zero.tableMetadata"
+          ADD COLUMN "minRowVersion" TEXT NOT NULL DEFAULT '00';
+
+        -- Removing the NOT NULL constraint from "metadata" requires copying
+        -- the column. We piggyback the rename to "upstreamMetadata" here.
+        ALTER TABLE "_zero.tableMetadata"
+          ADD COLUMN "upstreamMetadata" TEXT;
+        UPDATE "_zero.tableMetadata" SET "upstreamMetadata" = "metadata";
+        ALTER TABLE "_zero.tableMetadata" DROP "metadata";
+      `);
+    },
+  },
+
+  12: {
+    migrateSchema: (_, db) => {
+      // Bring back the "metadata" column removed in v11, but as a NULL-able column.
+      // It is needed for backwards compatibility.
+      db.exec(/*sql*/ `
+        ALTER TABLE "_zero.tableMetadata"
+          ADD COLUMN "metadata" TEXT;
+      `);
+    },
+
+    migrateData: (_, db) => {
+      // For rollback then roll forward, re-copy anything written to metadata.
+      db.exec(/*sql*/ `
+        UPDATE "_zero.tableMetadata" 
+          SET "upstreamMetadata" = COALESCE("metadata", "upstreamMetadata"),
+              "metadata" = NULL;
+      `);
+    },
+  },
 };
+
+// Referenced in tests.
+export const CURRENT_SCHEMA_VERSION = Object.keys(
+  schemaVersionMigrationMap,
+).reduce((prev, curr) => Math.max(prev, parseInt(curr)), 0);

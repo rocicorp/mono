@@ -75,7 +75,7 @@ describe('DD31', () => {
       expectClientGroupDisabled = false,
     } = args;
 
-    assert(formatVersion >= FormatVersion.V6);
+    assert(formatVersion >= FormatVersion.V6, 'Expected formatVersion >= V6');
 
     const auth = '1';
     const pushURL = 'https://test.replicache.dev/push';
@@ -143,7 +143,7 @@ describe('DD31', () => {
     const clientGroup = await withRead(testPerdag, read =>
       getClientGroup(client1.clientGroupID, read),
     );
-    assert(clientGroup);
+    assert(clientGroup, 'Expected clientGroup to be defined');
 
     fetchMocker.reset();
     fetchMocker.post(pushURL, pushResponse ?? 'ok');
@@ -235,7 +235,7 @@ describe('DD31', () => {
       getClientGroup(client1.clientGroupID, read),
     );
 
-    assert(updatedClientGroup);
+    assert(updatedClientGroup, 'Expected updatedClientGroup to be defined');
 
     const updatedClient2 = await withRead(testPerdag, read =>
       getClient(client2ID, read),
@@ -646,11 +646,11 @@ describe('DD31', () => {
       testPerdagForClients1Thru3,
       async read => {
         const clientGroup1 = await getClientGroup(client1.clientGroupID, read);
-        assert(clientGroup1);
+        assert(clientGroup1, 'Expected clientGroup1 to be defined');
         const clientGroup2 = await getClientGroup(client2.clientGroupID, read);
-        assert(clientGroup2);
+        assert(clientGroup2, 'Expected clientGroup2 to be defined');
         const clientGroup3 = await getClientGroup(client3.clientGroupID, read);
-        assert(clientGroup3);
+        assert(clientGroup3, 'Expected clientGroup3 to be defined');
         return {clientGroup1, clientGroup2, clientGroup3};
       },
     );
@@ -662,7 +662,7 @@ describe('DD31', () => {
     const clientGroup4 = await withRead(testPerdagForClient4, read =>
       getClientGroup(client4.clientGroupID, read),
     );
-    assert(clientGroup4);
+    assert(clientGroup4, 'Expected clientGroup4 to be defined');
 
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMocker.reset();
@@ -766,11 +766,11 @@ describe('DD31', () => {
       read => getClientGroups(read),
     );
     const updatedClientGroup1 = updatedClientGroups.get(client1.clientGroupID);
-    assert(updatedClientGroup1);
+    assert(updatedClientGroup1, 'Expected updatedClientGroup1 to be defined');
     const updatedClientGroup2 = updatedClientGroups.get(client2.clientGroupID);
-    assert(updatedClientGroup2);
+    assert(updatedClientGroup2, 'Expected updatedClientGroup2 to be defined');
     const updatedClientGroup3 = updatedClientGroups.get(client3.clientGroupID);
-    assert(updatedClientGroup3);
+    assert(updatedClientGroup3, 'Expected updatedClientGroup3 to be defined');
 
     const updatedClient4 = await withRead(testPerdagForClient4, read =>
       getClient(client4ID, read),
@@ -779,7 +779,7 @@ describe('DD31', () => {
     const updatedClientGroup4 = await withRead(testPerdagForClient4, read =>
       getClientGroup(client4.clientGroupID, read),
     );
-    assert(updatedClientGroup4);
+    assert(updatedClientGroup4, 'Expected updatedClientGroup4 to be defined');
 
     expect(updatedClient1).toEqual(client1);
     expect(updatedClientGroup1).toEqual({
@@ -887,11 +887,11 @@ describe('DD31', () => {
       testPerdag,
       async read => {
         const clientGroup1 = await getClientGroup(client1.clientGroupID, read);
-        assert(clientGroup1);
+        assert(clientGroup1, 'Expected clientGroup1 to be defined');
         const clientGroup2 = await getClientGroup(client2.clientGroupID, read);
-        assert(clientGroup2);
+        assert(clientGroup2, 'Expected clientGroup2 to be defined');
         const clientGroup3 = await getClientGroup(client3.clientGroupID, read);
-        assert(clientGroup3);
+        assert(clientGroup3, 'Expected clientGroup3 to be defined');
         return {
           clientGroup1,
           clientGroup2,
@@ -993,11 +993,11 @@ describe('DD31', () => {
       getClientGroups(read),
     );
     const updatedClientGroup1 = updatedClientGroups.get(client1.clientGroupID);
-    assert(updatedClientGroup1);
+    assert(updatedClientGroup1, 'Expected updatedClientGroup1 to be defined');
     const updatedClientGroup2 = updatedClientGroups.get(client2.clientGroupID);
-    assert(updatedClientGroup2);
+    assert(updatedClientGroup2, 'Expected updatedClientGroup2 to be defined');
     const updatedClientGroup3 = updatedClientGroups.get(client3.clientGroupID);
-    assert(updatedClientGroup3);
+    assert(updatedClientGroup3, 'Expected updatedClientGroup3 to be defined');
 
     expect(updatedClient1).toEqual(client1);
     expect(updatedClientGroup1).toEqual(clientGroup1);
@@ -1077,11 +1077,11 @@ describe('DD31', () => {
       testPerdag,
       async read => {
         const clientGroup1 = await getClientGroup(client1.clientGroupID, read);
-        assert(clientGroup1);
+        assert(clientGroup1, 'Expected clientGroup1 to be defined');
         const clientGroup2 = await getClientGroup(client2.clientGroupID, read);
-        assert(clientGroup2);
+        assert(clientGroup2, 'Expected clientGroup2 to be defined');
         const clientGroup3 = await getClientGroup(client3.clientGroupID, read);
-        assert(clientGroup3);
+        assert(clientGroup3, 'Expected clientGroup3 to be defined');
         return {
           clientGroup1,
           clientGroup2,
@@ -1189,11 +1189,11 @@ describe('DD31', () => {
       getClientGroups(read),
     );
     const updatedClientGroup1 = updatedClientGroups.get(client1.clientGroupID);
-    assert(updatedClientGroup1);
+    assert(updatedClientGroup1, 'Expected updatedClientGroup1 to be defined');
     const updatedClientGroup2 = updatedClientGroups.get(client2.clientGroupID);
-    assert(updatedClientGroup2);
+    assert(updatedClientGroup2, 'Expected updatedClientGroup2 to be defined');
     const updatedClientGroup3 = updatedClientGroups.get(client3.clientGroupID);
-    assert(updatedClientGroup3);
+    assert(updatedClientGroup3, 'Expected updatedClientGroup3 to be defined');
 
     expect(updatedClient1).toEqual(client1);
     expect(updatedClientGroup1).toEqual(clientGroup1);
@@ -1273,12 +1273,12 @@ describe('DD31', () => {
     const clientGroup1 = await withRead(testPerdagForClient1, read =>
       getClientGroup(client1.clientGroupID, read),
     );
-    assert(clientGroup1);
+    assert(clientGroup1, 'Expected clientGroup1 to be defined');
 
     const clientGroup2 = await withRead(testPerdagForClient2, read =>
       getClientGroup(client2.clientGroupID, read),
     );
-    assert(clientGroup2);
+    assert(clientGroup2, 'Expected clientGroup2 to be defined');
 
     const pullRequestJsonBodies: JSONObject[] = [];
     fetchMocker.reset();
@@ -1363,11 +1363,11 @@ describe('DD31', () => {
     const updatedClientGroup1 = await withRead(testPerdagForClient1, read =>
       getClientGroup(updatedClient1.clientGroupID, read),
     );
-    assert(updatedClientGroup1);
+    assert(updatedClientGroup1, 'Expected updatedClientGroup1 to be defined');
     const updatedClientGroup2 = await withRead(testPerdagForClient2, read =>
       getClientGroup(updatedClient2.clientGroupID, read),
     );
-    assert(updatedClientGroup2);
+    assert(updatedClientGroup2, 'Expected updatedClientGroup2 to be defined');
 
     expect(updatedClientGroup1.mutationIDs[client1ID]).toBe(
       clientGroup1.mutationIDs[client1ID],
@@ -1612,7 +1612,7 @@ describe('DD31', () => {
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       getClientGroup(client1.clientGroupID, read),
     );
-    assert(clientGroup1);
+    assert(clientGroup1, 'Expected clientGroup1 to be defined');
     expect(clientGroup1.mutationIDs[client1ID]).toBe(2);
 
     const pullRequestJSONBodies: JSONObject[] = [];
@@ -1695,7 +1695,7 @@ describe('DD31', () => {
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       getClientGroup(client1.clientGroupID, read),
     );
-    assert(clientGroup1);
+    assert(clientGroup1, 'Expected clientGroup1 to be defined');
     expect(clientGroup1.mutationIDs[client1ID]).toBe(2);
 
     const pullRequestJSONBodies: JSONObject[] = [];
@@ -1819,7 +1819,7 @@ describe('DD31', () => {
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       getClientGroup(client1.clientGroupID, read),
     );
-    assert(clientGroup1);
+    assert(clientGroup1, 'Expected clientGroup1 to be defined');
     expect(clientGroup1.mutationIDs[client1ID]).toBe(2);
 
     const client2 = await withRead(testPerdagDD31, read =>
@@ -1831,7 +1831,7 @@ describe('DD31', () => {
     const clientGroup2 = await withRead(testPerdagDD31, read =>
       getClientGroup(client2.clientGroupID, read),
     );
-    assert(clientGroup2);
+    assert(clientGroup2, 'Expected clientGroup2 to be defined');
     expect(clientGroup2.mutationIDs[client2ID]).toBe(2);
 
     fetchMocker.reset();

@@ -76,8 +76,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
   // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
   readonly #consumers: Resolver<Entry<M> | null>[] = [];
-  // Messages waiting to be consumed.
+  // Messages waiting to be dequeued.
   readonly #messages: (Entry<M> | 'terminus')[] = [];
+  // Messages dequeued but not yet consumed.
+  readonly #consuming = new Set<Entry<M>>();
   readonly #pipelineEnabled: boolean;
   // Sentinel value signaling that the subscription is "done" and no more
   // messages can be added.
@@ -112,6 +114,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
     this.#consumed = entry => {
       consumed(entry.value);
+      this.#consuming.delete(entry);
       entry.resolve('consumed');
     };
 
@@ -173,9 +176,14 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return this.#sentinel === undefined;
   }
 
-  /** The number messages waiting to be consumed. */
+  /** The number of messages waiting to be dequeued. */
   get queued(): number {
     return this.#messages.length;
+  }
+
+  /** The number of messages dequeued but not yet "consumed" */
+  get consuming(): number {
+    return this.#consuming.size;
   }
 
   /**
@@ -202,9 +210,15 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
   /**
    * Cancels the subscription immediately, cleans up, and terminates any iteration.
+   * This is intended for the consumer to call when it is no longer interested
+   * in the subscription.
+   *
+   * @param err If an `err` is specified, an iteration over the Subscription /
+   *        Sink will throw the `err` (equivalent to the producer calling
+   *        {@link fail()}). If undefined, the iteration will exit gracefully.
    */
-  cancel() {
-    this.#terminate('canceled');
+  cancel(err?: Error) {
+    this.#terminate(err ?? 'canceled');
   }
 
   /** Fails the subscription, cleans up, and throws from any iteration. */
@@ -216,7 +230,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
       this.#cleanup(
-        this.#messages.filter(m => m !== 'terminus'),
+        [...this.#consuming, ...this.#messages.filter(m => m !== 'terminus')],
         sentinel instanceof Error ? sentinel : undefined,
       );
       this.#messages.splice(0);
@@ -248,6 +262,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
           return {value: undefined, done: true};
         }
         if (entry !== undefined) {
+          this.#consuming.add(entry);
           return {
             value: {
               value: this.#publish(entry.value),
@@ -266,14 +281,16 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
         // Wait for push() (or termination) to resolve the consumer.
         const result = await consumer.promise;
-        return result
-          ? {
-              value: {
-                value: this.#publish(result.value),
-                consumed: () => this.#consumed(result),
-              },
-            }
-          : {value: undefined, done: true};
+        if (result !== null) {
+          this.#consuming.add(result);
+          return {
+            value: {
+              value: this.#publish(result.value),
+              consumed: () => this.#consumed(result),
+            },
+          };
+        }
+        return {value: undefined, done: true};
       },
 
       return: value => {

@@ -284,7 +284,10 @@ test('heartbeat with dropped idb throws', async () => {
   await promise;
 
   expect(message).lengthOf(3);
-  assert(message[2] instanceof IDBNotFoundError);
+  assert(
+    message[2] instanceof IDBNotFoundError,
+    'Expected message[2] to be an IDBNotFoundError',
+  );
   expect(message[2].message).toMatch(/^Expected IndexedDB not found: /);
 
   controller.abort();

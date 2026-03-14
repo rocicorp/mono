@@ -4,6 +4,7 @@ import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
+import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
 import {
   createLiteIndexStatement,
   createLiteTableStatement,
@@ -20,7 +21,6 @@ import {
   mapPostgresToLiteColumn,
   mapPostgresToLiteIndex,
 } from '../../db/pg-to-lite.ts';
-import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
@@ -39,6 +39,7 @@ import type {
   ColumnAdd,
   ColumnDrop,
   ColumnUpdate,
+  Identifier,
   IndexCreate,
   IndexDrop,
   MessageBackfill,
@@ -67,6 +68,7 @@ export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
 export type CommitResult = {
   watermark: string;
+  completedBackfill: DownloadStatus | undefined;
   schemaUpdated: boolean;
   changeLogUpdated: boolean;
 };
@@ -92,7 +94,7 @@ export class ChangeProcessor {
   // The TransactionProcessor lazily loads table specs into this Map,
   // and reloads them after a schema change. It is cached here to avoid
   // reading them from the DB on every transaction.
-  readonly #tableSpecs = new Map<string, LiteTableSpec>();
+  readonly #tableSpecs = new Map<string, LiteTableSpecWithReplicationStatus>();
 
   #currentTx: TransactionProcessor | null = null;
 
@@ -224,11 +226,7 @@ export class ChangeProcessor {
       this.#currentTx = null;
 
       assert(watermark, 'watermark is required for commit messages');
-      const {schemaUpdated, changeLogUpdated} = tx.processCommit(
-        msg,
-        watermark,
-      );
-      return {watermark, schemaUpdated, changeLogUpdated};
+      return tx.processCommit(msg, watermark);
     }
 
     if (msg.tag === 'rollback') {
@@ -550,7 +548,7 @@ class TransactionProcessor {
 
   processCreateTable(create: TableCreate) {
     if (create.metadata) {
-      this.#tableMetadata.set(create.spec, create.metadata);
+      this.#tableMetadata.setUpstreamMetadata(create.spec, create.metadata);
     }
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createLiteTableStatement(table));
@@ -580,7 +578,7 @@ class TransactionProcessor {
   }
 
   processTableMetadata(msg: TableUpdateMetadata) {
-    this.#tableMetadata.set(msg.table, msg.new);
+    this.#tableMetadata.setUpstreamMetadata(msg.table, msg.new);
   }
 
   processRenameTable(rename: TableRename) {
@@ -593,14 +591,14 @@ class TransactionProcessor {
     // Rename in metadata table
     this.#columnMetadata.renameTable(oldName, newName);
 
-    this.#bumpVersions(newName);
+    this.#bumpVersions(rename.new);
     this.#logResetOp(oldName);
     this.#lc.info?.(rename.tag, oldName, newName);
   }
 
   processAddColumn(msg: ColumnAdd) {
     if (msg.tableMetadata) {
-      this.#tableMetadata.set(msg.table, msg.tableMetadata);
+      this.#tableMetadata.setUpstreamMetadata(msg.table, msg.tableMetadata);
     }
     const table = liteTableName(msg.table);
     const {name} = msg.column;
@@ -617,7 +615,7 @@ class TransactionProcessor {
     } else {
       // Make the new column visible immediately if it's not being backfilled.
       // Otherwise, the version bump will happen with the backfill is complete.
-      this.#bumpVersions(table);
+      this.#bumpVersions(msg.table);
     }
     this.#lc.info?.(msg.tag, table, msg.column);
   }
@@ -682,7 +680,7 @@ class TransactionProcessor {
       msg.new.spec,
     );
 
-    this.#bumpVersions(table);
+    this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, msg.new);
   }
 
@@ -694,7 +692,7 @@ class TransactionProcessor {
     // Delete from metadata table
     this.#columnMetadata.deleteColumn(table, column);
 
-    this.#bumpVersions(table);
+    this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, column);
   }
 
@@ -737,12 +735,9 @@ class TransactionProcessor {
     this.#lc.info?.(drop.tag, name);
   }
 
-  #bumpVersions(table: string) {
-    this.#db.run(
-      `UPDATE ${id(table)} SET ${id(ZERO_VERSION_COLUMN_NAME)} = ?`,
-      this.#version,
-    );
-    this.#logResetOp(table);
+  #bumpVersions(table: Identifier) {
+    this.#tableMetadata.setMinRowVersion(table, this.#version);
+    this.#logResetOp(liteTableName(table));
   }
 
   /**
@@ -848,7 +843,9 @@ class TransactionProcessor {
     );
   }
 
-  processBackfillCompleted({relation, columns}: BackfillCompleted) {
+  #completedBackfill: DownloadStatus | undefined;
+
+  processBackfillCompleted({relation, columns, status}: BackfillCompleted) {
     const tableName = liteTableName(relation);
     const rowKeyCols = relation.rowKey.columns;
     const cols = [...rowKeyCols, ...columns];
@@ -859,7 +856,10 @@ class TransactionProcessor {
     }
     // Given that new columns are being exposed for every row in the table, bump the
     // row version for all rows.
-    this.#bumpVersions(tableName);
+    this.#bumpVersions(relation);
+    if (status) {
+      this.#completedBackfill = {table: tableName, columns: cols, ...status};
+    }
     this.#lc.info?.(`finished backfilling ${tableName}`);
 
     // Note that there is no need to clear the backfillingColumnVersions values
@@ -873,10 +873,7 @@ class TransactionProcessor {
     // no backfills are in progress).
   }
 
-  processCommit(
-    commit: MessageCommit,
-    watermark: string,
-  ): {schemaUpdated: boolean; changeLogUpdated: boolean} {
+  processCommit(commit: MessageCommit, watermark: string): CommitResult {
     if (watermark !== this.#version) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
@@ -902,6 +899,8 @@ class TransactionProcessor {
     this.#lc.debug?.(`Committed tx@${this.#version} (${elapsedMs} ms)`);
 
     return {
+      watermark,
+      completedBackfill: this.#completedBackfill,
       schemaUpdated: this.#schemaChanged,
       changeLogUpdated: this.#numChangeLogEntries > 0,
     };

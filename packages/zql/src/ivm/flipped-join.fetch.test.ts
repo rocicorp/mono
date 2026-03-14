@@ -1899,8 +1899,11 @@ suite('compound join keys', () => {
 });
 
 function fetchTest(t: FetchTest): FetchTestResults {
-  assert(t.sources.length > 0);
-  assert(t.joins.length === t.sources.length - 1);
+  assert(t.sources.length > 0, 'Expected at least one source');
+  assert(
+    t.joins.length === t.sources.length - 1,
+    'Expected joins.length to equal sources.length - 1',
+  );
 
   const log: SnitchMessage[] = [];
 

@@ -1,13 +1,15 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
-import {must} from '../../../../shared/src/must.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
-import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
+import type {
+  LiteAndZqlSpec,
+  LiteTableSpecWithKeysAndVersion,
+} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {
   normalizedKeyOrder,
@@ -170,9 +172,12 @@ export class Snapshotter {
    * on `prev` before each iteration, and (2) rollback to the save point after
    * the iteration.
    */
-  advance(tables: Map<string, LiteAndZqlSpec>): SnapshotDiff {
+  advance(
+    syncableTables: Map<string, LiteAndZqlSpec>,
+    allTableNames: Set<string>,
+  ): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
-    return new Diff(this.#appID, tables, prev, curr);
+    return new Diff(this.#appID, syncableTables, allTableNames, prev, curr);
   }
 
   advanceWithoutDiff() {
@@ -322,7 +327,7 @@ class Snapshot {
     };
   }
 
-  getRow(table: LiteTableSpecWithKeys, rowKey: JSONValue) {
+  getRow(table: LiteTableSpecWithKeysAndVersion, rowKey: JSONValue) {
     const key = normalizedKeyOrder(rowKey as RowKey);
     const conds = Object.keys(key).map(c => `${id(c)}=?`);
     const cols = Object.keys(table.columns);
@@ -340,7 +345,11 @@ class Snapshot {
     }
   }
 
-  getRows(table: LiteTableSpecWithKeys, keys: PrimaryKey[], row: RowValue) {
+  getRows(
+    table: LiteTableSpecWithKeysAndVersion,
+    keys: PrimaryKey[],
+    row: RowValue,
+  ) {
     // Filter out keys where any column is NULL. This is both correct and
     // critical for performance:
     // 1. Correctness: NULL values can't violate uniqueness (NULL != NULL in SQL)
@@ -379,19 +388,22 @@ class Snapshot {
 
 class Diff implements SnapshotDiff {
   readonly #permissionsTable: string;
-  readonly tables: Map<string, LiteAndZqlSpec>;
+  readonly #syncableTables: Map<string, LiteAndZqlSpec>;
+  readonly #allTableNames: Set<string>;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
 
   constructor(
     appID: string,
-    tables: Map<string, LiteAndZqlSpec>,
+    syncableTables: Map<string, LiteAndZqlSpec>,
+    allTableNames: Set<string>,
     prev: Snapshot,
     curr: Snapshot,
   ) {
     this.#permissionsTable = `${appID}.permissions`;
-    this.tables = tables;
+    this.#syncableTables = syncableTables;
+    this.#allTableNames = allTableNames;
     this.prev = prev;
     this.curr = curr;
     this.changes = curr.numChangesSince(prev.version);
@@ -432,7 +444,28 @@ class Diff implements SnapshotDiff {
                 `table ${table} has been truncated`,
               );
             }
-            const {tableSpec, zqlSpec} = must(this.tables.get(table));
+            const specs = this.#syncableTables.get(table);
+            if (!specs) {
+              if (this.#allTableNames.has(table)) {
+                continue; // skip change log entries for non-syncable tables.
+              }
+              throw new Error(`change for unknown table ${table}`);
+            }
+            const {tableSpec, zqlSpec} = specs;
+
+            // Sanity check: All change log ops should have a stateVersion
+            // greater than minRowVersion in the table metadata. This is a
+            // mini-proof that the overlay does not need to be applied to
+            // rows produced in incremental catchup, based on the invariant in
+            // change-processor's #bumpVersions(), whereby the setting of the
+            // minRowVersion is always followed by a RESET OP, meaning that
+            // subsequent change-log traversal happens at a later version.
+            assert(
+              (tableSpec.minRowVersion ?? '') < stateVersion,
+              () =>
+                `unexpected change @${stateVersion} for table ${table} with ` +
+                `minRowVersion ${tableSpec.minRowVersion}: ${op}(${rowKey})`,
+            );
 
             assert(rowKey !== null, 'rowKey must be present for row changes');
             const nextValue =

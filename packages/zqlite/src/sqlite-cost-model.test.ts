@@ -2,6 +2,7 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../../zero-cache/src/services/replicator/schema/table-metadata.ts';
 import {Database} from './db.ts';
 import {btreeCost, createSQLiteCostModel} from './sqlite-cost-model.ts';
 
@@ -20,6 +21,7 @@ describe('SQLite cost model', () => {
       CREATE TABLE foo (a INTEGER PRIMARY KEY, b INTEGER, c INTEGER);
       CREATE UNIQUE INDEX foo_a_unique ON foo(a);
     `);
+    db.exec(CREATE_TABLE_METADATA_TABLE);
 
     // Insert 2,000 rows
     const stmt = db.prepare('INSERT INTO foo (a, b, c) VALUES (?, ?, ?)');
@@ -244,6 +246,7 @@ describe('SQLite cost model with skewed data (STAT4 verification)', () => {
       CREATE UNIQUE INDEX skewed_id_unique ON skewed(id);
       CREATE INDEX idx_skewed_value ON skewed(value);
     `);
+    db.exec(CREATE_TABLE_METADATA_TABLE);
 
     // Insert SKEWED data:
     // - 1900 rows with value=1 (common)

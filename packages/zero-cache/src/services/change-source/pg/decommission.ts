@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {runTx} from '../../../db/run-transaction.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {dropShard} from './schema/shard.ts';
 
@@ -11,7 +12,7 @@ export async function decommissionShard(
   const shard = `${appID}_${shardID}`;
 
   lc.info?.(`Decommissioning zero shard ${shard}`);
-  await db.begin(async sql => {
+  await runTx(db, async sql => {
     // Kill the active_pid's on existing slots before altering publications,
     // as deleting a publication associated with an existing subscriber causes
     // weirdness; the active_pid becomes null and thus unable to be terminated.

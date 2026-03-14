@@ -1,7 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {WebSocket} from 'ws';
 import {assert, unreachable} from '../../../../../shared/src/asserts.ts';
-import {stringify} from '../../../../../shared/src/bigint-json.ts';
+import {
+  stringify,
+  type JSONObject,
+} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import type {SchemaValue} from '../../../../../zero-schema/src/table-schema.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
@@ -22,12 +25,15 @@ import {
   type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
+import {initReplica} from '../common/replica-schema.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
 import {
   type BackfillRequest,
   type ChangeSourceUpstream,
 } from '../protocol/current/upstream.ts';
-import {initSyncSchema} from './sync-schema.ts';
+
+/** Server context to store with the initial sync metadata for debugging. */
+export type ServerContext = JSONObject;
 
 /**
  * Initializes a Custom change source before streaming changes from the
@@ -38,13 +44,13 @@ export async function initializeCustomChangeSource(
   upstreamURI: string,
   shard: ShardConfig,
   replicaDbFile: string,
+  context: ServerContext,
 ): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
-  await initSyncSchema(
+  await initReplica(
     lc,
     `replica-${shard.appID}-${shard.shardNum}`,
-    shard,
     replicaDbFile,
-    upstreamURI,
+    (log, tx) => initialSync(log, shard, tx, upstreamURI, context),
   );
 
   const replica = new Database(lc, replicaDbFile);
@@ -153,6 +159,7 @@ export async function initialSync(
   shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
+  context: ServerContext,
 ) {
   const {appID: id, publications} = shard;
   const changeSource = new CustomChangeSource(lc, upstreamURI, shard, {
@@ -191,6 +198,7 @@ export async function initialSync(
             tx,
             [...publications].sort(),
             commitWatermark,
+            context,
             false,
           );
           processor.processMessage(lc, change);

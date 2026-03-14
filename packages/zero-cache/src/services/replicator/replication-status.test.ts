@@ -1,11 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {
   replicationStatusError,
   replicationStatusEvent,
+  ReplicationStatusPublisher,
 } from './replication-status.ts';
+import {CREATE_TABLE_METADATA_TABLE} from './schema/table-metadata.ts';
 
 describe('replicator/replication-status', () => {
   let lc: LogContext;
@@ -14,6 +16,7 @@ describe('replicator/replication-status', () => {
   beforeEach(() => {
     lc = createSilentLogContext();
     replica = new Database(createSilentLogContext(), ':memory:');
+    replica.exec(CREATE_TABLE_METADATA_TABLE);
   });
 
   test('initializing', () => {
@@ -66,7 +69,7 @@ describe('replicator/replication-status', () => {
               "unique": true,
             },
           ],
-          "replicaSize": 20480,
+          "replicaSize": 28672,
           "tables": [
             {
               "columns": [
@@ -157,7 +160,7 @@ describe('replicator/replication-status', () => {
               "unique": true,
             },
           ],
-          "replicaSize": 20480,
+          "replicaSize": 28672,
           "tables": [
             {
               "columns": [
@@ -231,7 +234,7 @@ describe('replicator/replication-status', () => {
               "unique": true,
             },
           ],
-          "replicaSize": 12288,
+          "replicaSize": 20480,
           "tables": [
             {
               "columns": [
@@ -285,5 +288,59 @@ describe('replicator/replication-status', () => {
       time: '2025-10-14T01:02:03.000Z',
       type: 'zero/events/status/replication/v1',
     });
+  });
+
+  test('publish with extra state callback', () => {
+    const publish = vi.fn();
+
+    const publisher = new ReplicationStatusPublisher(replica, publish);
+
+    publisher.publish(
+      lc,
+      'Initializing',
+      'foo bar',
+      0,
+      () => ({
+        downloadStatus: [
+          {
+            table: 'foo',
+            columns: ['a', 'b'],
+            rows: 0,
+            totalRows: 100,
+            totalBytes: 1000,
+          },
+        ],
+      }),
+      new Date(Date.UTC(2026, 1, 2, 3, 4, 5)),
+    );
+
+    expect(publish).toHaveBeenCalledOnce();
+    expect(publish.mock.calls[0][1]).toMatchInlineSnapshot(`
+      {
+        "component": "replication",
+        "description": "foo bar",
+        "stage": "Initializing",
+        "state": {
+          "downloadStatus": [
+            {
+              "columns": [
+                "a",
+                "b",
+              ],
+              "rows": 0,
+              "table": "foo",
+              "totalBytes": 1000,
+              "totalRows": 100,
+            },
+          ],
+          "indexes": [],
+          "replicaSize": 12288,
+          "tables": [],
+        },
+        "status": "OK",
+        "time": "2026-02-02T03:04:05.000Z",
+        "type": "zero/events/status/replication/v1",
+      }
+    `);
   });
 });

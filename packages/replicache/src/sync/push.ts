@@ -136,7 +136,10 @@ export async function push(
   // want tail first (in mutation id order).
   pending.reverse();
 
-  assert(pushVersion === PUSH_VERSION_DD31);
+  assert(
+    pushVersion === PUSH_VERSION_DD31,
+    'Expected pushVersion to be PUSH_VERSION_DD31',
+  );
 
   const pushMutations: FrozenMutationV1[] = [];
   for (const commit of pending) {
@@ -146,7 +149,7 @@ export async function push(
       throw new Error('Internal non local pending commit');
     }
   }
-  assert(clientGroupID);
+  assert(clientGroupID, 'Expected clientGroupID to be defined');
   const pushReq: PushRequestV1 = {
     profileID,
     clientGroupID,

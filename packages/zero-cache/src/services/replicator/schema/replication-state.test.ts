@@ -9,7 +9,7 @@ import {
 import {
   getAscendingEvents,
   getReplicationState,
-  getSubscriptionState,
+  getSubscriptionStateAndContext,
   initReplicationState,
   recordEvent,
   updateReplicationWatermark,
@@ -22,7 +22,9 @@ describe('replicator/schema/replication-state', () => {
     db = new StatementRunner(
       new Database(createSilentLogContext(), ':memory:'),
     );
-    initReplicationState(db.db, ['zero_data', 'zero_metadata'], '0a');
+    initReplicationState(db.db, ['zero_data', 'zero_metadata'], '0a', {
+      foo: 'bar',
+    });
   });
 
   test('initial replication state', () => {
@@ -32,6 +34,7 @@ describe('replicator/schema/replication-state', () => {
           lock: 1,
           replicaVersion: '0a',
           publications: '["zero_data","zero_metadata"]',
+          initialSyncContext: '{"foo":"bar"}',
         },
       ],
       ['_zero.replicationState']: [
@@ -75,9 +78,10 @@ describe('replicator/schema/replication-state', () => {
   });
 
   test('subscription state', () => {
-    expect(getSubscriptionState(db)).toEqual({
+    expect(getSubscriptionStateAndContext(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
+      initialSyncContext: {foo: 'bar'},
       watermark: '0a',
     });
   });
@@ -101,9 +105,10 @@ describe('replicator/schema/replication-state', () => {
     expect(getReplicationState(db)).toEqual({
       stateVersion: '0f',
     });
-    expect(getSubscriptionState(db)).toEqual({
+    expect(getSubscriptionStateAndContext(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
+      initialSyncContext: {foo: 'bar'},
       watermark: '0f',
     });
 
@@ -119,9 +124,10 @@ describe('replicator/schema/replication-state', () => {
     expect(getReplicationState(db)).toEqual({
       stateVersion: '0r',
     });
-    expect(getSubscriptionState(db)).toEqual({
+    expect(getSubscriptionStateAndContext(db)).toEqual({
       replicaVersion: '0a',
       publications: ['zero_data', 'zero_metadata'],
+      initialSyncContext: {foo: 'bar'},
       watermark: '0r',
     });
   });

@@ -1,7 +1,7 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {test as testPg, type PgTest} from '../test/db.ts';
 import {BYTEA, INT4, TEXT, VARCHAR} from './pg-types.ts';
-import {disableStatementTimeout, typeNameByOID, type PostgresDB} from './pg.ts';
+import {typeNameByOID, type PostgresDB} from './pg.ts';
 
 describe('types/pg-types', () => {
   test('typeNameByIOD', () => {
@@ -136,28 +136,6 @@ describe('types/pg', () => {
       timetz: expectedTimeTz,
       times: [expectedTime, expectedTime],
       timetzs: [expectedTimeTz, expectedTimeTz],
-    });
-  });
-
-  testPg('disable statement timeout', async () => {
-    await db`SET statement_timeout = 100000`;
-    expect(await db`SHOW statement_timeout`).toMatchInlineSnapshot(`
-      Result [
-        {
-          "statement_timeout": "100s",
-        },
-      ]
-    `);
-
-    await db.begin(async tx => {
-      disableStatementTimeout(tx);
-      expect(await tx`SHOW statement_timeout`).toMatchInlineSnapshot(`
-      Result [
-        {
-          "statement_timeout": "0",
-        },
-      ]
-    `);
     });
   });
 });

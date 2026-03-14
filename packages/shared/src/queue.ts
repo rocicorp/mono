@@ -41,7 +41,7 @@ export class Queue<T> {
    * @returns The number of entries deleted.
    */
   delete(value: T): number {
-    assert(value !== undefined);
+    assert(value !== undefined, 'Queue delete value must not be undefined');
 
     let count = 0;
     for (let i = this.#produced.length - 1; i >= 0; i--) {

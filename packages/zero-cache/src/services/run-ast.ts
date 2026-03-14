@@ -7,7 +7,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {AST, LiteralValue} from '../../../zero-protocol/src/ast.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
@@ -18,11 +18,15 @@ import {
   buildPipeline,
   type BuilderDelegate,
 } from '../../../zql/src/builder/builder.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
+import {skipYields} from '../../../zql/src/ivm/operator.ts';
 import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
+import {resolveSimpleScalarSubqueries} from '../../../zqlite/src/resolve-scalar-subqueries.ts';
 import type {JWTAuth} from '../auth/auth.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
+import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {hydrate} from './view-syncer/pipeline-driver.ts';
 
@@ -48,7 +52,7 @@ export async function runAst(
   options: RunAstOptions,
   yieldProcess: () => Promise<void>,
 ): Promise<AnalyzeQueryResult> {
-  const {clientToServerMapper, permissions, host} = options;
+  const {clientToServerMapper, permissions, host, db} = options;
   const result: AnalyzeQueryResult = {
     warnings: [],
     syncedRows: undefined,
@@ -84,8 +88,34 @@ export async function runAst(
     result.afterPermissions = await formatOutput(ast.table + astToZQL(ast));
   }
 
-  const pipeline = buildPipeline(
+  // Resolve scalar subqueries (e.g. whereExists with {scalar: true}) to
+  // literal equality conditions so that SQLite can use indexes effectively.
+  // Without this, correlated subqueries get stripped from SQL filters and
+  // queries on large tables fall back to full table scans.
+  const executor = (
+    subqueryAST: AST,
+    childField: string,
+  ): LiteralValue | null | undefined => {
+    const input = buildPipeline(subqueryAST, host, 'scalar-subquery');
+    // Consume the full stream rather than using first() to avoid
+    // triggering early return on Take's #initialFetch assertion.
+    // The subquery AST already has limit: 1, so at most one row is produced.
+    let node: Node | undefined;
+    for (const n of skipYields(input.fetch({}))) {
+      node ??= n;
+    }
+    input.destroy();
+    return node ? ((node.row[childField] as LiteralValue) ?? null) : undefined;
+  };
+
+  const {ast: resolvedAst} = resolveSimpleScalarSubqueries(
     ast,
+    options.tableSpecs,
+    executor,
+  );
+
+  const pipeline = buildPipeline(
+    resolvedAst,
     host,
     'query-id',
     options.costModel,
@@ -98,7 +128,12 @@ export async function runAst(
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
   const seenByTable: Set<string> = new Set();
-  for (const rowChange of hydrate(pipeline, hashOfAST(ast), clientSchema)) {
+  for (const rowChange of hydrate(
+    pipeline,
+    hashOfAST(resolvedAst),
+    clientSchema,
+    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}),
+  )) {
     if (rowChange === 'yield') {
       await yieldProcess();
       continue;

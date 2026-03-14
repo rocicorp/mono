@@ -209,7 +209,10 @@ test('compare test framework to real framework', () => {
   );
 
   function convertTestCondition(c: TestCondition): Condition {
-    assert(c.type === 'simple');
+    assert(
+      c.type === 'simple',
+      () => `Expected condition type to be 'simple', got '${c.type}'`,
+    );
     return {
       type: 'simple',
       right: {
@@ -300,42 +303,64 @@ test('not preserves flip and scalar on correlatedSubquery', () => {
 
   // flip: true is preserved
   const withFlipTrue = not({...base, flip: true});
-  assert(withFlipTrue.type === 'correlatedSubquery');
+  assert(
+    withFlipTrue.type === 'correlatedSubquery',
+    () => `Expected type 'correlatedSubquery', got '${withFlipTrue.type}'`,
+  );
   expect(withFlipTrue.op).toBe('NOT EXISTS');
   expect(withFlipTrue.flip).toBe(true);
 
   // flip: false is preserved (not dropped)
   const withFlipFalse = not({...base, flip: false});
-  assert(withFlipFalse.type === 'correlatedSubquery');
+  assert(
+    withFlipFalse.type === 'correlatedSubquery',
+    () => `Expected type 'correlatedSubquery', got '${withFlipFalse.type}'`,
+  );
   expect(withFlipFalse.op).toBe('NOT EXISTS');
   expect(withFlipFalse.flip).toBe(false);
 
   // flip: undefined is not present
   const withFlipUndefined = not({...base});
-  assert(withFlipUndefined.type === 'correlatedSubquery');
+  assert(
+    withFlipUndefined.type === 'correlatedSubquery',
+    () => `Expected type 'correlatedSubquery', got '${withFlipUndefined.type}'`,
+  );
   expect(withFlipUndefined.op).toBe('NOT EXISTS');
   expect('flip' in withFlipUndefined).toBe(false);
 
   // scalar: true is preserved
   const withScalarTrue = not({...base, scalar: true});
-  assert(withScalarTrue.type === 'correlatedSubquery');
+  assert(
+    withScalarTrue.type === 'correlatedSubquery',
+    () => `Expected type 'correlatedSubquery', got '${withScalarTrue.type}'`,
+  );
   expect(withScalarTrue.op).toBe('NOT EXISTS');
   expect(withScalarTrue.scalar).toBe(true);
 
   // scalar: false is preserved (not dropped)
   const withScalarFalse = not({...base, scalar: false});
-  assert(withScalarFalse.type === 'correlatedSubquery');
+  assert(
+    withScalarFalse.type === 'correlatedSubquery',
+    () => `Expected type 'correlatedSubquery', got '${withScalarFalse.type}'`,
+  );
   expect(withScalarFalse.op).toBe('NOT EXISTS');
   expect(withScalarFalse.scalar).toBe(false);
 
   // scalar: undefined is not present
   const withScalarUndefined = not({...base});
-  assert(withScalarUndefined.type === 'correlatedSubquery');
+  assert(
+    withScalarUndefined.type === 'correlatedSubquery',
+    () =>
+      `Expected type 'correlatedSubquery', got '${withScalarUndefined.type}'`,
+  );
   expect('scalar' in withScalarUndefined).toBe(false);
 
   // both flip and scalar preserved together
   const withBoth = not({...base, flip: false, scalar: true});
-  assert(withBoth.type === 'correlatedSubquery');
+  assert(
+    withBoth.type === 'correlatedSubquery',
+    () => `Expected type 'correlatedSubquery', got '${withBoth.type}'`,
+  );
   expect(withBoth.op).toBe('NOT EXISTS');
   expect(withBoth.flip).toBe(false);
   expect(withBoth.scalar).toBe(true);

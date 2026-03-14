@@ -8,6 +8,7 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import type {ShardID} from '../../types/shards.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../replicator/schema/table-metadata.ts';
 import {checkClientSchema} from './client-schema.ts';
 
 describe('client schemas', () => {
@@ -19,6 +20,7 @@ describe('client schemas', () => {
   beforeAll(() => {
     const lc = createSilentLogContext();
     const db = new Database(lc, ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
     db.exec(/* sql */ `
       CREATE TABLE foo(
         id "text|NOT_NULL",

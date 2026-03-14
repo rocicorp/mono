@@ -69,7 +69,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
   formatVersion: FormatVersion;
   snapshotLastMutationIDs?: Record<ClientID, number> | undefined;
 }): Promise<LocalMetaDD31[]> {
-  assert(formatVersion >= FormatVersion.DD31);
+  assert(formatVersion >= FormatVersion.DD31, 'Expected formatVersion >= DD31');
   const testMemdag = new LazyStore(
     perdag,
     100 * 2 ** 20, // 100 MB,

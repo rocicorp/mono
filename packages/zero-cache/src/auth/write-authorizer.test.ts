@@ -1,4 +1,5 @@
 import {beforeEach, describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {
@@ -10,14 +11,14 @@ import type {
   PermissionsConfig,
   Rule,
 } from '../../../zero-schema/src/compiled-permissions.ts';
-import {Database} from '../../../zqlite/src/db.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
 } from '../../../zqlite/src/database-storage.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../services/replicator/schema/table-metadata.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const lc = createSilentLogContext();
 const zeroConfig = {
@@ -61,6 +62,7 @@ beforeEach(() => {
     CREATE TABLE "the_app.permissions" (permissions JSON, hash TEXT);
     INSERT INTO "the_app.permissions" (permissions) VALUES (NULL);
     `);
+  replica.exec(CREATE_TABLE_METADATA_TABLE);
   const storageDb = new Database(lc, ':memory:');
   storageDb.prepare(CREATE_STORAGE_TABLE).run();
   writeAuthzStorage = new DatabaseStorage(storageDb);

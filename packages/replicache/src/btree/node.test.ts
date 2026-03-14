@@ -114,7 +114,7 @@ describe('btree node', () => {
     if (node[NODE_LEVEL] === 0) {
       for (const [k, v] of node[NODE_ENTRIES]) {
         if (lastKey !== undefined) {
-          assert(lastKey < k);
+          assert(lastKey < k, () => `Expected lastKey ${lastKey} < key ${k}`);
           lastKey = k;
         }
         rv[k] = v;

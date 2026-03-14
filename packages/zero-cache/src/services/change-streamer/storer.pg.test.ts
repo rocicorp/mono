@@ -166,6 +166,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
 
+      await storer.allProcessed();
       expect(
         await storer.getStartStreamInitializationParameters(),
       ).toMatchObject({lastWatermark: '08', backfillRequests: []});
@@ -196,6 +197,7 @@ describe('change-streamer/storer', () => {
       storer.store(['09', ['commit', messages.commit(), {watermark: '09'}]]);
 
       // No backfillRequests should be present.
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
         {
@@ -232,6 +234,7 @@ describe('change-streamer/storer', () => {
 
       // The table should appear in the backfillRequests, with null metadata
       // since none was ever specified.
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -286,6 +289,7 @@ describe('change-streamer/storer', () => {
 
       // Now the original table shows up in the backfillRequests, with its
       // table metadata.
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -362,6 +366,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0c', ['commit', messages.commit(), {watermark: '0c'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -442,6 +447,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0d', ['commit', messages.commit(), {watermark: '0d'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -531,6 +537,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0e', ['commit', messages.commit(), {watermark: '0e'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -613,6 +620,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['0f', ['commit', messages.commit(), {watermark: '0f'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -693,6 +701,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['110', ['commit', messages.commit(), {watermark: '110'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -765,6 +774,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['111', ['commit', messages.commit(), {watermark: '111'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -815,6 +825,7 @@ describe('change-streamer/storer', () => {
       ]);
       storer.store(['112', ['commit', messages.commit(), {watermark: '112'}]]);
 
+      await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
           {
@@ -827,7 +838,16 @@ describe('change-streamer/storer', () => {
     test('non-owner purge prevented', async () => {
       await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'different-task-id'`;
 
-      expect(await storer.purgeRecordsBefore('06')).toBe(0);
+      let result;
+      try {
+        result = await storer.purgeRecordsBefore('06');
+      } catch (e) {
+        result = e;
+      }
+      expect(result).toMatchInlineSnapshot(
+        `[AbortError: aborting changeLog purge to 06 because ownership has been taken by different-task-id]`,
+      );
+
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
@@ -861,7 +881,7 @@ describe('change-streamer/storer', () => {
       done = Promise.resolve();
     });
 
-    test('ownership change during transaction includes new owner in error', async () => {
+    test('ownership change not possible during transaction', async () => {
       // Start a transaction — this begins a SERIALIZABLE tx that
       // reads replicationState (owner = 'task-id').
       storer.store([
@@ -874,20 +894,32 @@ describe('change-streamer/storer', () => {
       // The pipelined SELECT of replicationState should have executed by now.
       await sleep(100);
 
-      // Change ownership externally — this commits immediately on a separate
-      // connection, modifying the replicationState row that the storer's
-      // SERIALIZABLE tx has already read.
-      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'new-owner-task'`;
+      // Simulate an ownership change attempt. This should fail.
+      let result;
+      try {
+        result =
+          await db`SELECT owner FROM "xero_5/cdc"."replicationState" FOR UPDATE NOWAIT`;
+      } catch (e) {
+        result = e;
+      }
+      expect(result).toMatchInlineSnapshot(
+        `[PostgresError: could not obtain lock on row in relation "replicationState"]`,
+      );
 
-      // Now send commit. The storer's initial read shows owner = 'task-id'
-      // (matching), so it proceeds to UPDATE lastWatermark. But Postgres
-      // detects the serialization conflict and throws PG_SERIALIZATION_FAILURE.
+      // Now send commit.
       storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
 
-      // The AbortError should include the new owner read from a fresh query.
-      await expect(done).rejects.toThrow(
-        'changeLog ownership was concurrently assumed by new-owner-task (serialization failure)',
-      );
+      // Now an ownership change should succeed.
+      expect(
+        await db`SELECT owner FROM "xero_5/cdc"."replicationState" FOR UPDATE`,
+      ).toMatchInlineSnapshot(`
+        Result [
+          {
+            "owner": "task-id",
+          },
+        ]
+      `);
+
       // Prevent the beforeEach cleanup from re-throwing the rejected done.
       done = Promise.resolve();
     });

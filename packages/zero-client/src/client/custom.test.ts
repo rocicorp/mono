@@ -661,17 +661,29 @@ describe('error handling', () => {
     const result = z.mutate.issue.fail();
 
     const clientResult = await result.client;
-    assert(clientResult.type === 'error');
+    assert(
+      clientResult.type === 'error',
+      'Expected client result type to be error',
+    );
     expect(clientResult.error.type).toBe('app');
-    assert(clientResult.error.type === 'app');
+    assert(
+      clientResult.error.type === 'app',
+      'Expected client error type to be app',
+    );
     expect(clientResult.error.details).toBeUndefined();
     expect(clientResult.error.message).toBe('client boom');
 
     const serverResult = await result.server;
-    assert(serverResult.type === 'error');
+    assert(
+      serverResult.type === 'error',
+      'Expected server result type to be error',
+    );
     expect(serverResult.error.type).toBe('app');
     expect(serverResult.error.message).toBe('client boom');
-    assert(serverResult.error.type === 'app');
+    assert(
+      serverResult.error.type === 'app',
+      'Expected server error type to be app',
+    );
     expect(serverResult.error.details).toBeUndefined();
 
     await z.close();
@@ -702,14 +714,20 @@ describe('error handling', () => {
     z.connectionManager.disconnected(offlineError);
 
     const serverResult = await result.server;
-    assert(serverResult.type === 'error');
+    assert(
+      serverResult.type === 'error',
+      'Expected server result type to be error',
+    );
     expect(serverResult.error.type).toBe('zero');
     expect(serverResult.error.message).toBe('offline');
     expect(noop).toHaveBeenCalledTimes(1);
 
     // client promise was already resolved
     const clientResult = await result.client;
-    assert(clientResult.type === 'success');
+    assert(
+      clientResult.type === 'success',
+      'Expected client result type to be success',
+    );
 
     await z.close();
   });
@@ -742,21 +760,33 @@ describe('error handling', () => {
     const offlineNamespaced = z.mutate.issue.namespaced({id: '123'});
 
     const offlineTopClient = await offlineTop.client;
-    assert(offlineTopClient.type === 'error');
+    assert(
+      offlineTopClient.type === 'error',
+      'Expected offline top-level client result to be error',
+    );
     expect(offlineTopClient.error.type).toBe('zero');
     expect(offlineTopClient.error.message).toBe('offline');
 
     const offlineTopServer = await offlineTop.server;
-    assert(offlineTopServer.type === 'error');
+    assert(
+      offlineTopServer.type === 'error',
+      'Expected offline top-level server result to be error',
+    );
     expect(offlineTopServer.error.type).toBe('zero');
     expect(offlineTopServer.error.message).toBe('offline');
 
     const offlineNamespacedClient = await offlineNamespaced.client;
-    assert(offlineNamespacedClient.type === 'error');
+    assert(
+      offlineNamespacedClient.type === 'error',
+      'Expected offline namespaced client result to be error',
+    );
     expect(offlineNamespacedClient.error.type).toBe('zero');
 
     const offlineNamespacedServer = await offlineNamespaced.server;
-    assert(offlineNamespacedServer.type === 'error');
+    assert(
+      offlineNamespacedServer.type === 'error',
+      'Expected offline namespaced server result to be error',
+    );
     expect(offlineNamespacedServer.error.type).toBe('zero');
 
     expect(topLevel).not.toHaveBeenCalled();
@@ -811,9 +841,9 @@ describe('error handling', () => {
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
     const result = await z.mutate.issue.create().client;
-    assert(result.type === 'error');
+    assert(result.type === 'error', 'Expected result type to be error');
     expect(result.error.type).toBe('app');
-    assert(result.error.type === 'app');
+    assert(result.error.type === 'app', 'Expected error type to be app');
     expect(result.error.message).toBe(
       'Cannot wait for complete results in custom mutations',
     );
@@ -921,10 +951,16 @@ describe('server results and keeping read queries', () => {
     await z.close();
 
     const closeServerResult = await close.server;
-    assert(closeServerResult.type === 'error');
+    assert(
+      closeServerResult.type === 'error',
+      'Expected close server result type to be error',
+    );
     expect(closeServerResult.error.type).toBe('app');
     expect(closeServerResult.error.message).toBe('application error');
-    assert(closeServerResult.error.type === 'app');
+    assert(
+      closeServerResult.error.type === 'app',
+      'Expected close server error type to be app',
+    );
     expect(closeServerResult.error.details).toEqual({
       code: 'APP_ERROR',
       other: 'some other detail',
@@ -1055,10 +1091,16 @@ describe('server results and keeping read queries', () => {
     z.queryDelegate.flushQueryChanges();
 
     const closeServerResult = await close.server;
-    assert(closeServerResult.type === 'error');
+    assert(
+      closeServerResult.type === 'error',
+      'Expected close server result type to be error',
+    );
     expect(closeServerResult.error.type).toBe('app');
     expect(closeServerResult.error.message).toBe('womp womp');
-    assert(closeServerResult.error.type === 'app');
+    assert(
+      closeServerResult.error.type === 'app',
+      'Expected close server error type to be app',
+    );
     expect(closeServerResult.error.details).toEqual({
       issue: 'not found',
     });

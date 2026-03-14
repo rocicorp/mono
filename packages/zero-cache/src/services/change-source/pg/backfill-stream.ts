@@ -10,12 +10,13 @@ import {READONLY} from '../../../db/mode-enum.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
 import {getTypeParsers, type TypeParser} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
-import {TransactionPool} from '../../../db/transaction-pool.ts';
-import {pgClient} from '../../../types/pg.ts';
+import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
+import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {SchemaIncompatibilityError} from '../common/backfill-manager.ts';
 import type {
   BackfillCompleted,
   BackfillRequest,
+  DownloadStatus,
   JSONValue,
   MessageBackfill,
 } from '../protocol/current.ts';
@@ -25,7 +26,8 @@ import {
 } from './backfill-metadata.ts';
 import {
   createReplicationSlot,
-  makeSelectPublishedStmt,
+  makeDownloadStatements,
+  type DownloadStatements,
 } from './initial-sync.ts';
 import {toStateVersionString} from './lsn.ts';
 import {getPublicationInfo} from './schema/published.ts';
@@ -66,10 +68,17 @@ export async function* streamBackfill(
   const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE} = opts;
   const db = pgClient(lc, upstreamURI, {
     connection: {['application_name']: 'backfill-stream'},
+    ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
   });
-  const tx = new TransactionPool(lc, READONLY).run(db);
+  let tx: TransactionPool | undefined;
+  let watermark: string;
   try {
-    const watermark = await setSnapshot(lc, upstreamURI, tx, slot);
+    ({tx, watermark} = await createSnapshotTransaction(
+      lc,
+      upstreamURI,
+      db,
+      slot,
+    ));
     const {tableSpec, backfill} = await validateSchema(
       tx,
       publications,
@@ -86,7 +95,7 @@ export async function* streamBackfill(
       lc,
       tx,
       backfill,
-      makeSelectPublishedStmt(tableSpec, cols),
+      makeDownloadStatements(tableSpec, cols),
       cols.map(col => types.getTypeParser(tableSpec.columns[col].typeOID)),
       flushThresholdBytes,
     );
@@ -107,9 +116,7 @@ export async function* streamBackfill(
     }
     throw e;
   } finally {
-    tx.setDone();
-    // errors are already thrown and handled from processReadTask()
-    void tx.done().catch(() => {});
+    tx?.setDone();
     // Workaround postgres.js hanging at the end of some COPY commands:
     // https://github.com/porsager/postgres/issues/499
     void db.end().catch(e => lc.warn?.(`error closing backfill connection`, e));
@@ -120,18 +127,32 @@ async function* stream(
   lc: LogContext,
   tx: TransactionPool,
   backfill: BackfillParams,
-  selectStmt: string,
+  {select, getTotalRows, getTotalBytes}: DownloadStatements,
   colParsers: TypeParser[],
   flushThresholdBytes: number,
 ): AsyncGenerator<MessageBackfill | BackfillCompleted> {
   const start = performance.now();
-  lc.info?.(`Starting backfill copy stream:`, selectStmt);
+  const [rows, bytes] = await tx.processReadTask(sql =>
+    Promise.all([
+      sql.unsafe<{totalRows: bigint}[]>(getTotalRows),
+      sql.unsafe<{totalBytes: bigint}[]>(getTotalBytes),
+    ]),
+  );
+  const status: DownloadStatus = {
+    rows: 0,
+    totalRows: Number(rows[0].totalRows),
+    totalBytes: Number(bytes[0].totalBytes),
+  };
+
+  let elapsed = (performance.now() - start).toFixed(3);
+  lc.info?.(`Computed total rows and bytes for: ${select} (${elapsed} ms)`, {
+    status,
+  });
   const copyStream = await tx.processReadTask(sql =>
-    sql.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
+    sql.unsafe(`COPY (${select}) TO STDOUT`).readable(),
   );
 
   const tsvParser = new TsvParser();
-  let totalRows = 0;
   let totalBytes = 0;
   let totalMsgs = 0;
   let rowValues: JSONValue[][] = [];
@@ -140,7 +161,7 @@ async function* stream(
   const logFlushed = () => {
     lc.debug?.(
       `Flushed ${rowValues.length} rows, ${bufferedBytes} bytes ` +
-        `(total: rows=${totalRows}, msgs=${totalMsgs}, bytes=${totalBytes})`,
+        `(total: rows=${status.rows}, msgs=${totalMsgs}, bytes=${totalBytes})`,
     );
   };
 
@@ -155,7 +176,7 @@ async function* stream(
 
       if (++col === colParsers.length) {
         rowValues.push(row);
-        totalRows++;
+        status.rows++;
         row = Array.from({length: colParsers.length});
         col = 0;
       }
@@ -164,7 +185,7 @@ async function* stream(
     totalBytes += chunk.byteLength;
 
     if (bufferedBytes >= flushThresholdBytes) {
-      yield {tag: 'backfill', ...backfill, rowValues};
+      yield {tag: 'backfill', ...backfill, rowValues, status};
       totalMsgs++;
       logFlushed();
       rowValues = [];
@@ -174,16 +195,16 @@ async function* stream(
 
   // Flush the last batch of rows.
   if (rowValues.length > 0) {
-    yield {tag: 'backfill', ...backfill, rowValues};
+    yield {tag: 'backfill', ...backfill, rowValues, status};
     totalMsgs++;
     logFlushed();
   }
 
-  yield {tag: 'backfill-completed', ...backfill};
-  const elapsed = performance.now() - start;
+  yield {tag: 'backfill-completed', ...backfill, status};
+  elapsed = (performance.now() - start).toFixed(3);
   lc.info?.(
-    `Finished streaming ${totalRows} rows, ${totalMsgs} msgs, ${totalBytes} bytes ` +
-      `(${elapsed.toFixed(3)} ms)`,
+    `Finished streaming ${status.rows} rows, ${totalMsgs} msgs, ${totalBytes} bytes ` +
+      `(${elapsed} ms)`,
   );
 }
 
@@ -196,10 +217,10 @@ async function* stream(
  *  transaction; this is the only way to get set a transaction at a specific
  *  LSN.)
  */
-async function setSnapshot(
+async function createSnapshotTransaction(
   lc: LogContext,
   upstreamURI: string,
-  tx: TransactionPool,
+  db: PostgresDB,
   slotNamePrefix: string,
 ) {
   const replicationSession = pgClient(lc, upstreamURI, {
@@ -211,16 +232,14 @@ async function setSnapshot(
     const {snapshot_name: snapshot, consistent_point: lsn} =
       await createReplicationSlot(lc, replicationSession, tempSlot);
 
-    await tx.processReadTask(sql =>
-      sql.unsafe(`SET TRANSACTION SNAPSHOT '${snapshot}'`),
-    );
-    // Once the snapshot has been set, the replication session and slot can
-    // be closed / dropped.
+    const {init, imported} = importSnapshot(snapshot);
+    const tx = new TransactionPool(lc, READONLY, init).run(db);
+    await imported;
     await replicationSession.unsafe(`DROP_REPLICATION_SLOT "${tempSlot}"`);
 
     const watermark = toStateVersionString(lsn);
     lc.info?.(`Opened snapshot transaction at LSN ${lsn} (${watermark})`);
-    return watermark;
+    return {tx, watermark};
   } catch (e) {
     // In the event of a failure, clean up the replication slot if created.
     await replicationSession.unsafe(

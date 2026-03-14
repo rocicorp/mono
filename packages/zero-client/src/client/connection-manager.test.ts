@@ -443,7 +443,10 @@ describe('ConnectionManager', () => {
       manager.closed();
 
       expect(manager.state.name).toEqual(ConnectionStatus.Closed);
-      assert(manager.state.name === ConnectionStatus.Closed);
+      assert(
+        manager.state.name === ConnectionStatus.Closed,
+        'Expected connection manager state to be Closed',
+      );
       expect(manager.state.reason.kind).toEqual(ClientErrorKind.ClientClosed);
       expect(manager.shouldContinueRunLoop()).toBe(false);
       expect(listener).toHaveBeenCalledWith({
@@ -460,7 +463,10 @@ describe('ConnectionManager', () => {
       manager.disconnected(sharedDisconnectError);
 
       expect(manager.state.name).toEqual(ConnectionStatus.Closed);
-      assert(manager.state.name === ConnectionStatus.Closed);
+      assert(
+        manager.state.name === ConnectionStatus.Closed,
+        'Expected connection manager state to remain Closed',
+      );
       expect(manager.state.reason.kind).toEqual(ClientErrorKind.ClientClosed);
       expect(listener).not.toHaveBeenCalled();
     });
@@ -668,7 +674,10 @@ describe('ConnectionManager', () => {
 
       const nextState = await nextStatePromise;
       expect(nextState.name).toEqual(ConnectionStatus.Closed);
-      assert(nextState.name === ConnectionStatus.Closed);
+      assert(
+        nextState.name === ConnectionStatus.Closed,
+        'Expected next state to be Closed',
+      );
       expect(nextState.reason.kind).toEqual(ClientErrorKind.ClientClosed);
     });
 

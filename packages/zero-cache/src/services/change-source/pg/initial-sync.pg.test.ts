@@ -28,6 +28,8 @@ import {UnsupportedTableSchemaError} from './schema/validation.ts';
 const APP_ID = '1';
 const SHARD_NUM = 18;
 
+const TEST_CONTEXT = {foo: 'bar'};
+
 const ZERO_PERMISSIONS_SPEC: PublishedTableSpec = {
   columns: {
     permissions: {
@@ -328,6 +330,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       replicatedData: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}_${SHARD_NUM}.mutations`]: [],
+        ['_zero.replicationConfig']: [
+          {
+            replicaVersion: expect.any(String),
+            publications: `["_${APP_ID}_metadata_${SHARD_NUM}","_${APP_ID}_public_${SHARD_NUM}"]`,
+            initialSyncContext: '{"foo":"bar"}',
+          },
+        ],
         ['_zero.column_metadata']: [
           {
             character_max_length: null,
@@ -2594,6 +2603,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           replica,
           getConnectionURI(upstream),
           {tableCopyWorkers: 3},
+          TEST_CONTEXT,
         );
 
         const config = await upstream.unsafe(
@@ -2607,6 +2617,9 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           `SELECT * FROM "${APP_ID}_${SHARD_NUM}"."replicas"`,
         );
         expect(replicas).toHaveLength(i + 1);
+        for (const replica of replicas) {
+          expect(replica).toMatchObject({initialSyncContext: TEST_CONTEXT});
+        }
         const tableSpecs = Object.entries(c.published)
           .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
           .map(([_, spec]) => spec);
@@ -2714,9 +2727,16 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
     let result;
     try {
-      await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
-        tableCopyWorkers: 1,
-      });
+      await initialSync(
+        lc,
+        shardConfig,
+        replica,
+        getConnectionURI(upstream),
+        {
+          tableCopyWorkers: 1,
+        },
+        TEST_CONTEXT,
+      );
     } catch (e) {
       result = e;
     }
@@ -2753,13 +2773,66 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
     await sql.unsafe(corruption);
 
-    await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
-      tableCopyWorkers: 1,
-    });
+    await initialSync(
+      lc,
+      shardConfig,
+      replica,
+      getConnectionURI(upstream),
+      {
+        tableCopyWorkers: 1,
+      },
+      TEST_CONTEXT,
+    );
 
     expectMatchingObjectsInTables(replica, {
       [`${APP_ID}_${SHARD_NUM}.clients`]: [],
       foo: [{id: 1}],
+    });
+  });
+
+  test('different requested publications', async () => {
+    const lc = createSilentLogContext();
+    const sql = upstream;
+    await sql`
+      CREATE TABLE foo(id int4 PRIMARY KEY);
+      INSERT INTO foo(id) VALUES (1);
+
+      CREATE TABLE bar(id int4 PRIMARY KEY);
+      INSERT INTO bar(id) VALUES (1);
+
+      CREATE PUBLICATION pub_1 for TABLE foo;
+      CREATE PUBLICATION pub_2 for TABLE bar;
+    `.simple();
+
+    const replica = new Database(lc, ':memory:');
+
+    // Simulate a (partial) previous sync with pub_1 only.
+    await ensureShardSchema(lc, upstream, {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: ['pub_1'],
+    });
+
+    // initial-sync with pub_1 and pub_2
+    await initialSync(
+      lc,
+      {
+        appID: APP_ID,
+        shardNum: SHARD_NUM,
+        publications: ['pub_1', 'pub_2'],
+      },
+      replica,
+      getConnectionURI(upstream),
+      {
+        tableCopyWorkers: 1,
+      },
+      TEST_CONTEXT,
+    );
+
+    expectMatchingObjectsInTables(replica, {
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+      foo: [{id: 1}],
+      bar: [{id: 1}],
     });
   });
 
@@ -2779,6 +2852,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         replica,
         getConnectionURI(upstream),
         {tableCopyWorkers: 1},
+        TEST_CONTEXT,
       );
     } catch (e) {
       result = e;

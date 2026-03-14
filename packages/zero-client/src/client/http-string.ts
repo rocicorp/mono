@@ -13,11 +13,11 @@ export function toHTTPString(url: WSString): HTTPString {
 }
 
 export function assertHTTPString(url: string): asserts url is HTTPString {
-  assert(/^https?:\/\//.test(url));
+  assert(/^https?:\/\//.test(url), () => `Expected HTTP(S) URL, got "${url}"`);
 }
 
 export function assertWSString(url: string): asserts url is WSString {
-  assert(/^wss?:\/\//.test(url));
+  assert(/^wss?:\/\//.test(url), () => `Expected WS(S) URL, got "${url}"`);
 }
 
 export function appendPath<T extends HTTPString | WSString>(

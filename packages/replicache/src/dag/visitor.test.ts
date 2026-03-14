@@ -27,7 +27,7 @@ test('Ensure only visited once', async () => {
   const dagRead: MustGetChunk = {
     mustGetChunk(h: Hash) {
       const chunk = chunks.get(h);
-      assert(chunk);
+      assert(chunk, () => `Expected chunk for hash ${h} to be defined`);
       return Promise.resolve(chunk);
     },
   };

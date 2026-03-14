@@ -3,6 +3,11 @@ import type {LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
 import postgres from 'postgres';
 import {assert} from '../../../../../../shared/src/asserts.ts';
+import {
+  jsonObjectSchema,
+  stringify,
+  type JSONObject,
+} from '../../../../../../shared/src/bigint-json.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.ts';
@@ -191,9 +196,11 @@ export function shardSetup(
     );
 
   CREATE TABLE ${shard}.replicas (
-    "slot"          TEXT PRIMARY KEY,
-    "version"       TEXT NOT NULL,
-    "initialSchema" JSON NOT NULL
+    "slot"               TEXT PRIMARY KEY,
+    "version"            TEXT NOT NULL,
+    "initialSchema"      JSON NOT NULL,
+    "initialSyncContext" JSON,
+    "subscriberContext"  JSON
   );
   `;
 }
@@ -223,6 +230,8 @@ const replicaSchema = internalShardConfigSchema.extend({
   slot: v.string(),
   version: v.string(),
   initialSchema: publishedSchema,
+  initialSyncContext: jsonObjectSchema.nullable(),
+  subscriberContext: jsonObjectSchema.nullable(),
 });
 
 export type Replica = v.Infer<typeof replicaSchema>;
@@ -245,12 +254,14 @@ export async function addReplica(
   slot: string,
   replicaVersion: string,
   {tables, indexes}: PublishedSchema,
+  initialSyncContext: JSONObject,
 ) {
   const schema = upstreamSchema(shard);
   const synced: PublishedSchema = {tables, indexes};
   await sql`
-    INSERT INTO ${sql(schema)}.replicas ("slot", "version", "initialSchema")
-      VALUES (${slot}, ${replicaVersion}, ${synced})`;
+    INSERT INTO ${sql(schema)}.replicas
+      ("slot", "version", "initialSchema", "initialSyncContext")
+      VALUES (${slot}, ${replicaVersion}, ${synced}, ${initialSyncContext})`;
 }
 
 export async function getReplicaAtVersion(
@@ -258,6 +269,7 @@ export async function getReplicaAtVersion(
   sql: PostgresDB,
   shard: ShardID,
   replicaVersion: string,
+  context?: JSONObject,
 ): Promise<Replica | null> {
   const schema = sql(upstreamSchema(shard));
   const result = await sql`
@@ -267,8 +279,13 @@ export async function getReplicaAtVersion(
   if (result.length === 0) {
     // log out all the replicas and the joined shardConfig
     const allReplicas = await sql`
-      SELECT * FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true`;
-    lc.info?.(`Replica not found in: ${JSON.stringify(allReplicas)}`);
+      SELECT slot, version, "initialSyncContext", "subscriberContext" 
+        FROM ${schema}.replicas`;
+    lc.info?.(
+      `Replica ${replicaVersion} ` +
+        (context ? `(context: ${stringify(context)}) ` : '') +
+        `not found in: ${stringify(allReplicas)}`,
+    );
     return null;
   }
   return v.parse(result[0], replicaSchema, 'passthrough');

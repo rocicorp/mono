@@ -305,7 +305,10 @@ describe('patch', () => {
         const b = new ChainBuilder(store, undefined, formatVersion);
         await b.addGenesis(clientID);
         await withWriteNoImplicitCommit(store, async dagWrite => {
-          assert(formatVersion >= FormatVersion.DD31);
+          assert(
+            formatVersion >= FormatVersion.DD31,
+            'Expected formatVersion >= DD31',
+          );
           const dbWrite = await newWriteSnapshotDD31(
             b.chain[0].chunk.hash,
             {[clientID]: 1},

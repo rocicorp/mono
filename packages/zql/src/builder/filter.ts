@@ -131,12 +131,15 @@ function createPredicateImpl(
     case 'NOT ILIKE':
       return not(getLikePredicate(rhs, 'i'));
     case 'IN': {
-      assert(Array.isArray(rhs));
+      assert(Array.isArray(rhs), 'Expected rhs to be an array for IN operator');
       const set = new Set(rhs);
       return lhs => set.has(lhs);
     }
     case 'NOT IN': {
-      assert(Array.isArray(rhs));
+      assert(
+        Array.isArray(rhs),
+        'Expected rhs to be an array for NOT IN operator',
+      );
       const set = new Set(rhs);
       return lhs => !set.has(lhs);
     }

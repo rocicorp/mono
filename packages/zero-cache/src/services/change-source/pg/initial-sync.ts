@@ -7,7 +7,10 @@ import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
+import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {equals} from '../../../../../shared/src/set-utils.ts';
+import type {DownloadStatus} from '../../../../../zero-events/src/status.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,
@@ -20,6 +23,7 @@ import {
   mapPostgresToLiteIndex,
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
+import {runTx} from '../../../db/run-transaction.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {
@@ -58,12 +62,16 @@ export type InitialSyncOptions = {
   profileCopy?: boolean | undefined;
 };
 
+/** Server context to store with the initial sync metadata for debugging. */
+export type ServerContext = JSONObject;
+
 export async function initialSync(
   lc: LogContext,
   shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
   syncOptions: InitialSyncOptions,
+  context: ServerContext,
 ) {
   if (!ALLOWED_APP_ID_CHARACTERS.test(shard.appID)) {
     throw new Error(
@@ -130,15 +138,19 @@ export async function initialSync(
     const {snapshot_name: snapshot, consistent_point: lsn} = slot;
     const initialVersion = toStateVersionString(lsn);
 
-    initReplicationState(tx, publications, initialVersion);
+    initReplicationState(tx, publications, initialVersion, context);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
     // Retrieve the published schema at the consistent_point.
-    const published = await sql.begin(Mode.READONLY, async tx => {
-      await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
-      return getPublicationInfo(tx, publications);
-    });
+    const published = await runTx(
+      sql,
+      async tx => {
+        await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
+        return getPublicationInfo(tx, publications);
+      },
+      {mode: Mode.READONLY},
+    );
     // Note: If this throws, initial-sync is aborted.
     validatePublications(lc, published);
 
@@ -159,6 +171,7 @@ export async function initialSync(
     const copyPool = pgClient(lc, upstreamURI, {
       max: numWorkers,
       connection: {['application_name']: 'initial-sync-copy-worker'},
+      ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
     });
     const copiers = startTableCopyWorkers(
       lc,
@@ -169,22 +182,31 @@ export async function initialSync(
     );
     try {
       createLiteTables(tx, tables, initialVersion);
+      const downloads = await Promise.all(
+        tables.map(spec =>
+          copiers.processReadTask((db, lc) =>
+            getInitialDownloadState(lc, db, spec),
+          ),
+        ),
+      );
       statusPublisher.publish(
         lc,
         'Initializing',
         `Copying ${numTables} upstream tables at version ${initialVersion}`,
         5000,
+        () => ({downloadStatus: downloads.map(({status}) => status)}),
       );
 
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
-        tables.map(table =>
+        downloads.map(table =>
           copiers.processReadTask((db, lc) =>
             copy(lc, table, copyPool, db, tx),
           ),
         ),
       );
       void copyProfiler?.stopAndDispose(lc, 'initial-copy');
+      copiers.setDone();
 
       const total = rowCounts.reduce(
         (acc, curr) => ({
@@ -205,7 +227,14 @@ export async function initialSync(
       const index = performance.now() - indexStart;
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
-      await addReplica(sql, shard, slotName, initialVersion, published);
+      await addReplica(
+        sql,
+        shard,
+        slotName,
+        initialVersion,
+        published,
+        context,
+      );
 
       const elapsed = performance.now() - start;
       lc.info?.(
@@ -213,14 +242,8 @@ export async function initialSync(
           `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
       );
     } finally {
-      copiers.setDone();
-      if (platform() === 'win32') {
-        // Workaround a Node bug in Windows in which certain COPY streams result
-        // in hanging the connection, which causes this await to never resolve.
-        void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
-      } else {
-        await copyPool.end();
-      }
+      // All meaningful errors are handled at the processReadTask() call site.
+      void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
     }
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
@@ -272,6 +295,10 @@ async function ensurePublishedTables(
   const {publications} = await getInternalShardConfig(sql, shard);
 
   if (validate) {
+    let valid = false;
+    const nonInternalPublications = publications.filter(
+      p => !p.startsWith('_'),
+    );
     const exists = await sql`
       SELECT pubname FROM pg_publication WHERE pubname IN ${sql(publications)}
       `.values();
@@ -280,6 +307,17 @@ async function ensurePublishedTables(
         `some configured publications [${publications}] are missing: ` +
           `[${exists.flat()}]. resyncing`,
       );
+    } else if (
+      !equals(new Set(shard.publications), new Set(nonInternalPublications))
+    ) {
+      lc.warn?.(
+        `requested publications [${shard.publications}] differ from previous` +
+          `publications [${nonInternalPublications}]. resyncing`,
+      );
+    } else {
+      valid = true;
+    }
+    if (!valid) {
       await sql.unsafe(dropShard(shard.appID, shard.shardNum));
       return ensurePublishedTables(lc, sql, shard, false);
     }
@@ -377,31 +415,79 @@ const MB = 1024 * 1024;
 const MAX_BUFFERED_ROWS = 10_000;
 const BUFFERED_SIZE_THRESHOLD = 8 * MB;
 
-export function makeSelectPublishedStmt(
+export type DownloadStatements = {
+  select: string;
+  getTotalRows: string;
+  getTotalBytes: string;
+};
+
+export function makeDownloadStatements(
   table: PublishedTableSpec,
-  columns: string[],
-) {
+  cols: string[],
+): DownloadStatements {
   const filterConditions = Object.values(table.publications)
     .map(({rowFilter}) => rowFilter)
     .filter(f => !!f); // remove nulls
-  return (
-    /*sql*/ `
-    SELECT ${columns.map(id).join(',')} FROM ${id(table.schema)}.${id(table.name)}` +
-    (filterConditions.length === 0
+  const where =
+    filterConditions.length === 0
       ? ''
-      : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`)
-  );
+      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
+  const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)} ${where}`;
+  const totalBytes = `(${cols.map(col => `SUM(COALESCE(pg_column_size(${id(col)}), 0))`).join(' + ')})`;
+  const stmts = {
+    select: /*sql*/ `SELECT ${cols.map(id).join(',')} ${fromTable}`,
+    getTotalRows: /*sql*/ `SELECT COUNT(*) AS "totalRows" ${fromTable}`,
+    getTotalBytes: /*sql*/ `SELECT ${totalBytes} AS "totalBytes" ${fromTable}`,
+  };
+  return stmts;
+}
+
+type DownloadState = {
+  spec: PublishedTableSpec;
+  status: DownloadStatus;
+};
+
+async function getInitialDownloadState(
+  lc: LogContext,
+  sql: PostgresDB,
+  spec: PublishedTableSpec,
+): Promise<DownloadState> {
+  const start = performance.now();
+  const table = liteTableName(spec);
+  const columns = Object.keys(spec.columns);
+  const stmts = makeDownloadStatements(spec, columns);
+  const rowsResult = sql
+    .unsafe<{totalRows: bigint}[]>(stmts.getTotalRows)
+    .execute();
+  const bytesResult = sql
+    .unsafe<{totalBytes: bigint}[]>(stmts.getTotalBytes)
+    .execute();
+
+  const state: DownloadState = {
+    spec,
+    status: {
+      table,
+      columns,
+      rows: 0,
+      totalRows: Number((await rowsResult)[0].totalRows),
+      totalBytes: Number((await bytesResult)[0].totalBytes),
+    },
+  };
+  const elapsed = (performance.now() - start).toFixed(3);
+  lc.info?.(`Computed initial download state for ${table} (${elapsed} ms)`, {
+    state: state.status,
+  });
+  return state;
 }
 
 async function copy(
   lc: LogContext,
-  table: PublishedTableSpec,
+  {spec: table, status}: DownloadState,
   dbClient: PostgresDB,
   from: PostgresTransaction,
   to: Database,
 ) {
   const start = performance.now();
-  let rows = 0;
   let flushTime = 0;
 
   const tableName = liteTableName(table);
@@ -422,7 +508,7 @@ async function copy(
     insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
   );
 
-  const selectStmt = makeSelectPublishedStmt(table, columnNames);
+  const {select} = makeDownloadStatements(table, columnNames);
   const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 
@@ -452,7 +538,7 @@ async function copy(
       pendingValues[i] = undefined as unknown as LiteValueType;
     }
     pendingSize = 0;
-    rows += flushedRows;
+    status.rows += flushedRows;
 
     const elapsed = performance.now() - start;
     flushTime += elapsed;
@@ -461,7 +547,7 @@ async function copy(
     );
   }
 
-  lc.info?.(`Starting copy stream of ${tableName}:`, selectStmt);
+  lc.info?.(`Starting copy stream of ${tableName}:`, select);
   const pgParsers = await getTypeParsers(dbClient, {returnJsonAsString: true});
   const parsers = columnSpecs.map(c => {
     const pgParse = pgParsers.getTypeParser(c.typeOID);
@@ -477,7 +563,7 @@ async function copy(
   let col = 0;
 
   await pipeline(
-    await from.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
+    await from.unsafe(`COPY (${select}) TO STDOUT`).readable(),
     new Writable({
       highWaterMark: BUFFERED_SIZE_THRESHOLD,
 
@@ -521,8 +607,8 @@ async function copy(
 
   const elapsed = performance.now() - start;
   lc.info?.(
-    `Finished copying ${rows} rows into ${tableName} ` +
+    `Finished copying ${status.rows} rows into ${tableName} ` +
       `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
   );
-  return {rows, flushTime};
+  return {rows: status.rows, flushTime};
 }

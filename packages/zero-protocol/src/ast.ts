@@ -146,7 +146,10 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
 export type CompoundKey = readonly [string, ...string[]];
 
 function mustCompoundKey(field: readonly string[]): CompoundKey {
-  assert(Array.isArray(field) && field.length >= 1);
+  assert(
+    Array.isArray(field) && field.length >= 1,
+    'Expected non-empty array for compound key',
+  );
   return field as unknown as CompoundKey;
 }
 
@@ -530,10 +533,10 @@ function compareValuePosition(a: ValuePosition, b: ValuePosition): number {
   }
   switch (a.type) {
     case 'literal':
-      assert(b.type === 'literal');
+      assert(b.type === 'literal', 'Expected literal type for comparison');
       return compareUTF8(String(a.value), String(b.value));
     case 'column':
-      assert(b.type === 'column');
+      assert(b.type === 'column', 'Expected column type for comparison');
       return compareUTF8(a.name, b.name);
     case 'static':
       throw new Error(

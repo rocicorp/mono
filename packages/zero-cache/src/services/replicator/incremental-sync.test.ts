@@ -650,16 +650,24 @@ describe('replicator/incremental-sync', () => {
       await orTimeoutWith(next, 5000, new Error('timed-out')),
     ).not.toBeInstanceOf(Error);
 
-    // And row versions should be bumped.
+    // The row version in the table metadata should be bumped.
+    expect(
+      replica.prepare(/*sql*/ `SELECT * FROM "_zero.tableMetadata"`).get(),
+    ).toMatchObject({
+      minRowVersion: '110.02',
+      schema: 'public',
+      table: 'issues',
+    });
+    // (The row columns themselves are not updated ... too costly)
     expect(issuesDump.all()).toEqual([
       {
-        _0_version: '110.02',
+        _0_version: '100',
         big: 2,
         issueID: 1,
         new_column: 'hello',
       },
       {
-        _0_version: '110.02',
+        _0_version: '100',
         big: 3,
         issueID: 2,
         new_column: 'world',

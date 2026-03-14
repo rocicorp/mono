@@ -1,4 +1,4 @@
-import type {PermalinkHistoryState} from '@rocicorp/zero/react';
+import type {PermalinkHistoryState} from '@rocicorp/zero-virtual/react';
 import {useHistoryState} from 'wouter/use-browser-location';
 
 /**

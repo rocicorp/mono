@@ -2222,9 +2222,15 @@ describe('inspector.analyzeQuery name mapping', () => {
     expect(sentAst?.where).toBeDefined();
     expect(sentAst?.where?.type).toBe('simple');
     // Type narrowing: we know where is defined and is simple from above assertions
-    assert(sentAst?.where?.type === 'simple');
+    assert(
+      sentAst?.where?.type === 'simple',
+      'Expected where clause type to be simple',
+    );
     expect(sentAst.where.left.type).toBe('column');
-    assert(sentAst.where.left.type === 'column');
+    assert(
+      sentAst.where.left.type === 'column',
+      'Expected where left operand type to be column',
+    );
     expect(sentAst.where.left.name).toBe('creator_id');
     expect(result.syncedRowCount).toBe(1);
     await z.close();

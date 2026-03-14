@@ -504,8 +504,11 @@ describe('integration', {timeout: 30000}, () => {
   type Envs = [NodeJS.ProcessEnv] | [NodeJS.ProcessEnv, NodeJS.ProcessEnv];
 
   async function startZero(envs: Envs) {
-    assert(zeros.length === 0);
-    assert(zerosExited.length === 0);
+    assert(zeros.length === 0, 'Expected zeros to be empty before starting');
+    assert(
+      zerosExited.length === 0,
+      'Expected zerosExited to be empty before starting',
+    );
 
     let i = 0;
     for (const env of envs) {
@@ -649,25 +652,7 @@ describe('integration', {timeout: 30000}, () => {
     ],
   ] satisfies [string, 'pg' | 'custom', () => Envs, 'FULL' | undefined][])(
     '%s (%s)',
-    async ([_name, backend, makeEnvs, replicaIdentity], {skip}) => {
-      if (process.env.CI) {
-        // TODO: Track down this unhandled rejection that regularly happens
-        //       when the test pg instances are shut down, particularly when
-        //       running the test with concurrently pg versions.
-        //       Then re-enable the test in the CI.
-        //
-        // ----⎯⎯⎯⎯⎯⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
-        // PostgresError: terminating connection due to administrator command
-        // ❯ ErrorResponse node_modules/postgres/src/connection.js:794:26
-        // ❯ handle node_modules/postgres/src/connection.js:480:6
-        // ❯ Socket.data node_modules/postgres/src/connection.js:315:9
-        // ❯ Socket.emit node:events:508:28
-        // ❯ addChunk node:internal/streams/readable:559:12
-        // ❯ readableAddChunkPushByteMode node:internal/streams/readable:510:3
-        // ❯ Socket.Readable.push node:internal/streams/readable:390:5
-        // ❯ TCP.onStreamRead node:internal/stream_base_commons:189:23
-        skip();
-      }
+    async ([_name, backend, makeEnvs, replicaIdentity]) => {
       if (backend === 'pg') {
         await upDB.unsafe(initialPGSetup(replicaIdentity));
       }

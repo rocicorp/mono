@@ -112,9 +112,9 @@ test('updateClients and getClients for DD31', async () => {
   // Make sure we write the refresh1Hash as well.
   await withRead(dagStore, async read => {
     const h = await read.getHead(CLIENTS_HEAD_NAME);
-    assert(h);
+    assert(h, 'Expected clients head hash to be defined');
     const chunk = await read.getChunk(h);
-    assert(chunk);
+    assert(chunk, 'Expected chunk for clients head hash to be defined');
     expect(chunk.meta).toEqual([
       refresh1Hash,
       headClient1Hash,
@@ -356,7 +356,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
 
     const {clientGroupID} = client;
     const clientGroup = await getClientGroup(clientGroupID, dagRead);
-    assert(clientGroup);
+    assert(clientGroup, 'Expected clientGroup to be defined');
     expect(clientGroup.mutationIDs).toEqual({});
     expect(clientGroup.lastServerAckdMutationIDs).toEqual({});
 

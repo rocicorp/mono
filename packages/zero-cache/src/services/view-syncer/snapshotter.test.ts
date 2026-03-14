@@ -22,6 +22,7 @@ describe('view-syncer/snapshotter', () => {
   let dbFile: DbFile;
   let replicator: FakeReplicator;
   let tableSpecs: Map<string, LiteAndZqlSpec>;
+  let allTableNames: Set<string>;
   let s: Snapshotter;
 
   beforeEach(() => {
@@ -54,6 +55,8 @@ describe('view-syncer/snapshotter', () => {
 
         INSERT INTO users(id, handle, ignore, _0_version) VALUES(10, 'alice', 'vvv', '01');
         INSERT INTO users(id, handle, ignore, _0_version) VALUES(20, 'bob', 'vxv', '01');
+
+        CREATE TABLE backfilling(id INT PRIMARY KEY, _0_version TEXT NOT NULL);
       `);
     initReplicationState(db, ['zero_data'], '01');
 
@@ -70,6 +73,7 @@ describe('view-syncer/snapshotter', () => {
     ).run();
 
     tableSpecs = computeZqlSpecs(lc, db, {includeBackfillingColumns: false});
+    allTableNames = new Set(tableSpecs.keys());
 
     replicator = fakeReplicator(lc, db);
     s = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
@@ -123,7 +127,7 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('01');
 
-    const diff = s.advance(tableSpecs);
+    const diff = s.advance(tableSpecs, allTableNames);
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(0);
@@ -135,6 +139,7 @@ describe('view-syncer/snapshotter', () => {
     issues: 'id',
     users: 'id',
     comments: 'id',
+    backfilling: 'id',
     ['my_app.permissions']: 'lock',
   });
 
@@ -147,7 +152,7 @@ describe('view-syncer/snapshotter', () => {
     );
     replicator.processTransaction('09');
 
-    const diff = s.advance(tableSpecs);
+    const diff = s.advance(tableSpecs, allTableNames);
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('09');
     expect(diff.changes).toBe(1);
@@ -181,6 +186,71 @@ describe('view-syncer/snapshotter', () => {
     `);
   });
 
+  test('non-syncable tables skipped', () => {
+    expect(s.current().version).toBe('01');
+
+    replicator.processTransaction(
+      '09',
+      messages.insert('users', {id: 20, handle: 'alice'}),
+      messages.insert('backfilling', {id: 30}),
+      messages.insert('users', {id: 30, handle: 'bob'}),
+    );
+    replicator.processTransaction('09');
+
+    // simulate the backfilling table being non-syncable
+    tableSpecs.delete('backfilling');
+    const diff = s.advance(tableSpecs, allTableNames);
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('09');
+    expect(diff.changes).toBe(3);
+
+    expect([...diff]).toMatchInlineSnapshot(`
+      [
+        {
+          "nextValue": {
+            "_0_version": "09",
+            "handle": "alice",
+            "id": 20,
+          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "handle": "bob",
+              "id": 20,
+            },
+            {
+              "_0_version": "01",
+              "handle": "alice",
+              "id": 10,
+            },
+          ],
+          "rowKey": {
+            "id": 20,
+          },
+          "table": "users",
+        },
+        {
+          "nextValue": {
+            "_0_version": "09",
+            "handle": "bob",
+            "id": 30,
+          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "handle": "bob",
+              "id": 20,
+            },
+          ],
+          "rowKey": {
+            "id": 30,
+          },
+          "table": "users",
+        },
+      ]
+    `);
+  });
+
   test('concurrent snapshot diffs', () => {
     const s1 = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
     const s2 = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
@@ -196,7 +266,7 @@ describe('view-syncer/snapshotter', () => {
       messages.delete('issues', {id: 3}),
     );
 
-    const diff1 = s1.advance(tableSpecs);
+    const diff1 = s1.advance(tableSpecs, allTableNames);
     expect(diff1.prev.version).toBe('01');
     expect(diff1.curr.version).toBe('09');
     expect(diff1.changes).toBe(5); // The key update results in a del(old) + set(new).
@@ -371,7 +441,7 @@ describe('view-syncer/snapshotter', () => {
       messages.update('issues', {id: 2, owner: 10, desc: 'bard'}, {id: 5}),
     );
 
-    const diff2 = s1.advance(tableSpecs);
+    const diff2 = s1.advance(tableSpecs, allTableNames);
     expect(diff2.prev.version).toBe('09');
     expect(diff2.curr.version).toBe('0d');
     expect(diff2.changes).toBe(3);
@@ -436,7 +506,7 @@ describe('view-syncer/snapshotter', () => {
     // The diff for s2 goes straight from '00' to '08'.
     // This will coalesce multiple changes to a row, and can result in some noops,
     // (e.g. rows that return to their original state).
-    const diff3 = s2.advance(tableSpecs);
+    const diff3 = s2.advance(tableSpecs, allTableNames);
     expect(diff3.prev.version).toBe('01');
     expect(diff3.curr.version).toBe('0d');
     expect(diff3.changes).toBe(5);
@@ -511,7 +581,7 @@ describe('view-syncer/snapshotter', () => {
 
     replicator.processTransaction('07', messages.truncate('users'));
 
-    const diff = s.advance(tableSpecs);
+    const diff = s.advance(tableSpecs, allTableNames);
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
@@ -533,7 +603,7 @@ describe('view-syncer/snapshotter', () => {
       }),
     );
 
-    const diff = s.advance(tableSpecs);
+    const diff = s.advance(tableSpecs, allTableNames);
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
@@ -548,7 +618,7 @@ describe('view-syncer/snapshotter', () => {
 
     replicator.processTransaction('07', messages.insert('comments', {id: 1}));
 
-    const diff = s.advance(tableSpecs);
+    const diff = s.advance(tableSpecs, allTableNames);
     let currStmts = 0;
 
     const abortError = new Error('aborted iteration');
@@ -585,7 +655,7 @@ describe('view-syncer/snapshotter', () => {
       messages.addColumn('comments', 'likes', {dataType: 'INT4', pos: 0}),
     );
 
-    const diff = s.advance(tableSpecs);
+    const diff = s.advance(tableSpecs, allTableNames);
     expect(diff.prev.version).toBe('01');
     expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
@@ -605,7 +675,7 @@ describe('view-syncer/snapshotter', () => {
       messages.insert('users', {id: 30, handle: null}),
     );
 
-    const diff = s.advance(tableSpecs);
+    const diff = s.advance(tableSpecs, allTableNames);
     expect(diff.curr.version).toBe('05');
 
     // Spy on the statement cache to see what queries are generated

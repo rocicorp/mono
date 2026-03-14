@@ -192,7 +192,10 @@ async function main() {
       logLine('', options);
     }
     first = false;
-    assert(browser !== 'all');
+    assert(
+      browser !== 'all',
+      () => `Expected a specific browser, got '${browser}'`,
+    );
 
     const context =
       await playwright[browser].launchPersistentContext(userDataDir);

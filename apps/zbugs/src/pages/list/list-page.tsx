@@ -1,4 +1,5 @@
-import {useQuery, useZero, useZeroVirtualizer} from '@rocicorp/zero/react';
+import {useZeroVirtualizer} from '@rocicorp/zero-virtual/react';
+import {useQuery, useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
 import React, {

@@ -44,7 +44,7 @@ async function deleteClientGroupForTesting<MD extends MutatorDefs = {}>(
   rep: ReplicacheTest<MD>,
 ) {
   const clientGroupID = await rep.clientGroupID;
-  assert(clientGroupID);
+  assert(clientGroupID, 'Expected clientGroupID to be defined');
   await withWriteNoImplicitCommit(rep.perdag, async tx => {
     await deleteClientGroup(clientGroupID, tx);
     await tx.commit();

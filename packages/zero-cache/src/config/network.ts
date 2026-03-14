@@ -2,16 +2,24 @@ import type {LogContext} from '@rocicorp/logger';
 import {isIPv6, isPrivate, isReserved} from 'is-in-subnet';
 import {networkInterfaces, type NetworkInterfaceInfo} from 'os';
 
-export function getHostIp(lc: LogContext, preferredPrefixes: string[]) {
+export const DEFAULT_PREFERRED_PREFIXES = [
+  'eth', // linux
+  'en', // macbooks
+] as const;
+
+export function getHostIp(
+  lc?: LogContext,
+  preferredPrefixes: readonly string[] = DEFAULT_PREFERRED_PREFIXES,
+) {
   const interfaces = networkInterfaces();
   const preferred = getPreferredIp(interfaces, preferredPrefixes);
-  lc.info?.(`network interfaces`, {preferred, interfaces});
+  lc?.info?.(`network interfaces`, {preferred, interfaces});
   return preferred;
 }
 
 export function getPreferredIp(
   interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>,
-  preferredPrefixes: string[],
+  preferredPrefixes: readonly string[],
 ) {
   const rank = ({name}: {name: string}) => {
     for (let i = 0; i < preferredPrefixes.length; i++) {

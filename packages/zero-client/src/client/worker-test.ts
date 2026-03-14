@@ -72,14 +72,21 @@ async function testBasics(userID: string) {
   await z.triggerConnected();
 
   await sleep(1);
-  assert(deepEqual(log, [[]]));
+  assert(
+    deepEqual(log, [[]]),
+    'Expected initial log to contain one empty array',
+  );
 
   await z.mutate(upsertE({id: 'foo', value: 1})).client;
-  assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
+  assert(
+    deepEqual(log, [[], [{id: 'foo', value: 1}]]),
+    'Expected log after first mutation',
+  );
 
   await z.mutate(upsertE({id: 'foo', value: 2})).client;
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
+    'Expected log after second mutation',
   );
 
   removeListener();
@@ -87,6 +94,7 @@ async function testBasics(userID: string) {
   await z.mutate(upsertE({id: 'foo', value: 3})).client;
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
+    'Expected log unchanged after listener removed',
   );
 
   const view2 = z.materialize(q);
@@ -94,5 +102,8 @@ async function testBasics(userID: string) {
   view2.addListener(rows => {
     data = [...rows];
   });
-  assert(deepEqual(data, [{id: 'foo', value: 3}]));
+  assert(
+    deepEqual(data, [{id: 'foo', value: 3}]),
+    'Expected materialized view data',
+  );
 }

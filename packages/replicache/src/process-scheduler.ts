@@ -168,6 +168,9 @@ async function throttle(
   try {
     await sleep(timeMs, abortSignal);
   } catch (e) {
-    assert(e instanceof AbortError);
+    assert(
+      e instanceof AbortError,
+      'Expected caught error to be an AbortError',
+    );
   }
 }

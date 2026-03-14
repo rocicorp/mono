@@ -71,6 +71,10 @@ export class RunningState {
     return this.#controller.signal;
   }
 
+  get retryDelay() {
+    return this.#retryDelay;
+  }
+
   /**
    * Returns `true` until {@link stop()} has been called.
    *
@@ -147,6 +151,7 @@ export class RunningState {
     this.#retryDelay = Math.min(delay * 2, this.#maxRetryDelay);
 
     if (err instanceof AbortError || err instanceof UnrecoverableError) {
+      this.resetBackoff();
       this.stop(lc, err);
     } else if (this.shouldRun()) {
       // Use delay-based log level: higher delay means more retries

@@ -1,6 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {CloudEvent, emitterFor, httpTransport} from 'cloudevents';
 import {nanoid} from 'nanoid';
+import {gzip} from 'node:zlib';
+import {stringify} from '../../../shared/src/bigint-json.ts';
 import {isJSONValue, type JSONObject} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
@@ -32,6 +35,12 @@ type PartialEvent = v.Infer<typeof eventSchema>;
 // https://github.com/knative/eventing/blob/main/docs/spec/sources.md#sinkbinding
 const extensionsObjectSchema = v.object({extensions: eventSchema});
 
+async function base64gzip(str: string): Promise<string> {
+  const {promise: gzipped, resolve, reject} = resolver<Buffer>();
+  gzip(Buffer.from(str), (err, buf) => (err ? reject(err) : resolve(buf)));
+  return (await gzipped).toString('base64');
+}
+
 /**
  * Initializes a per-process event sink according to the cloud event
  * parameters in the ZeroConfig. This must be called at the beginning
@@ -58,13 +67,22 @@ export function initEventSink(
     overrides = extensions;
   }
 
-  function createCloudEvent(data: ZeroEvent) {
-    const {type, time} = data;
+  async function createCloudEvent(event: ZeroEvent) {
+    const {type, time} = event;
+    const json = stringify(event);
+    const data = await base64gzip(json);
+
     return new CloudEvent({
       id: nanoid(),
       source: taskID,
       type,
       time,
+      // Pass `data` as text/plain to prevent intermediaries from
+      // base64-decoding it. It is the responsibility of the final processor
+      // to recognize that datacontentencoding === "gzip" and unpack the
+      // `data` accordingly before parsing it.
+      datacontenttype: 'text/plain',
+      datacontentencoding: 'gzip',
       data,
       ...overrides,
     });
@@ -75,7 +93,13 @@ export function initEventSink(
   lc.debug?.(`Publishing ZeroEvents to ${sinkURI}`);
 
   publishFn = async (lc, event) => {
-    const cloudEvent = createCloudEvent(event);
+    let cloudEvent: CloudEvent<string>;
+    try {
+      cloudEvent = await createCloudEvent(event);
+    } catch (e) {
+      lc.error?.(`Error creating CloudEvent ${event.type}`, e);
+      return;
+    }
     lc.debug?.(`Publishing CloudEvent: ${cloudEvent.type}`);
 
     for (let i = 0; i < MAX_PUBLISH_ATTEMPTS; i++) {
@@ -85,7 +109,9 @@ export function initEventSink(
       }
       try {
         await emit(cloudEvent);
-        lc.info?.(`Published CloudEvent: ${cloudEvent.type}`, cloudEvent);
+        // Avoid logging the (possibly large and) unreadable data field.
+        const {data: _, ...event} = cloudEvent;
+        lc.info?.(`Published CloudEvent: ${cloudEvent.type}`, {event});
         return;
       } catch (e) {
         lc.warn?.(`Error publishing ${cloudEvent.type} (attempt ${i + 1})`, e);

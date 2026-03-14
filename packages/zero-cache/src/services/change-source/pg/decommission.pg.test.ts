@@ -41,6 +41,7 @@ describe('decommission', () => {
       replica,
       getConnectionURI(upstream),
       {tableCopyWorkers: 5},
+      {test: 'context'},
     );
 
     expect(await upstream`SELECT pubname FROM pg_publication`.values()).toEqual(

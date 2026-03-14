@@ -24,7 +24,10 @@ describe('promiseRace with record', () => {
     expectTypeOf(result.key).toEqualTypeOf<'bar' | 'foo'>();
     expectTypeOf(result.status).toEqualTypeOf<'fulfilled'>();
     expectTypeOf(result.result).toEqualTypeOf<void | string>();
-    assert(result.key === 'bar');
+    assert(
+      result.key === 'bar',
+      () => `Expected result.key to be 'bar', got '${result.key}'`,
+    );
     // type narrows to string
     expectTypeOf(result.result).toEqualTypeOf<string>();
   });

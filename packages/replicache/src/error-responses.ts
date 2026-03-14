@@ -60,5 +60,8 @@ export function isVersionNotSupportedResponse(
 export function assertVersionNotSupportedResponse(
   v: unknown,
 ): asserts v is VersionNotSupportedResponse {
-  assert(isVersionNotSupportedResponse(v));
+  assert(
+    isVersionNotSupportedResponse(v),
+    'Expected a VersionNotSupportedResponse',
+  );
 }

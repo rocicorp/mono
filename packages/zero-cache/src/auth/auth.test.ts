@@ -80,7 +80,7 @@ describe('AuthSession', () => {
     expect(await authSession.update('u1', 't1')).toEqual({ok: true});
 
     const mismatch = await authSession.update('u2', 't2');
-    assert(!mismatch.ok);
+    assert(!mismatch.ok, 'Expected mismatch update to fail');
     expect(mismatch.error.kind).toBe(ErrorKind.Unauthorized);
   });
 
@@ -99,7 +99,7 @@ describe('AuthSession', () => {
     const authSession = new AuthSessionImpl(lc, 'cg1', undefined);
     expect(await authSession.update('u1', 't1')).toEqual({ok: true});
     const result = await authSession.update('u1', '');
-    assert(!result.ok);
+    assert(!result.ok, 'Expected missing auth update to fail');
     expect(result.error.kind).toBe(ErrorKind.Unauthorized);
     expect(result.error.message).toContain('No token provided');
   });
@@ -165,7 +165,7 @@ describe('AuthSession', () => {
     const authSession = new AuthSessionImpl(lc, 'cg1', validateLegacyJWT);
 
     const result = await authSession.update('u1', 'jwt-1');
-    assert(!result.ok);
+    assert(!result.ok, 'Expected legacy JWT validation failure');
     expect(result.error.kind).toBe(ErrorKind.AuthInvalidated);
     expect(result.error.origin).toBe(ErrorOrigin.ZeroCache);
   });
@@ -182,7 +182,7 @@ describe('AuthSession', () => {
     const authSession = new AuthSessionImpl(lc, 'cg1', validateLegacyJWT);
 
     const result = await authSession.update('u1', 'jwt-1');
-    assert(!result.ok);
+    assert(!result.ok, 'Expected protocol error from validator');
     expect(result.error.kind).toBe(ErrorKind.Unauthorized);
     expect(result.error.message).toBe('nope');
   });
@@ -201,7 +201,7 @@ describe('AuthSession', () => {
     const authSession = new AuthSessionImpl(lc, 'cg1', validateLegacyJWT);
 
     const failed = await authSession.update('alice', 'bad-token');
-    assert(!failed.ok);
+    assert(!failed.ok, 'Expected bad-token update to fail');
     expect(failed.error.kind).toBe(ErrorKind.AuthInvalidated);
 
     expect(await authSession.update('bob', 'good-token')).toEqual({ok: true});

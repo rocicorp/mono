@@ -89,5 +89,6 @@ export async function writePagila(pg: PostgresDB, replica: Database) {
     replica,
     getConnectionURI(pg),
     {tableCopyWorkers: 1},
+    {},
   );
 }

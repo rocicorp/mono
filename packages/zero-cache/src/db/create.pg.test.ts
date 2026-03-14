@@ -1,6 +1,7 @@
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {CREATE_TABLE_METADATA_TABLE} from '../services/replicator/schema/table-metadata.ts';
 import {test} from '../test/db.ts';
 import {createLiteTableStatement} from './create.ts';
 import {
@@ -80,6 +81,7 @@ describe('tables/create', () => {
           },
         },
         backfilling: [],
+        minRowVersion: null,
       },
     },
     {
@@ -142,6 +144,7 @@ describe('tables/create', () => {
           },
         },
         backfilling: [],
+        minRowVersion: null,
       },
     },
     {
@@ -273,6 +276,7 @@ describe('tables/create', () => {
           },
         },
         backfilling: [],
+        minRowVersion: null,
       },
     },
     {
@@ -369,6 +373,7 @@ describe('tables/create', () => {
           },
         },
         backfilling: [],
+        minRowVersion: null,
       },
     },
     {
@@ -465,6 +470,7 @@ describe('tables/create', () => {
           },
         },
         backfilling: [],
+        minRowVersion: null,
       },
     },
   ];
@@ -474,6 +480,7 @@ describe('tables/create', () => {
 
     beforeEach(() => {
       db = new Database(createSilentLogContext(), ':memory:');
+      db.exec(CREATE_TABLE_METADATA_TABLE);
     });
 
     test.each(cases)('$name', c => {

@@ -8,6 +8,7 @@ import {
   ColumnMetadataStore,
   metadataToLiteTypeString,
 } from '../services/replicator/schema/column-metadata.ts';
+import {TableMetadataTracker} from '../services/replicator/schema/table-metadata.ts';
 import {
   isArray,
   isEnum,
@@ -35,15 +36,18 @@ type ColumnInfo = {
 
 export type LiteTableSpecWithReplicationStatus = LiteTableSpec & {
   readonly backfilling?: string[];
+  readonly minRowVersion?: string | null;
 };
 
 type MutableLiteTableSpecWithReplicationStatus = MutableLiteTableSpec & {
   backfilling: string[];
+  minRowVersion: string | null;
 };
 
 export function listTables(
   db: Database,
   useColumnMetadata = true,
+  useTableMetadata = true,
 ): LiteTableSpecWithReplicationStatus[] {
   const columns = db
     .prepare(
@@ -65,7 +69,10 @@ export function listTables(
     )
     .all() as ColumnInfo[];
 
-  const tables: LiteTableSpec[] = [];
+  const minRowVersions = useTableMetadata
+    ? new TableMetadataTracker(db).getMinRowVersions()
+    : new Map();
+  const tables: LiteTableSpecWithReplicationStatus[] = [];
   let table: MutableLiteTableSpecWithReplicationStatus | undefined;
 
   columns.forEach(col => {
@@ -75,6 +82,7 @@ export function listTables(
         name: col.table,
         columns: {},
         backfilling: [],
+        minRowVersion: minRowVersions.get(col.table) ?? null,
       };
       tables.push(table);
     }
@@ -287,6 +295,7 @@ export function computeZqlSpecsFromLiteSpecs(
       allPotentialPrimaryKeys: keys.map(key =>
         v.parse(key.sort(), primaryKeySchema),
       ),
+      minRowVersion: fullTable.minRowVersion ?? null,
     };
 
     tableSpecs.set(tableSpec.name, {

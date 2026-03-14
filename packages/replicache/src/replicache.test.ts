@@ -1976,7 +1976,7 @@ test('Create KV Store', async () => {
   );
 
   expect(store).toBeInstanceOf(MemStoreWithCounters);
-  assert(store);
+  assert(store, 'Expected store to be defined');
 
   await testMemStoreWithCounters(rep, store);
 });

@@ -15,13 +15,13 @@ import {randInt} from '../../../shared/src/rand.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {
-  type Sink,
-  type Source,
   stream,
   streamIn,
   streamOut,
+  type Sink,
+  type Source,
 } from './streams.ts';
-import {Subscription} from './subscription.ts';
+import {Subscription, type Result} from './subscription.ts';
 
 const messageSchema = v.object({
   from: v.number(),
@@ -250,9 +250,16 @@ describe('streams with internal acks', () => {
     await server.close();
   });
 
-  function startReceiver() {
+  async function startReceiver() {
     ws = new WebSocket(`http://localhost:${port}/`);
-    return streamIn(lc, ws, messageSchema);
+    return {
+      ws,
+      consumer: (await streamIn(
+        lc,
+        ws,
+        messageSchema,
+      )) as Subscription<Message>,
+    };
   }
 
   test('one at a time', async () => {
@@ -260,7 +267,7 @@ describe('streams with internal acks', () => {
 
     producer.push({from: num, to: num + 1, str: 'foo'});
 
-    const consumer = await startReceiver();
+    const {consumer} = await startReceiver();
     for await (const msg of consumer) {
       if (num > 0) {
         expect(await consumed.dequeue()).toEqual({
@@ -283,11 +290,12 @@ describe('streams with internal acks', () => {
   });
 
   test('pipelined', async () => {
-    producer.push({from: 0, to: 1, str: 'foo'});
-    producer.push({from: 1, to: 2, str: 'bar'});
-    producer.push({from: 2, to: 3, str: 'baz'});
+    const results: Promise<Result>[] = [];
+    results.push(producer.push({from: 0, to: 1, str: 'foo'}).result);
+    results.push(producer.push({from: 1, to: 2, str: 'bar'}).result);
+    results.push(producer.push({from: 2, to: 3, str: 'baz'}).result);
 
-    const consumer = (await startReceiver()) as Subscription<Message>;
+    const {consumer} = await startReceiver();
 
     // Pipelining should send all messages even before they are
     // "consumed" on the receiving end.
@@ -327,6 +335,42 @@ describe('streams with internal acks', () => {
     }
     expect(await consumed.dequeue()).toEqual({from: 2, to: 3, str: 'baz'});
     expect(await cleanedUp).toEqual([]);
+    expect(await Promise.all(results)).toEqual([
+      'consumed',
+      'consumed',
+      'consumed',
+    ]);
+  });
+
+  test('pipelined (unconsumed)', async () => {
+    const results: Promise<Result>[] = [];
+    results.push(producer.push({from: 0, to: 1, str: 'foo'}).result);
+    results.push(producer.push({from: 1, to: 2, str: 'bar'}).result);
+    results.push(producer.push({from: 2, to: 3, str: 'baz'}).result);
+
+    const {consumer, ws} = await startReceiver();
+
+    // Pipelining should send all messages even before they are
+    // "consumed" on the receiving end.
+    while (consumer.queued < 3) {
+      await sleep(1);
+    }
+    expect(consumed.size()).toBe(0);
+
+    // Terminate the websocket ungracefully.
+    ws.terminate();
+
+    expect(consumed.size()).toBe(0);
+    expect(await cleanedUp).toEqual([
+      {from: 0, str: 'foo', to: 1},
+      {from: 1, str: 'bar', to: 2},
+      {from: 2, str: 'baz', to: 3},
+    ]);
+    expect(await Promise.all(results)).toEqual([
+      'unconsumed',
+      'unconsumed',
+      'unconsumed',
+    ]);
   });
 
   test('coalesce and cleanup', async () => {
@@ -346,7 +390,7 @@ describe('streams with internal acks', () => {
 
     // oxlint-disable-next-line no-unused-vars -- Used in switch statement increment
     let i = 0;
-    const consumer = await startReceiver();
+    const {consumer} = await startReceiver();
     for await (const msg of consumer) {
       switch (i++) {
         case 0:
@@ -391,7 +435,10 @@ describe('streams with internal acks', () => {
     expect(consumed.size()).toBe(0);
     // In this case, the producer does not get the ack that the last messages
     // were consumed
-    expect(await cleanedUp).toEqual([{from: 8, to: 10, str: 'voodoo'}]);
+    expect(await cleanedUp).toEqual([
+      {from: 5, to: 8, str: 'fooboodoo'},
+      {from: 8, to: 10, str: 'voodoo'},
+    ]);
   });
 
   async function drain(
@@ -412,7 +459,7 @@ describe('streams with internal acks', () => {
   test('passthrough', async () => {
     producer.push({from: 1, to: 2, str: 'foo', extra: 'bar'} as Message);
 
-    const consumer = await startReceiver();
+    const {consumer} = await startReceiver();
     expect(await drain(1, consumer)).toEqual([
       {from: 1, to: 2, str: 'foo', extra: 'bar'},
     ]);
@@ -432,7 +479,7 @@ describe('streams with internal acks', () => {
       ],
     } as Message);
 
-    const consumer = await startReceiver();
+    const {consumer} = await startReceiver();
     expect(await drain(1, consumer)).toEqual([
       {
         from: 1,
@@ -450,7 +497,7 @@ describe('streams with internal acks', () => {
   });
 
   test('unconsumed array receives pending messages after close', async () => {
-    const consumer = (await startReceiver()) as Subscription<Message>;
+    const {consumer} = await startReceiver();
 
     for (let i = 0; i < 100; i++) {
       producer.push({from: i, to: i + 1, str: 'foo' + 1});

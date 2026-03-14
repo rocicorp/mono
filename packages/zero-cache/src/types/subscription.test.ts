@@ -48,7 +48,7 @@ describe('types/subscription', () => {
     expect(await subscription.push(6).result).toBe('unconsumed');
   });
 
-  test('cancel', async () => {
+  test('cancel non-pipelined', async () => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
     const results: Promise<Result>[] = [];
@@ -86,12 +86,74 @@ describe('types/subscription', () => {
     expect(received).toEqual([0, 1, 2]);
     expect(consumed).toEqual(new Set(received));
     expect(cleanup).toBeCalledTimes(1);
-    expect(cleanup.mock.calls[0][0]).toEqual([3, 4]);
+    // Note: 2 is also sent to cleanup due to the fact that cancel()
+    //       is called from within the loop, before it was "consumed".
+    expect(cleanup.mock.calls[0][0]).toEqual([2, 3, 4]);
 
     expect(await subscription.push(6).result).toBe('unconsumed');
   });
 
-  test('fail', async () => {
+  test('cancel pipelined', async () => {
+    const consumed = new Set<number>();
+    const cleanup = vi.fn();
+    const results: Promise<Result>[] = [];
+
+    const subscription = Subscription.create<number>({
+      cleanup,
+      consumed: m => consumed.add(m),
+    });
+    for (let i = 0; i < 5; i++) {
+      const {result} = subscription.push(i);
+      results.push(result);
+    }
+
+    const received: number[] = [];
+
+    let j = 0;
+    const {pipeline} = subscription;
+    assert(pipeline, 'must support pipeline');
+
+    for await (const {value: m, consumed: signalConsumed} of pipeline) {
+      expect(consumed.has(m)).toBe(false);
+      for (let i = 0; i < m && i < 2; i++) {
+        expect(consumed.has(i)).toBe(true);
+        expect(await results[i]).toBe('consumed');
+      }
+      if (j < 2) {
+        // Ack 0, 1
+        received.push(m);
+        expect(subscription.consuming).toBe(1);
+        signalConsumed();
+        expect(subscription.consuming).toBe(0);
+      } else {
+        // but not 2 and 3
+        expect(subscription.consuming).toBe(j - 1);
+        if (j === 4) {
+          // Cancel at 4
+          expect(subscription.active).toBe(true);
+          subscription.cancel();
+          expect(subscription.active).toBe(false);
+        }
+      }
+      j++;
+    }
+
+    for (let i = 0; i < 5; i++) {
+      expect(await results[i]).toBe(i < 2 ? 'consumed' : 'unconsumed');
+    }
+
+    expect(received).toEqual([0, 1]);
+    expect(consumed).toEqual(new Set(received));
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual([2, 3, 4]);
+
+    expect(await subscription.push(6).result).toBe('unconsumed');
+  });
+
+  test.each([
+    ['fail', true],
+    ['cancel', false],
+  ])('fail or cancel: %s', async (_, fail) => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
     const results: Promise<Result>[] = [];
@@ -119,7 +181,11 @@ describe('types/subscription', () => {
         received.push(m);
         if (j++ === 2) {
           expect(subscription.active).toBe(true);
-          subscription.fail(failure);
+          if (fail) {
+            subscription.fail(failure);
+          } else {
+            subscription.cancel(failure);
+          }
           expect(subscription.active).toBe(false);
         }
       }
@@ -135,7 +201,7 @@ describe('types/subscription', () => {
     expect(received).toEqual([0, 1, 2]);
     expect(consumed).toEqual(new Set(received));
     expect(cleanup).toBeCalledTimes(1);
-    expect(cleanup.mock.calls[0][0]).toEqual([3, 4]);
+    expect(cleanup.mock.calls[0][0]).toEqual([2, 3, 4]);
     expect(cleanup.mock.calls[0][1]).toBe(failure);
 
     expect(await subscription.push(6).result).toBe('unconsumed');
@@ -311,12 +377,12 @@ describe('types/subscription', () => {
       }
     }
     expect(await results[2]).toBe('coalesced');
-    expect(await results[3]).toBe('consumed');
+    expect(await results[3]).toBe('unconsumed');
 
     expect(received).toEqual(['a,b', 'c,d']);
     expect(consumed).toEqual(new Set(received));
     expect(cleanup).toBeCalledTimes(1);
-    expect(cleanup.mock.calls[0][0]).toEqual([]);
+    expect(cleanup.mock.calls[0][0]).toEqual(['c,d']);
 
     expect(await subscription.push('e').result).toBe('unconsumed');
   });
@@ -444,6 +510,7 @@ describe('types/subscription', () => {
     expect(consumed).toEqual(new Set([0, 1, 2]));
     expect(cleanup).toBeCalledTimes(1);
     expect(cleanup.mock.calls[0][0]).toEqual([
+      {foo: 2, bar: 'internal'},
       {foo: 3, bar: 'internal'},
       {foo: 4, bar: 'internal'},
     ]);
@@ -501,7 +568,10 @@ describe('types/subscription', () => {
       cleanup,
       consumed: m => consumed.add(m),
     });
-    assert(subscription.pipeline);
+    assert(
+      subscription.pipeline,
+      'Expected subscription pipeline to be defined',
+    );
 
     for (let i = 0; i < 5; i++) {
       const {result} = subscription.push(i);

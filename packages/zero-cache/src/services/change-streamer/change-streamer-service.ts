@@ -2,6 +2,8 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {getDefaultHighWaterMark} from 'node:stream';
 import {unreachable} from '../../../../shared/src/asserts.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {publishCriticalEvent} from '../../observability/events.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {
   min,
@@ -20,7 +22,10 @@ import {
   type ChangeStreamControl,
   type ChangeStreamData,
 } from '../change-source/protocol/current/downstream.ts';
-import {publishReplicationError} from '../replicator/replication-status.ts';
+import {
+  publishReplicationError,
+  replicationStatusError,
+} from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
@@ -57,6 +62,7 @@ export async function initializeStreamer(
   subscriptionState: SubscriptionState,
   autoReset: boolean,
   backPressureLimitHeapProportion: number,
+  flowControlConsensusPaddingSeconds: number,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
@@ -81,6 +87,7 @@ export async function initializeStreamer(
     changeSource,
     autoReset,
     backPressureLimitHeapProportion,
+    flowControlConsensusPaddingSeconds,
     setTimeoutFn,
   );
 }
@@ -278,6 +285,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     source: ChangeSource,
     autoReset: boolean,
     backPressureLimitHeapProportion: number,
+    flowControlConsensusPaddingSeconds: number,
     setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
@@ -298,7 +306,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       err => this.stop(err),
       backPressureLimitHeapProportion,
     );
-    this.#forwarder = new Forwarder();
+    this.#forwarder = new Forwarder(lc, {
+      flowControlConsensusPaddingSeconds,
+    });
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
   }
@@ -306,15 +316,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   async run() {
     this.#lc.info?.('starting change stream');
 
+    this.#forwarder.startProgressMonitor();
+
     // Once this change-streamer acquires "ownership" of the change DB,
     // it is safe to start the storer.
     await this.#storer.assumeOwnership();
-    // The storer will, in turn, detect changes to ownership and stop
-    // the change-streamer appropriately.
-    this.#storer
-      .run()
-      .then(() => this.stop())
-      .catch(e => this.stop(e));
 
     // The threshold in (estimated number of) bytes to send() on subscriber
     // websockets before `await`-ing the I/O buffers to be ready for more.
@@ -331,6 +337,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           lastWatermark,
           backfillRequests,
         );
+        this.#storer.run().catch(e => stream.changes.cancel(e));
+
         this.#stream = stream;
         this.#state.resetBackoff();
         watermark = null;
@@ -366,9 +374,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
               break;
           }
 
-          unflushedBytes += this.#storer.store([watermark, change]);
-          const sent = this.#forwarder.forward([watermark, change]);
-          if (unflushedBytes >= flushBytesThreshold) {
+          const entry: WatermarkedChange = [watermark, change];
+          unflushedBytes += this.#storer.store(entry);
+          if (unflushedBytes < flushBytesThreshold) {
+            // pipeline changes until flushBytesThreshold
+            this.#forwarder.forward(entry);
+          } else {
             // Wait for messages to clear socket buffers to ensure that they
             // make their way to subscribers. Without this `await`, the
             // messages end up being buffered in this process, which:
@@ -376,7 +387,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             // (2) prevents subscribers from processing the messages as they
             //     arrive, instead getting them in a large batch after being
             //     idle while they were queued (causing further delays).
-            await sent;
+            await this.#forwarder.forwardWithFlowControl(entry);
             unflushedBytes = 0;
           }
 
@@ -407,8 +418,20 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         ]);
       }
 
-      await this.#state.backoff(this.#lc, err);
+      // Backoff and drain any pending entries in the storer before reconnecting.
+      await Promise.all([
+        this.#storer.stop(),
+        this.#state.backoff(this.#lc, err),
+        this.#state.retryDelay > 5000
+          ? publishCriticalEvent(
+              this.#lc,
+              replicationStatusError(this.#lc, 'Replicating', err),
+            )
+          : promiseVoid,
+      ]);
     }
+
+    this.#forwarder.stopProgressMonitor();
     this.#lc.info?.('ChangeStreamer stopped');
   }
 
@@ -497,6 +520,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     };
   }
 
+  /**
+   * Makes a best effort to purge the change log. In the event of a database
+   * error, exceptions will be logged and swallowed, so this method is safe
+   * to run in a timeout.
+   */
   async #purgeOldChanges(): Promise<void> {
     const initial = [...this.#initialWatermarks];
     if (initial.length === 0) {
@@ -518,10 +546,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           `At least one client is behind backup (${earliestCurrent} < ${earliestInitial})`,
         );
       } else {
+        this.#lc.info?.(`Purging changes before ${earliestInitial} ...`);
+        const start = performance.now();
         const deleted = await this.#storer.purgeRecordsBefore(earliestInitial);
-        this.#lc.info?.(`Purged ${deleted} changes before ${earliestInitial}`);
+        const elapsed = (performance.now() - start).toFixed(2);
+        this.#lc.info?.(
+          `Purged ${deleted} changes before ${earliestInitial} (${elapsed} ms)`,
+        );
         this.#initialWatermarks.delete(earliestInitial);
       }
+    } catch (e) {
+      this.#lc.warn?.(`error purging change log`, e);
     } finally {
       if (this.#initialWatermarks.size) {
         // If there are unpurged watermarks to check, schedule the next purge.

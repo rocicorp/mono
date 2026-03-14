@@ -18,9 +18,10 @@ export const downstreamStatusMessageSchema = v.tuple([
 ]);
 
 /**
- * The `zero-cache` will send the Commit payload when acknowledging a
- * completed transaction, and will echo back the downstreamStatus message
- * if `ack` is true.
+ * The `zero-cache` will send the Commit payload to acknowledge a completed
+ * transaction (unless the `skipAck` field was specified in the Begin message
+ * of the transaction), and will echo back the downstream `status` message if
+ * `ack` is true.
  */
 export const upstreamStatusMessageSchema = v.tuple([
   v.literal('status'),
@@ -41,7 +42,8 @@ export const upstreamStatusMessageSchema = v.tuple([
  *
  * The `zero-cache` sends StatusMessages to the ChangeSource:
  *
- * * when it has processed a `Commit` received from the ChangeSource
+ * * when it has processed a `Commit` received from the ChangeSource,
+ *   unless the `Begin` message specified `skipAck`.
  *
  * * when it receives a `StatusMessage` and all preceding `Commit` messages
  *   have been processed

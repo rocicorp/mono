@@ -14,8 +14,8 @@ import {
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
 import {
-  type Input,
   skipYields,
+  type Input,
   type Storage,
 } from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
@@ -48,7 +48,10 @@ import {
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
-import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
+import {
+  getSubscriptionState,
+  ZERO_VERSION_COLUMN_NAME,
+} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
@@ -135,6 +138,7 @@ export class PipelineDriver {
   readonly #logConfig: LogConfig;
   readonly #config: ZeroConfig | undefined;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
+  readonly #allTableNames = new Set<string>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   readonly #yieldThresholdMs: () => number;
   #streamer: Streamer | null = null;
@@ -214,6 +218,7 @@ export class PipelineDriver {
     }
     this.#pipelines.clear();
     this.#tables.clear();
+    this.#allTableNames.clear();
     this.#initAndResetCommon(clientSchema);
   }
 
@@ -233,6 +238,10 @@ export class PipelineDriver {
       this.#tableSpecs,
       fullTables,
     );
+    this.#allTableNames.clear();
+    for (const table of fullTables.keys()) {
+      this.#allTableNames.add(table);
+    }
     const primaryKeys = this.#primaryKeys ?? new Map<string, PrimaryKey>();
     this.#primaryKeys = primaryKeys;
     primaryKeys.clear();
@@ -457,7 +466,12 @@ export class PipelineDriver {
         },
       });
 
-      yield* hydrateInternal(input, queryID, must(this.#primaryKeys));
+      yield* hydrateInternal(
+        input,
+        queryID,
+        must(this.#primaryKeys),
+        this.#tableSpecs,
+      );
 
       for (const {table, row} of companionRows) {
         const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
@@ -593,7 +607,10 @@ export class PipelineDriver {
       this.initialized(),
       'Pipeline driver must be initialized before advancing',
     );
-    const diff = this.#snapshotter.advance(this.#tableSpecs);
+    const diff = this.#snapshotter.advance(
+      this.#tableSpecs,
+      this.#allTableNames,
+    );
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
       `advance ${prev.version} => ${curr.version}: ${changes} changes`,
@@ -615,12 +632,18 @@ export class PipelineDriver {
       this.#hydrateContext === null,
       'Cannot advance while hydration is in progress',
     );
+    const totalHydrationTimeMs = this.totalHydrationTimeMs();
     this.#advanceContext = {
       timer,
-      totalHydrationTimeMs: this.totalHydrationTimeMs(),
+      totalHydrationTimeMs,
       numChanges,
       pos: 0,
     };
+    this.#lc.info?.(
+      `starting pipeline advancement of ${numChanges} changes with an ` +
+        `advancement time limited based on total hydration time of ` +
+        `${totalHydrationTimeMs} ms.`,
+    );
     try {
       for (const {table, prevValues, nextValue} of diff) {
         // Advance progress is checked each time a row is fetched
@@ -796,7 +819,7 @@ export class PipelineDriver {
 
   #startAccumulating() {
     assert(this.#streamer === null, 'Streamer already started');
-    this.#streamer = new Streamer(must(this.#primaryKeys));
+    this.#streamer = new Streamer(must(this.#primaryKeys), this.#tableSpecs);
   }
 
   #stopAccumulating(): Streamer {
@@ -809,9 +832,14 @@ export class PipelineDriver {
 
 class Streamer {
   readonly #primaryKeys: Map<string, PrimaryKey>;
+  readonly #tableSpecs: Map<string, LiteAndZqlSpec>;
 
-  constructor(primaryKeys: Map<string, PrimaryKey>) {
+  constructor(
+    primaryKeys: Map<string, PrimaryKey>,
+    tableSpecs: Map<string, LiteAndZqlSpec>,
+  ) {
     this.#primaryKeys = primaryKeys;
+    this.#tableSpecs = tableSpecs;
   }
 
   readonly #changes: [
@@ -888,6 +916,7 @@ class Streamer {
     const {tableName: table, system} = schema;
 
     const primaryKey = must(this.#primaryKeys.get(table));
+    const spec = must(this.#tableSpecs.get(table)).tableSpec;
 
     // We do not sync rows gathered by the permissions
     // system to the client.
@@ -900,8 +929,18 @@ class Streamer {
         yield node;
         continue;
       }
-      const {relationships, row} = node;
+      const {relationships} = node;
+      let {row} = node;
       const rowKey = getRowKey(primaryKey, row);
+      if (op !== 'remove') {
+        const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
+        if (
+          typeof rowVersion === 'string' &&
+          rowVersion < (spec.minRowVersion ?? '00')
+        ) {
+          row = {...row, [ZERO_VERSION_COLUMN_NAME]: spec.minRowVersion};
+        }
+      }
 
       yield {
         type: op,
@@ -942,13 +981,13 @@ export function* hydrate(
   input: Input,
   hash: string,
   clientSchema: ClientSchema,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
 ): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
-  const streamer = new Streamer(buildPrimaryKeys(clientSchema)).accumulate(
-    hash,
-    input.getSchema(),
-    toAdds(res),
-  );
+  const streamer = new Streamer(
+    buildPrimaryKeys(clientSchema),
+    tableSpecs,
+  ).accumulate(hash, input.getSchema(), toAdds(res));
   yield* streamer.stream();
 }
 
@@ -956,9 +995,10 @@ export function* hydrateInternal(
   input: Input,
   hash: string,
   primaryKeys: Map<string, PrimaryKey>,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
 ): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
-  const streamer = new Streamer(primaryKeys).accumulate(
+  const streamer = new Streamer(primaryKeys, tableSpecs).accumulate(
     hash,
     input.getSchema(),
     toAdds(res),

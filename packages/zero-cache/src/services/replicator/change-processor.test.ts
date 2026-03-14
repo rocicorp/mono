@@ -1085,7 +1085,10 @@ describe('replicator/change-processor', () => {
           {
             schema: 'public',
             table: 'foo',
-            metadata: '{"rowKey":{"type":"index","columns":["id","serial"]}}',
+            upstreamMetadata:
+              '{"rowKey":{"type":"index","columns":["id","serial"]}}',
+            minRowVersion: '00',
+            metadata: null,
           },
         ],
         ['_zero.column_metadata']: [
@@ -1178,6 +1181,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: ['serial'],
+          minRowVersion: '00',
         },
       ],
       indexSpecs: [],
@@ -1190,7 +1194,7 @@ describe('replicator/change-processor', () => {
         INSERT INTO foo(id, _0_version) VALUES (2, '00');
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
 
-        INSERT INTO "_zero.tableMetadata" ("schema", "table", "metadata")
+        INSERT INTO "_zero.tableMetadata" ("schema", "table", "upstreamMetadata")
           VALUES ('public', 'foo', '{"rowKey":{"columns":["id"]}}');
       `,
       downstream: [
@@ -1201,9 +1205,9 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         bar: [
-          {id: 1n, ['_0_version']: '0e'},
-          {id: 2n, ['_0_version']: '0e'},
-          {id: 3n, ['_0_version']: '0e'},
+          {id: 1n, ['_0_version']: '00'},
+          {id: 2n, ['_0_version']: '00'},
+          {id: 3n, ['_0_version']: '00'},
           {id: 4n, ['_0_version']: '0e'},
         ],
         ['_zero.changeLog2']: [
@@ -1228,7 +1232,9 @@ describe('replicator/change-processor', () => {
           {
             schema: 'public',
             table: 'bar',
-            metadata: '{"rowKey":{"columns":["id"]}}',
+            upstreamMetadata: '{"rowKey":{"columns":["id"]}}',
+            minRowVersion: '0e',
+            metadata: null,
           },
         ],
       },
@@ -1254,6 +1260,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [],
@@ -1317,21 +1324,21 @@ describe('replicator/change-processor', () => {
             newInt: 123n,
             newBool: 1n,
             newJSON: null,
-            ['_0_version']: '0e',
+            ['_0_version']: '00',
           },
           {
             id: 2n,
             newInt: 123n,
             newBool: 1n,
             newJSON: null,
-            ['_0_version']: '0e',
+            ['_0_version']: '00',
           },
           {
             id: 3n,
             newInt: 123n,
             newBool: 1n,
             newJSON: null,
-            ['_0_version']: '0e',
+            ['_0_version']: '00',
           },
           {
             id: 4n,
@@ -1363,7 +1370,9 @@ describe('replicator/change-processor', () => {
           {
             schema: 'public',
             table: 'foo',
-            metadata: '{"rowKey":{"columns":["id"]}}',
+            upstreamMetadata: '{"rowKey":{"columns":["id"]}}',
+            minRowVersion: '0e',
+            metadata: null,
           },
         ],
         ['_zero.column_metadata']: [
@@ -1446,6 +1455,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: ['newJSON'],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [],
@@ -1467,8 +1477,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         foo: [
-          {id: 1n, ['_0_version']: '0e'},
-          {id: 2n, ['_0_version']: '0e'},
+          {id: 1n, ['_0_version']: '00'},
+          {id: 2n, ['_0_version']: '00'},
           {id: 3n, ['_0_version']: '0e'},
           {id: 4n, ['_0_version']: '0e'},
         ],
@@ -1498,6 +1508,15 @@ describe('replicator/change-processor', () => {
             backfillingColumnVersions: '{}',
           },
         ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            minRowVersion: '0e',
+            metadata: null,
+            upstreamMetadata: null,
+          },
+        ],
       },
       tableSpecs: [
         {
@@ -1521,6 +1540,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [],
@@ -1550,8 +1570,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         foo: [
-          {id: 1n, newName: 'hel', ['_0_version']: '0e'},
-          {id: 2n, newName: 'low', ['_0_version']: '0e'},
+          {id: 1n, newName: 'hel', ['_0_version']: '00'},
+          {id: 2n, newName: 'low', ['_0_version']: '00'},
           {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
           {id: 4n, newName: 'yay', ['_0_version']: '0e'},
         ],
@@ -1579,6 +1599,15 @@ describe('replicator/change-processor', () => {
             op: 's',
             rowKey: '{"id":4}',
             backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            minRowVersion: '0e',
+            metadata: null,
+            upstreamMetadata: null,
           },
         ],
       },
@@ -1612,6 +1641,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [
@@ -1648,8 +1678,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         foo: [
-          {id: 1n, nolz: 'hel', ['_0_version']: '0e'},
-          {id: 2n, nolz: 'low', ['_0_version']: '0e'},
+          {id: 1n, nolz: 'hel', ['_0_version']: '00'},
+          {id: 2n, nolz: 'low', ['_0_version']: '00'},
           {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
           {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
         ],
@@ -1677,6 +1707,15 @@ describe('replicator/change-processor', () => {
             op: 's',
             rowKey: '{"id":4}',
             backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            minRowVersion: '0e',
+            metadata: null,
+            upstreamMetadata: null,
           },
         ],
       },
@@ -1710,6 +1749,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [
@@ -1749,8 +1789,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         foo: [
-          {id: 1n, nolz: 'hel', ['_0_version']: '0e'},
-          {id: 2n, nolz: 'low', ['_0_version']: '0e'},
+          {id: 1n, nolz: 'hel', ['_0_version']: '00'},
+          {id: 2n, nolz: 'low', ['_0_version']: '00'},
           {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
           {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
         ],
@@ -1778,6 +1818,15 @@ describe('replicator/change-processor', () => {
             op: 's',
             rowKey: '{"id":4}',
             backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            minRowVersion: '0e',
+            metadata: null,
+            upstreamMetadata: null,
           },
         ],
       },
@@ -1811,6 +1860,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [
@@ -1848,8 +1898,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         foo: [
-          {id: 1n, newName: 'hel', ['_0_version']: '0e'},
-          {id: 2n, newName: 'low', ['_0_version']: '0e'},
+          {id: 1n, newName: 'hel', ['_0_version']: '00'},
+          {id: 2n, newName: 'low', ['_0_version']: '00'},
           {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
           {id: 4n, newName: 'yay', ['_0_version']: '0e'},
         ],
@@ -1877,6 +1927,15 @@ describe('replicator/change-processor', () => {
             op: 's',
             rowKey: '{"id":4}',
             backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            minRowVersion: '0e',
+            metadata: null,
+            upstreamMetadata: null,
           },
         ],
       },
@@ -1910,6 +1969,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [
@@ -1952,8 +2012,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         foo: [
-          {id: 1n, num: 3n, ['_0_version']: '0e'},
-          {id: 2n, num: 2n, ['_0_version']: '0e'},
+          {id: 1n, num: 3n, ['_0_version']: '00'},
+          {id: 2n, num: 2n, ['_0_version']: '00'},
           {id: 3n, num: 1n, ['_0_version']: '0e'},
           {id: 4n, num: 23n, ['_0_version']: '0e'},
         ],
@@ -1981,6 +2041,15 @@ describe('replicator/change-processor', () => {
             op: 's',
             rowKey: '{"id":4}',
             backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            minRowVersion: '0e',
+            metadata: null,
+            upstreamMetadata: null,
           },
         ],
       },
@@ -2014,6 +2083,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [
@@ -2052,8 +2122,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         foo: [
-          {id: 1n, num: 3n, ['_0_version']: '0e'},
-          {id: 2n, num: 2n, ['_0_version']: '0e'},
+          {id: 1n, num: 3n, ['_0_version']: '00'},
+          {id: 2n, num: 2n, ['_0_version']: '00'},
           {id: 3n, num: 1n, ['_0_version']: '0e'},
           {id: 4n, num: 23n, ['_0_version']: '0e'},
         ],
@@ -2081,6 +2151,15 @@ describe('replicator/change-processor', () => {
             op: 's',
             rowKey: '{"id":4}',
             backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            minRowVersion: '0e',
+            metadata: null,
+            upstreamMetadata: null,
           },
         ],
       },
@@ -2114,6 +2193,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [
@@ -2162,8 +2242,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         foo: [
-          {id: 1n, number: 3n, ['_0_version']: '0e'},
-          {id: 2n, number: 2n, ['_0_version']: '0e'},
+          {id: 1n, number: 3n, ['_0_version']: '00'},
+          {id: 2n, number: 2n, ['_0_version']: '00'},
           {id: 3n, number: 1n, ['_0_version']: '0e'},
           {id: 4n, number: 23n, ['_0_version']: '0e'},
         ],
@@ -2191,6 +2271,15 @@ describe('replicator/change-processor', () => {
             op: 's',
             rowKey: '{"id":4}',
             backfillingColumnVersions: '{}',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'foo',
+            minRowVersion: '0e',
+            metadata: null,
+            upstreamMetadata: null,
           },
         ],
       },
@@ -2224,6 +2313,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '0e',
         },
       ],
       indexSpecs: [
@@ -2243,7 +2333,7 @@ describe('replicator/change-processor', () => {
         INSERT INTO foo(id, _0_version) VALUES (2, '00');
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
       
-        INSERT INTO "_zero.tableMetadata" ("schema", "table", "metadata") VALUES
+        INSERT INTO "_zero.tableMetadata" ("schema", "table", "upstreamMetadata") VALUES
           ('public', 'foo', '{"rowKey":{"columns":["id"]}}'),
           ('public', 'bar', '{"rowKey":{"columns":["id"]}}');
       `,
@@ -2276,7 +2366,9 @@ describe('replicator/change-processor', () => {
           {
             schema: 'public',
             table: 'bar',
-            metadata: '{"rowKey":{"columns":["id"]}}',
+            upstreamMetadata: '{"rowKey":{"columns":["id"]}}',
+            metadata: null,
+            minRowVersion: '00',
           },
         ],
       },
@@ -2288,7 +2380,7 @@ describe('replicator/change-processor', () => {
       setup: `
         CREATE TABLE foo(id INT8, id2 INT8, _0_version TEXT);
       
-        INSERT INTO "_zero.tableMetadata" ("schema", "table", "metadata") VALUES
+        INSERT INTO "_zero.tableMetadata" ("schema", "table", "upstreamMetadata") VALUES
           ('public', 'foo', '{"rowKey":{"columns":["id"]}}'),
           ('public', 'bar', '{"rowKey":{"columns":["id"]}}');
       `,
@@ -2310,12 +2402,16 @@ describe('replicator/change-processor', () => {
           {
             schema: 'public',
             table: 'foo',
-            metadata: '{"rowKey":{"type":"index","columns":["id2"]}}',
+            upstreamMetadata: '{"rowKey":{"type":"index","columns":["id2"]}}',
+            minRowVersion: '00',
+            metadata: null,
           },
           {
             schema: 'public',
             table: 'bar',
-            metadata: '{"rowKey":{"columns":["id"]}}',
+            upstreamMetadata: '{"rowKey":{"columns":["id"]}}',
+            minRowVersion: '00',
+            metadata: null,
           },
         ],
       },
@@ -2349,6 +2445,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '00',
         },
       ],
       indexSpecs: [],
@@ -2489,6 +2586,16 @@ describe('replicator/change-processor', () => {
             backfillingColumnVersions: '{}',
           },
         ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'transaction',
+            upstreamMetadata:
+              '{"rowKey":{"columns":["not-mocked-for-the-test"]}}',
+            minRowVersion: '07',
+            metadata: null,
+          },
+        ],
       },
       tableSpecs: [
         {
@@ -2520,6 +2627,7 @@ describe('replicator/change-processor', () => {
             },
           },
           backfilling: [],
+          minRowVersion: '07',
         },
       ],
     },
@@ -3067,7 +3175,7 @@ describe('replicator/change-processor', () => {
       data: {
         bff: [
           {
-            _0_version: '123.02',
+            _0_version: '101',
             a: 1n,
             b: 2n,
             c: 3n,
@@ -3075,7 +3183,7 @@ describe('replicator/change-processor', () => {
             e: 701n,
           },
           {
-            _0_version: '123.02',
+            _0_version: '123',
             a: 23n,
             b: 45n,
             c: 67n,
@@ -3083,7 +3191,7 @@ describe('replicator/change-processor', () => {
             e: 77n, // 77@123 not overwritten by backfill 4000
           },
           {
-            _0_version: '123.02',
+            _0_version: '123',
             a: 32n,
             b: 54n,
             c: 76n,
@@ -3091,20 +3199,20 @@ describe('replicator/change-processor', () => {
             e: 2000n, // 87@101 not overwritten by backfill 2000
           },
           {
-            _0_version: '123.02',
-            a: 10n,
-            b: 20n,
-            c: 30n,
-            d: 5000n,
-            e: 6000n,
-          },
-          {
-            _0_version: '123.02',
+            _0_version: '123',
             a: 1000n,
             b: 2000n,
             c: 3000n,
             d: 4n, // 4@123 not overwritten by backfill -1
             e: 5n, // 5@123 not overwritten by backfill -2
+          },
+          {
+            _0_version: '115',
+            a: 10n,
+            b: 20n,
+            c: 30n,
+            d: 5000n,
+            e: 6000n,
           },
         ],
         ['_zero.changeLog2']: [
@@ -3167,6 +3275,15 @@ describe('replicator/change-processor', () => {
             rowKey: '123.02',
             stateVersion: '123.02',
             table: 'bff',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'bff',
+            minRowVersion: '123.02',
+            metadata: null,
+            upstreamMetadata: '{"rowKey":{"columns":["b","a","c"]}}',
           },
         ],
       },
@@ -3272,7 +3389,7 @@ describe('replicator/change-processor', () => {
       data: {
         bff: [
           {
-            _0_version: '123.02',
+            _0_version: '03',
             a: 1n,
             b: 2n,
             c: 3n,
@@ -3280,7 +3397,7 @@ describe('replicator/change-processor', () => {
             e: 5n,
           },
           {
-            _0_version: '123.02',
+            _0_version: '123',
             a: 23n,
             b: 45n,
             c: 67n,
@@ -3288,7 +3405,7 @@ describe('replicator/change-processor', () => {
             e: 77n, // 77@123 not overwritten by backfill 4000
           },
           {
-            _0_version: '123.02',
+            _0_version: '123',
             a: 32n,
             b: 54n,
             c: 76n,
@@ -3296,20 +3413,20 @@ describe('replicator/change-processor', () => {
             e: 2000n, // 87@101 not overwritten by backfill 2000
           },
           {
-            _0_version: '123.02',
-            a: 10n,
-            b: 20n,
-            c: 30n,
-            d: 5000n,
-            e: 6000n,
-          },
-          {
-            _0_version: '123.02',
+            _0_version: '123',
             a: 1000n,
             b: 2000n,
             c: 3000n,
             d: 4n, // 4@123 not overwritten by backfill -1
             e: 5n, // 5@123 not overwritten by backfill -2
+          },
+          {
+            _0_version: '115',
+            a: 10n,
+            b: 20n,
+            c: 30n,
+            d: 5000n,
+            e: 6000n,
           },
         ],
         ['_zero.changeLog2']: [
@@ -3360,6 +3477,15 @@ describe('replicator/change-processor', () => {
             rowKey: '123.02',
             stateVersion: '123.02',
             table: 'bff',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'bff',
+            minRowVersion: '123.02',
+            metadata: null,
+            upstreamMetadata: '{"rowKey":{"columns":["b","a","c"]}}',
           },
         ],
       },
@@ -3436,8 +3562,8 @@ describe('replicator/change-processor', () => {
       ],
       data: {
         bff: [
-          {id: 2n, _0_version: '123.01'},
-          {id: 83n, _0_version: '123.01'},
+          {id: 2n, _0_version: '115'},
+          {id: 83n, _0_version: '115'},
         ],
         ['_zero.changeLog2']: [
           {
@@ -3447,6 +3573,15 @@ describe('replicator/change-processor', () => {
             rowKey: '123.01',
             stateVersion: '123.01',
             table: 'bff',
+          },
+        ],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'bff',
+            minRowVersion: '123.01',
+            metadata: null,
+            upstreamMetadata: '{"rowKey":{"columns":["id"]}}',
           },
         ],
       },

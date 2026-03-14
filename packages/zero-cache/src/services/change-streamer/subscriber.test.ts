@@ -158,7 +158,7 @@ describe('change-streamer/subscriber', () => {
     `);
   });
 
-  test('ack tracking', async () => {
+  test('acks, pending, processed, stats', async () => {
     const [sub, _, receiver] = createSubscriber('00');
 
     // Send some messages while it is catching up.
@@ -182,8 +182,16 @@ describe('change-streamer/subscriber', () => {
 
     expect(sub.acked).toBe('00');
 
+    let processed = 0;
+    let pending = 8;
+    expect(sub.getStats()).toEqual({processRate: 0, pending: 8});
+    expect(sub.numPending).toBe(pending);
+
     let txNum = 0;
     for await (const msg of receiver) {
+      expect(sub.numProcessed).toBe(processed++);
+      expect(sub.numPending).toBe(pending--);
+
       if (msg[0] === 'begin') {
         txNum++;
       }
@@ -203,5 +211,9 @@ describe('change-streamer/subscriber', () => {
           break;
       }
     }
+    expect(sub.numProcessed).toBe(8);
+    expect(
+      sub.sampleProcessRate(performance.now()).getStats().processRate,
+    ).toBeGreaterThan(0);
   });
 });

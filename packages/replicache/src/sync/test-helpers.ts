@@ -50,7 +50,10 @@ export async function addSyncSnapshot(
   // Add sync snapshot.
   const cookie = `sync_cookie_${chain.length}`;
   await withWriteNoImplicitCommit(store, async dagWrite => {
-    assert(formatVersion >= FormatVersion.DD31);
+    assert(
+      formatVersion >= FormatVersion.DD31,
+      'Expected formatVersion >= DD31',
+    );
     const w = await newWriteSnapshotDD31(
       baseSnapshot.chunk.hash,
       {[clientID]: await baseSnapshot.getMutationID(clientID, dagWrite)},
