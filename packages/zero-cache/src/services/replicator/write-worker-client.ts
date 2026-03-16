@@ -1,5 +1,5 @@
 import {assert} from '../../../../shared/src/asserts.ts';
-import {resolver} from '@rocicorp/resolver';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import {Worker} from 'node:worker_threads';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -27,12 +27,6 @@ export interface WriteWorkerClient {
 }
 
 // Wire protocol types — errors are passed directly via structured clone
-export type Method =
-  | 'init'
-  | 'getSubscriptionState'
-  | 'processMessage'
-  | 'abort'
-  | 'stop';
 export type ArgsMap = {
   init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
@@ -40,6 +34,8 @@ export type ArgsMap = {
   abort: [];
   stop: [];
 };
+
+export type Method = keyof ArgsMap;
 
 export type Request<M extends Method = Method> = {method: M; args: ArgsMap[M]};
 
@@ -71,8 +67,7 @@ export function applyPragmas(db: Database, pragmas: PragmaConfig) {
  */
 export class ThreadWriteWorkerClient implements WriteWorkerClient {
   readonly #worker: Worker;
-  #pending: {resolve: (v: unknown) => void; reject: (e: Error) => void} | null =
-    null;
+  #pending: Resolver<unknown, Error> | null = null;
   #errorHandler: ErrorHandler = () => {};
   #terminated = false;
 
@@ -126,13 +121,10 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 
   #call<M extends Method>(method: M, args: ArgsMap[M]): Promise<ResultMap[M]> {
     assert(this.#pending === null, `concurrent call: ${method}`);
-    const {promise, resolve, reject} = resolver<ResultMap[M]>();
-    this.#pending = {resolve, reject} as {
-      resolve: (v: unknown) => void;
-      reject: (e: Error) => void;
-    };
+    const r = resolver<ResultMap[M]>();
+    this.#pending = r as Resolver<unknown, Error>;
     this.#worker.postMessage({method, args} satisfies Request);
-    return promise;
+    return r.promise;
   }
 
   init(

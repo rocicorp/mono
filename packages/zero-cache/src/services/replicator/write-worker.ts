@@ -24,64 +24,67 @@ if (!parentPort) {
   throw new Error('write-worker must be run as a worker thread');
 }
 
-let db: Database | undefined;
-let runner: StatementRunner | undefined;
-let processor: ChangeProcessor | undefined;
-let mode: ChangeProcessorMode | undefined;
-let lc: LogContext | undefined;
-
 const port = parentPort;
-
-function createProcessor() {
-  processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
-    port.postMessage({
-      writeError: err instanceof Error ? err : new Error(String(err)),
-    } satisfies WriteError);
-  });
-}
 
 type API = {[M in Method]: (...args: ArgsMap[M]) => ResultMap[M]};
 
-const api: API = {
-  init(
-    dbPath: string,
-    cpMode: ChangeProcessorMode,
-    pragmas: PragmaConfig,
-    logConfig: LogConfig,
-  ) {
-    lc = createLogContext({log: logConfig}, {worker: 'write-worker'});
-    db = new Database(lc, dbPath);
-    applyPragmas(db, pragmas);
-    runner = new StatementRunner(db);
-    mode = cpMode;
-    createProcessor();
-  },
+function createAPI(): API {
+  let db: Database | undefined;
+  let runner: StatementRunner | undefined;
+  let processor: ChangeProcessor | undefined;
+  let mode: ChangeProcessorMode | undefined;
+  let lc: LogContext | undefined;
 
-  getSubscriptionState() {
-    return getSubscriptionState(must(runner));
-  },
+  function createProcessor() {
+    processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
+      port.postMessage({
+        writeError: err instanceof Error ? err : new Error(String(err)),
+      } satisfies WriteError);
+    });
+  }
 
-  processMessage(downstream: ChangeStreamData) {
-    return must(processor).processMessage(must(lc), downstream);
-  },
+  return {
+    init(
+      dbPath: string,
+      cpMode: ChangeProcessorMode,
+      pragmas: PragmaConfig,
+      logConfig: LogConfig,
+    ) {
+      lc = createLogContext({log: logConfig}, {worker: 'write-worker'});
+      db = new Database(lc, dbPath);
+      applyPragmas(db, pragmas);
+      runner = new StatementRunner(db);
+      mode = cpMode;
+      createProcessor();
+    },
 
-  abort() {
-    must(processor).abort(must(lc));
-    createProcessor();
-  },
+    getSubscriptionState() {
+      return getSubscriptionState(must(runner));
+    },
 
-  stop() {
-    db?.close();
-    db = undefined;
-    runner = undefined;
-    processor = undefined;
-  },
-};
+    processMessage(downstream: ChangeStreamData) {
+      return must(processor).processMessage(must(lc), downstream);
+    },
+
+    abort() {
+      must(processor).abort(must(lc));
+      createProcessor();
+    },
+
+    stop() {
+      db?.close();
+      db = undefined;
+      runner = undefined;
+      processor = undefined;
+    },
+  };
+}
+
+const api = createAPI();
 
 port.on('message', (msg: Request) => {
   try {
-    // TS can't narrow msg.method + msg.args together; cast at the spread site.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS can't narrow msg.method + msg.args together
     const result = (api[msg.method] as (...args: any[]) => unknown)(
       ...msg.args,
     );
