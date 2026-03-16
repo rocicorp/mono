@@ -114,9 +114,9 @@ export type MakeCustomMutatorInterface<TSchema extends Schema, F> = F extends (
   ? (...args: Args) => MutatorResult
   : never;
 
-export class TransactionImpl<TSchema extends Schema = DefaultSchema>
-  implements ClientTransaction<TSchema>
-{
+export class TransactionImpl<
+  TSchema extends Schema = DefaultSchema,
+> implements ClientTransaction<TSchema> {
   readonly location = 'client';
   readonly mutate: TransactionMutate<TSchema>;
   /**

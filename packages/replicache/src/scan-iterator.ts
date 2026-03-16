@@ -26,9 +26,10 @@ type ToValue<Options extends ScanOptions, Value> = (
  * await` loop. There are also methods to iterate over the {@link keys},
  * {@link entries} or {@link values}.
  */
-export class ScanResultImpl<Options extends ScanOptions, V>
-  implements ScanResult<KeyTypeForScanOptions<Options>, V>
-{
+export class ScanResultImpl<
+  Options extends ScanOptions,
+  V,
+> implements ScanResult<KeyTypeForScanOptions<Options>, V> {
   readonly #iter: AsyncIterable<EntryForOptions<Options, ReadonlyJSONValue>>;
   readonly #options: Options;
   readonly #dbDelegateOptions: Closed;
@@ -137,14 +138,15 @@ export interface ScanResult<K extends ScanKey, V> extends AsyncIterable<V> {
  * const keys: string[] = await rep.scan().keys().toArray();
  * ```
  */
-export interface AsyncIterableIteratorToArray<V>
-  extends AsyncIterableIterator<V> {
+export interface AsyncIterableIteratorToArray<
+  V,
+> extends AsyncIterableIterator<V> {
   toArray(): Promise<V[]>;
 }
 
-class AsyncIterableIteratorToArrayWrapperImpl<V>
-  implements AsyncIterableIterator<V>
-{
+class AsyncIterableIteratorToArrayWrapperImpl<
+  V,
+> implements AsyncIterableIterator<V> {
   readonly #it: AsyncIterableIterator<V>;
 
   constructor(it: AsyncIterableIterator<V>) {

@@ -415,9 +415,9 @@ export function findProtocolError(error: unknown): ProtocolError | undefined {
 function hasErrno(error: unknown): boolean {
   return Boolean(
     error &&
-      typeof error === 'object' &&
-      'errno' in error &&
-      typeof (error as {errno: unknown}).errno !== 'undefined',
+    typeof error === 'object' &&
+    'errno' in error &&
+    typeof (error as {errno: unknown}).errno !== 'undefined',
   );
 }
 

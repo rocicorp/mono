@@ -35,10 +35,10 @@ export function newRunnableQuery<
 }
 
 export class RunnableQueryImpl<
-    TTable extends keyof TSchema['tables'] & string,
-    TSchema extends Schema,
-    TReturn = PullRow<TTable, TSchema>,
-  >
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
+  TReturn = PullRow<TTable, TSchema>,
+>
   extends QueryImpl<TTable, TSchema, TReturn>
   implements Query<TTable, TSchema, TReturn>
 {

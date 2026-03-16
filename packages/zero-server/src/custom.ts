@@ -105,9 +105,10 @@ class ServerTransactionQueryDelegate extends QueryDelegateBase {
   }
 }
 
-export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
-  implements ServerTransaction<TSchema, TWrappedTransaction>
-{
+export class TransactionImpl<
+  TSchema extends Schema,
+  TWrappedTransaction,
+> implements ServerTransaction<TSchema, TWrappedTransaction> {
   readonly location = 'server';
   readonly reason = 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;

@@ -10,9 +10,9 @@ const missing = Symbol();
  * @template Source - The type of values in the source record
  * @template Dest - The type of transformed values
  */
-class RecordProxyHandler<Source, Dest>
-  implements ProxyHandler<Record<string, Source>>
-{
+class RecordProxyHandler<Source, Dest> implements ProxyHandler<
+  Record<string, Source>
+> {
   readonly #toValue: (source: Source, prop: string) => Dest;
   readonly #onMissing: ((prop: string) => void) | undefined;
   readonly #cache: Map<string, Dest | typeof missing> = new Map();

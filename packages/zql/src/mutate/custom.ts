@@ -72,8 +72,9 @@ export interface ServerTransaction<
  * allows reading and writing to the database and IVM at the head at which the
  * mutator is being applied.
  */
-export interface ClientTransaction<S extends Schema = DefaultSchema>
-  extends TransactionBase<S> {
+export interface ClientTransaction<
+  S extends Schema = DefaultSchema,
+> extends TransactionBase<S> {
   readonly location: 'client';
   readonly reason: 'optimistic' | 'rebase';
 }

@@ -45,10 +45,9 @@ export type DrizzleTransaction<
 
 export class DrizzleConnection<
   TDrizzle extends DrizzleDatabase,
-  TTransaction extends
-    DrizzleTransaction<TDrizzle> = DrizzleTransaction<TDrizzle>,
-> implements DBConnection<TTransaction>
-{
+  TTransaction extends DrizzleTransaction<TDrizzle> =
+    DrizzleTransaction<TDrizzle>,
+> implements DBConnection<TTransaction> {
   readonly #drizzle: TDrizzle;
 
   constructor(drizzle: TDrizzle) {
@@ -70,8 +69,7 @@ export class DrizzleConnection<
 
 class DrizzleInternalTransaction<
   TTransaction extends DrizzleTransaction<DrizzleDatabase>,
-> implements DBTransaction<TTransaction>
-{
+> implements DBTransaction<TTransaction> {
   readonly wrappedTransaction: TTransaction;
 
   constructor(drizzleTx: TTransaction) {
