@@ -25,9 +25,9 @@ export type PostgresJsTransaction<
   T extends Record<string, unknown> = Record<string, unknown>,
 > = postgres.TransactionSql<T>;
 
-export class PostgresJSConnection<T extends Record<string, unknown>>
-  implements DBConnection<PostgresJsTransaction<T>>
-{
+export class PostgresJSConnection<
+  T extends Record<string, unknown>,
+> implements DBConnection<PostgresJsTransaction<T>> {
   readonly #pg: postgres.Sql<T>;
   constructor(pg: postgres.Sql<T>) {
     this.#pg = pg;
@@ -42,9 +42,9 @@ export class PostgresJSConnection<T extends Record<string, unknown>>
   }
 }
 
-export class PostgresJsTransactionInternal<T extends Record<string, unknown>>
-  implements DBTransaction<PostgresJsTransaction<T>>
-{
+export class PostgresJsTransactionInternal<
+  T extends Record<string, unknown>,
+> implements DBTransaction<PostgresJsTransaction<T>> {
   readonly wrappedTransaction: PostgresJsTransaction<T>;
   constructor(pgTx: PostgresJsTransaction<T>) {
     this.wrappedTransaction = pgTx;

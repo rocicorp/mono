@@ -22,9 +22,10 @@ import type {
  * writing data that the Zero client does, so that mutator functions can be
  * shared across client and server.
  */
-export class ZQLDatabase<TSchema extends Schema, TWrappedTransaction>
-  implements Database<TransactionImpl<TSchema, TWrappedTransaction>>
-{
+export class ZQLDatabase<
+  TSchema extends Schema,
+  TWrappedTransaction,
+> implements Database<TransactionImpl<TSchema, TWrappedTransaction>> {
   readonly connection: DBConnection<TWrappedTransaction>;
   readonly #crudFactory: CRUDMutatorFactory<TSchema>;
 

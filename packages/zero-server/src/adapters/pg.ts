@@ -54,9 +54,7 @@ export class NodePgConnection implements DBConnection<NodePgTransaction> {
   }
 }
 
-export class NodePgTransactionInternal
-  implements DBTransaction<NodePgTransaction>
-{
+export class NodePgTransactionInternal implements DBTransaction<NodePgTransaction> {
   readonly wrappedTransaction: NodePgTransaction;
 
   constructor(client: NodePgTransaction) {

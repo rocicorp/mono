@@ -73,9 +73,9 @@ export type GetFilterType<
   TOperator extends SimpleOperator,
 > = TOperator extends 'IS' | 'IS NOT'
   ? // SchemaValueToTSType adds null if the type is optional, but we add null
-    // no matter what for dx reasons. See:
-    // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
-    SchemaValueToTSType<TSchema['columns'][TColumn]> | null | undefined
+      // no matter what for dx reasons. See:
+      // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
+      SchemaValueToTSType<TSchema['columns'][TColumn]> | null | undefined
   : TOperator extends 'IN' | 'NOT IN'
     ? // We don't want to compare to null in where clauses because it causes
       // confusing results:

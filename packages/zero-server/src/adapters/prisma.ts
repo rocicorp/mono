@@ -35,9 +35,9 @@ export type PrismaTransaction<
     ? TTransaction
     : PrismaTransactionLike;
 
-export class PrismaConnection<TClient extends PrismaClientLike>
-  implements DBConnection<PrismaTransaction<TClient>>
-{
+export class PrismaConnection<
+  TClient extends PrismaClientLike,
+> implements DBConnection<PrismaTransaction<TClient>> {
   readonly #client: TClient;
 
   constructor(client: TClient) {
@@ -57,9 +57,9 @@ export class PrismaConnection<TClient extends PrismaClientLike>
   }
 }
 
-class PrismaInternalTransaction<TTransaction extends PrismaTransactionLike>
-  implements DBTransaction<TTransaction>
-{
+class PrismaInternalTransaction<
+  TTransaction extends PrismaTransactionLike,
+> implements DBTransaction<TTransaction> {
   readonly wrappedTransaction: TTransaction;
 
   constructor(prismaTx: TTransaction) {

@@ -91,10 +91,10 @@ export function newQueryImpl<
 }
 
 export class QueryImpl<
-    TTable extends keyof TSchema['tables'] & string,
-    TSchema extends Schema,
-    TReturn = PullRow<TTable, TSchema>,
-  >
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
+  TReturn = PullRow<TTable, TSchema>,
+>
   implements
     Query<TTable, TSchema, TReturn>,
     QueryInternals<TTable, TSchema, TReturn>
