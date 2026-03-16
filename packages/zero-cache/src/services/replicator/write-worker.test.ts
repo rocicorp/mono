@@ -152,6 +152,10 @@ describe('write-worker', () => {
     );
   });
 
+  // This test verifies the ChangeProcessor's internal error path:
+  // ChangeProcessor catches the error via #fail, which posts a {writeError}
+  // message (rejecting the pending promise AND calling the errorHandler),
+  // rather than the error propagating through the worker's generic try/catch.
   test('error handling: fail message on worker error', async () => {
     let errorReceived: Error | undefined;
     worker.onError(err => {

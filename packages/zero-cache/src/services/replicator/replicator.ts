@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ReadonlyJSONObject} from '../../../../shared/src/json.ts';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import type {Source} from '../../types/streams.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
@@ -58,6 +57,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly #lc: LogContext;
   readonly #incrementalSyncer: IncrementalSyncer;
   readonly #worker: WriteWorkerClient;
+  #runPromise: Promise<void> | undefined;
 
   constructor(
     lc: LogContext,
@@ -91,7 +91,8 @@ export class ReplicatorService implements Replicator, Service {
   }
 
   run() {
-    return this.#incrementalSyncer.run(this.#lc);
+    this.#runPromise = this.#incrementalSyncer.run(this.#lc);
+    return this.#runPromise;
   }
 
   subscribe(): Source<ReplicaState> {
@@ -100,7 +101,10 @@ export class ReplicatorService implements Replicator, Service {
 
   async stop() {
     this.#incrementalSyncer.stop(this.#lc);
+    // Wait for the syncer's run loop to finish so that any in-flight
+    // worker.processMessage() call completes and clears #pending
+    // before we send the 'stop' message to the worker.
+    await this.#runPromise;
     await this.#worker.stop();
-    return promiseVoid;
   }
 }
