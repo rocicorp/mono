@@ -14,8 +14,14 @@
     "lint": "oxlint --type-aware src/"
   },
   "peerDependencies": {
+    "@tanstack/react-virtual": "^3.10.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-virtual": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
