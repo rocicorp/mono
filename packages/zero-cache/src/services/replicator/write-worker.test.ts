@@ -34,10 +34,15 @@ describe('write-worker', () => {
     worker = new ThreadWriteWorkerClient(
       new URL('./write-worker.ts', import.meta.url),
     );
-    await worker.init(dbFile.path, 'serving', {
-      busyTimeout: 30000,
-      analysisLimit: 1000,
-    });
+    await worker.init(
+      dbFile.path,
+      'serving',
+      {
+        busyTimeout: 30000,
+        analysisLimit: 1000,
+      },
+      {level: 'error', format: 'text'},
+    );
   });
 
   afterEach(async () => {
@@ -136,10 +141,15 @@ describe('write-worker', () => {
     worker = new ThreadWriteWorkerClient(
       new URL('./write-worker.ts', import.meta.url),
     );
-    await worker.init(dbFile.path, 'serving', {
-      busyTimeout: 30000,
-      analysisLimit: 1000,
-    });
+    await worker.init(
+      dbFile.path,
+      'serving',
+      {
+        busyTimeout: 30000,
+        analysisLimit: 1000,
+      },
+      {level: 'error', format: 'text'},
+    );
   });
 
   test('error handling: fail message on worker error', async () => {

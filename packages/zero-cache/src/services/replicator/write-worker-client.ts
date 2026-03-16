@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {Worker} from 'node:worker_threads';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {LogConfig} from '../../../../shared/src/logging.ts';
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
 
@@ -33,7 +34,7 @@ export type Method =
   | 'abort'
   | 'stop';
 export type ArgsMap = {
-  init: [string, ChangeProcessorMode, PragmaConfig];
+  init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
   processMessage: [ChangeStreamData];
   abort: [];
@@ -138,8 +139,9 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     dbPath: string,
     mode: ChangeProcessorMode,
     pragmas: PragmaConfig,
+    logConfig: LogConfig,
   ): Promise<void> {
-    return this.#call('init', [dbPath, mode, pragmas]);
+    return this.#call('init', [dbPath, mode, pragmas, logConfig]);
   }
 
   getSubscriptionState(): Promise<SubscriptionState> {

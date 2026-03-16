@@ -47,7 +47,7 @@ export default async function runWorker(
   const workerClient = new ThreadWriteWorkerClient(
     new URL('../services/replicator/write-worker.ts', import.meta.url),
   );
-  await workerClient.init(dbPath, mode, pragmas);
+  await workerClient.init(dbPath, mode, pragmas, config.log);
 
   const runningLocalChangeStreamer =
     config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;

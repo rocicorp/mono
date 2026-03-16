@@ -18,7 +18,7 @@ import {
   getZeroConfig,
   type ZeroConfig,
 } from '../config/zero-config.js';
-import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
+import {setupOtelDiagnosticLogger} from './otel-diag-logger.ts';
 
 export type ActiveUsers = {
   active_users_last_day: number;

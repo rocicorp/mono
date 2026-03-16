@@ -1,5 +1,7 @@
+import type {LogContext} from '@rocicorp/logger';
 import {must} from '../../../../shared/src/must.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../../shared/src/logging.ts';
+import {createLogContext} from '../../server/logging.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -26,6 +28,7 @@ let db: Database | undefined;
 let runner: StatementRunner | undefined;
 let processor: ChangeProcessor | undefined;
 let mode: ChangeProcessorMode | undefined;
+let lc: LogContext | undefined;
 
 const port = parentPort;
 
@@ -40,8 +43,13 @@ function createProcessor() {
 type API = {[M in Method]: (...args: ArgsMap[M]) => ResultMap[M]};
 
 const api: API = {
-  init(dbPath: string, cpMode: ChangeProcessorMode, pragmas: PragmaConfig) {
-    const lc = createSilentLogContext();
+  init(
+    dbPath: string,
+    cpMode: ChangeProcessorMode,
+    pragmas: PragmaConfig,
+    logConfig: LogConfig,
+  ) {
+    lc = createLogContext({log: logConfig}, {worker: 'write-worker'});
     db = new Database(lc, dbPath);
     applyPragmas(db, pragmas);
     runner = new StatementRunner(db);
@@ -54,13 +62,11 @@ const api: API = {
   },
 
   processMessage(downstream: ChangeStreamData) {
-    const lc = createSilentLogContext();
-    return must(processor).processMessage(lc, downstream);
+    return must(processor).processMessage(must(lc), downstream);
   },
 
   abort() {
-    const lc = createSilentLogContext();
-    must(processor).abort(lc);
+    must(processor).abort(must(lc));
     createProcessor();
   },
 

@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import {resetOtelDiagnosticLogger} from './otel-diag-logger.js';
+import {resetOtelDiagnosticLogger} from './otel-diag-logger.ts';
 
 // Mock OpenTelemetry modules to avoid actual SDK initialization
 vi.mock('@opentelemetry/api', async () => {

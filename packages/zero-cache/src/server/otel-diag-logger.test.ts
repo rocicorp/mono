@@ -4,7 +4,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {
   resetOtelDiagnosticLogger,
   setupOtelDiagnosticLogger,
-} from './otel-diag-logger.js';
+} from './otel-diag-logger.ts';
 
 // Mock the diag.setLogger function
 vi.mock('@opentelemetry/api', async () => {
