@@ -33,17 +33,17 @@
     "bench:bmf:silent": "npx turbo run bench:bmf:silent --concurrency=1"
   },
   "devDependencies": {
-    "@vitest/browser-playwright": "^4.1.0",
-    "@vitest/coverage-v8": "4.1.0",
-    "@vitest/runner": "4.1.0",
-    "baseline-browser-mapping": "^2.10.8",
-    "oxlint": "^1.56.0",
-    "oxlint-tsgolint": "^0.17.0",
+    "@vitest/browser-playwright": "^4.1.2",
+    "@vitest/coverage-v8": "4.1.2",
+    "@vitest/runner": "4.1.2",
+    "baseline-browser-mapping": "^2.10.11",
+    "oxlint": "^1.57.0",
+    "oxlint-tsgolint": "^0.17.4",
     "prettier": "^3.8.1",
     "syncpack": "^14.2.1",
     "tsx": "^4.21.0",
     "turbo": "^2.4.4",
-    "vitest": "4.1.0"
+    "vitest": "4.1.2"
   },
   "overrides": {
     "esbuild": "^0.27.4"
