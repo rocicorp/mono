@@ -637,6 +637,27 @@ describe('string arg packing', () => {
       },
     );
 
+    test('does not conflate different object values across jsonb columns', () => {
+      expect(
+        formatPgInternalConvert(
+          sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+            {isArray: false, isEnum: false, type: 'jsonb'},
+            {a: 1},
+            false,
+            false,
+          )}, ${sqlConvertColumnArg(
+            {isArray: false, isEnum: false, type: 'jsonb'},
+            {b: 2},
+            false,
+            false,
+          )})`,
+        ),
+      ).toEqual({
+        text: `INSERT INTO "foo" VALUES ($1::text::jsonb, $2::text::jsonb)`,
+        values: ['{"a":1}', '{"b":2}'],
+      });
+    });
+
     test('insert text[]', () => {
       expect(
         formatPgInternalConvert(
