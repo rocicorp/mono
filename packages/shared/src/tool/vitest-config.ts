@@ -5,6 +5,22 @@ import {makeDefine} from '../build.ts';
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
 const {VITEST_BROWSER} = process.env;
 
+function assertValidBrowser(
+  browser: string | undefined,
+): asserts browser is 'chromium' | 'firefox' | 'webkit' | undefined {
+  switch (browser) {
+    case 'chromium':
+    case 'firefox':
+    case 'webkit':
+    case undefined:
+      return;
+    default:
+      throw new Error(`Invalid VITEST_BROWSER value: ${browser}`);
+  }
+}
+
+assertValidBrowser(VITEST_BROWSER);
+
 const define = {
   ...makeDefine(),
   ['TESTING']: 'true',
@@ -45,12 +61,12 @@ export default defineConfig({
       screenshotFailures: false,
       instances: VITEST_BROWSER
         ? ([{browser: VITEST_BROWSER}] as const)
-        : ([
+        : [
             {browser: 'chromium'},
             ...(CI
               ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const)
               : []),
-          ] as const),
+          ],
     },
     coverage: {
       provider: 'v8',
