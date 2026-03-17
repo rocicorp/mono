@@ -137,7 +137,7 @@ function stringify(arg: SqlConvertArg): string | null {
 }
 
 class SQLConvertFormat implements FormatConfig {
-  readonly #seen: Map<unknown, number> = new Map();
+  readonly #seen: Map<string, number> = new Map();
   readonly escapeIdentifier: (str: string) => string;
 
   constructor(escapeIdentifier: (str: string) => string) {
@@ -146,7 +146,7 @@ class SQLConvertFormat implements FormatConfig {
 
   formatValue = (value: unknown) => {
     assert(isSqlConvert(value), 'JsonPackedFormat can only take JsonPackArgs.');
-    const key = value.value;
+    const key = String(value.value) + '|' + value.type;
     if (this.#seen.has(key)) {
       return {
         placeholder: createPlaceholder(this.#seen.get(key)!, value),
