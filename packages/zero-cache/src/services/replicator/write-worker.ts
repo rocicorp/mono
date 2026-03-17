@@ -83,6 +83,7 @@ const api = createAPI();
 
 port.on('message', (msg: Request) => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TS can't narrow msg.method + msg.args together
     const result = (api[msg.method] as (...args: any[]) => unknown)(
       ...msg.args,
     );
