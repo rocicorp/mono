@@ -86,8 +86,9 @@ describe('replicator/incremental-sync', () => {
   afterEach(async () => {
     downstream?.cancel();
     syncer?.stop(lc);
-    // Prevent unhandled rejection when worker stops while syncing is in flight.
-    syncing?.catch(() => {});
+    // Wait for the run loop to finish so any in-flight worker call
+    // completes before we send 'stop' to the worker.
+    await syncing?.catch(() => {});
     await worker?.stop();
     mainDb?.close();
     dbFile?.delete();
@@ -730,11 +731,12 @@ describe('replicator/incremental-sync', () => {
       true,
     );
 
-    syncing = syncer.run(lc);
+    const localSyncing = syncer.run(lc);
 
     expect(await hasRetried).toBe(true);
 
-    void syncer.stop(lc);
+    syncer.stop(lc);
+    void localSyncing.catch(() => {});
   });
 
   test('retry on error in change-stream', async () => {
@@ -759,12 +761,13 @@ describe('replicator/incremental-sync', () => {
       true,
     );
 
-    syncing = syncer.run(lc);
+    const localSyncing = syncer.run(lc);
 
     downstream.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
 
-    void syncer.stop(lc);
+    syncer.stop(lc);
+    void localSyncing.catch(() => {});
   });
 });
