@@ -7,7 +7,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import {decommissionShard} from './decommission.ts';
 import {initialSync} from './initial-sync.ts';
 
-const APP_ID = 'zeroout';
+const APP_ID = 'zerooutcs';
 const SHARD_NUM = 13;
 
 describe('decommission', () => {
@@ -45,26 +45,26 @@ describe('decommission', () => {
     );
 
     expect(await upstream`SELECT pubname FROM pg_publication`.values()).toEqual(
-      [['_zeroout_public_13'], ['_zeroout_metadata_13']],
+      [['_zerooutcs_public_13'], ['_zerooutcs_metadata_13']],
     );
     expect(
-      await upstream`SELECT evtname FROM pg_event_trigger WHERE evtname LIKE 'zeroout%'`.values(),
+      await upstream`SELECT evtname FROM pg_event_trigger WHERE evtname LIKE 'zerooutcs%'`.values(),
     ).toEqual([
-      ['zeroout_ddl_start_13'],
-      ['zeroout_create_table_13'],
-      ['zeroout_alter_table_13'],
-      ['zeroout_create_index_13'],
-      ['zeroout_drop_table_13'],
-      ['zeroout_drop_index_13'],
-      ['zeroout_alter_publication_13'],
-      ['zeroout_alter_schema_13'],
+      ['zerooutcs_ddl_start_13'],
+      ['zerooutcs_create_table_13'],
+      ['zerooutcs_alter_table_13'],
+      ['zerooutcs_create_index_13'],
+      ['zerooutcs_drop_table_13'],
+      ['zerooutcs_drop_index_13'],
+      ['zerooutcs_alter_publication_13'],
+      ['zerooutcs_alter_schema_13'],
     ]);
     expect(
-      await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zeroout%'`.values(),
-    ).toMatchObject([[expect.stringMatching('zeroout_13_')]]);
+      await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zerooutcs%'`.values(),
+    ).toMatchObject([[expect.stringMatching('zerooutcs_13_')]]);
     expect(
-      await upstream`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values(),
-    ).toEqual([['zeroout_13'], ['zeroout']]);
+      await upstream`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zerooutcs%'`.values(),
+    ).toEqual([['zerooutcs_13'], ['zerooutcs']]);
 
     await decommissionShard(lc, upstream, APP_ID, SHARD_NUM);
 
@@ -72,15 +72,15 @@ describe('decommission', () => {
       [],
     );
     expect(
-      await upstream`SELECT evtname FROM pg_event_trigger WHERE evtname LIKE 'zeroout%'`.values(),
+      await upstream`SELECT evtname FROM pg_event_trigger WHERE evtname LIKE 'zerooutcs%'`.values(),
     ).toEqual([]);
     expect(
-      await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zeroout%'`.values(),
+      await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zerooutcs%'`.values(),
     ).toEqual([]);
 
     // Note: The app schema remains, since it is not shard specific.
     expect(
-      await upstream`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values(),
-    ).toEqual([['zeroout']]);
+      await upstream`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zerooutcs%'`.values(),
+    ).toEqual([['zerooutcs']]);
   });
 });

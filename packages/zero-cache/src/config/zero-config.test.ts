@@ -55,12 +55,16 @@ test('zero-cache --help', () => {
                                                                         Basic Examples:                                                                                                       
                                                                           Exact URL match:                                                                                                    
                                                                             "https://api.example.com/mutate"                                                                                  
+                                                                                                                                                                                              
                                                                           Any subdomain using wildcard:                                                                                       
                                                                             "https://*.example.com/mutate"                                                                                    
+                                                                                                                                                                                              
                                                                           Multiple subdomain levels:                                                                                          
                                                                             "https://*.*.example.com/mutate"                                                                                  
+                                                                                                                                                                                              
                                                                           Any path under a domain:                                                                                            
                                                                             "https://api.example.com/*"                                                                                       
+                                                                                                                                                                                              
                                                                           Named path parameters:                                                                                              
                                                                             "https://api.example.com/:version/mutate"                                                                         
                                                                             ↳ Matches "https://api.example.com/v1/mutate", "https://api.example.com/v2/mutate", etc.                          
@@ -68,6 +72,7 @@ test('zero-cache --help', () => {
                                                                         Advanced Patterns:                                                                                                    
                                                                           Optional path segments:                                                                                             
                                                                             "https://api.example.com/:path?"                                                                                  
+                                                                                                                                                                                              
                                                                           Regex in segments (for specific patterns):                                                                          
                                                                             "https://api.example.com/:version(v\\d+)/mutate"                                                                   
                                                                             ↳ Matches only "v" followed by digits                                                                             
@@ -110,12 +115,16 @@ test('zero-cache --help', () => {
                                                                         Basic Examples:                                                                                                       
                                                                           Exact URL match:                                                                                                    
                                                                             "https://api.example.com/mutate"                                                                                  
+                                                                                                                                                                                              
                                                                           Any subdomain using wildcard:                                                                                       
                                                                             "https://*.example.com/mutate"                                                                                    
+                                                                                                                                                                                              
                                                                           Multiple subdomain levels:                                                                                          
                                                                             "https://*.*.example.com/mutate"                                                                                  
+                                                                                                                                                                                              
                                                                           Any path under a domain:                                                                                            
                                                                             "https://api.example.com/*"                                                                                       
+                                                                                                                                                                                              
                                                                           Named path parameters:                                                                                              
                                                                             "https://api.example.com/:version/mutate"                                                                         
                                                                             ↳ Matches "https://api.example.com/v1/mutate", "https://api.example.com/v2/mutate", etc.                          
@@ -123,6 +132,7 @@ test('zero-cache --help', () => {
                                                                         Advanced Patterns:                                                                                                    
                                                                           Optional path segments:                                                                                             
                                                                             "https://api.example.com/:path?"                                                                                  
+                                                                                                                                                                                              
                                                                           Regex in segments (for specific patterns):                                                                          
                                                                             "https://api.example.com/:version(v\\d+)/mutate"                                                                   
                                                                             ↳ Matches only "v" followed by digits                                                                             

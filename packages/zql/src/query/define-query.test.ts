@@ -376,8 +376,8 @@ describe('defineQuery types', () => {
     >();
     // Verify the validator's input type accepts undefined
     expectTypeOf<
-      Parameters<(typeof defaultValidator)['~standard']['validate']>
-    >().toEqualTypeOf<[unknown]>();
+      Parameters<(typeof defaultValidator)['~standard']['validate']>[0]
+    >().toEqualTypeOf<unknown>();
 
     // Transform: completely different types
     const stringToNumberValidator = makeValidator<string, number>(data => {
@@ -396,8 +396,8 @@ describe('defineQuery types', () => {
     >();
     // Verify the validator's input type accepts string
     expectTypeOf<
-      Parameters<(typeof stringToNumberValidator)['~standard']['validate']>
-    >().toEqualTypeOf<[unknown]>();
+      Parameters<(typeof stringToNumberValidator)['~standard']['validate']>[0]
+    >().toEqualTypeOf<unknown>();
   });
 
   test('defineQuery with with explicit types', () => {

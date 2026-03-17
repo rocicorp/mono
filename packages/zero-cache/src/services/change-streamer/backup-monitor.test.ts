@@ -53,7 +53,11 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
       .get('/metrics')
       .reply(200, () => metricsResponse);
 
-    return () => vi.useRealTimers();
+    return () => {
+      nock.abortPendingRequests();
+      nock.cleanAll();
+      vi.useRealTimers();
+    };
   });
 
   function getFirstMessage(

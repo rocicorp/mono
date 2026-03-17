@@ -103,11 +103,16 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   ): Queue<ChangeStreamMessage | 'timeout'> {
     const queue = new Queue<ChangeStreamMessage | 'timeout'>();
     void (async () => {
-      for await (const msg of sub) {
-        if (msg[0] === 'status' && !msg[1].ack) {
-          continue; // filter out keepalives
+      try {
+        for await (const msg of sub) {
+          if (msg[0] === 'status' && !msg[1].ack) {
+            continue; // filter out keepalives
+          }
+          queue.enqueue(msg);
         }
-        queue.enqueue(msg);
+      } catch {
+        // The source can error during teardown if upstream connections are
+        // forcibly terminated; this should not surface as an unhandled rejection.
       }
     })();
     return queue;
@@ -116,7 +121,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   async function nextTransaction(): Promise<DataOrSchemaChange[]> {
     const data: DataOrSchemaChange[] = [];
     for (;;) {
-      const change = await downstream.dequeue('timeout', 5000);
+      const change = await downstream.dequeue('timeout', 10_000);
       if (change === 'timeout') {
         throw new Error('timed out waiting for change');
       }

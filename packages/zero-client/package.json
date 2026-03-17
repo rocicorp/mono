@@ -21,7 +21,6 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@vitest/ui": "^4.0.15",
     "ast-to-zql": "0.0.0",
     "datadog": "0.0.0",
     "esbuild": "^0.25.10",
