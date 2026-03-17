@@ -47,7 +47,9 @@ export default defineConfig({
         ? ([{browser: VITEST_BROWSER}] as const)
         : ([
             {browser: 'chromium'},
-            ...(CI ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const) : []),
+            ...(CI
+              ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const)
+              : []),
           ] as const),
     },
     coverage: {
