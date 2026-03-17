@@ -1,8 +1,0 @@
-{
-  "extends": ["../../.oxlintrc.json"],
-  "plugins": ["react"],
-  "env": {
-    "builtin": true,
-    "browser": true
-  }
-}

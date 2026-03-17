@@ -17,8 +17,8 @@
     "@rocicorp/logger": "^5.4.0"
   },
   "devDependencies": {
-    "@vitest/runner": "4.0.15",
-    "vitest": "4.0.15",
+    "@vitest/runner": "4.1.0",
+    "vitest": "4.1.0",
     "zero-cache": "0.0.0",
     "zero-server": "0.0.0"
   }

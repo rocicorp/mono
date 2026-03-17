@@ -19,7 +19,7 @@
     "dev": "npx turbo run dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "oxlint --type-aware --quiet --ignore-pattern '**/um.js' --report-unused-disable-directives-severity=error",
+    "lint": "oxlint --quiet",
     "format": "npx turbo run format",
     "check-format": "npx turbo run check-format",
     "check-types": "npx turbo run check-types",
@@ -30,15 +30,18 @@
     "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix"
   },
   "devDependencies": {
-    "@vitest/browser-playwright": "^4.0.15",
-    "@vitest/coverage-v8": "4.0.15",
-    "@vitest/runner": "4.0.15",
-    "baseline-browser-mapping": "^2.9.6",
-    "oxlint": "^1.50.0",
-    "oxlint-tsgolint": "^0.14.2",
+    "@vitest/browser-playwright": "^4.1.0",
+    "@vitest/coverage-v8": "4.1.0",
+    "@vitest/runner": "4.1.0",
+    "baseline-browser-mapping": "^2.10.8",
+    "oxlint": "^1.56.0",
+    "oxlint-tsgolint": "^0.17.0",
     "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "turbo": "^2.4.4",
-    "vitest": "4.0.15"
+    "vitest": "4.1.0"
+  },
+  "overrides": {
+    "esbuild": "^0.27.4"
   }
 }

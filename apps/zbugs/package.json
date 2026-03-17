@@ -19,7 +19,7 @@
     "clean": "cd docker && docker compose down && docker volume rm docker_zbugs_pgdata_sync && docker volume rm docker_zbugs_pgdata_upstream && rm -rf /tmp/zbugs-sync-replica.db*",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint --type-aware --react-plugin src/",
+    "lint": "oxlint --quiet -c ../../oxlint.config.ts src/",
     "preview": "vite preview",
     "zero": "tsx --trace-warnings ../../packages/zero-cache/src/server/runner/main.ts",
     "zero-cache-dev": "tsx ../../packages/zero/src/zero-cache-dev.ts",
@@ -79,10 +79,10 @@
     "@types/pg": "^8.11.11",
     "@types/react": "^18.3.18",
     "@types/react-dom": "18.3.5",
-    "@vitejs/plugin-react": "^5.1.2",
-    "@vitest/runner": "4.0.15",
-    "drizzle-kit": "^0.31.4",
-    "drizzle-orm": "^0.44.2",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/runner": "4.1.0",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.1",
     "postcss-preset-env": "^7.4.3",
     "prettier": "^3.8.1",
     "rehype-video": "^2.3.0",
@@ -90,11 +90,9 @@
     "tailwindcss": "^3.0.23",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
-    "universal-user-agent": "^7.0.2",
-    "vite": "7.2.7",
-    "vite-bundle-analyzer": "^1.3.1",
+    "vite": "8.0.0",
+    "vite-bundle-analyzer": "^1.3.6",
     "vite-plugin-svgr": "^4.5.0",
-    "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "4.0.15"
+    "vitest": "4.1.0"
   }
 }

@@ -16,6 +16,12 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:chromium": "VITEST_BROWSER=chromium vitest run --config vitest.config.web.ts",
+    "test:chromium:watch": "VITEST_BROWSER=chromium vitest --config vitest.config.web.ts",
+    "test:firefox": "VITEST_BROWSER=firefox vitest run --config vitest.config.web.ts",
+    "test:firefox:watch": "VITEST_BROWSER=firefox vitest --config vitest.config.web.ts",
+    "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
+    "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
     "bench": "vitest bench --run",
     "bench:watch": "vitest bench --watch",
     "format": "prettier --write .",
@@ -40,16 +46,16 @@
     "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/zero-sqlite3": "^1.0.15",
     "@types/command-line-usage": "^5.0.2",
-    "@vitest/runner": "4.0.15",
+    "@vitest/runner": "4.1.0",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
-    "esbuild": "^0.25.10",
+    "esbuild": "^0.27.4",
     "expo-sqlite": ">=15",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
     "typescript": "~5.9.3",
-    "vitest": "4.0.15"
+    "vitest": "4.1.0"
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",

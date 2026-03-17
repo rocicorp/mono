@@ -6,6 +6,12 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:chromium": "VITEST_BROWSER=chromium vitest run --config vitest.config.web.ts",
+    "test:chromium:watch": "VITEST_BROWSER=chromium vitest --config vitest.config.web.ts",
+    "test:firefox": "VITEST_BROWSER=firefox vitest run --config vitest.config.web.ts",
+    "test:firefox:watch": "VITEST_BROWSER=firefox vitest --config vitest.config.web.ts",
+    "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
+    "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
@@ -28,13 +34,13 @@
   "devDependencies": {
     "@types/semver": "^7.5.1",
     "@types/strip-ansi": "^3.0.0",
-    "@vitest/runner": "4.0.15",
+    "@vitest/runner": "4.1.0",
     "compare-utf8": "^0.1.1",
     "fast-check": "^3.18.0",
     "package-up": "^5.0.0",
     "playwright": "^1.53.2",
     "type-fest": "^4.30.0",
     "typescript": "~5.9.3",
-    "vitest": "4.0.15"
+    "vitest": "4.1.0"
   }
 }

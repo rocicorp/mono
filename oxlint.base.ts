@@ -1,0 +1,142 @@
+import type { OxlintConfig } from 'oxlint';
+
+/**
+ * Shared oxlint configuration for all packages in the monorepo.
+ * This is a plain data module (not an oxlint config file) so it can be
+ * imported by both root configs without triggering nested-config validation.
+ */
+export const baseConfig = {
+  plugins: ['eslint', 'typescript', 'unicorn', 'jest'],
+  ignorePatterns: [
+    'node_modules',
+    'dist',
+    'coverage',
+    'out',
+    'tool',
+    'bin',
+    '*_generated.ts',
+    'src/*/generated/',
+    'perf/index.js',
+    'um.js',
+    'prod/sst/sst-env.d.ts',
+    '**/um.js',
+  ],
+  rules: {
+    // Disable unsafe optional chaining - many legitimate patterns in codebase
+    'no-unsafe-optional-chaining': 'off',
+
+    'no-console': 'error',
+    'eqeqeq': 'error',
+    'arrow-body-style': 'error',
+
+    // Handle unused variables consistently with ESLint config
+    'no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      },
+    ],
+
+    // TypeScript-specific rules
+    'typescript/no-explicit-any': 'error',
+    'typescript/no-floating-promises': 'error',
+    'typescript/no-non-null-assertion': 'warn',
+    'typescript/consistent-type-imports': 'error',
+    'typescript/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      },
+    ],
+
+    // Require await in async functions
+    'require-await': 'error',
+
+    // Vitest rules uses "jest" plugin
+    'jest/no-focused-tests': 'error',
+    'jest/no-standalone-expect': 'off',
+
+    // Private class members (with inline disables for false positives)
+    'no-unused-private-class-members': 'error',
+
+    // Import restrictions - preserve the exact patterns from @rocicorp/eslint-config
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: [
+              'datadog/*',
+              'otel/*',
+              'replicache/*',
+              'replicache-perf/*',
+              'shared/*',
+              'zero/*',
+              'zero-cache/*',
+              'zero-client/*',
+              'zero-protocol/*',
+              'zero-react/*',
+              'zero-react-native/*',
+              'zero-schema/*',
+              'zero-solid/*',
+              'zero-vue/*',
+              'zql/*',
+              'zqlite/*',
+              'zqlite-zql-test/*',
+            ],
+            message: 'Use relative imports instead',
+          },
+          {
+            group: ['**/mod.ts'],
+            message:
+              "Don't import from barrel files. Import from the specific module instead.",
+          },
+          {
+            group: ['**/*.test.ts', '**/*.test.tsx'],
+            message: 'Do not import from test files.',
+          },
+          {
+            group: ['sinon'],
+            message: 'Use vi instead of sinon',
+          },
+        ],
+        paths: [
+          {name: 'datadog', message: 'Use relative imports instead'},
+          {name: 'otel', message: 'Use relative imports instead'},
+          {name: 'replicache', message: 'Use relative imports instead'},
+          {
+            name: 'replicache-perf',
+            message: 'Use relative imports instead',
+          },
+          {name: 'shared', message: 'Use relative imports instead'},
+          {name: 'zero', message: 'Use relative imports instead'},
+          {name: 'zero-cache', message: 'Use relative imports instead'},
+          {name: 'zero-client', message: 'Use relative imports instead'},
+          {name: 'zero-protocol', message: 'Use relative imports instead'},
+          {name: 'zero-react', message: 'Use relative imports instead'},
+          {
+            name: 'zero-react-native',
+            message: 'Use relative imports instead',
+          },
+          {name: 'zero-schema', message: 'Use relative imports instead'},
+          {name: 'zero-solid', message: 'Use relative imports instead'},
+          {name: 'zero-vue', message: 'Use relative imports instead'},
+          {name: 'zql', message: 'Use relative imports instead'},
+          {name: 'zqlite', message: 'Use relative imports instead'},
+          {name: 'zqlite-zql-test', message: 'Use relative imports instead'},
+        ],
+      },
+    ],
+
+    // Additional beneficial rules
+    'unicorn/prefer-set-size': 'error',
+    'unicorn/prefer-string-starts-ends-with': 'error',
+    'unicorn/prefer-array-find': 'error',
+    'unicorn/prefer-array-flat-map': 'error',
+    'unicorn/prefer-set-has': 'error',
+  },
+} satisfies OxlintConfig;

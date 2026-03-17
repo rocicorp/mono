@@ -2,7 +2,6 @@ import react from '@vitejs/plugin-react';
 import {fileURLToPath, URL} from 'node:url';
 import {defineConfig, type PluginOption, type ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
-import tsconfigPaths from 'vite-tsconfig-paths';
 import {makeDefine} from '../../packages/shared/src/build.ts';
 import {fastify} from './api/index.ts';
 
@@ -29,6 +28,7 @@ export default defineConfig({
   // `@rocicorp/zero-virtual` against a different module instance, which breaks
   // Zero context/query internals checks in dev.
   resolve: {
+    tsconfigPaths: true,
     dedupe: ['@rocicorp/zero', '@rocicorp/zero/react'],
     alias: [
       {find: '@rocicorp/zero/react', replacement: zeroReactPath},
@@ -43,7 +43,6 @@ export default defineConfig({
     ],
   },
   plugins: [
-    tsconfigPaths(),
     svgr() as unknown as PluginOption,
     react() as unknown as PluginOption,
     {

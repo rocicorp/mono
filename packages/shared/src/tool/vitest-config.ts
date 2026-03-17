@@ -3,6 +3,23 @@ import {defineConfig} from 'vitest/config';
 import {makeDefine} from '../build.ts';
 
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
+const {VITEST_BROWSER} = process.env;
+
+function assertValidBrowser(
+  browser: string | undefined,
+): asserts browser is 'chromium' | 'firefox' | 'webkit' | undefined {
+  switch (browser) {
+    case 'chromium':
+    case 'firefox':
+    case 'webkit':
+    case undefined:
+      return;
+    default:
+      throw new Error(`Invalid VITEST_BROWSER value: ${browser}`);
+  }
+}
+
+assertValidBrowser(VITEST_BROWSER);
 
 const define = {
   ...makeDefine(),
@@ -25,9 +42,6 @@ export default defineConfig({
     include: ['vitest > @vitest/expect > chai'],
   },
   define,
-  esbuild: {
-    define,
-  },
 
   test: {
     onConsoleLog(log: string) {
@@ -45,10 +59,14 @@ export default defineConfig({
       provider: playwright(),
       headless: true,
       screenshotFailures: false,
-      instances: [
-        {browser: 'chromium'},
-        ...(CI ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const) : []),
-      ],
+      instances: VITEST_BROWSER
+        ? ([{browser: VITEST_BROWSER}] as const)
+        : [
+            {browser: 'chromium'},
+            ...(CI
+              ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const)
+              : []),
+          ],
     },
     coverage: {
       provider: 'v8',

@@ -66,7 +66,9 @@ describe('ClientError', () => {
     });
 
     expect(error.stack).toBeDefined();
-    expect(error.stack).toContain('ClientError');
+    // Stack formatting differs by engine: V8/Spidermonkey includes error class
+    // names, while WebKit often only includes callsite URLs and line numbers.
+    expect(error.stack).toMatch(/ClientError|error\.test\.ts:\d+:\d+/);
   });
 });
 
@@ -136,7 +138,9 @@ describe('ServerError', () => {
     });
 
     expect(error.stack).toBeDefined();
-    expect(error.stack).toContain('ProtocolError');
+    // Stack formatting differs by engine: V8/Spidermonkey includes error class names,
+    // while WebKit often only includes callsite URLs and line numbers.
+    expect(error.stack).toMatch(/ProtocolError|error\.test\.ts:\d+:\d+/);
   });
 });
 
