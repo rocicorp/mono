@@ -162,13 +162,13 @@ describe('string arg packing', () => {
           )}`,
         ),
       ).toMatchInlineSnapshot(`
-      {
-        "text": "SELECT * FROM "foo" WHERE "str" = $1::text COLLATE "ucs_basic"",
-        "values": [
-          "str",
-        ],
-      }
-    `);
+        {
+          "text": "SELECT * FROM "foo" WHERE "str" = $1::text",
+          "values": [
+            "str",
+          ],
+        }
+      `);
     });
 
     test('boolean type', () => {
@@ -210,13 +210,13 @@ describe('string arg packing', () => {
           )}`,
         ),
       ).toMatchInlineSnapshot(`
-      {
-        "text": "SELECT * FROM "foo" WHERE "uuid"::text = $1::text COLLATE "ucs_basic"",
-        "values": [
-          "8f1dceb2-b3dd-46cf-9deb-460e9d87541c",
-        ],
-      }
-    `);
+        {
+          "text": "SELECT * FROM "foo" WHERE "uuid"::text = $1::text::uuid",
+          "values": [
+            "8f1dceb2-b3dd-46cf-9deb-460e9d87541c",
+          ],
+        }
+      `);
     });
 
     test('enum type', () => {
@@ -234,13 +234,13 @@ describe('string arg packing', () => {
           )}`,
         ),
       ).toMatchInlineSnapshot(`
-      {
-        "text": "SELECT * FROM "foo" WHERE "enum"::text = $1::text COLLATE "ucs_basic"",
-        "values": [
-          "ENUM_KEY",
-        ],
-      }
-    `);
+        {
+          "text": "SELECT * FROM "foo" WHERE "enum"::text = $1::text::"some_enum"",
+          "values": [
+            "ENUM_KEY",
+          ],
+        }
+      `);
     });
 
     test('timestamp type', () => {
@@ -358,15 +358,15 @@ describe('string arg packing', () => {
           )}`,
         ),
       ).toMatchInlineSnapshot(`
-      {
-        "text": "SELECT * FROM "foo" WHERE "str" = ARRAY(
-                SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-              )",
-        "values": [
-          "["a","b","c"]",
-        ],
-      }
-    `);
+        {
+          "text": "SELECT * FROM "foo" WHERE "str" = ARRAY(
+                  SELECT value::text FROM jsonb_array_elements_text($1::text::jsonb)
+                )",
+          "values": [
+            "["a","b","c"]",
+          ],
+        }
+      `);
     });
 
     test('boolean[] type', () => {
@@ -413,15 +413,15 @@ describe('string arg packing', () => {
           )}`,
         ),
       ).toMatchInlineSnapshot(`
-      {
-        "text": "SELECT * FROM "foo" WHERE "uuid"::text = ARRAY(
-                SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-              )",
-        "values": [
-          "["8f1dceb2-b3dd-46cf-9deb-460e9d87541c","11111111-1111-1111-1111-111111111111"]",
-        ],
-      }
-    `);
+        {
+          "text": "SELECT * FROM "foo" WHERE "uuid"::text = ARRAY(
+                  SELECT value::text::uuid FROM jsonb_array_elements_text($1::text::jsonb)
+                )",
+          "values": [
+            "["8f1dceb2-b3dd-46cf-9deb-460e9d87541c","11111111-1111-1111-1111-111111111111"]",
+          ],
+        }
+      `);
     });
 
     test('enum[] type', () => {
@@ -439,15 +439,15 @@ describe('string arg packing', () => {
           )}`,
         ),
       ).toMatchInlineSnapshot(`
-      {
-        "text": "SELECT * FROM "foo" WHERE "enum"::text = ARRAY(
-                SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-              )",
-        "values": [
-          "["ENUM_KEY","OTHER_KEY"]",
-        ],
-      }
-    `);
+        {
+          "text": "SELECT * FROM "foo" WHERE "enum"::text = ARRAY(
+                  SELECT value::text::"some_enum" FROM jsonb_array_elements_text($1::text::jsonb)
+                )",
+          "values": [
+            "["ENUM_KEY","OTHER_KEY"]",
+          ],
+        }
+      `);
     });
 
     test('timestamp[] type', () => {
@@ -514,7 +514,7 @@ describe('string arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE $1::text::double precision AND $2::text::double precision AND $3::text::text COLLATE "ucs_basic" AND $4::text::boolean AND $5",
+        "text": "SELECT * FROM "foo" WHERE $1::text::double precision AND $2::text::double precision AND $3::text::text AND $4::text::boolean AND $5",
         "values": [
           "1",
           "1.1",

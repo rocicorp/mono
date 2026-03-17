@@ -443,17 +443,10 @@ function primaryKeyClause(
   return sql`${sql.join(
     primaryKey.map(
       ([origName, serverName]) =>
-        sql`${sql.ident(serverName)}${maybeCastColumn(serverTableSchema[serverName])} = ${sqlValue(row[origName], serverTableSchema[serverName])}`,
+        sql`${sql.ident(serverName)} = ${sqlValue(row[origName], serverTableSchema[serverName])}`,
     ),
     ' AND ',
   )}`;
-}
-
-function maybeCastColumn(col: ServerColumnSchema) {
-  if (col.type === 'uuid' || col.isEnum) {
-    return sql`::text`;
-  }
-  return sql``;
 }
 
 function origAndServerNamesFor(
