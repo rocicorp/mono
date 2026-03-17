@@ -47,6 +47,7 @@ export const pgToZqlTypeMap = Object.freeze({
   // Date/Time types
   'date': 'number',
   'time': 'number',
+  'timetz': 'number',
   'time with time zone': 'number',
   'time without time zone': 'number',
   'timestamp': 'number',
