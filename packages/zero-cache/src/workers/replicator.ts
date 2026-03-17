@@ -11,6 +11,10 @@ import type {
   Replicator,
 } from '../services/replicator/replicator.ts';
 import {
+  applyPragmas,
+  type PragmaConfig,
+} from '../services/replicator/write-worker-client.ts';
+import {
   getAscendingEvents,
   recordEvent,
 } from '../services/replicator/schema/replication-state.ts';
@@ -84,18 +88,25 @@ async function connect(
   lc.info?.(`setting ${file} to ${walMode} mode`);
   replica.pragma(`journal_mode = ${walMode}`);
 
-  // The duration of the loop in which the replicator attempts
-  // to begin a transaction while litestream is performing a
-  // checkpoint.
-  replica.pragma('busy_timeout = 30000');
+  const pragmas = getPragmaConfig(mode);
+  applyPragmas(replica, pragmas);
 
   replica.pragma('optimize = 0x10002');
-  // Cap the running time of `PRAGMA optimize` calls that happen
-  // after replicating schema changes. 1000 is the limit recommended
-  // in https://sqlite.org/lang_analyze.html#approx
-  replica.pragma('analysis_limit = 1000');
   lc.info?.(`optimized ${file}`);
   return replica;
+}
+
+/**
+ * Returns the PragmaConfig for a given replica file mode.
+ * This is used by both the main thread (setupReplica) and
+ * the write worker thread to apply the same pragma settings.
+ */
+export function getPragmaConfig(mode: ReplicaFileMode): PragmaConfig {
+  return {
+    busyTimeout: 30000,
+    analysisLimit: 1000,
+    walAutocheckpoint: mode === 'backup' ? 0 : undefined,
+  };
 }
 
 export async function setupReplica(
@@ -106,12 +117,8 @@ export async function setupReplica(
   lc.info?.(`setting up ${mode} replica`);
 
   switch (mode) {
-    case 'backup': {
-      const replica = await connect(lc, replicaOptions, 'wal', mode);
-      // https://litestream.io/tips/#disable-autocheckpoints-for-high-write-load-servers
-      replica.pragma('wal_autocheckpoint = 0');
-      return replica;
-    }
+    case 'backup':
+      return await connect(lc, replicaOptions, 'wal', mode);
 
     case 'serving-copy': {
       // In 'serving-copy' mode, the original file is being used for 'backup'

@@ -10,6 +10,7 @@ import {
   ReplicatorService,
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
+import {ThreadWriteWorkerClient} from '../services/replicator/write-worker-client.ts';
 import {
   parentWorker,
   singleProcessMode,
@@ -17,6 +18,7 @@ import {
 } from '../types/processes.ts';
 import {getShardConfig} from '../types/shards.ts';
 import {
+  getPragmaConfig,
   replicaFileModeSchema,
   setUpMessageHandlers,
   setupReplica,
@@ -38,6 +40,14 @@ export default async function runWorker(
   initEventSink(lc, config);
 
   const replica = await setupReplica(lc, fileMode, config.replica);
+
+  // Create the write worker for async SQLite writes.
+  const dbPath = replica.name;
+  const pragmas = getPragmaConfig(fileMode);
+  const workerClient = new ThreadWriteWorkerClient(
+    new URL('../services/replicator/write-worker.ts', import.meta.url),
+  );
+  await workerClient.init(dbPath, mode, pragmas, config.log);
 
   const runningLocalChangeStreamer =
     config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
@@ -66,6 +76,7 @@ export default async function runWorker(
     mode,
     changeStreamer,
     replica,
+    workerClient,
     runningLocalChangeStreamer, // publish ReplicationStatusEvents
   );
 

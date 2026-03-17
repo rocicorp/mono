@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ReadonlyJSONObject} from '../../../../shared/src/json.ts';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import type {Source} from '../../types/streams.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
+import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
 export type ReplicaState = {
@@ -56,6 +56,8 @@ export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #incrementalSyncer: IncrementalSyncer;
+  readonly #worker: WriteWorkerClient;
+  #runPromise: Promise<void> | undefined;
 
   constructor(
     lc: LogContext,
@@ -63,19 +65,22 @@ export class ReplicatorService implements Replicator, Service {
     id: string,
     mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
-    replica: Database,
+    statusDb: Database,
+    worker: WriteWorkerClient,
     publishReplicationStatus: boolean,
   ) {
     this.id = id;
     this.#lc = lc
       .withContext('component', 'replicator')
       .withContext('serviceID', this.id);
+    this.#worker = worker;
 
     this.#incrementalSyncer = new IncrementalSyncer(
       taskID,
       `${taskID}/${id}`,
       changeStreamer,
-      replica,
+      statusDb,
+      worker,
       mode,
       publishReplicationStatus,
     );
@@ -86,15 +91,20 @@ export class ReplicatorService implements Replicator, Service {
   }
 
   run() {
-    return this.#incrementalSyncer.run(this.#lc);
+    this.#runPromise = this.#incrementalSyncer.run(this.#lc);
+    return this.#runPromise;
   }
 
   subscribe(): Source<ReplicaState> {
     return this.#incrementalSyncer.subscribe();
   }
 
-  stop() {
+  async stop() {
     this.#incrementalSyncer.stop(this.#lc);
-    return promiseVoid;
+    // Wait for the syncer's run loop to finish so that any in-flight
+    // worker.processMessage() call completes and clears #pending
+    // before we send the 'stop' message to the worker.
+    await this.#runPromise;
+    await this.#worker.stop();
   }
 }

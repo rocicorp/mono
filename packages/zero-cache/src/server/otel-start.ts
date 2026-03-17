@@ -10,7 +10,7 @@ import {
   otelMetricsEnabled,
   otelTracesEnabled,
 } from '../../../otel/src/enabled.ts';
-import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
+import {setupOtelDiagnosticLogger} from './otel-diag-logger.ts';
 
 class OtelManager {
   static #instance: OtelManager;
