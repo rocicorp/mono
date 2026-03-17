@@ -569,6 +569,18 @@ describe('computeZqlSpec', () => {
     `);
   });
 
+  test('timetz columns are synced as numbers', () => {
+    const spec = must(
+      t(`
+    CREATE TABLE foo(id "TEXT|NOT_NULL", time_tz "timetz|NOT_NULL");
+    CREATE UNIQUE INDEX foo_pkey ON foo(id ASC);
+    `)[0],
+    );
+
+    expect(spec.tableSpec.columns.time_tz?.dataType).toBe('timetz|NOT_NULL');
+    expect(spec.zqlSpec.time_tz).toEqual({type: 'number'});
+  });
+
   test('indexes with unsupported columns (MACADDR8) are excluded', () => {
     expect(
       t(`
