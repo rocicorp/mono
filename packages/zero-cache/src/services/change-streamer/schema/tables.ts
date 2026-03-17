@@ -168,6 +168,7 @@ export async function ensureReplicationConfig(
   >,
   shard: ShardID,
   autoReset: boolean,
+  setTimeoutFn: typeof setTimeout = setTimeout,
 ) {
   const {publications, replicaVersion, watermark} = subscriptionState;
   const replicaConfig = {publications, replicaVersion};
@@ -180,6 +181,7 @@ export async function ensureReplicationConfig(
 
   await runTx(db, async sql => {
     const stmts: PendingQuery<Row[]>[] = [];
+    let needsTruncate = false;
     const results = await sql<
       {
         replicaVersion: string;
@@ -214,6 +216,7 @@ export async function ensureReplicationConfig(
         //       change-streamer. Deleting the existing row and creating
         //       a new one, on the other hand, may not properly trigger the
         //       SERIALIZATION failure necessary to abort the pending tx.
+        needsTruncate = true;
         stmts.push(
           sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
           sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
@@ -223,7 +226,7 @@ export async function ensureReplicationConfig(
       }
     }
     // Initialize (or re-initialize TRUNCATED) tables
-    if (results.length === 0 || stmts.length > 0) {
+    if (results.length === 0 || needsTruncate) {
       // The storer uses the earliest changeLog entry as the safe watermark
       // from which subscribers can be resumed. These initial entries ensure
       // that subscribers can start from a freshly synced replica, even if
@@ -245,6 +248,24 @@ export async function ensureReplicationConfig(
           change => sql`INSERT INTO ${sql(schema)}."changeLog" ${sql(change)}`,
         ),
       );
+
+      if (needsTruncate) {
+        // The TRUNCATE statements require ACCESS EXCLUSIVE locks, which may
+        // be blocked by old storer catchup reads. Race against a timeout
+        // that terminates the blocking backends if the TRUNCATE takes too
+        // long.
+        const timer = setTimeoutFn(async () => {
+          lc.info?.(
+            'ensureReplicationConfig blocked, terminating lock holders',
+          );
+          await terminateChangeDBLockHolders(lc, db, shard);
+        }, LOCK_HOLDER_TERMINATE_TIMEOUT_MS);
+        try {
+          return await Promise.all(stmts);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
       return Promise.all(stmts);
     }
 
@@ -266,6 +287,78 @@ export async function ensureReplicationConfig(
   });
 }
 
+// The time to wait for a TRUNCATE in ensureReplicationConfig before
+// terminating blocking backends via terminateChangeDBLockHolders.
+const LOCK_HOLDER_TERMINATE_TIMEOUT_MS = 5_000;
+
+export const CHANGE_STREAMER_APP_NAME = 'zero-change-streamer';
+
 export class AutoResetSignal extends AbortError {
   readonly name = 'AutoResetSignal';
+}
+
+/**
+ * Terminates zero-cache backends that are blocking the current backend
+ * from acquiring locks on CDC tables (e.g., during TRUNCATE).
+ *
+ * This is used during change-DB takeover when the new replication-manager's
+ * `ensureReplicationConfig` needs to TRUNCATE tables, but the old
+ * replication-manager's storer is still reading from them (e.g., large
+ * catchup cursors).
+ *
+ * The function:
+ * 1. Finds backends waiting for a lock on a TRUNCATE in {schema}
+ * 2. Uses `pg_blocking_pids()` to identify which backends are blocking them
+ * 3. Terminates blocking backends that have `application_name = 'zero-change-streamer'`
+ *
+ * Must be called on a **separate connection** from the one that is blocked,
+ * since the blocked connection is inside a pending transaction.
+ */
+export async function terminateChangeDBLockHolders(
+  lc: LogContext,
+  db: PostgresDB,
+  shard: ShardID,
+) {
+  const schema = cdcSchema(shard);
+
+  // Step 1: Find backends that are blocked waiting for a lock,
+  // whose query involves a TRUNCATE on this shard's CDC schema.
+  const blocked = await db<{pid: number}[]>`
+    SELECT pid FROM pg_stat_activity
+      WHERE wait_event_type = 'Lock'
+        AND application_name = ${CHANGE_STREAMER_APP_NAME}
+        AND query LIKE ${'%TRUNCATE%' + schema + '%'}`;
+
+  if (blocked.length === 0) {
+    lc.info?.('no blocked TRUNCATE backends found');
+    return;
+  }
+
+  const blockedPids = blocked.map(r => r.pid);
+  lc.info?.(`found blocked TRUNCATE backends: ${JSON.stringify(blockedPids)}`);
+
+  // Step 2: For each blocked backend, find and terminate its blockers
+  // that are zero-change-streamer connections.
+  const terminated = await db<
+    {pid: number; applicationName: string; query: string; terminated: boolean}[]
+  >`
+    SELECT pid, application_name as "applicationName", query,
+           pg_terminate_backend(pid) as terminated
+      FROM pg_stat_activity
+      WHERE pid = ANY(
+        SELECT unnest(pg_blocking_pids(blocked.pid))
+          FROM unnest(${blockedPids}::int[]) AS blocked(pid)
+      )
+      AND application_name = ${CHANGE_STREAMER_APP_NAME}
+      AND pid != ALL(${blockedPids}::int[])`;
+
+  if (terminated.length === 0) {
+    lc.info?.(`no ${CHANGE_STREAMER_APP_NAME} blockers found to terminate`);
+  } else {
+    for (const {pid, applicationName, query, terminated: ok} of terminated) {
+      lc.info?.(
+        `terminated blocking backend pid=${pid} app=${applicationName} ok=${ok} query=${query.slice(0, 200)}`,
+      );
+    }
+  }
 }

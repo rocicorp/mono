@@ -73,6 +73,7 @@ export async function initializeStreamer(
     subscriptionState,
     shard,
     autoReset,
+    setTimeoutFn,
   );
 
   const {replicaVersion} = subscriptionState;
