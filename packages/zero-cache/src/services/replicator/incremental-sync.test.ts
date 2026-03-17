@@ -60,9 +60,7 @@ describe('replicator/incremental-sync', () => {
       new Date(Date.UTC(2025, 7, 14, 1, 2, 3)),
     );
     subscribeFn = vi.fn();
-    worker = new ThreadWriteWorkerClient(
-      new URL('./write-worker.ts', import.meta.url),
-    );
+    worker = new ThreadWriteWorkerClient();
     await worker.init(
       dbFile.path,
       'serving',

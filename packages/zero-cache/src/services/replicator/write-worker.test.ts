@@ -31,9 +31,7 @@ describe('write-worker', () => {
       `,
     );
 
-    worker = new ThreadWriteWorkerClient(
-      new URL('./write-worker.ts', import.meta.url),
-    );
+    worker = new ThreadWriteWorkerClient();
     await worker.init(
       dbFile.path,
       'serving',
@@ -138,9 +136,7 @@ describe('write-worker', () => {
   test('stop shuts down cleanly', async () => {
     await worker.stop();
     // Create a new worker for afterEach cleanup
-    worker = new ThreadWriteWorkerClient(
-      new URL('./write-worker.ts', import.meta.url),
-    );
+    worker = new ThreadWriteWorkerClient();
     await worker.init(
       dbFile.path,
       'serving',
