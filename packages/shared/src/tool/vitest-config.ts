@@ -65,6 +65,7 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
     silent: 'passed-only',
     browser,
+
     coverage: {
       provider: 'v8',
       include: ['src/**'],
