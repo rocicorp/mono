@@ -1,7 +1,7 @@
-import {playwright} from '@vitest/browser-playwright';
-import {defineConfig} from 'vitest/config';
-import type {BrowserConfigOptions} from 'vitest/node';
-import {makeDefine} from '../build.ts';
+import { playwright } from '@vitest/browser-playwright';
+import { defineConfig } from 'vitest/config';
+import type { BrowserConfigOptions } from 'vitest/node';
+import { makeDefine } from '../build.ts';
 
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
 const {VITEST_BROWSER} = process.env;
