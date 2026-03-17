@@ -16,6 +16,12 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:chromium": "VITEST_BROWSER=chromium vitest run --config vitest.config.web.ts",
+    "test:chromium:watch": "VITEST_BROWSER=chromium vitest --config vitest.config.web.ts",
+    "test:firefox": "VITEST_BROWSER=firefox vitest run --config vitest.config.web.ts",
+    "test:firefox:watch": "VITEST_BROWSER=firefox vitest --config vitest.config.web.ts",
+    "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
+    "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
     "bench": "vitest bench --run",
     "bench:watch": "vitest bench --watch",
     "format": "prettier --write .",

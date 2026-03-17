@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
 
-import {ProtocolError, isProtocolError, type ErrorBody} from './error.ts';
 import {ErrorKind} from './error-kind.ts';
 import {ErrorOrigin} from './error-origin.ts';
+import {ProtocolError, isProtocolError, type ErrorBody} from './error.ts';
 
 describe('ProtocolError', () => {
   test('exposes error body and metadata', () => {
@@ -44,6 +44,9 @@ describe('ProtocolError', () => {
     });
 
     expect(error.stack).toBeDefined();
-    expect(error.stack).toContain('ProtocolError');
+    console.log(error.stack);
+    // Stack formatting differs by engine: V8/Spidermonkey includes error class names,
+    // while WebKit often only includes callsite URLs and line numbers.
+    expect(error.stack).toMatch(/ProtocolError|error\.test\.ts:\d+:\d+/);
   });
 });

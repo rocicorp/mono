@@ -9,6 +9,12 @@
     "check-types:watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest watch",
+    "test:chromium": "VITEST_BROWSER=chromium vitest run",
+    "test:chromium:watch": "VITEST_BROWSER=chromium vitest",
+    "test:firefox": "VITEST_BROWSER=firefox vitest run",
+    "test:firefox:watch": "VITEST_BROWSER=firefox vitest",
+    "test:webkit": "VITEST_BROWSER=webkit vitest run",
+    "test:webkit:watch": "VITEST_BROWSER=webkit vitest",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "oxlint --type-aware src/"
