@@ -1,7 +1,6 @@
 // Type definitions and imports for @op-engineering/op-sqlite
 // This file isolates the module resolution workarounds needed for this package
 
-// @ts-expect-error - Module resolution issue with @op-engineering/op-sqlite exports
 import {open as openDB} from '@op-engineering/op-sqlite';
 
 // Minimal type definitions for @op-engineering/op-sqlite

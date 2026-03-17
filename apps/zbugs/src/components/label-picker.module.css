@@ -48,7 +48,7 @@
   top: 2.65rem; /* Center vertically */
   transform: translateY(-50%);
   border-style: solid;
-  z-index: var(--z-index-popover + 1);
+  z-index: calc(var(--z-index-popover) + 1);
 }
 
 .popoverWrapper::before {

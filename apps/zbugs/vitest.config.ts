@@ -1,6 +1,5 @@
 import {dirname, resolve} from 'path';
 import {fileURLToPath} from 'url';
-import tsconfigPaths from 'vite-tsconfig-paths';
 import {defineConfig, mergeConfig} from 'vitest/config';
 import config from '../../packages/shared/src/tool/vitest-config.ts';
 
@@ -16,8 +15,8 @@ export function configForVersion(version: number, url: string) {
   const packagesDir = resolve(rootDir, '../../packages');
 
   return mergeConfig(config, {
-    plugins: [tsconfigPaths()],
     resolve: {
+      tsconfigPaths: true,
       alias: [
         {
           find: '@rocicorp/zero',
