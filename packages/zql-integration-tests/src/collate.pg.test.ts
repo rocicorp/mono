@@ -1,3 +1,17 @@
+/**
+ * Collation consistency tests between z2s (PostgreSQL), zqlite (SQLite), and
+ * zql (in-memory).
+ *
+ * These tests are effectively relaxed: z2s no longer adds COLLATE "ucs_basic"
+ * to queries, so PostgreSQL uses its native (locale-aware) collation which may
+ * order text and enum columns differently than SQLite/zql byte ordering.
+ *
+ * The tests currently verify:
+ * - zql and zqlite produce identical ordering (both use byte-order comparison)
+ * - PostgreSQL returns the same *set* of rows (but possibly in different order)
+ *
+ * Kept in case we eventually align collations across all three environments.
+ */
 import {Client} from 'pg';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
