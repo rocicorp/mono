@@ -5,6 +5,7 @@ import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'path';
+import {pathToFileURL} from 'node:url';
 
 /** @param {string[]} parts */
 function basePath(...parts) {
@@ -38,11 +39,10 @@ function writePackageData(packagePath, data) {
 }
 
 async function getProtocolVersions() {
-  const script = `
-import {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from './packages/zero-protocol/src/protocol-version.ts';
-
-console.log(JSON.stringify({PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL}));
-`;
+  const protocolVersionURL = pathToFileURL(
+    basePath('packages', 'zero-protocol', 'src', 'protocol-version.ts'),
+  ).href;
+  const script = `import {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from ${JSON.stringify(protocolVersionURL)}; console.log(JSON.stringify({PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL}));`;
   const output = execute(
     `node --experimental-strip-types --no-warnings --input-type=module -e ${JSON.stringify(script)}`,
     {stdio: 'pipe'},
