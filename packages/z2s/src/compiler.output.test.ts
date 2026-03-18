@@ -98,6 +98,16 @@ const timestampsTable = table('timestampsTable')
   })
   .primaryKey('id');
 
+const timesTable = table('timesTable')
+  .columns({
+    id: string(),
+    timeWithTz: number(),
+    timeWithTzArray: json<number[]>(),
+    timeWithoutTz: number(),
+    timeWithoutTzArray: json<number[]>(),
+  })
+  .primaryKey('id');
+
 const alternateUser = table('alternate_user')
   .from('alternate_schema.user')
   .columns({
@@ -117,6 +127,7 @@ const schema = createSchema({
     childTable,
     enumTable,
     timestampsTable,
+    timesTable,
     alternateUser,
   ],
 });
@@ -165,6 +176,13 @@ const serverSchema: ServerSchema = {
     timestampWithoutTzArray: {type: 'timestamp', isArray: true, isEnum: false},
     timestampWithTz: {type: 'timestamptz', isArray: false, isEnum: false},
     timestampWithTzArray: {type: 'timestamptz', isArray: true, isEnum: false},
+  },
+  'timesTable': {
+    id: {type: 'text', isArray: false, isEnum: false},
+    timeWithoutTz: {type: 'time', isArray: false, isEnum: false},
+    timeWithoutTzArray: {type: 'time', isArray: true, isEnum: false},
+    timeWithTz: {type: 'timetz', isArray: false, isEnum: false},
+    timeWithTzArray: {type: 'timetz', isArray: true, isEnum: false},
   },
   'alternate_schema.user': {
     id: {type: 'text', isArray: false, isEnum: false},
@@ -484,6 +502,29 @@ test('compile with timestamp (without timezone) array', () => {
       "values": [
         ""abc"",
       ],
+    }
+  `);
+});
+
+test('compile with time/timetz projects milliseconds', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'timesTable',
+        related: [],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "timesTable_0"."id" as "id",EXTRACT(EPOCH FROM "timesTable_0"."timeWithTz") * 1000 as "timeWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timesTable_0"."timeWithTzArray")) * 1000) as "timeWithTzArray",EXTRACT(EPOCH FROM "timesTable_0"."timeWithoutTz") * 1000 as "timeWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timesTable_0"."timeWithoutTzArray")) * 1000) as "timeWithoutTzArray"
+        FROM "timesTable" AS "timesTable_0"
+         
+         
+        ORDER BY "timesTable_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [],
     }
   `);
 });

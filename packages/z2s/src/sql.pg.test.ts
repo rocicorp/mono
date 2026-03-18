@@ -156,6 +156,32 @@ describe('SQL builder with PostgreSQL', () => {
       expect(result).toEqual([{content: value, summary: value}]);
     },
   );
+
+  test.each([
+    {type: 'time', value: 32887654},
+    {type: 'timetz', value: 32887654},
+  ] as const)(
+    'numeric $type inserts round-trip as milliseconds',
+    async ({type, value}) => {
+      const table = `round_trip_${type}`;
+      await pg.unsafe(`
+        DROP TABLE IF EXISTS "${table}";
+        CREATE TABLE "${table}" (
+          value ${type.toUpperCase()} NOT NULL
+        );
+      `);
+
+      const stmt = formatPgInternalConvert(sql`
+        INSERT INTO ${sql.ident(table)} (value)
+        VALUES (${sqlConvertArg(type, value)})
+        RETURNING value
+      `);
+
+      const result = await pg.unsafe(stmt.text, stmt.values as JSONValue[]);
+
+      expect(result).toEqual([{value}]);
+    },
+  );
 });
 
 const pluralComparison = {
