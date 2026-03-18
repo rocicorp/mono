@@ -24,9 +24,7 @@ import {
   type NameMapper,
 } from '../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {
-  ServerSchema,
-} from '../../zero-types/src/server-schema.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {
