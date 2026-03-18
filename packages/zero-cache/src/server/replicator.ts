@@ -44,9 +44,7 @@ export default async function runWorker(
   // Create the write worker for async SQLite writes.
   const dbPath = replica.name;
   const pragmas = getPragmaConfig(fileMode);
-  const workerClient = new ThreadWriteWorkerClient(
-    new URL('../services/replicator/write-worker.ts', import.meta.url),
-  );
+  const workerClient = new ThreadWriteWorkerClient();
   await workerClient.init(dbPath, mode, pragmas, config.log);
 
   const runningLocalChangeStreamer =

@@ -1,9 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
-import {must} from '../../../../shared/src/must.ts';
+import {parentPort} from 'node:worker_threads';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
-import {createLogContext} from '../../server/logging.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
+import {createLogContext} from '../../server/logging.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
@@ -12,13 +13,11 @@ import {
   type ArgsMap,
   type Method,
   type PragmaConfig,
-  type ResultMap,
-  type WriteError,
   type Request,
   type Response,
+  type ResultMap,
+  type WriteError,
 } from './write-worker-client.ts';
-
-import {parentPort} from 'node:worker_threads';
 
 if (!parentPort) {
   throw new Error('write-worker must be run as a worker thread');
