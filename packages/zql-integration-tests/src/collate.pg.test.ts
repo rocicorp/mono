@@ -212,12 +212,8 @@ describe('collation behavior', () => {
       expect(zqlResult).toEqualPg(memoryResult);
       // PG should return the same set of rows (order may differ
       // due to locale-aware collation for text/enum columns).
-      expect(zqlResult).toEqual(
-        expect.arrayContaining(pgResult as unknown[]),
-      );
-      expect(pgResult).toEqual(
-        expect.arrayContaining(zqlResult as unknown[]),
-      );
+      expect(zqlResult).toEqual(expect.arrayContaining(pgResult as unknown[]));
+      expect(pgResult).toEqual(expect.arrayContaining(zqlResult as unknown[]));
 
       function makeQuery(
         query: Query<'item', Schema>,
