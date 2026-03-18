@@ -38,22 +38,24 @@ function writePackageData(packagePath, data) {
 }
 
 async function getProtocolVersions() {
-  const {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} = await import(
-    basePath(
-      'packages',
-      'zero',
-      'out',
-      'zero-protocol',
-      'src',
-      'protocol-version.js',
-    )
+  const script = `
+import {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from './packages/zero-protocol/src/protocol-version.ts';
+
+console.log(JSON.stringify({PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL}));
+`;
+  const output = execute(
+    `node --experimental-strip-types --no-warnings --input-type=module -e ${JSON.stringify(script)}`,
+    {stdio: 'pipe'},
+  );
+  const {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} = JSON.parse(
+    output ?? '{}',
   );
   if (
     typeof PROTOCOL_VERSION !== 'number' ||
     typeof MIN_SERVER_SUPPORTED_SYNC_PROTOCOL !== 'number'
   ) {
     throw new Error(
-      'Could not extract protocol versions from protocol-version.js',
+      'Could not extract protocol versions from packages/zero-protocol/src/protocol-version.ts',
     );
   }
   return {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL};
