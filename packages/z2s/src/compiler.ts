@@ -8,7 +8,6 @@ import {
 import {hasOwn} from '../../shared/src/has-own.ts';
 import {type JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
-import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg-data-type.ts';
 import type {
   AST,
   Condition,
@@ -25,10 +24,7 @@ import {
   type NameMapper,
 } from '../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {
-  ServerColumnSchema,
-  ServerSchema,
-} from '../../zero-types/src/server-schema.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {
@@ -36,7 +32,6 @@ import {
   sqlConvertColumnArg,
   sqlConvertPluralLiteralArg,
   sqlConvertSingularLiteralArg,
-  Z2S_COLLATION,
   type PluralLiteralType,
 } from './sql.ts';
 
@@ -166,33 +161,21 @@ export function orderBy(
     return sql``;
   }
   return sql`ORDER BY ${sql.join(
-    orderBy.map(([col, dir]) => {
-      const serverColumnSchema = getServerColumn(spec.server, table, col);
-      return dir === 'asc'
+    orderBy.map(([col, dir]) =>
+      dir === 'asc'
         ? // Oh postgres. The table must be referred to by client name but the column by server name.
           // E.g., `SELECT server_col as client_col FROM server_table as client_table ORDER BY client_Table.server_col`
           sql`${colIdent(spec.server, {
             table,
             zql: col,
-          })}${maybeCollate(serverColumnSchema)} ASC NULLS FIRST`
+          })} ASC NULLS FIRST`
         : sql`${colIdent(spec.server, {
             table,
             zql: col,
-          })}${maybeCollate(serverColumnSchema)} DESC NULLS LAST`;
-    }),
+          })} DESC NULLS LAST`,
+    ),
     ', ',
   )}`;
-}
-
-function maybeCollate(serverColumnSchema: ServerColumnSchema): SQLQuery {
-  if (serverColumnSchema.type === 'uuid' || serverColumnSchema.isEnum) {
-    return sql`::text COLLATE ${sql.ident(Z2S_COLLATION)}`;
-  }
-  if (Object.hasOwn(pgToZqlStringTypeMap, serverColumnSchema.type)) {
-    return sql` COLLATE ${sql.ident(Z2S_COLLATION)}`;
-  }
-
-  return sql``;
 }
 
 function related(
@@ -474,18 +457,10 @@ function valueComparison(
   const valuePosType = valuePos.type;
   switch (valuePosType) {
     case 'column': {
-      const serverColumnSchema = getServerColumn(
-        spec.server,
-        table,
-        valuePos.name,
-      );
       const qualified: QualifiedColumn = {
         table,
         zql: valuePos.name,
       };
-      if (serverColumnSchema.type === 'uuid' || serverColumnSchema.isEnum) {
-        return sql`${colIdent(spec.server, qualified)}::text`;
-      }
       return colIdent(spec.server, qualified);
     }
     case 'literal':

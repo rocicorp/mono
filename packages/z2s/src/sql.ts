@@ -12,8 +12,6 @@ import {
 import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
 import type {ServerColumnSchema} from '../../zero-types/src/server-schema.ts';
 
-export const Z2S_COLLATION = 'ucs_basic';
-
 export function formatPg(sql: SQLQuery) {
   const format = new ReusingFormat(escapePostgresIdentifier);
   return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
@@ -175,13 +173,12 @@ function createPlaceholder(index: number, arg: SqlConvertArg) {
   }
 
   if (arg[sqlConvert] === 'literal') {
-    const collate = arg.type === 'string' ? ` COLLATE "${Z2S_COLLATION}"` : '';
     const {value} = arg;
     if (Array.isArray(value)) {
       const elType = pgTypeForLiteralType(arg.type);
-      return formatPlural(index, `value::${elType}${collate}`);
+      return formatPlural(index, `value::${elType}`);
     }
-    return `$${index}::text::${pgTypeForLiteralType(arg.type)}${collate}`;
+    return `$${index}::text::${pgTypeForLiteralType(arg.type)}`;
   }
 
   const common = formatCommonToSingularAndPlural(index, arg);
@@ -207,16 +204,12 @@ function formatCommonToSingularAndPlural(
     case 'timestamptz':
     case 'timestamp with time zone':
       return `to_timestamp(${valuePlaceholder}::text::bigint / 1000.0)`;
-    // uuid doesn't support collation, so we compare as text
+    // uuid: cast to native uuid type for proper comparison and index usage
     case 'uuid':
-      return arg.isComparison
-        ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
-        : `${valuePlaceholder}::text::uuid`;
+      return `${valuePlaceholder}::text::uuid`;
   }
   if (arg.isEnum) {
-    return arg.isComparison
-      ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
-      : `${valuePlaceholder}::text::"${arg.type}"`;
+    return `${valuePlaceholder}::text::"${arg.type}"`;
   }
   if (isPgStringType(arg.type)) {
     // For comparison cast to the general `text` type, not the
@@ -224,7 +217,7 @@ function formatCommonToSingularAndPlural(
     // force the value being compared to the size/max-size of the column
     // type before comparison.
     return arg.isComparison
-      ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
+      ? `${valuePlaceholder}::text`
       : `${valuePlaceholder}::text::${arg.type}`;
   }
   if (isPgNumberType(arg.type)) {
