@@ -47,7 +47,7 @@ import {
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
-import {upstreamSchema, type ShardID} from '../../types/shards.ts';
+import {type ShardID} from '../../types/shards.ts';
 import {
   getSubscriptionState,
   ZERO_VERSION_COLUMN_NAME,
@@ -246,9 +246,7 @@ export class PipelineDriver {
     this.#primaryKeys = primaryKeys;
     primaryKeys.clear();
     for (const [table, spec] of this.#tableSpecs.entries()) {
-      if (table.startsWith(upstreamSchema(this.#shardID))) {
-        primaryKeys.set(table, spec.tableSpec.primaryKey);
-      }
+      primaryKeys.set(table, spec.tableSpec.primaryKey);
     }
     buildPrimaryKeys(clientSchema, primaryKeys);
     const {replicaVersion} = getSubscriptionState(db);
