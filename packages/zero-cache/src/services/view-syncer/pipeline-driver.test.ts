@@ -184,6 +184,10 @@ describe('view-syncer/pipeline-driver', () => {
     tables: [issues, comments, issueLabels, labels, uniques],
   });
 
+  const subsetClientSchema = createSchema({
+    tables: [issues],
+  });
+
   const ISSUES_AND_COMMENTS: AST = {
     table: 'issues',
     orderBy: [['id', 'desc']],
@@ -1283,6 +1287,62 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('subset client schema can hydrate whereExists helper tables', () => {
+    pipelines.init(subsetClientSchema);
+
+    expect([
+      ...pipelines.addQuery(
+        'hash-subset-schema-exists',
+        'querySubsetSchemaExists',
+        ISSUES_QUERY_WITH_EXISTS,
+        startTimer(),
+      ),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "querySubsetSchemaExists",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "querySubsetSchemaExists",
+          "row": {
+            "_0_version": "123",
+            "issueID": "1",
+            "labelID": "1",
+            "legacyID": "1-1",
+          },
+          "rowKey": {
+            "legacyID": "1-1",
+          },
+          "table": "issueLabels",
+          "type": "add",
+        },
+        {
+          "queryID": "querySubsetSchemaExists",
+          "row": {
+            "_0_version": "123",
+            "id": "1",
+            "name": "bug",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "labels",
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
   test('whereExists added by permissions return no rows', () => {
     pipelines.init(clientSchema);
     expect([
@@ -1900,6 +1960,58 @@ describe('view-syncer/pipeline-driver', () => {
     });
   });
 
+  test('subset client schema can hydrate scalar subquery companion tables', () => {
+    pipelines.init(subsetClientSchema);
+
+    expect([
+      ...pipelines.addQuery(
+        'hash-scalar-subset-schema',
+        'queryScalarSubsetSchema',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalarSubsetSchema",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryID": "queryScalarSubsetSchema",
+          "row": {
+            "_0_version": "123",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
+
+    expect(
+      pipelines.queries().get('queryScalarSubsetSchema')?.transformedAst.where,
+    ).toEqual({
+      type: 'simple',
+      op: '=',
+      left: {type: 'column', name: 'id'},
+      right: {type: 'literal', value: '1'},
+    });
+  });
+
   test('scalar subquery with no matching rows', () => {
     pipelines.init(clientSchema);
 
@@ -2063,6 +2175,43 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
+          "type": "edit",
+        },
+      ]
+    `);
+  });
+
+  test('subset client schema advances scalar companion tables', () => {
+    pipelines.init(subsetClientSchema);
+
+    [
+      ...pipelines.addQuery(
+        'hash-scalar-subset-schema',
+        'queryScalarSubsetSchema',
+        ISSUES_WITH_SCALAR_SUBQUERY,
+        startTimer(),
+      ),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      messages.update('comments', {id: '10', issueID: '1', upvotes: 5}),
+    );
+
+    expect(changes()).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryScalarSubsetSchema",
+          "row": {
+            "_0_version": "134",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 5,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
           "type": "edit",
         },
       ]
