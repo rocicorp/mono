@@ -1,71 +1,39 @@
-//@ts-check
-
 import commandLineArgs from 'command-line-args';
 import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'path';
-import {pathToFileURL} from 'node:url';
+import {
+  MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
+  PROTOCOL_VERSION,
+} from '../../zero-protocol/src/protocol-version.ts';
 
-/** @param {string[]} parts */
-function basePath(...parts) {
+function basePath(...parts: string[]) {
   return path.join(process.cwd(), ...parts);
 }
 
-/**
- * @param {string} command
- * @param {{stdio?:'inherit'|'pipe'|undefined, cwd?:string|undefined}|undefined} [options]
- */
-function execute(command, options) {
+function execute(
+  command: string,
+  options?: {stdio?: 'inherit' | 'pipe' | undefined; cwd?: string | undefined},
+) {
   console.log(`Executing: ${command}`);
   return execSync(command, {stdio: 'inherit', ...options})
     ?.toString()
     ?.trim();
 }
 
-/**
- * @param {fs.PathOrFileDescriptor} packagePath
- */
-function getPackageData(packagePath) {
+function getPackageData(packagePath: fs.PathOrFileDescriptor) {
   return JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 }
 
-/**
- * @param {fs.PathOrFileDescriptor} packagePath
- * @param {any} data
- */
-function writePackageData(packagePath, data) {
+function writePackageData(packagePath: fs.PathOrFileDescriptor, data: any) {
   fs.writeFileSync(packagePath, JSON.stringify(data, null, 2));
 }
 
-async function getProtocolVersions() {
-  const protocolVersionURL = pathToFileURL(
-    basePath('packages', 'zero-protocol', 'src', 'protocol-version.ts'),
-  ).href;
-  const script = `import {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from ${JSON.stringify(protocolVersionURL)}; console.log(JSON.stringify({PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL}));`;
-  const output = execute(
-    `node --experimental-strip-types --no-warnings --input-type=module -e ${JSON.stringify(script)}`,
-    {stdio: 'pipe'},
-  );
-  const {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} = JSON.parse(
-    output ?? '{}',
-  );
-  if (
-    typeof PROTOCOL_VERSION !== 'number' ||
-    typeof MIN_SERVER_SUPPORTED_SYNC_PROTOCOL !== 'number'
-  ) {
-    throw new Error(
-      'Could not extract protocol versions from packages/zero-protocol/src/protocol-version.ts',
-    );
-  }
-  return {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL};
-}
-
 /**
- * @param {string} version - Base version from package.json (e.g., "0.24.0")
- * @param {string} remote
+ * @param version - Base version from package.json (e.g., "0.24.0")
  */
-function bumpCanaryVersion(version, remote) {
+function bumpCanaryVersion(version: string, remote: string) {
   // Canary versions use the format: major.minor.patch-canary.attempt
   //
   // This ensures that canary versions are treated as prereleases in semver,
@@ -122,47 +90,6 @@ function bumpCanaryVersion(version, remote) {
   console.log(`Next canary version: ${nextVersion}`);
 
   return nextVersion;
-}
-
-/**
- * Find the latest canary tag for a given base version
- * @param {string} baseVersion - e.g., "0.24.0"
- * @param {string} remote
- * @returns {string | null} - e.g., "zero/v0.24.0-canary.5" or null if none found
- */
-function findLatestCanaryTag(baseVersion, remote) {
-  console.log(
-    `Looking for latest canary tag for base version ${baseVersion}...`,
-  );
-  execute(`git fetch ${remote} --tags`, {stdio: 'pipe'});
-
-  const tagPattern = `zero/v${baseVersion}-canary.*`;
-  const tagsOutput = execute(`git tag -l "${tagPattern}"`, {stdio: 'pipe'});
-
-  if (!tagsOutput) {
-    return null;
-  }
-
-  const tags = tagsOutput.split('\n').filter(Boolean);
-  const attemptRegex = new RegExp(
-    `^zero/v${baseVersion.replace(/\./g, '\\.')}-canary\\.(\\d+)$`,
-  );
-
-  let maxAttempt = -1;
-  let latestTag = null;
-
-  for (const tag of tags) {
-    const match = tag.match(attemptRegex);
-    if (match) {
-      const attempt = parseInt(match[1]);
-      if (attempt > maxAttempt) {
-        maxAttempt = attempt;
-        latestTag = tag;
-      }
-    }
-  }
-
-  return latestTag;
 }
 
 /**
@@ -239,7 +166,7 @@ function parseArgs() {
     process.exit(1);
   }
 
-  const isCanary = !Boolean(options.stable);
+  const isCanary = !options.stable;
   const remote = options.remote || 'origin';
 
   return {
@@ -253,13 +180,10 @@ function parseArgs() {
   };
 }
 
-/**
- * Display help message
- * @param {Array<any>} optionDefinitions
- */
-function showHelp(optionDefinitions) {
+/** Display help message */
+function showHelp(optionDefinitions: Array<any>) {
   console.log(`
-Usage: node release.js [options]
+Usage: node release.ts [options]
 
 Creates canary or stable release builds for @rocicorp/zero.
 
@@ -278,22 +202,22 @@ Options:`);
 
   console.log(`
 Canary Examples:
-  node release.js --from main                          # Build canary from main
-  node release.js --from maint/zero/v0.24              # Build canary from maintenance branch
-  node release.js --from zero/v0.24.0                  # Build canary from specific tag
+  node release.ts --from main                          # Build canary from main
+  node release.ts --from maint/zero/v0.24              # Build canary from maintenance branch
+  node release.ts --from zero/v0.24.0                  # Build canary from specific tag
 
 Stable Release Examples:
-  node release.js --stable --from zero/v0.24.0-canary.3    # Promote specific canary to stable
+  node release.ts --stable --from zero/v0.24.0-canary.3    # Promote specific canary to stable
 
 Maintenance/cherry-pick workflow:
   1. Create a maintenance branch from tag: git checkout -b maint/zero/v0.24 zero/v0.24.0
-  2. Cherry-pick commits: git cherry-pick -x <commit-hash>
+  2. Cherry-pick commits: git cherry-pick <commit-hash>
   3. Push to origin: git push origin maint/zero/v0.24
-  4. Run: node release.js --from maint/zero/v0.24
+  4. Run: node release.ts --from maint/zero/v0.24
 
 Retrying after partial failure:
-  node release.js --from main --skip-git --skip-npm    # Retry just docker
-  node release.js --from main --skip-git               # Retry npm and docker
+  node release.ts --from main --skip-git --skip-npm    # Retry just docker
+  node release.ts --from main --skip-git               # Retry npm and docker
 `);
 }
 
@@ -469,12 +393,7 @@ try {
   execute('npm install');
   execute('npm run build');
   execute('npm run format');
-  execute('npx -y syncpack@13 fix-mismatches');
-
-  // Surface information about the code as image metadata (labels) for
-  // production / release management.
-  const {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} =
-    await getProtocolVersions();
+  execute('npx syncpack@13 fix-mismatches');
 
   execute('git status');
 
@@ -578,7 +497,7 @@ try {
     console.log(
       `  1. Update base version in package.json if needed: node bump-version.js X.Y.Z`,
     );
-    console.log(`  2. Run: node release.js --stable --from ${tagName}`);
+    console.log(`  2. Run: node release.ts --stable --from ${tagName}`);
     console.log(
       `  3. When ready for users: npm dist-tag add @rocicorp/zero@X.Y.Z latest`,
     );
@@ -588,6 +507,7 @@ try {
   }
   console.log(``);
 } catch (error) {
+  // oxlint-disable-next-line restrict-template-expressions
   console.error(`Error during execution: ${error}`);
   process.exit(1);
 }
