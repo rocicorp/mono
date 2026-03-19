@@ -99,8 +99,8 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     {
       "afterPermissions": undefined,
       "dbScansByQuery": {},
-      "elapsed": 1,
-      "end": 1003,
+      "elapsed": 13,
+      "end": 1017,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -135,8 +135,8 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     {
       "afterPermissions": undefined,
       "dbScansByQuery": {},
-      "elapsed": 1,
-      "end": 1005,
+      "elapsed": 13,
+      "end": 1031,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -184,8 +184,8 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     {
       "afterPermissions": undefined,
       "dbScansByQuery": {},
-      "elapsed": 1,
-      "end": 1007,
+      "elapsed": 13,
+      "end": 1045,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -231,8 +231,8 @@ test('runAst returns empty object for vendedRowCounts when no debug tracking', a
     {
       "afterPermissions": undefined,
       "dbScansByQuery": {},
-      "elapsed": 1,
-      "end": 1003,
+      "elapsed": 13,
+      "end": 1017,
       "readRowCount": 0,
       "readRowCountsByQuery": {},
       "readRows": undefined,
@@ -274,8 +274,8 @@ test('runAst basic structure and functionality', async () => {
     {
       "afterPermissions": undefined,
       "dbScansByQuery": {},
-      "elapsed": 1,
-      "end": 1003,
+      "elapsed": 13,
+      "end": 1017,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
