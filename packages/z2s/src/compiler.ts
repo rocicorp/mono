@@ -629,9 +629,11 @@ function selectIdent(server: ServerSpec, column: QualifiedColumn): SQLQuery {
     let needsNormalization = false;
     switch (serverType) {
       case 'timestamptz':
+      // @ts-expect-error Fallthrough intended
       case 'timetz':
         needsNormalization = true;
       // fallthrough
+
       case 'date':
       case 'time':
       case 'time without time zone':
@@ -644,7 +646,7 @@ function selectIdent(server: ServerSpec, column: QualifiedColumn): SQLQuery {
         // modular arithmetic to normalize to 0..86400000.
         const toMs = (epochExpr: SQLQuery): SQLQuery =>
           needsNormalization
-            ? sql`((${epochExpr})::bigint % 86400000 + 86400000) % 86400000`
+            ? sql`((${epochExpr})::bigint + 86400000) % 86400000`
             : epochExpr;
 
         if (serverColumnSchema.isArray) {

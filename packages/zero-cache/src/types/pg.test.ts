@@ -2,6 +2,7 @@ import {describe, expect, test} from 'vitest';
 import {
   millisecondsToPostgresTime,
   postgresTimeToMilliseconds,
+  postgresTypeConfig,
   timestampToFpMillis,
 } from './pg.ts';
 
@@ -345,6 +346,88 @@ describe('postgresTimeToMilliseconds', () => {
       ['double digit hour', '01:00:00', 3600000],
     ])('should handle PostgreSQL format: %s', (_caseName, input, expected) => {
       expect(postgresTimeToMilliseconds(input)).toBe(expected);
+    });
+  });
+
+  describe('timezone offset handling', () => {
+    test.each([
+      // UTC offset - no change
+      ['UTC +00', '12:00:00+00', 43200000],
+      // Positive offsets subtract from UTC
+      ['positive offset +01', '12:00:00+01', 39600000],
+      ['positive offset +05:30', '12:00:00+05:30', 23400000],
+      ['positive offset +14', '12:00:00+14', 79200000], // normalizes (wraps to 22:00)
+      // Negative offsets add to UTC
+      ['negative offset -05', '12:00:00-05', 61200000],
+      ['negative offset -05:30', '12:00:00-05:30', 63000000],
+      // Normalization: result < 0 wraps to previous day
+      ['midnight UTC+01 wraps to 23:00', '00:00:00+01', 82800000],
+      ['midnight UTC+05:30 wraps', '00:00:00+05:30', 66600000],
+      // Normalization: result > 24h wraps forward
+      ['23:00 UTC-02 wraps to 01:00 next day', '23:00:00-02', 3600000],
+    ])('should apply timezone offset: %s', (_caseName, input, expected) => {
+      expect(postgresTimeToMilliseconds(input)).toBe(expected);
+    });
+  });
+});
+
+describe('serializeTime (via postgresTypeConfig)', () => {
+  const {time, timetz} = postgresTypeConfig().types;
+
+  describe('string inputs are passed through unchanged', () => {
+    test.each([
+      ['plain time string', '12:34:56'],
+      ['time with milliseconds', '12:34:56.789'],
+      ['time with UTC offset', '12:34:56+00'],
+      ['time with positive offset', '12:34:56+05:30'],
+      ['time with negative offset', '12:34:56-08'],
+      ['midnight', '00:00:00'],
+    ])('%s', (_caseName, input) => {
+      expect(time.serialize(input)).toBe(input);
+      expect(timetz.serialize(input)).toBe(input);
+    });
+  });
+
+  describe('number inputs are converted via millisecondsToPostgresTime', () => {
+    test.each([
+      ['midnight (0)', 0, '00:00:00.000+00'],
+      ['1 hour', 3600000, '01:00:00.000+00'],
+      ['noon', 43200000, '12:00:00.000+00'],
+      [
+        'complex time',
+        12 * 3600000 + 34 * 60000 + 56 * 1000 + 789,
+        '12:34:56.789+00',
+      ],
+      ['max value', 86399999, '23:59:59.999+00'],
+    ])('%s', (_caseName, input, expected) => {
+      expect(time.serialize(input)).toBe(expected);
+      expect(timetz.serialize(input)).toBe(expected);
+    });
+  });
+
+  describe('unsupported input types throw', () => {
+    test.each([
+      ['boolean true', true],
+      ['boolean false', false],
+      ['plain object', {}],
+      ['array', []],
+      ['null', null],
+    ])('%s', (_caseName, input) => {
+      expect(() => time.serialize(input)).toThrow(/Unsupported type/);
+      expect(() => timetz.serialize(input)).toThrow(/Unsupported type/);
+    });
+  });
+
+  describe('round trip: serialize then parse', () => {
+    test.each([
+      ['midnight', 0],
+      ['one millisecond', 1],
+      ['noon', 43200000],
+      ['complex time', 45296789],
+      ['max', 86399999],
+    ])('%s', (_caseName, ms) => {
+      const serialized = time.serialize(ms) as string;
+      expect(postgresTimeToMilliseconds(serialized)).toBe(ms);
     });
   });
 });

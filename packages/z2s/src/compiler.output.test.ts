@@ -396,7 +396,7 @@ test('compile with timestamp (with timezone)', () => {
     {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
-        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
+        FROM (SELECT "timestampsTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000)::bigint + 86400000) % 86400000 as "timestampWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithTz" = to_timestamp($1::text::bigint / 1000.0)
          
@@ -427,7 +427,7 @@ test('compile with timestamp array (with timezone)', () => {
     {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
-        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
+        FROM (SELECT "timestampsTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000)::bigint + 86400000) % 86400000 as "timestampWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithTzArray" = ARRAY(
               SELECT to_timestamp(value::text::bigint / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
@@ -460,7 +460,7 @@ test('compile with timestamp (without timezone)', () => {
     {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
-        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
+        FROM (SELECT "timestampsTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000)::bigint + 86400000) % 86400000 as "timestampWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'
          
@@ -491,7 +491,7 @@ test('compile with timestamp (without timezone) array', () => {
     {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
-        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
+        FROM (SELECT "timestampsTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000)::bigint + 86400000) % 86400000 as "timestampWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithoutTzArray" = ARRAY(
               SELECT to_timestamp(value::text::bigint / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
@@ -518,7 +518,7 @@ test('compile with time/timetz projects milliseconds', () => {
     {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
-        FROM (SELECT "timesTable_0"."id" as "id",EXTRACT(EPOCH FROM "timesTable_0"."timeWithTz") * 1000 as "timeWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timesTable_0"."timeWithTzArray")) * 1000) as "timeWithTzArray",EXTRACT(EPOCH FROM "timesTable_0"."timeWithoutTz") * 1000 as "timeWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timesTable_0"."timeWithoutTzArray")) * 1000) as "timeWithoutTzArray"
+        FROM (SELECT "timesTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timesTable_0"."timeWithTz") * 1000)::bigint + 86400000) % 86400000 as "timeWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timesTable_0"."timeWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timeWithTzArray",EXTRACT(EPOCH FROM "timesTable_0"."timeWithoutTz") * 1000 as "timeWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timesTable_0"."timeWithoutTzArray")) * 1000) as "timeWithoutTzArray"
         FROM "timesTable" AS "timesTable_0"
          
          
