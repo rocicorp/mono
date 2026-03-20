@@ -222,6 +222,7 @@ BEGIN
     LIMIT 1 INTO target;
 
   -- Filter DDL updates that are not relevant to the shard (i.e. publications) when possible.
+  SELECT true INTO relevant;
 
   -- Note: ALTER TABLE statements may *remove* the table from the set of published
   --       tables, and there is no way to determine if the table "used to be" in the
@@ -234,10 +235,6 @@ BEGIN
       JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = c.relname
       WHERE c.oid = target.objid AND pb.pubname = ANY (publications)
       INTO relevant;
-    IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(tag, target);
-      RETURN;
-    END IF;
 
   ELSIF target.object_type = 'index' THEN
     SELECT ns.nspname AS "schema", c.relname AS "name" FROM pg_class AS c
@@ -246,30 +243,18 @@ BEGIN
       JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = ind.tablename
       WHERE c.oid = target.objid AND pb.pubname = ANY (publications)
       INTO relevant;
-    IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(tag, target);
-      RETURN;
-    END IF;
 
   ELSIF target.object_type = 'publication relation' THEN
     SELECT pb.pubname FROM pg_publication_rel AS rel
       JOIN pg_publication AS pb ON pb.oid = rel.prpubid
       WHERE rel.oid = target.objid AND pb.pubname = ANY (publications) 
       INTO relevant;
-    IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(tag, target);
-      RETURN;
-    END IF;
 
   ELSIF target.object_type = 'publication namespace' THEN
     SELECT pb.pubname FROM pg_publication_namespace AS ns
       JOIN pg_publication AS pb ON pb.oid = ns.pnpubid
       WHERE ns.oid = target.objid AND pb.pubname = ANY (publications) 
       INTO relevant;
-    IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(tag, target);
-      RETURN;
-    END IF;
 
   ELSIF target.object_type = 'schema' THEN
     SELECT ns.nspname AS "schema", c.relname AS "name" FROM pg_class AS c
@@ -277,21 +262,17 @@ BEGIN
       JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = c.relname
       WHERE ns.oid = target.objid AND pb.pubname = ANY (publications)
       INTO relevant;
-    IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(tag, target);
-      RETURN;
-    END IF;
 
   ELSIF target.object_type = 'publication' THEN
     SELECT 1 WHERE target.object_identity = ANY (publications)
       INTO relevant;
-    IF relevant IS NULL THEN
-      PERFORM ${schema}.notice_ignore(tag, target);
-      RETURN;
-    END IF;
 
   -- no-op CREATE IF NOT EXIST statements
   ELSIF tag LIKE 'CREATE %' AND target.object_type IS NULL THEN
+    relevant := NULL;
+  END IF;
+
+  IF relevant IS NULL THEN
     PERFORM ${schema}.notice_ignore(tag, target);
     RETURN;
   END IF;
