@@ -14,8 +14,10 @@ import {
   createEventTriggerStatements,
   ddlStartEventSchema,
   ddlUpdateEventSchema,
+  schemaSnapshotEventSchema,
   type DdlStartEvent,
   type DdlUpdateEvent,
+  type SchemaSnapshotEvent,
 } from './ddl.ts';
 
 const SLOT_NAME = 'ddl_test_slot';
@@ -70,11 +72,14 @@ describe('change-source/tables/ddl', () => {
     };
   });
 
-  async function drainReplicationMessages(num: number): Promise<Message[]> {
+  async function expectReplicationMessagesToMatchObject(
+    expected: unknown[],
+  ): Promise<Message[]> {
     const drained: Message[] = [];
-    while (drained.length < num) {
+    while (drained.length < expected.length) {
       drained.push(await messages.dequeue());
     }
+    expect(drained).toMatchObject(expected);
     return drained;
   }
 
@@ -1307,8 +1312,7 @@ describe('change-source/tables/ddl', () => {
         await tx.unsafe(query);
       });
 
-      const messages = await drainReplicationMessages(6);
-      expect(messages).toMatchObject([
+      const messages = await expectReplicationMessagesToMatchObject([
         {tag: 'begin'},
         {tag: 'relation'},
         {tag: 'insert'},
@@ -1337,6 +1341,47 @@ describe('change-source/tables/ddl', () => {
 
       msg = messages[4] as MessageMessage;
       expect(parseDDLUpdateEvent(msg)).toMatchObject(ddlUpdate);
+    },
+  );
+
+  test.each([
+    [
+      'schema snapshot',
+      `COMMENT ON PUBLICATION zero_sum IS 'foo'`,
+      {
+        context: {
+          query: `COMMENT ON PUBLICATION zero_sum IS 'foo'`,
+        },
+        type: 'schemaSnapshot',
+        version: 1,
+        event: {tag: 'COMMENT'},
+        schema: DDL_START.schema,
+      },
+    ],
+  ] satisfies [string, string, SchemaSnapshotEvent][])(
+    '%s',
+    async (_, query, schemaSnapshot) => {
+      await upstream.begin(async tx => {
+        await tx`INSERT INTO pub.boo(id) VALUES('1')`;
+        await tx.unsafe(query);
+      });
+
+      const messages = await expectReplicationMessagesToMatchObject([
+        {tag: 'begin'},
+        {tag: 'relation'},
+        {tag: 'insert'},
+        {
+          tag: 'message',
+          prefix: 'zap/0/ddl',
+          content: expect.any(Uint8Array),
+          flags: 1,
+          transactional: true,
+        },
+        {tag: 'commit'},
+      ]);
+
+      const msg = messages[3] as MessageMessage;
+      expect(parseSchemaSnapshotEvent(msg)).toMatchObject(schemaSnapshot);
     },
   );
 
@@ -1396,8 +1441,7 @@ describe('change-source/tables/ddl', () => {
       });
 
       // There should only be a ddlStart message, and no ddlUpdate message.
-      const messages = await drainReplicationMessages(5);
-      expect(messages).toMatchObject([
+      const messages = await expectReplicationMessagesToMatchObject([
         {tag: 'begin'},
         {tag: 'relation'},
         {tag: 'insert'},
@@ -1423,6 +1467,41 @@ describe('change-source/tables/ddl', () => {
     },
   );
 
+  test.each([
+    [
+      `COMMENT ON TABLE zero.foo IS 'whatever';`,
+      [/ignoring COMMENT.*zero.foo/],
+    ],
+    [
+      `COMMENT ON PUBLICATION nonzeropub IS 'whatever';`,
+      [/ignoring COMMENT.*nonzeropub/],
+    ],
+  ] satisfies [string, RegExp[]][])(
+    'ignore unrelated comments: %s',
+    async (query, expectedNotices) => {
+      while (notices.size()) {
+        await notices.dequeue();
+      }
+
+      await upstream.begin(async tx => {
+        await tx`INSERT INTO pub.boo(id) VALUES('1')`;
+        await tx.unsafe(query);
+      });
+
+      await expectReplicationMessagesToMatchObject([
+        {tag: 'begin'},
+        {tag: 'relation'},
+        {tag: 'insert'},
+        {tag: 'commit'},
+      ]);
+
+      for (const n of expectedNotices) {
+        const notice = await notices.dequeue();
+        expect(notice.message).toMatch(n);
+      }
+    },
+  );
+
   test('postgres documentation: current_query() is unreliable', async () => {
     await upstream`CREATE PROCEDURE procedure_name()
        LANGUAGE SQL
@@ -1433,8 +1512,7 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
     );
 
-    const messages = await drainReplicationMessages(10);
-    expect(messages).toMatchObject([
+    const messages = await expectReplicationMessagesToMatchObject([
       {tag: 'begin'},
       {
         tag: 'message',
@@ -1527,5 +1605,12 @@ function parseDDLUpdateEvent(msg: MessageMessage) {
   return v.parse(
     JSON.parse(new TextDecoder().decode(msg.content)),
     ddlUpdateEventSchema,
+  );
+}
+
+function parseSchemaSnapshotEvent(msg: MessageMessage) {
+  return v.parse(
+    JSON.parse(new TextDecoder().decode(msg.content)),
+    schemaSnapshotEventSchema,
   );
 }

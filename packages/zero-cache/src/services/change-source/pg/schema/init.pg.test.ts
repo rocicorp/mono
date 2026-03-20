@@ -13,7 +13,11 @@ import {
 } from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {id} from '../../../../types/sql.ts';
-import {ensureShardSchema, updateShardSchema} from './init.ts';
+import {
+  CURRENT_SCHEMA_VERSION,
+  ensureShardSchema,
+  updateShardSchema,
+} from './init.ts';
 import {addReplica, metadataPublicationName} from './shard.ts';
 
 const APP_ID = 'zappz';
@@ -21,8 +25,8 @@ const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 16,
-  schemaVersion: 16,
+  dataVersion: CURRENT_SCHEMA_VERSION,
+  schemaVersion: CURRENT_SCHEMA_VERSION,
   minSafeVersion: 1,
   lock: 'v',
 } as const;

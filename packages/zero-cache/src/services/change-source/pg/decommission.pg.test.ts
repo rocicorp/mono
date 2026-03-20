@@ -58,6 +58,7 @@ describe('decommission', () => {
       ['zerooutcs_drop_index_13'],
       ['zerooutcs_alter_publication_13'],
       ['zerooutcs_alter_schema_13'],
+      ['zerooutcs_comment_13'],
     ]);
     expect(
       await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zerooutcs%'`.values(),

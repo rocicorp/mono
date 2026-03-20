@@ -1809,6 +1809,155 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         },
       ],
     ],
+    [
+      'working ALTER PUBLICATION trigger not affected by surrounding COMMENTs',
+      /*sql*/ `
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt);
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill-completed'}],
+      ],
+      {foo: []},
+      [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              elemPgTypeClass: null,
+              notNull: false,
+              pos: 2,
+            },
+            flt: {
+              characterMaximumLength: null,
+              dataType: 'float8',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            newInt: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 4,
+            },
+          },
+        },
+      ],
+      [],
+    ],
+    [
+      'disable ALTER PUBLICATION trigger',
+      /*sql*/ `DROP EVENT TRIGGER ${APP_ID}_alter_publication_0;`,
+      [],
+      {},
+      [],
+      [],
+    ],
+    // Cases hereafter no longer have the ALTER PUBLICATION TRIGGER
+    [
+      'missing ALTER PUBLICATION trigger covered by surrounding COMMENTs',
+      /*sql*/ `
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", int, flt);
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+
+      -- Additional comments have no effect.
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      COMMENT ON PUBLICATION zero_some_public IS NULL;
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill-completed'}],
+      ],
+      {foo: []},
+      [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              elemPgTypeClass: null,
+              notNull: false,
+              pos: 2,
+            },
+            flt: {
+              characterMaximumLength: null,
+              dataType: 'float8',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            newInt: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 4,
+            },
+            int: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 5,
+            },
+          },
+        },
+      ],
+      [],
+    ],
   ] satisfies [
     name: string,
     statements: string,
