@@ -169,7 +169,16 @@ export function handleSubscriptionsFrom(
     });
 
     for await (const msg of subscription) {
-      subscriber.send<Notification>(['notify', msg]);
+      try {
+        subscriber.send<Notification>(['notify', msg]);
+      } catch (e) {
+        // This can happen in a race condition if the subscribing process
+        // is closed before the 'close' message is processed.
+        lc.warn?.(
+          `error sending replicator notification to ${subscriber.pid}: ${String(e)}`,
+          e,
+        );
+      }
     }
   });
 }
