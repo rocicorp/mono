@@ -59,7 +59,7 @@ export class TestDBs {
     database: string,
     onNotice?: OnNoticeFn,
     typeOpts: TypeOptions | false = {},
-  ): Promise<PostgresDB> {
+  ): Promise<PostgresDB & AsyncDisposable> {
     const exists = this.#dbs[database];
     if (exists !== undefined) {
       console.warn('dropping database', database);
@@ -84,7 +84,11 @@ export class TestDBs {
       ...(typeOpts ? postgresTypeConfig(typeOpts) : {}),
     });
     this.#dbs[database] = db;
-    return db;
+    return Object.assign(db, {
+      [Symbol.asyncDispose]: async () => {
+        await this.#drop(db);
+      },
+    });
   }
 
   async drop(...dbs: postgres.Sql[]) {

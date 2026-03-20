@@ -196,14 +196,29 @@ function formatCommonToSingularAndPlural(
   // being bool/json/numeric/whatever and the bindings try to coerce
   // the inputs to those types.
   const valuePlaceholder = arg.plural ? 'value' : `$${index}`;
+  let atTimeZone = ` AT TIME ZONE 'UTC'`;
   switch (arg.type) {
+    case 'timestamptz':
+    // @ts-expect-error Fallthrough intended
+    case 'timestamp with time zone':
+      atTimeZone = '';
+    // fallthrough
+
     case 'date':
     case 'timestamp':
     case 'timestamp without time zone':
-      return `to_timestamp(${valuePlaceholder}::text::bigint / 1000.0) AT TIME ZONE 'UTC'`;
-    case 'timestamptz':
-    case 'timestamp with time zone':
-      return `to_timestamp(${valuePlaceholder}::text::bigint / 1000.0)`;
+      return `to_timestamp(${valuePlaceholder}::text::bigint / 1000.0)${atTimeZone}`;
+
+    case 'timetz':
+    // @ts-expect-error Fallthrough intended
+    case 'time with time zone':
+      atTimeZone = '';
+    // fallthrough
+
+    case 'time':
+    case 'time without time zone':
+      return `(${valuePlaceholder}::text::int * interval'1ms')::time${atTimeZone}`;
+
     // uuid: cast to native uuid type for proper comparison and index usage
     case 'uuid':
       return `${valuePlaceholder}::text::uuid`;

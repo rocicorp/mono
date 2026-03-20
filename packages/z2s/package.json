@@ -11,6 +11,14 @@
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --type-aware src/",
     "test": "vitest run",
+    "test:no-pg": "vitest run --project z2s/no-pg",
+    "test:no-pg:watch": "vitest --project z2s/no-pg",
+    "test:pg15": "vitest run --project z2s/pg-15",
+    "test:pg15:watch": "vitest --project z2s/pg-15",
+    "test:pg16": "vitest run --project z2s/pg-16",
+    "test:pg16:watch": "vitest --project z2s/pg-16",
+    "test:pg17": "vitest run --project z2s/pg-17",
+    "test:pg17:watch": "vitest --project z2s/pg-17",
     "test:watch": "vitest watch"
   },
   "dependencies": {

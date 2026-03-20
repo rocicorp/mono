@@ -625,20 +625,43 @@ function selectIdent(server: ServerSpec, column: QualifiedColumn): SQLQuery {
       server.mapper.columnName(column.table.zql, column.zql)
     ];
   const serverType = serverColumnSchema.type;
-  if (
-    !serverColumnSchema.isEnum &&
-    (serverType === 'date' ||
-      serverType === 'timestamp' ||
-      serverType === 'timestamp without time zone' ||
-      serverType === 'timestamptz' ||
-      serverType === 'timestamp with time zone')
-  ) {
-    if (serverColumnSchema.isArray) {
-      // Map EXTRACT(EPOCH FROM ...) * 1000 over array elements
-      return sql`ARRAY(SELECT EXTRACT(EPOCH FROM unnest(${colIdent(server, column)})) * 1000) as ${sql.ident(column.zql)}`;
+  if (!serverColumnSchema.isEnum) {
+    let needsNormalization = false;
+    switch (serverType) {
+      case 'timestamptz':
+      // @ts-expect-error Fallthrough intended
+      case 'timetz':
+        needsNormalization = true;
+      // fallthrough
+
+      case 'date':
+      case 'time':
+      case 'time without time zone':
+      case 'time with time zone':
+      case 'timestamp':
+      case 'timestamp without time zone':
+      case 'timestamp with time zone': {
+        // EXTRACT(EPOCH FROM timetz) can be negative when the UTC offset is
+        // positive (e.g. 01:00+02 = 23:00 UTC prev day = -3600s). Wrap with
+        // modular arithmetic to normalize to 0..86400000.
+        const toMs = (epochExpr: SQLQuery): SQLQuery =>
+          needsNormalization
+            ? sql`((${epochExpr})::bigint + 86400000) % 86400000`
+            : epochExpr;
+
+        if (serverColumnSchema.isArray) {
+          return sql`ARRAY(SELECT ${toMs(
+            sql`EXTRACT(EPOCH FROM unnest(${colIdent(server, column)})) * 1000`,
+          )}) as ${sql.ident(column.zql)}`;
+        }
+
+        return sql`${toMs(
+          sql`EXTRACT(EPOCH FROM ${colIdent(server, column)}) * 1000`,
+        )} as ${sql.ident(column.zql)}`;
+      }
     }
-    return sql`EXTRACT(EPOCH FROM ${colIdent(server, column)}) * 1000 as ${sql.ident(column.zql)}`;
   }
+
   return sql`${colIdent(server, column)} as ${sql.ident(column.zql)}`;
 }
 
