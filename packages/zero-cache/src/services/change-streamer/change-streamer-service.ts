@@ -25,7 +25,7 @@ import {
 import {
   publishReplicationError,
   replicationStatusError,
-  ReplicationStatusPublisher,
+  type ReplicationStatusPublisher,
 } from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
