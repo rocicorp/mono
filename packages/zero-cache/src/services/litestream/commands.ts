@@ -208,6 +208,9 @@ function replicaIsValid(
       snapshot,
     );
     return true;
+  } catch (e) {
+    lc.error?.('Error while validating restored replica', e);
+    return false;
   } finally {
     db.close();
   }
