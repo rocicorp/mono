@@ -1,6 +1,6 @@
 import type {SQLQuery} from '@databases/sql';
 import type {JSONValue} from 'postgres';
-import {beforeAll, describe, expect, test} from 'vitest';
+import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {formatPgInternalConvert, sql, sqlConvertColumnArg} from './sql.ts';
@@ -21,6 +21,10 @@ beforeAll(async () => {
       tags TEXT[]
     );
   `);
+});
+
+afterAll(async () => {
+  await testDBs.drop(pg);
 });
 
 describe('SQL builder with PostgreSQL', () => {
@@ -163,8 +167,15 @@ describe('SQL builder with PostgreSQL', () => {
   ] as const)(
     'numeric $type inserts round-trip as milliseconds',
     async ({type, value}) => {
+      await using pg = await testDBs.create(
+        `${DB_NAME}_${type}`,
+        undefined,
+        {},
+      );
+
       const table = `round_trip_${type}`;
       await pg.unsafe(`
+        SET TIME ZONE 'UTC';
         DROP TABLE IF EXISTS "${table}";
         CREATE TABLE "${table}" (
           value ${type.toUpperCase()} NOT NULL

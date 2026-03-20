@@ -81,6 +81,17 @@ function serializeTimestamp(val: unknown): string {
 }
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function serializeTime(x: unknown, type: 'time' | 'timetz'): string {
+  switch (typeof x) {
+    case 'string':
+      return x; // Let Postgres parse it
+    case 'number':
+      return millisecondsToPostgresTime(x);
+  }
+  throw new Error(`Unsupported type "${typeof x}" for ${type}: ${x}`);
+}
+
 export function millisecondsToPostgresTime(milliseconds: number): string {
   if (milliseconds < 0) {
     throw new Error('Milliseconds cannot be negative');
@@ -243,18 +254,17 @@ export const postgresTypeConfig = ({sendStringAsJson}: TypeOptions = {}) => ({
     time: {
       to: TIME,
       from: [TIME, TIMETZ],
-      serialize: (x: unknown) => {
-        switch (typeof x) {
-          case 'string':
-            return x; // Let Postgres parse it
-          case 'number':
-            return millisecondsToPostgresTime(x);
-        }
-
-        throw new Error(`Unsupported type "${typeof x}" for time: ${x}`);
-      },
+      serialize: (x: unknown) => serializeTime(x, 'time'),
       parse: postgresTimeToMilliseconds,
     },
+
+    timetz: {
+      to: TIMETZ,
+      from: [TIME, TIMETZ],
+      serialize: (x: unknown) => serializeTime(x, 'timetz'),
+      parse: postgresTimeToMilliseconds,
+    },
+
     // The DATE type is stored directly as the PG normalized date string.
     date: {
       to: DATE,
