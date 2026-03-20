@@ -1,6 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import {DatabaseInitError} from '../../../zqlite/src/db.ts';
+import {Database, DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
@@ -18,7 +18,10 @@ import {
   CHANGE_STREAMER_APP_NAME,
 } from '../services/change-streamer/schema/tables.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
-import {replicationStatusError} from '../services/replicator/replication-status.ts';
+import {
+  replicationStatusError,
+  ReplicationStatusPublisher,
+} from '../services/replicator/replication-status.ts';
 import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -99,6 +102,10 @@ export default async function runWorker(
               context,
             );
 
+      const replicationStatusPublisher = new ReplicationStatusPublisher(
+        new Database(lc, replica.file, {readonly: true}),
+      );
+
       changeStreamer = await initializeStreamer(
         lc,
         shard,
@@ -107,6 +114,7 @@ export default async function runWorker(
         protocol,
         changeDB,
         changeSource,
+        replicationStatusPublisher,
         subscriptionState,
         autoReset ?? false,
         backPressureLimitHeapProportion,

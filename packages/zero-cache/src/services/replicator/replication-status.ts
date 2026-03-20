@@ -9,7 +9,7 @@ import type {
   ReplicationStatusEvent,
   Status,
 } from '../../../../zero-events/src/status.ts';
-import type {Database} from '../../../../zqlite/src/db.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {computeZqlSpecs, listIndexes} from '../../db/lite-tables.ts';
 import type {LiteTableSpec} from '../../db/specs.ts';
 import {
@@ -24,6 +24,10 @@ export class ReplicationStatusPublisher {
   readonly #db: Database;
   readonly #publish: typeof publishCriticalEvent;
   #timer: NodeJS.Timeout | undefined;
+
+  static forTesting(lc: LogContext = createSilentLogContext(), db?: Database) {
+    return new ReplicationStatusPublisher(db ?? new Database(lc, ':memory:'));
+  }
 
   constructor(db: Database, publishFn = publishCriticalEvent) {
     this.#db = db;

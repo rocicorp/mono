@@ -25,6 +25,7 @@ import {
 import {
   publishReplicationError,
   replicationStatusError,
+  type ReplicationStatusPublisher,
 } from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
@@ -59,6 +60,7 @@ export async function initializeStreamer(
   discoveryProtocol: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
+  replicationStatusPublisher: ReplicationStatusPublisher,
   subscriptionState: SubscriptionState,
   autoReset: boolean,
   backPressureLimitHeapProportion: number,
@@ -86,6 +88,7 @@ export async function initializeStreamer(
     changeDB,
     replicaVersion,
     changeSource,
+    replicationStatusPublisher,
     autoReset,
     backPressureLimitHeapProportion,
     flowControlConsensusPaddingSeconds,
@@ -252,6 +255,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #source: ChangeSource;
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
+  readonly #replicationStatusPublisher: ReplicationStatusPublisher;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
@@ -284,6 +288,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     changeDB: PostgresDB,
     replicaVersion: string,
     source: ChangeSource,
+    replicationStatusPublisher: ReplicationStatusPublisher,
     autoReset: boolean,
     backPressureLimitHeapProportion: number,
     flowControlConsensusPaddingSeconds: number,
@@ -310,6 +315,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#forwarder = new Forwarder(lc, {
       flowControlConsensusPaddingSeconds,
     });
+    this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
   }
@@ -342,6 +348,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
         this.#stream = stream;
         this.#state.resetBackoff();
+        this.#replicationStatusPublisher.publish(
+          this.#lc,
+          'Replicating',
+          `Replicating from ${lastWatermark}`,
+        );
         watermark = null;
 
         for await (const change of stream.changes) {
