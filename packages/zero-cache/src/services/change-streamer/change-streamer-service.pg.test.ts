@@ -15,6 +15,7 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import {ReplicationStatusPublisher} from '../replicator/replication-status.ts';
 import {
   getSubscriptionState,
   initReplicationState,
@@ -76,6 +77,7 @@ describe('change-streamer/service', () => {
             acks: {push: status => acks.enqueue(status)},
           }),
       },
+      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       true,
       0.04,
@@ -908,6 +910,7 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
+      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       true,
       0.04,
@@ -934,6 +937,7 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
+      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       true,
       0.04,
@@ -957,6 +961,7 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
+      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       true,
       0.04,
@@ -993,6 +998,7 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
+      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       true,
       0.04,
@@ -1031,6 +1037,7 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
+      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       true,
       0.04,
@@ -1086,6 +1093,7 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
+      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       true,
       0.04,
@@ -1158,6 +1166,7 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
+      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       true,
       0.04,
