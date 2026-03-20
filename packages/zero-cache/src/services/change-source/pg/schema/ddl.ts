@@ -60,9 +60,59 @@ export const ddlUpdateEventSchema = ddlEventSchema.extend({
 
 export type DdlUpdateEvent = v.Infer<typeof ddlUpdateEventSchema>;
 
+/**
+ * The `schemaSnapshot` message is a snapshot of a schema taken in response to
+ * a `COMMENT ON PUBLICATION` command, which is a hook recognized by zero
+ * to manually emit schema snapshots to support detection of schema changes
+ * from `ALTER PUBLICATION` commands on supabase, which does not fire event
+ * triggers for them (https://github.com/supabase/supautils/issues/123).
+ *
+ * The hook is exercised by bookmarking the publication change with
+ * `COMMENT ON PUBLICATION` statements within e.g.
+ *
+ * ```sql
+ * BEGIN;
+ * COMMENT ON PUBLICATION my_publication IS 'whatever';
+ * ALTER PUBLICATION my_publication ...;
+ * COMMENT ON PUBLICATION my_publication IS 'whatever';
+ * COMMIT;
+ * ```
+ *
+ * The `change-source` will perform the diff between a `schemaSnapshot`
+ * events and its preceding `schemaSnapshot` (or `ddlUpdate`) within the
+ * transaction.
+ *
+ * In the case where event trigger support is missing, this results in
+ * diffing the `schemaSnapshot`s before and after the `ALTER PUBLICATION`
+ * statement, thus effecting the same logic that would have been exercised
+ * between the `ddlStart` and `ddlEvent` events fired by a database with
+ * fully functional event triggers.
+ *
+ * Note that if the same transaction is run on a database that *does*
+ * support event triggers on `ALTER PUBLICATION` statements, the sequence
+ * of emitted messages will be:
+ *
+ * * `schemaSnapshot`
+ * * `ddlStart`
+ * * `ddlUpdate`
+ * * `schemaSnapshot`
+ *
+ * Since `schemaSnapshot` messages are diffed with the preceding
+ * `schemaSnapshot` or `ddlUpdate` event (if any), there will be no schema
+ * difference between the `ddlUpdate` and the second `schemaSnapshot`, and
+ * thus the extra `COMMENT` statements will effectively be no-ops.
+ */
+export const schemaSnapshotEventSchema = ddlEventSchema.extend({
+  type: v.literal('schemaSnapshot'),
+  event: v.object({tag: v.string()}),
+});
+
+export type SchemaSnapshotEvent = v.Infer<typeof schemaSnapshotEventSchema>;
+
 export const replicationEventSchema = v.union(
   ddlStartEventSchema,
   ddlUpdateEventSchema,
+  schemaSnapshotEventSchema,
 );
 
 export type ReplicationEvent = v.Infer<typeof replicationEventSchema>;
@@ -162,6 +212,8 @@ DECLARE
   schema_specs TEXT;
   message TEXT;
   event TEXT;
+  event_type TEXT;
+  event_prefix TEXT;
 BEGIN
   publications := ARRAY[${lit(publications)}];
 
@@ -230,13 +282,34 @@ BEGIN
       RETURN;
     END IF;
 
+  ELSIF target.object_type = 'publication' THEN
+    SELECT 1 WHERE target.object_identity = ANY (publications)
+      INTO relevant;
+    IF relevant IS NULL THEN
+      PERFORM ${schema}.notice_ignore(tag, target);
+      RETURN;
+    END IF;
+
   -- no-op CREATE IF NOT EXIST statements
   ELSIF tag LIKE 'CREATE %' AND target.object_type IS NULL THEN
     PERFORM ${schema}.notice_ignore(tag, target);
     RETURN;
   END IF;
 
-  RAISE INFO 'Creating ddlUpdate for % %', tag, row_to_json(target);
+  IF tag = 'COMMENT' THEN
+    -- Only make schemaSnapshots for COMMENT ON PUBLICATION
+    IF target.object_type != 'publication' THEN
+      PERFORM ${schema}.notice_ignore(tag, target);
+      RETURN;
+    END IF;
+    event_type := 'schemaSnapshot';
+    event_prefix := '/ddl';
+  ELSE
+    event_type := 'ddlUpdate';
+    event_prefix := '';  -- TODO: Use '/ddl' for both when rollback safe
+  END IF;
+
+  RAISE INFO 'Creating % for % %', event_type, tag, row_to_json(target);
 
   -- Construct and emit the DdlUpdateEvent message.
   SELECT json_build_object('tag', tag) INTO event;
@@ -244,7 +317,7 @@ BEGIN
   SELECT ${schema}.schema_specs() INTO schema_specs;
 
   SELECT json_build_object(
-    'type', 'ddlUpdate',
+    'type', event_type,
     'version', ${PROTOCOL_VERSION},
     'schema', schema_specs::json,
     'event', event::json,
@@ -253,7 +326,7 @@ BEGIN
 
   PERFORM pg_logical_emit_message(true, ${lit(
     `${appID}/${shardNum}`,
-  )}, message);
+  )} || event_prefix, message);
 END
 $$ LANGUAGE plpgsql;
 `;
@@ -295,7 +368,7 @@ CREATE EVENT TRIGGER ${sharded(`${appID}_ddl_start`)}
 `);
 
   // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
-  for (const tag of TAGS) {
+  for (const tag of [...TAGS, 'COMMENT']) {
     const tagID = tag.toLowerCase().replace(' ', '_');
     triggers.push(/*sql*/ `
 CREATE OR REPLACE FUNCTION ${schema}.emit_${tagID}() 
@@ -326,7 +399,7 @@ export function dropEventTriggerStatements(
   `);
 
   // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
-  for (const tag of TAGS) {
+  for (const tag of [...TAGS, 'COMMENT']) {
     const tagID = tag.toLowerCase().replace(' ', '_');
     stmts.push(/*sql*/ `
       DROP EVENT TRIGGER IF EXISTS ${id(`${appID}_${tagID}_${shardID}`)};

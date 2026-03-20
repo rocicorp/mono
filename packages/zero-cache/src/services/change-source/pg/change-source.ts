@@ -81,7 +81,11 @@ import type {
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe} from './logical-replication/stream.ts';
 import {fromBigInt, toStateVersionString, type LSN} from './lsn.ts';
-import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.ts';
+import {
+  replicationEventSchema,
+  type DdlUpdateEvent,
+  type SchemaSnapshotEvent,
+} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
 import {
   getPublicationInfo,
@@ -662,7 +666,7 @@ class ChangeMaker {
       const errorDetails: JSONObject = {error: message};
       if (err instanceof UnsupportedSchemaChangeError) {
         errorDetails.reason = err.description;
-        errorDetails.context = err.ddlUpdate.context;
+        errorDetails.context = err.event.context;
       } else {
         errorDetails.reason = String(err);
       }
@@ -688,7 +692,7 @@ class ChangeMaker {
           err,
         )}`,
         err instanceof UnsupportedSchemaChangeError
-          ? err.ddlUpdate.context
+          ? err.event.context
           : // 'content' can be a large byte Buffer. Exclude it from logging output.
             {...msg, content: undefined},
       );
@@ -747,13 +751,21 @@ class ChangeMaker {
         return [['data', {...msg, relations: msg.relations.map(makeRelation)}]];
 
       case 'message':
-        if (msg.prefix !== this.#shardPrefix) {
+        if (!msg.prefix.startsWith(this.#shardPrefix)) {
           this.#lc.debug?.('ignoring message for different shard', msg.prefix);
           return [];
         }
-        return this.#handleCustomMessage(msg);
+        switch (msg.prefix.substring(this.#shardPrefix.length)) {
+          case '': // Legacy prefix
+          case '/ddl':
+            return this.#handleDdlMessage(msg);
+          default:
+            this.#lc.debug?.('ignoring unknown message type', msg.prefix);
+            return [];
+        }
 
       case 'commit':
+        this.#lastSnapshotInTx = undefined;
         return [
           [
             'commit',
@@ -777,23 +789,48 @@ class ChangeMaker {
   }
 
   #preSchema: PublishedSchema | undefined;
+  #lastSnapshotInTx: PublishedSchema | undefined;
 
-  #handleCustomMessage(msg: MessageMessage) {
+  #handleDdlMessage(msg: MessageMessage) {
     const event = this.#parseReplicationEvent(msg.content);
     // Cancel manual schema adjustment timeouts when an upstream schema change
     // is about to happen, so as to avoid interfering / redundant work.
     clearTimeout(this.#replicaIdentityTimer);
 
-    if (event.type === 'ddlStart') {
-      // Store the schema in order to diff it with a potential ddlUpdate.
-      this.#preSchema = event.schema;
-      return [];
+    let previousSchema: PublishedSchema | null;
+    const {type} = event;
+    switch (type) {
+      case 'ddlStart':
+        // Store the schema in order to diff it with a subsequent ddlUpdate.
+        this.#preSchema = event.schema;
+        return [];
+      case 'ddlUpdate':
+        // guaranteed by event triggers
+        previousSchema = must(
+          this.#preSchema,
+          `ddlUpdate received without a ddlStart`,
+        );
+        break;
+      case 'schemaSnapshot':
+        previousSchema = this.#lastSnapshotInTx ?? null;
+        break;
+      default: // Ignore unknown types for forwards compatibility
+        this.#lc.info?.(`ignoring unknown ddl message type: ${type}`);
+        return [];
     }
-    // ddlUpdate
-    const changes = this.#makeSchemaChanges(
-      must(this.#preSchema, `ddlUpdate received without a ddlStart`),
-      event,
-    ).map(change => ['data', change] satisfies Data);
+
+    // Store the schema (from either a ddlUpdate or schemaSnapshot) to
+    // diff against the next schemaSnapshot.
+    this.#lastSnapshotInTx = event.schema;
+    if (!previousSchema) {
+      this.#lc.info?.(`received ${msg.prefix}/${type} event`);
+      return []; // First schemaSnapshot in the tx.
+    }
+    this.#lc.info?.(`processing ${msg.prefix}/${type} event`, event);
+
+    const changes = this.#makeSchemaChanges(previousSchema, event).map(
+      change => ['data', change] satisfies Data,
+    );
 
     this.#lc
       .withContext('tag', event.event.tag)
@@ -845,7 +882,7 @@ class ChangeMaker {
    */
   #makeSchemaChanges(
     preSchema: PublishedSchema,
-    update: DdlUpdateEvent,
+    update: DdlUpdateEvent | SchemaSnapshotEvent,
   ): SchemaChange[] {
     try {
       const [prevTbl, prevIdx] = specsByID(preSchema);
@@ -912,7 +949,8 @@ class ChangeMaker {
         };
         if (!update.event.tag.startsWith('CREATE')) {
           // Tables introduced to the publication via ALTER statements
-          // must be backfilled.
+          // or the COMMENT statement (from schemaSnapshots) must be
+          // backfilled.
           createTable.backfill = mapValues(spec.columns, ({pos: attNum}) => ({
             attNum,
           })) satisfies Record<string, ColumnMetadata>;
@@ -992,10 +1030,11 @@ class ChangeMaker {
       }
     }
 
-    // All columns introduced by a publication change require backfill.
+    // All columns introduced by a publication change require backfill
+    // (which appear as ALTER PUBLICATION or COMMENT tags).
     // Columns created by ALTER TABLE, on the other hand, only require
     // backfill if they have non-constant defaults.
-    const alwaysBackfill = ddlTag === 'ALTER PUBLICATION';
+    const alwaysBackfill = ddlTag !== 'ALTER TABLE';
 
     // ADD
     for (const id of added) {
@@ -1325,11 +1364,11 @@ function makeRelation(relation: PostgresRelation): MessageRelation {
 class UnsupportedSchemaChangeError extends Error {
   readonly name = 'UnsupportedSchemaChangeError';
   readonly description: string;
-  readonly ddlUpdate: DdlUpdateEvent;
+  readonly event: DdlUpdateEvent | SchemaSnapshotEvent;
 
   constructor(
     description: string,
-    ddlUpdate: DdlUpdateEvent,
+    event: DdlUpdateEvent | SchemaSnapshotEvent,
     options?: ErrorOptions,
   ) {
     super(
@@ -1337,7 +1376,7 @@ class UnsupportedSchemaChangeError extends Error {
       options,
     );
     this.description = description;
-    this.ddlUpdate = ddlUpdate;
+    this.event = event;
   }
 }
 

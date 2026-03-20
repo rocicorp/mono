@@ -239,7 +239,16 @@ function getIncrementalMigrations(
 
     // Upgrade DDL trigger to fire on all ALTER TABLE statements
     // to catch the *removal* of a table from the published set.
-    16: {
+    // (subsumed by v17)
+    16: {},
+
+    // Upgrade DDL triggers to support the COMMENT ON PUBLICATION hook for
+    // working around the lack of event trigger support for PUBLICATION
+    // changes in supabase.
+    //
+    // This also adds forwards-compatible support for hierarchical logical
+    // message prefixes and unknown ddl event types.
+    17: {
       migrateSchema: async (lc, sql) => {
         const [{publications}] = await sql<{publications: string[]}[]>`
           SELECT publications FROM ${sql(shardConfigTable)}`;
@@ -249,6 +258,15 @@ function getIncrementalMigrations(
     },
   };
 }
+
+// Referenced in tests.
+export const CURRENT_SCHEMA_VERSION = Object.keys(
+  getIncrementalMigrations({
+    appID: 'unused',
+    shardNum: 0,
+    publications: ['foo'],
+  }),
+).reduce((prev, curr) => Math.max(prev, parseInt(curr)), 0);
 
 export async function decommissionLegacyShard(
   lc: LogContext,
