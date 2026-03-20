@@ -91,14 +91,13 @@ function getIncrementalMigrations(
       minSafeVersion: 3,
     },
 
-    // v5 changes the upstream schema organization from "zero_{SHARD_ID}" to
+    // v5: changes the upstream schema organization from "zero_{SHARD_ID}" to
     // the "{APP_ID}_0". An incremental migration indicates that the previous
     // SHARD_ID was "0" and the new APP_ID is "zero" (i.e. the default values
     // for those options). In this case, the upstream format is identical, and
     // no migration is necessary. However, the version is bumped to v5 to
     // indicate that it was created with the {APP_ID} configuration and should
     // not be decommissioned as a legacy shard.
-    5: {},
 
     6: {
       migrateSchema: async (lc, sql) => {
@@ -172,13 +171,12 @@ function getIncrementalMigrations(
       },
     },
 
-    // Fixes field ordering of compound indexes. This incremental migration
+    // v9: Fixes field ordering of compound indexes. This incremental migration
     // only fixes indexes resulting from new schema changes. A full resync is
     // required to fix existing indexes.
     //
     // The migration has been subsumed by the identical logic for migrating
     // to v12 (i.e. a trigger upgrade).
-    9: {},
 
     // Adds the `mutations` table used to track mutation results.
     10: {
@@ -191,13 +189,11 @@ function getIncrementalMigrations(
       },
     },
 
-    // Formerly dropped the schemaVersions table, but restored in the v13
+    // v11: Formerly dropped the schemaVersions table, but restored in the v13
     // migration for rollback safety.
-    11: {},
 
-    // Upgrade DDL trigger to query schemaOID, needed information for auto-backfill.
+    // v12: Upgrade DDL trigger to query schemaOID, needed information for auto-backfill.
     // (subsumed by v14)
-    12: {},
 
     // Recreates the legacy schemaVersions table that was prematurely dropped
     // in the (former) v11 migration. It needs to remain present for at least one
@@ -222,9 +218,8 @@ function getIncrementalMigrations(
       },
     },
 
-    // Upgrade DDL trigger to log more info to PG logs.
+    // v14: Upgrade DDL trigger to log more info to PG logs.
     // (subsumed by v16)
-    14: {},
 
     // Add initialSyncContext column to replicas table.
     15: {
@@ -237,18 +232,20 @@ function getIncrementalMigrations(
       },
     },
 
-    // Upgrade DDL trigger to fire on all ALTER TABLE statements
+    // v16: Upgrade DDL trigger to fire on all ALTER TABLE statements
     // to catch the *removal* of a table from the published set.
     // (subsumed by v17)
-    16: {},
 
-    // Upgrade DDL triggers to support the COMMENT ON PUBLICATION hook for
+    // v17: Upgrade DDL triggers to support the COMMENT ON PUBLICATION hook for
     // working around the lack of event trigger support for PUBLICATION
     // changes in supabase.
     //
     // This also adds forwards-compatible support for hierarchical logical
     // message prefixes and unknown ddl event types.
-    17: {
+    // (subsued by v18)
+
+    // v18: Pure refactoring of event trigger code.
+    18: {
       migrateSchema: async (lc, sql) => {
         const [{publications}] = await sql<{publications: string[]}[]>`
           SELECT publications FROM ${sql(shardConfigTable)}`;
