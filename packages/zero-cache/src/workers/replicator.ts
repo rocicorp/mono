@@ -11,13 +11,13 @@ import type {
   Replicator,
 } from '../services/replicator/replicator.ts';
 import {
-  applyPragmas,
-  type PragmaConfig,
-} from '../services/replicator/write-worker-client.ts';
-import {
   getAscendingEvents,
   recordEvent,
 } from '../services/replicator/schema/replication-state.ts';
+import {
+  applyPragmas,
+  type PragmaConfig,
+} from '../services/replicator/write-worker-client.ts';
 import type {Worker} from '../types/processes.ts';
 
 export const replicaFileModeSchema = v.literalUnion(
@@ -169,7 +169,23 @@ export function handleSubscriptionsFrom(
     });
 
     for await (const msg of subscription) {
-      subscriber.send<Notification>(['notify', msg]);
+      try {
+        subscriber.send<Notification>(['notify', msg]);
+      } catch (e) {
+        const log =
+          e instanceof Error &&
+          'code' in e &&
+          // This can happen in a race condition if the subscribing process
+          // is closed before the 'close' message is processed.
+          e.code === 'ERR_IPC_CHANNEL_CLOSED'
+            ? 'warn'
+            : 'error';
+
+        lc[log]?.(
+          `error sending replicator notification to ${subscriber.pid}: ${String(e)}`,
+          e,
+        );
+      }
     }
   });
 }
