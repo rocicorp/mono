@@ -400,6 +400,7 @@ export class Storer implements Service {
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
         const {promise, resolve, reject} = resolver<ReplicationState>();
+        void promise.then(() => {}); // handle rejections before the await
         tx = {
           pool: new TransactionPool(
             this.#lc.withContext('watermark', watermark),
@@ -499,15 +500,21 @@ export class Storer implements Service {
     );
     reader.run(this.#db);
 
-    // Ensure that the transaction has started (and is thus holding a snapshot
-    // of the database) before continuing on to commit more changes. This is
-    // done by performing a single read on the db, which determines the
-    // snapshot for the REPEATABLE_READ transaction.
-    const [{lastWatermark}] = await reader.processReadTask(
-      sql => sql<ReplicationState[]>`
+    let lastWatermark: string | undefined;
+    try {
+      // Ensure that the transaction has started (and is thus holding a snapshot
+      // of the database) before continuing on to commit more changes. This is
+      // done by performing a single read on the db, which determines the
+      // snapshot for the REPEATABLE_READ transaction.
+      [{lastWatermark}] = await reader.processReadTask(
+        sql => sql<ReplicationState[]>`
         SELECT * FROM ${this.#cdc('replicationState')}
       `,
-    );
+      );
+    } catch (e) {
+      subs.map(({subscriber}) => subscriber.fail(e));
+      throw e;
+    }
 
     // Run the actual catchup queries in the background. Errors are handled in
     // #catchup() by disconnecting the associated subscriber.
