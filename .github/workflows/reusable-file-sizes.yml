@@ -69,7 +69,7 @@ jobs:
           --project zero \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
-          --github-actions '${{ github.token }}' \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --start-point main \
           --threshold-measure file-size \
           --threshold-test percentage \
@@ -88,7 +88,7 @@ jobs:
           --project zero \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
-          --github-actions '${{ github.token }}' \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --ci-id size \
           --branch "${{ inputs.head_ref }}" \
           --start-point "${{ inputs.base_ref }}" \
