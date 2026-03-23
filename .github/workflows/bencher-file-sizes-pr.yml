@@ -1,0 +1,20 @@
+name: Bencher File Sizes PR
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+jobs:
+  file_sizes:
+    name: File Sizes PR
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/reusable-file-sizes.yml
+    with:
+      is_pr: true
+      base_ref: ${{ github.event.pull_request.base.ref }}
+      head_ref: ${{ github.event.pull_request.head.ref }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+    secrets:
+      BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}

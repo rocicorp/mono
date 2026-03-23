@@ -5,54 +5,6 @@ on:
     branches: main
 
 jobs:
-  file_sizes:
-    name: File Sizes
-    permissions:
-      checks: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
-          cache: 'npm'
-      - uses: bencherdev/bencher@main
-
-      - run: npm ci
-      - run: npm run build
-
-      - name: Build npm zero package
-        working-directory: packages/zero
-        run: |
-          npm pack --pack-destination ./out
-          mv ./out/*.tgz ./out/zero-package.tgz
-
-      - name: Build zero client single file package
-        working-directory: packages/zero
-        run: npx tsx tool/build.ts --bundle-sizes
-
-      - name: Compress
-        working-directory: packages/zero
-        run: brotli out/zero.js
-
-      - name: Upload benchmarks results to bencher.dev
-        working-directory: packages/zero
-        run: |
-          bencher run \
-          --project zero \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --adapter json \
-          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --start-point main \
-          --threshold-measure file-size \
-          --threshold-test percentage \
-          --threshold-upper-boundary 0.02 \
-          --threshold-max-sample-size 2 \
-          --err \
-          --file-size out/zero-package.tgz \
-          --file-size out/zero.js.br \
-          --file-size out/zero.js
-
   playwright-install:
     name: Install Playwright
     runs-on: self-hosted
