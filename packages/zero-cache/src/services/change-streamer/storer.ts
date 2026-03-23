@@ -400,7 +400,7 @@ export class Storer implements Service {
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
         const {promise, resolve, reject} = resolver<ReplicationState>();
-        void promise.then(() => {}); // handle rejections before the await
+        void promise.catch(() => {}); // handle rejections before the await
         tx = {
           pool: new TransactionPool(
             this.#lc.withContext('watermark', watermark),
