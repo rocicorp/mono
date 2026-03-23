@@ -863,6 +863,9 @@ describe('change-streamer/storer', () => {
     });
 
     test('ownership change detected at begin aborts transaction', async () => {
+      const [sub1, _1, stream1] = createSubscriber('00');
+      const [sub2, _2, stream2] = createSubscriber('00');
+
       // Change ownership before storing begin — the storer's pipelined
       // SELECT will read the new owner immediately.
       await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'other-task'`;
@@ -871,14 +874,20 @@ describe('change-streamer/storer', () => {
         '07',
         ['begin', messages.begin(), {commitWatermark: '08'}],
       ]);
+      storer.catchup(sub1, 'serving');
       storer.store(['07', ['data', messages.insert('issues', {id: 'foo'})]]);
       storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+      storer.catchup(sub2, 'serving');
 
       await expect(done).rejects.toThrow(
         'changeLog ownership has been assumed by other-task',
       );
       // Prevent the beforeEach cleanup from re-throwing the rejected done.
       done = Promise.resolve();
+
+      // subscribers that were waiting to be caught up should be canceled
+      expect(stream1.active).toBe(false);
+      expect(stream2.active).toBe(false);
     });
 
     test('ownership change not possible during transaction', async () => {
