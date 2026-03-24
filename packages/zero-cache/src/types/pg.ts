@@ -313,6 +313,8 @@ export function pgClient(
         lc.debug?.(n);
         return;
       case 'WARNING':
+        lc.warn?.(n);
+        return;
       case 'EXCEPTION':
         lc.error?.(n);
         return;
