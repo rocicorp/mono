@@ -83,7 +83,8 @@ jobs:
           --threshold-lower-boundary 0.99 \
           --threshold-min-sample-size 20 \
           --threshold-max-sample-size 60 \
-          --err
+          --err \
+          --thresholds-reset
 
       - name: Upload PR benchmarks results to bencher.dev
         if: ${{ inputs.is_pr }}
@@ -108,4 +109,6 @@ jobs:
           --threshold-lower-boundary 0.99 \
           --threshold-min-sample-size 20 \
           --threshold-max-sample-size 60 \
-          --err
+          --err \
+          --thresholds-reset
+

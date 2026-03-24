@@ -136,4 +136,5 @@ jobs:
           --threshold-lower-boundary 0.99 \
           --threshold-min-sample-size 20 \
           --threshold-max-sample-size 60 \
-          --err
+          --err \
+          --thresholds-reset
