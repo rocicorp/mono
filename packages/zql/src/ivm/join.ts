@@ -250,47 +250,54 @@ export class Join implements Input {
     }
   }
 
+  #fetchChildStream(parentNodeRow: Row): Stream<Node | 'yield'> {
+    const constraint = buildJoinConstraint(
+      parentNodeRow,
+      this.#parentKey,
+      this.#childKey,
+    );
+    const stream = constraint ? this.#child.fetch({constraint}) : [];
+
+    if (
+      this.#inprogressChildChange &&
+      isJoinMatch(
+        parentNodeRow,
+        this.#parentKey,
+        this.#inprogressChildChange.change.node.row,
+        this.#childKey,
+      ) &&
+      this.#inprogressChildChange.position &&
+      this.#schema.compareRows(
+        parentNodeRow,
+        this.#inprogressChildChange.position,
+      ) > 0
+    ) {
+      return generateWithOverlay(
+        stream,
+        this.#inprogressChildChange.change,
+        this.#child.getSchema(),
+      );
+    }
+    return stream;
+  }
+
   #processParentNode(
     parentNodeRow: Row,
     parentNodeRelations: Record<string, () => Stream<Node | 'yield'>>,
   ): Node {
-    const childStream = () => {
-      const constraint = buildJoinConstraint(
-        parentNodeRow,
-        this.#parentKey,
-        this.#childKey,
-      );
-      const stream = constraint ? this.#child.fetch({constraint}) : [];
-
-      if (
-        this.#inprogressChildChange &&
-        isJoinMatch(
-          parentNodeRow,
-          this.#parentKey,
-          this.#inprogressChildChange.change.node.row,
-          this.#childKey,
-        ) &&
-        this.#inprogressChildChange.position &&
-        this.#schema.compareRows(
-          parentNodeRow,
-          this.#inprogressChildChange.position,
-        ) > 0
-      ) {
-        return generateWithOverlay(
-          stream,
-          this.#inprogressChildChange.change,
-          this.#child.getSchema(),
-        );
-      }
-      return stream;
-    };
-
-    return {
-      row: parentNodeRow,
-      relationships: {
-        ...parentNodeRelations,
-        [this.#relationshipName]: childStream,
-      },
-    };
+    let hasExisting = false;
+    for (const _ in parentNodeRelations) {
+      hasExisting = true;
+      break;
+    }
+    const relationships = hasExisting
+      ? {
+          ...parentNodeRelations,
+          [this.#relationshipName]: () => this.#fetchChildStream(parentNodeRow),
+        }
+      : {
+          [this.#relationshipName]: () => this.#fetchChildStream(parentNodeRow),
+        };
+    return {row: parentNodeRow, relationships};
   }
 }
