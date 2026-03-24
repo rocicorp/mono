@@ -23,6 +23,28 @@ export type Node = {
 };
 
 /**
+ * Fast-path string comparison that handles the common ASCII case
+ * without calling into compareUTF8. Falls back to compareUTF8 for
+ * non-ASCII characters.
+ *
+ * Returns a sign-only contract: negative if a < b, 0 if equal, positive
+ * if a > b. Callers must NOT rely on the magnitude of the return value.
+ */
+export function compareStringUTF8Fast(a: string, b: string): number {
+  if (a === b) return 0;
+  const len = a.length < b.length ? a.length : b.length;
+  for (let i = 0; i < len; i++) {
+    const ac = a.charCodeAt(i);
+    const bc = b.charCodeAt(i);
+    if (ac !== bc) {
+      if (ac < 128 && bc < 128) return ac - bc;
+      return compareUTF8(a, b);
+    }
+  }
+  return a.length - b.length;
+}
+
+/**
  * Compare two values. The values must be of the same type. This function
  * throws at runtime if the types differ.
  *
@@ -41,6 +63,15 @@ export function compareValues(a: Value, b: Value): number {
   if (a === b) {
     return 0;
   }
+  // String check before null: strings are the most common value type in
+  // practice, so testing them first reduces branch mispredictions. The
+  // null sub-check inside handles the string-vs-null comparison without
+  // falling through to the generic null checks below.
+  if (typeof a === 'string') {
+    if (b === null) return 1;
+    assertString(b);
+    return compareStringUTF8Fast(a, b);
+  }
   if (a === null) {
     return -1;
   }
@@ -54,18 +85,6 @@ export function compareValues(a: Value, b: Value): number {
   if (typeof a === 'number') {
     assertNumber(b);
     return a - b;
-  }
-  if (typeof a === 'string') {
-    assertString(b);
-    // We compare all strings in Zero as UTF-8. This is the default on SQLite
-    // and we need to match it. See:
-    // https://blog.replicache.dev/blog/replicache-11-adventures-in-text-encoding.
-    //
-    // TODO: We could change this since SQLite supports UTF-16. Microbenchmark
-    // to see if there's a big win.
-    //
-    // https://www.sqlite.org/c3ref/create_collation.html
-    return compareUTF8(a, b);
   }
   throw new Error(`Unsupported type: ${a}`);
 }
@@ -84,6 +103,18 @@ export function normalizeUndefined(v: Value): NormalizedValue {
 export type Comparator = (r1: Row, r2: Row) => number;
 
 export function makeComparator(order: Ordering, reverse?: boolean): Comparator {
+  if (order.length === 1) {
+    const key = order[0][0];
+    const dir = order[0][1];
+    if (dir === 'asc') {
+      return reverse
+        ? (a, b) => -compareValues(a[key], b[key])
+        : (a, b) => compareValues(a[key], b[key]);
+    }
+    return reverse
+      ? (a, b) => compareValues(a[key], b[key])
+      : (a, b) => -compareValues(a[key], b[key]);
+  }
   return (a, b) => {
     // Skip destructuring here since it is hot code.
     for (const ord of order) {

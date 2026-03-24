@@ -1,4 +1,9 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {
+  assert,
+  assertNumber,
+  assertString,
+  unreachable,
+} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {once} from '../../../shared/src/iterables.ts';
@@ -25,6 +30,7 @@ import {
   type Constraint,
 } from './constraint.ts';
 import {
+  compareStringUTF8Fast,
   compareValues,
   makeComparator,
   valuesEqual,
@@ -33,7 +39,6 @@ import {
 } from './data.ts';
 import {filterPush} from './filter-push.ts';
 import {
-  skipYields,
   type FetchRequest,
   type Input,
   type Output,
@@ -49,6 +54,10 @@ import type {
   SourceInput,
 } from './source.ts';
 import type {Stream} from './stream.ts';
+
+// Shared frozen sentinel for nodes with no relationships. Avoids allocating
+// a fresh {} on every node creation in the fetch and push hot paths.
+const EMPTY_RELATIONSHIPS: Record<string, never> = Object.freeze({});
 
 export type Overlay = {
   epoch: number;
@@ -80,6 +89,12 @@ export type Connection = {
     | undefined;
   readonly debug?: DebugDelegate | undefined;
   lastPushedEpoch: number;
+  /** Pre-computed on connect so #fetch avoids re-deriving it every call. */
+  pkConstraint: Constraint | undefined;
+  /** Per-connection cache of constraint+sort -> Index to skip Map lookups. */
+  indexCache: Map<string, Index>;
+  /** Stringified sort key for this connection, cached to build index cache keys cheaply. */
+  requestedSortKey: string;
 };
 
 /**
@@ -94,6 +109,8 @@ export class MemorySource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   readonly #primaryKey: PrimaryKey;
   readonly #primaryIndexSort: Ordering;
+  /** Cached JSON key for the primary index to avoid repeated JSON.stringify. */
+  readonly #primaryIndexKey: string;
   readonly #indexes: Map<string, Index> = new Map();
   readonly #connections: Connection[] = [];
 
@@ -110,8 +127,9 @@ export class MemorySource implements Source {
     this.#columns = columns;
     this.#primaryKey = primaryKey;
     this.#primaryIndexSort = primaryKey.map(k => [k, 'asc']);
+    this.#primaryIndexKey = JSON.stringify(this.#primaryIndexSort);
     const comparator = makeBoundComparator(this.#primaryIndexSort);
-    this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
+    this.#indexes.set(this.#primaryIndexKey, {
       comparator,
       data: primaryIndexData ?? new BTreeSet<Row>(comparator),
       usedBy: new Set(),
@@ -172,6 +190,7 @@ export class MemorySource implements Source {
       fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
 
+    const requestedSortKey = sort.map(p => `${p[0]}:${p[1]}`).join('|');
     const connection: Connection = {
       input,
       output: undefined,
@@ -185,6 +204,12 @@ export class MemorySource implements Source {
           }
         : undefined,
       lastPushedEpoch: 0,
+      pkConstraint: primaryKeyConstraintFromFilters(
+        transformedFilters.filters,
+        this.#primaryKey,
+      ),
+      indexCache: new Map(),
+      requestedSortKey,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -207,7 +232,7 @@ export class MemorySource implements Source {
   }
 
   #getPrimaryIndex(): Index {
-    const index = this.#indexes.get(JSON.stringify(this.#primaryIndexSort));
+    const index = this.#indexes.get(this.#primaryIndexKey);
     assert(index, 'Primary index not found');
     return index;
   }
@@ -249,18 +274,64 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+  // Non-generator: returns an Iterable directly rather than using function*.
+  // This avoids one generator frame allocation per fetch call. The returned
+  // iterable comes from one of the fused generator helpers below, chosen
+  // based on whether an overlay is active and whether the PK fast path applies.
+  #fetch(
+    req: FetchRequest,
+    conn: Connection,
+  ): Iterable<Node | 'yield'> {
     const {sort: requestedSort, compareRows} = conn;
-    const connectionComparator = (r1: Row, r2: Row) =>
-      compareRows(r1, r2) * (req.reverse ? -1 : 1);
+    const connectionComparator: Comparator = req.reverse
+      ? (r1, r2) => -compareRows(r1, r2)
+      : compareRows;
 
-    const pkConstraint = primaryKeyConstraintFromFilters(
-      conn.filters?.condition,
-      this.#primaryKey,
-    );
+    const pkConstraint = conn.pkConstraint;
     // The primary key constraint will be more limiting than the constraint
     // so swap out to that if it exists.
     const fetchOrPkConstraint = pkConstraint ?? req.constraint;
+
+    // Determine overlay state once
+    const overlay = this.#overlay;
+    const hasActiveOverlay =
+      overlay !== undefined && conn.lastPushedEpoch >= overlay.epoch;
+
+    // PK fast path: direct BTree.get() for single-row constrained lookups.
+    // When filters constrain to a single PK value and no overlay is active,
+    // skip the entire generator pipeline and do a direct O(log n) lookup.
+    if (pkConstraint && !hasActiveOverlay) {
+      const row = this.#getPrimaryIndex().data.get(pkConstraint as Row);
+      if (row !== undefined) {
+        if (!conn.filters || conn.filters.predicate(row)) {
+          if (!req.constraint || constraintMatchesRow(req.constraint, row)) {
+            const start = req.start;
+            if (
+              !start ||
+              (start.basis === 'at'
+                ? connectionComparator(row, start.row) >= 0
+                : connectionComparator(row, start.row) > 0)
+            ) {
+              return [{row, relationships: EMPTY_RELATIONSHIPS}];
+            }
+          }
+        }
+      }
+      return [];
+    }
+
+    // Standard path: index-based scan
+    const includeRequestedSort =
+      this.#primaryKey.length > 1 ||
+      !fetchOrPkConstraint ||
+      !constraintMatchesPrimaryKey(fetchOrPkConstraint, this.#primaryKey);
+
+    let constraintShapeKey = '';
+    if (fetchOrPkConstraint) {
+      for (const key of Object.keys(fetchOrPkConstraint)) {
+        constraintShapeKey += key + '|';
+      }
+    }
 
     // If there is a constraint, we need an index sorted by it first.
     const indexSort: OrderPart[] = [];
@@ -270,21 +341,18 @@ export class MemorySource implements Source {
       }
     }
 
-    // For the special case of constraining by PK, we don't need to worry about
-    // any requested sort since there can only be one result. Otherwise we also
-    // need the index sorted by the requested sort.
-    if (
-      this.#primaryKey.length > 1 ||
-      !fetchOrPkConstraint ||
-      !constraintMatchesPrimaryKey(fetchOrPkConstraint, this.#primaryKey)
-    ) {
+    if (includeRequestedSort) {
       indexSort.push(...requestedSort);
     }
 
-    const index = this.#getOrCreateIndex(indexSort, conn);
+    const indexCacheKey = `${constraintShapeKey}::${includeRequestedSort ? conn.requestedSortKey : 'pk'}`;
+    let index = conn.indexCache.get(indexCacheKey);
+    if (!index) {
+      index = this.#getOrCreateIndex(indexSort, conn);
+      conn.indexCache.set(indexCacheKey, index);
+    }
+
     const {data, comparator: compare} = index;
-    const indexComparator = (r1: Row, r2: Row) =>
-      compare(r1, r2) * (req.reverse ? -1 : 1);
 
     const startAt = req.start?.row;
 
@@ -317,41 +385,63 @@ export class MemorySource implements Source {
       scanStart = startAt;
     }
 
-    const rowsIterable = generateRows(data, scanStart, req.reverse);
-    const withOverlay = generateWithOverlay(
+    // Fused fetch paths: eliminate generator frame overhead by combining
+    // overlay/start/constraint/filter into minimal generators.
+    if (!hasActiveOverlay) {
+      // No overlay: fuse all 5 generator stages into 1
+      return generateFetchDirect(
+        data,
+        scanStart,
+        req.reverse,
+        req.start,
+        connectionComparator,
+        req.constraint,
+        conn.filters?.predicate,
+      );
+    }
+
+    // Overlay active: compute overlay effects
+    const indexComparator: Comparator = (r1, r2) =>
+      compare(r1, r2) * (req.reverse ? -1 : 1);
+    const overlays = computeOverlays(
       startAt,
-      pkConstraint ? once(rowsIterable) : rowsIterable,
-      // use `req.constraint` here and not `fetchOrPkConstraint` since `fetchOrPkConstraint` could be the
-      // primary key constraint. The primary key constraint comes from filters and is acting as a filter
-      // rather than as the fetch constraint.
       req.constraint,
-      this.#overlay,
-      conn.lastPushedEpoch,
-      // Use indexComparator, generateWithOverlayInner has a subtle dependency
-      // on this.  Since generateWithConstraint is done after
-      // generateWithOverlay, the generator consumed by generateWithOverlayInner
-      // does not end when the constraint stops matching and so the final
-      // check to yield an add overlay if not yet yielded is not reached.
-      // However, using the indexComparator the add overlay will be less than
-      // the first row that does not match the constraint, and so any
-      // not yet yielded add overlay will be yielded when the first row
-      // not matching the constraint is reached.
+      overlay,
       indexComparator,
       conn.filters?.predicate,
     );
 
-    const withConstraint = generateWithConstraint(
-      skipYields(
-        generateWithStart(withOverlay, req.start, connectionComparator),
-      ),
-      // we use `req.constraint` and not `fetchOrPkConstraint` here because we need to
-      // AND the constraint with what could have been the primary key constraint
-      req.constraint,
-    );
+    if (overlays.add === undefined && overlays.remove === undefined) {
+      // Overlay doesn't affect this fetch: use fused no-overlay path
+      return generateFetchDirect(
+        data,
+        scanStart,
+        req.reverse,
+        req.start,
+        connectionComparator,
+        req.constraint,
+        conn.filters?.predicate,
+      );
+    }
 
-    yield* conn.filters
-      ? generateWithFilter(withConstraint, conn.filters.predicate)
-      : withConstraint;
+    // Overlay has actual changes: use overlay inner + fused post-processing.
+    // This reduces from 4 generators (overlay+start+constraint+filter) to 2.
+    const rowsSource = data[req.reverse ? 'valuesFromReversed' : 'valuesFrom'](
+      scanStart as Row | undefined,
+    );
+    const rowsIterable = pkConstraint ? once(rowsSource) : rowsSource;
+    const overlayedNodes = generateWithOverlayInner(
+      rowsIterable,
+      overlays,
+      indexComparator,
+    );
+    return generatePostOverlayFused(
+      overlayedNodes,
+      req.start,
+      connectionComparator,
+      req.constraint,
+      conn.filters?.predicate,
+    );
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -416,26 +506,6 @@ export class MemorySource implements Source {
         default:
           unreachable(change);
       }
-    }
-  }
-}
-
-function* generateWithConstraint(
-  it: Stream<Node>,
-  constraint: Constraint | undefined,
-) {
-  for (const node of it) {
-    if (constraint && !constraintMatchesRow(constraint, node.row)) {
-      break;
-    }
-    yield node;
-  }
-}
-
-function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
-  for (const node of it) {
-    if (filter(node.row)) {
-      yield node;
     }
   }
 }
@@ -535,31 +605,46 @@ function* genPush(
       unreachable(change);
   }
 
+  // Reuse a small set of objects across the connection loop below to avoid
+  // allocating fresh Node/Change objects per connection per push. The row
+  // fields are overwritten before each use. This is safe because filterPush
+  // and its downstream consumers process each change synchronously within
+  // the generator chain -- yield* completes fully before the next iteration
+  // mutates the objects. In a workload with 135 connections, this eliminates
+  // thousands of short-lived allocations per push cycle.
+  const reuseNode: Node = {
+    row: undefined as unknown as Row,
+    relationships: EMPTY_RELATIONSHIPS,
+  };
+  const reuseOldNode: Node = {
+    row: undefined as unknown as Row,
+    relationships: EMPTY_RELATIONSHIPS,
+  };
+  const reuseAddRemove = {
+    type: undefined as unknown as 'add' | 'remove',
+    node: reuseNode,
+  };
+  const reuseEdit = {
+    type: 'edit' as const,
+    oldNode: reuseOldNode,
+    node: reuseNode,
+  };
+
   for (const conn of connections) {
     const {output, filters, input} = conn;
     if (output) {
       conn.lastPushedEpoch = pushEpoch;
       setOverlay({epoch: pushEpoch, change});
-      const outputChange: Change =
-        change.type === 'edit'
-          ? {
-              type: change.type,
-              oldNode: {
-                row: change.oldRow,
-                relationships: {},
-              },
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            }
-          : {
-              type: change.type,
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            };
+      let outputChange: Change;
+      if (change.type === 'edit') {
+        reuseOldNode.row = change.oldRow;
+        reuseNode.row = change.row;
+        outputChange = reuseEdit;
+      } else {
+        reuseAddRemove.type = change.type;
+        reuseNode.row = change.row;
+        outputChange = reuseAddRemove;
+      }
       yield* filterPush(outputChange, output, input, filters?.predicate);
       yield undefined;
     }
@@ -621,17 +706,25 @@ export function* generateWithOverlay(
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
 ) {
-  let overlayToApply: Overlay | undefined = undefined;
-  if (overlay && lastPushedEpoch >= overlay.epoch) {
-    overlayToApply = overlay;
+  if (!overlay || lastPushedEpoch < overlay.epoch) {
+    for (const row of rows) {
+      yield {row, relationships: EMPTY_RELATIONSHIPS};
+    }
+    return;
   }
   const overlays = computeOverlays(
     startAt,
     constraint,
-    overlayToApply,
+    overlay,
     compare,
     filterPredicate,
   );
+  if (overlays.add === undefined && overlays.remove === undefined) {
+    for (const row of rows) {
+      yield {row, relationships: EMPTY_RELATIONSHIPS};
+    }
+    return;
+  }
   yield* generateWithOverlayInner(rows, overlays, compare);
 }
 
@@ -739,7 +832,7 @@ export function* generateWithOverlayInner(
       const cmp = compare(overlays.add, row);
       if (cmp < 0) {
         addOverlayYielded = true;
-        yield {row: overlays.add, relationships: {}};
+        yield {row: overlays.add, relationships: EMPTY_RELATIONSHIPS};
       }
     }
 
@@ -750,11 +843,11 @@ export function* generateWithOverlayInner(
         continue;
       }
     }
-    yield {row, relationships: {}};
+    yield {row, relationships: EMPTY_RELATIONSHIPS};
   }
 
   if (!addOverlayYielded && overlays.add) {
-    yield {row: overlays.add, relationships: {}};
+    yield {row: overlays.add, relationships: EMPTY_RELATIONSHIPS};
   }
 }
 
@@ -770,12 +863,51 @@ type MinValue = typeof minValue;
 const maxValue = Symbol('max-value');
 type MaxValue = typeof maxValue;
 
+/**
+ * Compares two Bound values, handling minValue/maxValue sentinels,
+ * null, and delegating to type-specific comparison. This merges the
+ * logic of compareBounds + compareValues into a single function that
+ * V8 can inline at the call site (well within TurboFan's 460-bytecode
+ * inlining threshold).
+ */
+function compareBoundValue(a: Bound, b: Bound): number {
+  if (a === b) return 0;
+  if (a === minValue) return -1;
+  if (b === minValue) return 1;
+  if (a === maxValue) return 1;
+  if (b === maxValue) return -1;
+  const aN: Value = a ?? null;
+  const bN: Value = b ?? null;
+  if (aN === null) return bN === null ? 0 : -1;
+  if (bN === null) return 1;
+  if (typeof a === 'string') {
+    assertString(b);
+    return compareStringUTF8Fast(a, b);
+  }
+  if (typeof a === 'number') {
+    assertNumber(b);
+    return a - (b as number);
+  }
+  return compareValues(aN, bN);
+}
+
+/**
+ * Creates a comparator for RowBound values used in BTree index scans.
+ *
+ * For single-key sorts (the common case), returns a direct comparator
+ * that avoids the multi-key loop. The actual comparison logic lives in
+ * compareBoundValue, which V8 inlines at the call site.
+ */
 function makeBoundComparator(sort: Ordering) {
+  if (sort.length === 1) {
+    const key = sort[0][0];
+    const dir = sort[0][1];
+    const cmp = (a: RowBound, b: RowBound) => compareBoundValue(a[key], b[key]);
+    return dir === 'asc' ? cmp : (a: RowBound, b: RowBound) => -cmp(a, b);
+  }
   return (a: RowBound, b: RowBound) => {
-    // Hot! Do not use destructuring
     for (const entry of sort) {
-      const key = entry[0];
-      const cmp = compareBounds(a[key], b[key]);
+      const cmp = compareBoundValue(a[entry[0]], b[entry[0]]);
       if (cmp !== 0) {
         return entry[1] === 'asc' ? cmp : -cmp;
       }
@@ -784,37 +916,73 @@ function makeBoundComparator(sort: Ordering) {
   };
 }
 
-function compareBounds(a: Bound, b: Bound): number {
-  if (a === b) {
-    return 0;
-  }
-  if (a === minValue) {
-    return -1;
-  }
-  if (b === minValue) {
-    return 1;
-  }
-  if (a === maxValue) {
-    return 1;
-  }
-  if (b === maxValue) {
-    return -1;
-  }
-  return compareValues(a, b);
-}
-
-function* generateRows(
-  data: BTreeSet<Row>,
-  scanStart: RowBound | undefined,
-  reverse: boolean | undefined,
-) {
-  yield* data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
-    scanStart as Row | undefined,
-  );
-}
-
 export function stringify(change: SourceChange) {
   return JSON.stringify(change, (_, v) =>
     typeof v === 'bigint' ? v.toString() : v,
   );
+}
+
+// Fused fetch for no-overlay case.
+// Replaces the 5-generator chain (generateRows -> generateWithOverlay ->
+// generateWithStart -> generateWithConstraint -> generateWithFilter)
+// with a single generator, eliminating 4 generator frame suspend/resume costs.
+function* generateFetchDirect(
+  data: BTreeSet<Row>,
+  scanStart: RowBound | undefined,
+  reverse: boolean | undefined,
+  start: Start | undefined,
+  connectionComparator: Comparator,
+  constraint: Constraint | undefined,
+  filterPredicate: ((row: Row) => boolean) | undefined,
+): Stream<Node> {
+  let started = !start;
+  for (const row of data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
+    scanStart as Row | undefined,
+  )) {
+    if (!started) {
+      const cmp = connectionComparator(row, start!.row);
+      if (start!.basis === 'at' ? cmp >= 0 : cmp > 0) {
+        started = true;
+      } else {
+        continue;
+      }
+    }
+    if (constraint && !constraintMatchesRow(constraint, row)) {
+      break;
+    }
+    if (filterPredicate && !filterPredicate(row)) {
+      continue;
+    }
+    yield {row, relationships: EMPTY_RELATIONSHIPS};
+  }
+}
+
+// Fused post-overlay processing.
+// Replaces generateWithStart + generateWithConstraint + generateWithFilter
+// (3 generators) with a single generator after overlay interleaving.
+function* generatePostOverlayFused(
+  nodes: Iterable<Node>,
+  start: Start | undefined,
+  connectionComparator: Comparator,
+  constraint: Constraint | undefined,
+  filterPredicate: ((row: Row) => boolean) | undefined,
+): Stream<Node> {
+  let started = !start;
+  for (const node of nodes) {
+    if (!started) {
+      const cmp = connectionComparator(node.row, start!.row);
+      if (start!.basis === 'at' ? cmp >= 0 : cmp > 0) {
+        started = true;
+      } else {
+        continue;
+      }
+    }
+    if (constraint && !constraintMatchesRow(constraint, node.row)) {
+      break;
+    }
+    if (filterPredicate && !filterPredicate(node.row)) {
+      continue;
+    }
+    yield node;
+  }
 }
