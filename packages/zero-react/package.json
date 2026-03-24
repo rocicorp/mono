@@ -17,7 +17,7 @@
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint --type-aware src/"
+    "lint": "oxlint --quiet --type-aware src/"
   },
   "peerDependencies": {
     "react": "^18.3.1",

@@ -9,7 +9,7 @@
     "check-format": "prettier --check .",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "lint": "oxlint --type-aware src/",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch"
   },

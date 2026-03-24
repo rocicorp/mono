@@ -10,7 +10,7 @@
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "build:bin": "tsc -p tsconfig.bin.json",
-    "lint": "oxlint --type-aware src/",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts",
     "test": "vitest run",
     "test:pg17": "vitest run --project='*17*'",
     "test:watch": "vitest watch",
