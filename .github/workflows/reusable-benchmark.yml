@@ -73,7 +73,7 @@ jobs:
           npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
           --project zero \
-          --testbed self-hosted \
+          --testbed self-hosted-metal \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ github.token }}' \
@@ -83,8 +83,7 @@ jobs:
           --threshold-lower-boundary 0.99 \
           --threshold-min-sample-size 20 \
           --threshold-max-sample-size 60 \
-          --err \
-          --thresholds-reset
+          --err
 
       - name: Upload PR benchmarks results to bencher.dev
         if: ${{ inputs.is_pr }}
@@ -94,7 +93,7 @@ jobs:
           npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
           --project zero \
-          --testbed self-hosted \
+          --testbed self-hosted-metal \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ github.token }}' \
@@ -109,6 +108,5 @@ jobs:
           --threshold-lower-boundary 0.99 \
           --threshold-min-sample-size 20 \
           --threshold-max-sample-size 60 \
-          --err \
-          --thresholds-reset
+          --err
 

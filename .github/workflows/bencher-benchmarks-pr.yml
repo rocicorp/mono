@@ -121,7 +121,7 @@ jobs:
           cat output.json |
           bencher run \
           --project zero \
-          --testbed self-hosted \
+          --testbed self-hosted-metal \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
@@ -136,5 +136,4 @@ jobs:
           --threshold-lower-boundary 0.99 \
           --threshold-min-sample-size 20 \
           --threshold-max-sample-size 60 \
-          --err \
-          --thresholds-reset
+          --err
