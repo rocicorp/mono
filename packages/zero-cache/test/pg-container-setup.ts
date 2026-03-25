@@ -10,6 +10,8 @@ export function runPostgresContainer(image: string, timezone: string) {
         '-c',
         'max_replication_slots=100',
         '-c',
+        'max_wal_senders=100',
+        '-c',
         `timezone=${timezone}`,
       ])
       .start();
