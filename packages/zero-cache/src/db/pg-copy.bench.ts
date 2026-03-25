@@ -1,5 +1,5 @@
 import {pipeline, Readable} from 'node:stream';
-import {bench, describe} from 'vitest';
+import {bench, describe} from '../../../shared/src/bench.ts';
 import {TextTransform} from './pg-copy.ts';
 
 describe('pg-copy benchmark', () => {

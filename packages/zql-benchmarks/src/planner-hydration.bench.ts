@@ -1,5 +1,4 @@
-import {mitataBench, run, summary} from 'mitata';
-import {expect, test} from 'vitest';
+import {bench, describe} from '../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
@@ -80,12 +79,12 @@ function benchmarkQuery(name: string, query: AnyQuery) {
   const unplannedQuery = createQuery(tableName, unplannedAST);
   const plannedQuery = createQuery(tableName, plannedClientAST);
 
-  summary(() => {
-    mitataBench(`unplanned: ${name}`, async () => {
+  describe(name, () => {
+    bench(`unplanned: ${name}`, async () => {
       await delegate.run(unplannedQuery);
     });
 
-    mitataBench(`planned: ${name}`, async () => {
+    bench(`planned: ${name}`, async () => {
       await delegate.run(plannedQuery);
     });
   });
@@ -128,24 +127,3 @@ benchmarkQuery(
     ),
   ),
 );
-
-// Check if JSON output is requested via environment variable
-const format = process.env.BENCH_OUTPUT_FORMAT;
-
-if (format === 'json') {
-  // Output JSON without samples for smaller, cleaner output
-  await run({
-    format: {
-      json: {
-        samples: false,
-        debug: false,
-      },
-    },
-  });
-} else {
-  await run();
-}
-
-test('no-op', () => {
-  expect(true).toBe(true);
-});

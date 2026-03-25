@@ -1,7 +1,5 @@
-// oxlint-disable no-console
-import {summary} from 'mitata';
-import {expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {bench, describe} from '../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
@@ -17,9 +15,11 @@ import {builder, schema} from './schema.ts';
 const dbPath = process.env.ZBUGS_REPLICA_PATH;
 
 if (!dbPath) {
+  // oxlint-disable-next-line no-console
   console.error(
     'Cannot run zbugs.bench.ts without a path to the zbugs replica. Set env var: `ZBUGS_REPLICA_PATH`',
   );
+  bench.skip('skipped - no ZBUGS_REPLICA_PATH', () => {});
 } else {
   // Open the zbugs SQLite database
   const db = new Database(createSilentLogContext(), dbPath);
@@ -92,9 +92,9 @@ if (!dbPath) {
   }
 
   // Helper to benchmark planned vs unplanned
-  async function benchmarkQuery<
+  function registerBenchmark<
     TTable extends keyof typeof schema.tables & string,
-  >(_name: string, query: AnyQuery) {
+  >(name: string, query: AnyQuery) {
     const unplannedAST = asQueryInternals(query).ast;
     const format = asQueryInternals(query).format;
 
@@ -108,34 +108,15 @@ if (!dbPath) {
     const tableName = unplannedAST.table as TTable;
     const unplannedQuery = createQuery(tableName, unplannedAST, format);
 
-    db.exec('BEGIN');
-    const start = performance.now();
-    await delegate.run(unplannedQuery as AnyQuery);
-    const end = performance.now();
-    console.log('duration ', end - start);
-    db.exec('ROLLBACK');
-
-    summary(() => {
-      // bench(`unplanned: ${name}`, async () => {
-      //   await delegate.run(unplannedQuery as AnyQuery);
-      // });
-      // bench(`planned: ${name}`, async () => {
-      //   await delegate.run(plannedQuery as AnyQuery);
-      // });
+    bench(name, async () => {
+      await delegate.run(unplannedQuery as AnyQuery);
     });
   }
 
-  await benchmarkQuery(
-    'full issue scan + join',
-    builder.issue.related('creator').related('assignee'),
-  );
-
-  // run all reads in an explicit tx
-  // db.exec('BEGIN');
-  // await run();
-  // db.exec('ROLLBACK');
+  describe('zbugs', () => {
+    registerBenchmark(
+      'full issue scan + join',
+      builder.issue.related('creator').related('assignee'),
+    );
+  });
 }
-
-test('no-op', () => {
-  expect(true).toBe(true);
-});

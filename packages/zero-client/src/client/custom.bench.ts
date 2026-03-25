@@ -1,6 +1,6 @@
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
-import {bench} from 'vitest';
 import {zeroData} from '../../../replicache/src/transactions.ts';
+import {bench} from '../../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {generateSchema} from '../../../zql/src/query/test/schema-gen.ts';
 import {TransactionImpl} from './custom.ts';

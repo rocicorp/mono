@@ -73,13 +73,18 @@ jobs:
     strategy:
       matrix:
         package:
+          - name: 'shared'
+            directory: 'packages/shared'
+            ci_id: 'shared-perf'
           - name: 'zero-client'
             directory: 'packages/zero-client'
             ci_id: 'perf'
-          # Replicache has no vitest benchs
-          # - name: 'replicache'
-          #   directory: 'packages/replicache'
-          #   ci_id: 'replicache-perf'
+          - name: 'zero-cache'
+            directory: 'packages/zero-cache'
+            ci_id: 'zero-cache-perf'
+          - name: 'zql-benchmarks'
+            directory: 'packages/zql-benchmarks'
+            ci_id: 'zql'
     with:
       package_name: ${{ matrix.package.name }}
       working_directory: ${{ matrix.package.directory }}
@@ -91,49 +96,3 @@ jobs:
     secrets:
       BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-  zql_benchmarks:
-    name: ZQL Benchmarks PR
-    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-
-    permissions:
-      pull-requests: write
-    runs-on: self-hosted
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22.x
-          cache: 'npm'
-      - uses: bencherdev/bencher@main
-
-      - run: npm ci
-
-      - name: Run ZQL benchmarks
-        uses: ./.github/actions/run-zql-benchmarks
-
-      - name: Upload PR benchmarks results to bencher.dev
-        working-directory: packages/zql-benchmarks
-        run: |
-          cat output.json |
-          bencher run \
-          --project zero \
-          --testbed self-hosted-metal \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --adapter json \
-          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --ci-id zql \
-          --branch "$GITHUB_HEAD_REF" \
-          --start-point "$GITHUB_BASE_REF" \
-          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
-          --start-point-clone-thresholds \
-          --start-point-reset \
-          --threshold-measure throughput \
-          --threshold-test t_test \
-          --threshold-lower-boundary 0.99 \
-          --threshold-min-sample-size 20 \
-          --threshold-max-sample-size 60 \
-          --err

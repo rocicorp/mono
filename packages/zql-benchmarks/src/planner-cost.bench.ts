@@ -1,5 +1,4 @@
-import {mitataBench, run, summary} from 'mitata';
-import {expect, test} from 'vitest';
+import {bench, describe} from '../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
@@ -56,12 +55,12 @@ function benchmarkPlanning<TTable extends keyof typeof schema.tables & string>(
   );
   const mappedAST = mapAST(completeOrderAst, clientToServerMapper);
 
-  mitataBench(name, () => {
+  bench(name, () => {
     planQuery(mappedAST, costModel);
   });
 }
 
-summary(() => {
+describe('planner cost', () => {
   benchmarkPlanning(
     '1 exists: track.exists(album)',
     queries.track.whereExists('album'),
@@ -227,25 +226,4 @@ summary(() => {
       ),
     ),
   );
-});
-
-// Check if JSON output is requested via environment variable
-const format = process.env.BENCH_OUTPUT_FORMAT;
-
-if (format === 'json') {
-  // Output JSON without samples for smaller, cleaner output
-  await run({
-    format: {
-      json: {
-        samples: false,
-        debug: false,
-      },
-    },
-  });
-} else {
-  await run();
-}
-
-test('no-op', () => {
-  expect(true).toBe(true);
 });

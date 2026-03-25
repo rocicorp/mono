@@ -80,10 +80,18 @@ const externalizedWarningRegExp =
   /has been externalized for browser compatibility/;
 
 export const benchConfig = defineConfig({
+  define: {
+    ...define,
+    'process.env.NO_COLOR': JSON.stringify(process.env.NO_COLOR ?? ''),
+    'process.env.NODE_DISABLE_COLORS': JSON.stringify(
+      process.env.NODE_DISABLE_COLORS ?? '',
+    ),
+    'process.env.BENCH_OUTPUT_FORMAT': JSON.stringify(
+      process.env.BENCH_OUTPUT_FORMAT ?? '',
+    ),
+  },
+
   test: {
-    provide: {
-      benchOutputFormat: process.env.BENCH_OUTPUT_FORMAT as 'json' | undefined,
-    },
     include: ['src/**/*.bench{,.node}.?(c|m)[jt]s?(x)'],
     disableConsoleIntercept: true,
     silent: false,
@@ -99,9 +107,9 @@ export const benchConfig = defineConfig({
       return false;
     },
     browser,
-    // slowTestThreshold: 10_000,
-    // testTimeout: 300_000,
-    hookTimeout: 300_000,
+    slowTestThreshold: 15_000,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 
   server: {

@@ -1,7 +1,6 @@
-import {runBenchmarks} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
-import {expect, test} from 'vitest';
+import {runBenchmarks} from '../../zql-integration-tests/src/helpers/runner.ts';
 
 const pgContent = await getChinook();
 
@@ -63,7 +62,3 @@ await runBenchmarks(
     },
   ],
 );
-
-test('no-op', () => {
-  expect(true).toBe(true);
-});
