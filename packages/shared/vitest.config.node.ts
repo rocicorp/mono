@@ -6,7 +6,6 @@ export default mergeConfig(config, {
     name: 'shared/node',
     browser: {
       enabled: false,
-      name: '', // not used but required by the type system
     },
   },
 });

@@ -12,6 +12,7 @@
     "test:firefox:watch": "VITEST_BROWSER=firefox vitest --config vitest.config.web.ts",
     "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
+    "bench": "vitest run --config vitest.config.bench.ts",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",

@@ -1,4 +1,4 @@
-import {bench, run, summary} from 'mitata';
+import {mitataBench, run, summary} from 'mitata';
 import {expect, test} from 'vitest';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
@@ -14,7 +14,7 @@ const {queries, delegates} = await bootstrap({
 
 // Demonstration of how to compare two different query styles
 summary(() => {
-  bench('tracks with artist name : flipped', async () => {
+  mitataBench('tracks with artist name : flipped', async () => {
     await delegates.sqlite.run(
       queries.artist
         .where('name', 'AC/DC')
@@ -22,7 +22,7 @@ summary(() => {
     );
   });
 
-  bench('tracks with artist name : not flipped', async () => {
+  mitataBench('tracks with artist name : not flipped', async () => {
     await delegates.sqlite.run(
       queries.track.whereExists('album', a =>
         a.whereExists('artist', ar => ar.where('name', 'AC/DC')),

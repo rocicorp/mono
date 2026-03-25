@@ -1,4 +1,4 @@
-import {bench, run, summary} from 'mitata';
+import {mitataBench, run, summary} from 'mitata';
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
@@ -81,11 +81,11 @@ function benchmarkQuery(name: string, query: AnyQuery) {
   const plannedQuery = createQuery(tableName, plannedClientAST);
 
   summary(() => {
-    bench(`unplanned: ${name}`, async () => {
+    mitataBench(`unplanned: ${name}`, async () => {
       await delegate.run(unplannedQuery);
     });
 
-    bench(`planned: ${name}`, async () => {
+    mitataBench(`planned: ${name}`, async () => {
       await delegate.run(plannedQuery);
     });
   });

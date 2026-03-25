@@ -1,4 +1,4 @@
-import {bench, run, summary} from 'mitata';
+import {mitataBench, run, summary} from 'mitata';
 import {expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
@@ -56,7 +56,7 @@ function benchmarkPlanning<TTable extends keyof typeof schema.tables & string>(
   );
   const mappedAST = mapAST(completeOrderAst, clientToServerMapper);
 
-  bench(name, () => {
+  mitataBench(name, () => {
     planQuery(mappedAST, costModel);
   });
 }

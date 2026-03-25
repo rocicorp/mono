@@ -1,4 +1,4 @@
-import {bench, run, summary} from 'mitata';
+import {mitataBench, run, summary} from 'mitata';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -491,7 +491,7 @@ function makeBenchmark<TSchema extends Schema>({
 }
 
 function benchHydration(name: string, delegate: QueryDelegate, q: AnyQuery) {
-  bench(name, async () => {
+  mitataBench(name, async () => {
     await delegate.run(q);
   });
 }
@@ -504,7 +504,7 @@ function benchPush(
   pushGenerator: PushGenerator,
 ) {
   let iteration = 0;
-  bench(`${type}: ${name}`, function* () {
+  mitataBench(`${type}: ${name}`, function* () {
     // setup
     const delegate = type === 'zqlite' ? delegates.sqlite : delegates.memory;
     const view = delegate.materialize(query);
