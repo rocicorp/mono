@@ -114,18 +114,26 @@ class AnonymousTelemetryManager {
     // Add a random jitter to the export interval to avoid all view-syncers exporting at the same time
     const exportIntervalMillis =
       60000 * this.#viewSyncerCount + Math.floor(Math.random() * 10000);
-    const metricReader = new PeriodicExportingMetricReader({
-      exportIntervalMillis,
-      exporter: new OTLPMetricExporter({
-        url: 'https://metrics.rocicorp.dev',
-        timeoutMillis: 30000,
+    const readers = [
+      new PeriodicExportingMetricReader({
+        exportIntervalMillis,
+        exporter: new OTLPMetricExporter({
+          url: 'https://metrics.rocicorp.dev',
+          timeoutMillis: 30000,
+        }),
       }),
-    });
+    ];
 
-    this.#meterProvider = new MeterProvider({
-      resource,
-      readers: [metricReader],
-    });
+    // Uncomment this to debug metrics exports.
+
+    // readers.push(
+    //   new PeriodicExportingMetricReader({
+    //     exportIntervalMillis,
+    //     exporter: new ConsoleMetricExporter(),
+    //   }),
+    // );
+
+    this.#meterProvider = new MeterProvider({resource, readers});
     this.#meter = this.#meterProvider.getMeter('zero-anonymous-telemetry');
 
     this.#setupMetrics();
@@ -221,11 +229,6 @@ class AnonymousTelemetryManager {
         if (actives) {
           const value = actives[metric];
           result.observe(value, attrs);
-          this.#lc?.debug?.(`telemetry: ${metric}=${value}`);
-        } else {
-          this.#lc?.debug?.(
-            `telemetry: no actives available, skipping observation of ${metric}`,
-          );
         }
       };
     this.#meter
@@ -268,68 +271,44 @@ class AnonymousTelemetryManager {
     uptimeGauge.addCallback((result: ObservableResult) => {
       const uptimeSeconds = Math.floor(process.uptime());
       result.observe(uptimeSeconds, attrs);
-      this.#lc?.debug?.(`telemetry: uptime=${uptimeSeconds}s`);
     });
     uptimeCounter.addCallback((result: ObservableResult) => {
       const uptimeSeconds = Math.floor(process.uptime());
       result.observe(uptimeSeconds, attrs);
-      this.#lc?.debug?.(`telemetry: uptime_counter=${uptimeSeconds}s`);
     });
     crudMutationsCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalCrudMutations, attrs);
-      this.#lc?.debug?.(
-        `telemetry: crud_mutations=${this.#totalCrudMutations}`,
-      );
     });
     customMutationsCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalCustomMutations, attrs);
-      this.#lc?.debug?.(
-        `telemetry: custom_mutations=${this.#totalCustomMutations}`,
-      );
     });
     totalMutationsCounter.addCallback((result: ObservableResult) => {
       const totalMutations =
         this.#totalCrudMutations + this.#totalCustomMutations;
       result.observe(totalMutations, attrs);
-      this.#lc?.debug?.(`telemetry: total_mutations=${totalMutations}`);
     });
     crudQueriesCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalCrudQueries, attrs);
-      this.#lc?.debug?.(`telemetry: crud_queries=${this.#totalCrudQueries}`);
     });
     customQueriesCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalCustomQueries, attrs);
-      this.#lc?.debug?.(
-        `telemetry: custom_queries=${this.#totalCustomQueries}`,
-      );
     });
     totalQueriesCounter.addCallback((result: ObservableResult) => {
       const totalQueries = this.#totalCrudQueries + this.#totalCustomQueries;
       result.observe(totalQueries, attrs);
-      this.#lc?.debug?.(`telemetry: total_queries=${totalQueries}`);
     });
     rowsSyncedCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalRowsSynced, attrs);
-      this.#lc?.debug?.(`telemetry: rows_synced=${this.#totalRowsSynced}`);
     });
     connectionsSuccessCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalConnectionsSuccess, attrs);
-      this.#lc?.debug?.(
-        `telemetry: connections_success=${this.#totalConnectionsSuccess}`,
-      );
     });
     connectionsAttemptedCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalConnectionsAttempted, attrs);
-      this.#lc?.debug?.(
-        `telemetry: connections_attempted=${this.#totalConnectionsAttempted}`,
-      );
     });
     activeClientGroupsGauge.addCallback((result: ObservableResult) => {
       const activeClientGroups = this.#activeClientGroupsGetter?.() ?? 0;
       result.observe(activeClientGroups, attrs);
-      this.#lc?.debug?.(
-        `telemetry: gauge_active_client_groups=${activeClientGroups}`,
-      );
     });
   }
 
