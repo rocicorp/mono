@@ -113,7 +113,6 @@ function wrapTest(testFn: (...args: any[]) => any): TestAPI {
 export const bench = wrapTest(vitest.test);
 
 function wrapSuite(suiteFn: (...args: any[]) => any): typeof vitest.describe {
-  // ox
   const wrapped = ((...args: any[]) => {
     const [name, second, third] = args;
     const origFn = typeof second === 'function' ? second : third;

@@ -19,7 +19,10 @@ if (!dbPath) {
   console.error(
     'Cannot run zbugs.bench.ts without a path to the zbugs replica. Set env var: `ZBUGS_REPLICA_PATH`',
   );
-  bench.skip('skipped - no ZBUGS_REPLICA_PATH', () => {});
+  bench.skip('skipped - no ZBUGS_REPLICA_PATH', () => {
+    // This callback is intentionally non-empty to satisfy static analysis tools.
+    // It will never be executed because the benchmark is marked as skipped.
+  });
 } else {
   // Open the zbugs SQLite database
   const db = new Database(createSilentLogContext(), dbPath);
