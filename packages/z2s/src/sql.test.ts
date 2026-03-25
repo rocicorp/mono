@@ -258,13 +258,13 @@ describe('string arg packing', () => {
           )}`,
         ),
       ).toMatchInlineSnapshot(`
-      {
-        "text": "SELECT * FROM "foo" WHERE "timestamp" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'",
-        "values": [
-          "1712345678901",
-        ],
-      }
-    `);
+        {
+          "text": "SELECT * FROM "foo" WHERE "timestamp" = to_timestamp($1::text::numeric / 1000.0) AT TIME ZONE 'UTC'",
+          "values": [
+            "1712345678901",
+          ],
+        }
+      `);
     });
 
     test('timestamptz type', () => {
@@ -282,13 +282,13 @@ describe('string arg packing', () => {
           )}`,
         ),
       ).toMatchInlineSnapshot(`
-      {
-        "text": "SELECT * FROM "foo" WHERE "timestampz" = to_timestamp($1::text::bigint / 1000.0)",
-        "values": [
-          "1712345678901",
-        ],
-      }
-    `);
+        {
+          "text": "SELECT * FROM "foo" WHERE "timestampz" = to_timestamp($1::text::numeric / 1000.0)",
+          "values": [
+            "1712345678901",
+          ],
+        }
+      `);
     });
 
     test('jsonb[] type', () => {
@@ -467,7 +467,7 @@ describe('string arg packing', () => {
       ).toMatchInlineSnapshot(`
         {
           "text": "SELECT * FROM "foo" WHERE "timestamp" = ARRAY(
-                  SELECT to_timestamp(value::text::bigint / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
+                  SELECT to_timestamp(value::text::numeric / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
                 )",
           "values": [
             "[1712345678901,1712345678902]",
@@ -493,7 +493,7 @@ describe('string arg packing', () => {
       ).toMatchInlineSnapshot(`
         {
           "text": "SELECT * FROM "foo" WHERE "timestampz" = ARRAY(
-                  SELECT to_timestamp(value::text::bigint / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
+                  SELECT to_timestamp(value::text::numeric / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
                 )",
           "values": [
             "[1712345678901,1712345678902]",
@@ -863,7 +863,7 @@ describe('string arg packing', () => {
         ),
       ).toMatchInlineSnapshot(`
         {
-          "text": "INSERT INTO "foo" VALUES (to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC')",
+          "text": "INSERT INTO "foo" VALUES (to_timestamp($1::text::numeric / 1000.0) AT TIME ZONE 'UTC')",
           "values": [
             "1712345678901",
           ],
@@ -884,7 +884,7 @@ describe('string arg packing', () => {
       ).toMatchInlineSnapshot(`
         {
           "text": "INSERT INTO "foo" VALUES (ARRAY(
-                  SELECT to_timestamp(value::text::bigint / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
+                  SELECT to_timestamp(value::text::numeric / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
                 ))",
           "values": [
             "[1712345678901,1712345678902]",
@@ -905,7 +905,7 @@ describe('string arg packing', () => {
         ),
       ).toMatchInlineSnapshot(`
         {
-          "text": "INSERT INTO "foo" VALUES (to_timestamp($1::text::bigint / 1000.0))",
+          "text": "INSERT INTO "foo" VALUES (to_timestamp($1::text::numeric / 1000.0))",
           "values": [
             "1712345678901",
           ],
@@ -926,7 +926,7 @@ describe('string arg packing', () => {
       ).toMatchInlineSnapshot(`
         {
           "text": "INSERT INTO "foo" VALUES (ARRAY(
-                  SELECT to_timestamp(value::text::bigint / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
+                  SELECT to_timestamp(value::text::numeric / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
                 ))",
           "values": [
             "[1712345678901,1712345678902]",
