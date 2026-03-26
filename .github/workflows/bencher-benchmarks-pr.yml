@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       - uses: bencherdev/bencher@main
 
@@ -65,10 +65,19 @@ jobs:
           --file-size out/zero.js.br \
           --file-size out/zero.js
 
+  playwright-install:
+    name: Install Playwright
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/playwright-install
+
   perf:
     name: Perf PR
     # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: playwright-install
     uses: ./.github/workflows/reusable-benchmark.yml
     strategy:
       matrix:

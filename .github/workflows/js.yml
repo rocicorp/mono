@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       - run: npx syncpack@13 list-mismatches
 
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       - run: npm install --prefix tools/verify-package-deps
       - run: npm run verify-deps
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       - uses: oven-sh/setup-bun@v2
         with:
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       - uses: oven-sh/setup-bun@v2
         with:
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       - run: npm ci
       - run: npm run check-types
@@ -106,7 +106,7 @@ jobs:
           fetch-depth: 100
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       - run: npm ci
       - name: Install Playwright
@@ -130,7 +130,7 @@ jobs:
           fetch-depth: 100
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       - run: npm ci
       - name: Run tests

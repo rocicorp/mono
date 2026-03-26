@@ -8,20 +8,26 @@ on:
       - 'packages/replicache-perf/**'
 
 jobs:
+  playwright-install:
+    name: Install Playwright
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/playwright-install
+
   benchmark:
     name: Performance regression check
+    needs: playwright-install
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: 'npm'
       # Clear out potential user data dirs left over from previous failures.
       - run: rm -rf /tmp/replicache-playwright-*
       - run: npm ci
-      - name: Install Playwright
-        run: npx playwright install --with-deps
 
       - run: npm run build
         working-directory: packages/replicache-perf
