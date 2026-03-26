@@ -13,7 +13,7 @@
     "check-types": "tsc",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint --type-aware src/"
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
   "dependencies": {
     "oxc-parser": "^0.94.0"

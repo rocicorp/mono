@@ -11,7 +11,7 @@
     "test:watch": "vitest watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint --type-aware src/"
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
   "devDependencies": {
     "shared": "0.0.0",

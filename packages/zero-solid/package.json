@@ -17,7 +17,7 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint --type-aware src/"
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
   "peerDependencies": {
     "solid-js": "^1.9.4"
