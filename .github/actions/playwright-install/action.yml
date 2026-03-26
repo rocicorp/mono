@@ -1,15 +1,24 @@
 name: 'Install Playwright'
-description: 'Install Playwright browsers and system dependencies'
+description: 'Install Playwright browsers and system dependencies with caching. Requires node and npm dependencies to be set up before use.'
 
 runs:
   using: 'composite'
   steps:
-    - uses: actions/setup-node@v6
-      with:
-        node-version: 24.x
-        cache: 'npm'
-    - run: npm ci
+    - name: Get Playwright version
+      id: playwright-version
+      run: echo "version=$(npx playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
       shell: bash
-    - name: Install Playwright
+    - name: Cache Playwright browsers
+      id: playwright-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+    - name: Install Playwright browsers and system deps
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: npx playwright install --with-deps
+      shell: bash
+    - name: Install Playwright system deps only
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: npx playwright install-deps
       shell: bash
