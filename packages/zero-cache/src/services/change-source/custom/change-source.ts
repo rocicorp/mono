@@ -100,6 +100,10 @@ class CustomChangeSource implements ChangeSource {
     return this.#startStream();
   }
 
+  startLagReporter() {
+    return null; // Not supported for custom sources
+  }
+
   startStream(
     clientWatermark: string,
     backfillRequests: BackfillRequest[] = [],

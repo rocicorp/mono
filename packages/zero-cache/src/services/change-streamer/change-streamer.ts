@@ -3,6 +3,7 @@ import type {Source} from '../../types/streams.ts';
 import {type Change} from '../change-source/protocol/current/data.ts';
 import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
+import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
 
 /**
@@ -48,13 +49,16 @@ export interface ChangeStreamer {
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>>;
 }
 
-// v1: Client-side support for JSON_FORMAT. Introduced in 0.18.
+// v1: v0.18
+//   - Client-side support for JSON_FORMAT. Introduced in 0.18.
 // v2: v0.19
 //   - Adds the "status" message which is initially used to signal that the
 //     subscription is valid (i.e. starting at the requested watermark).
-// v3: Adds the "taskID" to the subscription context, and support for
+// v3: v0.20
+//   - Adds the "taskID" to the subscription context, and support for
 //     the BackupMonitor-mediated "/snapshot" request.
-// v4: Adds the "replicaVersion" and "minWatermark" fields to the "/snapshot"
+// v4: v0.25
+//   - Adds the "replicaVersion" and "minWatermark" fields to the "/snapshot"
 //     status request so that a subscriber can verify whether its replica,
 //     whether it be restored or existing in a permanent volume, is compatible
 //     with the change-streamer.
@@ -66,6 +70,8 @@ export interface ChangeStreamer {
 //   - Adds `table-update-metadata` message
 // v6: v0.26
 //   - Adds support for `backfill` messages
+// v6: v1.0.1  (backwards compatible, no version change)
+//   - Adds lag reporting to status messages
 
 export const PROTOCOL_VERSION = 6;
 
@@ -132,7 +138,16 @@ export type ChangeEntry = {
  */
 export const statusSchema = v.object({
   tag: v.literal('status'),
+
+  lagReport: v
+    .object({
+      lastTimings: changeSourceTimingsSchema.optional(),
+      nextSendTimeMs: v.number(),
+    })
+    .optional(),
 });
+
+export type Status = v.Infer<typeof statusSchema>;
 
 export const statusMessageSchema = v.tuple([v.literal('status'), statusSchema]);
 

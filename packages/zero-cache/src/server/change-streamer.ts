@@ -74,7 +74,7 @@ export default async function runWorker(
   );
   void warmupConnections(lc, changeDB, 'change');
 
-  const {autoReset} = config;
+  const {autoReset, replicationLag} = config;
   const shard = getShardConfig(config);
 
   let changeStreamer: ChangeStreamerService | undefined;
@@ -93,6 +93,7 @@ export default async function runWorker(
               replica.file,
               initialSync,
               context,
+              replicationLag.reportIntervalMs,
             )
           : await initializeCustomChangeSource(
               lc,

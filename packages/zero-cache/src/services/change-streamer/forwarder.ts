@@ -3,6 +3,7 @@ import {joinIterables, wrapIterable} from '../../../../shared/src/iterables.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current.ts';
 import {Broadcast} from './broadcast.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
+import type {Status} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
 export type ProgressMonitorOptions = {
@@ -84,6 +85,12 @@ export class Forwarder {
   forward(entry: WatermarkedChange) {
     Broadcast.withoutTracking(this.#active.values(), entry);
     this.#updateActiveSubscribers(entry[1]);
+  }
+
+  sendStatus(status: Status) {
+    for (const sub of this.#active.values()) {
+      sub.sendStatus(status);
+    }
   }
 
   /**

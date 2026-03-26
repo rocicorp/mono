@@ -5,7 +5,7 @@ import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
-import {type Downstream} from './change-streamer.ts';
+import {type Downstream, type Status} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
@@ -21,6 +21,7 @@ export class Subscriber {
   readonly #protocolVersion: number;
   readonly id: string;
   readonly #downstream: Subscription<Downstream>;
+  readonly #latestStatus: () => Status;
   #watermark: string;
   #acked: string;
   #backlog: WatermarkedChange[] | null;
@@ -30,10 +31,12 @@ export class Subscriber {
     id: string,
     watermark: string,
     downstream: Subscription<Downstream>,
+    latestStatus: () => Status,
   ) {
     this.#protocolVersion = protocolVersion;
     this.id = id;
     this.#downstream = downstream;
+    this.#latestStatus = latestStatus;
     this.#watermark = watermark;
     this.#acked = watermark;
     this.#backlog = [];
@@ -58,18 +61,28 @@ export class Subscriber {
     }
   }
 
-  #initialStatusSent = false;
+  #initialized = false;
 
-  #ensureInitialStatusSent() {
-    if (this.#protocolVersion >= 2 && !this.#initialStatusSent) {
-      void this.#sendDownstream(['status', {tag: 'status'}]);
-      this.#initialStatusSent = true;
+  /**
+   * Called once the subscriber's watermark has been validated in the initial
+   * catchup process.
+   */
+  #initialize() {
+    if (!this.#initialized) {
+      this.#initialized = true;
+      this.sendStatus(this.#latestStatus());
+    }
+  }
+
+  sendStatus(status: Status) {
+    if (this.#protocolVersion >= 2 && this.#initialized) {
+      void this.#sendDownstream(['status', status]);
     }
   }
 
   /** catchup() is called on ChangeEntries loaded from the store. */
   async catchup(change: WatermarkedChange) {
-    this.#ensureInitialStatusSent();
+    this.#initialize();
     await this.#sendChange(change);
   }
 
@@ -78,7 +91,7 @@ export class Subscriber {
    * entries that were received during the catchup.
    */
   setCaughtUp() {
-    this.#ensureInitialStatusSent();
+    this.#initialize();
     assert(
       this.#backlog,
       'setCaughtUp() called but subscriber is not in catchup mode',

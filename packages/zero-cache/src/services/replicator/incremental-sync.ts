@@ -2,18 +2,20 @@ import type {LogContext} from '@rocicorp/logger';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {
   PROTOCOL_VERSION,
   type ChangeStreamer,
   type Downstream,
 } from '../change-streamer/change-streamer.ts';
-import type {CommitResult} from './change-processor.ts';
 import {RunningState} from '../running-state.ts';
+import type {CommitResult} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
+import {ReplicationReportRecorder} from './reporter/recorder.ts';
+import type {ReplicationReport} from './reporter/report-schema.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /**
@@ -24,6 +26,7 @@ import type {WriteWorkerClient} from './write-worker-client.ts';
  * in a worker thread via the {@link WriteWorkerClient}.
  */
 export class IncrementalSyncer {
+  readonly #lc: LogContext;
   readonly #taskID: string;
   readonly #id: string;
   readonly #changeStreamer: ChangeStreamer;
@@ -32,6 +35,7 @@ export class IncrementalSyncer {
   readonly #mode: ReplicatorMode;
   readonly #publishReplicationStatus: boolean;
   readonly #notifier: Notifier;
+  readonly #reporter: ReplicationReportRecorder;
 
   readonly #state = new RunningState('IncrementalSyncer');
 
@@ -42,6 +46,7 @@ export class IncrementalSyncer {
   );
 
   constructor(
+    lc: LogContext,
     taskID: string,
     id: string,
     changeStreamer: ChangeStreamer,
@@ -50,6 +55,7 @@ export class IncrementalSyncer {
     mode: ReplicatorMode,
     publishReplicationStatus: boolean,
   ) {
+    this.#lc = lc;
     this.#taskID = taskID;
     this.#id = id;
     this.#changeStreamer = changeStreamer;
@@ -58,9 +64,11 @@ export class IncrementalSyncer {
     this.#mode = mode;
     this.#publishReplicationStatus = publishReplicationStatus;
     this.#notifier = new Notifier();
+    this.#reporter = new ReplicationReportRecorder(lc);
   }
 
-  async run(lc: LogContext) {
+  async run() {
+    const lc = this.#lc;
     this.#worker.onError(err => this.#state.stop(lc, err));
     lc.info?.(`Starting IncrementalSyncer`);
     const {watermark: initialWatermark} =
@@ -105,11 +113,22 @@ export class IncrementalSyncer {
         for await (const message of downstream) {
           this.#replicationEvents.add(1);
           switch (message[0]) {
-            case 'status':
-              // Used for checking if a replica can be caught up. Not
-              // relevant here.
-              lc.debug?.(`Received initial status`, message[1]);
+            case 'status': {
+              const {lagReport} = message[1];
+              if (lagReport) {
+                const report: ReplicationReport = {
+                  nextSendTimeMs: lagReport.nextSendTimeMs,
+                };
+                if (lagReport.lastTimings) {
+                  report.lastTimings = {
+                    ...lagReport.lastTimings,
+                    replicateTimeMs: Date.now(),
+                  };
+                }
+                this.#reporter.record(report);
+              }
               break;
+            }
             case 'error':
               // Unrecoverable error. Stop the service.
               this.stop(lc, message[1]);
