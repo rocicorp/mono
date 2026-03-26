@@ -21,6 +21,7 @@ const colors = !process.env.NO_COLOR && !process.env.NODE_DISABLE_COLORS;
 type MeasureFn = Parameters<typeof measure>[0];
 
 type BenchResult = {name: string; stats: Stats};
+const resultsStack: (BenchResult[] | undefined)[] = [];
 let currentResults: BenchResult[] | undefined;
 
 function benchResultToJson(name: string, stats: Stats) {
@@ -121,11 +122,12 @@ function wrapSuite(suiteFn: (...args: any[]) => any): typeof vitest.describe {
       const results: BenchResult[] = [];
 
       vitest.beforeAll(() => {
+        resultsStack.push(currentResults);
         currentResults = results;
       });
 
       vitest.afterAll(() => {
-        currentResults = undefined;
+        currentResults = resultsStack.pop();
         if (results.length === 0) return;
         if (benchOutputFormat === 'json') {
           printJsonResults(results);
