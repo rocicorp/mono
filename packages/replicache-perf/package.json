@@ -24,7 +24,7 @@
     "replicache": "15.2.1",
     "shared": "0.0.0",
     "tsx": "^4.21.0",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.2",
     "vite": "8.0.3",
     "xbytes": "^1.7.0"
   },

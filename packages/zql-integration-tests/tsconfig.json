@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "rootDir": "..",
     "outDir": "dist"
   },
   "include": ["src/**/*.ts", "../zql-benchmarks/src/chinook.bench.ts"]

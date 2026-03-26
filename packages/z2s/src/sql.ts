@@ -3,7 +3,7 @@ import {
   escapeSQLiteIdentifier,
 } from '@databases/escape-identifier';
 import type {FormatConfig, SQLItem, SQLQuery} from '@databases/sql';
-import baseSql, {SQLItemType} from '@databases/sql';
+import sql, {SQLItemType} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {
   isPgNumberType,
@@ -270,7 +270,7 @@ function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {
   }
 }
 
-export const sql = baseSql.default;
+export {sql};
 
 const PREVIOUSLY_SEEN_VALUE = Symbol('PREVIOUSLY_SEEN_VALUE');
 
