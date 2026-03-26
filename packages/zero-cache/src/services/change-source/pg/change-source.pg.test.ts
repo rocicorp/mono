@@ -3,7 +3,9 @@ import {LogContext} from '@rocicorp/logger';
 import {PostgresError} from 'postgres';
 import {beforeEach, describe, expect, vi} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {assert} from '../../../../../shared/src/asserts.ts';
 import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../../shared/src/must.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
 import {sleep} from '../../../../../shared/src/sleep.ts';
 import {Default, Index} from '../../../db/postgres-replica-identity-enum.ts';
@@ -106,7 +108,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     void (async () => {
       try {
         for await (const msg of sub) {
-          if (msg[0] === 'status' && !msg[1].ack) {
+          if (msg[0] === 'status' && !msg[1].ack && !msg[1].lagReport) {
             continue; // filter out keepalives
           }
           queue.enqueue(msg);
@@ -118,7 +120,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     return queue;
   }
 
-  const WATERMARK_REGEX = /[0-9a-z]{2,}/;
+  const WATERMARK_REGEX = /[0-9a-z]{3,}/;
 
   async function setReplicaIdentityFull() {
     await upstream.unsafe(
@@ -144,7 +146,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     return toBigInt(lsn);
   }
 
-  async function startReplication() {
+  async function startReplication(lagReportIntervalMs?: number) {
     ({changeSource: source} = await initializePostgresChangeSource(
       lc,
       upstreamURI,
@@ -156,6 +158,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       replicaDbFile.path,
       {tableCopyWorkers: 5},
       {test: 'context'},
+      lagReportIntervalMs,
     ));
 
     const [{slot, initialSyncContext, subscriberContext}] = await upstream`
@@ -869,6 +872,67 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       }
     },
   );
+
+  test('replication lag reports', async () => {
+    await startReplication(10);
+
+    const initialSend = await source.startLagReporter();
+    expect(initialSend).toMatchObject({
+      nextSendTimeMs: expect.any(Number),
+    });
+
+    const {changes} = await startStream('00');
+    try {
+      const downstream = drainToQueue(changes);
+
+      const EXPECTED_LAG_REPORT = [
+        'status',
+        {
+          ack: false,
+          lagReport: {
+            lastTimings: {
+              sendTimeMs: expect.any(Number),
+              commitTimeMs: expect.any(Number),
+              receiveTimeMs: expect.any(Number),
+            },
+            nextSendTimeMs: expect.any(Number),
+          },
+        },
+        {
+          watermark: WATERMARK_REGEX,
+        },
+      ];
+
+      const lag1 = await downstream.dequeue();
+      expect(lag1).toMatchObject(EXPECTED_LAG_REPORT);
+      const lag2 = await downstream.dequeue();
+      expect(lag2).toMatchObject(EXPECTED_LAG_REPORT);
+
+      assert(lag1[0] === 'status', () => lag1[0]);
+      assert(lag2[0] === 'status', () => lag1[0]);
+
+      expect(lag1[1].lagReport?.lastTimings.sendTimeMs).toBe(
+        initialSend?.nextSendTimeMs,
+      );
+      expect(
+        must(lag2[1].lagReport).lastTimings.sendTimeMs,
+      ).toBeGreaterThanOrEqual(must(lag1[1].lagReport).nextSendTimeMs);
+
+      for (const status of [lag1[1], lag2[1]]) {
+        const report1 = must(status.lagReport);
+        expect(report1.nextSendTimeMs).toBe(
+          Math.max(
+            report1.lastTimings.receiveTimeMs,
+            report1.lastTimings.sendTimeMs + 10,
+          ),
+        );
+      }
+
+      expect(lag2[2].watermark > lag1[2].watermark).toBe(true);
+    } finally {
+      changes.cancel();
+    }
+  });
 
   test('missing replication slot', async () => {
     await startReplication();

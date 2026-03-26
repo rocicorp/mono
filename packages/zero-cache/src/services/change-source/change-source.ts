@@ -18,6 +18,12 @@ export type ChangeStream = {
 
 export interface ChangeSource {
   /**
+   * Starts a replication lag reporter, returning the send time of the next
+   * expected report, or `null` if lag reporting is not supported / enabled.
+   */
+  startLagReporter(): Promise<{nextSendTimeMs: number}> | null;
+
+  /**
    * Starts a stream of changes starting after the specific watermark,
    * with a corresponding sink for upstream acknowledgements.
    */

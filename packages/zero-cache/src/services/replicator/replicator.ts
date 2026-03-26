@@ -76,6 +76,7 @@ export class ReplicatorService implements Replicator, Service {
     this.#worker = worker;
 
     this.#incrementalSyncer = new IncrementalSyncer(
+      this.#lc,
       taskID,
       `${taskID}/${id}`,
       changeStreamer,
@@ -91,7 +92,7 @@ export class ReplicatorService implements Replicator, Service {
   }
 
   run() {
-    this.#runPromise = this.#incrementalSyncer.run(this.#lc);
+    this.#runPromise = this.#incrementalSyncer.run();
     return this.#runPromise;
   }
 

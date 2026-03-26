@@ -13,7 +13,13 @@ export function createSubscriber(
   const sub = Subscription.create<Downstream>({
     cleanup: unconsumed => received.push(...unconsumed),
   });
-  const subscriber = new Subscriber(PROTOCOL_VERSION, id, watermark, sub);
+  const subscriber = new Subscriber(
+    PROTOCOL_VERSION,
+    id,
+    watermark,
+    sub,
+    () => ({tag: 'status'}),
+  );
   if (caughtUp) {
     subscriber.setCaughtUp();
   }

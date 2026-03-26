@@ -414,6 +414,16 @@ test('zero-cache --help', () => {
                                                                         clients. This is a heavy-weight operation and can result in user-visible                                              
                                                                         slowness or downtime if compute resources are scarce.                                                                 
                                                                                                                                                                                               
+     --replication-lag-report-interval-ms number                        optional                                                                                                              
+       ZERO_REPLICATION_LAG_REPORT_INTERVAL_MS env                                                                                                                                            
+                                                                        The minimum interval at which replication lag reports are written upstream and                                        
+                                                                        reported via the zero.replication.total_lag opentelemetry metric. Because                                             
+                                                                        replication lag reports are only issued after the previous one was received, the                                      
+                                                                        actual interval between reports may be longer when there is a backlog in the                                          
+                                                                        replication stream.                                                                                                   
+                                                                                                                                                                                              
+                                                                        This monitoring feature is only support on the postgres upstream type.                                                
+                                                                                                                                                                                              
      --admin-password string                                            optional                                                                                                              
        ZERO_ADMIN_PASSWORD env                                                                                                                                                                
                                                                         A password used to administer zero-cache server, for example to access the                                            

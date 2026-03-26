@@ -76,6 +76,7 @@ describe('change-streamer/service', () => {
             changes,
             acks: {push: status => acks.enqueue(status)},
           }),
+        startLagReporter: () => Promise.resolve({nextSendTimeMs: 123}),
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
@@ -152,10 +153,10 @@ describe('change-streamer/service', () => {
       {watermark: '09'},
     ]);
 
-    changes.push(['status', {ack: false}, {watermark: '0a'}]);
-    changes.push(['status', {ack: true}, {watermark: '0b'}]);
-
-    expect(await nextChange(downstream)).toMatchObject({tag: 'status'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'status',
+      lagReport: {nextSendTimeMs: 123},
+    });
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'insert',
@@ -170,8 +171,40 @@ describe('change-streamer/service', () => {
       extra: 'fields',
     });
 
-    // Await the ACK for the single commit, then the status message.
-    await expectAcks('09', '0b');
+    changes.push(['status', {ack: false}, {watermark: '0a'}]);
+
+    changes.push([
+      'status',
+      {
+        ack: false,
+        lagReport: {
+          lastTimings: {
+            sendTimeMs: 150,
+            commitTimeMs: 151,
+            receiveTimeMs: 152,
+          },
+          nextSendTimeMs: 234,
+        },
+      },
+      {watermark: '0b'},
+    ]);
+
+    changes.push(['status', {ack: true}, {watermark: '0c'}]);
+
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'status',
+      lagReport: {
+        lastTimings: {
+          sendTimeMs: 150,
+          commitTimeMs: 151,
+          receiveTimeMs: 152,
+        },
+        nextSendTimeMs: 234,
+      },
+    });
+
+    // Await the ACK for the single commit, then the status message with an ack.
+    await expectAcks('09', '0c');
 
     expect(
       await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
@@ -901,6 +934,7 @@ describe('change-streamer/service', () => {
           retried(true);
           return resolver().promise;
         }),
+      startLagReporter: () => null,
     };
     const streamer = await initializeStreamer(
       lc,
@@ -928,6 +962,7 @@ describe('change-streamer/service', () => {
         requests.enqueue(req);
         return resolver().promise;
       }),
+      startLagReporter: () => null,
     };
     let streamer = await initializeStreamer(
       lc,
@@ -989,6 +1024,7 @@ describe('change-streamer/service', () => {
           retried(true);
           return resolver().promise;
         }),
+      startLagReporter: () => null,
     };
     const streamer = await initializeStreamer(
       lc,
@@ -1028,6 +1064,7 @@ describe('change-streamer/service', () => {
           retried(true);
           return resolver().promise;
         }),
+      startLagReporter: () => null,
     };
     const streamer = await initializeStreamer(
       lc,
@@ -1084,6 +1121,7 @@ describe('change-streamer/service', () => {
           retried(true);
           return resolver().promise;
         }),
+      startLagReporter: () => null,
     };
     const streamer = await initializeStreamer(
       lc,
@@ -1157,6 +1195,7 @@ describe('change-streamer/service', () => {
             acks: () => {},
           }),
         ),
+      startLagReporter: () => null,
     };
     const streamer = await initializeStreamer(
       lc,
