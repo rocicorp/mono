@@ -120,7 +120,7 @@ jobs:
     needs: [format, lint, check-types]
     strategy:
       matrix:
-        pg-version: [17, 16, 15]
+        pg-version: [18, 17, 16, 15]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
