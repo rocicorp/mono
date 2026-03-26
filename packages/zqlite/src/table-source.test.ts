@@ -6,7 +6,8 @@ import type {Row, Value} from '../../zero-protocol/src/data.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import type {Change} from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';
-import {Database} from './db.ts';
+import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
+import {Database, Statement} from './db.ts';
 import {format} from './internal/sql.ts';
 import {
   fromSQLiteTypes,
@@ -15,6 +16,7 @@ import {
 } from './table-source.ts';
 import {filtersToSQL} from './query-builder.ts';
 import {assert} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
 
 const columns = {
@@ -975,4 +977,66 @@ describe('fromSQLiteTypes error messages', () => {
       `[SyntaxError: Unexpected token 'o', "not valid json" is not valid JSON]`,
     );
   });
+});
+
+test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes is iterated', () => {
+  const db = new Database(lc, ':memory:');
+  db.exec('CREATE TABLE test (id TEXT PRIMARY KEY, val INTEGER);');
+  db.prepare('INSERT INTO test (id, val) VALUES (?, ?)').run('1', 1);
+
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'test',
+    {id: {type: 'string'}, val: {type: 'number'}},
+    ['id'],
+  );
+
+  // Spy on Statement.prototype.iterate to track .return() calls on the
+  // returned iterator.
+  let iteratorReturnCalled = false;
+  const origIterate = Statement.prototype.iterate;
+  // @ts-expect-error monkey-patching for test
+  Statement.prototype.iterate = function (...args) {
+    const iter = origIterate.apply(this, args);
+    const origReturn = must(iter.return).bind(iter);
+    iter.return = () => {
+      iteratorReturnCalled = true;
+      return origReturn();
+    };
+    return iter;
+  };
+
+  try {
+    // debug.initQuery() is called in #fetch after the SQLite iterator is
+    // created but before the yield* generator chain (and thus
+    // #mapFromSQLiteTypes) is ever iterated. If initQuery throws, the fix
+    // ensures rowIterator.return() is still called in #fetch's finally block.
+    // Without the fix, rowIterator.return() was only in #mapFromSQLiteTypes'
+    // finally block, which never ran because the generator was never started.
+    const throwingDebug: DebugDelegate = {
+      initQuery() {
+        throw new Error('initQuery error');
+      },
+      rowVended() {},
+      getVendedRowCounts: () => ({}),
+      getVendedRows: () => ({}),
+      recordNVisit() {},
+      getNVisitCounts: () => ({}),
+      reset() {},
+    };
+
+    const input = source.connect(
+      [['id', 'asc']],
+      undefined,
+      undefined,
+      throwingDebug,
+    );
+
+    expect(() => [...input.fetch({})]).toThrow('initQuery error');
+    expect(iteratorReturnCalled).toBe(true);
+  } finally {
+    Statement.prototype.iterate = origIterate;
+  }
 });
