@@ -3,7 +3,7 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "outDir": "out",
-    "rootDir": "src",
+    "rootDir": "../",
     "noEmit": false,
     "emitDeclarationOnly": true
   },

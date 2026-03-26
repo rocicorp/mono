@@ -3,7 +3,7 @@
   "compilerOptions": {
     "noEmit": false,
     "emitDeclarationOnly": true,
-    "rootDir": "src",
+    "rootDir": "../",
     "outDir": "out"
   },
   "include": ["src"],
