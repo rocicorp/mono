@@ -83,6 +83,9 @@ export class TestDBs {
       },
       ...(typeOpts ? postgresTypeConfig(typeOpts) : {}),
     });
+    // Ensure deterministic behavior for timestamp/date tests regardless
+    // of the server's timezone setting.
+    await db.unsafe("SET TIME ZONE 'UTC'");
     this.#dbs[database] = db;
     return Object.assign(db, {
       [Symbol.asyncDispose]: async () => {
