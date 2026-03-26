@@ -9,6 +9,7 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+import {assert} from '../../shared/src/asserts.ts';
 import {sql} from './internal/sql.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
 import type {Start} from '../../zql/src/ivm/operator.ts';
@@ -27,7 +28,7 @@ export function buildSelectQuery(
   columns: Record<string, SchemaValue>,
   constraint: Constraint | undefined,
   filters: NoSubqueryCondition | undefined,
-  order: Ordering,
+  order: Ordering | undefined,
   reverse: boolean | undefined,
   start: Start | undefined,
 ) {
@@ -38,6 +39,7 @@ export function buildSelectQuery(
   const constraints: SQLQuery[] = constraintsToSQL(constraint, columns);
 
   if (start) {
+    assert(order !== undefined, 'start requires ordering');
     constraints.push(gatherStartConstraints(start, reverse, order, columns));
   }
 
@@ -49,7 +51,10 @@ export function buildSelectQuery(
     query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
   }
 
-  return sql`${query} ${orderByToSQL(order, !!reverse)}`;
+  if (order && order.length > 0) {
+    return sql`${query} ${orderByToSQL(order, !!reverse)}`;
+  }
+  return query;
 }
 
 export function constraintsToSQL(

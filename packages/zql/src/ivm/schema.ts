@@ -21,5 +21,5 @@ export type SourceSchema = {
   // We should not sync the data from the session table to the client.
   readonly system: System;
   readonly compareRows: Comparator;
-  readonly sort: Ordering;
+  readonly sort?: Ordering | undefined;
 };
