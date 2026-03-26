@@ -10,6 +10,21 @@ runs:
         cache: 'npm'
     - run: npm ci
       shell: bash
-    - name: Install Playwright
+    - name: Get Playwright version
+      id: playwright-version
+      run: echo "version=$(npx playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - name: Cache Playwright browsers
+      id: playwright-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+    - name: Install Playwright browsers and system deps
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: npx playwright install --with-deps
+      shell: bash
+    - name: Install Playwright system deps only
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: npx playwright install-deps
       shell: bash
