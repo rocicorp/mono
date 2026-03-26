@@ -27,7 +27,10 @@
     "build-ci": "npm install && npx turbo run build",
     "start-zero-cache": "cd packages/zero-cache && npm run start",
     "verify-deps": "cd tools/verify-package-deps && npm run verify",
-    "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix"
+    "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix",
+    "bench": "npx turbo run bench --concurrency=1",
+    "bench:bmf": "npx turbo run bench:bmf --concurrency=1",
+    "bench:bmf:silent": "npx turbo run bench:bmf:silent --concurrency=1"
   },
   "devDependencies": {
     "@vitest/browser-playwright": "^4.1.0",

@@ -1,0 +1,15 @@
+name: 'Install Playwright'
+description: 'Install Playwright browsers and system dependencies'
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24.x
+        cache: 'npm'
+    - run: npm ci
+      shell: bash
+    - name: Install Playwright
+      run: npx playwright install --with-deps
+      shell: bash

@@ -1,5 +1,6 @@
 import {playwright} from '@vitest/browser-playwright';
 import {defineConfig} from 'vitest/config';
+import type {BrowserConfigOptions} from 'vitest/node';
 import {makeDefine} from '../build.ts';
 
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
@@ -36,11 +37,20 @@ const logSilenceMessages = [
   'Zero starting up with no server URL',
 ];
 
+const browser: BrowserConfigOptions = {
+  enabled: true,
+  provider: playwright(),
+  headless: true,
+  screenshotFailures: false,
+  instances: VITEST_BROWSER
+    ? ([{browser: VITEST_BROWSER}] as const)
+    : [
+        {browser: 'chromium'},
+        ...(CI ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const) : []),
+      ],
+};
+
 export default defineConfig({
-  // https://github.com/vitest-dev/vitest/issues/5332#issuecomment-1977785593
-  optimizeDeps: {
-    include: ['vitest > @vitest/expect > chai'],
-  },
   define,
 
   test: {
@@ -54,20 +64,7 @@ export default defineConfig({
     },
     include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
     silent: 'passed-only',
-    browser: {
-      enabled: true,
-      provider: playwright(),
-      headless: true,
-      screenshotFailures: false,
-      instances: VITEST_BROWSER
-        ? ([{browser: VITEST_BROWSER}] as const)
-        : [
-            {browser: 'chromium'},
-            ...(CI
-              ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const)
-              : []),
-          ],
-    },
+    browser,
     coverage: {
       provider: 'v8',
       include: ['src/**'],
@@ -76,5 +73,49 @@ export default defineConfig({
       enabled: false,
     },
     testTimeout: 10_000,
+  },
+});
+
+const externalizedWarningRegExp =
+  /has been externalized for browser compatibility/;
+
+export const benchConfig = defineConfig({
+  define: {
+    ...define,
+    'process.env.NO_COLOR': JSON.stringify(process.env.NO_COLOR ?? ''),
+    'process.env.NODE_DISABLE_COLORS': JSON.stringify(
+      process.env.NODE_DISABLE_COLORS ?? '',
+    ),
+    'process.env.BENCH_OUTPUT_FORMAT': JSON.stringify(
+      process.env.BENCH_OUTPUT_FORMAT ?? '',
+    ),
+  },
+
+  test: {
+    include: ['src/**/*.bench{,.node}.?(c|m)[jt]s?(x)'],
+    disableConsoleIntercept: true,
+    silent: false,
+    onConsoleLog(str, type, _entity) {
+      if (externalizedWarningRegExp.test(str)) {
+        return false;
+      }
+      if (type === 'stderr') {
+        console.error(str);
+      } else {
+        console.log(str);
+      }
+      return false;
+    },
+    browser,
+    slowTestThreshold: 15_000,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
+  },
+
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
 });

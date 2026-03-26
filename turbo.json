@@ -25,6 +25,15 @@
     "check-types": {
       "dependsOn": ["^check-types", "build"],
       "outputs": []
+    },
+    "bench": {
+      "cache": false
+    },
+    "bench:bmf": {
+      "cache": false
+    },
+    "bench:bmf:silent": {
+      "cache": false
     }
   }
 }

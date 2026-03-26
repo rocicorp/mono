@@ -1,5 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import {bench, describe, expect} from 'vitest';
+import {expect} from 'vitest';
+import {bench, describe} from '../../../shared/src/bench.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {getInternalReplicacheImplForTesting, Zero} from './zero.ts';
@@ -62,67 +63,49 @@ await z.mutateBatch(async m => {
 await getInternalReplicacheImplForTesting(z).persist();
 
 describe('basics', () => {
-  bench(
-    `All ${N} rows x 10 columns (numbers)`,
-    async () => {
-      const {promise, resolve} = resolver<readonly UserRow[]>();
-      const m = z.materialize(zql.user);
-      m.addListener(data => {
-        if (data.length === N) {
-          resolve(data as readonly UserRow[]);
-        }
-      });
-      const rows = await promise;
-      expect(rows.reduce((sum, row) => sum + row.a, 0)).toBe(((N - 1) / 2) * N);
-      m.destroy();
-    },
-    {
-      throws: true,
-    },
-  );
+  bench(`All ${N} rows x 10 columns (numbers)`, async () => {
+    const {promise, resolve} = resolver<readonly UserRow[]>();
+    const m = z.materialize(zql.user);
+    m.addListener(data => {
+      if (data.length === N) {
+        resolve(data as readonly UserRow[]);
+      }
+    });
+    const rows = await promise;
+    expect(rows.reduce((sum, row) => sum + row.a, 0)).toBe(((N - 1) / 2) * N);
+    m.destroy();
+  });
 });
 
 describe('pk compare', () => {
-  bench(
-    `pk = N`,
-    async () => {
-      const {promise, resolve} = resolver<readonly UserRow[]>();
-      const value = N - 1;
-      const m = z.materialize(zql.user.where('a', value));
-      m.addListener(data => {
-        if (data.length === 1) {
-          resolve(data as readonly UserRow[]);
-        }
-      });
-      const rows = await promise;
-      expect(rows[0].a).toBe(value);
-      m.destroy();
-    },
-    {
-      throws: true,
-    },
-  );
+  bench(`pk = N`, async () => {
+    const {promise, resolve} = resolver<readonly UserRow[]>();
+    const value = N - 1;
+    const m = z.materialize(zql.user.where('a', value));
+    m.addListener(data => {
+      if (data.length === 1) {
+        resolve(data as readonly UserRow[]);
+      }
+    });
+    const rows = await promise;
+    expect(rows[0].a).toBe(value);
+    m.destroy();
+  });
 });
 
 describe('with filter', () => {
-  bench(
-    `Lower rows ${N / 2} x 10 columns (numbers)`,
-    async () => {
-      const {promise, resolve} = resolver<readonly UserRow[]>();
-      const m = z.materialize(zql.user.where('a', '<', N / 2));
-      m.addListener(data => {
-        if (data.length === N / 2) {
-          resolve(data as readonly UserRow[]);
-        }
-      });
-      const rows = await promise;
-      expect(rows.reduce((sum, row) => sum + row.a, 0)).toBe(
-        (((N / 2 - 1) / 2) * N) / 2,
-      );
-      m.destroy();
-    },
-    {
-      throws: true,
-    },
-  );
+  bench(`Lower rows ${N / 2} x 10 columns (numbers)`, async () => {
+    const {promise, resolve} = resolver<readonly UserRow[]>();
+    const m = z.materialize(zql.user.where('a', '<', N / 2));
+    m.addListener(data => {
+      if (data.length === N / 2) {
+        resolve(data as readonly UserRow[]);
+      }
+    });
+    const rows = await promise;
+    expect(rows.reduce((sum, row) => sum + row.a, 0)).toBe(
+      (((N / 2 - 1) / 2) * N) / 2,
+    );
+    m.destroy();
+  });
 });

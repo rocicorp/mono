@@ -28,6 +28,8 @@ function* getProjects(): Iterable<string> {
       if (basePath === '' && name === 'vitest.config.ts') continue;
       // If any suffixed config exists in this dir, exclude the base config
       if (name === 'vitest.config.ts' && hasSuffixed) continue;
+      // Skip bench configs — those are run separately via `npm run bench`
+      if (name.includes('.bench')) continue;
       yield `${basePath}${name}`;
     }
 

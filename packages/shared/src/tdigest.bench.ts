@@ -2,7 +2,7 @@
 // https://github.com/influxdata/tdigest
 
 import {generateMersenne53Randomizer} from '@faker-js/faker';
-import {bench, describe} from 'vitest';
+import {bench, describe} from './bench.ts';
 import {Centroid} from './centroid.js';
 import {TDigest} from './tdigest.js';
 
