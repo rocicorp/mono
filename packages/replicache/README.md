@@ -53,7 +53,7 @@ npm install
 ```bash
 vim packages/replicache/package.json
 # Must be done in root of mono checkout
-npx syncpack fix-mismatches
+npx syncpack fix
 npm install
 npm run build
 git commit -a -m 'chore(replicache): Bump version to v$NEW_VERSION'
