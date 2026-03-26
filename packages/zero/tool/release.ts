@@ -393,7 +393,7 @@ try {
   execute('npm install');
   execute('npm run build');
   execute('npm run format');
-  execute('npx -y syncpack@13 fix-mismatches');
+  execute('npx -y syncpack fix');
 
   execute('git status');
 

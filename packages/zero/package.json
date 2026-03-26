@@ -85,6 +85,7 @@
     "expo-sqlite": ">=15",
     "replicache": "15.2.1",
     "shared": "0.0.0",
+    "syncpack": "^14.2.1",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
     "typescript": "~5.9.3",
@@ -100,8 +101,8 @@
     "zqlite": "0.0.0"
   },
   "peerDependencies": {
-    "expo-sqlite": ">=15",
-    "@op-engineering/op-sqlite": ">=15"
+    "@op-engineering/op-sqlite": ">=15",
+    "expo-sqlite": ">=15"
   },
   "peerDependenciesMeta": {
     "expo-sqlite": {
