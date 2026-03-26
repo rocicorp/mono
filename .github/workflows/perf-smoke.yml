@@ -21,8 +21,7 @@ jobs:
           node-version: 24.x
           cache: 'npm'
       - run: npm ci
-      - name: Install Playwright
-        run: npx playwright install --with-deps
+      - uses: ./.github/actions/playwright-install
       - name: Run benchmark
         shell: bash
         working-directory: packages/replicache-perf
