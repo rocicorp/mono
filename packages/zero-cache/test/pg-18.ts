@@ -1,3 +1,3 @@
 import {runPostgresContainer} from './pg-container-setup.ts';
 
-export default runPostgresContainer('postgres:18.1-alpine3.23', 'UTC+1');
+export default runPostgresContainer('postgres:18-alpine', 'UTC+1');
