@@ -61,7 +61,7 @@ export interface Source {
    *   a remove of the old row followed by an add of the new row.
    */
   connect(
-    sort: Ordering,
+    sort: Ordering | undefined,
     filters?: Condition,
     splitEditKeys?: Set<string>,
     debug?: DebugDelegate,

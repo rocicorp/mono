@@ -6,6 +6,7 @@ import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
   generateWithOverlay,
+  generateWithOverlayUnordered,
   isJoinMatch,
   rowEqualsForCompoundKey,
   type JoinChangeOverlay,
@@ -276,10 +277,18 @@ export class Join implements Input {
           this.#inprogressChildChange.position,
         ) > 0
       ) {
+        const childSchema = this.#child.getSchema();
+        if (childSchema.sort === undefined) {
+          return generateWithOverlayUnordered(
+            stream,
+            this.#inprogressChildChange.change,
+            childSchema,
+          );
+        }
         return generateWithOverlay(
           stream,
           this.#inprogressChildChange.change,
-          this.#child.getSchema(),
+          childSchema,
         );
       }
       return stream;

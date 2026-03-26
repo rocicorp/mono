@@ -1,6 +1,7 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
+import {must} from '../../../shared/src/must.ts';
 import {once} from '../../../shared/src/iterables.ts';
 import type {
   Condition,
@@ -69,7 +70,7 @@ type Index = {
 export type Connection = {
   input: Input;
   output: Output | undefined;
-  sort: Ordering;
+  sort?: Ordering | undefined;
   splitEditKeys: Set<string> | undefined;
   compareRows: Comparator;
   filters:
@@ -140,12 +141,12 @@ export class MemorySource implements Source {
     return this.#getPrimaryIndex().data;
   }
 
-  #getSchema(connection: Connection): SourceSchema {
+  #getSchema(connection: Connection, unordered: boolean): SourceSchema {
     return {
       tableName: this.#tableName,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
-      sort: connection.sort,
+      sort: unordered ? undefined : connection.sort,
       system: 'client',
       relationships: {},
       isHidden: false,
@@ -154,11 +155,13 @@ export class MemorySource implements Source {
   }
 
   connect(
-    sort: Ordering,
+    sort: Ordering | undefined,
     filters?: Condition,
     splitEditKeys?: Set<string>,
   ): SourceInput {
     const transformedFilters = transformFilters(filters);
+    const unordered = sort === undefined;
+    const internalSort = sort ?? this.#primaryIndexSort;
 
     const input: SourceInput = {
       getSchema: () => schema,
@@ -175,9 +178,9 @@ export class MemorySource implements Source {
     const connection: Connection = {
       input,
       output: undefined,
-      sort,
+      sort: internalSort,
       splitEditKeys,
-      compareRows: makeComparator(sort),
+      compareRows: makeComparator(internalSort),
       filters: transformedFilters.filters
         ? {
             condition: transformedFilters.filters,
@@ -186,8 +189,10 @@ export class MemorySource implements Source {
         : undefined,
       lastPushedEpoch: 0,
     };
-    const schema = this.#getSchema(connection);
-    assertOrderingIncludesPK(sort, this.#primaryKey);
+    const schema = this.#getSchema(connection, unordered);
+    if (!unordered) {
+      assertOrderingIncludesPK(internalSort, this.#primaryKey);
+    }
     this.#connections.push(connection);
     return input;
   }
@@ -250,7 +255,8 @@ export class MemorySource implements Source {
   }
 
   *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
-    const {sort: requestedSort, compareRows} = conn;
+    const requestedSort = must(conn.sort);
+    const {compareRows} = conn;
     const connectionComparator = (r1: Row, r2: Row) =>
       compareRows(r1, r2) * (req.reverse ? -1 : 1);
 
@@ -756,6 +762,80 @@ export function* generateWithOverlayInner(
   if (!addOverlayYielded && overlays.add) {
     yield {row: overlays.add, relationships: {}};
   }
+}
+
+/**
+ * Like {@link generateWithOverlay} but for unordered streams.
+ * No `startAt` or comparator needed. Injects remove/old-edit rows eagerly
+ * at the start, and suppresses add/new-edit rows inline by PK match.
+ */
+export function* generateWithOverlayUnordered(
+  rows: Iterable<Row>,
+  constraint: Constraint | undefined,
+  overlay: Overlay | undefined,
+  lastPushedEpoch: number,
+  primaryKey: PrimaryKey,
+  filterPredicate?: ((row: Row) => boolean) | undefined,
+) {
+  let overlayToApply: Overlay | undefined = undefined;
+  if (overlay && lastPushedEpoch >= overlay.epoch) {
+    overlayToApply = overlay;
+  }
+  let overlays: Overlays = {add: undefined, remove: undefined};
+  switch (overlayToApply?.change.type) {
+    case 'add':
+      overlays = {add: overlayToApply.change.row, remove: undefined};
+      break;
+    case 'remove':
+      overlays = {add: undefined, remove: overlayToApply.change.row};
+      break;
+    case 'edit':
+      overlays = {
+        add: overlayToApply.change.row,
+        remove: overlayToApply.change.oldRow,
+      };
+      break;
+  }
+  if (constraint) {
+    overlays = overlaysForConstraint(overlays, constraint);
+  }
+  if (filterPredicate) {
+    overlays = overlaysForFilterPredicate(overlays, filterPredicate);
+  }
+  yield* generateWithOverlayInnerUnordered(rows, overlays, primaryKey);
+}
+
+export function* generateWithOverlayInnerUnordered(
+  rowIterator: Iterable<Row>,
+  overlays: Overlays,
+  primaryKey: PrimaryKey,
+) {
+  // Eager inject: yield the add overlay at the start (row not yet in storage)
+  if (overlays.add) {
+    yield {row: overlays.add, relationships: {}};
+  }
+  // Stream with inline suppress: skip the remove overlay (row still in storage)
+  let removeSkipped = false;
+  for (const row of rowIterator) {
+    if (
+      !removeSkipped &&
+      overlays.remove &&
+      rowMatchesPK(overlays.remove, row, primaryKey)
+    ) {
+      removeSkipped = true;
+      continue;
+    }
+    yield {row, relationships: {}};
+  }
+}
+
+function rowMatchesPK(a: Row, b: Row, primaryKey: PrimaryKey): boolean {
+  for (const key of primaryKey) {
+    if (!valuesEqual(a[key], b[key])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**

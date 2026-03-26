@@ -6,6 +6,8 @@ import {Catch} from './catch.ts';
 import type {Change} from './change.ts';
 import {
   generateWithOverlayInner,
+  generateWithOverlayInnerUnordered,
+  generateWithOverlayUnordered,
   MemorySource,
   overlaysForConstraintForTest,
   overlaysForStartAtForTest,
@@ -509,4 +511,213 @@ test('overlaysForStartAt', () => {
       compare,
     ),
   ).toEqual({add: undefined, remove: undefined});
+});
+
+describe('generateWithOverlayInnerUnordered', () => {
+  const rows = [
+    {id: 1, s: 'a', n: 11},
+    {id: 2, s: 'b', n: 22},
+    {id: 3, s: 'c', n: 33},
+  ];
+
+  const pk = ['id'] as const;
+
+  test.each([
+    {
+      name: 'No overlay',
+      overlays: {add: undefined, remove: undefined},
+      expected: rows,
+    },
+    {
+      name: 'Add overlay — yields added row first',
+      overlays: {add: {id: 4, s: 'd', n: 44}, remove: undefined},
+      expected: [{id: 4, s: 'd', n: 44}, ...rows],
+    },
+    {
+      name: 'Remove overlay start',
+      overlays: {add: undefined, remove: {id: 1, s: 'a', n: 11}},
+      expected: [rows[1], rows[2]],
+    },
+    {
+      name: 'Remove overlay middle',
+      overlays: {add: undefined, remove: {id: 2, s: 'b', n: 22}},
+      expected: [rows[0], rows[2]],
+    },
+    {
+      name: 'Remove overlay end',
+      overlays: {add: undefined, remove: {id: 3, s: 'c', n: 33}},
+      expected: [rows[0], rows[1]],
+    },
+    {
+      name: 'Remove overlay not found — yields all rows',
+      overlays: {add: undefined, remove: {id: 99, s: 'z', n: 0}},
+      expected: rows,
+    },
+    {
+      name: 'Edit (add + remove) — new row first, old row suppressed',
+      overlays: {
+        add: {id: 2, s: 'b2', n: 225},
+        remove: {id: 2, s: 'b', n: 22},
+      },
+      expected: [{id: 2, s: 'b2', n: 225}, rows[0], rows[2]],
+    },
+    {
+      name: 'Edit position change — different non-PK values',
+      overlays: {
+        add: {id: 5, s: 'e', n: 55},
+        remove: {id: 1, s: 'a', n: 11},
+      },
+      expected: [{id: 5, s: 'e', n: 55}, rows[1], rows[2]],
+    },
+    {
+      name: 'Empty stream with add',
+      overlays: {add: {id: 1, s: 'a', n: 11}, remove: undefined},
+      rows: [],
+      expected: [{id: 1, s: 'a', n: 11}],
+    },
+    {
+      name: 'Empty stream no overlay',
+      overlays: {add: undefined, remove: undefined},
+      rows: [],
+      expected: [],
+    },
+  ] as const)('$name', c => {
+    const input = 'rows' in c ? c.rows : rows;
+    const actual = [
+      ...generateWithOverlayInnerUnordered(input, c.overlays, pk),
+    ].map(({row}) => row);
+    expect(actual).toEqual(c.expected);
+  });
+
+  test('Compound primary key — matches on all PK columns', () => {
+    const compoundRows = [
+      {a: 1, b: 'x', v: 10},
+      {a: 1, b: 'y', v: 20},
+      {a: 2, b: 'x', v: 30},
+    ];
+    const compoundPK = ['a', 'b'] as const;
+    const actual = [
+      ...generateWithOverlayInnerUnordered(
+        compoundRows,
+        {add: undefined, remove: {a: 1, b: 'y', v: 20}},
+        compoundPK,
+      ),
+    ].map(({row}) => row);
+    expect(actual).toEqual([compoundRows[0], compoundRows[2]]);
+  });
+
+  test('Compound PK partial match — does not suppress', () => {
+    const compoundRows = [
+      {a: 1, b: 'x', v: 10},
+      {a: 1, b: 'y', v: 20},
+      {a: 2, b: 'x', v: 30},
+    ];
+    const compoundPK = ['a', 'b'] as const;
+    const actual = [
+      ...generateWithOverlayInnerUnordered(
+        compoundRows,
+        {add: undefined, remove: {a: 1, b: 'z', v: 0}},
+        compoundPK,
+      ),
+    ].map(({row}) => row);
+    expect(actual).toEqual(compoundRows);
+  });
+});
+
+describe('generateWithOverlayUnordered', () => {
+  const rows = [
+    {id: 1, s: 'a', n: 11},
+    {id: 2, s: 'b', n: 22},
+    {id: 3, s: 'c', n: 33},
+  ];
+
+  const pk = ['id'] as const;
+
+  test('Epoch gating — overlay skipped when lastPushedEpoch < overlay.epoch', () => {
+    const overlay = {
+      epoch: 5,
+      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+    };
+    const actual = [
+      ...generateWithOverlayUnordered(rows, undefined, overlay, 4, pk),
+    ].map(({row}) => row);
+    expect(actual).toEqual(rows);
+  });
+
+  test('Epoch gating — overlay applied when lastPushedEpoch >= overlay.epoch', () => {
+    const overlay = {
+      epoch: 5,
+      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+    };
+    const actual = [
+      ...generateWithOverlayUnordered(rows, undefined, overlay, 5, pk),
+    ].map(({row}) => row);
+    expect(actual).toEqual([{id: 4, s: 'd', n: 44}, ...rows]);
+  });
+
+  test('Constraint filtering — overlay filtered out by constraint', () => {
+    const overlay = {
+      epoch: 1,
+      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+    };
+    const actual = [
+      ...generateWithOverlayUnordered(rows, {s: 'a'}, overlay, 1, pk),
+    ].map(({row}) => row);
+    expect(actual).toEqual(rows);
+  });
+
+  test('Filter predicate — overlay filtered out by predicate', () => {
+    const overlay = {
+      epoch: 1,
+      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+    };
+    const actual = [
+      ...generateWithOverlayUnordered(
+        rows,
+        undefined,
+        overlay,
+        1,
+        pk,
+        (row: Row) => (row.n as number) < 40,
+      ),
+    ].map(({row}) => row);
+    expect(actual).toEqual(rows);
+  });
+
+  test('Add change type', () => {
+    const overlay = {
+      epoch: 1,
+      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+    };
+    const actual = [
+      ...generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),
+    ].map(({row}) => row);
+    expect(actual).toEqual([{id: 4, s: 'd', n: 44}, ...rows]);
+  });
+
+  test('Remove change type', () => {
+    const overlay = {
+      epoch: 1,
+      change: {type: 'remove' as const, row: {id: 2, s: 'b', n: 22}},
+    };
+    const actual = [
+      ...generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),
+    ].map(({row}) => row);
+    expect(actual).toEqual([rows[0], rows[2]]);
+  });
+
+  test('Edit change type', () => {
+    const overlay = {
+      epoch: 1,
+      change: {
+        type: 'edit' as const,
+        row: {id: 2, s: 'b2', n: 225},
+        oldRow: {id: 2, s: 'b', n: 22},
+      },
+    };
+    const actual = [
+      ...generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),
+    ].map(({row}) => row);
+    expect(actual).toEqual([{id: 2, s: 'b2', n: 225}, rows[0], rows[2]]);
+  });
 });
