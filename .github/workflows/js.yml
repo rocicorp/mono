@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 24.x
           cache: 'npm'
-      - run: npx syncpack@13 list-mismatches
+      - run: npx syncpack list
 
   verify-deps:
     name: Verify Package Dependencies
