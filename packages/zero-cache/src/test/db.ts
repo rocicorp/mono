@@ -81,6 +81,11 @@ export class TestDBs {
         onNotice?.(n);
         defaultOnNotice(n);
       },
+      // Ensure deterministic behavior for timestamp/date tests regardless
+      // of the server's timezone setting. This is sent as a startup parameter
+      // to every connection in the pool (unlike SET TIME ZONE which only
+      // affects a single connection).
+      connection: {TimeZone: 'UTC'},
       ...(typeOpts ? postgresTypeConfig(typeOpts) : {}),
     });
     this.#dbs[database] = db;

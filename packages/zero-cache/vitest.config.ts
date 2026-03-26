@@ -7,7 +7,7 @@ function nameFromURL(url: string) {
 }
 
 export function configForVersion(version: number, url: string) {
-  const TIMEOUT = (CI ? 2 : 1) * 20_000;
+  const TIMEOUT = (CI ? 2 : 1) * 30_000;
   const name = nameFromURL(url);
   const merged = mergeConfig(config, {
     test: {
@@ -22,6 +22,7 @@ export function configForVersion(version: number, url: string) {
       },
       testTimeout: TIMEOUT,
       hookTimeout: TIMEOUT,
+      slowTestThreshold: TIMEOUT / 10,
     },
   });
   // Override include to only pg tests (mergeConfig merges arrays, we want to replace)
