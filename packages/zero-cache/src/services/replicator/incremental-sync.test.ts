@@ -71,6 +71,7 @@ describe('replicator/incremental-sync', () => {
       {level: 'error', format: 'text'},
     );
     syncer = new IncrementalSyncer(
+      lc,
       TASK_ID,
       REPLICA_ID,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
@@ -117,7 +118,7 @@ describe('replicator/incremental-sync', () => {
       `,
     );
 
-    syncing = syncer.run(lc);
+    syncing = syncer.run();
     const notifications = syncer.subscribe();
     const versionReady = notifications[Symbol.asyncIterator]();
     await versionReady.next(); // Get the initial nextStateVersion.
@@ -395,7 +396,7 @@ describe('replicator/incremental-sync', () => {
       `,
     );
 
-    syncing = syncer.run(lc);
+    syncing = syncer.run();
     const notifications = syncer.subscribe();
     const versionReady = notifications[Symbol.asyncIterator]();
     await versionReady.next(); // Get the initial nextStateVersion.
@@ -572,7 +573,7 @@ describe('replicator/incremental-sync', () => {
       `,
     );
 
-    syncing = syncer.run(lc);
+    syncing = syncer.run();
     const notifications = syncer.subscribe();
     const versionReady = notifications[Symbol.asyncIterator]();
     await versionReady.next(); // Get the initial nextStateVersion.
@@ -712,6 +713,7 @@ describe('replicator/incremental-sync', () => {
 
     const {promise: hasRetried, resolve: retried} = resolver<true>();
     const syncer = new IncrementalSyncer(
+      lc,
       TASK_ID,
       REPLICA_ID,
       {
@@ -729,7 +731,7 @@ describe('replicator/incremental-sync', () => {
       true,
     );
 
-    const localSyncing = syncer.run(lc);
+    const localSyncing = syncer.run();
 
     expect(await hasRetried).toBe(true);
 
@@ -742,6 +744,7 @@ describe('replicator/incremental-sync', () => {
 
     const {promise: hasRetried, resolve: retried} = resolver<true>();
     const syncer = new IncrementalSyncer(
+      lc,
       TASK_ID,
       REPLICA_ID,
       {
@@ -759,7 +762,7 @@ describe('replicator/incremental-sync', () => {
       true,
     );
 
-    const localSyncing = syncer.run(lc);
+    const localSyncing = syncer.run();
 
     downstream.fail(new Error('doh'));
 

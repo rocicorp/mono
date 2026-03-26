@@ -36,6 +36,7 @@ import {
 import {
   type ChangeStreamerService,
   type Downstream,
+  type Status,
   type SubscriberContext,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
@@ -277,6 +278,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     'Count of replicated transactions',
   );
 
+  #latestStatus: Status;
   #stream: ChangeStream | undefined;
 
   constructor(
@@ -318,12 +320,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
+    this.#latestStatus = {tag: 'status'};
   }
 
   async run() {
     this.#lc.info?.('starting change stream');
 
     this.#forwarder.startProgressMonitor();
+
+    const lagReport = await this.#source.startLagReporter();
+    if (lagReport) {
+      this.#latestStatus.lagReport = lagReport;
+    }
 
     // Once this change-streamer acquires "ownership" of the change DB,
     // it is safe to start the storer.
@@ -361,6 +369,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             case 'status':
               if (msg.ack) {
                 this.#storer.status(change); // storer acks once it gets through its queue
+              }
+              if (msg.lagReport) {
+                // Lag reports are not stored in the cdc change log, but rather
+                // only forwarded on "live" connections. When a new subscriber
+                // is catching up, it is initialized with the #latestStatus
+                // from which it can measure lag while catching up.
+                this.#latestStatus.lagReport = msg.lagReport;
+                this.#forwarder.sendStatus(this.#latestStatus);
               }
               continue;
             case 'control':
@@ -424,10 +440,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       if (watermark) {
         this.#lc.warn?.(`aborting interrupted transaction ${watermark}`);
         this.#storer.abort();
-        await this.#forwarder.forward([
-          watermark,
-          ['rollback', {tag: 'rollback'}],
-        ]);
+        this.#forwarder.forward([watermark, ['rollback', {tag: 'rollback'}]]);
       }
 
       // Backoff and drain any pending entries in the storer before reconnecting.
@@ -483,6 +496,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       id,
       watermark,
       downstream,
+      () => this.#latestStatus,
     );
     if (replicaVersion !== this.#replicaVersion) {
       this.#lc.warn?.(

@@ -1,12 +1,20 @@
 import * as v from '../../../../../../shared/src/valita.ts';
+import {changeSourceReportSchema} from '../../../replicator/reporter/report-schema.ts';
 import {commitSchema} from './data.ts';
 
 /**
- * The downstream status message indicates whether it should be echoed
+ * The downstream status messages contain metadata about the status
+ * of the change-source. indicates whether it should be echoed
  * back in an upstream status message.
  */
 export const downstreamStatusSchema = v.object({
+  // Indicates whether the status message should be echoed back
+  // in an upstream status message once the consumer has successfully
+  // processed/persisted all preceding changes.
   ack: v.boolean().optional(() => true),
+
+  // Contains a lag report for recording end to end latency metrics.
+  lagReport: changeSourceReportSchema.optional(),
 });
 
 export type DownstreamStatus = v.Infer<typeof downstreamStatusSchema>;

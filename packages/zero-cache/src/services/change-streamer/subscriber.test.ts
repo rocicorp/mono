@@ -12,11 +12,19 @@ describe('change-streamer/subscriber', () => {
     void sub.send(['11', ['begin', messages.begin(), {commitWatermark: '12'}]]);
     void sub.send(['12', ['commit', messages.commit(), {watermark: '12'}]]);
 
+    // Status messages before initialization should be ignored.
+    sub.sendStatus({tag: 'status', lagReport: {nextSendTimeMs: 123}});
+
     // Send catchup messages.
     void sub.catchup([
       '01',
       ['begin', messages.begin(), {commitWatermark: '02'}],
     ]);
+
+    // Status messages after initialization are sent. These can happen
+    // within a transaction.
+    sub.sendStatus({tag: 'status', lagReport: {nextSendTimeMs: 234}});
+
     void sub.catchup(['02', ['commit', messages.commit(), {watermark: '02'}]]);
 
     sub.setCaughtUp();
@@ -24,6 +32,8 @@ describe('change-streamer/subscriber', () => {
     // Send some messages after catchup.
     void sub.send(['21', ['begin', messages.begin(), {commitWatermark: '22'}]]);
     void sub.send(['22', ['commit', messages.commit(), {watermark: '22'}]]);
+
+    sub.sendStatus({tag: 'status', lagReport: {nextSendTimeMs: 456}});
 
     sub.close();
 
@@ -42,6 +52,15 @@ describe('change-streamer/subscriber', () => {
           },
           {
             "commitWatermark": "02",
+          },
+        ],
+        [
+          "status",
+          {
+            "lagReport": {
+              "nextSendTimeMs": 234,
+            },
+            "tag": "status",
           },
         ],
         [
@@ -87,6 +106,15 @@ describe('change-streamer/subscriber', () => {
           },
           {
             "watermark": "22",
+          },
+        ],
+        [
+          "status",
+          {
+            "lagReport": {
+              "nextSendTimeMs": 456,
+            },
+            "tag": "status",
           },
         ],
       ]
