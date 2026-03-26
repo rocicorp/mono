@@ -334,7 +334,7 @@ export async function runBenchmarks<TSchema extends Schema>(
   benchSpecs
     .flat()
     .filter(t => (only ? only.includes(t.name) : true))
-    .map(({name, createQuery, generatePush}) =>
+    .forEach(({name, createQuery, generatePush}) =>
       describe(name, () => {
         makeBenchmark({
           name,
