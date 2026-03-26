@@ -60,7 +60,7 @@ jobs:
 
       - name: Run benchmarks
         working-directory: ${{ inputs.working_directory }}
-        run: npm run bench:bmf:silent > output.json
+        run: npm run --silent bench:bmf:silent > output.json
 
       - name: Upload benchmarks results to bencher.dev (main)
         if: ${{ !inputs.is_pr }}
