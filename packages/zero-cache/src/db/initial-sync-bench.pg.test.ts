@@ -65,22 +65,22 @@ describe.skipIf(!UPSTREAM_DB)('initial-sync-bench', () => {
         publications,
       };
 
-      const replicaPath = join(
-        tmpdir(),
-        `initial-sync-bench-${nanoid()}.db`,
-      );
+      const replicaPath = join(tmpdir(), `initial-sync-bench-${nanoid()}.db`);
 
       try {
         const start = performance.now();
 
-        await initReplica(
-          lc,
-          'initial-sync-bench',
-          replicaPath,
-          (log, tx) =>
-            initialSync(log, shard, tx, upstreamURI, {tableCopyWorkers: 4}, {
+        await initReplica(lc, 'initial-sync-bench', replicaPath, (log, tx) =>
+          initialSync(
+            log,
+            shard,
+            tx,
+            upstreamURI,
+            {tableCopyWorkers: 4},
+            {
               benchmark: true,
-            }),
+            },
+          ),
         );
 
         const elapsed = performance.now() - start;

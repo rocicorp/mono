@@ -1,11 +1,18 @@
-import {PostgreSqlContainer, type StartedPostgreSqlContainer} from '@testcontainers/postgresql';
+import {
+  PostgreSqlContainer,
+  type StartedPostgreSqlContainer,
+} from '@testcontainers/postgresql';
 import {Writable, type Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import {afterAll, beforeAll, describe, expect, inject, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
-import {postgresTypeConfig, type PostgresDB, type PostgresValueType} from '../types/pg.ts';
+import {
+  postgresTypeConfig,
+  type PostgresDB,
+  type PostgresValueType,
+} from '../types/pg.ts';
 import {
   BinaryCopyParser,
   makeBinaryDecoder,
@@ -32,11 +39,7 @@ let sql: PostgresDB;
 beforeAll(async () => {
   const pgImage = inject('pgImage') ?? 'postgres:18-alpine';
   container = await new PostgreSqlContainer(pgImage)
-    .withCommand([
-      'postgres',
-      '-c', 'wal_level=logical',
-      '-c', 'timezone=UTC',
-    ])
+    .withCommand(['postgres', '-c', 'wal_level=logical', '-c', 'timezone=UTC'])
     .withPrivilegedMode()
     .start();
 
@@ -57,7 +60,15 @@ afterAll(async () => {
 async function addLatency(ms: number) {
   if (ms > 0) {
     await container.exec([
-      'tc', 'qdisc', 'add', 'dev', 'eth0', 'root', 'netem', 'delay', `${ms}ms`,
+      'tc',
+      'qdisc',
+      'add',
+      'dev',
+      'eth0',
+      'root',
+      'netem',
+      'delay',
+      `${ms}ms`,
     ]);
   }
 }
@@ -98,7 +109,11 @@ async function copyWithText(
   const parsers = columns.map(c => {
     const pgParse = pgParsers.getTypeParser(c.typeOID);
     return (val: string) =>
-      liteValue(pgParse(val) as PostgresValueType, c.dataType, JSON_STRINGIFIED);
+      liteValue(
+        pgParse(val) as PostgresValueType,
+        c.dataType,
+        JSON_STRINGIFIED,
+      );
   });
 
   const colList = columns.map(c => `"${c.name}"`).join(',');
@@ -226,9 +241,7 @@ async function copyWithBinary(
   const start = performance.now();
 
   const readable: Readable = await db
-    .unsafe(
-      `COPY ${pgTable} (${colList}) TO STDOUT WITH (FORMAT binary)`,
-    )
+    .unsafe(`COPY ${pgTable} (${colList}) TO STDOUT WITH (FORMAT binary)`)
     .readable();
 
   await pipeline(
@@ -361,78 +374,82 @@ describe('COPY binary vs text benchmark', () => {
     for (const latency of LATENCIES_MS) {
       const label = `${(rowCount / 1000).toFixed(0)}K rows, ${latency}ms latency`;
 
-      test(
-        label,
-        {timeout: 300_000},
-        async () => {
-          const pgTable = `bench_${rowCount}`;
-          const lc = createSilentLogContext();
+      test(label, {timeout: 300_000}, async () => {
+        const pgTable = `bench_${rowCount}`;
+        const lc = createSilentLogContext();
 
-          // Seed once per row count (reused across latency values via TRUNCATE guard).
-          await seedTable(pgTable, rowCount);
-          const cols = await getColumnInfo(pgTable);
+        // Seed once per row count (reused across latency values via TRUNCATE guard).
+        await seedTable(pgTable, rowCount);
+        const cols = await getColumnInfo(pgTable);
 
-          await addLatency(latency);
-          try {
-            // ---- Text ----
-            const textDb = new Database(lc, ':memory:');
-            textDb.exec('PRAGMA journal_mode = OFF');
-            textDb.exec('PRAGMA synchronous = OFF');
-            createLiteTable(textDb, pgTable);
-            const textResult = await copyWithText(
-              sql, pgTable, cols, textDb, pgTable,
-            );
-            textDb.close();
+        await addLatency(latency);
+        try {
+          // ---- Text ----
+          const textDb = new Database(lc, ':memory:');
+          textDb.exec('PRAGMA journal_mode = OFF');
+          textDb.exec('PRAGMA synchronous = OFF');
+          createLiteTable(textDb, pgTable);
+          const textResult = await copyWithText(
+            sql,
+            pgTable,
+            cols,
+            textDb,
+            pgTable,
+          );
+          textDb.close();
 
-            // ---- Binary ----
-            const binDb = new Database(lc, ':memory:');
-            binDb.exec('PRAGMA journal_mode = OFF');
-            binDb.exec('PRAGMA synchronous = OFF');
-            createLiteTable(binDb, pgTable);
-            const binResult = await copyWithBinary(
-              sql, pgTable, cols, binDb, pgTable,
-            );
-            binDb.close();
+          // ---- Binary ----
+          const binDb = new Database(lc, ':memory:');
+          binDb.exec('PRAGMA journal_mode = OFF');
+          binDb.exec('PRAGMA synchronous = OFF');
+          createLiteTable(binDb, pgTable);
+          const binResult = await copyWithBinary(
+            sql,
+            pgTable,
+            cols,
+            binDb,
+            pgTable,
+          );
+          binDb.close();
 
-            // ---- Report ----
-            const speedup = textResult.totalMs / binResult.totalMs;
-            const parseSpeedup =
-              textResult.parseMs > 0 && binResult.parseMs > 0
-                ? textResult.parseMs / binResult.parseMs
-                : NaN;
+          // ---- Report ----
+          const speedup = textResult.totalMs / binResult.totalMs;
+          const parseSpeedup =
+            textResult.parseMs > 0 && binResult.parseMs > 0
+              ? textResult.parseMs / binResult.parseMs
+              : NaN;
 
-            // oxlint-disable-next-line no-console
-            console.log(`\n--- ${label} ---`);
-            // oxlint-disable-next-line no-console
-            console.log(
-              `  TEXT:   total=${fmt(textResult.totalMs)}  ` +
-                `parse=${fmt(textResult.parseMs)}  ` +
-                `flush=${fmt(textResult.flushMs)}  ` +
-                `rate=${rate(textResult.rows, textResult.totalMs)}`,
-            );
-            // oxlint-disable-next-line no-console
-            console.log(
-              `  BINARY: total=${fmt(binResult.totalMs)}  ` +
-                `parse=${fmt(binResult.parseMs)}  ` +
-                `flush=${fmt(binResult.flushMs)}  ` +
-                `rate=${rate(binResult.rows, binResult.totalMs)}`,
-            );
-            // oxlint-disable-next-line no-console
-            console.log(
-              `  SPEEDUP: ${speedup.toFixed(2)}x total` +
-                (Number.isFinite(parseSpeedup)
-                  ? `, ${parseSpeedup.toFixed(2)}x parse`
-                  : '') +
-                '\n',
-            );
+          // oxlint-disable-next-line no-console
+          console.log(`\n--- ${label} ---`);
+          // oxlint-disable-next-line no-console
+          console.log(
+            `  TEXT:   total=${fmt(textResult.totalMs)}  ` +
+              `parse=${fmt(textResult.parseMs)}  ` +
+              `flush=${fmt(textResult.flushMs)}  ` +
+              `rate=${rate(textResult.rows, textResult.totalMs)}`,
+          );
+          // oxlint-disable-next-line no-console
+          console.log(
+            `  BINARY: total=${fmt(binResult.totalMs)}  ` +
+              `parse=${fmt(binResult.parseMs)}  ` +
+              `flush=${fmt(binResult.flushMs)}  ` +
+              `rate=${rate(binResult.rows, binResult.totalMs)}`,
+          );
+          // oxlint-disable-next-line no-console
+          console.log(
+            `  SPEEDUP: ${speedup.toFixed(2)}x total` +
+              (Number.isFinite(parseSpeedup)
+                ? `, ${parseSpeedup.toFixed(2)}x parse`
+                : '') +
+              '\n',
+          );
 
-            expect(textResult.rows).toBe(rowCount);
-            expect(binResult.rows).toBe(rowCount);
-          } finally {
-            await removeLatency();
-          }
-        },
-      );
+          expect(textResult.rows).toBe(rowCount);
+          expect(binResult.rows).toBe(rowCount);
+        } finally {
+          await removeLatency();
+        }
+      });
     }
   }
 });
