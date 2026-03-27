@@ -372,3 +372,7 @@ export const typeNameByOID: Record<number, string> = Object.freeze(
     ]),
   ),
 );
+
+export function isPostgresError(e: unknown, ...codes: [string, ...string[]]) {
+  return e instanceof postgres.PostgresError && codes.includes(e.code);
+}
