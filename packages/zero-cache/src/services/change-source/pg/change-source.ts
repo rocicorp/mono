@@ -760,18 +760,14 @@ class LagReporter {
   #scheduleNextReport(delayMs: number) {
     this.#expectingLagReport = null;
     clearTimeout(this.#timer);
-
-    const timeout = (this.#timer = setTimeout(async () => {
-      if (this.#timer === timeout) {
-        this.#timer = undefined;
-      }
+    this.#timer = setTimeout(async () => {
       try {
         await this.initiateLagReport();
       } catch (e) {
         this.#lc.warn?.(`error initiating lag report`, e);
         this.#scheduleNextReport(this.#lagIntervalMs);
       }
-    }, delayMs));
+    }, delayMs);
   }
 
   processLagReport(msg: MessageMessage): DownstreamStatusMessage {
