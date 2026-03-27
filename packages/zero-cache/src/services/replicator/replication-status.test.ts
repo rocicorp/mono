@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {
   replicationStatusError,

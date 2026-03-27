@@ -11,7 +11,7 @@ import {
 import {RunningState} from '../running-state.ts';
 import type {CommitResult} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
-import {ReplicationStatusPublisher} from './replication-status.ts';
+import type {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {ReplicationReportRecorder} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
