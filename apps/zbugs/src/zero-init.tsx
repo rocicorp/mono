@@ -13,7 +13,7 @@ export function ZeroInit({children}: {children: ReactNode}) {
       ({
         schema,
         cacheURL: import.meta.env.VITE_PUBLIC_SERVER,
-        userID: login.loginState?.decoded?.sub ?? 'anon',
+        userID: login.loginState?.decoded?.sub,
         mutators,
         logLevel: 'info',
         // changing the auth token will cause ZeroProvider to call connection.connect

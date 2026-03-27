@@ -256,6 +256,8 @@ const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
 
 const DEFAULT_QUERY_CHANGE_THROTTLE_MS = 10;
 
+export const LOGGED_OUT_STORAGE_USER_ID = '__anonymous__';
+
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
 ): UpdateNeededReason {
@@ -330,7 +332,7 @@ export class Zero<
 
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;
   readonly #server: HTTPString | null;
-  readonly userID: string;
+  readonly userID: string | undefined;
   readonly storageKey: string;
 
   readonly #lc: LogContext;
@@ -470,12 +472,16 @@ export class Zero<
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
     } = options;
-    if (!userID) {
+
+    if (userID === '' || userID === 'anon') {
       throw new ClientError({
         kind: ClientErrorKind.Internal,
-        message: 'ZeroOptions.userID must not be empty.',
+        message: `ZeroOptions.userID should not be ${userID === '' ? 'empty' : userID}. Omit it entirely for logged-out clients.`,
       });
     }
+
+    this.#checkAuthValid(userID, options.auth);
+
     const cacheURL = options.cacheURL ?? options.server;
     const server = getServer(cacheURL);
     this.#enableAnalytics = shouldEnableAnalytics(
@@ -566,6 +572,7 @@ export class Zero<
       queryUrl: options.queryURL ?? options.getQueriesURL ?? '',
     });
     const hashedKey = h64(nameKey).toString(36);
+    const storageScopedUserID = userID ?? LOGGED_OUT_STORAGE_USER_ID;
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
       // The schema stored in IDB is dependent upon both the ClientSchema
@@ -574,7 +581,7 @@ export class Zero<
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
-      name: `zero-${userID}-${hashedKey}`,
+      name: `zero-${storageScopedUserID}-${hashedKey}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
       pushDelay: 0,
@@ -2252,6 +2259,8 @@ export class Zero<
    * @param auth - The authentication token to set.
    */
   #setAuth(auth: string | undefined | null): void {
+    this.#checkAuthValid(this.userID, auth);
+
     this.#rep.auth = toReplicacheAuthToken(auth);
 
     if (auth) {
@@ -2451,6 +2460,18 @@ export class Zero<
       ...(args as ClientMetricMap[keyof ClientMetricMap]),
     );
   };
+
+  #checkAuthValid(
+    userID: string | undefined,
+    auth: string | null | undefined,
+  ): void {
+    if (userID === undefined && auth) {
+      throw new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'ZeroOptions.userID is required when auth is set.',
+      });
+    }
+  }
 }
 
 export class OnlineManager extends Subscribable<boolean> {
@@ -2478,7 +2499,7 @@ export async function createSocket(
   clientID: string,
   clientGroupID: string,
   clientSchema: ClientSchema,
-  userID: string,
+  userID: string | undefined,
   auth: string | undefined,
   lmid: number,
   wsid: string,
@@ -2572,7 +2593,7 @@ export async function createConnectionURL(
   socketOrigin: HTTPString | WSString,
   clientID: string,
   clientGroupID: string,
-  userID: string,
+  userID: string | undefined,
   baseCookie: string | null,
   lmid: number,
   wsid: string,
@@ -2587,7 +2608,9 @@ export async function createConnectionURL(
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
-  searchParams.set('userID', userID);
+  if (userID !== undefined) {
+    searchParams.set('userID', userID);
+  }
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
   searchParams.set('ts', String(performance.now()));
   searchParams.set('lmid', String(lmid));

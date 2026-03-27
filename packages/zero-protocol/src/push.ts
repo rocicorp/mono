@@ -126,7 +126,7 @@ export const pushBodySchema = v.object({
   timestamp: v.number(),
   requestID: v.string(),
   /**
-   * @deprecated auth is managed at client-group scope via connect/updateAuth
+   * @deprecated auth is managed at connection scope via connect/updateAuth
    * and should not be included in push messages.
    */
   auth: v.string().optional(),

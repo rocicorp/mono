@@ -20,8 +20,9 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
+import {isAuthErrorBody} from '../../auth/auth.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import {compileUrlPattern, fetchFromAPIServer} from '../../custom/fetch.ts';
+import {fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
@@ -29,26 +30,23 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
+import type {
+  ConnectionContext,
+  ConnectionContextManager,
+  ConnectionSelector,
+} from '../view-syncer/connection-context-manager.ts';
 
 export interface Pusher extends RefCountedService {
-  readonly pushURL: string | undefined;
-
-  initConnection(
-    clientID: string,
-    wsID: string,
-    userPushURL: string | undefined,
-    userPushHeaders: Record<string, string> | undefined,
-    onAuthFailure?: () => void,
-  ): Source<Downstream>;
-  enqueuePush(
-    clientID: string,
-    push: PushBody,
-    auth: string | undefined,
-    httpCookie: string | undefined,
-    origin: string | undefined,
-  ): HandlerResult;
-  ackMutationResponses(upToID: MutationID): Promise<void>;
-  deleteClientMutations(clientIDs: string[]): Promise<void>;
+  initConnection(selector: ConnectionSelector): Source<Downstream>;
+  enqueuePush(selector: ConnectionSelector, push: PushBody): HandlerResult;
+  ackMutationResponses(
+    requester: ConnectionSelector,
+    upToID: MutationID,
+  ): Promise<void>;
+  deleteClientMutations(
+    requester: ConnectionSelector,
+    clientIDs: string[],
+  ): Promise<void>;
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
@@ -68,78 +66,58 @@ type Config = Pick<ZeroConfig, 'app' | 'shard'>;
  */
 export class PusherService implements Service, Pusher {
   readonly id: string;
+  readonly #contextManager: ConnectionContextManager;
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
-  readonly #pushConfig: ZeroConfig['push'] & {url: string[]};
   readonly #config: Config;
   readonly #lc: LogContext;
-  readonly #pushURLPatterns: URLPattern[];
   #stopped: Promise<void> | undefined;
   #refCount = 0;
   #isStopped = false;
 
   constructor(
     appConfig: Config,
-    pushConfig: ZeroConfig['push'] & {url: string[]},
     lc: LogContext,
     clientGroupID: string,
+    contextManager: ConnectionContextManager,
   ) {
+    this.#contextManager = contextManager;
     this.#config = appConfig;
     this.#lc = lc.withContext('component', 'pusherService');
-    this.#pushURLPatterns = pushConfig.url.map(compileUrlPattern);
     this.#queue = new Queue();
     this.#pusher = new PushWorker(
       appConfig,
       lc,
-      pushConfig.url,
-      pushConfig.apiKey,
-      pushConfig.allowedClientHeaders,
+      this.#contextManager,
       this.#queue,
     );
     this.id = clientGroupID;
-    this.#pushConfig = pushConfig;
   }
 
-  get pushURL(): string | undefined {
-    return this.#pusher.pushURLs[0];
-  }
-
-  initConnection(
-    clientID: string,
-    wsID: string,
-    userPushURL: string | undefined,
-    userPushHeaders: Record<string, string> | undefined,
-    onAuthFailure?: () => void,
-  ) {
-    return this.#pusher.initConnection(
-      clientID,
-      wsID,
-      userPushURL,
-      userPushHeaders,
-      onAuthFailure,
-    );
+  initConnection(selector: ConnectionSelector) {
+    return this.#pusher.initConnection(selector);
   }
 
   enqueuePush(
-    clientID: string,
+    selector: ConnectionSelector,
     push: PushBody,
-    auth: string | undefined,
-    httpCookie: string | undefined,
-    origin: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
-    if (!this.#pushConfig.forwardCookies) {
-      httpCookie = undefined; // remove cookies if not forwarded
-    }
-    this.#queue.enqueue({push, auth, clientID, httpCookie, origin});
+    this.#pusher.enqueuePush(
+      this.#contextManager.mustGetConnectionContext(selector),
+      push,
+    );
 
     return {
       type: 'ok',
     };
   }
 
-  async ackMutationResponses(upToID: MutationID) {
-    const url = this.#pusher.effectivePushURL;
-    if (!url) {
+  async ackMutationResponses(
+    requester: ConnectionSelector,
+    upToID: MutationID,
+  ): Promise<void> {
+    const ctx = this.#contextManager.getConnectionContext(requester);
+    if (!ctx?.pushContext?.url) {
       // No push URL configured, skip cleanup
       return;
     }
@@ -173,10 +151,8 @@ export class PusherService implements Service, Pusher {
         pushResponseSchema,
         'push',
         this.#lc,
-        url,
-        this.#pushURLPatterns,
+        ctx,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
-        {apiKey: this.#pushConfig.apiKey},
         cleanupBody,
       );
     } catch (e) {
@@ -186,54 +162,57 @@ export class PusherService implements Service, Pusher {
     }
   }
 
-  async deleteClientMutations(clientIDs: string[]) {
+  async deleteClientMutations(
+    requester: ConnectionSelector,
+    clientIDs: string[],
+  ): Promise<void> {
     if (clientIDs.length === 0) {
       return;
     }
-    const url = this.#pusher.effectivePushURL;
-    if (!url) {
-      // No push URL configured, skip cleanup
-      return;
-    }
+    for (const clientID of clientIDs) {
+      const ctx = this.#contextManager.getConnectionContext(requester);
+      if (!ctx?.pushContext?.url) {
+        continue;
+      }
 
-    const cleanupBody: PushBody = {
-      clientGroupID: this.id,
-      mutations: [
-        {
-          type: MutationType.Custom,
-          id: 0, // Not tracked - this is fire-and-forget
-          clientID: clientIDs[0], // Use first client as sender
-          name: CLEANUP_RESULTS_MUTATION_NAME,
-          args: [
-            {
-              type: 'bulk',
-              clientGroupID: this.id,
-              clientIDs,
-            },
-          ],
-          timestamp: Date.now(),
-        },
-      ],
-      pushVersion: 1,
-      timestamp: Date.now(),
-      requestID: `cleanup-bulk-${this.id}-${Date.now()}`,
-    };
+      const cleanupBody: PushBody = {
+        clientGroupID: this.id,
+        mutations: [
+          {
+            type: MutationType.Custom,
+            id: 0, // Not tracked - this is fire-and-forget
+            clientID,
+            name: CLEANUP_RESULTS_MUTATION_NAME,
+            args: [
+              {
+                type: 'bulk',
+                clientGroupID: this.id,
+                clientIDs: [clientID],
+              },
+            ],
+            timestamp: Date.now(),
+          },
+        ],
+        pushVersion: 1,
+        timestamp: Date.now(),
+        requestID: `cleanup-bulk-${this.id}-${clientID}-${Date.now()}`,
+      };
 
-    try {
-      await fetchFromAPIServer(
-        pushResponseSchema,
-        'push',
-        this.#lc,
-        url,
-        this.#pushURLPatterns,
-        {appID: this.#config.app.id, shardNum: this.#config.shard.num},
-        {apiKey: this.#pushConfig.apiKey},
-        cleanupBody,
-      );
-    } catch (e) {
-      this.#lc.warn?.('Failed to send bulk cleanup mutation', {
-        error: getErrorMessage(e),
-      });
+      try {
+        await fetchFromAPIServer(
+          pushResponseSchema,
+          'push',
+          this.#lc,
+          ctx,
+          {appID: this.#config.app.id, shardNum: this.#config.shard.num},
+          cleanupBody,
+        );
+      } catch (e) {
+        this.#lc.warn?.('Failed to send bulk cleanup mutation', {
+          error: getErrorMessage(e),
+          clientIDs: [clientID],
+        });
+      }
     }
   }
 
@@ -271,10 +250,7 @@ export class PusherService implements Service, Pusher {
 
 type PusherEntry = {
   push: PushBody;
-  auth: string | undefined;
-  httpCookie: string | undefined;
-  origin: string | undefined;
-  clientID: string;
+  context: ConnectionContext;
 };
 type PusherEntryOrStop = PusherEntry | 'stop';
 
@@ -283,23 +259,14 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  * to the user's API server.
  */
 class PushWorker {
-  readonly #pushURLs: string[];
-  readonly #pushURLPatterns: URLPattern[];
-  readonly #apiKey: string | undefined;
-  readonly #allowedClientHeaders: readonly string[] | undefined;
+  readonly #contextManager: ConnectionContextManager;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
   readonly #config: Config;
   readonly #clients: Map<
     string,
-    {
-      wsID: string;
-      downstream: Subscription<Downstream>;
-      onAuthFailure: (() => void) | undefined;
-    }
+    {wsID: string; downstream: Subscription<Downstream>}
   >;
-  #userPushURL?: string | undefined;
-  #userPushHeaders?: Record<string, string> | undefined;
 
   readonly #customMutations = getOrCreateCounter(
     'mutation',
@@ -315,42 +282,23 @@ class PushWorker {
   constructor(
     config: Config,
     lc: LogContext,
-    pushURL: string[],
-    apiKey: string | undefined,
-    allowedClientHeaders: readonly string[] | undefined,
+    contextManager: ConnectionContextManager,
     queue: Queue<PusherEntryOrStop>,
   ) {
-    this.#pushURLs = pushURL;
     this.#lc = lc.withContext('component', 'pusher');
-    this.#pushURLPatterns = pushURL.map(compileUrlPattern);
-    this.#apiKey = apiKey;
-    this.#allowedClientHeaders = allowedClientHeaders;
+    this.#contextManager = contextManager;
     this.#queue = queue;
     this.#config = config;
     this.#clients = new Map();
-  }
-
-  get pushURLs() {
-    return this.#pushURLs;
-  }
-
-  get effectivePushURL(): string | undefined {
-    return this.#userPushURL ?? this.#pushURLs[0];
   }
 
   /**
    * Returns a new downstream stream if the clientID,wsID pair has not been seen before.
    * If a clientID already exists with a different wsID, that client's downstream is cancelled.
    */
-  initConnection(
-    clientID: string,
-    wsID: string,
-    userPushURL: string | undefined,
-    userPushHeaders: Record<string, string> | undefined,
-    onAuthFailure?: () => void,
-  ) {
-    const existing = this.#clients.get(clientID);
-    if (existing && existing.wsID === wsID) {
+  initConnection(selector: ConnectionSelector) {
+    const existing = this.#clients.get(selector.clientID);
+    if (existing && existing.wsID === selector.wsID) {
       // already initialized for this socket
       throw new Error('Connection was already initialized');
     }
@@ -360,32 +308,23 @@ class PushWorker {
       existing.downstream.cancel();
     }
 
-    // Handle client group level URL parameters
-    if (this.#userPushURL === undefined) {
-      // First client in the group - store its URL and headers
-      this.#userPushURL = userPushURL;
-      this.#userPushHeaders = userPushHeaders;
-    } else {
-      // Validate that subsequent clients have compatible parameters
-      if (this.#userPushURL !== userPushURL) {
-        this.#lc.warn?.(
-          'Client provided different mutate parameters than client group',
-          {
-            clientID,
-            clientURL: userPushURL,
-            clientGroupURL: this.#userPushURL,
-          },
-        );
-      }
-    }
-
     const downstream = Subscription.create<Downstream>({
       cleanup: () => {
-        this.#clients.delete(clientID);
+        this.#clients.delete(selector.clientID);
       },
     });
-    this.#clients.set(clientID, {wsID, downstream, onAuthFailure});
+    this.#clients.set(selector.clientID, {
+      wsID: selector.wsID,
+      downstream,
+    });
     return downstream;
+  }
+
+  enqueuePush(context: ConnectionContext, push: PushBody) {
+    this.#queue.enqueue({
+      push,
+      context,
+    });
   }
 
   async run() {
@@ -466,16 +405,8 @@ class PushWorker {
                   };
 
           this.#failDownstream(client.downstream, pushFailedBody);
-          if (isPushAuthFailure(pushFailedBody)) {
-            this.#lc.debug?.('Auth failure detected in push response');
-            client.onAuthFailure?.();
-          }
         } else if ('kind' in response) {
           this.#failDownstream(client.downstream, response);
-          if (isPushAuthFailure(response)) {
-            this.#lc.debug?.('Auth failure detected in push response');
-            client.onAuthFailure?.();
-          }
         } else {
           unreachable(response);
         }
@@ -546,9 +477,10 @@ class PushWorker {
     // Record custom mutations for telemetry
     recordMutation('custom', entry.push.mutations.length);
 
-    const url =
-      this.#userPushURL ??
-      must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set');
+    const url = must(
+      entry.context.pushContext.url,
+      'ZERO_MUTATE_URL is not set',
+    );
 
     this.#lc.debug?.(
       'pushing to',
@@ -566,32 +498,44 @@ class PushWorker {
         clientID: m.clientID,
       }));
 
-      return await fetchFromAPIServer(
+      const response = await fetchFromAPIServer(
         pushResponseSchema,
         'push',
         this.#lc,
-        url,
-        this.#pushURLPatterns,
+        entry.context,
         {
           appID: this.#config.app.id,
           shardNum: this.#config.shard.num,
         },
-        {
-          apiKey: this.#apiKey,
-          customHeaders: this.#userPushHeaders,
-          allowedClientHeaders: this.#allowedClientHeaders,
-          token: entry.auth,
-          cookie: entry.httpCookie,
-          origin: entry.origin,
-        },
         entry.push,
       );
+      if ('kind' in response || 'error' in response) {
+        if (isAuthErrorBody(response)) {
+          this.#contextManager.failConnection(
+            entry.context,
+            entry.context.revision,
+          );
+        }
+        return response;
+      }
+      this.#contextManager.validateConnection(
+        entry.context,
+        entry.context.revision,
+      );
+      return response;
     } catch (e) {
       if (isProtocolError(e) && e.errorBody.kind === ErrorKind.PushFailed) {
-        return {
+        const response = {
           ...e.errorBody,
           mutationIDs,
         } as const satisfies PushFailedBody;
+        if (isAuthErrorBody(response)) {
+          this.#contextManager.failConnection(
+            entry.context,
+            entry.context.revision,
+          );
+        }
+        return response;
       }
 
       return {
@@ -612,13 +556,6 @@ class PushWorker {
   }
 }
 
-function isPushAuthFailure(errorBody: PushFailedBody): boolean {
-  return (
-    errorBody.reason === ErrorReason.HTTP &&
-    (errorBody.status === 401 || errorBody.status === 403)
-  );
-}
-
 /**
  * Pushes for different clientIDs could theoretically be interleaved.
  *
@@ -628,11 +565,11 @@ function isPushAuthFailure(errorBody: PushFailedBody): boolean {
 export function combinePushes(
   entries: readonly (PusherEntryOrStop | undefined)[],
 ): [PusherEntry[], boolean] {
-  const pushesByClientID = new Map<string, PusherEntry[]>();
+  const pushesByConnection = new Map<string, PusherEntry[]>();
 
   function collect() {
     const ret: PusherEntry[] = [];
-    for (const entries of pushesByClientID.values()) {
+    for (const entries of pushesByConnection.values()) {
       const composite: PusherEntry = {
         ...entries[0],
         push: {
@@ -654,12 +591,12 @@ export function combinePushes(
       return [collect(), true];
     }
 
-    const {clientID} = entry;
-    const existing = pushesByClientID.get(clientID);
+    const key = `${entry.context.clientID}:${entry.context.wsID}:${entry.context.revision}`;
+    const existing = pushesByConnection.get(key);
     if (existing) {
       existing.push(entry);
     } else {
-      pushesByClientID.set(clientID, [entry]);
+      pushesByConnection.set(key, [entry]);
     }
   }
 
@@ -670,11 +607,19 @@ export function combinePushes(
 // If they are not, we have a bug in the code somewhere.
 function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
   assert(
-    left.clientID === right.clientID,
+    left.context.clientID === right.context.clientID,
     'clientID must be the same for all pushes',
   );
   assert(
-    left.auth === right.auth,
+    left.context.wsID === right.context.wsID,
+    'wsID must be the same for all pushes',
+  );
+  assert(
+    left.context.revision === right.context.revision,
+    'revision must be the same for all pushes',
+  );
+  assert(
+    left.context.auth === right.context.auth,
     'auth must be the same for all pushes with the same clientID',
   );
   assert(
@@ -686,11 +631,21 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
     'pushVersion must be the same for all pushes with the same clientID',
   );
   assert(
-    left.httpCookie === right.httpCookie,
+    left.context.pushContext.headerOptions.cookie ===
+      right.context.pushContext.headerOptions.cookie,
     'httpCookie must be the same for all pushes with the same clientID',
   );
   assert(
-    left.origin === right.origin,
+    left.context.pushContext.headerOptions.origin ===
+      right.context.pushContext.headerOptions.origin,
     'origin must be the same for all pushes with the same clientID',
+  );
+  assert(
+    left.context.userID === right.context.userID,
+    'userID must be the same for all pushes with the same clientID',
+  );
+  assert(
+    left.context.pushContext.url === right.context.pushContext.url,
+    'userPushURL must be the same for all pushes with the same clientID',
   );
 }

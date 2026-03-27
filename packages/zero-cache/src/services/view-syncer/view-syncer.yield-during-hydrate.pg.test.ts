@@ -46,6 +46,7 @@ describe('view-syncer/yield-during-hydrate', () => {
   let vs: ViewSyncerService;
   let stateChanges: Subscription<ReplicaState>;
   let viewSyncerDone: Promise<void>;
+  let clearMocks: () => void;
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
@@ -62,6 +63,7 @@ describe('view-syncer/yield-during-hydrate', () => {
     httpCookie: undefined,
     origin: undefined,
     userID: 'bar',
+    auth: undefined,
   };
 
   afterEach(() => {
@@ -75,11 +77,13 @@ describe('view-syncer/yield-during-hydrate', () => {
       upstreamDb,
       vs,
       viewSyncerDone,
+      clearMocks,
       connect,
       stateChanges,
     } = await setup(testDBs, 'view_syncer_yield_test', permissionsAll));
 
     return async () => {
+      clearMocks();
       await vs.stop();
       await viewSyncerDone;
       await testDBs.drop(cvrDB, upstreamDb);

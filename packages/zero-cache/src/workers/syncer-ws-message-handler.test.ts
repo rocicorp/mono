@@ -2,9 +2,13 @@ import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/push.ts';
-import type {Auth} from '../auth/auth.ts';
+import type {Auth, ValidateLegacyJWT} from '../auth/auth.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
+import {
+  type ConnectionContextManager,
+  ConnectionContextManagerImpl,
+} from '../services/view-syncer/connection-context-manager.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {ConnectParams} from './connect-params.ts';
 import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
@@ -15,47 +19,32 @@ function createMockPusher() {
   return {
     enqueuePush: vi.fn().mockReturnValue({type: 'ok'}),
     initConnection: vi.fn(),
-  } as unknown as Pusher;
+    ackMutationResponses: vi.fn().mockResolvedValue(undefined),
+    deleteClientMutations: vi.fn().mockResolvedValue(undefined),
+  };
 }
+
+type MockPusher = ReturnType<typeof createMockPusher>;
 
 function createMockMutagen() {
   return {
     processMutation: vi.fn().mockResolvedValue(undefined),
-  } as unknown as Mutagen;
+  };
 }
 
+type MockMutagen = ReturnType<typeof createMockMutagen>;
+
 type MockViewSyncer = ViewSyncer & {
-  clearAuth: ReturnType<typeof vi.fn>;
+  deleteClients: ReturnType<typeof vi.fn>;
   updateAuth: ReturnType<typeof vi.fn>;
 };
 
-function createMockViewSyncer(initialAuth: Auth | undefined): MockViewSyncer {
-  let auth = initialAuth;
-
+function createMockViewSyncer(
+  contextManager: ConnectionContextManager,
+): MockViewSyncer {
   return {
-    get auth() {
-      return auth;
-    },
-    clearAuth: vi.fn(() => {
-      auth = undefined;
-    }),
-    updateAuth: vi.fn((...args: Parameters<ViewSyncer['updateAuth']>) => {
-      const [, msg] = args;
-      if (!msg[1].auth) {
-        if (auth) {
-          throw new Error(
-            'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
-          );
-        }
-        auth = undefined;
-        return;
-      }
-
-      auth = {
-        type: 'opaque',
-        raw: msg[1].auth,
-      };
-    }),
+    contextManager,
+    updateAuth: vi.fn().mockResolvedValue(undefined),
     changeDesiredQueries: vi.fn().mockResolvedValue(undefined),
     deleteClients: vi.fn().mockResolvedValue([]),
     initConnection: vi.fn(),
@@ -87,27 +76,45 @@ function createConnectParams(
 
 function createHandler(
   viewSyncer: ViewSyncer,
-  mutagen: Mutagen,
-  pusher: Pusher,
+  mutagen: MockMutagen,
+  pusher: MockPusher,
+  initialAuth: Auth | undefined,
+  connectParamsOverrides: Partial<ConnectParams> = {},
+  contextManager = new ConnectionContextManagerImpl(lc),
 ) {
+  const connectParams = createConnectParams(connectParamsOverrides);
+  contextManager.registerConnection(
+    {clientID: connectParams.clientID, wsID: connectParams.wsID},
+    connectParams,
+    initialAuth,
+  );
   return new SyncerWsMessageHandler(
     lc,
-    createConnectParams(),
+    connectParams,
+    contextManager,
     viewSyncer,
-    mutagen,
-    pusher,
+    mutagen as unknown as Mutagen,
+    pusher as unknown as Pusher,
   );
 }
 
 describe('SyncerWsMessageHandler auth handling', () => {
-  test('uses auth from push message when provided', async () => {
+  test('ignores push auth and uses the connection auth snapshot', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const viewSyncer = createMockViewSyncer({
-      type: 'opaque',
-      raw: 'old-token',
-    });
-    const handler = createHandler(viewSyncer, mutagen, pusher);
+    const contextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(contextManager);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
+      {
+        type: 'opaque',
+        raw: 'connection-token',
+      },
+      {},
+      contextManager,
+    );
 
     await handler.handleMessage([
       'push',
@@ -127,76 +134,47 @@ describe('SyncerWsMessageHandler auth handling', () => {
         schemaVersion: 1,
         timestamp: Date.now(),
         requestID: 'req-1',
-        auth: 'fresh-token',
+        auth: 'ignored-token',
       },
     ]);
 
-    expect(viewSyncer.updateAuth).toHaveBeenCalledTimes(1);
+    expect(viewSyncer.updateAuth).not.toHaveBeenCalled();
     expect(pusher.enqueuePush).toHaveBeenCalledWith(
-      'test-client',
+      {
+        clientID: 'test-client',
+        wsID: 'test-ws',
+      },
       expect.any(Object),
-      'fresh-token',
-      undefined,
-      undefined,
     );
   });
 
-  test('falls back to existing auth when push auth is missing', async () => {
+  test('updateAuth updates auth used by later pushes', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const viewSyncer = createMockViewSyncer({
-      type: 'opaque',
-      raw: 'connection-token',
-    });
-    const handler = createHandler(viewSyncer, mutagen, pusher);
-
-    await handler.handleMessage([
-      'push',
+    const contextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(contextManager);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
       {
-        clientGroupID: 'test-client-group',
-        mutations: [
-          {
-            type: 'custom',
-            id: 1,
-            clientID: 'test-client',
-            name: 'testMutation',
-            args: [],
-            timestamp: Date.now(),
-          },
-        ],
-        pushVersion: 1,
-        schemaVersion: 1,
-        timestamp: Date.now(),
-        requestID: 'req-1',
+        type: 'opaque',
+        raw: 'old-token',
       },
-    ]);
-
-    expect(pusher.enqueuePush).toHaveBeenCalledWith(
-      'test-client',
-      expect.any(Object),
-      'connection-token',
-      undefined,
-      undefined,
+      {},
+      contextManager,
     );
-  });
 
-  test('updateAuth updates auth used by later push', async () => {
-    const pusher = createMockPusher();
-    const mutagen = createMockMutagen();
-    const viewSyncer = createMockViewSyncer({
-      type: 'opaque',
-      raw: 'old-token',
-    });
-    const handler = createHandler(viewSyncer, mutagen, pusher);
+    await handler.handleMessage(['updateAuth', {auth: 'new-token'}]);
 
-    await handler.handleMessage([
-      'updateAuth',
+    expect(viewSyncer.updateAuth).toHaveBeenCalledWith(
       {
-        auth: 'new-token',
+        clientID: 'test-client',
+        wsID: 'test-ws',
       },
-    ]);
-
-    expect(viewSyncer.updateAuth).toHaveBeenCalledTimes(1);
+      ['updateAuth', {auth: 'new-token'}],
+      true,
+    );
 
     await handler.handleMessage([
       'push',
@@ -219,85 +197,171 @@ describe('SyncerWsMessageHandler auth handling', () => {
       },
     ]);
 
-    expect(viewSyncer.auth?.raw).toBe('new-token');
     expect(pusher.enqueuePush).toHaveBeenCalledWith(
-      'test-client',
+      {
+        clientID: 'test-client',
+        wsID: 'test-ws',
+      },
       expect.any(Object),
-      'new-token',
-      undefined,
-      undefined,
+    );
+
+    await handler.handleMessage(['updateAuth', {auth: 'new-token'}]);
+    expect(viewSyncer.updateAuth).toHaveBeenCalledWith(
+      {
+        clientID: 'test-client',
+        wsID: 'test-ws',
+      },
+      ['updateAuth', {auth: 'new-token'}],
+      // the second call should not have an auth revision
+      false,
     );
   });
 
-  test('updateAuth with empty auth is rejected for authenticated client group', async () => {
+  test('ackMutationResponses forwards connection auth context to cleanup', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const viewSyncer = createMockViewSyncer({
-      type: 'opaque',
-      raw: 'old-token',
-    });
-    const handler = createHandler(viewSyncer, mutagen, pusher);
+    const contextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(contextManager);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
+      {
+        type: 'opaque',
+        raw: 'connection-token',
+      },
+      {
+        httpCookie: 'my-cookie',
+        origin: 'https://app.example',
+      },
+      contextManager,
+    );
+
+    await handler.handleMessage([
+      'ackMutationResponses',
+      {
+        clientID: 'test-client',
+        id: 42,
+      },
+    ]);
+
+    expect(pusher.ackMutationResponses).toHaveBeenCalledWith(
+      {
+        clientID: 'test-client',
+        wsID: 'test-ws',
+      },
+      {
+        clientID: 'test-client',
+        id: 42,
+      },
+    );
+  });
+
+  test('deleteClients forwards connection auth context to cleanup', async () => {
+    const pusher = createMockPusher();
+    const mutagen = createMockMutagen();
+    const contextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(contextManager);
+    viewSyncer.deleteClients.mockResolvedValue(['client-a']);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
+      {
+        type: 'opaque',
+        raw: 'connection-token',
+      },
+      {
+        httpCookie: 'my-cookie',
+        origin: 'https://app.example',
+      },
+      contextManager,
+    );
+
+    await handler.handleMessage(['deleteClients', {clientIDs: ['client-a']}]);
+
+    expect(pusher.deleteClientMutations).toHaveBeenCalledWith(
+      {
+        clientID: 'test-client',
+        wsID: 'test-ws',
+      },
+      ['client-a'],
+    );
+  });
+
+  test('rejects clearing auth on an authenticated connection', async () => {
+    const pusher = createMockPusher();
+    const mutagen = createMockMutagen();
+    const contextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(contextManager);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
+      {
+        type: 'opaque',
+        raw: 'old-token',
+      },
+      {},
+      contextManager,
+    );
 
     await expect(
-      handler.handleMessage([
-        'updateAuth',
-        {
-          auth: '',
-        },
-      ]),
-    ).rejects.toThrow(
-      'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
+      handler.handleMessage(['updateAuth', {auth: ''}]),
+    ).rejects.toMatchObject({
+      errorBody: expect.objectContaining({kind: 'Unauthorized'}),
+    });
+    expect(viewSyncer.updateAuth).not.toHaveBeenCalled();
+  });
+
+  test('surfaces validator failures before updating the connection auth', async () => {
+    const pusher = createMockPusher();
+    const mutagen = createMockMutagen();
+    const validateLegacyJWT: ValidateLegacyJWT = () =>
+      Promise.reject(new Error('bad token'));
+    const contextManager = new ConnectionContextManagerImpl(
+      lc,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      validateLegacyJWT,
+    );
+    const viewSyncer = createMockViewSyncer(contextManager);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
+      undefined,
+      {},
+      contextManager,
     );
 
-    expect(viewSyncer.auth?.raw).toBe('old-token');
-  });
-
-  test('invalid push auth stops processing before enqueueing or mutating', async () => {
-    const pusher = createMockPusher();
-    const mutagen = createMockMutagen();
-    const viewSyncer = createMockViewSyncer(undefined);
-    const updateAuthSpy = vi
-      .spyOn(viewSyncer, 'updateAuth')
-      .mockRejectedValue(new Error('bad token'));
-    const handler = createHandler(viewSyncer, mutagen, pusher);
-
     await expect(
-      handler.handleMessage([
-        'push',
-        {
-          clientGroupID: 'test-client-group',
-          mutations: [
-            {
-              type: 'custom',
-              id: 1,
-              clientID: 'test-client',
-              name: 'testMutation',
-              args: [],
-              timestamp: Date.now(),
-            },
-          ],
-          pushVersion: 1,
-          schemaVersion: 1,
-          timestamp: Date.now(),
-          requestID: 'req-1',
-          auth: 'bad-token',
-        },
-      ]),
-    ).rejects.toThrow('bad token');
-
-    expect(updateAuthSpy).toHaveBeenCalledTimes(1);
-    expect(pusher.enqueuePush).not.toHaveBeenCalled();
-    expect(mutagen.processMutation).not.toHaveBeenCalled();
+      handler.handleMessage(['updateAuth', {auth: 'jwt-token'}]),
+    ).rejects.toMatchObject({
+      errorBody: expect.objectContaining({kind: 'AuthInvalidated'}),
+    });
+    expect(viewSyncer.updateAuth).not.toHaveBeenCalled();
   });
 
-  test('push auth null does not clear auth used by pusher', async () => {
+  test('uses handler-local JWT auth for CRUD mutations', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const viewSyncer = createMockViewSyncer({
-      type: 'opaque',
-      raw: 'existing-token',
-    });
-    const handler = createHandler(viewSyncer, mutagen, pusher);
+    const contextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(contextManager);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
+      {
+        type: 'jwt',
+        raw: 'jwt-token',
+        decoded: {sub: 'test-user', iat: 1},
+      },
+      {},
+      contextManager,
+    );
 
     await handler.handleMessage([
       'push',
@@ -305,11 +369,11 @@ describe('SyncerWsMessageHandler auth handling', () => {
         clientGroupID: 'test-client-group',
         mutations: [
           {
-            type: 'custom',
+            type: MutationType.CRUD,
             id: 1,
             clientID: 'test-client',
-            name: 'testMutation',
-            args: [],
+            name: CRUD_MUTATION_NAME,
+            args: [{ops: []}],
             timestamp: Date.now(),
           },
         ],
@@ -320,23 +384,29 @@ describe('SyncerWsMessageHandler auth handling', () => {
       },
     ]);
 
-    expect(pusher.enqueuePush).toHaveBeenCalledWith(
-      'test-client',
-      expect.any(Object),
-      'existing-token',
-      undefined,
-      undefined,
+    expect(mutagen.processMutation).toHaveBeenCalledWith(
+      expect.objectContaining({type: MutationType.CRUD}),
+      {sub: 'test-user', iat: 1},
+      true,
     );
   });
 
   test('rejects CRUD mutations when auth is opaque', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const viewSyncer = createMockViewSyncer({
-      type: 'opaque',
-      raw: 'opaque-token',
-    });
-    const handler = createHandler(viewSyncer, mutagen, pusher);
+    const contextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(contextManager);
+    const handler = createHandler(
+      viewSyncer,
+      mutagen,
+      pusher,
+      {
+        type: 'opaque',
+        raw: 'opaque-token',
+      },
+      {},
+      contextManager,
+    );
 
     await expect(
       handler.handleMessage([

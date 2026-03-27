@@ -91,7 +91,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [listContext]);
 
   const [issue, issueResult] = useQuery(
-    queries.issueDetail({idField, id: idValue, userID: z.userID}),
+    queries.issueDetail({idField, id: idValue}),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -122,7 +122,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     // only push viewed forward if the issue has been modified since the last viewing
     if (
-      z.userID !== 'anon' &&
+      z.userID !== undefined &&
       displayed &&
       displayed.modified > (displayed?.viewState?.viewed ?? 0)
     ) {
@@ -218,7 +218,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [[next]] = useQuery(
     queries.issueListV2({
       listContext: listContextParams,
-      userID: z.userID,
       limit: 1,
       start,
       dir: 'forward',
@@ -237,7 +236,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [[prev]] = useQuery(
     queries.issueListV2({
       listContext: listContextParams,
-      userID: z.userID,
       limit: 1,
       start,
       dir: 'backward',
@@ -741,7 +739,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           </div>
         </div>
 
-        {z.userID === 'anon' ? (
+        {z.userID === undefined ? (
           <a href="/api/login/github" className="login-to-comment">
             Login to comment
           </a>
@@ -1093,13 +1091,12 @@ function useShowToastForNewComment(
 }
 
 export function IssueRedirect({onReady}: {onReady: () => void}) {
-  const z = useZero();
   const params = useParams();
 
   const {idField, idValue} = getID(params);
 
   const [issue, issueResult] = useQuery(
-    queries.issueDetail({idField, id: idValue, userID: z.userID}),
+    queries.issueDetail({idField, id: idValue}),
     CACHE_NAV,
   );
 

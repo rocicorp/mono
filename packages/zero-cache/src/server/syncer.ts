@@ -8,7 +8,6 @@ import {randInt} from '../../../shared/src/rand.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
-import {AuthSessionImpl, type ValidateLegacyJWT} from '../auth/auth.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
@@ -18,6 +17,10 @@ import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
+import {
+  type ConnectionContextManager,
+  ConnectionContextManagerImpl,
+} from '../services/view-syncer/connection-context-manager.ts';
 import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
@@ -37,6 +40,9 @@ import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 import {isPriorityOpRunning, runPriorityOp} from './priority-op.ts';
+import type {ValidateLegacyJWT} from '../auth/auth.ts';
+import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
+import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -53,6 +59,8 @@ function getCustomQueryConfig(
 
   return {
     url: queryConfig.url,
+    apiKey: queryConfig.apiKey,
+    allowedClientHeaders: queryConfig.allowedClientHeaders,
     forwardCookies: queryConfig.forwardCookies ?? false,
   };
 }
@@ -107,26 +115,75 @@ export default function runWorker(
   );
 
   const shard = getShardID(config);
+  const customQueryConfig = getCustomQueryConfig(config);
+  const pushConfig =
+    config.push.url === undefined && config.mutate.url === undefined
+      ? undefined
+      : {
+          ...config.push,
+          ...config.mutate,
+          url: must(
+            config.push.url ?? config.mutate.url,
+            'No push or mutate URL configured',
+          ),
+        };
+
+  /** @deprecated used in JWT validation */
+  let validateLegacyJWT: ValidateLegacyJWT | undefined = undefined;
+
+  const tokenOptions = tokenConfigOptions(config.auth ?? {});
+  if (tokenOptions.length === 1) {
+    validateLegacyJWT = async (token, {userID}) => {
+      if (!userID) {
+        throw new ProtocolErrorWithLevel(
+          {
+            kind: 'Unauthorized',
+            message: 'UserID is required for JWT validation.',
+            origin: 'zeroCache',
+          },
+          'warn',
+        );
+      }
+
+      const decoded = await verifyToken(config.auth, token, {
+        subject: userID,
+        ...(config.auth?.issuer && {issuer: config.auth.issuer}),
+        ...(config.auth?.audience && {
+          audience: config.auth.audience,
+        }),
+      });
+      return {
+        type: 'jwt',
+        raw: token,
+        decoded,
+      };
+    };
+  }
 
   const viewSyncerFactory = (
     id: string,
     sub: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
-    validateLegacyJWT: ValidateLegacyJWT | undefined,
   ) => {
     const logger = lc
       .withContext('component', 'view-syncer')
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
+
+    const customQueryTransformer =
+      customQueryConfig && new CustomQueryTransformer(logger, shard);
+    const contextManager = new ConnectionContextManagerImpl(
+      logger,
+      config.auth.revalidateIntervalSeconds,
+      config.auth.retransformIntervalSeconds,
+      customQueryConfig,
+      pushConfig,
+      validateLegacyJWT,
+    );
+
     lc.debug?.(
       `creating view syncer. Query Planner Enabled: ${config.enableQueryPlanner}`,
     );
-
-    // Create the custom query transformer if configured
-    const customQueryConfig = getCustomQueryConfig(config);
-    const customQueryTransformer =
-      customQueryConfig &&
-      new CustomQueryTransformer(logger, customQueryConfig, shard);
 
     const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
 
@@ -135,12 +192,6 @@ export default function runWorker(
       2,
     );
     const normalYieldThresholdMs = Math.max(config.yieldThresholdMs, 2);
-
-    const authSession = new AuthSessionImpl(
-      logger.withContext('component', 'auth-session'),
-      id,
-      validateLegacyJWT,
-    );
 
     return new ViewSyncerService(
       config,
@@ -168,9 +219,9 @@ export default function runWorker(
       drainCoordinator,
       config.log.slowHydrateThreshold,
       inspectorDelegate,
+      contextManager,
       customQueryTransformer,
       runPriorityOp,
-      authSession,
     );
   };
 
@@ -189,21 +240,14 @@ export default function runWorker(
     : undefined;
 
   const pusherFactory =
-    config.push.url === undefined && config.mutate.url === undefined
+    pushConfig === undefined
       ? undefined
-      : (id: string) =>
+      : (id: string, contextManager: ConnectionContextManager) =>
           new PusherService(
             config,
-            {
-              ...config.push,
-              ...config.mutate,
-              url: must(
-                config.push.url ?? config.mutate.url,
-                'No push or mutate URL configured',
-              ),
-            },
             lc.withContext('clientGroupID', id),
             id,
+            contextManager,
           );
 
   const syncer = new Syncer(
@@ -213,6 +257,7 @@ export default function runWorker(
     mutagenFactory,
     pusherFactory,
     parent,
+    validateLegacyJWT,
   );
 
   startAnonymousTelemetry(lc, config);

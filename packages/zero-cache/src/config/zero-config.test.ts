@@ -307,6 +307,16 @@ test('zero-cache --help', () => {
                                                                         To change the set of publications without disrupting an existing app, a new app                                       
                                                                         should be created.                                                                                                    
                                                                                                                                                                                               
+     --auth-revalidate-interval-seconds number                          optional                                                                                                              
+       ZERO_AUTH_REVALIDATE_INTERVAL_SECONDS env                                                                                                                                              
+                                                                        The interval in seconds between periodic /query auth revalidation for validated connections.                          
+                                                                        If unset, periodic auth revalidation is disabled.                                                                     
+                                                                                                                                                                                              
+     --auth-retransform-interval-seconds number                         optional                                                                                                              
+       ZERO_AUTH_RETRANSFORM_INTERVAL_SECONDS env                                                                                                                                             
+                                                                        The interval in seconds between periodic shared /query retransform work for a client group.                           
+                                                                        If unset, periodic shared retransform is disabled.                                                                    
+                                                                                                                                                                                              
      --port number                                                      default: 4848                                                                                                         
        ZERO_PORT env                                                                                                                                                                          
                                                                         The port for sync connections.                                                                                        
