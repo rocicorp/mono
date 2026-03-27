@@ -483,6 +483,8 @@ async function getInitialDownloadState(
   return state;
 }
 
+const USE_TEXT_COPY = process.env.ZERO_INITIAL_SYNC_TEXT_COPY === '1';
+
 async function copy(
   lc: LogContext,
   {spec: table, status}: DownloadState,
@@ -490,16 +492,10 @@ async function copy(
   from: PostgresTransaction,
   to: Database,
 ) {
-  try {
-    return await copyBinary(lc, table, status, from, to);
-  } catch (e) {
-    const tableName = liteTableName(table);
-    lc.warn?.(
-      `Binary COPY failed for ${tableName}, falling back to text format`,
-      e,
-    );
+  if (USE_TEXT_COPY) {
     return copyText(lc, table, status, dbClient, from, to);
   }
+  return copyBinary(lc, table, status, from, to);
 }
 
 async function copyBinary(
