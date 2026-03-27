@@ -369,7 +369,9 @@ describe('handleGetQueriesRequest', () => {
   });
 });
 
-describe('handleTransformRequest', () => {
+describe('handleQueryRequest', () => {
+  const principalID = 'principal-1';
+
   test('returns transformed queries with server names when given JSON body', async () => {
     const ast: AST = {
       table: 'names',
@@ -383,7 +385,7 @@ describe('handleTransformRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleQueryRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, principalID, schema, [
       'transform',
       [
         {
@@ -410,6 +412,7 @@ describe('handleTransformRequest', () => {
           }),
         },
       ],
+      {principalID},
     ]);
   });
 
@@ -437,7 +440,7 @@ describe('handleTransformRequest', () => {
       body,
     });
 
-    const result = await handleQueryRequest(cb, schema, request);
+    const result = await handleQueryRequest(cb, undefined, schema, request);
 
     expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
     expect(result).toEqual([
@@ -449,6 +452,7 @@ describe('handleTransformRequest', () => {
           ast: expect.objectContaining({table: 'basic'}),
         },
       ],
+      {principalID: null},
     ]);
   });
 
@@ -457,6 +461,7 @@ describe('handleTransformRequest', () => {
       () => {
         throw new Error('should not be called');
       },
+      principalID,
       schema,
       ['invalid', []],
     );
@@ -485,6 +490,7 @@ describe('handleTransformRequest', () => {
       () => {
         throw new Error('should not be called');
       },
+      principalID,
       schema,
       request,
     );
@@ -514,7 +520,7 @@ describe('handleTransformRequest', () => {
       return makeQuery(ast);
     });
 
-    const result = await handleQueryRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, principalID, schema, [
       'transform',
       [
         {id: 'q1', name: 'first', args: []},
@@ -541,6 +547,7 @@ describe('handleTransformRequest', () => {
       name: 'second',
       ast: expect.objectContaining({table: 'basic'}),
     });
+    expect(result[2]).toEqual({principalID});
   });
 
   test('wraps thrown errors from callback with details when possible', async () => {
@@ -549,7 +556,7 @@ describe('handleTransformRequest', () => {
       throw error;
     });
 
-    const result = await handleQueryRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, principalID, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);
@@ -565,6 +572,7 @@ describe('handleTransformRequest', () => {
           details: expect.objectContaining({name: 'TypeError'}),
         },
       ],
+      {principalID},
     ]);
   });
 
@@ -578,7 +586,7 @@ describe('handleTransformRequest', () => {
       throw error;
     });
 
-    const result = await handleQueryRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, principalID, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);
@@ -594,6 +602,7 @@ describe('handleTransformRequest', () => {
           details: customDetails,
         },
       ],
+      {principalID},
     ]);
   });
 
@@ -606,7 +615,7 @@ describe('handleTransformRequest', () => {
       throw parseError;
     });
 
-    const result = await handleQueryRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, principalID, schema, [
       'transform',
       [{id: 'q1', name: 'testQuery', args: [{foo: 'bar'}]}],
     ]);
@@ -622,6 +631,7 @@ describe('handleTransformRequest', () => {
           details: expect.objectContaining({name: 'QueryParseError'}),
         },
       ],
+      {principalID},
     ]);
   });
 
@@ -639,7 +649,7 @@ describe('handleTransformRequest', () => {
       return makeQuery(ast);
     });
 
-    const result = await handleQueryRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, principalID, schema, [
       'transform',
       [
         {id: 'q1', name: 'parseErrorQuery', args: []},
@@ -664,6 +674,7 @@ describe('handleTransformRequest', () => {
           ast: expect.objectContaining({table: 'basic'}),
         },
       ],
+      {principalID},
     ]);
   });
 
@@ -681,7 +692,7 @@ describe('handleTransformRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleQueryRequest(cb, schema, [
+    const result = await handleQueryRequest(cb, principalID, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);

@@ -69,6 +69,7 @@ export function handleTransformRequest<S extends Schema>(
  * This function will call `transformQuery` in parallel for each query found in the request.
  *
  * @param transformQuery - Callback function that takes a query name and args, and returns a Query
+ * @param principalID - The authenticated principal for this request, if any
  * @param schema - The Zero schema
  * @param requestOrJsonBody - Either a Request object or the JSON body directly
  * @param logLevel - Logging level (defaults to 'info')
@@ -76,6 +77,7 @@ export function handleTransformRequest<S extends Schema>(
  */
 export function handleQueryRequest<S extends Schema>(
   transformQuery: TransformQueryFunction,
+  principalID: string | undefined,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
   logLevel: LogLevel = 'info',
@@ -86,6 +88,7 @@ export function handleQueryRequest<S extends Schema>(
     requestOrJsonBody,
     'query',
     logLevel,
+    principalID,
   );
 }
 
@@ -98,6 +101,7 @@ async function transform<S extends Schema>(
   requestOrJsonBody: Request | ReadonlyJSONValue,
   apiName: 'query' | 'getQueries' | 'transform',
   logLevel: LogLevel = 'info',
+  principalID?: string,
 ): Promise<TransformResponseMessage> {
   const lc = createLogContext(logLevel).withContext('TransformRequest');
   let parsed: TransformRequestMessage;
@@ -170,6 +174,9 @@ async function transform<S extends Schema>(
       }),
     );
 
+    if (apiName === 'query') {
+      return ['transformed', responses, {principalID: principalID ?? null}];
+    }
     return ['transformed', responses];
   } catch (e) {
     const message = getErrorMessage(e);

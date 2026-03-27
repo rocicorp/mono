@@ -223,6 +223,7 @@ async function queryHandler(
           const query = mustGetQuery(queries, name);
           return query.fn({args, ctx: authData});
         },
+        authData?.sub,
         schema,
         request.body,
       ),
