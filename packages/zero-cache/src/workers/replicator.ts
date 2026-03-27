@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';
@@ -43,17 +44,12 @@ async function connect(
 ): Promise<Database> {
   const replica = new Database(lc, file);
 
-  // To allow other readers (e.g. the change-streamer) to access the replica
-  // for stats / event publishing, allow a short busy_timeout for performing
-  // locking operations.
-  replica.pragma('busy_timeout = 1000');
-
   // Perform any upgrades to the replica in case the backup is an
   // earlier version.
   await upgradeReplica(lc, `${mode}-replica`, file);
 
   // Start by folding any (e.g. restored) WAL(2) files into the main db.
-  replica.pragma('journal_mode = delete');
+  await setJournalMode(lc, replica, 'delete');
 
   const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
     'page_size',
@@ -90,8 +86,7 @@ async function connect(
     }
   }
 
-  lc.info?.(`setting ${file} to ${walMode} mode`);
-  replica.pragma(`journal_mode = ${walMode}`);
+  await setJournalMode(lc, replica, walMode);
 
   const pragmas = getPragmaConfig(mode);
   applyPragmas(replica, pragmas);
@@ -99,6 +94,30 @@ async function connect(
   replica.pragma('optimize = 0x10002');
   lc.info?.(`optimized ${file}`);
   return replica;
+}
+
+// Setting the journal_mode requires an exclusive lock on the replica.
+// Add resilience against random replica reads (for stats, etc.) by
+// retrying if the database is locked. Note that the busy_timeout doesn't
+// work here.
+async function setJournalMode(
+  lc: LogContext,
+  replica: Database,
+  mode: 'delete' | 'wal' | 'wal2',
+) {
+  lc.info?.(`setting ${replica.name} to ${mode} mode`);
+  let err: unknown;
+  for (let i = 0; i < 5; i++) {
+    try {
+      replica.pragma(`journal_mode = ${mode}`);
+      return;
+    } catch (e) {
+      lc.warn?.(`error setting journal_mode to ${mode} (attempt ${i + 1})`, e);
+      err = e;
+    }
+    await sleep(500);
+  }
+  throw err;
 }
 
 /**

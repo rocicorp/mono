@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Database} from '../../../../zqlite/src/db.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
@@ -12,7 +11,7 @@ import {
 import {RunningState} from '../running-state.ts';
 import type {CommitResult} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
-import {ReplicationStatusPublisher} from './replication-status.ts';
+import type {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {ReplicationReportRecorder} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
@@ -30,10 +29,9 @@ export class IncrementalSyncer {
   readonly #taskID: string;
   readonly #id: string;
   readonly #changeStreamer: ChangeStreamer;
-  readonly #statusDb: Database;
   readonly #worker: WriteWorkerClient;
   readonly #mode: ReplicatorMode;
-  readonly #publishReplicationStatus: boolean;
+  readonly #statusPublisher: ReplicationStatusPublisher | null;
   readonly #notifier: Notifier;
   readonly #reporter: ReplicationReportRecorder;
 
@@ -50,19 +48,17 @@ export class IncrementalSyncer {
     taskID: string,
     id: string,
     changeStreamer: ChangeStreamer,
-    statusDb: Database,
     worker: WriteWorkerClient,
     mode: ReplicatorMode,
-    publishReplicationStatus: boolean,
+    statusPublisher: ReplicationStatusPublisher | null,
   ) {
     this.#lc = lc;
     this.#taskID = taskID;
     this.#id = id;
     this.#changeStreamer = changeStreamer;
-    this.#statusDb = statusDb;
     this.#worker = worker;
     this.#mode = mode;
-    this.#publishReplicationStatus = publishReplicationStatus;
+    this.#statusPublisher = statusPublisher;
     this.#notifier = new Notifier();
     this.#reporter = new ReplicationReportRecorder(lc);
   }
@@ -76,11 +72,6 @@ export class IncrementalSyncer {
 
     // Notify any waiting subscribers that the replica is ready to be read.
     void this.#notifier.notifySubscribers();
-
-    // Only the backup replicator publishes replication status events.
-    const statusPublisher = this.#publishReplicationStatus
-      ? new ReplicationStatusPublisher(this.#statusDb)
-      : undefined;
 
     while (this.#state.shouldRun()) {
       const {replicaVersion, watermark} =
@@ -102,7 +93,7 @@ export class IncrementalSyncer {
         });
         this.#state.resetBackoff();
         unregister = this.#state.cancelOnStop(downstream);
-        statusPublisher?.publish(
+        this.#statusPublisher?.publish(
           lc,
           'Replicating',
           `Replicating from ${watermark}`,
@@ -140,7 +131,7 @@ export class IncrementalSyncer {
                 if (!backfillStatus) {
                   // Start publishing the status every 3 seconds.
                   backfillStatus = status;
-                  statusPublisher?.publish(
+                  this.#statusPublisher?.publish(
                     lc,
                     'Replicating',
                     `Backfilling ${msg.relation.name} table`,
@@ -169,7 +160,7 @@ export class IncrementalSyncer {
                 message as ChangeStreamData,
               );
 
-              this.#handleResult(lc, result, statusPublisher);
+              this.#handleResult(lc, result);
               if (result?.completedBackfill) {
                 backfillStatus = undefined;
               }
@@ -184,25 +175,21 @@ export class IncrementalSyncer {
       } finally {
         downstream?.cancel();
         unregister();
-        statusPublisher?.stop();
+        this.#statusPublisher?.stop();
       }
       await this.#state.backoff(lc, err);
     }
     lc.info?.('IncrementalSyncer stopped');
   }
 
-  #handleResult(
-    lc: LogContext,
-    result: CommitResult | null,
-    statusPublisher: ReplicationStatusPublisher | undefined,
-  ) {
+  #handleResult(lc: LogContext, result: CommitResult | null) {
     if (!result) {
       return;
     }
     if (result.completedBackfill) {
       // Publish the final status
       const status = result.completedBackfill;
-      statusPublisher?.publish(
+      this.#statusPublisher?.publish(
         lc,
         'Replicating',
         `Backfilled ${status.table} table`,
@@ -210,7 +197,7 @@ export class IncrementalSyncer {
         () => ({downloadStatus: [status]}),
       );
     } else if (result.schemaUpdated) {
-      statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
+      this.#statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
     }
     if (result.watermark && result.changeLogUpdated) {
       void this.#notifier.notifySubscribers({state: 'version-ready'});
