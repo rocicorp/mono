@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from '../../../shared/src/asserts.ts';
 import {TimedCache} from '../../../shared/src/cache.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -7,6 +8,7 @@ import {
   type ErroredQuery,
   type TransformRequestBody,
   type TransformRequestMessage,
+  type TransformResponseBody,
 } from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -24,6 +26,27 @@ import {
 } from '../custom/fetch.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import type {ShardID} from '../types/shards.ts';
+
+type PrincipalID = string | null | undefined;
+
+export type CustomQueryValidationResult = {
+  readonly principalID: PrincipalID;
+};
+
+export type CustomQueryTransformResult = {
+  readonly queries: readonly (TransformedAndHashed | ErroredQuery)[];
+  readonly principalID: PrincipalID;
+};
+
+type CachedTransform = {
+  readonly transformed: TransformedAndHashed;
+  readonly principalID: PrincipalID;
+};
+
+type FetchedTransform = {
+  readonly queries: TransformResponseBody;
+  readonly principalID: PrincipalID;
+};
 
 /**
  * Transforms a custom query by calling the user's API server.
@@ -48,7 +71,7 @@ import type {ShardID} from '../types/shards.ts';
  */
 export class CustomQueryTransformer {
   readonly #shard: ShardID;
-  readonly #cache: TimedCache<TransformedAndHashed>;
+  readonly #cache: TimedCache<CachedTransform>;
   readonly #config: {
     url: string[];
     forwardCookies: boolean;
@@ -71,27 +94,40 @@ export class CustomQueryTransformer {
     this.#cache = new TimedCache(5000); // 5 seconds cache TTL
   }
 
-  async transform(
+  async validate(
+    headerOptions: HeaderOptions,
+    userQueryURL: string | undefined,
+  ): Promise<CustomQueryValidationResult | TransformFailedBody> {
+    const result = await this.#fetchTransform(
+      normalizeHeaderOptions(headerOptions, this.#config.forwardCookies),
+      [],
+      userQueryURL,
+    );
+    if ('kind' in result) {
+      return result;
+    }
+    return {principalID: result.principalID};
+  }
+
+  async transformAndValidate(
     headerOptions: HeaderOptions,
     queries: Iterable<CustomQueryRecord>,
     userQueryURL: string | undefined,
-  ): Promise<(TransformedAndHashed | ErroredQuery)[] | TransformFailedBody> {
+  ): Promise<CustomQueryTransformResult | TransformFailedBody> {
+    const normalizedHeaderOptions = normalizeHeaderOptions(
+      headerOptions,
+      this.#config.forwardCookies,
+    );
     const request: TransformRequestBody = [];
     const cachedResponses: TransformedAndHashed[] = [];
+    let principalID: PrincipalID = undefined;
 
-    if (!this.#config.forwardCookies && headerOptions.cookie) {
-      headerOptions = {
-        ...headerOptions,
-        cookie: undefined, // remove cookies if not forwarded
-      };
-    }
-
-    // split queries into cached and uncached
     for (const query of queries) {
-      const cacheKey = getCacheKey(headerOptions, query.id);
+      const cacheKey = getCacheKey(normalizedHeaderOptions, query.id);
       const cached = this.#cache.get(cacheKey);
       if (cached) {
-        cachedResponses.push(cached);
+        cachedResponses.push(cached.transformed);
+        principalID = mergePrincipalID(principalID, cached.principalID);
       } else {
         request.push({
           id: query.id,
@@ -102,9 +138,72 @@ export class CustomQueryTransformer {
     }
 
     if (request.length === 0) {
-      return cachedResponses;
+      return {
+        queries: cachedResponses,
+        principalID,
+      };
     }
 
+    const transformResponse = await this.#fetchTransform(
+      normalizedHeaderOptions,
+      request,
+      userQueryURL,
+    );
+    if ('kind' in transformResponse) {
+      return transformResponse;
+    }
+
+    principalID = mergePrincipalID(principalID, transformResponse.principalID);
+
+    const newResponses = transformResponse.queries.map(transformed => {
+      if ('error' in transformed) {
+        return transformed;
+      }
+      return {
+        id: transformed.id,
+        transformedAst: transformed.ast,
+        transformationHash: hashOfAST(transformed.ast),
+      } satisfies TransformedAndHashed;
+    });
+
+    for (const transformed of newResponses) {
+      if ('error' in transformed) {
+        continue;
+      }
+      const cacheKey = getCacheKey(normalizedHeaderOptions, transformed.id);
+      this.#cache.set(cacheKey, {
+        transformed,
+        principalID: transformResponse.principalID,
+      });
+    }
+
+    return {
+      queries: newResponses.concat(cachedResponses),
+      principalID,
+    };
+  }
+
+  async transform(
+    headerOptions: HeaderOptions,
+    queries: Iterable<CustomQueryRecord>,
+    userQueryURL: string | undefined,
+  ): Promise<(TransformedAndHashed | ErroredQuery)[] | TransformFailedBody> {
+    const result = await this.transformAndValidate(
+      headerOptions,
+      queries,
+      userQueryURL,
+    );
+    if ('kind' in result) {
+      return result;
+    }
+    return [...result.queries];
+  }
+
+  async #fetchTransform(
+    headerOptions: HeaderOptions,
+    request: TransformRequestBody,
+    userQueryURL: string | undefined,
+  ): Promise<FetchedTransform | TransformFailedBody> {
     const queryIDs = request.map(r => r.id);
 
     try {
@@ -127,27 +226,10 @@ export class CustomQueryTransformer {
         return transformResponse[1];
       }
 
-      const newResponses = transformResponse[1].map(transformed => {
-        if ('error' in transformed) {
-          return transformed;
-        }
-        return {
-          id: transformed.id,
-          transformedAst: transformed.ast,
-          transformationHash: hashOfAST(transformed.ast),
-        } satisfies TransformedAndHashed;
-      });
-
-      for (const transformed of newResponses) {
-        if ('error' in transformed) {
-          // do not cache error responses
-          continue;
-        }
-        const cacheKey = getCacheKey(headerOptions, transformed.id);
-        this.#cache.set(cacheKey, transformed);
-      }
-
-      return newResponses.concat(cachedResponses);
+      return {
+        queries: transformResponse[1],
+        principalID: transformResponse[2]?.principalID,
+      };
     } catch (e) {
       if (
         isProtocolError(e) &&
@@ -168,6 +250,34 @@ export class CustomQueryTransformer {
       } as const satisfies TransformFailedBody;
     }
   }
+}
+
+function normalizeHeaderOptions(
+  headerOptions: HeaderOptions,
+  forwardCookies: boolean,
+) {
+  if (!forwardCookies && headerOptions.cookie) {
+    return {
+      ...headerOptions,
+      cookie: undefined,
+    };
+  }
+  return headerOptions;
+}
+
+function mergePrincipalID(
+  current: PrincipalID,
+  next: PrincipalID,
+): PrincipalID {
+  if (current === undefined) {
+    return next;
+  }
+  assert(
+    next === undefined || current === next,
+    () =>
+      `conflicting principalID metadata from custom query responses: ${current} !== ${next}`,
+  );
+  return current;
 }
 
 function getCacheKey(headerOptions: HeaderOptions, queryID: string) {

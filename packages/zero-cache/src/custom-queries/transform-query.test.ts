@@ -212,6 +212,81 @@ describe('CustomQueryTransformer', () => {
     expect(result).toEqual(transformResults);
   });
 
+  test('validate hits the API for empty queries and returns principal metadata', async () => {
+    mockFetchFromAPIServer.mockResolvedValue([
+      'transformed',
+      [],
+      {principalID: 'principal-1'},
+    ] satisfies TransformResponseMessage);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+    const result = await transformer.validate(headerOptions, undefined);
+
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(),
+      'transform',
+      lc,
+      pullUrl,
+      [expectUrlPatternMatching(pullUrl)],
+      mockShard,
+      headerOptions,
+      ['transform', []],
+    );
+    expect(result).toEqual({principalID: 'principal-1'});
+  });
+
+  test('validate preserves null principal metadata', async () => {
+    mockFetchFromAPIServer.mockResolvedValue([
+      'transformed',
+      [],
+      {principalID: null},
+    ] satisfies TransformResponseMessage);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    await expect(
+      transformer.validate(headerOptions, undefined),
+    ).resolves.toEqual({
+      principalID: null,
+    });
+  });
+
+  test('validate preserves undefined principal metadata for legacy responses', async () => {
+    mockFetchFromAPIServer.mockResolvedValue([
+      'transformed',
+      [],
+    ] satisfies TransformResponseMessage);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    await expect(
+      transformer.validate(headerOptions, undefined),
+    ).resolves.toEqual({
+      principalID: undefined,
+    });
+  });
+
   test('should handle errored queries in response', async () => {
     mockFetchFromAPIServer.mockResolvedValue([
       'transformed',
@@ -343,6 +418,46 @@ describe('CustomQueryTransformer', () => {
     expect(result).toEqual([transformResults[0]]);
   });
 
+  test('transformAndValidate preserves principal metadata for cached responses', async () => {
+    mockFetchFromAPIServer.mockResolvedValue([
+      'transformed',
+      [mockQueryResponses[0]],
+      {principalID: 'principal-1'},
+    ] satisfies TransformResponseMessage);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    expect(
+      await transformer.transformAndValidate(
+        headerOptions,
+        [mockQueries[0]],
+        undefined,
+      ),
+    ).toEqual({
+      queries: [transformResults[0]],
+      principalID: 'principal-1',
+    });
+
+    expect(
+      await transformer.transformAndValidate(
+        headerOptions,
+        [mockQueries[0]],
+        undefined,
+      ),
+    ).toEqual({
+      queries: [transformResults[0]],
+      principalID: 'principal-1',
+    });
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+  });
+
   test('should cache successful responses for 5 seconds', async () => {
     const mockSuccessResponse = () =>
       [
@@ -441,6 +556,85 @@ describe('CustomQueryTransformer', () => {
     // Verify combined result includes both cached and fresh data
     expect(result).toHaveLength(2);
     expect(result).toEqual(expect.arrayContaining(transformResults));
+  });
+
+  test('transformAndValidate preserves principal metadata for mixed cached and fresh queries', async () => {
+    mockFetchFromAPIServer
+      .mockResolvedValueOnce([
+        'transformed',
+        [mockQueryResponses[0]],
+        {principalID: 'principal-1'},
+      ] satisfies TransformResponseMessage)
+      .mockResolvedValueOnce([
+        'transformed',
+        [mockQueryResponses[1]],
+        {principalID: 'principal-1'},
+      ] satisfies TransformResponseMessage);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    await transformer.transformAndValidate(
+      headerOptions,
+      [mockQueries[0]],
+      undefined,
+    );
+
+    const result = await transformer.transformAndValidate(
+      headerOptions,
+      mockQueries,
+      undefined,
+    );
+
+    expect(result).toEqual({
+      queries: expect.arrayContaining(transformResults),
+      principalID: 'principal-1',
+    });
+    if ('kind' in result) {
+      throw new Error('Expected successful transform result');
+    }
+    expect(result.queries).toHaveLength(2);
+  });
+
+  test('transformAndValidate asserts on conflicting principal metadata', async () => {
+    mockFetchFromAPIServer
+      .mockResolvedValueOnce([
+        'transformed',
+        [mockQueryResponses[0]],
+        {principalID: 'principal-1'},
+      ] satisfies TransformResponseMessage)
+      .mockResolvedValueOnce([
+        'transformed',
+        [mockQueryResponses[1]],
+        {principalID: 'principal-2'},
+      ] satisfies TransformResponseMessage);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    await transformer.transformAndValidate(
+      headerOptions,
+      [mockQueries[0]],
+      undefined,
+    );
+
+    await expect(
+      transformer.transformAndValidate(headerOptions, mockQueries, undefined),
+    ).rejects.toThrow(
+      'conflicting principalID metadata from custom query responses',
+    );
   });
 
   test('should not forward cookies if forwardCookies is false', async () => {
