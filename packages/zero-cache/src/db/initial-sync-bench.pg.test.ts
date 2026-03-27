@@ -1,3 +1,4 @@
+// oxlint-disable no-console
 /**
  * Benchmarks initial sync against an external PostgreSQL database.
  *
@@ -19,6 +20,7 @@ import {initReplica} from '../services/change-source/common/replica-schema.ts';
 import {initialSync} from '../services/change-source/pg/initial-sync.ts';
 import type {ShardConfig} from '../types/shards.ts';
 import {pgClient} from '../types/pg.ts';
+import {must} from '../../../shared/src/must.ts';
 
 const UPSTREAM_DB = process.env['ZERO_UPSTREAM_DB'];
 
@@ -27,7 +29,7 @@ describe.skipIf(!UPSTREAM_DB)('initial-sync-bench', () => {
     'initial sync from external PG',
     {timeout: 3_600_000}, // 1 hour
     async () => {
-      const upstreamURI = UPSTREAM_DB!;
+      const upstreamURI = must(UPSTREAM_DB);
       const lc = createSilentLogContext();
 
       // Count rows in all user tables for the report.
@@ -40,13 +42,10 @@ describe.skipIf(!UPSTREAM_DB)('initial-sync-bench', () => {
       `;
       const totalRows = tables.reduce((sum, t) => sum + Number(t.rows), 0);
 
-      // oxlint-disable-next-line no-console
       console.log(`\nUpstream tables:`);
       for (const t of tables) {
-        // oxlint-disable-next-line no-console
         console.log(`  ${t.table}: ${Number(t.rows).toLocaleString()} rows`);
       }
-      // oxlint-disable-next-line no-console
       console.log(`  TOTAL: ${totalRows.toLocaleString()} rows\n`);
 
       // Discover publications from PG.
@@ -56,8 +55,7 @@ describe.skipIf(!UPSTREAM_DB)('initial-sync-bench', () => {
       `;
       const publications = pubs.map(p => p.pubname);
       await sql.end();
-      // oxlint-disable-next-line no-console
-      console.log(`Publications: [${publications}]`);
+      console.log(`Publications: [${publications.join(', ')}]\n`);
 
       const shard: ShardConfig = {
         appID: 'bench',
@@ -109,15 +107,10 @@ describe.skipIf(!UPSTREAM_DB)('initial-sync-bench', () => {
             ? `${(rowsPerSec / 1000).toFixed(1)}K rows/s`
             : `${rowsPerSec.toFixed(0)} rows/s`;
 
-        // oxlint-disable-next-line no-console
         console.log(`\n--- Initial Sync Benchmark ---`);
-        // oxlint-disable-next-line no-console
         console.log(`  Total time:    ${fmt(elapsed)}`);
-        // oxlint-disable-next-line no-console
         console.log(`  Rows synced:   ${totalRows.toLocaleString()}`);
-        // oxlint-disable-next-line no-console
         console.log(`  Rate:          ${rateStr}`);
-        // oxlint-disable-next-line no-console
         console.log(`  Replica size:  ${sizeMB.toFixed(1)} MB\n`);
 
         expect(elapsed).toBeGreaterThan(0);
