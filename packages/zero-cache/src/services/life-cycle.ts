@@ -102,11 +102,21 @@ export class ProcessManager {
     }
     this.#all.add(proc);
 
+    let isOpen = true;
+    proc.on('close', (code, signal) => {
+      isOpen = false;
+      this.#onExit(code, signal, null, type, name, proc);
+    });
+
+    // As per https://nodejs.org/api/child_process.html#event-error
+    // 'error' events can happen when sending a message to a child process
+    // fails. This is not really an error when the server is shutting down,
+    // so log any post-close errors at 'warn'.
     proc.on('error', err =>
-      this.#lc.error?.(`error from ${name} ${proc.pid}`, err),
-    );
-    proc.on('close', (code, signal) =>
-      this.#onExit(code, signal, null, type, name, proc),
+      this.#lc[isOpen ? 'error' : 'warn']?.(
+        `error from ${name} ${proc.pid}`,
+        err,
+      ),
     );
   }
 
