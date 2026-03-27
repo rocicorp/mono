@@ -43,6 +43,11 @@ async function connect(
 ): Promise<Database> {
   const replica = new Database(lc, file);
 
+  // To allow other readers (e.g. the change-streamer) to access the replica
+  // for stats / event publishing, allow a short busy_timeout for performing
+  // locking operations.
+  replica.pragma('busy_timeout = 1000');
+
   // Perform any upgrades to the replica in case the backup is an
   // earlier version.
   await upgradeReplica(lc, `${mode}-replica`, file);
