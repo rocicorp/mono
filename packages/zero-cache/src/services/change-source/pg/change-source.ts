@@ -305,8 +305,8 @@ class PostgresChangeSource implements ChangeSource {
               ? 'pg_logical_emit_message(boolean, text, text, boolean)'
               : 'pg_logical_emit_message(boolean, text, text)';
           this.#lc.warn?.(
-            `\n\nUnable to initiate lag reports due to insufficient privileges.` +
-              `\nTo enable lab reporting, run:`,
+            `\n\nUnable to initiate replication lag reports due to insufficient privileges.` +
+              `\nTo enable replication lag reporting, run:`,
             `\n\tGRANT EXECUTE ON FUNCTION ${functionName} TO <your_db_user>;\n\n`,
             e,
           );
