@@ -23,6 +23,7 @@ import {
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
+import {ReplicationStatusPublisher} from './replication-status.ts';
 import {
   createReplicationStateTables,
   initReplicationState,
@@ -75,10 +76,9 @@ describe('replicator/incremental-sync', () => {
       TASK_ID,
       REPLICA_ID,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
-      mainDb,
       worker,
       'serving',
-      true,
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
   });
 
@@ -725,10 +725,9 @@ describe('replicator/incremental-sync', () => {
             return resolver().promise;
           }),
       },
-      mainDb,
       worker,
       'serving',
-      true,
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
 
     const localSyncing = syncer.run();
@@ -756,10 +755,9 @@ describe('replicator/incremental-sync', () => {
             return resolver().promise;
           }),
       },
-      mainDb,
       worker,
       'serving',
-      true,
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
 
     const localSyncing = syncer.run();

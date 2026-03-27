@@ -181,7 +181,7 @@ export async function initialSync(
     },
   );
 
-  const statusPublisher = new ReplicationStatusPublisher(tx);
+  const statusPublisher = ReplicationStatusPublisher.forRunningTransaction(tx);
   try {
     let num = 0;
     for await (const change of changes) {
