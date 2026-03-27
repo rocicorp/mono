@@ -1,5 +1,6 @@
 import {
   PG_ADMIN_SHUTDOWN,
+  PG_INSUFFICIENT_PRIVILEGE,
   PG_OBJECT_IN_USE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
@@ -31,7 +32,7 @@ import type {
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
-import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {isPostgresError, pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {
   upstreamSchema,
   type ShardConfig,
@@ -110,6 +111,8 @@ import {
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
 
+const PG_17 = 170000;
+
 /**
  * Initializes a Postgres change source, including the initial sync of the
  * replica, before streaming changes from the corresponding logical replication
@@ -122,7 +125,7 @@ export async function initializePostgresChangeSource(
   replicaDbFile: string,
   syncOptions: InitialSyncOptions,
   context: ServerContext,
-  lagReportIntervalMs?: number,
+  lagReportIntervalMs = 0,
 ): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
   await initReplica(
     lc,
@@ -154,7 +157,7 @@ export async function initializePostgresChangeSource(
       shard,
       upstreamReplica,
       context,
-      lagReportIntervalMs ?? null,
+      lagReportIntervalMs,
     );
 
     return {subscriptionState, changeSource};
@@ -268,7 +271,7 @@ class PostgresChangeSource implements ChangeSource {
     shard: ShardID,
     replica: Replica,
     context: ServerContext,
-    lagReportIntervalMs: number | null,
+    lagReportIntervalMs: number,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#db = pgClient(lc, upstreamUri, {
@@ -280,18 +283,42 @@ class PostgresChangeSource implements ChangeSource {
     this.#shard = shard;
     this.#replica = replica;
     this.#context = context;
-    this.#lagReporter = lagReportIntervalMs
-      ? new LagReporter(
-          lc.withContext('component', 'lag-reporter'),
-          shard,
-          this.#db,
-          lagReportIntervalMs,
-        )
-      : null;
+    this.#lagReporter =
+      lagReportIntervalMs > 0
+        ? new LagReporter(
+            lc.withContext('component', 'lag-reporter'),
+            shard,
+            this.#db,
+            lagReportIntervalMs,
+          )
+        : null;
   }
 
-  startLagReporter(): Promise<{nextSendTimeMs: number}> | null {
-    return this.#lagReporter ? this.#lagReporter.initiateLagReport(true) : null;
+  async startLagReporter(): Promise<{nextSendTimeMs: number} | null> {
+    if (this.#lagReporter) {
+      try {
+        return await this.#lagReporter.initiateLagReport(true);
+      } catch (e) {
+        if (isPostgresError(e, PG_INSUFFICIENT_PRIVILEGE)) {
+          const functionName =
+            (this.#lagReporter.pgVersion ?? 0) >= PG_17
+              ? 'pg_logical_emit_message(boolean, text, text, boolean)'
+              : 'pg_logical_emit_message(boolean, text, text)';
+          this.#lc.warn?.(
+            `\n\nUnable to initiate replication lag reports due to insufficient privileges.` +
+              `\nTo enable replication lag reporting, run:`,
+            `\n\tGRANT EXECUTE ON FUNCTION ${functionName} TO <your_db_user>;\n\n`,
+            e,
+          );
+        } else {
+          this.#lc.error?.(
+            `Unexpected error while initiating lag reports. Lag reports will be disabled.`,
+            e,
+          );
+        }
+      }
+    }
+    return null;
   }
 
   async startStream(
@@ -694,6 +721,10 @@ class LagReporter {
     return this.#pgVersion;
   }
 
+  get pgVersion() {
+    return this.#pgVersion;
+  }
+
   async initiateLagReport(log = false) {
     const pgVersion = this.#pgVersion ?? (await this.#getPgVersion());
     const now = Date.now();
@@ -703,7 +734,7 @@ class LagReporter {
     this.#expectingLagReport = lagReport;
 
     let lsn: string;
-    if (pgVersion >= 170000) {
+    if (pgVersion >= PG_17) {
       [{lsn}] = await this.#db<{lsn: string}[]> /*sql*/ `
         SELECT pg_logical_emit_message(
           false,

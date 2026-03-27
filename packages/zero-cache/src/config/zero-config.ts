@@ -638,13 +638,13 @@ export const zeroOptions = {
 
   replicationLag: {
     reportIntervalMs: {
-      type: v.number().optional(),
+      type: v.number().default(30000),
       desc: [
         `The minimum interval at which replication lag reports are written upstream and`,
         `reported via the {bold zero.replication.total_lag} opentelemetry metric. Because`,
         `replication lag reports are only issued after the previous one was received, the`,
         `actual interval between reports may be longer when there is a backlog in the`,
-        `replication stream.`,
+        `replication stream. A negative or 0 value disables lag reporting.`,
         ``,
         `This monitoring feature is only support on the postgres upstream type.`,
       ],
