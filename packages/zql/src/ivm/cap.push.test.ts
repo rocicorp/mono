@@ -99,8 +99,9 @@ suite('Cap push - basic behavior', () => {
       ]
     `);
     expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`[]`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -245,8 +246,9 @@ suite('Cap push - basic behavior', () => {
       ]
     `);
     expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`[]`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -337,8 +339,9 @@ suite('Cap push - basic behavior', () => {
       ]
     `);
     expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`[]`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -389,8 +392,9 @@ suite('Cap push - basic behavior', () => {
 
     expect(data).toMatchInlineSnapshot(`[]`);
     expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`[]`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -529,8 +533,9 @@ suite('Cap push - basic behavior', () => {
       ]
     `);
     expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`[]`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -692,8 +697,9 @@ suite('Cap push - unordered overlay in join', () => {
       ]
     `);
     expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`undefined`);
-    expect(log.filter(msg => msg[0] === '.children:cap'))
-      .toMatchInlineSnapshot(`[]`);
+    expect(log.filter(msg => msg[0] === '.children:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
