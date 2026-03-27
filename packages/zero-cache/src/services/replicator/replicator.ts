@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ReadonlyJSONObject} from '../../../../shared/src/json.ts';
-import type {Database} from '../../../../zqlite/src/db.ts';
 import type {Source} from '../../types/streams.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
+import type {ReplicationStatusPublisher} from './replication-status.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
@@ -65,9 +65,8 @@ export class ReplicatorService implements Replicator, Service {
     id: string,
     mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
-    statusDb: Database,
     worker: WriteWorkerClient,
-    publishReplicationStatus: boolean,
+    statusPublisher: ReplicationStatusPublisher | null,
   ) {
     this.id = id;
     this.#lc = lc
@@ -80,10 +79,9 @@ export class ReplicatorService implements Replicator, Service {
       taskID,
       `${taskID}/${id}`,
       changeStreamer,
-      statusDb,
       worker,
       mode,
-      publishReplicationStatus,
+      statusPublisher,
     );
   }
 

@@ -1,6 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import {Database, DatabaseInitError} from '../../../zqlite/src/db.ts';
+import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
@@ -103,9 +103,8 @@ export default async function runWorker(
               context,
             );
 
-      const replicationStatusPublisher = new ReplicationStatusPublisher(
-        new Database(lc, replica.file, {readonly: true}),
-      );
+      const replicationStatusPublisher =
+        ReplicationStatusPublisher.forReplicaFile(replica.file);
 
       changeStreamer = await initializeStreamer(
         lc,

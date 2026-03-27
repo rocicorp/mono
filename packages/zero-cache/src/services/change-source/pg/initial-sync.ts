@@ -86,10 +86,9 @@ export async function initialSync(
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
   });
   const slotName = newReplicationSlot(shard);
-  const statusPublisher = new ReplicationStatusPublisher(tx).publish(
-    lc,
-    'Initializing',
-  );
+  const statusPublisher = ReplicationStatusPublisher.forRunningTransaction(
+    tx,
+  ).publish(lc, 'Initializing');
   try {
     await checkUpstreamConfig(sql);
 

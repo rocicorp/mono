@@ -21,16 +21,34 @@ const byKeys = (a: [string, unknown], b: [string, unknown]) =>
   a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
 
 export class ReplicationStatusPublisher {
-  readonly #db: Database;
+  readonly #dbRunner: <T>(lc: LogContext, fn: (db: Database) => T) => T;
   readonly #publish: typeof publishCriticalEvent;
   #timer: NodeJS.Timeout | undefined;
 
-  static forTesting(lc: LogContext = createSilentLogContext(), db?: Database) {
-    return new ReplicationStatusPublisher(db ?? new Database(lc, ':memory:'));
+  static forTesting() {
+    return ReplicationStatusPublisher.forReplicaFile(':memory:');
   }
 
-  constructor(db: Database, publishFn = publishCriticalEvent) {
-    this.#db = db;
+  static forRunningTransaction(tx: Database, publishFn = publishCriticalEvent) {
+    return new ReplicationStatusPublisher((_lc, fn) => fn(tx), publishFn);
+  }
+
+  static forReplicaFile(file: string, publishFn = publishCriticalEvent) {
+    return new ReplicationStatusPublisher((lc, fn) => {
+      const db = new Database(lc, file, {readonly: true});
+      try {
+        return fn(db);
+      } finally {
+        db.close();
+      }
+    }, publishFn);
+  }
+
+  constructor(
+    dbRunner: <T>(lc: LogContext, fn: (db: Database) => T) => T,
+    publishFn = publishCriticalEvent,
+  ) {
+    this.#dbRunner = dbRunner;
     this.#publish = publishFn;
   }
 
@@ -43,13 +61,9 @@ export class ReplicationStatusPublisher {
     now = new Date(),
   ): this {
     this.stop();
-    const event = replicationStatusEvent(
-      lc,
-      this.#db,
-      stage,
-      'OK',
-      description,
-      now,
+
+    const event = this.#dbRunner(lc, db =>
+      replicationStatusEvent(lc, db, stage, 'OK', description, now),
     );
     if (event.state) {
       event.state = {
@@ -74,7 +88,9 @@ export class ReplicationStatusPublisher {
     e: unknown,
   ): Promise<never> {
     this.stop();
-    const event = replicationStatusError(lc, stage, e, this.#db);
+    const event = this.#dbRunner(lc, db =>
+      replicationStatusError(lc, stage, e, db),
+    );
     await this.#publish(lc, event);
     throw e;
   }
