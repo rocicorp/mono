@@ -4,7 +4,12 @@ import {beforeEach, describe, expect} from 'vitest';
 import {stringify} from '../../../shared/src/bigint-json.ts';
 import {type PgTest, test} from '../test/db.ts';
 import {type PostgresDB, type PostgresValueType} from '../types/pg.ts';
-import {BinaryCopyParser, makeBinaryDecoder} from './pg-copy-binary.ts';
+import {
+  BinaryCopyParser,
+  hasBinaryDecoder,
+  makeBinaryDecoder,
+  textCastDecoder,
+} from './pg-copy-binary.ts';
 import {TsvParser} from './pg-copy.ts';
 import {getTypeParsers} from './pg-type-parser.ts';
 import {
@@ -80,9 +85,20 @@ describe('pg-copy-binary', () => {
       elemPgTypeClass?: string | null | undefined;
     }[],
   ): Promise<LiteValueType[]> {
+    type Spec = Parameters<typeof makeBinaryDecoder>[0];
     const decoders = columns.map(c =>
-      makeBinaryDecoder(c as Parameters<typeof makeBinaryDecoder>[0]),
+      hasBinaryDecoder(c as Spec)
+        ? makeBinaryDecoder(c as Spec)
+        : textCastDecoder,
     );
+    // Cast unknown-type columns to ::text in the SELECT.
+    const selectCols = columns
+      .map(c =>
+        hasBinaryDecoder(c as Spec)
+          ? `"${c.name}"`
+          : `"${c.name}"::text`,
+      )
+      .join(',');
     const binaryParser = new BinaryCopyParser();
     const results: LiteValueType[] = [];
     const colCount = columns.length;
@@ -91,7 +107,7 @@ describe('pg-copy-binary', () => {
     await pipeline(
       await sql
         .unsafe(
-          `COPY ${tableName} (${columns.map(c => `"${c.name}"`).join(',')}) TO STDOUT WITH (FORMAT binary)`,
+          `COPY (SELECT ${selectCols} FROM ${tableName}) TO STDOUT WITH (FORMAT binary)`,
         )
         .readable(),
       new Writable({
@@ -496,6 +512,49 @@ describe('pg-copy-binary', () => {
     const cols = await getColumnOIDs('large_json');
     const textResult = await copyText('large_json', cols);
     const binaryResult = await copyBinary('large_json', cols);
+    expect(binaryResult).toEqual(textResult);
+  });
+
+  test('composite type (unknown OID, uses ::text cast)', async () => {
+    await sql.unsafe(`CREATE TYPE custom_point AS (x float8, y float8)`);
+    await sql`
+      CREATE TABLE composite_types (
+        id int4,
+        pt custom_point
+      )`;
+    await sql.unsafe(`INSERT INTO composite_types VALUES
+      (1, ROW(1.5, 2.5)),
+      (2, ROW(-3.0, 4.0)),
+      (3, NULL)`);
+
+    const cols = await getColumnOIDs('composite_types');
+    // Composite type has pgTypeClass='c' and an unknown OID.
+    const ptCol = cols.find(c => c.name === 'pt');
+    expect(ptCol?.pgTypeClass).toBe('c');
+
+    const textResult = await copyText('composite_types', cols);
+    const binaryResult = await copyBinary('composite_types', cols);
+    expect(binaryResult).toEqual(textResult);
+  });
+
+  test('mixed known and unknown types', async () => {
+    await sql.unsafe(
+      `CREATE TYPE status_composite AS (code int4, label text)`,
+    );
+    await sql`
+      CREATE TABLE mixed_known_unknown (
+        id int4,
+        name text,
+        info status_composite,
+        score float8
+      )`;
+    await sql.unsafe(`INSERT INTO mixed_known_unknown VALUES
+      (1, 'alice', ROW(200, 'ok'), 99.5),
+      (2, 'bob', NULL, 0)`);
+
+    const cols = await getColumnOIDs('mixed_known_unknown');
+    const textResult = await copyText('mixed_known_unknown', cols);
+    const binaryResult = await copyBinary('mixed_known_unknown', cols);
     expect(binaryResult).toEqual(textResult);
   });
 });

@@ -19,7 +19,9 @@ import {
 import * as Mode from '../../../db/mode-enum.ts';
 import {
   BinaryCopyParser,
+  hasBinaryDecoder,
   makeBinaryDecoder,
+  textCastDecoder,
 } from '../../../db/pg-copy-binary.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
 import {
@@ -524,7 +526,24 @@ async function copyBinary(
     insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
   );
 
-  const {select} = makeDownloadStatements(table, columnNames);
+  // Build SELECT with ::text casts for columns without a known binary decoder.
+  const filterConditions = Object.values(table.publications)
+    .map(({rowFilter}) => rowFilter)
+    .filter(f => !!f);
+  const where =
+    filterConditions.length === 0
+      ? ''
+      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
+  const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)} ${where}`;
+  const selectColumns = orderedColumns.map(([name, spec]) =>
+    hasBinaryDecoder(spec) ? id(name) : `${id(name)}::text`,
+  );
+  const select = /*sql*/ `SELECT ${selectColumns.join(',')} ${fromTable}`;
+
+  const decoders = orderedColumns.map(([, spec]) =>
+    hasBinaryDecoder(spec) ? makeBinaryDecoder(spec) : textCastDecoder,
+  );
+
   const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 
@@ -560,7 +579,6 @@ async function copyBinary(
     );
   }
 
-  const decoders = columnSpecs.map(c => makeBinaryDecoder(c));
   const binaryParser = new BinaryCopyParser();
   let col = 0;
 

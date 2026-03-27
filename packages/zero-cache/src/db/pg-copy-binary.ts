@@ -185,10 +185,56 @@ type BinaryColumnSpec = Pick<
   'dataType' | 'pgTypeClass' | 'elemPgTypeClass'
 > & {typeOID: number};
 
+const KNOWN_BINARY_OIDS = new Set([
+  BOOL,
+  INT2,
+  INT4,
+  INT8,
+  FLOAT4,
+  FLOAT8,
+  TEXT,
+  VARCHAR,
+  BPCHAR,
+  CHAR,
+  UUID,
+  BYTEA,
+  JSON_OID,
+  JSONB,
+  TIMESTAMP,
+  TIMESTAMPTZ,
+  DATE,
+  TIME,
+  TIMETZ,
+  NUMERIC,
+]);
+
+/**
+ * Returns true if the column's binary format is known and can be decoded
+ * natively. For columns where this returns false, the COPY SELECT should
+ * cast the column to `::text` so PG sends the text representation inside
+ * the binary frame.
+ */
+export function hasBinaryDecoder(spec: BinaryColumnSpec): boolean {
+  if (spec.elemPgTypeClass !== null && spec.elemPgTypeClass !== undefined) {
+    return true; // Array types
+  }
+  if (spec.pgTypeClass === PostgresTypeClass.Enum) {
+    return true; // Enums are sent as UTF-8 text in binary format
+  }
+  return KNOWN_BINARY_OIDS.has(spec.typeOID);
+}
+
+/** Decoder for columns cast to `::text` in the COPY SELECT. */
+export const textCastDecoder: BinaryDecoder = buf => buf.toString('utf8');
+
 /**
  * Creates a specialized binary decoder for the given column spec.
  * The returned function converts a raw COPY binary field `Buffer`
  * directly to a `LiteValueType`, bypassing text parsing entirely.
+ *
+ * Only call this for columns where {@link hasBinaryDecoder} returns true.
+ * For other columns, cast to `::text` in the SELECT and use
+ * {@link textCastDecoder}.
  */
 export function makeBinaryDecoder(spec: BinaryColumnSpec): BinaryDecoder {
   const {typeOID, pgTypeClass, elemPgTypeClass} = spec;
@@ -242,8 +288,10 @@ export function makeBinaryDecoder(spec: BinaryColumnSpec): BinaryDecoder {
     case NUMERIC:
       return buf => decodeNumeric(buf);
     default:
-      // Fallback: treat as text (consistent with text path's String fallback).
-      return buf => buf.toString('utf8');
+      throw new Error(
+        `No binary decoder for type OID ${typeOID}. ` +
+          `Use hasBinaryDecoder() to check before calling makeBinaryDecoder().`,
+      );
   }
 }
 
