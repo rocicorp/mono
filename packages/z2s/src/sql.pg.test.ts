@@ -162,6 +162,49 @@ describe('SQL builder with PostgreSQL', () => {
   );
 
   test.each([
+    {type: 'timestamp', value: 1712345678901.5},
+    {type: 'timestamptz', value: 1712345678901.5},
+  ] as const)(
+    'numeric $type with fractional milliseconds round-trips correctly',
+    async ({type, value}) => {
+      await using pg = await testDBs.create(
+        `${DB_NAME}_${type}_frac`,
+        undefined,
+        {},
+      );
+
+      const table = `round_trip_${type}_frac`;
+      await pg.unsafe(`
+        SET TIME ZONE 'UTC';
+        DROP TABLE IF EXISTS "${table}";
+        CREATE TABLE "${table}" (
+          value ${type.toUpperCase()} NOT NULL
+        );
+      `);
+
+      // Insert a fractional-millisecond timestamp.
+      // With the old ::bigint cast this would fail:
+      //   "invalid input syntax for type bigint: 1712345678901.5"
+      const insertStmt = formatPgInternalConvert(sql`
+        INSERT INTO ${sql.ident(table)} (value)
+        VALUES (${sqlConvertArg(type, value)})
+      `);
+      await pg.unsafe(insertStmt.text, insertStmt.values as JSONValue[]);
+
+      // Query it back using the same fractional value as a filter.
+      const selectStmt = formatPgInternalConvert(sql`
+        SELECT value FROM ${sql.ident(table)}
+        WHERE value = ${sqlConvertArg(type, value, singularComparison)}
+      `);
+      const result = await pg.unsafe(
+        selectStmt.text,
+        selectStmt.values as JSONValue[],
+      );
+      expect(result).toHaveLength(1);
+    },
+  );
+
+  test.each([
     {type: 'time', value: 32887654},
     {type: 'timetz', value: 32887654},
   ] as const)(
