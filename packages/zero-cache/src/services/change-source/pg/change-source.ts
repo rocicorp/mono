@@ -381,12 +381,15 @@ class PostgresChangeSource implements ChangeSource {
         msg.tag === 'message' &&
         msg.prefix === this.#lagReporter?.messagePrefix
       ) {
-        changes.pushStatus(this.#lagReporter.processLagReport(msg));
+        changes.pushStatus(this.#lagReporter.processLagReportMessage(msg));
         return false;
       }
       // Checks if we are passed the LSN of the expected lag report, in which
       // case a new one is initiated.
-      this.#lagReporter?.checkCurrentLSN(lsn);
+      const status = this.#lagReporter?.checkCurrentLSN(lsn);
+      if (status) {
+        changes.pushStatus(status);
+      }
 
       if (msg.tag === 'keepalive') {
         changes.pushStatus([
@@ -679,10 +682,7 @@ const lagReportSchema = v.object({
 
 export type LagReport = v.Infer<typeof lagReportSchema>;
 
-type InitiatedLagReport = {
-  id: string;
-  lsn: bigint;
-};
+type InitiatedLagReport = LagReport & {lsn: bigint};
 
 class LagReporter {
   static readonly MESSAGE_SUFFIX = '/lag-report/v1';
@@ -730,22 +730,26 @@ class LagReporter {
     const now = Date.now();
     const id = nanoid();
 
-    const lagReport = {id, lsn: 0n}; // lsn is filled in after the db call.
+    // lsn is filled in after the db call.
+    const lagReport = {id, sendTimeMs: now, commitTimeMs: now, lsn: 0n};
     this.#expectingLagReport = lagReport;
 
+    let commitTimeMs: number;
     let lsn: string;
+
     if (pgVersion >= PG_17) {
-      [{lsn}] = await this.#db<{lsn: string}[]> /*sql*/ `
-        SELECT pg_logical_emit_message(
+      [{commitTimeMs, lsn}] = await this.#db /*sql*/ `
+        WITH CTE AS (SELECT extract(epoch from now()) * 1000 AS "commitTimeMs")
+        SELECT "commitTimeMs", pg_logical_emit_message(
           false,
           ${this.messagePrefix},
           json_build_object(
             'id', ${id}::text,
             'sendTimeMs', ${now}::int8,
-            'commitTimeMs', extract(epoch from now()) * 1000
+            'commitTimeMs', "commitTimeMs"
           )::text,
           true
-        ) as lsn;
+        ) as lsn FROM CTE;
     `;
     } else {
       // Versions before PG 17 do not support the final `flush` option of
@@ -753,16 +757,17 @@ class LagReporter {
       // for replication reports when the db is idle, which is still
       // acceptable for the purpose for alerting on pathological lag, for
       // which the threshold is much higher (e.g. many seconds).
-      [{lsn}] = await this.#db<{lsn: string}[]> /*sql*/ `
-        SELECT pg_logical_emit_message(
+      [{commitTimeMs, lsn}] = await this.#db /*sql*/ `
+        WITH CTE AS (SELECT extract(epoch from now()) * 1000 as "commitTimeMs")
+        SELECT "commitTimeMs", pg_logical_emit_message(
           false,
           ${this.messagePrefix},
           json_build_object(
             'id', ${id}::text,
             'sendTimeMs', ${now}::int8,
-            'commitTimeMs', extract(epoch from now()) * 1000
+            'commitTimeMs', "commitTimeMs"
           )::text
-        ) as lsn;
+        ) as lsn FROM CTE;
     `;
     }
 
@@ -771,21 +776,31 @@ class LagReporter {
     //       already been sent through the replication stream, but this
     //       is okay since this.#expectingLagReport will have be updated.
     lagReport.lsn = toBigInt(lsn);
+    lagReport.commitTimeMs = commitTimeMs;
 
     if (log) {
-      this.#lc.info?.(`initiated lag report at lsn ${lsn}`, {id, lsn});
+      this.#lc.info?.(`initiated lag report at lsn ${lsn}`, {
+        id,
+        lsn,
+        sendTimeMs: now,
+        commitTimeMs,
+      });
     }
     return {nextSendTimeMs: now};
   }
 
-  checkCurrentLSN(lsn: bigint) {
+  checkCurrentLSN(lsn: bigint): DownstreamStatusMessage | undefined {
     if (this.#expectingLagReport?.lsn && lsn > this.#expectingLagReport.lsn) {
       this.#lc.warn?.(
         `LSN ${fromBigInt(lsn)} is passed expected lag report ` +
-          `${fromBigInt(this.#expectingLagReport.lsn)}. Initiating new report.`,
+          `${fromBigInt(this.#expectingLagReport.lsn)}. Processing it as received.`,
       );
-      this.#scheduleNextReport(0);
+      return this.#processLagReport(
+        this.#expectingLagReport,
+        majorVersionToString(lsn),
+      );
     }
+    return undefined;
   }
 
   #scheduleNextReport(delayMs: number) {
@@ -801,12 +816,22 @@ class LagReporter {
     }, delayMs);
   }
 
-  processLagReport(msg: MessageMessage): DownstreamStatusMessage {
+  processLagReportMessage(msg: MessageMessage): DownstreamStatusMessage {
     assert(
       msg.prefix === this.messagePrefix,
       `unexpected message prefix: ${msg.prefix}`,
     );
     const report = parseLogicalMessageContent(msg, lagReportSchema);
+    return this.#processLagReport(
+      report,
+      toStateVersionString(msg.messageLsn ?? '0/0'),
+    );
+  }
+
+  #processLagReport(
+    report: LagReport,
+    watermark: string,
+  ): DownstreamStatusMessage {
     const now = Date.now();
     const nextSendTimeMs = Math.max(
       now,
@@ -835,7 +860,7 @@ class LagReporter {
           nextSendTimeMs,
         },
       },
-      {watermark: toStateVersionString(msg.messageLsn ?? '0/0')},
+      {watermark},
     ];
   }
 }
