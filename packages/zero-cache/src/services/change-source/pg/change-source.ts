@@ -789,9 +789,28 @@ class LagReporter {
     return {nextSendTimeMs: now};
   }
 
+  /**
+   * In Postgres < 17, the pg_logical_emit_message lacks an immediate "flush"
+   * option, which can cause messages to be missed when the replication stream
+   * starts up:
+   *
+   * ```
+   * * emit message → WAL write (buffered, not flushed)
+   * * walsender reads up to current flush LSN
+   * * emitted message's LSN is beyond flush LSN → not yet visible
+   * * stream feedback/acknowledgment advances slot
+   * * WAL eventually flushes → but slot has already moved past it
+   * ```
+   *
+   * This has been seen to happen for the initial `wal_writer_delay` interval
+   * of a replication session.
+   *
+   * To account for this, the last emitted lag report is considered "received"
+   * if the stream has advanced beyond the LSN of the report.
+   */
   checkCurrentLSN(lsn: bigint): DownstreamStatusMessage | undefined {
     if (this.#expectingLagReport?.lsn && lsn > this.#expectingLagReport.lsn) {
-      this.#lc.warn?.(
+      this.#lc.info?.(
         `LSN ${fromBigInt(lsn)} is passed expected lag report ` +
           `${fromBigInt(this.#expectingLagReport.lsn)}. Processing it as received.`,
       );
