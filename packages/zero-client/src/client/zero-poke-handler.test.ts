@@ -1599,6 +1599,127 @@ describe('poke handler', () => {
     });
   });
 
+  test('mergePokes skips rows for tables not in client schema', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              lastMutationIDChanges: {c1: 1},
+              rowsPatch: [
+                {
+                  op: 'put',
+                  tableName: 'issues',
+                  value: {['issue_id']: 'issue1', title: 'foo1'},
+                },
+                {
+                  op: 'put',
+                  tableName: 'unknownTable',
+                  value: {id: 'u1', data: 'should be skipped'},
+                },
+                {
+                  op: 'put',
+                  tableName: 'issues',
+                  value: {['issue_id']: 'issue2', title: 'bar1'},
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        cookie: '2',
+        lastMutationIDChanges: {c1: 1},
+        patch: [
+          {
+            op: 'put',
+            key: 'e/issue/issue1',
+            value: {id: 'issue1', title: 'foo1'},
+          },
+          {
+            op: 'put',
+            key: 'e/issue/issue2',
+            value: {id: 'issue2', title: 'bar1'},
+          },
+        ],
+      },
+    });
+  });
+
+  test('mergePokes skips del and update ops for tables not in client schema', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              lastMutationIDChanges: {c1: 1},
+              rowsPatch: [
+                {
+                  op: 'put',
+                  tableName: 'issues',
+                  value: {['issue_id']: 'issue1', title: 'foo1'},
+                },
+                {
+                  op: 'del',
+                  tableName: 'unknownTable',
+                  id: {id: 'u1'},
+                },
+                {
+                  op: 'update',
+                  tableName: 'unknownTable',
+                  id: {id: 'u2'},
+                  merge: {id: 'u2', data: 'updated'},
+                  constrain: ['id'],
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        cookie: '2',
+        lastMutationIDChanges: {c1: 1},
+        patch: [
+          {
+            op: 'put',
+            key: 'e/issue/issue1',
+            value: {id: 'issue1', title: 'foo1'},
+          },
+        ],
+      },
+    });
+  });
+
   test('mergePokes throws error on cookie gaps', () => {
     expect(() => {
       mergePokes(
