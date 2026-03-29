@@ -41,6 +41,7 @@ import {
   type QueryRecord,
   type RowID,
   type RowRecord,
+  versionString,
 } from './schema/types.ts';
 import {tracer} from './tracer.ts';
 import {ttlClockAsNumber, type TTLClock} from './ttl-clock.ts';
@@ -613,6 +614,13 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       // The error will surface when this.#existingRows is awaited.
       void this.#existingRows.then(() => {});
 
+      const versionBumped =
+        cmpVersions(this._orig.version, this._cvr.version) < 0;
+      lc.info?.(
+        `trackQueries: ${executed.length} executed, ${removed.length} removed, ` +
+          `version ${versionBumped ? 'bumped' : 'unchanged'}`,
+      );
+
       return {
         newVersion: this._cvr.version,
         queryPatches: queryPatches.map(patch => ({
@@ -740,10 +748,22 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * final cookie (i.e. version), and that must be sent before any poke parts
    * generated from {@link received} are sent.
    */
-  #assertNewVersion(): CVRVersion {
+  #assertNewVersion(
+    rowID: RowID,
+    existingVersion: string | undefined,
+    newVersion: string | undefined,
+    refCounts: RefCounts,
+  ): CVRVersion {
     assert(
       cmpVersions(this._orig.version, this._cvr.version) < 0,
-      'Expected CVR version to have been bumped above original',
+      () =>
+        `Expected CVR version to have been bumped above original` +
+        ` (orig=${versionString(this._orig.version)},` +
+        ` curr=${versionString(this._cvr.version)}).` +
+        ` Row ${JSON.stringify(rowID)}:` +
+        ` existing=${existingVersion},` +
+        ` new=${newVersion},` +
+        ` queries=[${Object.keys(refCounts).join(',')}]`,
     );
     return this._cvr.version;
   }
@@ -791,7 +811,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           const patchVersion =
             existing && existing.rowVersion === newRowVersion
               ? existing.patchVersion // existing row is unchanged
-              : this.#assertNewVersion();
+              : this.#assertNewVersion(
+                  id,
+                  existing?.rowVersion,
+                  newRowVersion,
+                  refCounts,
+                );
 
           // Note: for determining what to commit to the CVR store, use the
           // `version` of the update even if `merged` is null (i.e. don't
@@ -935,7 +960,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         // gets a new patchVersion (and corresponding poke).
         const patchVersion = newRefCounts
           ? existing.patchVersion
-          : this.#assertNewVersion();
+          : this.#assertNewVersion(
+              existing.id,
+              existing.rowVersion,
+              undefined,
+              existing.refCounts ?? {},
+            );
         const rowRecord: RowRecord = {
           ...existing,
           patchVersion,

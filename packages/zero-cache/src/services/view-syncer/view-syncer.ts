@@ -1251,6 +1251,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     const customQueries: Map<string, CustomQueryRecord> = new Map();
     const otherQueries: (ClientQueryRecord | InternalQueryRecord)[] = [];
+    let inactivatedCount = 0;
 
     for (const [, query] of gotQueries) {
       if (
@@ -1259,6 +1260,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           ({inactivatedAt}) => inactivatedAt !== undefined,
         )
       ) {
+        inactivatedCount++;
         continue; // No longer desired.
       }
 
@@ -1270,6 +1272,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     const transformedQueries: TransformedAndHashed[] = [];
+    let customErrorCount = 0;
+    let customHashMismatchCount = 0;
+    let otherHashMismatchCount = 0;
     if (customQueries.size > 0 && !this.#customQueryTransformer) {
       lc.warn?.(
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
@@ -1297,10 +1302,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // the client.
       if (Array.isArray(transformedCustomQueries)) {
         for (const q of transformedCustomQueries) {
-          if (
-            !('error' in q) &&
-            q.transformationHash === customQueries.get(q.id)?.transformationHash
+          if ('error' in q) {
+            customErrorCount++;
+          } else if (
+            q.transformationHash !== customQueries.get(q.id)?.transformationHash
           ) {
+            customHashMismatchCount++;
+          } else {
             transformedQueries.push(q);
           }
         }
@@ -1323,8 +1331,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // only process queries that transformed to the same
         // transformationHash as in the CVR here
         transformedQueries.push(transformed);
+      } else {
+        otherHashMismatchCount++;
       }
     }
+
+    lc.info?.(
+      `hydrateUnchangedQueries: ${gotQueries.length} got queries, ` +
+        `${inactivatedCount} inactivated, ` +
+        `${customErrorCount} custom transform errors, ` +
+        `${customHashMismatchCount} custom hash mismatches, ` +
+        `${otherHashMismatchCount} other hash mismatches, ` +
+        `${transformedQueries.length} hydrated`,
+    );
 
     for (const {
       id: queryID,
@@ -1646,6 +1665,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelines.queries().get(q.id)?.transformationHash !==
               q.transformationHash,
         );
+
+      lc.info?.(
+        `syncQueryPipelineSet: ${cvrQueryEntires.length} CVR queries, ` +
+          `${customQueriesToTransform.length} custom re-transformed, ` +
+          `${erroredQueryIDs?.length ?? 0} errored, ` +
+          `${removeQueriesQueryIds.size} to remove, ` +
+          `${addQueries.length} to add`,
+      );
 
       for (const q of addQueries) {
         const orig = cvr.queries[q.id];
