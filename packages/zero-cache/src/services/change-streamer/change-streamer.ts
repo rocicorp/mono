@@ -1,3 +1,4 @@
+import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Source} from '../../types/streams.ts';
 import {type Change} from '../change-source/protocol/current/data.ts';
@@ -5,6 +6,9 @@ import {changeStreamDataSchema} from '../change-source/protocol/current/downstre
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
+import * as ErrorType from './error-type-enum.ts';
+
+type ErrorType = Enum<typeof ErrorType>;
 
 /**
  * The ChangeStreamer is the component between replicators ("subscribers")
@@ -175,6 +179,19 @@ export const downstreamSchema = v.union(
 );
 
 export type Error = v.Infer<typeof errorSchema>;
+
+export function errorTypeToReadableName(val: ErrorType) {
+  switch (val) {
+    case ErrorType.WrongReplicaVersion:
+      return 'WrongReplicaVersion';
+    case ErrorType.WatermarkTooOld:
+      return 'WatermarkTooOld';
+    case ErrorType.Unknown:
+      return 'Unknown';
+    default:
+      return 'Unknown';
+  }
+}
 
 /**
  * A stream of transactions, each starting with a {@link Begin} message,

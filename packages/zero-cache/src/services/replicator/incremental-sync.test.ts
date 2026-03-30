@@ -10,6 +10,7 @@ import {
   type MockedFunction,
 } from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
+import type {Enum} from '../../../../shared/src/enum.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../zero-events/src/index.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
@@ -22,6 +23,7 @@ import {
   type Downstream,
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
+import * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import {
@@ -30,6 +32,8 @@ import {
 } from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 import {ThreadWriteWorkerClient} from './write-worker-client.ts';
+
+type ErrorType = Enum<typeof ErrorType>;
 
 const TASK_ID = 'task-id';
 const REPLICA_ID = 'incremental_sync_test_id';
@@ -768,5 +772,19 @@ describe('replicator/incremental-sync', () => {
 
     syncer.stop(lc);
     void localSyncing.catch(() => {});
+  });
+
+  test('shut down on change-streamer error message', async () => {
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+
+    const syncing = syncer.run();
+
+    downstream.push([
+      'error',
+      {type: ErrorType.WrongReplicaVersion, message: 'restart yo'},
+    ]);
+
+    // Should stop / resolve
+    await syncing;
   });
 });
