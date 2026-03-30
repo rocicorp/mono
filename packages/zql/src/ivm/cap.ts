@@ -141,14 +141,14 @@ export class Cap implements Operator {
   }
 
   *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
+    if (this.#limit === 0) {
+      return;
+    }
+
     assert(
       constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
       'Constraint should match partition key',
     );
-
-    if (this.#limit === 0) {
-      return;
-    }
 
     const capStateKey = getCapStateKey(this.#partitionKey, req.constraint);
     assert(

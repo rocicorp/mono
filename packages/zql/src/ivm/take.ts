@@ -151,14 +151,15 @@ export class Take implements Operator {
   *#initialFetch(req: FetchRequest): Stream<Node | 'yield'> {
     assert(req.start === undefined, 'Start should be undefined');
     assert(!req.reverse, 'Reverse should be false');
-    assert(
-      constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
-      'Constraint should match partition key',
-    );
 
     if (this.#limit === 0) {
       return;
     }
+
+    assert(
+      constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
+      'Constraint should match partition key',
+    );
 
     const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
     assert(
