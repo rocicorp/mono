@@ -155,6 +155,7 @@ export class Take implements Operator {
     if (this.#limit === 0) {
       return;
     }
+
     assert(
       constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
       'Constraint should match partition key',

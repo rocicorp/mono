@@ -7994,40 +7994,36 @@ describe('take limit 0 with related query', () => {
     },
   };
 
-  test('push to related source does not crash', () => {
-    const {data, pushes} = runPushTest({
-      sources,
-      sourceContents: {
-        issue: [{id: 'i1', ownerId: 'o1'}],
-        owner: [],
-      },
-      ast,
-      format,
-      pushes: [['owner', {type: 'add', row: {id: 'o1', name: 'Alice'}}]],
-    });
+  test.for([
+    {
+      name: 'single issue',
+      issues: [{id: 'i1', ownerId: 'o1'}],
+    },
+    {
+      name: 'multiple issues',
+      issues: [
+        {id: 'i1', ownerId: 'o1'},
+        {id: 'i2', ownerId: 'o1'},
+      ],
+    },
+  ])(
+    'push to related source with $name does not trigger assert',
+    ({issues}) => {
+      const {data, pushes} = runPushTest({
+        sources,
+        sourceContents: {
+          issue: issues,
+          owner: [],
+        },
+        ast,
+        format,
+        pushes: [['owner', {type: 'add', row: {id: 'o1', name: 'Alice'}}]],
+      });
 
-    expect(data).toEqual([]);
-    expect(pushes).toEqual([]);
-  });
-
-  test('push to related source with multiple issues does not trigger assert', () => {
-    const {data, pushes} = runPushTest({
-      sources,
-      sourceContents: {
-        issue: [
-          {id: 'i1', ownerId: 'o1'},
-          {id: 'i2', ownerId: 'o1'},
-        ],
-        owner: [],
-      },
-      ast,
-      format,
-      pushes: [['owner', {type: 'add', row: {id: 'o1', name: 'Alice'}}]],
-    });
-
-    expect(data).toEqual([]);
-    expect(pushes).toEqual([]);
-  });
+      expect(data).toEqual([]);
+      expect(pushes).toEqual([]);
+    },
+  );
 });
 
 type TakeTest = {

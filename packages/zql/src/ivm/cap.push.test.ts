@@ -1,20 +1,20 @@
-import {expect, suite, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {Cap} from './cap.ts';
+import {Catch} from './catch.ts';
+import {MemoryStorage} from './memory-storage.ts';
+import {consume} from './stream.ts';
 import {
   runPushTest,
   type SourceContents,
   type Sources,
 } from './test/fetch-and-push-tests.ts';
-import type {Format} from './view.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {Cap} from './cap.ts';
-import {Catch} from './catch.ts';
-import {MemoryStorage} from './memory-storage.ts';
 import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {consume} from './stream.ts';
+import type {Format} from './view.ts';
 
-suite('Cap push - basic behavior', () => {
+describe('Cap push - basic behavior', () => {
   const sources: Sources = {
     issue: {
       columns: {
@@ -573,7 +573,7 @@ suite('Cap push - basic behavior', () => {
   });
 });
 
-suite('Cap push - unordered overlay in join', () => {
+describe('Cap push - unordered overlay in join', () => {
   const sources: Sources = {
     parent: {
       columns: {
@@ -798,7 +798,7 @@ suite('Cap push - unordered overlay in join', () => {
   });
 });
 
-suite('Cap limit 0', () => {
+describe('Cap limit 0', () => {
   // Reproduces the bug where Cap#initialFetch asserted
   // "Constraint should match partition key" before checking limit === 0.
   // When Cap has limit=0 and receives a fetch with a constraint that
@@ -806,37 +806,31 @@ suite('Cap limit 0', () => {
   // not fire — the limit=0 check should return early first.
   const lc = createSilentLogContext();
 
-  test('fetch with constraint and no partition key does not crash', () => {
-    const source = createSource(
-      lc,
-      testLogConfig,
-      'table',
-      {id: {type: 'string'}, group: {type: 'string'}},
-      ['id'],
-    );
-    consume(source.push({type: 'add', row: {id: '1', group: 'g1'}}));
+  test.for([
+    {name: 'no partition key', partitionKey: undefined},
+    {name: 'with partition key', partitionKey: ['group'] as const},
+  ])(
+    'fetch with constraint and $name does not trigger assert',
+    ({partitionKey}) => {
+      const source = createSource(
+        lc,
+        testLogConfig,
+        'table',
+        {id: {type: 'string'}, group: {type: 'string'}},
+        ['id'],
+      );
+      consume(source.push({type: 'add', row: {id: '1', group: 'g1'}}));
 
-    const storage = new MemoryStorage();
-    const cap = new Cap(source.connect([['id', 'asc']]), storage, 0);
-    const c = new Catch(cap);
-    const result = c.fetch({constraint: {group: 'g1'}});
-    expect(result).toEqual([]);
-  });
-
-  test('fetch with constraint and partition key does not crash', () => {
-    const source = createSource(
-      lc,
-      testLogConfig,
-      'table',
-      {id: {type: 'string'}, group: {type: 'string'}},
-      ['id'],
-    );
-    consume(source.push({type: 'add', row: {id: '1', group: 'g1'}}));
-
-    const storage = new MemoryStorage();
-    const cap = new Cap(source.connect([['id', 'asc']]), storage, 0, ['group']);
-    const c = new Catch(cap);
-    const result = c.fetch({constraint: {group: 'g1'}});
-    expect(result).toEqual([]);
-  });
+      const storage = new MemoryStorage();
+      const cap = new Cap(
+        source.connect([['id', 'asc']]),
+        storage,
+        0,
+        partitionKey,
+      );
+      const c = new Catch(cap);
+      const result = c.fetch({constraint: {group: 'g1'}});
+      expect(result).toEqual([]);
+    },
+  );
 });
