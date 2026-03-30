@@ -101,7 +101,7 @@ export class PusherService implements Service, Pusher {
   }
 
   get pushURL(): string | undefined {
-    return this.#pusher.pushURL[0];
+    return this.#pusher.pushURLs[0];
   }
 
   initConnection(
@@ -138,7 +138,7 @@ export class PusherService implements Service, Pusher {
   }
 
   async ackMutationResponses(upToID: MutationID) {
-    const url = this.#pushConfig.url[0];
+    const url = this.#pusher.effectivePushURL;
     if (!url) {
       // No push URL configured, skip cleanup
       return;
@@ -190,7 +190,7 @@ export class PusherService implements Service, Pusher {
     if (clientIDs.length === 0) {
       return;
     }
-    const url = this.#pushConfig.url[0];
+    const url = this.#pusher.effectivePushURL;
     if (!url) {
       // No push URL configured, skip cleanup
       return;
@@ -330,8 +330,12 @@ class PushWorker {
     this.#clients = new Map();
   }
 
-  get pushURL() {
+  get pushURLs() {
     return this.#pushURLs;
+  }
+
+  get effectivePushURL(): string | undefined {
+    return this.#userPushURL ?? this.#pushURLs[0];
   }
 
   /**
