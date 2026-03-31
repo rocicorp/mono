@@ -207,7 +207,7 @@ function formatCommonToSingularAndPlural(
     case 'date':
     case 'timestamp':
     case 'timestamp without time zone':
-      return `to_timestamp(${valuePlaceholder}::text::bigint / 1000.0)${atTimeZone}`;
+      return `to_timestamp(${valuePlaceholder}::text::numeric / 1000.0)${atTimeZone}`;
 
     case 'timetz':
     // @ts-expect-error Fallthrough intended
