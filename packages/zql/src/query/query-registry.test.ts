@@ -24,7 +24,15 @@ import {
   type CustomQuery,
   type QueryRequest,
 } from './query-registry.ts';
-import type {PullRow, Query} from './query.ts';
+import type {
+  PullRow,
+  Query,
+  QueryContext,
+  QueryResultType,
+  QueryReturn,
+  QuerySchema,
+  QueryTable,
+} from './query.ts';
 
 const schema = createSchema({
   tables: [
@@ -952,6 +960,39 @@ describe('defineQueries merging types', () => {
 
     expectTypeOf(fooQuery).toEqualTypeOf<Query<'foo', typeof schema>>();
     expectTypeOf(barQuery).toEqualTypeOf<Query<'bar', typeof schema>>();
+  });
+
+  test('query helper types work for custom queries and requests', () => {
+    type Context = {userId: string};
+
+    const queries = defineQueriesWithType<typeof schema>()({
+      getFoo: defineQueryWithType<typeof schema, Context>()(({ctx}) =>
+        builder.foo.where('id', ctx.userId).one(),
+      ),
+    });
+
+    const request = queries.getFoo();
+
+    expectTypeOf<QueryTable<typeof queries.getFoo>>().toEqualTypeOf<'foo'>();
+    expectTypeOf<QuerySchema<typeof queries.getFoo>>().toEqualTypeOf<
+      typeof schema
+    >();
+    expectTypeOf<
+      QueryContext<typeof queries.getFoo>
+    >().toEqualTypeOf<Context>();
+    expectTypeOf<QueryReturn<typeof queries.getFoo>>().toEqualTypeOf<
+      PullRow<'foo', typeof schema> | undefined
+    >();
+
+    expectTypeOf<QueryTable<typeof request>>().toEqualTypeOf<'foo'>();
+    expectTypeOf<QuerySchema<typeof request>>().toEqualTypeOf<typeof schema>();
+    expectTypeOf<QueryContext<typeof request>>().toEqualTypeOf<Context>();
+    expectTypeOf<QueryReturn<typeof request>>().toEqualTypeOf<
+      PullRow<'foo', typeof schema> | undefined
+    >();
+    expectTypeOf<QueryResultType<typeof request>>().toEqualTypeOf<
+      PullRow<'foo', typeof schema> | undefined
+    >();
   });
 
   test('merging two plain query definitions should have correct types', () => {

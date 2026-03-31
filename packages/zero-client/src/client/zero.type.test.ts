@@ -26,6 +26,7 @@ import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
 import {
   defineQueriesWithType,
   defineQueryWithType,
@@ -204,6 +205,9 @@ test('materialize', async () => {
       readonly value: number;
     }[]
   >();
+
+  const m5 = z.materialize(queries.issues(), query => ({query}));
+  expectTypeOf(m5.query).toEqualTypeOf<Query<'issues', typeof schema>>();
 
   expect(gotData).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
 });

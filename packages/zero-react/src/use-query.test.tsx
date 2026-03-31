@@ -20,7 +20,10 @@ import {
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
 import {
+  createBuilder,
   createSchema,
+  defineQueriesWithType,
+  defineQueryWithType,
   number,
   string,
   table,
@@ -1255,8 +1258,17 @@ describe('maybe queries', () => {
       table('item').columns({id: number(), name: string()}).primaryKey('id'),
     ],
   });
+  const builder = createBuilder(testSchema);
   const pluralQuery = newQuery(testSchema, 'item');
   const singularQuery = pluralQuery.one();
+  const requests = defineQueriesWithType<typeof testSchema>()({
+    plural: defineQueryWithType<typeof testSchema>()(() => builder.item),
+    singular: defineQueryWithType<typeof testSchema>()(() =>
+      builder.item.one(),
+    ),
+  });
+  const pluralRequest = requests.plural();
+  const singularRequest = requests.singular();
   type Item = {readonly id: number; readonly name: string};
 
   test('plural maybe query (truthy at runtime) returns typed data', async () => {
@@ -1385,6 +1397,36 @@ describe('maybe queries', () => {
     expect(capturedData).toBe(undefined);
     expect(capturedDetails).toEqual({type: 'unknown'});
     expect(zero.materialize).not.toHaveBeenCalled();
+  });
+
+  test('query requests preserve inferred result types', async () => {
+    let rendered = false;
+
+    function Comp() {
+      const [pluralData] = useQuery(pluralRequest, false);
+      const [maybePluralData] = useQuery(
+        pluralRequest as typeof pluralRequest | null,
+        false,
+      );
+      const [suspenseData] = useSuspenseQuery(singularRequest, false);
+
+      expectTypeOf(pluralData).toEqualTypeOf<Item[]>();
+      expectTypeOf(maybePluralData).toEqualTypeOf<Item[] | undefined>();
+      expectTypeOf(suspenseData).toEqualTypeOf<Item | undefined>();
+
+      rendered = true;
+      return <div>Request query</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+
+    await vi.waitFor(() => {
+      expect(rendered).toBe(true);
+    });
   });
 
   // These tests verify that transitioning between truthy/falsy queries doesn't

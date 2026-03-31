@@ -35,9 +35,39 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
-export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
+export type QueryReturn<Q> = Q extends (
+  ...args: any
+) => Query<any, any, infer R>
+  ? R
+  : Q extends Query<any, any, infer R>
+    ? R
+    : Q extends {readonly '~': {readonly $return: infer R}}
+      ? R
+      : never;
 
-export type QueryTable<Q> = Q extends Query<infer T, any, any> ? T : never;
+export type QueryTable<Q> = Q extends (...args: any) => Query<infer T, any, any>
+  ? T
+  : Q extends Query<infer T, any, any>
+    ? T
+    : Q extends {readonly '~': {readonly $tableName: infer T}}
+      ? T
+      : never;
+
+export type QuerySchema<Q> = Q extends (
+  ...args: any
+) => Query<any, infer S, any>
+  ? S
+  : Q extends Query<any, infer S, any>
+    ? S
+    : Q extends {readonly '~': {readonly $schema: infer S}}
+      ? S
+      : never;
+
+export type QueryContext<Q> = Q extends {
+  readonly '~': {readonly $context: infer C};
+}
+  ? C
+  : unknown;
 
 export type ExistsOptions = {
   /**
@@ -158,11 +188,12 @@ export type Row<
       : never;
 
 /**
- * The shape of a CustomQuery's phantom type property.
- * CustomQuery has '~' containing CustomQueryTypes which extends 'Query' & {...}
+ * The shape of a query-like phantom type property.
  */
-type CustomQueryPhantom = {
+type QueryLikePhantom = {
   readonly '~': {
+    readonly $tableName: string;
+    readonly $schema: ZeroSchema;
     readonly $return: unknown;
   };
 };
@@ -173,27 +204,15 @@ type CustomQueryPhantom = {
 export type AnyQueryLike =
   | Query<string, ZeroSchema, any>
   | ((...args: any) => Query<string, ZeroSchema, any>)
-  | CustomQueryPhantom;
+  | QueryLikePhantom;
 
-export type QueryRowType<Q extends AnyQueryLike> = Q extends (
-  ...args: any
-) => Query<any, any, infer R>
-  ? R
-  : Q extends Query<any, any, infer R>
-    ? R
-    : Q extends CustomQueryPhantom
-      ? Q['~']['$return']
-      : never;
+export type QueryRowType<Q extends AnyQueryLike> = QueryReturn<Q>;
 
 export type ZeRow<Q extends AnyQueryLike> = QueryRowType<Q>;
 
-export type QueryResultType<Q extends AnyQueryLike> = Q extends
-  | Query<string, ZeroSchema, any>
-  | ((...args: any) => Query<string, ZeroSchema, any>)
-  ? HumanReadable<QueryRowType<Q>>
-  : Q extends CustomQueryPhantom
-    ? HumanReadable<Q['~']['$return']>
-    : never;
+export type QueryResultType<Q extends AnyQueryLike> = HumanReadable<
+  QueryRowType<Q>
+>;
 
 /**
  * A hybrid query that runs on both client and server.

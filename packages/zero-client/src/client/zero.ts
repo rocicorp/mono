@@ -30,7 +30,6 @@ import {
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {promiseRace} from '../../../shared/src/promise-race.ts';
@@ -104,13 +103,17 @@ import {
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
-  type QueryOrQueryRequest,
+  type AnyQueryOrQueryRequest,
   addContextToQuery,
 } from '../../../zql/src/query/query-registry.ts';
 import {
-  type HumanReadable,
   type MaterializeOptions,
+  type QueryContext,
   type PreloadOptions,
+  type QueryResultType,
+  type QueryReturn,
+  type QuerySchema,
+  type QueryTable,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
 import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
@@ -901,17 +904,15 @@ export class Zero<
    * // Now the data is cached and can be used immediately
    * ```
    */
-  preload<
-    TTable extends keyof S['tables'] & string,
-    TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
-    TReturn,
-  >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
+  preload<TQuery extends AnyQueryOrQueryRequest<S, C>>(
+    query: TQuery,
     options?: PreloadOptions,
   ) {
     return this.#zeroContext.preload(
-      addContextToQuery(query, this.context),
+      addContextToQuery<S, C, TQuery>(
+        query,
+        this.context as QueryContext<TQuery>,
+      ),
       options,
     );
   }
@@ -936,19 +937,17 @@ export class Zero<
    * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
    * ```
    */
-  run<
-    TTable extends keyof S['tables'] & string,
-    TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
-    TReturn,
-  >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
+  run<TQuery extends AnyQueryOrQueryRequest<S, C>>(
+    query: TQuery,
     runOptions?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<QueryResultType<TQuery>> {
     return this.#zeroContext.run(
-      addContextToQuery(query, this.context),
+      addContextToQuery<S, C, TQuery>(
+        query,
+        this.context as QueryContext<TQuery>,
+      ),
       runOptions,
-    );
+    ) as Promise<QueryResultType<TQuery>>;
   }
 
   get context(): C {
@@ -979,38 +978,36 @@ export class Zero<
    * const customView = zero.materialize(userQuery, (query) => new MyCustomView(query));
    * ```
    */
-  materialize<
-    TTable extends keyof S['tables'] & string,
-    TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
-    TReturn,
-  >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
+  materialize<TQuery extends AnyQueryOrQueryRequest<S, C>>(
+    query: TQuery,
     options?: MaterializeOptions,
-  ): TypedView<HumanReadable<TReturn>>;
-  materialize<
-    T,
-    TTable extends keyof S['tables'] & string,
-    TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
-    TReturn,
-  >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
-    factory: ViewFactory<TTable, S, TReturn, T>,
+  ): TypedView<QueryResultType<TQuery>>;
+  materialize<T, TQuery extends AnyQueryOrQueryRequest<S, C>>(
+    query: TQuery,
+    factory: ViewFactory<
+      QueryTable<TQuery>,
+      QuerySchema<TQuery>,
+      QueryReturn<TQuery>,
+      T
+    >,
     options?: MaterializeOptions,
   ): T;
-  materialize<
-    T,
-    TTable extends keyof S['tables'] & string,
-    TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
-    TReturn,
-  >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
-    factoryOrOptions?: ViewFactory<TTable, S, TReturn, T> | MaterializeOptions,
+  materialize<T, TQuery extends AnyQueryOrQueryRequest<S, C>>(
+    query: TQuery,
+    factoryOrOptions?:
+      | ViewFactory<
+          QueryTable<TQuery>,
+          QuerySchema<TQuery>,
+          QueryReturn<TQuery>,
+          T
+        >
+      | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    const q = addContextToQuery(query, this.context);
+    const q = addContextToQuery<S, C, TQuery>(
+      query,
+      this.context as QueryContext<TQuery>,
+    );
 
     let factory;
     let options;

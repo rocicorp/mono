@@ -9,20 +9,20 @@ import {
 } from './bindings.ts';
 import {useZero} from './zero-provider.tsx';
 import type {
+  AnyQueryOrQueryRequest,
   AnyMutatorRegistry,
   BaseDefaultContext,
   BaseDefaultSchema,
   CustomMutatorDefs,
-  DefaultContext,
-  DefaultSchema,
   ErroredQuery,
   Falsy,
   HumanReadable,
-  PullRow,
+  QueryContext,
   Query,
   QueryErrorDetails,
-  QueryOrQueryRequest,
+  QueryReturn,
   QueryResultDetails,
+  QuerySchema,
   ReadonlyJSONValue,
   ResultType,
   TTL,
@@ -43,6 +43,13 @@ export type MaybeQueryResult<TReturn> = readonly [
   HumanReadable<TReturn> | undefined,
   QueryResultDetails & {},
 ];
+
+type QueryResultFor<TQuery extends AnyQueryOrQueryRequest> = QueryResult<
+  QueryReturn<TQuery>
+>;
+
+type MaybeQueryResultFor<TQuery extends AnyQueryOrQueryRequest> =
+  MaybeQueryResult<QueryReturn<TQuery>>;
 
 export type UseQueryOptions = {
   enabled?: boolean | undefined;
@@ -78,54 +85,22 @@ const suspend: (p: Promise<unknown>) => void = reactUse
     };
 
 // Overload 1: Query
-export function useQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  query: QueryOrQueryRequest<
-    TTable,
-    TInput,
-    TOutput,
-    TSchema,
-    TReturn,
-    TContext
-  >,
+export function useQuery<TQuery extends AnyQueryOrQueryRequest>(
+  query: TQuery,
   options?: UseQueryOptions | boolean,
-): QueryResult<TReturn>;
+): QueryResultFor<TQuery>;
 
 // Overload 2: Maybe query
-export function useQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  query:
-    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-    | Falsy,
+export function useQuery<TQuery extends AnyQueryOrQueryRequest>(
+  query: TQuery | Falsy,
   options?: UseQueryOptions | boolean,
-): MaybeQueryResult<TReturn>;
+): MaybeQueryResultFor<TQuery>;
 
 // Implementation
-export function useQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  query:
-    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-    | Falsy,
+export function useQuery<TQuery extends AnyQueryOrQueryRequest>(
+  query: TQuery | Falsy,
   options?: UseQueryOptions | boolean,
-): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
+): QueryResultFor<TQuery> | MaybeQueryResultFor<TQuery> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   if (typeof options === 'boolean') {
@@ -134,7 +109,7 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const zero = useZero<TSchema, undefined, TContext>();
+  const zero = useZero<QuerySchema<TQuery>, undefined, QueryContext<TQuery>>();
 
   // When query is falsy, use disabled subscriber/snapshot to maintain hook order
   const q = query ? addContextToQuery(query, zero.context) : undefined;
@@ -145,61 +120,29 @@ export function useQuery<
   return useSyncExternalStore(
     view?.subscribeReactInternals ?? disabledSubscriber,
     view?.getSnapshot ??
-      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+      (getDisabledSnapshot as () => MaybeQueryResultFor<TQuery>),
     view?.getSnapshot ??
-      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+      (getDisabledSnapshot as () => MaybeQueryResultFor<TQuery>),
   );
 }
 
 // Overload 1: Query
-export function useSuspenseQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  query: QueryOrQueryRequest<
-    TTable,
-    TInput,
-    TOutput,
-    TSchema,
-    TReturn,
-    TContext
-  >,
+export function useSuspenseQuery<TQuery extends AnyQueryOrQueryRequest>(
+  query: TQuery,
   options?: UseSuspenseQueryOptions | boolean,
-): QueryResult<TReturn>;
+): QueryResultFor<TQuery>;
 
 // Overload 2: Maybe query
-export function useSuspenseQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  query:
-    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-    | Falsy,
+export function useSuspenseQuery<TQuery extends AnyQueryOrQueryRequest>(
+  query: TQuery | Falsy,
   options?: UseSuspenseQueryOptions | boolean,
-): MaybeQueryResult<TReturn>;
+): MaybeQueryResultFor<TQuery>;
 
 // Implementation
-export function useSuspenseQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  query:
-    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-    | Falsy,
+export function useSuspenseQuery<TQuery extends AnyQueryOrQueryRequest>(
+  query: TQuery | Falsy,
   options?: UseSuspenseQueryOptions | boolean,
-): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
+): QueryResultFor<TQuery> | MaybeQueryResultFor<TQuery> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   let suspendUntil: 'complete' | 'partial' = 'partial';
@@ -213,7 +156,7 @@ export function useSuspenseQuery<
     } = options);
   }
 
-  const zero = useZero<TSchema, undefined, TContext>();
+  const zero = useZero<QuerySchema<TQuery>, undefined, QueryContext<TQuery>>();
 
   // When query is falsy, use disabled subscriber/snapshot to maintain hook order
   const q = query ? addContextToQuery(query, zero.context) : undefined;
@@ -224,9 +167,9 @@ export function useSuspenseQuery<
   const snapshot = useSyncExternalStore(
     view?.subscribeReactInternals ?? disabledSubscriber,
     view?.getSnapshot ??
-      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+      (getDisabledSnapshot as () => MaybeQueryResultFor<TQuery>),
     view?.getSnapshot ??
-      (getDisabledSnapshot as () => MaybeQueryResult<TReturn>),
+      (getDisabledSnapshot as () => MaybeQueryResultFor<TQuery>),
   );
 
   if (view && enabled) {

@@ -18,10 +18,18 @@ import {
   refCountSymbol,
   type QueryDelegate,
 } from './bindings.ts';
-import {useQuery, type QueryResult, type UseQueryOptions} from './use-query.ts';
+import {
+  createQuery,
+  useQuery,
+  type QueryResult,
+  type UseQueryOptions,
+} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
 import {
+  createBuilder,
   createSchema,
+  defineQueriesWithType,
+  defineQueryWithType,
   number,
   relationships,
   string,
@@ -1044,6 +1052,45 @@ describe('maybe queries', () => {
     expect(data()).toBe(undefined);
     expect(details()).toEqual({type: 'unknown'});
     expect(materializeSpy).not.toHaveBeenCalled();
+  });
+
+  test('query requests preserve inferred result types', () => {
+    const {queryDelegate, schema} = setupTestEnvironment();
+    const zero = newMockZero('request-types', queryDelegate);
+
+    const builder = createBuilder(schema);
+    const requests = defineQueriesWithType<typeof schema>()({
+      plural: defineQueryWithType<typeof schema>()(() => builder.table),
+      singular: defineQueryWithType<typeof schema>()(() => builder.table.one()),
+    });
+
+    const pluralRequest = requests.plural();
+    const singularRequest = requests.singular();
+
+    const MockZeroProvider = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={zero}>{props.children}</ZeroProvider>
+    );
+
+    renderHook(
+      () => {
+        const [pluralData] = useQuery(() => pluralRequest);
+        const [maybePluralData] = useQuery(
+          () => pluralRequest as typeof pluralRequest | null,
+        );
+        const [deprecatedData] = createQuery(() => pluralRequest);
+        const [singularData] = useQuery(() => singularRequest);
+
+        expectTypeOf(pluralData()).toMatchTypeOf<readonly Row[]>();
+        expectTypeOf(maybePluralData()).toMatchTypeOf<
+          readonly Row[] | undefined
+        >();
+        expectTypeOf(deprecatedData()).toMatchTypeOf<readonly Row[]>();
+        expectTypeOf(singularData()).toMatchTypeOf<Row | undefined>();
+
+        return null;
+      },
+      {wrapper: MockZeroProvider},
+    );
   });
 
   // These tests verify that transitioning between truthy/falsy queries

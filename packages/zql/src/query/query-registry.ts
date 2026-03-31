@@ -14,7 +14,15 @@ import type {
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from './query-internals.ts';
-import type {PullRow, Query} from './query.ts';
+import type {
+  AnyQuery,
+  PullRow,
+  Query,
+  QueryContext,
+  QueryReturn,
+  QuerySchema,
+  QueryTable,
+} from './query.ts';
 import {validateInput} from './validate-input.ts';
 
 // ----------------------------------------------------------------------------
@@ -148,6 +156,30 @@ export type QueryOrQueryRequest<
   | QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
   | Query<TTable, TSchema, TReturn>;
 
+type AnyQueryRequest<TSchema extends Schema = Schema, TContext = unknown> = {
+  readonly 'query': unknown;
+  readonly 'args': unknown;
+  readonly '~': QueryRequestTypes<
+    keyof TSchema['tables'] & string,
+    ReadonlyJSONValue | undefined,
+    ReadonlyJSONValue | undefined,
+    TSchema,
+    unknown,
+    TContext
+  >;
+};
+
+type AnyQueryForSchema<TSchema extends Schema = Schema> = Query<
+  keyof TSchema['tables'] & string,
+  TSchema,
+  QueryReturn<AnyQuery>
+>;
+
+export type AnyQueryOrQueryRequest<
+  TSchema extends Schema = Schema,
+  TContext = unknown,
+> = AnyQueryRequest<TSchema, TContext> | AnyQueryForSchema<TSchema>;
+
 /**
  * Converts a query request to a {@link Query} using the context,
  * or returns the query as is.
@@ -156,24 +188,35 @@ export type QueryOrQueryRequest<
  * @param context - The context to use to convert the query request
  */
 export const addContextToQuery = <
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
   TSchema extends Schema,
-  TReturn,
   TContext,
+  TQuery extends AnyQueryOrQueryRequest<TSchema, TContext>,
 >(
-  query: QueryOrQueryRequest<
-    TTable,
-    TInput,
-    TOutput,
-    TSchema,
-    TReturn,
-    TContext
-  >,
-  context: TContext,
-): Query<TTable, TSchema, TReturn> =>
-  'query' in query ? query.query.fn({ctx: context, args: query.args}) : query;
+  query: TQuery,
+  context: QueryContext<TQuery>,
+): Query<QueryTable<TQuery>, QuerySchema<TQuery>, QueryReturn<TQuery>> => {
+  if ('query' in query) {
+    const queryRequest = query as QueryRequest<
+      QueryTable<TQuery>,
+      ReadonlyJSONValue | undefined,
+      ReadonlyJSONValue | undefined,
+      QuerySchema<TQuery>,
+      QueryReturn<TQuery>,
+      QueryContext<TQuery>
+    >;
+
+    return queryRequest.query.fn({
+      ctx: context,
+      args: queryRequest.args,
+    }) as Query<QueryTable<TQuery>, QuerySchema<TQuery>, QueryReturn<TQuery>>;
+  }
+
+  return query as Query<
+    QueryTable<TQuery>,
+    QuerySchema<TQuery>,
+    QueryReturn<TQuery>
+  >;
+};
 
 // ----------------------------------------------------------------------------
 // QueryRegistry types

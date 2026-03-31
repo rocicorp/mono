@@ -16,16 +16,13 @@ import {
 import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
 import {useZero} from './use-zero.ts';
 import {
-  type BaseDefaultContext,
-  type BaseDefaultSchema,
-  type DefaultContext,
-  type DefaultSchema,
+  type AnyQueryOrQueryRequest,
   type Falsy,
   type HumanReadable,
-  type PullRow,
-  type QueryOrQueryRequest,
+  type QueryContext,
+  type QueryReturn,
   type QueryResultDetails,
-  type ReadonlyJSONValue,
+  type QuerySchema,
   type TTL,
 } from './zero.ts';
 
@@ -43,6 +40,13 @@ export type MaybeQueryResult<TReturn> = readonly [
   Accessor<QueryResultDetails & {}>,
 ];
 
+type QueryResultFor<TQuery extends AnyQueryOrQueryRequest> = QueryResult<
+  QueryReturn<TQuery>
+>;
+
+type MaybeQueryResultFor<TQuery extends AnyQueryOrQueryRequest> =
+  MaybeQueryResult<QueryReturn<TQuery>>;
+
 // Deprecated in 0.22
 /**
  * @deprecated Use {@linkcode UseQueryOptions} instead.
@@ -59,68 +63,30 @@ export type UseQueryOptions = {
 /**
  * @deprecated Use {@linkcode useQuery} instead.
  */
-export function createQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  querySignal: Accessor<
-    QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-  >,
+export function createQuery<TQuery extends AnyQueryOrQueryRequest>(
+  querySignal: Accessor<TQuery>,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
-): QueryResult<TReturn> {
+): QueryResultFor<TQuery> {
   return useQuery(querySignal, options);
 }
 
 // Overload 1: Query - returns QueryResult<TReturn>
-export function useQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  querySignal: Accessor<
-    QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-  >,
+export function useQuery<TQuery extends AnyQueryOrQueryRequest>(
+  querySignal: Accessor<TQuery>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
-): QueryResult<TReturn>;
+): QueryResultFor<TQuery>;
 
 // Overload 2: Maybe query
-export function useQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  querySignal: Accessor<
-    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-    | Falsy
-  >,
+export function useQuery<TQuery extends AnyQueryOrQueryRequest>(
+  querySignal: Accessor<TQuery | Falsy>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
-): MaybeQueryResult<TReturn>;
+): MaybeQueryResultFor<TQuery>;
 
 // Implementation
-export function useQuery<
-  TTable extends keyof TSchema['tables'] & string,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TSchema extends BaseDefaultSchema = DefaultSchema,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext extends BaseDefaultContext = DefaultContext,
->(
-  querySignal: Accessor<
-    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-    | Falsy
-  >,
+export function useQuery<TQuery extends AnyQueryOrQueryRequest>(
+  querySignal: Accessor<TQuery | Falsy>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
-): QueryResult<TReturn> | MaybeQueryResult<TReturn> {
+): QueryResultFor<TQuery> | MaybeQueryResultFor<TQuery> {
   const [state, setState] = createStore<State>([
     {
       '': undefined,
@@ -134,7 +100,7 @@ export function useQuery<
     setRefetchKey(k => k + 1);
   };
 
-  const zero = useZero<TSchema, undefined, TContext>();
+  const zero = useZero<QuerySchema<TQuery>, undefined, QueryContext<TQuery>>();
 
   // Handle possibly falsy queries
   const q = createMemo(() => {
@@ -196,7 +162,10 @@ export function useQuery<
     ),
   );
 
-  return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
+  return [
+    () => state[0][''] as HumanReadable<QueryReturn<TQuery>>,
+    () => state[1],
+  ];
 }
 
 function normalize<T>(options?: T | Accessor<T | undefined>): T | undefined {
