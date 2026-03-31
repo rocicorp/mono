@@ -10,6 +10,8 @@ import type {
   MaterializeOptions,
   PreloadOptions,
   Query,
+  QueryForSchema,
+  QueryResultType,
   RunOptions,
 } from './query.ts';
 import type {TTL} from './ttl.ts';
@@ -115,14 +117,10 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
   /**
    * Run a query and return the results as a Promise.
    */
-  run<
-    TTable extends keyof TSchema['tables'] & string,
-    TSchema extends Schema,
-    TReturn,
-  >(
-    query: Query<TTable, TSchema, TReturn>,
+  run<TQuery extends QueryForSchema>(
+    query: TQuery,
     options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>>;
+  ): Promise<QueryResultType<TQuery>>;
 
   /**
    * Preload a query's data without materializing a view.

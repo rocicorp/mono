@@ -204,6 +204,7 @@ export type {
   PullRow,
   Query,
   QueryContext,
+  QueryForSchema,
   QueryResultType,
   QueryRowType,
   QueryReturn,

@@ -7,7 +7,12 @@ import type {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
-import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
+import type {
+  HumanReadable,
+  QueryForSchema,
+  QueryResultType,
+  RunOptions,
+} from '../query/query.ts';
 import type {ConditionalSchemaQuery} from '../query/schema-query.ts';
 import type {CRUDMutateRequest, SchemaCRUD, TransactionMutate} from './crud.ts';
 
@@ -47,10 +52,10 @@ export interface TransactionBase<S extends Schema> {
    */
   readonly query: ConditionalSchemaQuery<S>;
 
-  run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<TTable, S, TReturn>,
+  run<TQuery extends QueryForSchema<S>>(
+    query: TQuery,
     options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>>;
+  ): Promise<QueryResultType<TQuery>>;
 }
 
 export type Transaction<

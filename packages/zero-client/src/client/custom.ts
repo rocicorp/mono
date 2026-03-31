@@ -18,8 +18,8 @@ import type {
 } from '../../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
-  type HumanReadable,
-  type Query,
+  type QueryForSchema,
+  type QueryResultType,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
 import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
@@ -163,10 +163,10 @@ export class TransactionImpl<
     return (this.#repTx as WriteTransactionImpl)[zeroData]?.token;
   }
 
-  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TTable, TSchema, TReturn>,
+  run<TQuery extends QueryForSchema<TSchema>>(
+    query: TQuery,
     options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<QueryResultType<TQuery>> {
     return this.#zeroContext.run(query, options);
   }
 }

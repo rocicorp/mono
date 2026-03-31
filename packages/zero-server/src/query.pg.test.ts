@@ -1,6 +1,7 @@
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, expectTypeOf, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import type {Row} from '../../zql/src/query/query.ts';
 import {makeServerTransaction} from './custom.ts';
 import {schema, schemaSql, seedDataSql} from './test/schema.ts';
 import {Transaction} from './test/util.ts';
@@ -25,6 +26,7 @@ describe('makeSchemaQuery', () => {
       );
 
       const result = await transaction.run(transaction.query.basic);
+      expectTypeOf(result).toEqualTypeOf<Row<typeof schema.tables.basic>[]>();
       expect(result).toEqual([{id: '1', a: 2, b: 'foo', c: true}]);
 
       const result2 = await transaction.run(transaction.query.names);
@@ -46,6 +48,9 @@ describe('makeSchemaQuery', () => {
       );
 
       const result = await transaction.run(transaction.query.basic.one());
+      expectTypeOf(result).toEqualTypeOf<
+        Row<typeof schema.tables.basic> | undefined
+      >();
       expect(result).toEqual({id: '1', a: 2, b: 'foo', c: true});
     });
   });

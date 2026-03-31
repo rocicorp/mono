@@ -78,7 +78,7 @@ export class RunnableQueryImpl<
   }
 
   override run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
-    return this.#delegate.run(this, options);
+    return this.#delegate.run(this, options) as Promise<HumanReadable<TReturn>>;
   }
 
   override preload(options?: PreloadOptions): {

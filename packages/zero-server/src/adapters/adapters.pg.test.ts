@@ -17,6 +17,7 @@ import {zeroPrisma} from './prisma.ts';
 import {zeroNodePg} from './pg.ts';
 import {zeroPostgresJS} from './postgresjs.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import type {Row} from '../../../zql/src/query/query.ts';
 
 let postgresJsClient: PostgresDB;
 
@@ -219,6 +220,7 @@ describe('node-postgres', () => {
       const resultZQL = await zql.run(
         builder.user.where('id', '=', newUser.id),
       );
+      expectTypeOf(resultZQL).toEqualTypeOf<Row<typeof schema.tables.user>[]>();
 
       const resultClientQuery = await zql.transaction(async tx => {
         const result = await tx.dbTransaction.query(
@@ -259,6 +261,7 @@ describe('postgres-js', () => {
     const zql = zeroPostgresJS(schema, postgresJsClient);
 
     const resultZQL = await zql.run(builder.user.where('id', '=', newUser.id));
+    expectTypeOf(resultZQL).toEqualTypeOf<Row<typeof schema.tables.user>[]>();
 
     const resultClientQuery = await zql.transaction(async tx => {
       const result = await tx.dbTransaction.query(

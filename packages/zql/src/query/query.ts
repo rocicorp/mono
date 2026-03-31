@@ -413,3 +413,9 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
 } as const;
 
 export type AnyQuery = Query<string, ZeroSchema, any>;
+
+export type QueryForSchema<TSchema extends ZeroSchema = ZeroSchema> = Query<
+  keyof TSchema['tables'] & string,
+  TSchema,
+  QueryReturn<AnyQuery>
+>;

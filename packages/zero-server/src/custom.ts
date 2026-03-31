@@ -31,8 +31,9 @@ import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
 import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
-  HumanReadable,
-  Query,
+  QueryForSchema,
+  QueryResultType,
+  QueryReturn,
   RunOptions,
 } from '../../zql/src/query/query.ts';
 import type {ConditionalSchemaQuery} from '../../zql/src/query/schema-query.ts';
@@ -79,16 +80,12 @@ class ServerTransactionQueryDelegate extends QueryDelegateBase {
     throw new Error('not implemented');
   }
 
-  override run<
-    TTable extends keyof TSchema['tables'] & string,
-    TSchema extends Schema,
-    TReturn,
-  >(
-    query: Query<TTable, TSchema, TReturn>,
+  override run<TQuery extends QueryForSchema>(
+    query: TQuery,
     _options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<QueryResultType<TQuery>> {
     const queryInternals = asQueryInternals(query);
-    return this.#dbTransaction.runQuery<TReturn>(
+    return this.#dbTransaction.runQuery<QueryReturn<TQuery>>(
       queryInternals.ast,
       queryInternals.format,
       this.#schema,
@@ -146,14 +143,14 @@ export class TransactionImpl<
     this.query = createRunnableBuilder(delegate, schema);
   }
 
-  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TTable, TSchema, TReturn>,
+  run<TQuery extends QueryForSchema<TSchema>>(
+    query: TQuery,
     _options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<QueryResultType<TQuery>> {
     const queryInternals = asQueryInternals(query);
 
     // Execute the query using the database-specific executor
-    return this.dbTransaction.runQuery<TReturn>(
+    return this.dbTransaction.runQuery<QueryReturn<TQuery>>(
       queryInternals.ast,
       queryInternals.format,
       this.#schema,

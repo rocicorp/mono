@@ -23,6 +23,8 @@ import type {
   MaterializeOptions,
   PreloadOptions,
   Query,
+  QueryForSchema,
+  QueryResultType,
   RunOptions,
 } from './query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
@@ -105,14 +107,10 @@ export abstract class QueryDelegateBase implements QueryDelegate {
    * Default implementation calls runImpl.
    * Override if you need custom query execution (e.g., TestPGQueryDelegate).
    */
-  run<
-    TTable extends keyof TSchema['tables'] & string,
-    TSchema extends Schema,
-    TReturn,
-  >(
-    query: Query<TTable, TSchema, TReturn>,
+  run<TQuery extends QueryForSchema>(
+    query: TQuery,
     options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<QueryResultType<TQuery>> {
     return runImpl(query, this, options);
   }
 
@@ -246,30 +244,21 @@ export abstract class QueryDelegateBase implements QueryDelegate {
 }
 
 // oxlint-disable-next-line require-await
-export async function runImpl<
-  TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
-  TReturn,
->(
-  query: Query<TTable, TSchema, TReturn>,
+export async function runImpl<TQuery extends QueryForSchema>(
+  query: TQuery,
   delegate: QueryDelegate,
   options?: RunOptions,
-): Promise<HumanReadable<TReturn>> {
+): Promise<QueryResultType<TQuery>> {
   delegate.assertValidRunOptions(options);
-  const v: TypedView<HumanReadable<TReturn>> = materializeImpl(
-    query,
-    delegate,
-    undefined,
-    {
-      ttl: options?.ttl,
-    },
-  );
+  const v = materializeImpl(query, delegate, undefined, {
+    ttl: options?.ttl,
+  }) as TypedView<QueryResultType<TQuery>>;
   if (options?.type === 'complete') {
     return new Promise(resolve => {
       v.addListener((data, type) => {
         if (type === 'complete') {
           v.destroy();
-          resolve(data as HumanReadable<TReturn>);
+          resolve(data as QueryResultType<TQuery>);
         } else if (type === 'error') {
           v.destroy();
           resolve(Promise.reject(data));

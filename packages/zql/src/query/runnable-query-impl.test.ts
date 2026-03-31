@@ -1,13 +1,15 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, expectTypeOf, test} from 'vitest';
 import {newRunnableQuery} from './runnable-query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
+import type {Row} from './query.ts';
 
 describe('RunnableQueryImpl run/preload/materialize', () => {
   test('run() works on runnable query', async () => {
     const queryDelegate = new QueryDelegateImpl({callGot: true});
     const issueQuery = newRunnableQuery(queryDelegate, schema, 'issue');
     const result = await issueQuery.run();
+    expectTypeOf(result).toEqualTypeOf<Row<typeof schema.tables.issue>[]>();
     expect(result).toEqual([]);
   });
 
@@ -69,6 +71,9 @@ describe('RunnableQueryImpl run/preload/materialize', () => {
     const queryDelegate = new QueryDelegateImpl({callGot: true});
     const issueQuery = newRunnableQuery(queryDelegate, schema, 'issue').one();
     const result = await issueQuery.run();
+    expectTypeOf(result).toEqualTypeOf<
+      Row<typeof schema.tables.issue> | undefined
+    >();
     expect(result).toBeUndefined();
   });
 

@@ -48,6 +48,8 @@ import type {
   AnyQuery,
   HumanReadable,
   Query,
+  QueryForSchema,
+  QueryResultType,
   RunOptions,
 } from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
@@ -1080,14 +1082,10 @@ export class TestPGQueryDelegate extends QueryDelegateBase {
     return this.#pg.unsafe(query, args as JSONValue[]);
   }
 
-  override async run<
-    TTable extends keyof TSchema['tables'] & string,
-    TSchema extends Schema,
-    TReturn,
-  >(
-    query: Query<TTable, TSchema, TReturn>,
+  override async run<TQuery extends QueryForSchema>(
+    query: TQuery,
     _options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<QueryResultType<TQuery>> {
     const queryInternals = asQueryInternals(query);
     const sqlQuery = formatPgInternalConvert(
       compile(
@@ -1103,8 +1101,8 @@ export class TestPGQueryDelegate extends QueryDelegateBase {
     );
     // Handle empty results for .one() queries
     if (result.length === 0 && queryInternals.format.singular) {
-      return undefined as unknown as HumanReadable<TReturn>;
+      return undefined as unknown as QueryResultType<TQuery>;
     }
-    return extractZqlResult(result) as HumanReadable<TReturn>;
+    return extractZqlResult(result) as QueryResultType<TQuery>;
   }
 }

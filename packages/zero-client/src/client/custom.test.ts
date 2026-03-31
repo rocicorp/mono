@@ -375,7 +375,11 @@ describe('custom mutators can query the local store during an optimistic mutatio
             args: InsertValue<typeof legacySchema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
-            queryResult = await runQuery(tx);
+            const result = await runQuery(tx);
+            expectTypeOf(result).toEqualTypeOf<
+              Row<typeof legacySchema.tables.issue>[]
+            >();
+            queryResult = result;
           },
         },
       } as const,
@@ -412,6 +416,9 @@ describe('custom mutators can query the local store during an optimistic mutatio
             const createdIssue = await tx.run(
               zql.issue.where('id', args.id).one(),
             );
+            expectTypeOf(createdIssue).toEqualTypeOf<
+              Row<typeof legacySchema.tables.issue> | undefined
+            >();
 
             expect(createdIssue).toEqual(
               expect.objectContaining({id: args.id}),
@@ -419,6 +426,9 @@ describe('custom mutators can query the local store during an optimistic mutatio
           },
           closeAll: async (tx: MutatorTx) => {
             const issues = await tx.run(zql.issue);
+            expectTypeOf(issues).toEqualTypeOf<
+              Row<typeof legacySchema.tables.issue>[]
+            >();
             await Promise.all(
               issues.map(issue =>
                 tx.mutate.issue.update({id: issue.id, closed: true}),

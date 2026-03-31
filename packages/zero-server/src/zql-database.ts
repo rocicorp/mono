@@ -4,8 +4,8 @@ import type {CleanupResultsArg} from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {
-  HumanReadable,
-  Query,
+  QueryForSchema,
+  QueryResultType,
   RunOptions,
 } from '../../zql/src/query/query.ts';
 import {CRUDMutatorFactory, type TransactionImpl} from './custom.ts';
@@ -118,10 +118,10 @@ export class ZQLDatabase<
     return this.#crudFactory.createTransaction(dbTx, clientID, mutationID);
   }
 
-  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TTable, TSchema, TReturn>,
+  run<TQuery extends QueryForSchema<TSchema>>(
+    query: TQuery,
     options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<QueryResultType<TQuery>> {
     return this.transaction(tx => tx.run(query, options));
   }
 }
