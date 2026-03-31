@@ -1857,10 +1857,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       // Signal clients to commit.
-      await startAsyncSpan(
-        tracer,
-        'vs.#syncQueryPipelineSet.pokeEnd',
-        () => pokers.end(finalVersion),
+      await startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet.pokeEnd', () =>
+        pokers.end(finalVersion),
       );
 
       const wallTime = performance.now() - start;
