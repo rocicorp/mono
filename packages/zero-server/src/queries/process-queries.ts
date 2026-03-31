@@ -174,7 +174,13 @@ async function transform<S extends Schema>(
       }),
     );
 
-    if (apiName === 'query') {
+    // Only the empty `/query` validation call includes principal metadata,
+    // for backwards compatibility with older zero-cache versions that expect a
+    // 2-tuple response.
+    //
+    // Zero-cache uses that special empty `/query` request to bind an authoritative
+    // principal to a client group.
+    if (apiName === 'query' && parsed[1].length === 0) {
       return ['transformed', responses, {principalID: principalID ?? null}];
     }
     return ['transformed', responses];

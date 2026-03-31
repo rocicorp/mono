@@ -1,7 +1,9 @@
 import {assert, describe, expect, test, vi} from 'vitest';
 
+import * as v from '../../../shared/src/valita.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {transformResponseBodySchema} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import * as nameMapperModule from '../../../zero-schema/src/name-mapper.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';
@@ -412,8 +414,69 @@ describe('handleQueryRequest', () => {
           }),
         },
       ],
-      {principalID},
     ]);
+  });
+
+  test('keeps non-empty query responses parseable by legacy zero-cache validators', async () => {
+    const ast: AST = {
+      table: 'basic',
+      limit: 1,
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const result = await handleQueryRequest(cb, principalID, schema, [
+      'transform',
+      [
+        {
+          id: 'q1',
+          name: 'basicLimited',
+          args: [],
+        },
+      ],
+    ]);
+
+    const legacyTransformResponseMessageSchema = v.tuple([
+      v.literal('transformed'),
+      transformResponseBodySchema,
+    ]);
+
+    expect(v.parse(result, legacyTransformResponseMessageSchema)).toEqual(
+      result,
+    );
+  });
+
+  test('returns principal metadata for empty query validation requests', async () => {
+    const cb = vi.fn(() => {
+      throw new Error('should not be called');
+    });
+
+    const result = await handleQueryRequest(cb, principalID, schema, [
+      'transform',
+      [],
+    ]);
+
+    expect(cb).not.toHaveBeenCalled();
+    expect(result).toEqual(['transformed', [], {principalID}]);
+  });
+
+  test('returns null principal metadata for empty query validation requests without auth', async () => {
+    const cb = vi.fn(() => {
+      throw new Error('should not be called');
+    });
+
+    const resultUndefined = await handleQueryRequest(cb, undefined, schema, [
+      'transform',
+      [],
+    ]);
+    const resultNull = await handleQueryRequest(cb, null, schema, [
+      'transform',
+      [],
+    ]);
+
+    expect(cb).not.toHaveBeenCalled();
+    expect(resultUndefined).toEqual(['transformed', [], {principalID: null}]);
+    expect(resultNull).toEqual(['transformed', [], {principalID: null}]);
   });
 
   test('reads request bodies from Request instances', async () => {
@@ -452,7 +515,6 @@ describe('handleQueryRequest', () => {
           ast: expect.objectContaining({table: 'basic'}),
         },
       ],
-      {principalID: null},
     ]);
   });
 
@@ -547,7 +609,7 @@ describe('handleQueryRequest', () => {
       name: 'second',
       ast: expect.objectContaining({table: 'basic'}),
     });
-    expect(result[2]).toEqual({principalID});
+    expect(result).toHaveLength(2);
   });
 
   test('wraps thrown errors from callback with details when possible', async () => {
@@ -572,7 +634,6 @@ describe('handleQueryRequest', () => {
           details: expect.objectContaining({name: 'TypeError'}),
         },
       ],
-      {principalID},
     ]);
   });
 
@@ -602,7 +663,6 @@ describe('handleQueryRequest', () => {
           details: customDetails,
         },
       ],
-      {principalID},
     ]);
   });
 
@@ -631,7 +691,6 @@ describe('handleQueryRequest', () => {
           details: expect.objectContaining({name: 'QueryParseError'}),
         },
       ],
-      {principalID},
     ]);
   });
 
@@ -674,7 +733,6 @@ describe('handleQueryRequest', () => {
           ast: expect.objectContaining({table: 'basic'}),
         },
       ],
-      {principalID},
     ]);
   });
 
