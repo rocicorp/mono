@@ -15,7 +15,6 @@ import {
   TIMETZ,
 } from './pg-types.ts';
 
-
 // Matches: YEAR-MM-DD HH:MM:SS[.fraction][+-TZ[:MM]][ BC]
 const pgTimestampRe =
   /^(\d+)-(\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)([+-]\d{1,2}(?::\d{2})?)?(?: BC)?$/;
