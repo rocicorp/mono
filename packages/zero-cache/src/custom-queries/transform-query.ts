@@ -65,9 +65,9 @@ type FetchedTransform = {
  * The ViewSyncer will call the API server 3-4 times with the exact same queries
  * if we do not cache requests.
  *
- * Caching is safe here because the cache key encodes both
- * the user's cookies and auth token. A user cannot see another user's
- * transformed queries unless they share the same token and cookies.
+ * Caching is safe here because the cache key encodes the effective request
+ * identity used for `/query`: auth, forwarded cookies, origin, custom
+ * headers, target URL, and the query hash itself.
  */
 export class CustomQueryTransformer {
   readonly #shard: ShardID;
@@ -118,12 +118,17 @@ export class CustomQueryTransformer {
       headerOptions,
       this.#config.forwardCookies,
     );
+    const effectiveQueryURL = userQueryURL ?? this.#config.url[0];
     const request: TransformRequestBody = [];
     const cachedResponses: TransformedAndHashed[] = [];
     let principalID: PrincipalID = undefined;
 
     for (const query of queries) {
-      const cacheKey = getCacheKey(normalizedHeaderOptions, query.id);
+      const cacheKey = getCacheKey(
+        normalizedHeaderOptions,
+        query.id,
+        effectiveQueryURL,
+      );
       const cached = this.#cache.get(cacheKey);
       if (cached) {
         cachedResponses.push(cached.transformed);
@@ -170,7 +175,11 @@ export class CustomQueryTransformer {
       if ('error' in transformed) {
         continue;
       }
-      const cacheKey = getCacheKey(normalizedHeaderOptions, transformed.id);
+      const cacheKey = getCacheKey(
+        normalizedHeaderOptions,
+        transformed.id,
+        effectiveQueryURL,
+      );
       this.#cache.set(cacheKey, {
         transformed,
         principalID: transformResponse.principalID,
@@ -183,6 +192,10 @@ export class CustomQueryTransformer {
     };
   }
 
+  /**
+   * Convenience wrapper for callers that only need the transformed query list
+   * and do not consume validation metadata.
+   */
   async transform(
     headerOptions: HeaderOptions,
     queries: Iterable<CustomQueryRecord>,
@@ -280,9 +293,41 @@ function mergePrincipalID(
   return current;
 }
 
-function getCacheKey(headerOptions: HeaderOptions, queryID: string) {
+function getCacheKey(
+  headerOptions: HeaderOptions,
+  queryID: string,
+  effectiveQueryURL: string | undefined,
+) {
   // For custom queries, queryID is a hash of the name + args.
-  // the APIKey from headerOptions is static. Not needed for the cache key.
-  // The token is used to identify the user and should be included in the cache key.
-  return `${headerOptions.token}:${headerOptions.cookie}:${queryID}`;
+  // The apiKey is static for a given transformer instance.
+  return JSON.stringify({
+    queryID,
+    token: headerOptions.token,
+    cookie: headerOptions.cookie,
+    origin: headerOptions.origin,
+    url: effectiveQueryURL,
+    customHeaders: normalizedForwardedHeaders(headerOptions),
+  });
+}
+
+function normalizedForwardedHeaders(headerOptions: HeaderOptions) {
+  const {allowedClientHeaders, customHeaders} = headerOptions;
+  if (
+    !customHeaders ||
+    !allowedClientHeaders ||
+    allowedClientHeaders.length === 0
+  ) {
+    return undefined;
+  }
+
+  const allowedHeaders = new Set(
+    allowedClientHeaders.map(header => header.toLowerCase()),
+  );
+  const forwardedHeaders = Object.entries(customHeaders)
+    .filter(([header]) => allowedHeaders.has(header.toLowerCase()))
+    .sort((left, right) => left[0].localeCompare(right[0]));
+
+  return forwardedHeaders.length === 0
+    ? undefined
+    : JSON.stringify(forwardedHeaders);
 }

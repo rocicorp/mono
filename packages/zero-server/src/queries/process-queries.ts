@@ -69,7 +69,7 @@ export function handleTransformRequest<S extends Schema>(
  * This function will call `transformQuery` in parallel for each query found in the request.
  *
  * @param transformQuery - Callback function that takes a query name and args, and returns a Query
- * @param principalID - The validated user/principal ID for the current query, or undefined/null if unauthenticated
+ * @param principalID - The ID of the user making the request, or null/undefined if not authenticated
  * @param schema - The Zero schema
  * @param requestOrJsonBody - Either a Request object or the JSON body directly
  * @param logLevel - Logging level (defaults to 'info')

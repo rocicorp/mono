@@ -805,6 +805,148 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
   });
 
+  test('should use cache key based on effective query URL', async () => {
+    const mockSuccessResponse = () =>
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl, 'https://custom-api.example.com/query'],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+    await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      'https://custom-api.example.com/query',
+    );
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
+
+    await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      'https://custom-api.example.com/query',
+    );
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
+  });
+
+  test('should use cache key based on forwarded custom headers', async () => {
+    const mockSuccessResponse = () =>
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+    const headerOptionsA = {
+      ...headerOptions,
+      customHeaders: {'x-tenant': 'tenant-a'},
+      allowedClientHeaders: ['x-tenant'],
+    };
+    const headerOptionsB = {
+      ...headerOptions,
+      customHeaders: {'x-tenant': 'tenant-b'},
+      allowedClientHeaders: ['x-tenant'],
+    };
+
+    await transformer.transform(headerOptionsA, [mockQueries[0]], undefined);
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+    await transformer.transform(headerOptionsB, [mockQueries[0]], undefined);
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
+  });
+
+  test('should ignore disallowed custom headers in the cache key', async () => {
+    const mockSuccessResponse = () =>
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+    const headerOptionsA = {
+      ...headerOptions,
+      customHeaders: {'x-not-forwarded': 'first'},
+      allowedClientHeaders: ['x-tenant'],
+    };
+    const headerOptionsB = {
+      ...headerOptions,
+      customHeaders: {'x-not-forwarded': 'second'},
+      allowedClientHeaders: ['x-tenant'],
+    };
+
+    await transformer.transform(headerOptionsA, [mockQueries[0]], undefined);
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+
+    await transformer.transform(headerOptionsB, [mockQueries[0]], undefined);
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+  });
+
+  test('should use cache key based on origin', async () => {
+    const mockSuccessResponse = () =>
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    await transformer.transform(
+      {...headerOptions, origin: 'https://app-a.example.com'},
+      [mockQueries[0]],
+      undefined,
+    );
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+    await transformer.transform(
+      {...headerOptions, origin: 'https://app-b.example.com'},
+      [mockQueries[0]],
+      undefined,
+    );
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
+  });
+
   test('should use custom URL when userQueryURL is provided', async () => {
     const customUrl = 'https://custom-api.example.com/transform';
 
