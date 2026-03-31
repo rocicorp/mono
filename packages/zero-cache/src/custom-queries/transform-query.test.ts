@@ -188,6 +188,30 @@ describe('CustomQueryTransformer', () => {
     expect(result).toEqual(transformResults);
   });
 
+  test('accepts transformed responses with principal metadata', async () => {
+    mockFetchFromAPIServer.mockResolvedValue([
+      'transformed',
+      mockQueryResponses,
+      {principalID: 'principal-1'},
+    ] satisfies TransformResponseMessage);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+    const result = await transformer.transform(
+      headerOptions,
+      mockQueries,
+      undefined,
+    );
+
+    expect(result).toEqual(transformResults);
+  });
+
   test('should handle errored queries in response', async () => {
     mockFetchFromAPIServer.mockResolvedValue([
       'transformed',

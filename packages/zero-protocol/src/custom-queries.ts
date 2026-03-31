@@ -57,14 +57,26 @@ export const transformErrorMessageSchema = v.tuple([
 ]);
 export type TransformErrorMessage = v.Infer<typeof transformErrorMessageSchema>;
 
+export const transformSuccessMetadataSchema = v.object({
+  principalID: v.union(v.string(), v.null()),
+});
+export type TransformSuccessMetadata = v.Infer<
+  typeof transformSuccessMetadataSchema
+>;
+
 const transformFailedMessageSchema = v.tuple([
   v.literal('transformFailed'),
   transformFailedBodySchema,
 ]);
-const transformOkMessageSchema = v.tuple([
-  v.literal('transformed'),
-  transformResponseBodySchema,
-]);
+export const transformOkMessageSchema = v.union(
+  v.tuple([v.literal('transformed'), transformResponseBodySchema]),
+  v.tuple([
+    v.literal('transformed'),
+    transformResponseBodySchema,
+    transformSuccessMetadataSchema,
+  ]),
+);
+export type TransformOkMessage = v.Infer<typeof transformOkMessageSchema>;
 
 export const transformResponseMessageSchema = v.union(
   transformOkMessageSchema,
