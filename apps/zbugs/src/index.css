@@ -1575,6 +1575,24 @@ textarea.autoResize {
     background-size: 1rem;
     width: max-content;
   }
+
+  .add-filter-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-height: 80vh;
+    max-height: 80dvh;
+    overflow: visible;
+    transition:
+      top 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .add-filter-modal:has(input:focus) {
+    top: 1rem;
+    transform: translate(-50%, 0);
+  }
 }
 
 @media (max-width: 650px) {
@@ -1645,6 +1663,17 @@ textarea.autoResize {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    max-height: 80vh;
+    max-height: 80dvh;
+    overflow: visible;
+    transition:
+      top 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .add-filter-modal:has(input:focus) {
+    top: 1rem;
+    transform: translate(-50%, 0);
   }
 
   #root-modal {
