@@ -97,6 +97,8 @@ export async function initializeStreamer(
   );
 }
 
+const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
+
 /**
  * Internally all Downstream messages (not just commits) are given a watermark.
  * These are used for internal ordering for:
@@ -355,12 +357,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#storer.run().catch(e => stream.changes.cancel(e));
 
         this.#stream = stream;
-        this.#state.resetBackoff();
-        this.#replicationStatusPublisher.publish(
-          this.#lc,
-          'Replicating',
-          `Replicating from ${lastWatermark}`,
-        );
+        if (
+          this.#state.resetBackoff() >
+          REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
+        ) {
+          // After recovering from a backoff for which a replication status
+          // error was published, publish an OK status
+          this.#replicationStatusPublisher.publish(
+            this.#lc,
+            'Replicating',
+            `Replicating from ${lastWatermark}`,
+          );
+        }
         watermark = null;
 
         for await (const change of stream.changes) {
@@ -447,7 +455,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       await Promise.all([
         this.#storer.stop(),
         this.#state.backoff(this.#lc, err),
-        this.#state.retryDelay > 5000
+        this.#state.retryDelay > REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
           ? publishCriticalEvent(
               this.#lc,
               replicationStatusError(this.#lc, 'Replicating', err),

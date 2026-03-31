@@ -1,7 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
+import {DbFile} from '../../test/lite.ts';
 import {
   replicationStatusError,
   replicationStatusEvent,
@@ -11,12 +12,18 @@ import {CREATE_TABLE_METADATA_TABLE} from './schema/table-metadata.ts';
 
 describe('replicator/replication-status', () => {
   let lc: LogContext;
+  let replicaFile: DbFile;
   let replica: Database;
 
   beforeEach(() => {
     lc = createSilentLogContext();
-    replica = new Database(createSilentLogContext(), ':memory:');
+
+    replicaFile = new DbFile('replication-status');
+    replica = replicaFile.connect(lc);
+
     replica.exec(CREATE_TABLE_METADATA_TABLE);
+
+    return () => replicaFile.delete();
   });
 
   test('initializing', () => {
@@ -293,7 +300,10 @@ describe('replicator/replication-status', () => {
   test('publish with extra state callback', () => {
     const publish = vi.fn();
 
-    const publisher = new ReplicationStatusPublisher(replica, publish);
+    const publisher = ReplicationStatusPublisher.forReplicaFile(
+      replicaFile.path,
+      publish,
+    );
 
     publisher.publish(
       lc,

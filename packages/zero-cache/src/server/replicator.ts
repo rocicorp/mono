@@ -6,6 +6,7 @@ import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
   ReplicatorService,
   type ReplicatorMode,
@@ -73,9 +74,11 @@ export default async function runWorker(
     `${workerName}-${pid}`,
     mode,
     changeStreamer,
-    replica,
     workerClient,
-    runningLocalChangeStreamer, // publish ReplicationStatusEvents
+    runningLocalChangeStreamer
+      ? // publish ReplicationStatusEvents from backup-replicator only
+        ReplicationStatusPublisher.forReplicaFile(dbPath)
+      : null,
   );
 
   setUpMessageHandlers(lc, replicator, parent);

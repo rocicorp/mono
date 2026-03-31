@@ -167,9 +167,13 @@ export class RunningState {
    * When using {@link backoff()}, this method should be called when the
    * implementation receives a healthy signal (e.g. a successful
    * response). This resets the delay used in {@link backoff()}.
+   *
+   * @returns The previous backoff delay
    */
   resetBackoff() {
+    const prevDelay = this.#retryDelay;
     this.#retryDelay = this.#initialRetryDelay;
+    return prevDelay;
   }
 }
 

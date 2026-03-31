@@ -125,3 +125,25 @@ test('name mapping to client', () => {
   const uncopiedColumns = ['id', 'description'];
   expect(map.columns('noMappings', uncopiedColumns)).toBe(uncopiedColumns);
 });
+
+test('tableNameIfKnown returns mapped name for known tables', () => {
+  const stcMap = serverToClient(schema.tables);
+  expect(stcMap.tableNameIfKnown('issues')).toBe('issue');
+  expect(stcMap.tableNameIfKnown('comments')).toBe('comment');
+  expect(stcMap.tableNameIfKnown('noMappings')).toBe('noMappings');
+
+  const ctsMap = clientToServer(schema.tables);
+  expect(ctsMap.tableNameIfKnown('issue')).toBe('issues');
+  expect(ctsMap.tableNameIfKnown('comment')).toBe('comments');
+  expect(ctsMap.tableNameIfKnown('noMappings')).toBe('noMappings');
+});
+
+test('tableNameIfKnown returns undefined for unknown tables', () => {
+  const stcMap = serverToClient(schema.tables);
+  expect(stcMap.tableNameIfKnown('unknown')).toBeUndefined();
+  expect(stcMap.tableNameIfKnown('issueNotifications')).toBeUndefined();
+
+  const ctsMap = clientToServer(schema.tables);
+  expect(ctsMap.tableNameIfKnown('unknown')).toBeUndefined();
+  expect(ctsMap.tableNameIfKnown('issueNotifications')).toBeUndefined();
+});

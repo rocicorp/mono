@@ -33,6 +33,10 @@ export class NameMapper {
     return this.#getTable(src, context).tableName;
   }
 
+  tableNameIfKnown(src: string): string | undefined {
+    return this.#tables.get(src)?.tableName;
+  }
+
   columnName(table: string, src: string, ctx?: JSONValue): string {
     const dst = this.#getTable(table, ctx).columns[src];
     if (!dst) {

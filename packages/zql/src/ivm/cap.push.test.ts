@@ -1,13 +1,20 @@
-import {expect, suite, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {Cap} from './cap.ts';
+import {Catch} from './catch.ts';
+import {MemoryStorage} from './memory-storage.ts';
+import {consume} from './stream.ts';
 import {
   runPushTest,
   type SourceContents,
   type Sources,
 } from './test/fetch-and-push-tests.ts';
+import {createSource} from './test/source-factory.ts';
 import type {Format} from './view.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
 
-suite('Cap push - basic behavior', () => {
+describe('Cap push - basic behavior', () => {
   const sources: Sources = {
     issue: {
       columns: {
@@ -98,43 +105,10 @@ suite('Cap push - basic behavior', () => {
         },
       ]
     `);
-    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
-      {
-        "["cap","i1"]": {
-          "pks": [
-            "["c1"]",
-            "["c2"]",
-          ],
-          "size": 2,
-        },
-      }
-    `);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`
-      [
-        [
-          ".comments:cap",
-          "push",
-          {
-            "row": {
-              "id": "c2",
-              "issueID": "i1",
-              "text": "c2",
-            },
-            "type": "add",
-          },
-        ],
-        [
-          ".comments:cap",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -216,18 +190,7 @@ suite('Cap push - basic behavior', () => {
         },
       ]
     `);
-    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
-      {
-        "["cap","i1"]": {
-          "pks": [
-            "["c1"]",
-            "["c2"]",
-            "["c3"]",
-          ],
-          "size": 3,
-        },
-      }
-    `);
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
     expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
       `[]`,
     );
@@ -289,65 +252,10 @@ suite('Cap push - basic behavior', () => {
         },
       ]
     `);
-    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
-      {
-        "["cap","i1"]": {
-          "pks": [
-            "["c1"]",
-            "["c3"]",
-            "["c4"]",
-          ],
-          "size": 3,
-        },
-      }
-    `);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`
-      [
-        [
-          ".comments:cap",
-          "push",
-          {
-            "row": {
-              "id": "c2",
-              "issueID": "i1",
-              "text": "c2",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          ".comments:cap",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          ".comments:cap",
-          "push",
-          {
-            "row": {
-              "id": "c4",
-              "issueID": "i1",
-              "text": "c4",
-            },
-            "type": "add",
-          },
-        ],
-        [
-          ".comments:cap",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -437,42 +345,10 @@ suite('Cap push - basic behavior', () => {
         },
       ]
     `);
-    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
-      {
-        "["cap","i1"]": {
-          "pks": [
-            "["c2"]",
-          ],
-          "size": 1,
-        },
-      }
-    `);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`
-      [
-        [
-          ".comments:cap",
-          "push",
-          {
-            "row": {
-              "id": "c1",
-              "issueID": "i1",
-              "text": "c1",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          ".comments:cap",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -522,40 +398,10 @@ suite('Cap push - basic behavior', () => {
     });
 
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
-      {
-        "["cap","i1"]": {
-          "pks": [],
-          "size": 0,
-        },
-      }
-    `);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`
-      [
-        [
-          ".comments:cap",
-          "push",
-          {
-            "row": {
-              "id": "c1",
-              "issueID": "i1",
-              "text": "c1",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          ".comments:cap",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -638,18 +484,7 @@ suite('Cap push - basic behavior', () => {
         },
       ]
     `);
-    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
-      {
-        "["cap","i1"]": {
-          "pks": [
-            "["c1"]",
-            "["c2"]",
-            "["c3"]",
-          ],
-          "size": 3,
-        },
-      }
-    `);
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
     expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
       `[]`,
     );
@@ -704,48 +539,10 @@ suite('Cap push - basic behavior', () => {
         },
       ]
     `);
-    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
-      {
-        "["cap","i1"]": {
-          "pks": [
-            "["c1"]",
-            "["c2"]",
-          ],
-          "size": 2,
-        },
-      }
-    `);
-    expect(log.filter(msg => msg[0] === '.comments:cap'))
-      .toMatchInlineSnapshot(`
-      [
-        [
-          ".comments:cap",
-          "push",
-          {
-            "oldRow": {
-              "id": "c1",
-              "issueID": "i1",
-              "text": "c1",
-            },
-            "row": {
-              "id": "c1",
-              "issueID": "i1",
-              "text": "c1 updated",
-            },
-            "type": "edit",
-          },
-        ],
-        [
-          ".comments:cap",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`undefined`);
+    expect(log.filter(msg => msg[0] === '.comments:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -776,7 +573,7 @@ suite('Cap push - basic behavior', () => {
   });
 });
 
-suite('Cap push - unordered overlay in join', () => {
+describe('Cap push - unordered overlay in join', () => {
   const sources: Sources = {
     parent: {
       columns: {
@@ -906,83 +703,10 @@ suite('Cap push - unordered overlay in join', () => {
         },
       ]
     `);
-    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
-      {
-        "["cap","g1"]": {
-          "pks": [
-            "["x2"]",
-            "["x3"]",
-            "["x4"]",
-          ],
-          "size": 3,
-        },
-      }
-    `);
-    expect(log.filter(msg => msg[0] === '.children:cap'))
-      .toMatchInlineSnapshot(`
-      [
-        [
-          ".children:cap",
-          "push",
-          {
-            "row": {
-              "group": "g1",
-              "id": "x1",
-              "text": "x1",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          ".children:cap",
-          "fetch",
-          {
-            "constraint": {
-              "group": "g1",
-            },
-          },
-        ],
-        [
-          ".children:cap",
-          "fetch",
-          {
-            "constraint": {
-              "group": "g1",
-            },
-          },
-        ],
-        [
-          ".children:cap",
-          "push",
-          {
-            "row": {
-              "group": "g1",
-              "id": "x4",
-              "text": "x4",
-            },
-            "type": "add",
-          },
-        ],
-        [
-          ".children:cap",
-          "fetch",
-          {
-            "constraint": {
-              "group": "g1",
-            },
-          },
-        ],
-        [
-          ".children:cap",
-          "fetch",
-          {
-            "constraint": {
-              "group": "g1",
-            },
-          },
-        ],
-      ]
-    `);
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`undefined`);
+    expect(log.filter(msg => msg[0] === '.children:cap')).toMatchInlineSnapshot(
+      `[]`,
+    );
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -1072,4 +796,41 @@ suite('Cap push - unordered overlay in join', () => {
       ]
     `);
   });
+});
+
+describe('Cap limit 0', () => {
+  // Reproduces the bug where Cap#initialFetch asserted
+  // "Constraint should match partition key" before checking limit === 0.
+  // When Cap has limit=0 and receives a fetch with a constraint that
+  // doesn't match the (undefined) partition key, the assertion should
+  // not fire — the limit=0 check should return early first.
+  const lc = createSilentLogContext();
+
+  test.for([
+    {name: 'no partition key', partitionKey: undefined},
+    {name: 'with partition key', partitionKey: ['group'] as const},
+  ])(
+    'fetch with constraint and $name does not trigger assert',
+    ({partitionKey}) => {
+      const source = createSource(
+        lc,
+        testLogConfig,
+        'table',
+        {id: {type: 'string'}, group: {type: 'string'}},
+        ['id'],
+      );
+      consume(source.push({type: 'add', row: {id: '1', group: 'g1'}}));
+
+      const storage = new MemoryStorage();
+      const cap = new Cap(
+        source.connect([['id', 'asc']]),
+        storage,
+        0,
+        partitionKey,
+      );
+      const c = new Catch(cap);
+      const result = c.fetch({constraint: {group: 'g1'}});
+      expect(result).toEqual([]);
+    },
+  );
 });

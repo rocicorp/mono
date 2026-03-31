@@ -873,7 +873,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     },
   );
 
-  test('replication lag reports', async () => {
+  test.each([
+    ['received', false],
+    ['resumed if skipped', true],
+  ])('replication lag reports: %s', async (_name, startStreamAfterReport) => {
     await startReplication(10);
 
     const initialSend = await source.startLagReporter();
@@ -881,7 +884,21 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       nextSendTimeMs: expect.any(Number),
     });
 
-    const {changes} = await startStream('00');
+    let watermark = '00';
+    if (startStreamAfterReport) {
+      // Get the current lsn (which is at or after the lag report) and
+      // start a subscription _after_ it to skip the lag report.
+      const [{lsn}] = await upstream<
+        {lsn: string}[]
+      > /*sql*/ `SELECT pg_current_wal_lsn() as lsn`;
+
+      watermark = toStateVersionString(lsn);
+      lc.debug?.(
+        `starting subscription from ${watermark} (${fromStateVersionString(watermark)})`,
+      );
+    }
+
+    const {changes} = await startStream(watermark);
     try {
       const downstream = drainToQueue(changes);
 
@@ -929,51 +946,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       }
 
       expect(lag2[2].watermark > lag1[2].watermark).toBe(true);
-    } finally {
-      changes.cancel();
-    }
-  });
-
-  test('replication lag report re-initiated if skipped', async () => {
-    await startReplication(10);
-
-    // Initiates a lag report.
-    await source.startLagReporter();
-
-    // Get the current lsn (which is at or after the lag report) and
-    // start a subscription _after_ it to skip the lag report.
-    const [{lsn}] = await upstream<
-      {lsn: string}[]
-    > /*sql*/ `SELECT pg_current_wal_lsn() as lsn`;
-
-    const watermark = toStateVersionString(lsn);
-    lc.debug?.(
-      `starting subscription from ${watermark} (${fromStateVersionString(watermark)})`,
-    );
-
-    const {changes} = await startStream(watermark);
-    try {
-      const downstream = drainToQueue(changes);
-
-      const EXPECTED_LAG_REPORT = [
-        'status',
-        {
-          ack: false,
-          lagReport: {
-            lastTimings: {
-              sendTimeMs: expect.any(Number),
-              commitTimeMs: expect.any(Number),
-              receiveTimeMs: expect.any(Number),
-            },
-            nextSendTimeMs: expect.any(Number),
-          },
-        },
-        {
-          watermark: WATERMARK_REGEX,
-        },
-      ];
-
-      expect(await downstream.dequeue()).toMatchObject(EXPECTED_LAG_REPORT);
     } finally {
       changes.cancel();
     }

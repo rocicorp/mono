@@ -1,5 +1,6 @@
 import {
   PG_ADMIN_SHUTDOWN,
+  PG_INSUFFICIENT_PRIVILEGE,
   PG_OBJECT_IN_USE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
@@ -31,7 +32,7 @@ import type {
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
-import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {isPostgresError, pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {
   upstreamSchema,
   type ShardConfig,
@@ -110,6 +111,8 @@ import {
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
 
+const PG_17 = 170000;
+
 /**
  * Initializes a Postgres change source, including the initial sync of the
  * replica, before streaming changes from the corresponding logical replication
@@ -122,7 +125,7 @@ export async function initializePostgresChangeSource(
   replicaDbFile: string,
   syncOptions: InitialSyncOptions,
   context: ServerContext,
-  lagReportIntervalMs?: number,
+  lagReportIntervalMs = 0,
 ): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
   await initReplica(
     lc,
@@ -154,7 +157,7 @@ export async function initializePostgresChangeSource(
       shard,
       upstreamReplica,
       context,
-      lagReportIntervalMs ?? null,
+      lagReportIntervalMs,
     );
 
     return {subscriptionState, changeSource};
@@ -268,7 +271,7 @@ class PostgresChangeSource implements ChangeSource {
     shard: ShardID,
     replica: Replica,
     context: ServerContext,
-    lagReportIntervalMs: number | null,
+    lagReportIntervalMs: number,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#db = pgClient(lc, upstreamUri, {
@@ -280,18 +283,42 @@ class PostgresChangeSource implements ChangeSource {
     this.#shard = shard;
     this.#replica = replica;
     this.#context = context;
-    this.#lagReporter = lagReportIntervalMs
-      ? new LagReporter(
-          lc.withContext('component', 'lag-reporter'),
-          shard,
-          this.#db,
-          lagReportIntervalMs,
-        )
-      : null;
+    this.#lagReporter =
+      lagReportIntervalMs > 0
+        ? new LagReporter(
+            lc.withContext('component', 'lag-reporter'),
+            shard,
+            this.#db,
+            lagReportIntervalMs,
+          )
+        : null;
   }
 
-  startLagReporter(): Promise<{nextSendTimeMs: number}> | null {
-    return this.#lagReporter ? this.#lagReporter.initiateLagReport(true) : null;
+  async startLagReporter(): Promise<{nextSendTimeMs: number} | null> {
+    if (this.#lagReporter) {
+      try {
+        return await this.#lagReporter.initiateLagReport(true);
+      } catch (e) {
+        if (isPostgresError(e, PG_INSUFFICIENT_PRIVILEGE)) {
+          const functionName =
+            (this.#lagReporter.pgVersion ?? 0) >= PG_17
+              ? 'pg_logical_emit_message(boolean, text, text, boolean)'
+              : 'pg_logical_emit_message(boolean, text, text)';
+          this.#lc.warn?.(
+            `\n\nUnable to initiate replication lag reports due to insufficient privileges.` +
+              `\nTo enable replication lag reporting, run:`,
+            `\n\tGRANT EXECUTE ON FUNCTION ${functionName} TO <your_db_user>;\n\n`,
+            e,
+          );
+        } else {
+          this.#lc.error?.(
+            `Unexpected error while initiating lag reports. Lag reports will be disabled.`,
+            e,
+          );
+        }
+      }
+    }
+    return null;
   }
 
   async startStream(
@@ -354,12 +381,15 @@ class PostgresChangeSource implements ChangeSource {
         msg.tag === 'message' &&
         msg.prefix === this.#lagReporter?.messagePrefix
       ) {
-        changes.pushStatus(this.#lagReporter.processLagReport(msg));
+        changes.pushStatus(this.#lagReporter.processLagReportMessage(msg));
         return false;
       }
       // Checks if we are passed the LSN of the expected lag report, in which
       // case a new one is initiated.
-      this.#lagReporter?.checkCurrentLSN(lsn);
+      const status = this.#lagReporter?.checkCurrentLSN(lsn);
+      if (status) {
+        changes.pushStatus(status);
+      }
 
       if (msg.tag === 'keepalive') {
         changes.pushStatus([
@@ -652,10 +682,7 @@ const lagReportSchema = v.object({
 
 export type LagReport = v.Infer<typeof lagReportSchema>;
 
-type InitiatedLagReport = {
-  id: string;
-  lsn: bigint;
-};
+type InitiatedLagReport = LagReport & {lsn: bigint};
 
 class LagReporter {
   static readonly MESSAGE_SUFFIX = '/lag-report/v1';
@@ -694,27 +721,35 @@ class LagReporter {
     return this.#pgVersion;
   }
 
+  get pgVersion() {
+    return this.#pgVersion;
+  }
+
   async initiateLagReport(log = false) {
     const pgVersion = this.#pgVersion ?? (await this.#getPgVersion());
     const now = Date.now();
     const id = nanoid();
 
-    const lagReport = {id, lsn: 0n}; // lsn is filled in after the db call.
+    // lsn is filled in after the db call.
+    const lagReport = {id, sendTimeMs: now, commitTimeMs: now, lsn: 0n};
     this.#expectingLagReport = lagReport;
 
+    let commitTimeMs: number;
     let lsn: string;
-    if (pgVersion >= 170000) {
-      [{lsn}] = await this.#db<{lsn: string}[]> /*sql*/ `
-        SELECT pg_logical_emit_message(
+
+    if (pgVersion >= PG_17) {
+      [{commitTimeMs, lsn}] = await this.#db /*sql*/ `
+        WITH CTE AS (SELECT extract(epoch from now()) * 1000 AS "commitTimeMs")
+        SELECT "commitTimeMs", pg_logical_emit_message(
           false,
           ${this.messagePrefix},
           json_build_object(
             'id', ${id}::text,
             'sendTimeMs', ${now}::int8,
-            'commitTimeMs', extract(epoch from now()) * 1000
+            'commitTimeMs', "commitTimeMs"
           )::text,
           true
-        ) as lsn;
+        ) as lsn FROM CTE;
     `;
     } else {
       // Versions before PG 17 do not support the final `flush` option of
@@ -722,16 +757,17 @@ class LagReporter {
       // for replication reports when the db is idle, which is still
       // acceptable for the purpose for alerting on pathological lag, for
       // which the threshold is much higher (e.g. many seconds).
-      [{lsn}] = await this.#db<{lsn: string}[]> /*sql*/ `
-        SELECT pg_logical_emit_message(
+      [{commitTimeMs, lsn}] = await this.#db /*sql*/ `
+        WITH CTE AS (SELECT extract(epoch from now()) * 1000 as "commitTimeMs")
+        SELECT "commitTimeMs", pg_logical_emit_message(
           false,
           ${this.messagePrefix},
           json_build_object(
             'id', ${id}::text,
             'sendTimeMs', ${now}::int8,
-            'commitTimeMs', extract(epoch from now()) * 1000
+            'commitTimeMs', "commitTimeMs"
           )::text
-        ) as lsn;
+        ) as lsn FROM CTE;
     `;
     }
 
@@ -740,21 +776,50 @@ class LagReporter {
     //       already been sent through the replication stream, but this
     //       is okay since this.#expectingLagReport will have be updated.
     lagReport.lsn = toBigInt(lsn);
+    lagReport.commitTimeMs = commitTimeMs;
 
     if (log) {
-      this.#lc.info?.(`initiated lag report at lsn ${lsn}`, {id, lsn});
+      this.#lc.info?.(`initiated lag report at lsn ${lsn}`, {
+        id,
+        lsn,
+        sendTimeMs: now,
+        commitTimeMs,
+      });
     }
     return {nextSendTimeMs: now};
   }
 
-  checkCurrentLSN(lsn: bigint) {
+  /**
+   * In Postgres < 17, the pg_logical_emit_message lacks an immediate "flush"
+   * option, which can cause messages to be missed when the replication stream
+   * starts up:
+   *
+   * ```
+   * * emit message → WAL write (buffered, not flushed)
+   * * walsender reads up to current flush LSN
+   * * emitted message's LSN is beyond flush LSN → not yet visible
+   * * stream feedback/acknowledgment advances slot
+   * * WAL eventually flushes → but slot has already moved past it
+   * ```
+   *
+   * This has been seen to happen for the initial `wal_writer_delay` interval
+   * of a replication session.
+   *
+   * To account for this, the last emitted lag report is considered "received"
+   * if the stream has advanced beyond the LSN of the report.
+   */
+  checkCurrentLSN(lsn: bigint): DownstreamStatusMessage | undefined {
     if (this.#expectingLagReport?.lsn && lsn > this.#expectingLagReport.lsn) {
-      this.#lc.warn?.(
+      this.#lc.info?.(
         `LSN ${fromBigInt(lsn)} is passed expected lag report ` +
-          `${fromBigInt(this.#expectingLagReport.lsn)}. Initiating new report.`,
+          `${fromBigInt(this.#expectingLagReport.lsn)}. Processing it as received.`,
       );
-      this.#scheduleNextReport(0);
+      return this.#processLagReport(
+        this.#expectingLagReport,
+        majorVersionToString(lsn),
+      );
     }
+    return undefined;
   }
 
   #scheduleNextReport(delayMs: number) {
@@ -770,12 +835,22 @@ class LagReporter {
     }, delayMs);
   }
 
-  processLagReport(msg: MessageMessage): DownstreamStatusMessage {
+  processLagReportMessage(msg: MessageMessage): DownstreamStatusMessage {
     assert(
       msg.prefix === this.messagePrefix,
       `unexpected message prefix: ${msg.prefix}`,
     );
     const report = parseLogicalMessageContent(msg, lagReportSchema);
+    return this.#processLagReport(
+      report,
+      toStateVersionString(msg.messageLsn ?? '0/0'),
+    );
+  }
+
+  #processLagReport(
+    report: LagReport,
+    watermark: string,
+  ): DownstreamStatusMessage {
     const now = Date.now();
     const nextSendTimeMs = Math.max(
       now,
@@ -804,7 +879,7 @@ class LagReporter {
           nextSendTimeMs,
         },
       },
-      {watermark: toStateVersionString(msg.messageLsn ?? '0/0')},
+      {watermark},
     ];
   }
 }

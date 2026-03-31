@@ -7,7 +7,6 @@ import type {
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import type {
   PokeEndBody,
@@ -273,9 +272,14 @@ export function mergePokes(
       }
       if (pokePart.rowsPatch) {
         for (const p of pokePart.rowsPatch) {
-          mergedPatch.push(
-            rowsPatchOpToReplicachePatchOp(p, schema, serverToClient),
+          const patchOp = rowsPatchOpToReplicachePatchOp(
+            p,
+            schema,
+            serverToClient,
           );
+          if (patchOp) {
+            mergedPatch.push(patchOp);
+          }
         }
       }
       if (pokePart.mutationsPatch) {
@@ -348,11 +352,17 @@ function rowsPatchOpToReplicachePatchOp(
   op: RowPatchOp,
   schema: Schema,
   serverToClient: NameMapper,
-): PatchOperationInternal {
+): PatchOperationInternal | undefined {
   if (op.op === 'clear') {
     return op;
   }
-  const tableName = serverToClient.tableName(op.tableName, op as JSONValue);
+  // Skip rows for tables not in the client schema. This can happen when
+  // the server-side query AST references tables (e.g. issueNotifications)
+  // that are not yet part of the client schema definition.
+  const tableName = serverToClient.tableNameIfKnown(op.tableName);
+  if (!tableName) {
+    return undefined;
+  }
   switch (op.op) {
     case 'del':
       return {

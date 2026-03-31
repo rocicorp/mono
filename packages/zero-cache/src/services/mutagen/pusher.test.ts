@@ -675,6 +675,48 @@ describe('pusher service', () => {
     // No fetch call should be made
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  test('ack mutation responses uses custom URL from initConnection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: ['http://default.com', 'http://custom.com/push'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+
+    // Initialize connection with custom URL
+    pusher.initConnection(
+      clientID,
+      wsID,
+      'http://custom.com/push?tenant=foo',
+      undefined,
+    );
+
+    await pusher.ackMutationResponses({
+      clientID: 'test-client',
+      id: 42,
+    });
+
+    await pusher.stop();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url] = fetch.mock.calls[0];
+    // Should use the custom URL with query params, not the default URL
+    expect(url).toBe(
+      'http://custom.com/push?tenant=foo&schema=zero_0&appID=zero',
+    );
+  });
 });
 
 describe('initConnection', () => {

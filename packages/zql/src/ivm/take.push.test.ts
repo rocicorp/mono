@@ -1,11 +1,11 @@
-import {describe, expect, suite, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {SourceChange} from './source.ts';
 import {runPushTest, type Sources} from './test/fetch-and-push-tests.ts';
 
-suite('take with no partition', () => {
-  suite('add', () => {
+describe('take with no partition', () => {
+  describe('add', () => {
     test('limit 0', () => {
       const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
@@ -779,7 +779,7 @@ suite('take with no partition', () => {
     });
   });
 
-  suite('remove', () => {
+  describe('remove', () => {
     test('limit 0', () => {
       const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
@@ -2054,7 +2054,7 @@ suite('take with no partition', () => {
     });
   });
 
-  suite('edit', () => {
+  describe('edit', () => {
     const base = {
       sourceRows: [
         {id: 'i1', created: 100, text: 'a'},
@@ -3517,8 +3517,8 @@ suite('take with no partition', () => {
   });
 });
 
-suite('take with partition', () => {
-  suite('add', () => {
+describe('take with partition', () => {
+  describe('add', () => {
     test('limit 0', () => {
       const {data, messages, storage, pushes} = takeTestWithPartition({
         sourceRows: [
@@ -4257,7 +4257,7 @@ suite('take with partition', () => {
     });
   });
 
-  suite('remove', () => {
+  describe('remove', () => {
     test('limit 0', () => {
       const {data, messages, storage, pushes} = takeTestWithPartition({
         sourceRows: [
@@ -4622,7 +4622,7 @@ suite('take with partition', () => {
     });
   });
 
-  suite('edit', () => {
+  describe('edit', () => {
     const base = {
       sourceRows: [
         {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
@@ -7944,6 +7944,86 @@ suite('take with partition', () => {
       });
     });
   });
+});
+
+describe('take limit 0 with related query', () => {
+  // Reproduces the bug where Take#initialFetch asserted
+  // "Constraint should match partition key" before checking limit === 0.
+  // When a query has limit(0).related('child'), pushing data for the
+  // child source triggers Join#pushChildChange which fetches from
+  // Take(limit=0) with a join-correlation constraint. Before the fix,
+  // the assertion fired before the limit check.
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        ownerId: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    owner: {
+      columns: {
+        id: {type: 'string'},
+        name: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    limit: 0,
+    related: [
+      {
+        system: 'client',
+        correlation: {parentField: ['ownerId'], childField: ['id']},
+        subquery: {
+          table: 'owner',
+          alias: 'owner',
+          orderBy: [['id', 'asc']],
+        },
+      },
+    ],
+  };
+
+  const format = {
+    singular: false,
+    relationships: {
+      owner: {singular: true, relationships: {}},
+    },
+  };
+
+  test.for([
+    {
+      name: 'single issue',
+      issues: [{id: 'i1', ownerId: 'o1'}],
+    },
+    {
+      name: 'multiple issues',
+      issues: [
+        {id: 'i1', ownerId: 'o1'},
+        {id: 'i2', ownerId: 'o1'},
+      ],
+    },
+  ])(
+    'push to related source with $name does not trigger assert',
+    ({issues}) => {
+      const {data, pushes} = runPushTest({
+        sources,
+        sourceContents: {
+          issue: issues,
+          owner: [],
+        },
+        ast,
+        format,
+        pushes: [['owner', {type: 'add', row: {id: 'o1', name: 'Alice'}}]],
+      });
+
+      expect(data).toEqual([]);
+      expect(pushes).toEqual([]);
+    },
+  );
 });
 
 type TakeTest = {
