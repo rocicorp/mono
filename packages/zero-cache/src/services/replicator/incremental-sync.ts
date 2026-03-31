@@ -1,13 +1,17 @@
 import type {LogContext} from '@rocicorp/logger';
+import {AbortError} from '../../../../shared/src/abort-error.ts';
+import type {Enum} from '../../../../shared/src/enum.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {
+  errorTypeToReadableName,
   PROTOCOL_VERSION,
   type ChangeStreamer,
   type Downstream,
 } from '../change-streamer/change-streamer.ts';
+import type * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {RunningState} from '../running-state.ts';
 import type {CommitResult} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
@@ -16,6 +20,8 @@ import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {ReplicationReportRecorder} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
+
+type ErrorType = Enum<typeof ErrorType>;
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -120,10 +126,19 @@ export class IncrementalSyncer {
               }
               break;
             }
-            case 'error':
-              // Unrecoverable error. Stop the service.
-              this.stop(lc, message[1]);
+            case 'error': {
+              // Signal from the replication-manager that the view-syncer must
+              // shut down and restore a new backup from litestream.
+              const {type, message: msg} = message[1];
+              this.stop(
+                lc,
+                // Note: The AbortError indicates a clean / intentional shutdown.
+                new AbortError(
+                  `${errorTypeToReadableName(type as ErrorType)}: ${msg}`,
+                ),
+              );
               break;
+            }
             default: {
               const msg = message[1];
               if (msg.tag === 'backfill' && msg.status) {
