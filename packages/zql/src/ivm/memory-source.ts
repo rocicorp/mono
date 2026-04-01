@@ -1,8 +1,8 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
-import {must} from '../../../shared/src/must.ts';
 import {once} from '../../../shared/src/iterables.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {
   Condition,
   Ordering,
@@ -257,8 +257,10 @@ export class MemorySource implements Source {
   *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
     const requestedSort = must(conn.sort);
     const {compareRows} = conn;
-    const connectionComparator = (r1: Row, r2: Row) =>
-      compareRows(r1, r2) * (req.reverse ? -1 : 1);
+    // Avoid allocating a new closure when not reversing (the common case).
+    const connectionComparator: Comparator = req.reverse
+      ? (r1, r2) => compareRows(r2, r1)
+      : compareRows;
 
     const pkConstraint = primaryKeyConstraintFromFilters(
       conn.filters?.condition,
@@ -289,8 +291,10 @@ export class MemorySource implements Source {
 
     const index = this.#getOrCreateIndex(indexSort, conn);
     const {data, comparator: compare} = index;
-    const indexComparator = (r1: Row, r2: Row) =>
-      compare(r1, r2) * (req.reverse ? -1 : 1);
+    // Avoid allocating a new closure when not reversing (the common case).
+    const indexComparator: Comparator = req.reverse
+      ? (r1, r2) => compare(r2, r1)
+      : compare;
 
     const startAt = req.start?.row;
 
