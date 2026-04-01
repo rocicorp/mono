@@ -8,7 +8,7 @@ import {
   type JWTPayload,
   type KeyLike,
 } from 'jose';
-import type {AuthConfig} from '../config/zero-config.ts';
+import type {LegacyJWTAuthConfig} from '../config/zero-config.ts';
 
 /** @deprecated */
 export async function createJwkPair() {
@@ -38,7 +38,7 @@ function getRemoteKeyset(jwksUrl: string) {
 }
 
 /** @deprecated */
-export const tokenConfigOptions = (config: AuthConfig) => {
+export const tokenConfigOptions = (config: LegacyJWTAuthConfig) => {
   const tokenOptions = (['jwk', 'secret', 'jwksUrl'] as const).filter(
     key => config[key] !== undefined,
   );
@@ -48,7 +48,7 @@ export const tokenConfigOptions = (config: AuthConfig) => {
 
 /** @deprecated */
 export async function verifyToken(
-  config: AuthConfig,
+  config: LegacyJWTAuthConfig,
   token: string,
   verifyOptions: JWTClaimVerificationOptions,
 ): Promise<JWTPayload> {
