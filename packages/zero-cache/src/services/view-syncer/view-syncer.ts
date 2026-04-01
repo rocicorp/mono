@@ -910,7 +910,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         lc.debug?.('Synced ttlClock', rid, `in ${Date.now() - start} ms`);
       })
       .catch(e => {
-        lc.error?.(
+        lc.warn?.(
           'failed to update TTL clock',
           rid,
           `after ${Date.now() - start} ms`,
