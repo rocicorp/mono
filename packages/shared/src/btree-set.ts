@@ -251,10 +251,10 @@ function valuesFrom<K>(
 
   if (
     !inclusive &&
-    i < leaf.keys.length &&
+    lowestKey !== undefined &&
     // +1 because we did -1 above.
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    comparator(leaf.keys[i + 1], lowestKey!) === 0
+    i + 1 < leaf.keys.length &&
+    comparator(leaf.keys[i + 1], lowestKey) === 0
   ) {
     i++;
   }
