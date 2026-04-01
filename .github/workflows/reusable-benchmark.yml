@@ -76,8 +76,8 @@ jobs:
           --github-actions '${{ github.token }}' \
           --start-point main \
           --threshold-measure throughput \
-          --threshold-test delta_iqr \
-          --threshold-lower-boundary 3.0 \
+          --threshold-test percentage \
+          --threshold-lower-boundary 0.15 \
           --threshold-min-sample-size 10 \
           --threshold-max-sample-size 30 \
           --err
@@ -100,8 +100,8 @@ jobs:
           --start-point-clone-thresholds \
           --start-point-reset \
           --threshold-measure throughput \
-          --threshold-test delta_iqr \
-          --threshold-lower-boundary 3.0 \
+          --threshold-test percentage \
+          --threshold-lower-boundary 0.15 \
           --threshold-min-sample-size 10 \
           --threshold-max-sample-size 30 \
           --err
