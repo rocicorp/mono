@@ -93,7 +93,7 @@ export class ExpressionBuilder<
   cmp(
     field: string,
     opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
-    value?: ParameterReference | LiteralValue | undefined,
+    value?: ParameterReference | LiteralValue,
   ): Condition {
     if (arguments.length === 2) {
       return cmp(field, opOrValue);
@@ -192,7 +192,7 @@ export function not(expression: Condition): Condition {
 export function cmp(
   field: string,
   opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
-  value?: ParameterReference | LiteralValue | undefined,
+  value?: ParameterReference | LiteralValue,
 ): Condition {
   let op: SimpleOperator;
   let actualValue: ParameterReference | LiteralValue | undefined;

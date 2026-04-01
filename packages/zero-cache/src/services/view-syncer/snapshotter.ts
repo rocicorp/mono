@@ -100,7 +100,7 @@ export class Snapshotter {
     lc: LogContext,
     dbFile: string,
     {appID}: AppID,
-    pageCacheSizeKib?: number | undefined,
+    pageCacheSizeKib?: number,
   ) {
     this.#lc = lc;
     this.#dbFile = dbFile;

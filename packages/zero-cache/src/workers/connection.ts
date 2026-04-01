@@ -243,7 +243,7 @@ export class Connection {
       }
       case 'transient': {
         for (const error of result.errors) {
-          void this.sendError(error);
+          this.sendError(error);
         }
       }
     }

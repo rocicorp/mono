@@ -165,7 +165,7 @@ export class ColumnMetadataStore {
     tableName: string,
     columnName: string,
     spec: ColumnSpec,
-    backfill?: BackfillID | undefined,
+    backfill?: BackfillID,
   ): void {
     const metadata = pgColumnSpecToMetadata(spec);
     this.#insertMetadata(tableName, columnName, metadata, backfill);
@@ -175,7 +175,7 @@ export class ColumnMetadataStore {
     tableName: string,
     columnName: string,
     metadata: Omit<ColumnMetadata, 'isBackfilling'>,
-    backfill?: BackfillID | undefined,
+    backfill?: BackfillID,
   ): void {
     this.#insertStmt.run(
       tableName,

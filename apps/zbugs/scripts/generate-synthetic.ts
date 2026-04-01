@@ -619,8 +619,9 @@ async function main() {
     const descTemplate =
       cat.descriptionTemplates[(i * 3) % cat.descriptionTemplates.length];
     let description = fillTemplate(descTemplate, project.components);
-    if (description.length > 10240)
+    if (description.length > 10240) {
       description = description.slice(0, 10237) + '...';
+    }
 
     // Timestamps - use faker for realistic date spread
     const created = faker.date

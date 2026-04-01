@@ -29,10 +29,7 @@ export class ApplicationError<
    */
   readonly #details: T;
 
-  constructor(
-    message: string,
-    options?: ApplicationErrorOptions<T> | undefined,
-  ) {
+  constructor(message: string, options?: ApplicationErrorOptions<T>) {
     super(message, {cause: options?.cause});
     this.name = 'ApplicationError';
     this.#details = options?.details ?? (undefined as T);

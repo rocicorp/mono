@@ -775,7 +775,7 @@ export function* generateWithOverlayUnordered(
   overlay: Overlay | undefined,
   lastPushedEpoch: number,
   primaryKey: PrimaryKey,
-  filterPredicate?: ((row: Row) => boolean) | undefined,
+  filterPredicate?: (row: Row) => boolean,
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {

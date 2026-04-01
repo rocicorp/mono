@@ -171,8 +171,8 @@ export class PipelineDriver {
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
     yieldThresholdMs: () => number,
-    enablePlanner?: boolean | undefined,
-    config?: ZeroConfig | undefined,
+    enablePlanner?: boolean,
+    config?: ZeroConfig,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;

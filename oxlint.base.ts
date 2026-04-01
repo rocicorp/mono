@@ -1,4 +1,4 @@
-import type { OxlintConfig } from 'oxlint';
+import type {OxlintConfig} from 'oxlint';
 
 /**
  * Shared oxlint configuration for all packages in the monorepo.
@@ -26,6 +26,7 @@ export const baseConfig = {
     'no-unsafe-optional-chaining': 'off',
 
     'no-console': 'error',
+    'curly': ['error', 'multi-line'],
     'eqeqeq': 'error',
     'arrow-body-style': 'error',
 
