@@ -1424,8 +1424,8 @@ describe('change-source/tables/ddl', () => {
     [
       `CREATE TABLE IF NOT EXISTS pub.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);`,
       [
-        /relation \"foo\" already exists, skipping/,
-        /ignoring CREATE TABLE .*\"object_identity\":null/,
+        /relation "foo" already exists, skipping/,
+        /ignoring CREATE TABLE .*"object_identity":null/,
       ],
     ],
   ] satisfies [string, RegExp[]][])(

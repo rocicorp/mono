@@ -38,7 +38,7 @@ export interface Pusher extends RefCountedService {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
-    onAuthFailure?: (() => void) | undefined,
+    onAuthFailure?: () => void,
   ): Source<Downstream>;
   enqueuePush(
     clientID: string,
@@ -109,7 +109,7 @@ export class PusherService implements Service, Pusher {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
-    onAuthFailure?: (() => void) | undefined,
+    onAuthFailure?: () => void,
   ) {
     return this.#pusher.initConnection(
       clientID,
@@ -347,7 +347,7 @@ class PushWorker {
     wsID: string,
     userPushURL: string | undefined,
     userPushHeaders: Record<string, string> | undefined,
-    onAuthFailure?: (() => void) | undefined,
+    onAuthFailure?: () => void,
   ) {
     const existing = this.#clients.get(clientID);
     if (existing && existing.wsID === wsID) {

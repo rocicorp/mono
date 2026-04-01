@@ -829,6 +829,10 @@ describe('change-streamer/service', () => {
       await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['01'], ['01'], ['03'], ['04'], ['05'], ['06'], ['07'], ['08']]);
 
+    // schedule a cleanups at 04 and 06
+    streamer.scheduleCleanup('06');
+    streamer.scheduleCleanup('04');
+
     expect(setTimeoutFn).toHaveBeenCalledTimes(1);
     expect(setTimeoutFn.mock.calls[0][1]).toBe(30000);
 

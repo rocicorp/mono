@@ -106,8 +106,9 @@ function histogramBins(stats: Stats, size: number, percentile: number): Bins {
     min = 0;
     bins[clamp(0, Math.round((stats.avg - min) / step), size - 1)] = 1;
   } else {
-    for (let o = 0; o <= offset; o++)
+    for (let o = 0; o <= offset; o++) {
       bins[Math.round((stats.samples[o] - min) / step)]++;
+    }
   }
 
   return {
@@ -137,9 +138,9 @@ function histogramAscii(
       if (colors) l += ansi.cyan;
       for (let o = 0; o < avg; o++) {
         const b = bins[o];
-        if (y === 0)
+        if (y === 0) {
           l += symbols[clamp(0, Math.round(b * scale), symbols.length - 1)];
-        else {
+        } else {
           const lo = y * symbols.length;
           const hi = (y + 1) * symbols.length;
           const offset = Math.round(b * scale) | 0;
@@ -154,9 +155,9 @@ function histogramAscii(
     {
       if (colors) l += ansi.yellow;
       const b = bins[avg];
-      if (y === 0)
+      if (y === 0) {
         l += symbols[clamp(0, Math.round(b * scale), symbols.length - 1)];
-      else {
+      } else {
         const lo = y * symbols.length;
         const hi = (y + 1) * symbols.length;
         const offset = Math.round(b * scale) | 0;
@@ -171,9 +172,9 @@ function histogramAscii(
       if (colors) l += ansi.magenta;
       for (let o = 1 + avg; o < bins.length; o++) {
         const b = bins[o];
-        if (y === 0)
+        if (y === 0) {
           l += symbols[clamp(0, Math.round(b * scale), symbols.length - 1)];
-        else {
+        } else {
           const lo = y * symbols.length;
           const hi = (y + 1) * symbols.length;
           const offset = Math.round(b * scale) | 0;
@@ -222,7 +223,7 @@ export function printBenchResult(
   const histogram = histogramAscii(histBins, histHeight, colors);
 
   if (!colors) l += avg + '/iter' + ' ' + p75 + ' ' + histogram[0];
-  else
+  else {
     l +=
       ansi.bold +
       ansi.yellow +
@@ -237,6 +238,7 @@ export function printBenchResult(
       ansi.reset +
       ' ' +
       histogram[0];
+  }
   print(l);
 
   l = '';
@@ -247,7 +249,7 @@ export function printBenchResult(
 
   l += ' '.repeat(diff + nameWidth - 8);
   if (!colors) l += '(' + min + ' … ' + max + ')';
-  else
+  else {
     l +=
       ansi.gray +
       '(' +
@@ -264,6 +266,7 @@ export function printBenchResult(
       ansi.gray +
       ')' +
       ansi.reset;
+  }
   l += ' ';
   if (!colors) l += p99 + ' ' + histogram[1];
   else l += ansi.gray + p99 + ansi.reset + ' ' + histogram[1];
@@ -276,7 +279,7 @@ export function printBenchResult(
     const ha = fmtBytes(stats.heap.avg).padStart(9);
 
     if (!colors) l += '(' + hm + ' … ' + hx + ') ' + ha + ' ' + histogram[2];
-    else
+    else {
       l +=
         ansi.gray +
         '(' +
@@ -298,6 +301,7 @@ export function printBenchResult(
         ansi.reset +
         ' ' +
         histogram[2];
+    }
     print(l);
   }
 }
