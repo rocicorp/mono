@@ -383,19 +383,23 @@ class AnonymousTelemetryManager {
       process.env.ECS_CONTAINER_METADATA_URI_V4 ||
       process.env.ECS_CONTAINER_METADATA_URI ||
       process.env.AWS_EXECUTION_ENV
-    )
+    ) {
       return 'aws';
-    if (process.env.RAILWAY_ENV || process.env.RAILWAY_STATIC_URL)
+    }
+    if (process.env.RAILWAY_ENV || process.env.RAILWAY_STATIC_URL) {
       return 'railway';
+    }
     if (process.env.RENDER || process.env.RENDER_SERVICE_ID) return 'render';
     if (
       process.env.GCP_PROJECT ||
       process.env.GCLOUD_PROJECT ||
       process.env.GOOGLE_CLOUD_PROJECT
-    )
+    ) {
       return 'gcp';
-    if (process.env.COOLIFY_URL || process.env.COOLIFY_CONTAINER_NAME)
+    }
+    if (process.env.COOLIFY_URL || process.env.COOLIFY_CONTAINER_NAME) {
       return 'coolify';
+    }
     if (process.env.CONTAINER_APP_REVISION) return 'azure';
     if (process.env.FLIGHTCONTROL || process.env.FC_URL) return 'flightcontrol';
     return 'unknown';

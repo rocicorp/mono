@@ -398,7 +398,7 @@ test('compile with timestamp (with timezone)', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "timestampsTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000)::bigint + 86400000) % 86400000 as "timestampWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
-        WHERE "timestampsTable_0"."timestampWithTz" = to_timestamp($1::text::bigint / 1000.0)
+        WHERE "timestampsTable_0"."timestampWithTz" = to_timestamp($1::text::numeric / 1000.0)
          
         ORDER BY "timestampsTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
@@ -430,7 +430,7 @@ test('compile with timestamp array (with timezone)', () => {
         FROM (SELECT "timestampsTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000)::bigint + 86400000) % 86400000 as "timestampWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithTzArray" = ARRAY(
-              SELECT to_timestamp(value::text::bigint / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
+              SELECT to_timestamp(value::text::numeric / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
             )
          
         ORDER BY "timestampsTable_0"."id" ASC NULLS FIRST
@@ -462,7 +462,7 @@ test('compile with timestamp (without timezone)', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "timestampsTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000)::bigint + 86400000) % 86400000 as "timestampWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
-        WHERE "timestampsTable_0"."timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'
+        WHERE "timestampsTable_0"."timestampWithoutTz" = to_timestamp($1::text::numeric / 1000.0) AT TIME ZONE 'UTC'
          
         ORDER BY "timestampsTable_0"."id" ASC NULLS FIRST
         ) "zql_root"",
@@ -494,7 +494,7 @@ test('compile with timestamp (without timezone) array', () => {
         FROM (SELECT "timestampsTable_0"."id" as "id",((EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000)::bigint + 86400000) % 86400000 as "timestampWithTz",ARRAY(SELECT ((EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000)::bigint + 86400000) % 86400000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithoutTzArray" = ARRAY(
-              SELECT to_timestamp(value::text::bigint / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
+              SELECT to_timestamp(value::text::numeric / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
             )
          
         ORDER BY "timestampsTable_0"."id" ASC NULLS FIRST

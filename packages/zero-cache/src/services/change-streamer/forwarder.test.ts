@@ -161,7 +161,7 @@ describe('change-streamer/forwarder', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    void forwarder.forward([
+    forwarder.forward([
       '11',
       ['begin', messages.begin(), {commitWatermark: '14'}],
     ]);

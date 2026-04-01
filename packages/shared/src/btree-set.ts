@@ -194,8 +194,9 @@ function valuesFromReversed<K>(
 ): IterableIterator<K> {
   if (highestKey === undefined) {
     highestKey = maxKey;
-    if (highestKey === undefined)
-      return iterator<K>(() => ({done: true, value: undefined})); // collection is empty
+    if (highestKey === undefined) {
+      return iterator<K>(() => ({done: true, value: undefined}));
+    } // collection is empty
   }
   let [nodeQueue, nodeIndex, leaf] =
     findPath(highestKey, root, comparator) ||
@@ -570,9 +571,12 @@ class BNodeInternal<K> extends BNode<K> {
     const {children} = this;
     if (i >= 0 && i + 1 < children.length) {
       if (children[i].keys.length + children[i + 1].keys.length <= maxSize) {
-        if (children[i].isShared)
-          // cloned already UNLESS i is outside scan range
+        if (
+          children[i].isShared
+        ) // cloned already UNLESS i is outside scan range
+        {
           children[i] = children[i].clone();
+        }
         children[i].mergeSibling(children[i + 1], maxSize);
         children.splice(i + 1, 1);
         this.keys.splice(i + 1, 1);
