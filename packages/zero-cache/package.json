@@ -52,7 +52,7 @@
     "basic-auth": "^2.0.1",
     "chalk": "^5.3.0",
     "cloudevents": "^10.0.0",
-    "compare-utf8": "^0.1.1",
+    "compare-utf8": "^0.2.0",
     "defu": "^6.1.4",
     "eventemitter3": "^5.0.1",
     "fastify": "^5.0.0",

@@ -38,7 +38,7 @@
     "@types/semver": "^7.5.1",
     "@types/strip-ansi": "^3.0.0",
     "@vitest/runner": "4.1.2",
-    "compare-utf8": "^0.1.1",
+    "compare-utf8": "^0.2.0",
     "fast-check": "^3.18.0",
     "package-up": "^5.0.0",
     "playwright": "^1.53.2",
