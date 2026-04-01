@@ -62,7 +62,9 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
         run: npm run --silent bench:bmf:silent > output.json
 
-      - name: Upload benchmarks results to bencher.dev (main)
+      # If too many alerts, increase threshold-lower-boundary to 2.5
+      # If not enough alerts, decrease threshold-lower-boundary to 1.5
+      - name: Upload benchmark results (main)
         if: ${{ !inputs.is_pr }}
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -76,13 +78,13 @@ jobs:
           --github-actions '${{ github.token }}' \
           --start-point main \
           --threshold-measure throughput \
-          --threshold-test t_test \
-          --threshold-lower-boundary 0.99 \
-          --threshold-min-sample-size 20 \
-          --threshold-max-sample-size 60 \
+          --threshold-test delta_iqr \
+          --threshold-lower-boundary 2 \
+          --threshold-min-sample-size 5 \
+          --threshold-max-sample-size 50 \
           --err
 
-      - name: Upload PR benchmarks results to bencher.dev
+      - name: Upload benchmark results (PR)
         if: ${{ inputs.is_pr }}
         working-directory: ${{ inputs.working_directory }}
         run: |
@@ -100,8 +102,8 @@ jobs:
           --start-point-clone-thresholds \
           --start-point-reset \
           --threshold-measure throughput \
-          --threshold-test t_test \
-          --threshold-lower-boundary 0.99 \
-          --threshold-min-sample-size 20 \
-          --threshold-max-sample-size 60 \
+          --threshold-test delta_iqr \
+          --threshold-lower-boundary 2 \
+          --threshold-min-sample-size 5 \
+          --threshold-max-sample-size 50 \
           --err
