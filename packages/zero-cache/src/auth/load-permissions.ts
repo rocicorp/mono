@@ -21,7 +21,7 @@ export function loadPermissions(
   lc: LogContext,
   replica: StatementRunner,
   appID: string,
-  config?: ZeroConfig | undefined,
+  config?: ZeroConfig,
 ): LoadedPermissions {
   const {permissions, hash} = replica.get(
     `SELECT permissions, hash FROM "${appID}.permissions"`,
@@ -66,7 +66,7 @@ export function reloadPermissionsIfChanged(
   replica: StatementRunner,
   appID: string,
   current: LoadedPermissions | null,
-  config?: ZeroConfig | undefined,
+  config?: ZeroConfig,
 ): {permissions: LoadedPermissions; changed: boolean} {
   if (current === null) {
     return {

@@ -325,8 +325,9 @@ function formatFn(
           .map((name): string => {
             if (typeof name === 'string') return escapeIdentifier(name);
 
-            if (!localIdentifiers.has(name))
+            if (!localIdentifiers.has(name)) {
               localIdentifiers.set(name, `__local_${localIdentifiers.size}__`);
+            }
 
             return escapeIdentifier(localIdentifiers.get(name)!);
           })

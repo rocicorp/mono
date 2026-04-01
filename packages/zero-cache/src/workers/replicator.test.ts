@@ -22,7 +22,7 @@ describe('workers/replicator', () => {
 
     const [parent, child] = inProcChannel();
 
-    void setUpMessageHandlers(lc, replicator, parent);
+    setUpMessageHandlers(lc, replicator, parent);
 
     originalSub.push({state: 'version-ready', testSeqNum: 1});
     originalSub.push({state: 'version-ready', testSeqNum: 2});

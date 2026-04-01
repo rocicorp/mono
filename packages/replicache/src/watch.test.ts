@@ -537,7 +537,7 @@ describe('watch with initial values', () => {
 
       const unwatch = rep.experimentalWatch(
         diff => {
-          void q.enqueue(diff);
+          q.enqueue(diff);
         },
         {initialValuesInFirstDiff: true, prefix},
       );

@@ -119,7 +119,7 @@ describe('change-stream-multiplexer', () => {
       {ack: false},
       {watermark: '124'},
     ];
-    void stream.pushStatus(status);
+    stream.pushStatus(status);
     expect(listenFn1).toHaveBeenNthCalledWith(3, status);
     expect(listenFn2).toHaveBeenNthCalledWith(3, status);
   });
