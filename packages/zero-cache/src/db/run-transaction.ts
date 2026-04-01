@@ -44,7 +44,7 @@ export function runTx<T>(
     // application logic; for potentially long-running operations like
     // migrations and background cleanup, the statement timeout should be
     // disabled to prevent these operations from timing out.
-    void sql`SET LOCAL statement_timeout = 0;`.execute();
+    void sql`SET LOCAL statement_timeout = 0;`.execute().catch(() => {});
 
     // Set an idle_in_transaction_session_timeout to limit the blast radius of
     // orphaned transactions. The zero-cache does not keep transactions open
@@ -54,7 +54,8 @@ export function runTx<T>(
       .unsafe(
         /*sql*/ `SET LOCAL idle_in_transaction_session_timeout = ${IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS}`,
       )
-      .execute();
+      .execute()
+      .catch(() => {});
 
     return fn(sql);
   });
