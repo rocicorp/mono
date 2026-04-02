@@ -144,7 +144,10 @@ async function getViteConfig(): Promise<InlineConfig> {
 }
 
 // Bundle size dashboard config: single entry, no code splitting, minified
-// Uses esbuild's dropLabels to strip BUNDLE_SIZE labeled code blocks
+// Uses Rolldown's transform.dropLabels to strip BUNDLE_SIZE labeled code blocks
+// before bundling so the tree-shaker can eliminate the dead Inspector code.
+// Note: the old esbuild.dropLabels approach is silently ignored in Vite 8
+// because Vite 8 uses Rolldown's oxc transforms instead of esbuild.
 const bundleSizeConfig: InlineConfig = {
   ...baseConfig,
   build: {
@@ -159,15 +162,15 @@ const bundleSizeConfig: InlineConfig = {
         format: 'es',
         entryFileNames: '[name].js',
         // No code splitting for bundle size measurements
-        inlineDynamicImports: true,
+        codeSplitting: false,
       },
       treeshake: {
         moduleSideEffects: false,
       },
+      transform: {
+        dropLabels: ['BUNDLE_SIZE'],
+      },
     },
-  },
-  esbuild: {
-    dropLabels: ['BUNDLE_SIZE'],
   },
 };
 
