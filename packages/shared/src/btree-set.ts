@@ -3,6 +3,7 @@ import {assert} from './asserts.ts';
 const MAX_NODE_SIZE = 32;
 
 type Comparator<K> = (a: K, b: K) => number;
+
 export class BTreeSet<K> {
   #root: BNode<K> = emptyLeaf as BNode<K>;
   size: number = 0;
@@ -132,6 +133,105 @@ export class BTreeSet<K> {
   }
 }
 
+class BTreeForwardIterator<K> implements IterableIterator<K> {
+  readonly #nodeQueue: BNode<K>[][];
+  readonly #nodeIndex: number[];
+  #leaf: BNode<K>;
+  #i: number;
+
+  constructor(
+    nodeQueue: BNode<K>[][],
+    nodeIndex: number[],
+    leaf: BNode<K>,
+    startI: number,
+  ) {
+    this.#nodeQueue = nodeQueue;
+    this.#nodeIndex = nodeIndex;
+    this.#leaf = leaf;
+    this.#i = startI;
+  }
+
+  next(): IteratorResult<K> {
+    for (;;) {
+      if (++this.#i < this.#leaf.keys.length) {
+        return {done: false, value: this.#leaf.keys[this.#i]};
+      }
+
+      let level = -1;
+      for (;;) {
+        if (++level >= this.#nodeQueue.length) {
+          return {done: true, value: undefined as unknown as K};
+        }
+        if (++this.#nodeIndex[level] < this.#nodeQueue[level].length) {
+          break;
+        }
+      }
+      for (; level > 0; level--) {
+        this.#nodeQueue[level - 1] = (
+          this.#nodeQueue[level][this.#nodeIndex[level]] as BNodeInternal<K>
+        ).children;
+        this.#nodeIndex[level - 1] = 0;
+      }
+      this.#leaf = this.#nodeQueue[0][this.#nodeIndex[0]];
+      this.#i = -1;
+    }
+  }
+
+  [Symbol.iterator]() {
+    return this;
+  }
+}
+
+class BTreeReverseIterator<K> implements IterableIterator<K> {
+  readonly #nodeQueue: BNode<K>[][];
+  readonly #nodeIndex: number[];
+  #leaf: BNode<K>;
+  #i: number;
+
+  constructor(
+    nodeQueue: BNode<K>[][],
+    nodeIndex: number[],
+    leaf: BNode<K>,
+    startI: number,
+  ) {
+    this.#nodeQueue = nodeQueue;
+    this.#nodeIndex = nodeIndex;
+    this.#leaf = leaf;
+    this.#i = startI;
+  }
+
+  next(): IteratorResult<K> {
+    for (;;) {
+      if (--this.#i >= 0) {
+        return {done: false, value: this.#leaf.keys[this.#i]};
+      }
+
+      let level;
+      // Advance to the next leaf node
+      for (level = -1; ; ) {
+        if (++level >= this.#nodeQueue.length) {
+          return {done: true, value: undefined as unknown as K};
+        }
+        if (--this.#nodeIndex[level] >= 0) {
+          break;
+        }
+      }
+      for (; level > 0; level--) {
+        this.#nodeQueue[level - 1] = (
+          this.#nodeQueue[level][this.#nodeIndex[level]] as BNodeInternal<K>
+        ).children;
+        this.#nodeIndex[level - 1] = this.#nodeQueue[level - 1].length - 1;
+      }
+      this.#leaf = this.#nodeQueue[0][this.#nodeIndex[0]];
+      this.#i = this.#leaf.keys.length;
+    }
+  }
+
+  [Symbol.iterator]() {
+    return this;
+  }
+}
+
 function valuesFrom<K>(
   root: BNode<K>,
   comparator: Comparator<K>,
@@ -151,38 +251,15 @@ function valuesFrom<K>(
 
   if (
     !inclusive &&
-    i < leaf.keys.length &&
+    lowestKey !== undefined &&
     // +1 because we did -1 above.
-    comparator(leaf.keys[i + 1], lowestKey!) === 0
+    i + 1 < leaf.keys.length &&
+    comparator(leaf.keys[i + 1], lowestKey) === 0
   ) {
     i++;
   }
 
-  return iterator<K>(() => {
-    for (;;) {
-      if (++i < leaf.keys.length) {
-        return {done: false, value: leaf.keys[i]};
-      }
-
-      let level = -1;
-      for (;;) {
-        if (++level >= nodeQueue.length) {
-          return {done: true, value: undefined};
-        }
-        if (++nodeIndex[level] < nodeQueue[level].length) {
-          break;
-        }
-      }
-      for (; level > 0; level--) {
-        nodeQueue[level - 1] = (
-          nodeQueue[level][nodeIndex[level]] as BNodeInternal<K>
-        ).children;
-        nodeIndex[level - 1] = 0;
-      }
-      leaf = nodeQueue[0][nodeIndex[0]];
-      i = -1;
-    }
-  });
+  return new BTreeForwardIterator(nodeQueue, nodeIndex, leaf, i);
 }
 
 function valuesFromReversed<K>(
@@ -214,32 +291,7 @@ function valuesFromReversed<K>(
     i++;
   }
 
-  return iterator<K>(() => {
-    for (;;) {
-      if (--i >= 0) {
-        return {done: false, value: leaf.keys[i]};
-      }
-
-      let level;
-      // Advance to the next leaf node
-      for (level = -1; ; ) {
-        if (++level >= nodeQueue.length) {
-          return {done: true, value: undefined};
-        }
-        if (--nodeIndex[level] >= 0) {
-          break;
-        }
-      }
-      for (; level > 0; level--) {
-        nodeQueue[level - 1] = (
-          nodeQueue[level][nodeIndex[level]] as BNodeInternal<K>
-        ).children;
-        nodeIndex[level - 1] = nodeQueue[level - 1].length - 1;
-      }
-      leaf = nodeQueue[0][nodeIndex[0]];
-      i = leaf.keys.length;
-    }
-  });
+  return new BTreeReverseIterator(nodeQueue, nodeIndex, leaf, i);
 }
 
 function findPath<K>(
