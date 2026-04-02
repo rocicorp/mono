@@ -208,6 +208,20 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       `);
     },
   },
+
+  13: {
+    migrateSchema: (_, db) => {
+      db.exec(/*sql*/ `
+        ALTER TABLE "_zero.replicationState" ADD COLUMN writeTimeMs INTEGER;
+      `);
+    },
+
+    migrateData: (_, db) => {
+      db.exec(/*sql*/ `
+        UPDATE "_zero.replicationState" 
+          SET writeTimeMs = COALESCE(writeTimeMs, unixepoch('subsec') * 1000)`);
+    },
+  },
 };
 
 // Referenced in tests.

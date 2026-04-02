@@ -10,7 +10,12 @@ import {metrics} from '@opentelemetry/api';
 
 // intentional lazy initialization so it is not started before the SDK is started.
 
-export type Category = 'replication' | 'sync' | 'mutation' | 'server';
+export type Category =
+  | 'replication' // postgres to replica
+  | 'replica' // health of replica and litestream backup
+  | 'sync' // replica to client
+  | 'mutation'
+  | 'server';
 
 let meter: Meter | undefined;
 

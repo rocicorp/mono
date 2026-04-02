@@ -29,6 +29,8 @@ export const replicaFileModeSchema = v.literalUnion(
 
 export type ReplicaFileMode = v.Infer<typeof replicaFileModeSchema>;
 
+export type WalMode = 'wal' | 'wal2';
+
 export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
   return mode === 'serving-copy' ? `${replicaFile}-serving-copy` : replicaFile;
 }
@@ -36,12 +38,12 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
 const MILLIS_PER_HOUR = 1000 * 60 * 60;
 const MB = 1024 * 1024;
 
-async function connect(
+async function prepare(
   lc: LogContext,
   {file, vacuumIntervalHours}: ReplicaOptions,
-  walMode: 'wal' | 'wal2',
+  walMode: WalMode,
   mode: ReplicaFileMode,
-): Promise<Database> {
+): Promise<{file: string; walMode: WalMode}> {
   const replica = new Database(lc, file);
 
   // Perform any upgrades to the replica in case the backup is an
@@ -93,7 +95,8 @@ async function connect(
 
   replica.pragma('optimize = 0x10002');
   lc.info?.(`optimized ${file}`);
-  return replica;
+  replica.close();
+  return {file, walMode};
 }
 
 // Setting the journal_mode requires an exclusive lock on the replica.
@@ -133,16 +136,16 @@ export function getPragmaConfig(mode: ReplicaFileMode): PragmaConfig {
   };
 }
 
-export async function setupReplica(
+export function setupReplica(
   lc: LogContext,
   mode: ReplicaFileMode,
   replicaOptions: ReplicaOptions,
-): Promise<Database> {
+) {
   lc.info?.(`setting up ${mode} replica`);
 
   switch (mode) {
     case 'backup':
-      return await connect(lc, replicaOptions, 'wal', mode);
+      return prepare(lc, replicaOptions, 'wal', mode);
 
     case 'serving-copy': {
       // In 'serving-copy' mode, the original file is being used for 'backup'
@@ -158,11 +161,11 @@ export async function setupReplica(
       replica.close();
       lc.info?.(`finished copy (${Date.now() - start} ms)`);
 
-      return connect(lc, {...replicaOptions, file: copyLocation}, 'wal2', mode);
+      return prepare(lc, {...replicaOptions, file: copyLocation}, 'wal2', mode);
     }
 
     case 'serving':
-      return connect(lc, replicaOptions, 'wal2', mode);
+      return prepare(lc, replicaOptions, 'wal2', mode);
 
     default:
       throw new Error(`Invalid ReplicaMode ${mode}`);
