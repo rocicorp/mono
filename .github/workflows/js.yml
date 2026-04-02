@@ -37,7 +37,7 @@ jobs:
       - run: npm run verify-deps
 
   format:
-    name: Prettier
+    name: Oxfmt
     runs-on: ubuntu-latest
     needs: [syncpack, verify-deps]
     env:
