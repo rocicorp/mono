@@ -9,7 +9,7 @@ export function formatEmojiCreatorList(
   emojis: Emoji[],
   currentUserID: string,
 ): string {
-  assert(emojis.length > 0, 'Expected at least one emoji');
+  
   const names = emojis
     .filter(emoji => emoji.creator !== undefined)
     .map(emoji => {
@@ -41,6 +41,7 @@ export function formatEmojiTooltipText(
   emojis: Emoji[],
   currentUserID: string,
 ): string {
+  if (emojis.length === 0) return '';
   const names = formatEmojiCreatorList(emojis, currentUserID);
   return `${names} reacted with ${emojis[0].annotation}`;
 }
