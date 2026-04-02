@@ -431,7 +431,15 @@ class AnonymousTelemetryManager {
 
       return rootCommitHash.length === 40 ? rootCommitHash : 'unknown';
     } catch (error) {
-      this.#lc?.debug?.('telemetry: unable to get Git root commit:', error);
+      // execSync throws a child_process.SpawnSyncReturns-shaped error with an
+      // output property (an array with stdio buffers) and sometimes a killed
+      // property that references back to the error itself — making it
+      // circular and causing stringify() in the Logger logic to throw.
+      const details =
+        error instanceof Error
+          ? {message: error.message, name: error.name, stack: error.stack}
+          : String(error);
+      this.#lc?.debug?.('telemetry: unable to get Git root commit:', details);
       return 'unknown';
     }
   }
