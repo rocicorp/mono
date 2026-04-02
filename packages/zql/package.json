@@ -5,8 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts",
