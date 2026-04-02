@@ -1,9 +1,13 @@
+import type {ObservableCallback} from '@opentelemetry/api';
+import type {LogContext} from '@rocicorp/logger';
+import {stat} from 'node:fs/promises';
 import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
@@ -23,6 +27,7 @@ import {
   replicaFileModeSchema,
   setUpMessageHandlers,
   setupReplica,
+  type WalMode,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 
@@ -40,10 +45,15 @@ export default async function runWorker(
   const lc = createLogContext(config, {worker: workerName});
   initEventSink(lc, config);
 
-  const replica = await setupReplica(lc, fileMode, config.replica);
+  const {file: dbPath, walMode} = await setupReplica(
+    lc,
+    fileMode,
+    config.replica,
+  );
+
+  setupMetrics(lc, dbPath, walMode);
 
   // Create the write worker for async SQLite writes.
-  const dbPath = replica.name;
   const pragmas = getPragmaConfig(fileMode);
   const workerClient = new ThreadWriteWorkerClient();
   await workerClient.init(dbPath, mode, pragmas, config.log);
@@ -92,6 +102,38 @@ export default async function runWorker(
   }
 
   return running;
+}
+
+function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
+  getOrCreateGauge('replica', 'db_size', {
+    description:
+      `The size of the replica's main db file, ` +
+      `which does not include the wal file(s)`,
+    unit: 'bytes',
+  }).addCallback(observeFileSize(lc, file));
+
+  getOrCreateGauge('replica', 'wal_size', {
+    description: `The size of the replica's wal file`,
+    unit: 'bytes',
+  }).addCallback(observeFileSize(lc, `${file}-wal`));
+
+  if (walMode === 'wal2') {
+    getOrCreateGauge('replica', 'wal2_size', {
+      description: `The size of the replica's wal2 file`,
+      unit: 'bytes',
+    }).addCallback(observeFileSize(lc, `${file}-wal2`));
+  }
+}
+
+function observeFileSize(lc: LogContext, file: string): ObservableCallback {
+  return async o => {
+    try {
+      const stats = await stat(file);
+      o.observe(stats.size);
+    } catch (e) {
+      lc.warn?.(`unable to stat ${file} for size metrics`, e);
+    }
+  };
 }
 
 // fork()

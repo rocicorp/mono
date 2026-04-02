@@ -5,7 +5,7 @@ import Fastify, {type FastifyInstance} from 'fastify';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type WebSocket from 'ws';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import {DbFile, expectTables} from '../../../test/lite.ts';
+import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.ts';
 import {stream, type Sink} from '../../../types/streams.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
@@ -233,10 +233,16 @@ describe('change-source/custom', () => {
       TEST_CONTEXT,
     );
 
-    expectTables(replicaDbFile.connect(lc), {
+    expectMatchingObjectsInTables(replicaDbFile.connect(lc), {
       'foo': [{id: 'abcde', bar: 'baz', ['_0_version']: '123'}],
       ['bongo_0.clients']: [],
-      ['_zero.replicationState']: [{lock: 1, stateVersion: '123'}],
+      ['_zero.replicationState']: [
+        {
+          lock: 1,
+          stateVersion: '123',
+          writeTimeMs: expect.any(Number),
+        },
+      ],
       ['_zero.replicationConfig']: [
         {
           lock: 1,

@@ -1,6 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import parsePrometheusTextFormat from 'parse-prometheus-text-format';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {getOrCreateGauge} from '../../observability/metrics.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {RunningState} from '../running-state.ts';
 import type {Service} from '../service.ts';
@@ -49,6 +51,7 @@ type Reservation = {
 export class BackupMonitor implements Service {
   readonly id = 'backup-monitor';
   readonly #lc: LogContext;
+  readonly #replicaFile: string;
   readonly #backupURL: string;
   readonly #metricsEndpoint: string;
   readonly #changeStreamer: ChangeStreamerService;
@@ -58,17 +61,20 @@ export class BackupMonitor implements Service {
   readonly #watermarks = new Map<string, Date>();
 
   #lastWatermark: string = '';
+  #latestBackupTime: Date | null = null;
   #cleanupDelayMs: number;
   #checkMetricsTimer: NodeJS.Timeout | undefined;
 
   constructor(
     lc: LogContext,
+    replicaFile: string,
     backupURL: string,
     metricsEndpoint: string,
     changeStreamer: ChangeStreamerService,
     initialCleanupDelayMs: number,
   ) {
     this.#lc = lc.withContext('component', this.id);
+    this.#replicaFile = replicaFile;
     this.#backupURL = backupURL;
     this.#metricsEndpoint = metricsEndpoint;
     this.#changeStreamer = changeStreamer;
@@ -91,6 +97,7 @@ export class BackupMonitor implements Service {
       this.checkWatermarksAndScheduleCleanup,
       CHECK_INTERVAL_MS,
     );
+    this.#initBackupLagMetric();
     return this.#state.stopped();
   }
 
@@ -210,8 +217,10 @@ export class BackupMonitor implements Service {
             ` at ${time.toISOString()}.`,
         );
         this.#watermarks.set(watermark, time);
+        this.#latestBackupTime = time;
       }
     }
+    return this.#latestBackupTime;
   }
 
   #scheduleCleanup() {
@@ -253,5 +262,43 @@ export class BackupMonitor implements Service {
     }
     this.#state.stop(this.#lc);
     return promiseVoid;
+  }
+
+  #initBackupLagMetric() {
+    getOrCreateGauge('replica', 'backup_lag', {
+      description:
+        'Latency from when a change is written to the replica ' +
+        'to when it is backed up to litestream. It is expected to create a saw ' +
+        'pattern from 0 to the configured ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES.',
+      unit: 'millisecond',
+    }).addCallback(async o => {
+      // For legacy litestream, we use the watermark metric (and its associated
+      // backup time) exported by litestream metrics to determine the time of
+      // of the backed up watermark. This is technically imprecise--it would be
+      // more correct to use the committed writeTimeMs--but it is good enough
+      // in that it serves the purpose of detecting a non-functioning backup.
+      // With litestream v5, this can be made more precise by querying the
+      // _zero.replicationState row from the backup directly using an LTX-based
+      // database reader.
+      const latestBackup = await this.#checkWatermarks();
+      if (!latestBackup) {
+        this.#lc.warn?.(
+          `no backed up watermarks. unable to report replica.backup_lag`,
+        );
+        return;
+      }
+      const db = new Database(this.#lc, this.#replicaFile, {readonly: true});
+      try {
+        const {writeTimeMs} = db
+          .prepare(/*sql*/ `SELECT writeTimeMs FROM "_zero.replicationState"`)
+          .get<{writeTimeMs: number}>();
+        const backupLag = Math.max(0, writeTimeMs - latestBackup.getTime());
+        o.observe(backupLag);
+      } catch (e) {
+        this.#lc.warn?.(`error measuring replica.backup_lag metric`, e);
+      } finally {
+        db.close();
+      }
+    });
   }
 }

@@ -6,6 +6,7 @@ import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
+import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
@@ -146,10 +147,18 @@ export default async function runWorker(
   // impossible: upstream must have advanced in order for replication to be stuck.
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
+  // Perform any upgrades to the replica in case it was restored from an
+  // earlier version. Note that this upgrade is done by the replicator worker
+  // as well (in both the replication-manager and the view-syncer), but the
+  // change-streamer independently reads the replica, and it is fine run the
+  // upgrade logic redundantly since it is idempotent.
+  await upgradeReplica(lc, 'change-streamer-init', replica.file);
+
   const {backupURL, port: metricsPort} = litestream;
   const monitor = backupURL
     ? new BackupMonitor(
         lc,
+        replica.file,
         backupURL,
         `http://localhost:${metricsPort}/metrics`,
         changeStreamer,
