@@ -589,15 +589,21 @@ export function sharedSnapshot(): {
   // exporting the snapshot.
   let firstWorkerRun = false;
 
-  // Set when any worker is done, signalling that all non-sentinel Tasks have been
-  // dequeued, and thus any subsequently spawned workers should skip their initTask
-  // since the snapshot is no longer needed (and soon to become invalid).
+  // The LogContext of the exporting worker, used to identify its cleanup call.
+  // Each worker receives a unique lc instance (via withContext('tx', id)), so
+  // reference equality reliably identifies the exporting worker.
+  let exporterLc: LogContext | undefined;
+
+  // Set when the exporting worker's cleanup runs, signalling that the snapshot
+  // is no longer needed and any subsequently spawned workers should skip their
+  // initTask.
   let firstWorkerDone = false;
 
   return {
     init: (tx, lc) => {
       if (!firstWorkerRun) {
         firstWorkerRun = true;
+        exporterLc = lc; // Remember which worker is the exporter.
         const stmt = tx`SELECT pg_export_snapshot() AS snapshot;`.simple();
         // Intercept the promise to propagate the information to `snapshotExported`.
         stmt.then(result => exportSnapshot(result[0].snapshot), failExport);
@@ -612,8 +618,14 @@ export function sharedSnapshot(): {
       return [];
     },
 
-    cleanup: () => {
-      firstWorkerDone = true;
+    cleanup: (_tx, lc) => {
+      // Only the exporting worker's cleanup should disable snapshot-setting.
+      // Non-exporter workers may finish early; letting them flip this flag
+      // would cause subsequently spawned workers to skip SET TRANSACTION SNAPSHOT
+      // and read a newer database view, violating snapshot isolation.
+      if (lc === exporterLc) {
+        firstWorkerDone = true;
+      }
       return [];
     },
 
