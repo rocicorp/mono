@@ -22,8 +22,60 @@ describe('timestampToFpMillis', () => {
     ['2024-12-05 16:38:21.907-05', 1733434701907],
     ['2024-12-05 16:38:21.907-05:30', 1733436501907],
   ])('parse timestamp: %s', (timestamp, result) => {
-    // expect(new PreciseDate(timestamp).getTime()).toBe(Math.floor(result));
     expect(timestampToFpMillis(timestamp)).toBe(result);
+  });
+
+  test.each([
+    // No fractional seconds
+    ['2024-01-15 12:00:00', 1705320000000],
+    ['2024-01-15 12:00:00+00', 1705320000000],
+
+    // Whole milliseconds only
+    ['2024-01-15 12:00:00.5', 1705320000500],
+    ['2024-01-15 12:00:00.123', 1705320000123],
+  ])('parse timestamp without microseconds: %s', (timestamp, result) => {
+    expect(timestampToFpMillis(timestamp)).toBe(result);
+  });
+
+  test.each([
+    // 1 BC = year 0 in JS
+    ['0001-06-15 12:00:00 BC', new Date('0000-06-15T12:00:00Z').getTime()],
+    // 2 BC = year -1
+    ['0002-06-15 12:00:00 BC', new Date('-000001-06-15T12:00:00Z').getTime()],
+    // BC with timezone
+    ['0001-01-01 00:00:00+00 BC', new Date('0000-01-01T00:00:00Z').getTime()],
+  ])('parse BC timestamp: %s', (timestamp, result) => {
+    expect(timestampToFpMillis(timestamp)).toBe(result);
+  });
+
+  test.each([
+    // Year > 9999 uses expanded year format
+    ['10000-01-01 00:00:00', new Date('+010000-01-01T00:00:00Z').getTime()],
+    ['99999-06-15 12:00:00', new Date('+099999-06-15T12:00:00Z').getTime()],
+  ])('parse large year timestamp: %s', (timestamp, result) => {
+    expect(timestampToFpMillis(timestamp)).toBe(result);
+  });
+
+  test.each([
+    // Negative timezone offsets
+    ['2024-01-15 12:00:00-05', 1705338000000],
+    ['2024-01-15 12:00:00-05:30', 1705339800000],
+    // Positive timezone offsets
+    ['2024-01-15 12:00:00+05', 1705302000000],
+    ['2024-01-15 12:00:00+05:30', 1705300200000],
+    // Single digit tz hour
+    ['2024-01-15 12:00:00+5', 1705302000000],
+    ['2024-01-15 12:00:00-5', 1705338000000],
+  ])('parse timestamp with timezone offset: %s', (timestamp, result) => {
+    expect(timestampToFpMillis(timestamp)).toBe(result);
+  });
+
+  test('throws on invalid timestamp', () => {
+    expect(() => timestampToFpMillis('not a timestamp')).toThrow(
+      'Error parsing not a timestamp',
+    );
+    expect(() => timestampToFpMillis('')).toThrow('Error parsing ');
+    expect(() => timestampToFpMillis('2024-13-40 99:99:99')).toThrow();
   });
 });
 

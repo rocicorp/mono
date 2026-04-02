@@ -889,6 +889,88 @@ describe('db/transaction-pool', () => {
     });
   });
 
+  // Regression test for the race condition where a non-exporter worker's cleanup
+  // ran before new workers were spawned, setting firstWorkerDone=true and causing
+  // those new workers to skip SET TRANSACTION SNAPSHOT.
+  test('sharedSnapshot - non-exporter cleanup does not disable snapshot for new workers', async () => {
+    await db`
+    INSERT INTO foo (id) VALUES (1);
+    INSERT INTO foo (id) VALUES (2);
+    INSERT INTO foo (id) VALUES (3);
+    `.simple();
+
+    const processing = new Queue<boolean>();
+    const canProceed = new Queue<boolean>();
+
+    const {init, cleanup} = sharedSnapshot();
+    // initialWorkers=1 (worker 1 is the exporter), maxWorkers=2.
+    // Extra workers (worker 2+) exit after a very short idle timeout so that
+    // we can deterministically observe their cleanup running before a new worker
+    // is spawned.
+    const pool = newTransactionPool(Mode.READONLY, init, cleanup, 1, 2, {
+      forInitialWorkers: TIMEOUT_TASKS.forInitialWorkers,
+      forExtraWorkers: {timeoutMs: 20, task: 'done' as const},
+    });
+    pool.run(db);
+
+    const readTask = () => async (tx: postgres.TransactionSql) => {
+      processing.enqueue(true);
+      await canProceed.dequeue();
+      return (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
+    };
+
+    // Queue 2 tasks immediately. Worker 1 (exporter, initial) handles the first;
+    // the pool expands to spawn Worker 2 (non-exporter, extra) for the second.
+    const batch1: Promise<number[]>[] = [];
+    batch1.push(pool.processReadTask(readTask())); // task A → worker 1
+    batch1.push(pool.processReadTask(readTask())); // task B → worker 2
+
+    // Wait for both workers to start their tasks.
+    await processing.dequeue();
+    await processing.dequeue();
+
+    // Insert rows outside the snapshot. These must not be visible.
+    await db`
+    INSERT INTO foo (id) VALUES (4);
+    INSERT INTO foo (id) VALUES (5);
+    INSERT INTO foo (id) VALUES (6);
+    `.simple();
+
+    // Let task B (worker 2, non-exporter) finish while task A (worker 1) is
+    // still blocking. Worker 2 becomes idle and exits after its 20ms idle timeout,
+    // running its cleanup task.
+    canProceed.enqueue(true);
+
+    // Give worker 2 time to hit the idle timeout and fully run its cleanup.
+    // With a 20ms timeout and ~100ms sleep this is a comfortable margin.
+    await sleep(100);
+
+    // Worker 2 has now exited (#numWorkers decremented to 1).
+    // Queue task C while worker 1 is still blocking (#numWorking=1), so that
+    // the pool expands again and spawns Worker 3.
+    const batch2: Promise<number[]>[] = [];
+    batch2.push(pool.processReadTask(readTask())); // task C → worker 3
+
+    // Wait for worker 3 to start.
+    await processing.dequeue();
+
+    // Release the remaining blocked tasks.
+    canProceed.enqueue(true); // worker 3 (task C)
+    canProceed.enqueue(true); // worker 1 (task A)
+
+    const results = await Promise.all([...batch1, ...batch2]);
+    for (const result of results) {
+      // Before the fix, worker 2's cleanup set firstWorkerDone=true, causing
+      // worker 3 to skip SET TRANSACTION SNAPSHOT and see rows 4,5,6.
+      // After the fix, only the exporter (worker 1) flips firstWorkerDone,
+      // so worker 3 correctly imports the snapshot and sees only [1,2,3].
+      expect(result).toEqual([1, 2, 3]);
+    }
+
+    pool.setDone();
+    await pool.done();
+  });
+
   test('externally shared snapshot', async () => {
     const processing = new Queue<boolean>();
     const readTask = () => async (tx: postgres.TransactionSql) => {
