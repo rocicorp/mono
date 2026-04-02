@@ -5,21 +5,8 @@ on:
     branches: main
 
 jobs:
-  playwright-install:
-    name: Install Playwright
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
-      - uses: ./.github/actions/playwright-install
-
   perf:
     name: Perf
-    needs: playwright-install
     uses: ./.github/workflows/reusable-benchmark.yml
     strategy:
       matrix:

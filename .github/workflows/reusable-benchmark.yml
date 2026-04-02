@@ -58,6 +58,8 @@ jobs:
 
       - run: npm ci
 
+      - uses: ./.github/actions/playwright-install
+
       - name: Run benchmarks
         working-directory: ${{ inputs.working_directory }}
         run: npm run --silent bench:bmf:silent > output.json
