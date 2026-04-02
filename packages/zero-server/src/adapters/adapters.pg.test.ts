@@ -32,6 +32,13 @@ beforeEach(async () => {
   nodePgPool = new Pool({
     connectionString: getConnectionURI(postgresJsClient),
   });
+  // Suppress 57P01 ("terminating connection due to administrator command") on the
+  // pool itself so that connection-level errors emitted during DB teardown don't
+  // surface as unhandled Vitest errors.
+  nodePgPool.on('error', (e: Error & {code?: string}) => {
+    if (e.code === '57P01') return;
+    throw e;
+  });
   nodePgPoolClient = await nodePgPool.connect();
   nodePgClient = new Client({
     connectionString: getConnectionURI(postgresJsClient),
@@ -44,6 +51,11 @@ beforeEach(async () => {
   });
 
   await nodePgClient.connect();
+  // Suppress 57P01 on the direct client as well.
+  nodePgClient.on('error', (e: Error & {code?: string}) => {
+    if (e.code === '57P01') return;
+    throw e;
+  });
 
   await postgresJsClient.unsafe(`
     CREATE TABLE IF NOT EXISTS "user" (
@@ -55,14 +67,38 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // Ensure all node-postgres clients are closed before dropping the DB
-  await nodePgPoolClient.release();
-  await nodePgClient.end();
-  await nodePgPool.end();
-  await prismaClient?.$disconnect();
+  try {
+    // release() is synchronous — do not await
+    try {
+      nodePgPoolClient?.release();
+    } catch {
+      // ignore
+    }
 
-  // Drop the per-test database to avoid global teardown force-terminating connections
-  await testDBs.drop(postgresJsClient);
+    // Disconnect Prisma early; it maintains its own connection pool
+    try {
+      await prismaClient?.$disconnect();
+    } catch {
+      // ignore
+    }
+
+    // Close the direct client before ending the pool
+    try {
+      await nodePgClient?.end();
+    } catch {
+      // ignore
+    }
+
+    // End the pool last, after all clients have been released/closed
+    try {
+      await nodePgPool?.end();
+    } catch {
+      // ignore
+    }
+  } finally {
+    // Drop the per-test database only after all clients are fully closed
+    await testDBs.drop(postgresJsClient);
+  }
 });
 
 type UserStatus = 'active' | 'inactive';
