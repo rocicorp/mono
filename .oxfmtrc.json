@@ -1,0 +1,30 @@
+{
+  "singleQuote": true,
+  "trailingComma": "all",
+  "arrowParens": "avoid",
+  "bracketSpacing": false,
+  "quoteProps": "consistent",
+  "printWidth": 80,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "lib",
+    "*.log",
+    "packages/replicache/out",
+    "packages/replicache/doc/build/",
+    "packages/replicache/doc/docs/api",
+    "packages/replicache/doc/.docusaurus/",
+    "**/.next",
+    "**/.vercel",
+    "*.tsbuildinfo",
+    "renderer",
+    "vendor",
+    "!/renderer/src/constants.ts",
+    "**/bot-recordings.ts",
+    ".sst",
+    "prod/sst/sst-env.d.ts",
+    "apps/zbugs/public/um.js",
+    "apps/zbugs/db/migrations/"
+  ]
+}

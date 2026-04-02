@@ -390,7 +390,7 @@ test('reserved keys are prefixed', async () => {
     'https://http-intake.logs.datadoghq.com/api/v2/logs?dd-api-key=apiKey',
     {
       body: stringifyMany({
-        usr: {name: 'bob'},
+        'usr': {name: 'bob'},
         ['@DATADOG_RESERVED_host']: 'testHost',
         ['@DATADOG_RESERVED_source']: 'testSource',
         ['@DATADOG_RESERVED_status']: 'testStatus',
@@ -402,10 +402,10 @@ test('reserved keys are prefixed', async () => {
         ['@DATADOG_RESERVED_date']: 'test-date',
         ['@DATADOG_RESERVED_flushDelayMs']: 'test-flushDelayMs',
         ['@DATADOG_RESERVED_flushRetryCount']: 'test-flushRetryCount',
-        date: 1,
-        message: 'debug message',
-        status: 'debug',
-        flushDelayMs: 9,
+        'date': 1,
+        'message': 'debug message',
+        'status': 'debug',
+        'flushDelayMs': 9,
       }),
       method: 'POST',
       keepalive: true,

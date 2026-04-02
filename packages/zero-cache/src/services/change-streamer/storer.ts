@@ -216,9 +216,8 @@ export class Storer implements Service {
   }
 
   async getMinWatermarkForCatchup(): Promise<string | null> {
-    const [{minWatermark}] = await this.#db<
-      {minWatermark: string | null}[]
-    > /*sql*/ `
+    const [{minWatermark}] = await this.#db<{minWatermark: string | null}[]>
+    /*sql*/ `
       SELECT min(watermark) as "minWatermark" FROM ${this.#cdc('changeLog')}`;
     return minWatermark;
   }

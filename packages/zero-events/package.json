@@ -26,8 +26,8 @@
     "prepack": "npm run build",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts",
     "test": "vitest run"
   },

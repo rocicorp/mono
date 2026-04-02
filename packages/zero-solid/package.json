@@ -15,8 +15,8 @@
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
   "peerDependencies": {

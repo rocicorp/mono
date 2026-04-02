@@ -81,7 +81,7 @@ describe('change-streamer/pg/sync-schema', () => {
       replicaPostState: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         ['_zero.versionHistory']: [CURRENT_SCHEMA_VERSIONS],
-        users: [
+        'users': [
           {userID: 123, handle: '@zoot', ['_0_version']: WATERMARK_REGEX},
           {userID: 456, handle: '@bonk', ['_0_version']: WATERMARK_REGEX},
         ],

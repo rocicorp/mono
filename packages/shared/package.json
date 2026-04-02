@@ -17,8 +17,8 @@
     "bench:bmf:silent": "npm run bench:bmf --silent",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --type-aware src/"
   },
   "dependencies": {

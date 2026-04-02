@@ -888,9 +888,8 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     if (startStreamAfterReport) {
       // Get the current lsn (which is at or after the lag report) and
       // start a subscription _after_ it to skip the lag report.
-      const [{lsn}] = await upstream<
-        {lsn: string}[]
-      > /*sql*/ `SELECT pg_current_wal_lsn() as lsn`;
+      const [{lsn}] = await upstream<{lsn: string}[]>
+      /*sql*/ `SELECT pg_current_wal_lsn() as lsn`;
 
       watermark = toStateVersionString(lsn);
       lc.debug?.(

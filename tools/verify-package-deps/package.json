@@ -11,8 +11,8 @@
     "verify": "node --experimental-strip-types src/verify-package-deps.ts",
     "verify:fix": "node --experimental-strip-types src/verify-package-deps.ts --fix",
     "check-types": "tsc",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
   "dependencies": {

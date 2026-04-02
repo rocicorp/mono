@@ -234,7 +234,7 @@ describe('change-source/custom', () => {
     );
 
     expectTables(replicaDbFile.connect(lc), {
-      foo: [{id: 'abcde', bar: 'baz', ['_0_version']: '123'}],
+      'foo': [{id: 'abcde', bar: 'baz', ['_0_version']: '123'}],
       ['bongo_0.clients']: [],
       ['_zero.replicationState']: [{lock: 1, stateVersion: '123'}],
       ['_zero.replicationConfig']: [

@@ -484,7 +484,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         ['public.issues']: {
           columns: {
-            issueID: {
+            'issueID': {
               pos: 1,
               characterMaximumLength: null,
               dataType: 'int4',
@@ -493,7 +493,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            orgID: {
+            'orgID': {
               pos: 2,
               characterMaximumLength: null,
               dataType: 'int4',
@@ -502,7 +502,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            isAdmin: {
+            'isAdmin': {
               pos: 3,
               characterMaximumLength: null,
               dataType: 'bool',
@@ -511,7 +511,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            bigint: {
+            'bigint': {
               pos: 4,
               characterMaximumLength: null,
               dataType: 'int8',
@@ -520,7 +520,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            timestamp: {
+            'timestamp': {
               pos: 5,
               characterMaximumLength: null,
               dataType: 'timestamptz',
@@ -529,7 +529,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            bytes: {
+            'bytes': {
               pos: 6,
               characterMaximumLength: null,
               dataType: 'bytea',
@@ -538,7 +538,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            intArray: {
+            'intArray': {
               pos: 7,
               characterMaximumLength: null,
               dataType: 'int4[]',
@@ -547,7 +547,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: 'b',
             },
-            json: {
+            'json': {
               pos: 8,
               characterMaximumLength: null,
               dataType: 'json',
@@ -556,7 +556,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            jsonb: {
+            'jsonb': {
               pos: 9,
               characterMaximumLength: null,
               dataType: 'jsonb',
@@ -565,7 +565,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            date: {
+            'date': {
               pos: 10,
               characterMaximumLength: null,
               dataType: 'date',
@@ -574,7 +574,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            time: {
+            'time': {
               pos: 11,
               characterMaximumLength: null,
               dataType: 'time',
@@ -583,7 +583,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            serial: {
+            'serial': {
               pos: 12,
               characterMaximumLength: null,
               dataType: 'int4',
@@ -591,7 +591,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: "nextval('issues_serial_seq'::regclass)",
               notNull: true,
             },
-            enumz: {
+            'enumz': {
               pos: 13,
               characterMaximumLength: null,
               dataType: 'enumz',
@@ -612,7 +612,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             // },
             // Identity columns, however, are replicated.
             // https://www.postgresql.org/docs/current/ddl-identity-columns.html
-            shortID: {
+            'shortID': {
               pos: 15,
               characterMaximumLength: null,
               dataType: 'int4',
@@ -621,7 +621,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               elemPgTypeClass: null,
               notNull: true,
             },
-            shortID2: {
+            'shortID2': {
               pos: 16,
               characterMaximumLength: null,
               dataType: 'int4',
@@ -630,7 +630,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               elemPgTypeClass: null,
               notNull: true,
             },
-            num: {
+            'num': {
               pos: 17,
               characterMaximumLength: null,
               dataType: 'numeric',
@@ -648,7 +648,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               elemPgTypeClass: null,
               notNull: false,
             },
-            jsonArray: {
+            'jsonArray': {
               pos: 19,
               characterMaximumLength: null,
               dataType: 'json[]',
@@ -657,7 +657,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               elemPgTypeClass: 'b',
               notNull: false,
             },
-            jsonbArray: {
+            'jsonbArray': {
               pos: 20,
               characterMaximumLength: null,
               dataType: 'jsonb[]',
@@ -679,7 +679,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['issues']: {
           columns: {
-            issueID: {
+            'issueID': {
               pos: 1,
               characterMaximumLength: null,
               dataType: 'int4|NOT_NULL',
@@ -687,7 +687,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            orgID: {
+            'orgID': {
               pos: 2,
               characterMaximumLength: null,
               dataType: 'int4|NOT_NULL',
@@ -695,7 +695,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            isAdmin: {
+            'isAdmin': {
               pos: 3,
               characterMaximumLength: null,
               dataType: 'bool',
@@ -703,7 +703,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            bigint: {
+            'bigint': {
               pos: 4,
               characterMaximumLength: null,
               dataType: 'int8',
@@ -711,7 +711,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            timestamp: {
+            'timestamp': {
               pos: 5,
               characterMaximumLength: null,
               dataType: 'timestamptz',
@@ -719,7 +719,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            bytes: {
+            'bytes': {
               pos: 6,
               characterMaximumLength: null,
               dataType: 'bytea',
@@ -727,7 +727,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            intArray: {
+            'intArray': {
               pos: 7,
               characterMaximumLength: null,
               dataType: 'int4[]|TEXT_ARRAY',
@@ -735,7 +735,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: 'b',
             },
-            json: {
+            'json': {
               pos: 8,
               characterMaximumLength: null,
               dataType: 'json',
@@ -743,7 +743,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            jsonb: {
+            'jsonb': {
               pos: 9,
               characterMaximumLength: null,
               dataType: 'jsonb',
@@ -751,7 +751,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            date: {
+            'date': {
               pos: 10,
               characterMaximumLength: null,
               dataType: 'date',
@@ -759,7 +759,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            time: {
+            'time': {
               pos: 11,
               characterMaximumLength: null,
               dataType: 'time',
@@ -767,7 +767,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            serial: {
+            'serial': {
               pos: 12,
               characterMaximumLength: null,
               dataType: 'int4|NOT_NULL',
@@ -775,7 +775,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            enumz: {
+            'enumz': {
               pos: 13,
               characterMaximumLength: null,
               dataType: 'enumz|TEXT_ENUM',
@@ -783,7 +783,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               elemPgTypeClass: null,
               notNull: false,
             },
-            shortID: {
+            'shortID': {
               pos: 14,
               characterMaximumLength: null,
               dataType: 'int4|NOT_NULL',
@@ -791,7 +791,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            shortID2: {
+            'shortID2': {
               pos: 15,
               characterMaximumLength: null,
               dataType: 'int4|NOT_NULL',
@@ -799,7 +799,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            num: {
+            'num': {
               pos: 16,
               characterMaximumLength: null,
               dataType: 'numeric',
@@ -815,7 +815,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: null,
             },
-            jsonArray: {
+            'jsonArray': {
               pos: 18,
               characterMaximumLength: null,
               dataType: 'json[]|TEXT_ARRAY',
@@ -823,7 +823,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
               dflt: null,
               elemPgTypeClass: 'b',
             },
-            jsonbArray: {
+            'jsonbArray': {
               pos: 19,
               characterMaximumLength: null,
               dataType: 'jsonb[]|TEXT_ARRAY',
@@ -930,7 +930,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedData: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
-        issues: [
+        'issues': [
           {
             issueID: 1n,
             orgID: 1n,

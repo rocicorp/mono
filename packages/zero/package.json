@@ -19,8 +19,8 @@
     "check-types": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json",
     "check-types:client:watch": "tsc -p tsconfig.client.json --watch",
     "check-types:server:watch": "tsc -p tsconfig.server.json --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --type-aware src/",
     "docs": "node --experimental-strip-types --no-warnings tool/generate-docs.ts",
     "docs:server": "node --watch --experimental-strip-types --no-warnings tool/generate-docs.ts --server"
@@ -70,7 +70,6 @@
     "parse-prometheus-text-format": "^1.1.1",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "postgres": "3.4.7",
-    "prettier": "^3.8.1",
     "semver": "^7.5.4",
     "tsx": "^4.21.0",
     "url-pattern": "^1.0.3",

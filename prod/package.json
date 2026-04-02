@@ -4,29 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "format": "prettier --write .",
-    "check-format": "prettier --check ."
-  },
-  "prettier": {
-    "singleQuote": true,
-    "trailingComma": "all",
-    "arrowParens": "avoid",
-    "bracketSpacing": false,
-    "quoteProps": "consistent",
-    "overrides": [
-      {
-        "files": [
-          "*.yml",
-          "*.yaml"
-        ],
-        "options": {
-          "trailingComma": "es5",
-          "tabWidth": 2,
-          "bracketSpacing": false,
-          "semi": false,
-          "singleQuote": false
-        }
-      }
-    ]
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check ."
   }
 }

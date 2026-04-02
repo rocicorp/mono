@@ -63,14 +63,12 @@ describe('view-syncer/snapshotter', () => {
     // Initialize ColumnMetadata and mark a column as being backfilled,
     // to verify that it does not appear in the pipeline results.
     populateFromExistingTables(db, listTables(db, false));
-    db.prepare(
-      /*sql*/ `
+    db.prepare(/*sql*/ `
       UPDATE "_zero.column_metadata" 
         SET backfill = '{"upstreamID":123}'
         WHERE table_name = 'issues' 
          AND column_name = 'stillBeingBackfilled'
-      `,
-    ).run();
+      `).run();
 
     tableSpecs = computeZqlSpecs(lc, db, {includeBackfillingColumns: false});
     allTableNames = new Set(tableSpecs.keys());
@@ -136,10 +134,10 @@ describe('view-syncer/snapshotter', () => {
   });
 
   const messages = new ReplicationMessages({
-    issues: 'id',
-    users: 'id',
-    comments: 'id',
-    backfilling: 'id',
+    'issues': 'id',
+    'users': 'id',
+    'comments': 'id',
+    'backfilling': 'id',
     ['my_app.permissions']: 'lock',
   });
 
