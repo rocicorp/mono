@@ -28,6 +28,11 @@ export type WorkerType = 'user-facing' | 'supporting';
 export const GRACEFUL_SHUTDOWN = ['SIGTERM', 'SIGINT'] as const;
 export const FORCEFUL_SHUTDOWN = ['SIGQUIT'] as const;
 
+// An internal error code used to indicate that a message has already been
+// logged at level ERRROR. When a process exits with this error code, the
+// parent process logs the exit at level WARN instead of ERROR.
+export const UNHANDLED_EXCEPTION_ERROR_CODE = 13;
+
 /**
  * Handles readiness, termination signals, and coordination of graceful
  * shutdown.
@@ -175,10 +180,13 @@ export class ProcessManager {
       // Non-zero exits are warnings (not errors) since they're often transient issues.
       const log = code === 0 && this.#userFacing.size === 0 ? 'info' : 'warn';
       this.#lc[log]?.(`${name} (${pid}) exited with code (${code})`, err ?? '');
-      return this.#exit(log === 'info' ? code : -1);
+      return this.#exit(log === 'info' || code !== 0 ? code : -1);
     }
 
-    const log = this.#drainStart === 0 ? 'error' : 'warn';
+    const log =
+      this.#drainStart > 0 || code === UNHANDLED_EXCEPTION_ERROR_CODE
+        ? 'warn'
+        : 'error';
     if (sig) {
       this.#lc[log]?.(`${name} (${pid}) killed with (${sig})`, err ?? '');
     } else if (code !== 0) {
