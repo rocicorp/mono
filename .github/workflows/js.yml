@@ -49,11 +49,7 @@ jobs:
         with:
           node-version: 24.x
           cache: 'npm'
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install
-      - run: bun run check-format
+      - run: npx oxfmt --check
 
   lint:
     name: Lint
@@ -68,11 +64,12 @@ jobs:
         with:
           node-version: 24.x
           cache: 'npm'
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v6
         with:
-          bun-version: latest
-      - run: bun install
-      - run: bun run lint
+          node-version: 24.x
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
 
   check-types:
     name: Check Types
