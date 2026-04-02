@@ -142,7 +142,7 @@ export function applyChange(
           (parentEntry as Writable<Entry>)[relationship] = newEntry;
         }
       } else {
-        newEntry = add(
+        newEntry = addToView(
           change.node.row,
           getChildEntryList(parentEntry, relationship),
           schema,
@@ -204,13 +204,13 @@ export function applyChange(
         existing = getSingularEntry(parentEntry, relationship);
       } else {
         const view = getChildEntryList(parentEntry, relationship);
-        const {pos, found} = binarySearch(
+        const bsResult = binarySearch(
           view,
           change.node.row,
           schema.compareRows,
         );
-        assert(found, 'node does not exist');
-        existing = view[pos];
+        assert(bsResult >= 0, 'node does not exist');
+        existing = view[bsResult];
       }
 
       const childSchema = must(
@@ -238,18 +238,21 @@ export function applyChange(
         const view = getChildEntryList(parentEntry, relationship);
         // The position of the row in the list may have changed due to the edit.
         if (schema.compareRows(change.oldNode.row, change.node.row) !== 0) {
-          const {pos: oldPos, found: oldFound} = binarySearch(
+          const oldBsResult = binarySearch(
             view,
             change.oldNode.row,
             schema.compareRows,
           );
-          assert(oldFound, 'old node does not exist');
+          assert(oldBsResult >= 0, 'old node does not exist');
+          const oldPos = oldBsResult;
           const oldEntry = view[oldPos];
-          const {pos, found} = binarySearch(
+          const newBsResult = binarySearch(
             view,
             change.node.row,
             schema.compareRows,
           );
+          const found = newBsResult >= 0;
+          const pos = found ? newBsResult : ~newBsResult;
           // A special case:
           // when refCount is 1 (so the row is being moved
           // without leaving a placeholder behind), and the new pos is
@@ -294,13 +297,13 @@ export function applyChange(
           }
         } else {
           // Position could not have changed, so simply edit in place.
-          const {pos, found} = binarySearch(
+          const bsResult = binarySearch(
             view,
             change.oldNode.row,
             schema.compareRows,
           );
-          assert(found, 'node does not exist');
-          applyEdit(view[pos], change, schema, withIDs);
+          assert(bsResult >= 0, 'node does not exist');
+          applyEdit(view[bsResult], change, schema, withIDs);
         }
       }
 
@@ -323,18 +326,19 @@ function applyEdit(
   }
 }
 
-function add(
+function addToView(
   row: Row,
   view: MetaEntryList,
   schema: SourceSchema,
   withIDs: boolean,
 ): MetaEntry | undefined {
-  const {pos, found} = binarySearch(view, row, schema.compareRows);
+  const bsResult = binarySearch(view, row, schema.compareRows);
 
-  if (found) {
-    view[pos][refCountSymbol]++;
+  if (bsResult >= 0) {
+    view[bsResult][refCountSymbol]++;
     return undefined;
   }
+  const pos = ~bsResult;
   const newEntry = makeNewMetaEntry(row, schema, withIDs, 1);
   view.splice(pos, 0, newEntry);
   return newEntry;
@@ -345,24 +349,33 @@ function removeAndUpdateRefCount(
   row: Row,
   compareRows: Comparator,
 ): MetaEntry {
-  const {pos, found} = binarySearch(view, row, compareRows);
-  assert(found, 'node does not exist');
-  const oldEntry = view[pos];
+  const bsResult = binarySearch(view, row, compareRows);
+  assert(bsResult >= 0, 'node does not exist');
+  const oldEntry = view[bsResult];
   const rc = oldEntry[refCountSymbol];
   if (rc === 1) {
-    view.splice(pos, 1);
+    view.splice(bsResult, 1);
   }
   oldEntry[refCountSymbol]--;
 
   return oldEntry;
 }
 
-// TODO: Do not return an object. It puts unnecessary pressure on the GC.
+/**
+ * Binary search a sorted view.
+ *
+ * Returns the index of `target` if found (a non-negative integer), or
+ * `~insertionIndex` if not found (always negative, following Java's
+ * `Arrays.binarySearch` convention). To get the insertion index when
+ * not found use the bitwise NOT: `~result`.
+ *
+ * This avoids allocating a `{pos, found}` result object on every call.
+ */
 function binarySearch(
   view: MetaEntryList,
   target: Row,
   comparator: Comparator,
-) {
+): number {
   let low = 0;
   let high = view.length - 1;
   while (low <= high) {
@@ -373,10 +386,10 @@ function binarySearch(
     } else if (comparison > 0) {
       high = mid - 1;
     } else {
-      return {pos: mid, found: true};
+      return mid; // found
     }
   }
-  return {pos: low, found: false};
+  return ~low; // not found; use ~result to get insertion index
 }
 
 function getChildEntryList(
