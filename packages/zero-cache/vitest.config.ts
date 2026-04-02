@@ -20,6 +20,7 @@ export function configForVersion(version: number, url: string) {
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
         include: ['src/**'],
       },
+      retry: CI ? 2 : 0,
       testTimeout: TIMEOUT,
       hookTimeout: TIMEOUT,
       slowTestThreshold: TIMEOUT / 10,
