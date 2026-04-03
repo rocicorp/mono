@@ -7,7 +7,6 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
@@ -44,15 +43,6 @@ import {
   type TableMetadataRow,
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
-
-// Maximum time to wait for a batch of changeLog INSERTs to be confirmed by
-// the change DB. If this times out, the storer throws and triggers a reconnect.
-// Without a timeout, a statement_timeout=0 connection setting (sometimes
-// required to prevent initial-sync from hitting Postgres's default timeout)
-// can cause the change DB write to block indefinitely, which in turn prevents
-// the dequeue loop from making progress, which prevents back-pressure from
-// releasing, which deadlocks the entire replication pipeline.
-const WRITE_BATCH_TIMEOUT_MS = 30_000; // 30 seconds
 
 type SubscriberAndMode = {
   subscriber: Subscriber;
@@ -125,7 +115,6 @@ export class Storer implements Service {
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
-  readonly #writeBatchTimeoutMs: number;
 
   #approximateQueuedBytes = 0;
   #running = false;
@@ -141,7 +130,6 @@ export class Storer implements Service {
     onConsumed: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
     backPressureLimitHeapProportion: number,
-    writeBatchTimeoutMs = WRITE_BATCH_TIMEOUT_MS,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
@@ -152,7 +140,6 @@ export class Storer implements Service {
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
-    this.#writeBatchTimeoutMs = writeBatchTimeoutMs;
 
     const heapStats = getHeapStatistics();
     this.#backPressureThresholdBytes =
@@ -482,35 +469,13 @@ export class Storer implements Service {
             : []),
         ]);
 
-        // Release backpressure as soon as the byte count drops below the
-        // threshold, independently of whether the DB write has confirmed.
-        this.#maybeReleaseBackPressure();
-
         if (tx.pos % 100 === 0) {
           // Backpressure is exerted on commit when awaiting tx.pool.done().
           // However, backpressure checks need to be regularly done for
           // very large transactions in order to avoid memory blowup.
-          //
-          // Guard with a timeout: if the change DB is slow or stuck (e.g.
-          // because statement_timeout=0 lets a query block indefinitely),
-          // this await would block the dequeue loop, preventing further byte
-          // decrements and causing readyForMore() to never resolve. A timeout
-          // lets the storer fail fast and triggers a reconnect.
-          const timedOut = await Promise.race([
-            processed.then(() => false as const),
-            sleep(this.#writeBatchTimeoutMs).then(() => true as const),
-          ]);
-          if (timedOut) {
-            const err = new Error(
-              `storer changeLog write timed out after ${this.#writeBatchTimeoutMs}ms ` +
-                `(pos ${tx.pos} of tx ${tx.preCommitWatermark})`,
-            );
-            // Fail the pool so it rolls back and releases its connection
-            // once the in-flight query completes.
-            tx.pool.fail(err);
-            throw err;
-          }
+          await processed;
         }
+        this.#maybeReleaseBackPressure();
 
         if (tag === 'commit') {
           const {owner} = await tx.startingReplicationState;
