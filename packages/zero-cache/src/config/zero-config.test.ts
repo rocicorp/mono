@@ -459,7 +459,16 @@ test('zero-cache --help', () => {
                                                                                                                                                                                               
      --litestream-executable string                                     optional                                                                                                              
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                                                         
-                                                                        Path to the litestream executable.                                                                                    
+                                                                        Path to the litestream executable. This must be built from the                                                        
+                                                                        rocicorp/litestream fork. Support for the official binary at v0.5.x                                                   
+                                                                        is planned.                                                                                                           
+                                                                                                                                                                                              
+     --litestream-executable-for-restore string                         optional                                                                                                              
+       ZERO_LITESTREAM_EXECUTABLE_FOR_RESTORE env                                                                                                                                             
+                                                                        Optionally override the ZERO_LITESTREAM_EXECUTABLE for restoring the backup.                                          
+                                                                        Specify a litestream v0.5.8+ executable (which can restore from both v0.3.x                                           
+                                                                        and v0.5.x backup formats) for forwards compatibility with a future zero-cache                                        
+                                                                        version that will use litestream v0.5.x to backup the replica.                                                        
                                                                                                                                                                                               
      --litestream-config-path string                                    default: "./src/services/litestream/config.yml"                                                                       
        ZERO_LITESTREAM_CONFIG_PATH env                                                                                                                                                        
