@@ -13,6 +13,7 @@ import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {
+  ErroredQuery,
   TransformResponseBody,
   TransformResponseMessage,
 } from '../../../../zero-protocol/src/custom-queries.ts';
@@ -3117,6 +3118,54 @@ describe('view-syncer/service', () => {
     );
 
     // not yet supported: test('a single custom query that returns many queries' () => {});
+
+    test('transformed AST referencing non-existent table is caught and reported as error', async () => {
+      const NONEXISTENT_TABLE_AST = {
+        table: 'nonexistent_table',
+        orderBy: [['id', 'asc']] as const,
+      };
+
+      mockFetchImpl([
+        {
+          id: 'custom-1',
+          name: 'bad-query',
+          ast: NONEXISTENT_TABLE_AST,
+        },
+        {
+          id: 'custom-2',
+          name: 'good-query',
+          ast: USERS_QUERY,
+        },
+      ] satisfies TransformResponseBody);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'bad-query', args: ['arg1']},
+        {op: 'put', hash: 'custom-2', name: 'good-query', args: ['arg2']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+
+      // The invalid AST should produce a transformError for custom-1,
+      // while custom-2 should hydrate normally.
+      const messages = await nextPoke(client);
+      const transformErrors = messages.filter(m => m[0] === 'transformError');
+      expect(transformErrors).toHaveLength(1);
+      const [, errors] = transformErrors[0] as [string, ErroredQuery[]];
+      expect(errors).toHaveLength(1);
+      expect(errors[0].id).toBe('custom-1');
+      expect(errors[0].name).toBe('bad-query');
+      expect(errors[0].message).toContain('"nonexistent_table"');
+      expect(errors[0].message).toContain('does not exist');
+
+      // custom-2 should still be in the gotQueriesPatch
+      const pokeParts = messages
+        .filter((m): m is ['pokePart', PokePartBody] => m[0] === 'pokePart')
+        .map(([, body]) => body);
+      expect(pokeParts[0].gotQueriesPatch).toContainEqual({
+        hash: 'custom-2',
+        op: 'put',
+      });
+    });
   });
 
   test('delete client', async () => {

@@ -4,6 +4,7 @@ import {
   equals,
   intersection,
 } from '../../../../shared/src/set-utils.ts';
+import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
@@ -118,5 +119,147 @@ export function checkClientSchema(
       message: errors.join('\n'),
       origin: ErrorOrigin.ZeroCache,
     });
+  }
+}
+
+/**
+ * Validates that a transformed AST only references tables and columns
+ * that exist in the replica's tableSpecs. Returns a list of validation
+ * error strings (empty if valid).
+ */
+export function checkTransformedAST(
+  ast: AST,
+  tableSpecs: ReadonlyMap<string, LiteAndZqlSpec>,
+): string[] {
+  const errors: string[] = [];
+  checkASTRecursive(ast, tableSpecs, errors);
+  return errors;
+}
+
+function syncedTablesList(
+  tableSpecs: ReadonlyMap<string, LiteAndZqlSpec>,
+): string {
+  return [...tableSpecs.keys()]
+    .filter(t => !t.includes('.'))
+    .sort()
+    .map(t => `"${t}"`)
+    .join(',');
+}
+
+function syncedColumnsList(
+  tableSpecs: ReadonlyMap<string, LiteAndZqlSpec>,
+  table: string,
+): string {
+  const spec = tableSpecs.get(table);
+  if (!spec) {
+    return '';
+  }
+  return Object.keys(spec.zqlSpec)
+    .filter(c => c !== ZERO_VERSION_COLUMN_NAME)
+    .sort()
+    .map(c => `"${c}"`)
+    .join(',');
+}
+
+function checkASTRecursive(
+  ast: AST,
+  tableSpecs: ReadonlyMap<string, LiteAndZqlSpec>,
+  errors: string[],
+): void {
+  const tableSpec = tableSpecs.get(ast.table);
+  if (!tableSpec) {
+    errors.push(
+      `The "${ast.table}" table does not exist or is not ` +
+        `one of the replicated tables: ${syncedTablesList(tableSpecs)}.`,
+    );
+    // Can't validate columns if table doesn't exist.
+    return;
+  }
+
+  const syncedColumns = new Set(Object.keys(tableSpec.zqlSpec));
+
+  const checkColumn = (column: string) => {
+    if (!syncedColumns.has(column)) {
+      errors.push(
+        `The "${ast.table}"."${column}" column does not exist ` +
+          `or is not one of the replicated columns: ${syncedColumnsList(tableSpecs, ast.table)}.`,
+      );
+    }
+  };
+
+  // Validate columns in where conditions.
+  if (ast.where) {
+    checkConditionColumns(
+      ast.table,
+      ast.where,
+      tableSpecs,
+      errors,
+      checkColumn,
+    );
+  }
+
+  // Validate columns in orderBy.
+  if (ast.orderBy) {
+    for (const [column] of ast.orderBy) {
+      checkColumn(column);
+    }
+  }
+
+  // Validate columns in start.row.
+  if (ast.start) {
+    for (const column of Object.keys(ast.start.row)) {
+      checkColumn(column);
+    }
+  }
+
+  // Validate related subqueries.
+  if (ast.related) {
+    for (const related of ast.related) {
+      // Validate correlation parent fields (belong to this table).
+      for (const column of related.correlation.parentField) {
+        checkColumn(column);
+      }
+      // Validate correlation child fields and the subquery itself.
+      const childSpec = tableSpecs.get(related.subquery.table);
+      if (childSpec) {
+        const childColumns = new Set(Object.keys(childSpec.zqlSpec));
+        for (const column of related.correlation.childField) {
+          if (!childColumns.has(column)) {
+            errors.push(
+              `The "${related.subquery.table}"."${column}" column does not exist ` +
+                `or is not one of the replicated columns: ${syncedColumnsList(tableSpecs, related.subquery.table)}.`,
+            );
+          }
+        }
+      }
+      // Recursively validate the subquery AST.
+      checkASTRecursive(related.subquery, tableSpecs, errors);
+    }
+  }
+}
+
+function checkConditionColumns(
+  table: string,
+  condition: Condition,
+  tableSpecs: ReadonlyMap<string, LiteAndZqlSpec>,
+  errors: string[],
+  checkColumn: (column: string) => void,
+): void {
+  switch (condition.type) {
+    case 'simple':
+      if (condition.left.type === 'column') {
+        checkColumn(condition.left.name);
+      }
+      break;
+    case 'and':
+    case 'or':
+      for (const sub of condition.conditions) {
+        checkConditionColumns(table, sub, tableSpecs, errors, checkColumn);
+      }
+      break;
+    case 'correlatedSubquery':
+      // Recursively validate the correlated subquery's AST.
+      checkASTRecursive(condition.related.subquery, tableSpecs, errors);
+      break;
   }
 }

@@ -52,7 +52,7 @@ import {
   getSubscriptionState,
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
-import {checkClientSchema} from './client-schema.ts';
+import {checkClientSchema, checkTransformedAST} from './client-schema.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
@@ -323,6 +323,14 @@ export class PipelineDriver {
   /** @return Map from query ID to PipelineInfo for all added queries. */
   queries(): ReadonlyMap<string, QueryInfo> {
     return this.#pipelines;
+  }
+
+  /**
+   * Validates that the given AST only references tables and columns that
+   * exist in the replica. Returns a list of error strings (empty if valid).
+   */
+  validateAST(ast: AST): string[] {
+    return checkTransformedAST(ast, this.#tableSpecs);
   }
 
   totalHydrationTimeMs(): number {

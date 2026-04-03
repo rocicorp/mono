@@ -1,5 +1,6 @@
 import {beforeAll, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {
   ClientSchema,
   TableSchema,
@@ -9,7 +10,7 @@ import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import type {ShardID} from '../../types/shards.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../replicator/schema/table-metadata.ts';
-import {checkClientSchema} from './client-schema.ts';
+import {checkClientSchema, checkTransformedAST} from './client-schema.ts';
 
 describe('client schemas', () => {
   const tableSpecs = new Map<string, LiteAndZqlSpec>();
@@ -469,5 +470,315 @@ describe('client schemas', () => {
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: No tables have been synced from upstream. Please check that the ZERO_UPSTREAM_DB has been properly set.]`,
     );
+  });
+});
+
+describe('checkTransformedAST', () => {
+  const tableSpecs = new Map<string, LiteAndZqlSpec>();
+
+  beforeAll(() => {
+    const lc = createSilentLogContext();
+    const db = new Database(lc, ':memory:');
+    db.exec(CREATE_TABLE_METADATA_TABLE);
+    db.exec(/* sql */ `
+      CREATE TABLE issues(
+        id "text|NOT_NULL",
+        title "text|NOT_NULL",
+        status "text|NOT_NULL",
+        priority int,
+        ownerId "text|NOT_NULL",
+        _0_version TEXT
+      );
+      CREATE UNIQUE INDEX issues_pkey ON issues (id ASC);
+
+      CREATE TABLE users(
+        id "text|NOT_NULL",
+        name "text|NOT_NULL",
+        email "text|NOT_NULL",
+        _0_version TEXT
+      );
+      CREATE UNIQUE INDEX users_pkey ON users (id ASC);
+
+      CREATE TABLE labels(
+        id "text|NOT_NULL",
+        name "text|NOT_NULL",
+        _0_version TEXT
+      );
+      CREATE UNIQUE INDEX labels_pkey ON labels (id ASC);
+
+      CREATE TABLE "issue_labels"(
+        issueId "text|NOT_NULL",
+        labelId "text|NOT_NULL",
+        _0_version TEXT
+      );
+      CREATE UNIQUE INDEX issue_labels_pkey ON issue_labels (issueId ASC, labelId ASC);
+    `);
+    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}, tableSpecs);
+  });
+
+  test('valid AST with table and where column', () => {
+    const ast: AST = {
+      table: 'issues',
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'status'},
+        right: {type: 'literal', value: 'open'},
+      },
+      orderBy: [['priority', 'desc']],
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toEqual([]);
+  });
+
+  test('valid AST with related subquery', () => {
+    const ast: AST = {
+      table: 'issues',
+      related: [
+        {
+          correlation: {
+            parentField: ['ownerId'],
+            childField: ['id'],
+          },
+          subquery: {
+            table: 'users',
+            alias: 'owner',
+          },
+        },
+      ],
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toEqual([]);
+  });
+
+  test('non-existent table', () => {
+    const ast: AST = {
+      table: 'nonexistent',
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "nonexistent" table does not exist or is not one of the replicated tables: "issue_labels","issues","labels","users".",
+      ]
+    `);
+  });
+
+  test('non-existent column in where', () => {
+    const ast: AST = {
+      table: 'issues',
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'nonexistent'},
+        right: {type: 'literal', value: 'foo'},
+      },
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "issues"."nonexistent" column does not exist or is not one of the replicated columns: "id","ownerId","priority","status","title".",
+      ]
+    `);
+  });
+
+  test('non-existent column in orderBy', () => {
+    const ast: AST = {
+      table: 'issues',
+      orderBy: [['badColumn', 'asc']],
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "issues"."badColumn" column does not exist or is not one of the replicated columns: "id","ownerId","priority","status","title".",
+      ]
+    `);
+  });
+
+  test('non-existent column in start.row', () => {
+    const ast: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      start: {
+        row: {noSuchColumn: 'value'},
+        exclusive: false,
+      },
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "issues"."noSuchColumn" column does not exist or is not one of the replicated columns: "id","ownerId","priority","status","title".",
+      ]
+    `);
+  });
+
+  test('non-existent table in related subquery', () => {
+    const ast: AST = {
+      table: 'issues',
+      related: [
+        {
+          correlation: {
+            parentField: ['id'],
+            childField: ['issueId'],
+          },
+          subquery: {
+            table: 'nonexistent_table',
+            alias: 'sub',
+          },
+        },
+      ],
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "nonexistent_table" table does not exist or is not one of the replicated tables: "issue_labels","issues","labels","users".",
+      ]
+    `);
+  });
+
+  test('non-existent parent correlation column', () => {
+    const ast: AST = {
+      table: 'issues',
+      related: [
+        {
+          correlation: {
+            parentField: ['badParentCol'],
+            childField: ['id'],
+          },
+          subquery: {
+            table: 'users',
+            alias: 'owner',
+          },
+        },
+      ],
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "issues"."badParentCol" column does not exist or is not one of the replicated columns: "id","ownerId","priority","status","title".",
+      ]
+    `);
+  });
+
+  test('non-existent child correlation column', () => {
+    const ast: AST = {
+      table: 'issues',
+      related: [
+        {
+          correlation: {
+            parentField: ['ownerId'],
+            childField: ['badChildCol'],
+          },
+          subquery: {
+            table: 'users',
+            alias: 'owner',
+          },
+        },
+      ],
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "users"."badChildCol" column does not exist or is not one of the replicated columns: "email","id","name".",
+      ]
+    `);
+  });
+
+  test('non-existent table in correlatedSubquery condition', () => {
+    const ast: AST = {
+      table: 'issues',
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        related: {
+          correlation: {
+            parentField: ['id'],
+            childField: ['issueId'],
+          },
+          subquery: {
+            table: 'nonexistent',
+            alias: 'sub',
+          },
+        },
+      },
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "nonexistent" table does not exist or is not one of the replicated tables: "issue_labels","issues","labels","users".",
+      ]
+    `);
+  });
+
+  test('columns in nested and/or conditions', () => {
+    const ast: AST = {
+      table: 'issues',
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'status'},
+            right: {type: 'literal', value: 'open'},
+          },
+          {
+            type: 'or',
+            conditions: [
+              {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'badCol1'},
+                right: {type: 'literal', value: 'a'},
+              },
+              {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'badCol2'},
+                right: {type: 'literal', value: 'b'},
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toMatchInlineSnapshot(`
+      [
+        "The "issues"."badCol1" column does not exist or is not one of the replicated columns: "id","ownerId","priority","status","title".",
+        "The "issues"."badCol2" column does not exist or is not one of the replicated columns: "id","ownerId","priority","status","title".",
+      ]
+    `);
+  });
+
+  test('multiple errors accumulate', () => {
+    const ast: AST = {
+      table: 'issues',
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'badWhere'},
+        right: {type: 'literal', value: 'x'},
+      },
+      orderBy: [['badOrder', 'asc']],
+      related: [
+        {
+          correlation: {
+            parentField: ['ownerId'],
+            childField: ['id'],
+          },
+          subquery: {
+            table: 'nonexistent',
+            alias: 'sub',
+          },
+        },
+      ],
+    };
+    const errors = checkTransformedAST(ast, tableSpecs);
+    expect(errors).toHaveLength(3);
+    expect(errors[0]).toContain('"badWhere"');
+    expect(errors[1]).toContain('"badOrder"');
+    expect(errors[2]).toContain('"nonexistent"');
+  });
+
+  test('literal-only conditions are valid', () => {
+    const ast: AST = {
+      table: 'issues',
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'literal', value: 1},
+        right: {type: 'literal', value: 1},
+      },
+    };
+    expect(checkTransformedAST(ast, tableSpecs)).toEqual([]);
   });
 });

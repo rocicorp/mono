@@ -1407,6 +1407,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         appQueryErrors.push(q);
         continue;
       }
+      // Validate that the transformed AST only references tables/columns
+      // that exist in the replica.
+      const astErrors = this.#pipelines.validateAST(q.transformedAst);
+      if (astErrors.length > 0) {
+        const record = customQueryMap.get(q.id);
+        const name = record?.name ?? q.id;
+        const argsStr = record?.args?.length
+          ? ` with args ${JSON.stringify(record.args)}`
+          : '';
+        const errorMessage =
+          `API server returned invalid AST for query "${name}"${argsStr}: ${astErrors.join('; ')}`;
+        lc.warn?.(errorMessage);
+        appQueryErrors.push({
+          error: 'app',
+          id: q.id,
+          name,
+          message: errorMessage,
+        });
+        continue;
+      }
       cb(q);
     }
 
