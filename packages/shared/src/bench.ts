@@ -1,7 +1,7 @@
 // oxlint-disable typescript/no-explicit-any
 // oxlint-disable no-console
 
-import {measure} from 'mitata';
+import {measure, type k_options as MeasureOptions} from 'mitata';
 import type {TestAPI} from 'vitest';
 import * as vitest from 'vitest';
 import {
@@ -9,6 +9,8 @@ import {
   printBenchResult,
   type Stats,
 } from './bench-format.ts';
+
+export type {MeasureOptions};
 
 export {do_not_optimize as use} from 'mitata';
 
@@ -19,6 +21,11 @@ const benchOutputFormat = process.env.BENCH_OUTPUT_FORMAT;
 const colors = !process.env.NO_COLOR && !process.env.NODE_DISABLE_COLORS;
 
 type MeasureFn = Parameters<typeof measure>[0];
+
+const defaultMeasureOptions: MeasureOptions = {
+  min_cpu_time: 2e9, // 2 seconds
+  min_samples: 50,
+};
 
 type BenchResult = {name: string; stats: Stats};
 const resultsStack: (BenchResult[] | undefined)[] = [];
@@ -91,10 +98,10 @@ function copyModifiers<T extends (...args: any[]) => any>(
 }
 
 function wrapTest(testFn: (...args: any[]) => any): TestAPI {
-  const wrapped = ((name: string, fn: MeasureFn) =>
+  const wrapped = ((name: string, fn: MeasureFn, opts?: MeasureOptions) =>
     testFn(name, async ({task}: {task: {fullName: string}}) => {
       const {fullName} = task;
-      const stats = await measure(fn);
+      const stats = await measure(fn, {...defaultMeasureOptions, ...opts});
 
       if (currentResults) {
         currentResults.push({name: fullName, stats});
