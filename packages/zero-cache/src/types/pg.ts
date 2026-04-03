@@ -382,7 +382,7 @@ export function pgClient(
  * these operations from timing out.
  */
 export function disableStatementTimeout(sql: PostgresTransaction) {
-  void sql`SET LOCAL statement_timeout = 0;`.execute();
+  void sql`SET LOCAL statement_timeout = 0;`.execute().catch(() => {});
 }
 
 export const typeNameByOID: Record<number, string> = Object.freeze(
