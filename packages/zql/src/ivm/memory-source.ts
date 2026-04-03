@@ -872,17 +872,15 @@ function compareBounds(a: Bound, b: Bound): number {
   if (a === b) {
     return 0;
   }
-  if (a === minValue) {
-    return -1;
+  // Use typeof to guard the Symbol sentinel checks first. This gives V8 a
+  // clear type discriminant so the common non-symbol path compiles as a
+  // specialised numeric/string fast-path without a Smi deopt when the
+  // minValue/maxValue sentinel symbols appear.
+  if (typeof a === 'symbol') {
+    return a === minValue ? -1 : 1;
   }
-  if (b === minValue) {
-    return 1;
-  }
-  if (a === maxValue) {
-    return 1;
-  }
-  if (b === maxValue) {
-    return -1;
+  if (typeof b === 'symbol') {
+    return b === minValue ? 1 : -1;
   }
   return compareValues(a, b);
 }
