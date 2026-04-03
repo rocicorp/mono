@@ -5,11 +5,8 @@
  * Run:
  *   npm --workspace=zql-benchmarks run bench -- memory-ivm-deopt
  *
- * Run with deopt tracing:
- *   NODE_OPTIONS=--trace-deopt \
- *     npm --workspace=zql-benchmarks run bench -- memory-ivm-deopt \
- *     2>/tmp/deopt.log
- *   grep '\[deopt' /tmp/deopt.log | grep -v node_modules | sort | uniq -c | sort -rn
+ * Run with deopt tracing (output goes to stderr inline):
+ *   npm --workspace=zql-benchmarks run bench:deopt -- memory-ivm-deopt
  */
 
 import {bench, describe} from '../../shared/src/bench.ts';
