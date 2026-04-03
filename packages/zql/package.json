@@ -19,6 +19,7 @@
     "@standard-schema/spec": "^1.0.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
+    "oxfmt": "^0.43.0",
     "shared": "0.0.0",
     "typescript": "~5.9.3",
     "zero-protocol": "0.0.0",
