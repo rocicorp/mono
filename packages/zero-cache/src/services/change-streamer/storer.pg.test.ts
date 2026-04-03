@@ -1692,6 +1692,64 @@ describe('change-streamer/storer', () => {
     `);
       await expectConsumed('08', '0a', '0d', '0e');
     });
+
+    test('slow change DB write triggers timeout and storer re-throws', async () => {
+      // Re-create the storer with a very short write-batch timeout
+      // so the test completes quickly.
+      void storer.stop();
+      await done;
+
+      const SHORT_TIMEOUT_MS = 200;
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        db,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        0.04,
+        SHORT_TIMEOUT_MS,
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+
+      // Acquire an EXCLUSIVE lock on the changeLog table from a separate
+      // connection. This blocks storer INSERTs without timing out the
+      // Postgres connection itself, simulating a slow/stuck change DB.
+      const lockConn = await db.reserve();
+      await lockConn`BEGIN`;
+      await lockConn`LOCK TABLE "xero_5/cdc"."changeLog" IN EXCLUSIVE MODE`;
+
+      // Send a transaction with >100 rows so the every-100-row batch-wait
+      // is reached and gets stuck on the locked table.
+      storer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      for (let i = 0; i < 110; i++) {
+        storer.store([
+          '07',
+          ['data', messages.insert('issues', {id: String(i)})],
+        ]);
+      }
+      storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+
+      // The storer should throw once the timeout elapses.
+      await expect(done).rejects.toThrow(
+        `storer changeLog write timed out after ${SHORT_TIMEOUT_MS}ms`,
+      );
+      // Prevent the beforeEach cleanup from re-throwing the rejected done.
+      done = Promise.resolve();
+
+      // Release the lock. The storer's pool had pool.fail() called before the
+      // throw, so once the in-flight INSERT completes it will ROLLBACK and
+      // release its connection - which unblocks testDBs.drop() in cleanup.
+      await lockConn`ROLLBACK`;
+      lockConn.release();
+    });
   });
 
   describe('protocol: wss', () => {
