@@ -15,6 +15,7 @@
     "sst": "3.8.9"
   },
   "devDependencies": {
-    "@types/aws-lambda": "8.10.147"
+    "@types/aws-lambda": "8.10.147",
+    "oxfmt": "^0.43.0"
   }
 }

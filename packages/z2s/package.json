@@ -29,6 +29,7 @@
     "@faker-js/faker": "^9.6.0",
     "@types/pg": "^8.11.11",
     "@vitest/runner": "4.1.2",
+    "oxfmt": "^0.43.0",
     "pg": "^8.16.3",
     "shared": "0.0.0",
     "vitest": "4.1.2",

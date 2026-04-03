@@ -27,5 +27,8 @@
     "typescript": "~5.9.3",
     "vite": "8.0.3",
     "xbytes": "^1.7.0"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.43.0"
   }
 }

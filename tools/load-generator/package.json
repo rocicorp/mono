@@ -18,6 +18,7 @@
     "postgres": "3.4.7"
   },
   "devDependencies": {
+    "oxfmt": "^0.43.0",
     "shared": "0.0.0"
   }
 }

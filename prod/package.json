@@ -6,5 +6,8 @@
   "scripts": {
     "format": "oxfmt .",
     "check-format": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "oxfmt": "^0.43.0"
   }
 }

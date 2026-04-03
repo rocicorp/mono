@@ -12,5 +12,7 @@
   "dependencies": {
     "@rocicorp/zero": "file:rocicorp-zero.tgz"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "oxfmt": "^0.43.0"
+  }
 }
