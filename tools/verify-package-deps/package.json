@@ -21,6 +21,6 @@
   "devDependencies": {
     "@types/node": "^22.10.5",
     "oxfmt": "^0.43.0",
-    "typescript": "~5.9.3"
+    "typescript": "~6.0.2"
   }
 }

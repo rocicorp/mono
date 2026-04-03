@@ -9,7 +9,7 @@
     "@vitest/runner": "4.1.2",
     "oxfmt": "^0.43.0",
     "shared": "0.0.0",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.2",
     "vitest": "4.1.2"
   },
   "scripts": {

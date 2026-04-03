@@ -1,6 +1,6 @@
-import type {SQLQuery, FormatConfig} from '@databases/sql';
-import baseSql from '@databases/sql';
 import {escapeSQLiteIdentifier} from '@databases/escape-identifier';
+import type {FormatConfig, SQLQuery} from '@databases/sql';
+import sql from '@databases/sql';
 
 const sqliteFormat: FormatConfig = {
   escapeIdentifier: str => escapeSQLiteIdentifier(str),
@@ -15,4 +15,4 @@ export function format(sql: SQLQuery) {
   return sql.format(sqliteFormat);
 }
 
-export const sql = baseSql.default;
+export {sql};
