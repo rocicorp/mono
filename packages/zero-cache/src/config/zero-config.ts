@@ -706,10 +706,11 @@ export const zeroOptions = {
       ],
     },
 
-    executableForRestore: {
+    executableV5: {
       type: v.string().optional(),
       desc: [
-        `Optionally override the {bold ZERO_LITESTREAM_EXECUTABLE} for restoring the backup.`,
+        `The v0.5.x litestream executable which, when specified, will be used for`,
+        `restoring the backup instead of the {bold ZERO_LITESTREAM_EXECUTABLE}.`,
         `Specify a litestream v0.5.8+ executable (which can restore from both v0.3.x`,
         `and v0.5.x backup formats) for forwards compatibility with a future zero-cache`,
         `version that will use litestream v0.5.x to backup the replica.`,

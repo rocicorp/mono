@@ -463,9 +463,10 @@ test('zero-cache --help', () => {
                                                                         rocicorp/litestream fork. Support for the official binary at v0.5.x                                                   
                                                                         is planned.                                                                                                           
                                                                                                                                                                                               
-     --litestream-executable-for-restore string                         optional                                                                                                              
-       ZERO_LITESTREAM_EXECUTABLE_FOR_RESTORE env                                                                                                                                             
-                                                                        Optionally override the ZERO_LITESTREAM_EXECUTABLE for restoring the backup.                                          
+     --litestream-executable-v5 string                                  optional                                                                                                              
+       ZERO_LITESTREAM_EXECUTABLE_V5 env                                                                                                                                                      
+                                                                        The v0.5.x litestream executable which, when specified, will be used for                                              
+                                                                        restoring the backup instead of the ZERO_LITESTREAM_EXECUTABLE.                                                       
                                                                         Specify a litestream v0.5.8+ executable (which can restore from both v0.3.x                                           
                                                                         and v0.5.x backup formats) for forwards compatibility with a future zero-cache                                        
                                                                         version that will use litestream v0.5.x to backup the replica.                                                        
