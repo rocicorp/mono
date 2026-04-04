@@ -69,6 +69,7 @@ function getLitestream(
   const {
     executable,
     executableV5,
+    restoreUsingV5,
     backupURL,
     logLevel,
     configPath,
@@ -91,7 +92,7 @@ function getLitestream(
     // The v0.5.8+ litestream executable can restore from either the new LTX
     // format or the legacy WAL format, allowing forwards-compatibility /
     // rollback safety with zero-cache versions that backup to LTX.
-    (mode === 'restore' ? executableV5 : executable) ??
+    (mode === 'restore' && restoreUsingV5 ? executableV5 : executable) ??
     must(executable, `Missing --litestream-executable`);
   return {
     litestream,
