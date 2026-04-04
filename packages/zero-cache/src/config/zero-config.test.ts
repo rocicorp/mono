@@ -465,11 +465,15 @@ test('zero-cache --help', () => {
                                                                                                                                                                                               
      --litestream-executable-v5 string                                  optional                                                                                                              
        ZERO_LITESTREAM_EXECUTABLE_V5 env                                                                                                                                                      
-                                                                        The v0.5.x litestream executable which, when specified, will be used for                                              
-                                                                        restoring the backup instead of the ZERO_LITESTREAM_EXECUTABLE.                                                       
-                                                                        Specify a litestream v0.5.8+ executable (which can restore from both v0.3.x                                           
-                                                                        and v0.5.x backup formats) for forwards compatibility with a future zero-cache                                        
+                                                                        The v0.5.x litestream executable which is used for restoring the backup                                               
+                                                                        backup when ZERO_LITESTREAM_RESTORE_USING_V5 is specified.                                                            
+                                                                        litestream v0.5.8+ can restore from both v0.3.x and v0.5.x backup formats,                                            
+                                                                        affording forwards compatibility with a future zero-cache                                                             
                                                                         version that will use litestream v0.5.x to backup the replica.                                                        
+                                                                                                                                                                                              
+     --litestream-restore-using-v5 boolean                              default: false                                                                                                        
+       ZERO_LITESTREAM_RESTORE_USING_V5 env                                                                                                                                                   
+                                                                        Restores the backup using the ZERO_LITESTREAM_EXECUTABLE_V5 if specified.                                             
                                                                                                                                                                                               
      --litestream-config-path string                                    default: "./src/services/litestream/config.yml"                                                                       
        ZERO_LITESTREAM_CONFIG_PATH env                                                                                                                                                        
