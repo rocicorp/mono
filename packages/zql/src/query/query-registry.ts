@@ -42,7 +42,7 @@ export type CustomQueryTypes<
 export type CustomQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined = TInput,
+  TOutput = TInput,
   TSchema extends Schema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
   TContext = DefaultContext,
@@ -55,7 +55,7 @@ export type CustomQuery<
 type CustomQueryCallable<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -91,7 +91,7 @@ export function isQuery<S extends Schema>(
 export type QueryRequestTypes<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -107,7 +107,7 @@ export type QueryRequestTypes<
 export type QueryRequest<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -140,7 +140,7 @@ export type QueryRequest<
 export type QueryOrQueryRequest<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -158,7 +158,7 @@ export type QueryOrQueryRequest<
 export const addContextToQuery = <
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,
@@ -263,7 +263,7 @@ export type QueryDefinitionTypes<
 export type QueryDefinition<
   TTable extends string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TReturn,
   TContext = DefaultContext,
 > = {
@@ -291,7 +291,7 @@ export function isQueryDefinition(f: unknown): f is AnyQueryDefinition {
 
 export type QueryDefinitionFunction<
   TTable extends string,
-  TInput extends ReadonlyJSONValue | undefined,
+  TInput,
   TReturn,
   TContext,
 > = (options: {args: TInput; ctx: TContext}) => Query<TTable, Schema, TReturn>;
@@ -356,7 +356,7 @@ export function defineQuery<
 // Overload for validator parameter - Input and Output can be different
 export function defineQuery<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TContext = DefaultContext,
   TSchema extends Schema = DefaultSchema,
   TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
@@ -370,7 +370,7 @@ export function defineQuery<
 // Implementation
 export function defineQuery<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TContext = DefaultContext,
   TSchema extends Schema = DefaultSchema,
   TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
@@ -482,7 +482,7 @@ type TypedDefineQuery<TSchema extends Schema, TContext> = {
   // With validator
   <
     TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
+    TOutput,
     TReturn,
     TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
       string,
@@ -499,7 +499,7 @@ type TypedDefineQuery<TSchema extends Schema, TContext> = {
 export function createQuery<
   TTable extends keyof TSchema['tables'] & string,
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema,
   TReturn,
   TContext,

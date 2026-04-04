@@ -904,7 +904,7 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
+    TOutput,
     TReturn,
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
@@ -939,7 +939,7 @@ export class Zero<
   run<
     TTable extends keyof S['tables'] & string,
     TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
+    TOutput,
     TReturn,
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
@@ -982,7 +982,7 @@ export class Zero<
   materialize<
     TTable extends keyof S['tables'] & string,
     TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
+    TOutput,
     TReturn,
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
@@ -992,7 +992,7 @@ export class Zero<
     T,
     TTable extends keyof S['tables'] & string,
     TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
+    TOutput,
     TReturn,
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
@@ -1003,7 +1003,7 @@ export class Zero<
     T,
     TTable extends keyof S['tables'] & string,
     TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
+    TOutput,
     TReturn,
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
