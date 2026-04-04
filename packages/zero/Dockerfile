@@ -57,7 +57,7 @@ COPY --from=litestream-v5 /usr/local/bin/litestream /usr/local/bin/litestream-v5
 RUN cp /usr/local/lib/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
 
 ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
-ENV ZERO_LITESTREAM_EXECUTABLE_FOR_RESTORE=/usr/local/bin/litestream-v5
+ENV ZERO_LITESTREAM_EXECUTABLE_V5=/usr/local/bin/litestream-v5
 ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
 ENV ZERO_LOG_FORMAT=json
 ENV ZERO_SERVER_VERSION=${ZERO_VERSION}

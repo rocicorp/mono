@@ -68,7 +68,7 @@ function getLitestream(
 } {
   const {
     executable,
-    executableForRestore,
+    executableV5,
     backupURL,
     logLevel,
     configPath,
@@ -88,7 +88,10 @@ function getLitestream(
   const snapshotBackupIntervalMinutes = snapshotBackupIntervalHours * 60 - 5;
 
   const litestream =
-    (mode === 'restore' ? executableForRestore : executable) ??
+    // The v0.5.8+ litestream executable can restore from either the new LTX
+    // format or the legacy WAL format, allowing forwards-compatibility /
+    // rollback safety with zero-cache versions that backup to LTX.
+    (mode === 'restore' ? executableV5 : executable) ??
     must(executable, `Missing --litestream-executable`);
   return {
     litestream,
