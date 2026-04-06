@@ -334,12 +334,7 @@ export class TableSource implements Source {
         );
       }
     } finally {
-      // Ensure the SQLite iterate() is closed. Normally #mapFromSQLiteTypes
-      // closes it via its own finally block, but if the generator chain is
-      // returned before #mapFromSQLiteTypes was ever started (e.g., the
-      // unordered overlay yielded an add row before iterating the source),
-      // the SQLite iterator would remain active and lock the connection.
-      // Calling return() on an already-closed iterator is a safe no-op.
+      // Ensure the SQLite iterate() is closed.
       rowIterator.return?.();
       if (debug) {
         let totalNvisit = 0;
@@ -371,27 +366,23 @@ export class TableSource implements Source {
     debug: DebugDelegate | undefined,
   ): IterableIterator<Row> {
     let result;
-    try {
-      do {
-        result = timeSampled(
-          this.#lc,
-          ++eventCount,
-          this.#logConfig.ivmSampling,
-          () => rowIterator.next(),
-          this.#logConfig.slowRowThreshold,
-          () =>
-            `table-source.next took too long for ${query}. Are you missing an index?`,
-        );
-        if (result.done) {
-          break;
-        }
-        const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
-        debug?.rowVended(this.#table, query, row);
-        yield row;
-      } while (!result.done);
-    } finally {
-      rowIterator.return?.();
-    }
+    do {
+      result = timeSampled(
+        this.#lc,
+        ++eventCount,
+        this.#logConfig.ivmSampling,
+        () => rowIterator.next(),
+        this.#logConfig.slowRowThreshold,
+        () =>
+          `table-source.next took too long for ${query}. Are you missing an index?`,
+      );
+      if (result.done) {
+        break;
+      }
+      const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
+      debug?.rowVended(this.#table, query, row);
+      yield row;
+    } while (!result.done);
   }
 
   *push(change: SourceChange): Stream<'yield'> {
