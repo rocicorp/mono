@@ -1,8 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
 import nock from 'nock';
-import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {beforeAll, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {DbFile} from '../../test/lite.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {BackupMonitor} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import type {SnapshotMessage} from './snapshot.ts';
@@ -19,6 +21,7 @@ describe('change-streamer/backup-monitor', () => {
   };
   let metricsResponse = 'unconfigured';
   let monitor: BackupMonitor;
+  let replica: DbFile;
 
   function setMetricsResponse(watermark: string, timestamp: string) {
     // Sample response from prometheus metrics handler
@@ -34,6 +37,17 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
 litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",status="ok"} 0`;
   }
 
+  beforeAll(() => {
+    replica = new DbFile('backup_monitor_test');
+    initReplicationState(
+      replica.connect(createSilentLogContext()),
+      ['zero_pub'],
+      '123',
+    );
+
+    return () => replica.delete();
+  });
+
   beforeEach(() => {
     const lc = createSilentLogContext();
 
@@ -42,6 +56,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
 
     monitor = new BackupMonitor(
       lc,
+      replica.path,
       's3://foo/bar',
       'http://localhost:4850/metrics',
       changeStreamer as unknown as ChangeStreamerService,

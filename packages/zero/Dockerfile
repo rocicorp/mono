@@ -1,14 +1,16 @@
 FROM golang:1.23 AS litestream
 
 WORKDIR /src/
-RUN git clone --depth 1 --branch zero@v0.0.8 https://github.com/rocicorp/litestream.git
+RUN git clone --depth 1 --branch zero@v0.0.9 https://github.com/rocicorp/litestream.git
 WORKDIR /src/litestream/
 
-ARG LITESTREAM_VERSION=0.3.13+z0.0.8  # upstream version + zero version
+ARG LITESTREAM_VERSION=0.3.13+z0.0.9  # upstream version + zero version
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
 	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
+
+FROM litestream/litestream:0.5.10 AS litestream-v5
 
 FROM node:22.15.0-alpine3.20
 
@@ -51,9 +53,11 @@ RUN ln -s /usr/local/lib/node_modules/@rocicorp/zero/node_modules/@rocicorp/zero
 
 # Copy litestream executable and config.yml
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
+COPY --from=litestream-v5 /usr/local/bin/litestream /usr/local/bin/litestream-v5
 RUN cp /usr/local/lib/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
 
 ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
+ENV ZERO_LITESTREAM_EXECUTABLE_V5=/usr/local/bin/litestream-v5
 ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
 ENV ZERO_LOG_FORMAT=json
 ENV ZERO_SERVER_VERSION=${ZERO_VERSION}

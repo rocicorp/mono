@@ -271,10 +271,7 @@ function formatAttemptSummary(
     | NodeCostEvent
     | Extract<PlanDebugEventJSON, {type: 'node-cost'}>
   )[] = [];
-  const connectionConstraintEvents: (
-    | NodeConstraintEvent
-    | Extract<PlanDebugEventJSON, {type: 'node-constraint'}>
-  )[] = [];
+  const connectionConstraintEvents: NodeConstraintEvent[] = [];
 
   for (const event of events) {
     if (event.type === 'node-cost' && event.nodeType === 'connection') {

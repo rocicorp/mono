@@ -174,7 +174,7 @@ describe('replicator/incremental-sync', () => {
     expectTables(
       mainDb,
       {
-        issues: [
+        'issues': [
           {
             issueID: 123n,
             big: null,

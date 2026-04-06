@@ -699,7 +699,29 @@ export const zeroOptions = {
   litestream: {
     executable: {
       type: v.string().optional(),
-      desc: [`Path to the {bold litestream} executable.`],
+      desc: [
+        `Path to the {bold litestream} executable. This must be built from the`,
+        `{bold rocicorp/litestream} fork. Support for the official binary at v0.5.x`,
+        `is planned.`,
+      ],
+    },
+
+    executableV5: {
+      type: v.string().optional(),
+      desc: [
+        `The v0.5.x litestream executable which is used for restoring the backup`,
+        `backup when {bold ZERO_LITESTREAM_RESTORE_USING_V5} is specified.`,
+        `litestream v0.5.8+ can restore from both v0.3.x and v0.5.x backup formats,`,
+        `affording forwards compatibility with a future zero-cache`,
+        `version that will use litestream v0.5.x to backup the replica.`,
+      ],
+    },
+
+    restoreUsingV5: {
+      type: v.boolean().default(false),
+      desc: [
+        `Restores the backup using the {bold ZERO_LITESTREAM_EXECUTABLE_V5} if specified.`,
+      ],
     },
 
     configPath: {

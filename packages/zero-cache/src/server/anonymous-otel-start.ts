@@ -383,19 +383,23 @@ class AnonymousTelemetryManager {
       process.env.ECS_CONTAINER_METADATA_URI_V4 ||
       process.env.ECS_CONTAINER_METADATA_URI ||
       process.env.AWS_EXECUTION_ENV
-    )
+    ) {
       return 'aws';
-    if (process.env.RAILWAY_ENV || process.env.RAILWAY_STATIC_URL)
+    }
+    if (process.env.RAILWAY_ENV || process.env.RAILWAY_STATIC_URL) {
       return 'railway';
+    }
     if (process.env.RENDER || process.env.RENDER_SERVICE_ID) return 'render';
     if (
       process.env.GCP_PROJECT ||
       process.env.GCLOUD_PROJECT ||
       process.env.GOOGLE_CLOUD_PROJECT
-    )
+    ) {
       return 'gcp';
-    if (process.env.COOLIFY_URL || process.env.COOLIFY_CONTAINER_NAME)
+    }
+    if (process.env.COOLIFY_URL || process.env.COOLIFY_CONTAINER_NAME) {
       return 'coolify';
+    }
     if (process.env.CONTAINER_APP_REVISION) return 'azure';
     if (process.env.FLIGHTCONTROL || process.env.FC_URL) return 'flightcontrol';
     return 'unknown';
@@ -427,7 +431,15 @@ class AnonymousTelemetryManager {
 
       return rootCommitHash.length === 40 ? rootCommitHash : 'unknown';
     } catch (error) {
-      this.#lc?.debug?.('telemetry: unable to get Git root commit:', error);
+      // execSync throws a child_process.SpawnSyncReturns-shaped error with an
+      // output property (an array with stdio buffers) and sometimes a killed
+      // property that references back to the error itself — making it
+      // circular and causing stringify() in the Logger logic to throw.
+      const details =
+        error instanceof Error
+          ? {message: error.message, name: error.name, stack: error.stack}
+          : String(error);
+      this.#lc?.debug?.('telemetry: unable to get Git root commit:', details);
       return 'unknown';
     }
   }

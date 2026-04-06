@@ -58,6 +58,7 @@ export async function restoreReplica(
 }
 
 function getLitestream(
+  mode: 'restore' | 'replicate',
   config: ZeroConfig,
   logLevelOverride?: LogLevel,
   backupURLOverride?: string,
@@ -67,6 +68,8 @@ function getLitestream(
 } {
   const {
     executable,
+    executableV5,
+    restoreUsingV5,
     backupURL,
     logLevel,
     configPath,
@@ -85,8 +88,14 @@ function getLitestream(
   // the hourly check triggers on the hour, rather than the hour after.
   const snapshotBackupIntervalMinutes = snapshotBackupIntervalHours * 60 - 5;
 
+  const litestream =
+    // The v0.5.8+ litestream executable can restore from either the new LTX
+    // format or the legacy WAL format, allowing forwards-compatibility /
+    // rollback safety with zero-cache versions that backup to LTX.
+    (mode === 'restore' && restoreUsingV5 ? executableV5 : executable) ??
+    must(executable, `Missing --litestream-executable`);
   return {
-    litestream: must(executable, `Missing --litestream-executable`),
+    litestream,
     env: {
       ...process.env,
       ['ZERO_REPLICA_FILE']: config.replica.file,
@@ -137,6 +146,7 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
   }
 
   const {litestream, env} = getLitestream(
+    'restore',
     config,
     'debug', // Include all output from `litestream restore`, as it's minimal.
     snapshotStatus?.backupURL,
@@ -220,7 +230,7 @@ export function startReplicaBackupProcess(
   lc: LogContext,
   config: ZeroConfig,
 ): ChildProcess {
-  const {litestream, env} = getLitestream(config);
+  const {litestream, env} = getLitestream('replicate', config);
   lc.info?.(`starting litestream backup to ${config.litestream.backupURL}`);
   return spawn(litestream, ['replicate'], {
     env,

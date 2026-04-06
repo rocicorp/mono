@@ -17,8 +17,8 @@
     "bench:bmf:silent": "npm run bench:bmf --silent",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
@@ -38,12 +38,13 @@
     "@types/semver": "^7.5.1",
     "@types/strip-ansi": "^3.0.0",
     "@vitest/runner": "4.1.2",
-    "compare-utf8": "^0.1.1",
+    "compare-utf8": "^0.2.0",
     "fast-check": "^3.18.0",
+    "oxfmt": "^0.43.0",
     "package-up": "^5.0.0",
     "playwright": "^1.53.2",
     "type-fest": "^4.30.0",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.2",
     "vitest": "4.1.2"
   }
 }

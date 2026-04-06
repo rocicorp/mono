@@ -205,6 +205,49 @@ describe('SQL builder with PostgreSQL', () => {
   );
 
   test.each([
+    // 0001-01-01 00:00:00 BC  (year 0 in proleptic Gregorian / JS)
+    {type: 'timestamp', value: -62167219200000},
+    {type: 'timestamptz', value: -62167219200000},
+    // 0044-03-15 00:00:00 BC  (44 BC, year -43 in JS)
+    {type: 'timestamp', value: -63492537600000},
+    {type: 'timestamptz', value: -63492537600000},
+  ] as const)(
+    'numeric $type with BC date ($value) round-trips correctly',
+    async ({type, value}) => {
+      await using pg = await testDBs.create(
+        `${DB_NAME}_${type}_bc`,
+        undefined,
+        {},
+      );
+
+      const table = `round_trip_${type}_bc`;
+      await pg.unsafe(`
+        SET TIME ZONE 'UTC';
+        DROP TABLE IF EXISTS "${table}";
+        CREATE TABLE "${table}" (
+          value ${type.toUpperCase()} NOT NULL
+        );
+      `);
+
+      const insertStmt = formatPgInternalConvert(sql`
+        INSERT INTO ${sql.ident(table)} (value)
+        VALUES (${sqlConvertArg(type, value)})
+      `);
+      await pg.unsafe(insertStmt.text, insertStmt.values as JSONValue[]);
+
+      const selectStmt = formatPgInternalConvert(sql`
+        SELECT value FROM ${sql.ident(table)}
+        WHERE value = ${sqlConvertArg(type, value, singularComparison)}
+      `);
+      const result = await pg.unsafe(
+        selectStmt.text,
+        selectStmt.values as JSONValue[],
+      );
+      expect(result).toHaveLength(1);
+    },
+  );
+
+  test.each([
     {type: 'time', value: 32887654},
     {type: 'timetz', value: 32887654},
   ] as const)(

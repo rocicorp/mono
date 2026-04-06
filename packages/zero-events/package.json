@@ -26,13 +26,14 @@
     "prepack": "npm run build",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts",
     "test": "vitest run"
   },
   "devDependencies": {
+    "oxfmt": "^0.43.0",
     "shared": "0.0.0",
-    "typescript": "~5.9.3"
+    "typescript": "~6.0.2"
   }
 }

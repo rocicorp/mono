@@ -6,14 +6,14 @@
   "scripts": {
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "prettier": "^3.8.1"
+    "oxfmt": "^0.43.0"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",

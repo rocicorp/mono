@@ -7,8 +7,9 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@vitest/runner": "4.1.2",
+    "oxfmt": "^0.43.0",
     "shared": "0.0.0",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.2",
     "vitest": "4.1.2"
   },
   "scripts": {
@@ -16,8 +17,8 @@
     "test:watch": "vitest",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --type-aware src/"
   }
 }

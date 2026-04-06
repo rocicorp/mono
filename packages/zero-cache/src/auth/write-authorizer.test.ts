@@ -71,10 +71,8 @@ beforeEach(() => {
 function setPermissions(permissions: PermissionsConfig) {
   const json = JSON.stringify(permissions);
   replica
-    .prepare(
-      /* sql */ `
-    UPDATE "the_app.permissions" SET permissions = ?, hash = ?`,
-    )
+    .prepare(/* sql */ `
+    UPDATE "the_app.permissions" SET permissions = ?, hash = ?`)
     .run(json, h128(json).toString(16));
 }
 

@@ -9,8 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint --type-aware .",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,7 +19,8 @@
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@vitest/coverage-v8": "4.1.2",
-    "typescript": "~5.9.3",
+    "oxfmt": "^0.43.0",
+    "typescript": "~6.0.2",
     "vitest": "4.1.2"
   }
 }

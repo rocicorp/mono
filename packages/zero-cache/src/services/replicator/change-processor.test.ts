@@ -121,7 +121,7 @@ describe('replicator/change-processor', () => {
         ['commit', issues.commit(), {watermark: '0b'}],
       ],
       data: {
-        issues: [
+        'issues': [
           {
             issueID: 123n,
             big: null,
@@ -269,7 +269,7 @@ describe('replicator/change-processor', () => {
         ['commit', issues.commit(), {watermark: '0a'}],
       ],
       data: {
-        issues: [
+        'issues': [
           {
             issueID: 123n,
             big: 9223372036854775807n,
@@ -346,7 +346,7 @@ describe('replicator/change-processor', () => {
         ['commit', orgIssues.commit(), {watermark: '0a'}],
       ],
       data: {
-        issues: [
+        'issues': [
           {
             orgID: 2n,
             issueID: 123n,
@@ -453,7 +453,7 @@ describe('replicator/change-processor', () => {
         ['commit', orgIssues.commit(), {watermark: '0c'}],
       ],
       data: {
-        issues: [
+        'issues': [
           {
             orgID: 2n,
             issueID: 789n,
@@ -526,13 +526,13 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0i'}],
       ],
       data: {
-        foo: [{id: 101n, ['_0_version']: '0i'}],
-        bar: [
+        'foo': [{id: 101n, ['_0_version']: '0i'}],
+        'bar': [
           {id: 4n, ['_0_version']: '0e'},
           {id: 5n, ['_0_version']: '0e'},
           {id: 6n, ['_0_version']: '0e'},
         ],
-        baz: [],
+        'baz': [],
         ['_zero.changeLog2']: [
           {
             backfillingColumnVersions: '{}',
@@ -672,7 +672,7 @@ describe('replicator/change-processor', () => {
         ['commit', issues.commit(), {watermark: '0b'}],
       ],
       data: {
-        full: [
+        'full': [
           {id: 123n, bool: 0n, desc: 'foobar', ['_0_version']: '0b'},
           {id: 987n, bool: 1n, desc: 'barfoo', ['_0_version']: '0b'},
         ],
@@ -763,12 +763,12 @@ describe('replicator/change-processor', () => {
         ['commit', full.commit(), {watermark: '06'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, desc: 'replaced one', ['_0_version']: '06'},
           {id: 789n, desc: null, ['_0_version']: '06'},
           {id: 234n, desc: 'woo', ['_0_version']: '06'},
         ],
-        full: [
+        'full': [
           {id: 2n, bool: 1n, desc: 'replaced two', ['_0_version']: '06'},
           {id: 321n, bool: 0n, desc: 'voo', ['_0_version']: '06'},
           {id: 456n, bool: 0n, desc: null, ['_0_version']: '06'},
@@ -886,7 +886,7 @@ describe('replicator/change-processor', () => {
         ['commit', orgIssues.commit(), {watermark: '07'}],
       ],
       data: {
-        transaction: [],
+        'transaction': [],
         ['_zero.changeLog2']: [
           {
             stateVersion: '07',
@@ -961,7 +961,7 @@ describe('replicator/change-processor', () => {
         ['commit', orgIssues.commit(), {watermark: '08'}],
       ],
       data: {
-        issues: [
+        'issues': [
           {
             orgID: 1n,
             issueID: 456n,
@@ -1051,7 +1051,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 'bar', count: 2n, bool: 1n, serial: 1n, ['_0_version']: '0e'},
           {id: 'baz', count: 3n, bool: 0n, serial: 2n, ['_0_version']: '0e'},
         ],
@@ -1204,7 +1204,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        bar: [
+        'bar': [
           {id: 1n, ['_0_version']: '00'},
           {id: 2n, ['_0_version']: '00'},
           {id: 3n, ['_0_version']: '00'},
@@ -1318,7 +1318,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {
             id: 1n,
             newInt: 123n,
@@ -1476,7 +1476,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, ['_0_version']: '00'},
           {id: 2n, ['_0_version']: '00'},
           {id: 3n, ['_0_version']: '0e'},
@@ -1569,7 +1569,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, newName: 'hel', ['_0_version']: '00'},
           {id: 2n, newName: 'low', ['_0_version']: '00'},
           {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
@@ -1677,7 +1677,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, nolz: 'hel', ['_0_version']: '00'},
           {id: 2n, nolz: 'low', ['_0_version']: '00'},
           {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
@@ -1788,7 +1788,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, nolz: 'hel', ['_0_version']: '00'},
           {id: 2n, nolz: 'low', ['_0_version']: '00'},
           {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
@@ -1897,7 +1897,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, newName: 'hel', ['_0_version']: '00'},
           {id: 2n, newName: 'low', ['_0_version']: '00'},
           {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
@@ -2011,7 +2011,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, num: 3n, ['_0_version']: '00'},
           {id: 2n, num: 2n, ['_0_version']: '00'},
           {id: 3n, num: 1n, ['_0_version']: '0e'},
@@ -2121,7 +2121,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, num: 3n, ['_0_version']: '00'},
           {id: 2n, num: 2n, ['_0_version']: '00'},
           {id: 3n, num: 1n, ['_0_version']: '0e'},
@@ -2241,7 +2241,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        foo: [
+        'foo': [
           {id: 1n, number: 3n, ['_0_version']: '00'},
           {id: 2n, number: 2n, ['_0_version']: '00'},
           {id: 3n, number: 1n, ['_0_version']: '0e'},
@@ -2575,7 +2575,7 @@ describe('replicator/change-processor', () => {
         ['commit', orgIssues.commit(), {watermark: '07'}],
       ],
       data: {
-        transaction: [],
+        'transaction': [],
         ['_zero.changeLog2']: [
           {
             stateVersion: '07',
@@ -2756,7 +2756,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '123.03'}],
       ],
       data: {
-        bff: [
+        'bff': [
           {
             // Note: The version is unchanged even though backfill updated
             //       a replicated row.
@@ -2973,7 +2973,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '123.03'}],
       ],
       data: {
-        bff: [
+        'bff': [
           {
             // Note: Versions are unchanged even though backfill values
             //       are added.
@@ -3173,7 +3173,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
       ],
       data: {
-        bff: [
+        'bff': [
           {
             _0_version: '101',
             a: 1n,
@@ -3387,7 +3387,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
       ],
       data: {
-        bff: [
+        'bff': [
           {
             _0_version: '03',
             a: 1n,
@@ -3561,7 +3561,7 @@ describe('replicator/change-processor', () => {
         ['commit', fooBarBaz.commit(), {watermark: '123.01'}],
       ],
       data: {
-        bff: [
+        'bff': [
           {id: 2n, _0_version: '115'},
           {id: 83n, _0_version: '115'},
         ],

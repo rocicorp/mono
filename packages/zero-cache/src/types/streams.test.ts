@@ -57,7 +57,7 @@ describe('streams with flow control', () => {
         ws,
         messageSchema,
       );
-      void serverRequests.enqueue({serverIn: instream, serverOut: outstream});
+      serverRequests.enqueue({serverIn: instream, serverOut: outstream});
     });
     const url = await server.listen({port: 0});
     lc.info?.(`server running on ${url}`);

@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "es2020",
     "lib": ["ES2020"],
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "preserve",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,

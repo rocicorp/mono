@@ -15,8 +15,8 @@
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
   "peerDependencies": {
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",
+    "oxfmt": "^0.43.0",
     "shared": "0.0.0",
     "solid-js": "^1.9.4",
     "vite-plugin-solid": "^2.11.11",

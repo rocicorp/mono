@@ -57,10 +57,12 @@ const CREATE_REPLICATION_STATE_SCHEMA =
   //                    `replicaVersion` and moving forward to each subsequent commit watermark
   //                    (e.g. corresponding to a Postgres LSN). Versions are represented as
   //                    lexicographically sortable watermarks (e.g. LexiVersions).
+  // writeTimeMs      : The millisecond epoch at which this version was written to the replica.
   //
-  `
+  /*sql*/ `
   CREATE TABLE "_zero.replicationState" (
     stateVersion TEXT NOT NULL,
+    writeTimeMs INTEGER,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
   ` +
@@ -130,11 +132,10 @@ export function initReplicationState(
     JSON.stringify(publications.sort()),
     stringify(initialSyncContext),
   );
-  db.prepare(
-    `
-    INSERT INTO "_zero.replicationState" (stateVersion) VALUES (?)
-    `,
-  ).run(watermark);
+  db.prepare(/*sql*/ `
+    INSERT INTO "_zero.replicationState" (stateVersion, writeTimeMs) 
+      VALUES (?, unixepoch('subsec') * 1000)
+    `).run(watermark);
   recordEvent(db, 'sync');
 }
 
@@ -196,7 +197,12 @@ export function updateReplicationWatermark(
   db: StatementRunner,
   watermark: string,
 ) {
-  db.run(`UPDATE "_zero.replicationState" SET stateVersion=?`, watermark);
+  db.run(
+    /*sql*/ `
+    UPDATE "_zero.replicationState" 
+      SET stateVersion=?, writeTimeMs=unixepoch('subsec') * 1000`,
+    watermark,
+  );
 }
 
 export function getReplicationState(db: StatementRunner): ReplicationState {

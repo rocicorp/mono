@@ -218,7 +218,7 @@ describe('shutdown', () => {
       ['stop supporting', 'stop supporting', 'stop user-facing'],
     ],
   ])('forceful shutdown: %s', async (_name, fn, expectedEvents) => {
-    void fn();
+    fn();
 
     await Promise.allSettled(all.map(w => w.stopped.promise));
 

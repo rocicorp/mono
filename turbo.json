@@ -6,13 +6,6 @@
       "dependsOn": ["^build"],
       "outputs": ["out/**", "dist/**", ".next/**", "next-env.d.ts", "build/**"]
     },
-    "lint": {
-      "outputs": []
-    },
-    "format": {},
-    "check-format": {
-      "outputs": []
-    },
     "dev": {
       "cache": true
     },

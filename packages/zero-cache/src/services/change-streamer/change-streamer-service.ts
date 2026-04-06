@@ -492,7 +492,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
-    const {protocolVersion, id, mode, replicaVersion, watermark, initial} = ctx;
+    const {protocolVersion, id, mode, replicaVersion, watermark} = ctx;
     if (mode === 'serving') {
       this.#serving.resolve();
     }
@@ -521,10 +521,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
       this.#forwarder.add(subscriber);
       this.#storer.catchup(subscriber, mode);
-
-      if (initial) {
-        this.scheduleCleanup(watermark);
-      }
     }
     return Promise.resolve(downstream);
   }

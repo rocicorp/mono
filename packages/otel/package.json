@@ -6,14 +6,15 @@
   "scripts": {
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "format": "prettier --write .",
-    "check-format": "prettier --check .",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0"
   },
   "devDependencies": {
+    "oxfmt": "^0.43.0",
     "shared": "0.0.0"
   }
 }

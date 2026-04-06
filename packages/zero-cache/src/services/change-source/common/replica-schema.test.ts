@@ -1,4 +1,4 @@
-import {beforeEach, describe, test} from 'vitest';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
@@ -36,6 +36,10 @@ const CREATE_V1_REPLICATION_CONFIG_TABLE = /*sql*/ `
   CREATE TABLE "_zero.replicationConfig" (
     replicaVersion TEXT NOT NULL,
     publications TEXT NOT NULL,
+    lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+  );
+  CREATE TABLE "_zero.replicationState" (
+    stateVersion TEXT NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
 `;
@@ -383,6 +387,65 @@ describe('replica-schema-migrations', () => {
             minRowVersion: '00',
             upstreamMetadata: '{"foo":"bar"}',
             metadata: null,
+          },
+        ],
+      },
+    },
+    {
+      fromSchemaVersion: 12,
+      fromDataVersion: 12,
+      desc: 'backfill writeTimeMs column',
+      replicaSetup:
+        CREATE_V1_REPLICATION_CONFIG_TABLE +
+        CREATE_V6_COLUMN_METADATA_TABLE +
+        CREATE_V7_CHANGE_LOG +
+        CREATE_TABLE_METADATA_TABLE,
+      replicaPreState: {
+        ['_zero.replicationState']: [
+          {
+            stateVersion: '123',
+            lock: 1,
+          },
+        ],
+      },
+      replicaPostState: {
+        ['_zero.replicationState']: [
+          {
+            stateVersion: '123',
+            writeTimeMs: expect.any(Number),
+            lock: 1,
+          },
+        ],
+      },
+    },
+    {
+      fromSchemaVersion: 13,
+      fromDataVersion: 11,
+      desc: 'preserves writeTimeMs after rollback and rollforward',
+      replicaSetup:
+        /*sql*/ `CREATE TABLE "_zero.replicationState" (
+          stateVersion TEXT NOT NULL,
+          writeTimeMs INTEGER,
+          lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+        );` +
+        CREATE_V6_COLUMN_METADATA_TABLE +
+        CREATE_V7_CHANGE_LOG +
+        CREATE_TABLE_METADATA_TABLE,
+      replicaPreState: {
+        ['_zero.replicationState']: [
+          {
+            stateVersion: '123',
+            writeTimeMs: 12345,
+            lock: 1,
+          },
+        ],
+      },
+      replicaPostState: {
+        ['_zero.replicationState']: [
+          {
+            stateVersion: '123',
+            writeTimeMs: 12345,
+            lock: 1,
           },
         ],
       },

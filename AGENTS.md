@@ -43,7 +43,7 @@ npm run test:watch        # Watch mode
 # Type checking and linting
 npm run check-types       # TypeScript across all packages
 npm run lint              # oxlint with type-awareness
-npm run format            # Prettier formatting
+npm run format            # oxfmt formatting
 ```
 
 **Always run `lint`, `format` and `check-types` after every change.**

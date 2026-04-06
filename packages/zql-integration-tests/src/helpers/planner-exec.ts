@@ -392,7 +392,7 @@ export type PlannerInfrastructure = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query: any,
     useIndexedDb?: boolean,
-    maxEstimatedCost?: number | undefined,
+    maxEstimatedCost?: number,
   ) => PlanAttemptResult[];
 };
 
@@ -500,7 +500,7 @@ export async function createPlannerInfrastructure(config: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query: any,
     useIndexedDb = false,
-    maxEstimatedCost?: number | undefined,
+    maxEstimatedCost?: number,
   ): PlanAttemptResult[] {
     // Get the query AST
     const ast = mapAST(
