@@ -66,6 +66,7 @@ import {
 export type InitialSyncOptions = {
   tableCopyWorkers: number;
   profileCopy?: boolean | undefined;
+  textCopy?: boolean | undefined;
 };
 
 /** Server context to store with the initial sync metadata for debugging. */
@@ -84,7 +85,7 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers, profileCopy} = syncOptions;
+  const {tableCopyWorkers, profileCopy, textCopy = false} = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = pgClient(lc, upstreamURI);
   const replicationSession = pgClient(lc, upstreamURI, {
@@ -206,7 +207,7 @@ export async function initialSync(
       const rowCounts = await Promise.all(
         downloads.map(table =>
           copiers.processReadTask((db, lc) =>
-            copy(lc, table, copyPool, db, tx),
+            copy(lc, table, copyPool, db, tx, textCopy),
           ),
         ),
       );
@@ -485,16 +486,15 @@ async function getInitialDownloadState(
   return state;
 }
 
-const USE_TEXT_COPY = process.env.ZERO_INITIAL_SYNC_TEXT_COPY === '1';
-
 function copy(
   lc: LogContext,
   {spec: table, status}: DownloadState,
   dbClient: PostgresDB,
   from: PostgresTransaction,
   to: Database,
+  textCopy: boolean,
 ) {
-  if (USE_TEXT_COPY) {
+  if (textCopy) {
     return copyText(lc, table, status, dbClient, from, to);
   }
   return copyBinary(lc, table, status, from, to);

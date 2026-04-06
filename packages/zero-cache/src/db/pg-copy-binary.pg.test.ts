@@ -94,9 +94,7 @@ describe('pg-copy-binary', () => {
     // Cast unknown-type columns to ::text in the SELECT.
     const selectCols = columns
       .map(c =>
-        hasBinaryDecoder(c as Spec)
-          ? `"${c.name}"`
-          : `"${c.name}"::text`,
+        hasBinaryDecoder(c as Spec) ? `"${c.name}"` : `"${c.name}"::text`,
       )
       .join(',');
     const binaryParser = new BinaryCopyParser();
@@ -541,9 +539,7 @@ describe('pg-copy-binary', () => {
   });
 
   test('mixed known and unknown types', async () => {
-    await sql.unsafe(
-      `CREATE TYPE status_composite AS (code int4, label text)`,
-    );
+    await sql.unsafe(`CREATE TYPE status_composite AS (code int4, label text)`);
     await sql`
       CREATE TABLE mixed_known_unknown (
         id int4,

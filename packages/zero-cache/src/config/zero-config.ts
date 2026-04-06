@@ -880,6 +880,15 @@ export const zeroOptions = {
         `initial-copy.cpuprofile in the tmp directory.`,
       ],
     },
+
+    textCopy: {
+      type: v.boolean().default(false),
+      desc: [
+        `Use text-format COPY instead of binary COPY for the initial sync.`,
+        `This is slower but can work around issues with binary encoding of`,
+        `certain data types.`,
+      ],
+    },
   },
 
   /** @deprecated */
