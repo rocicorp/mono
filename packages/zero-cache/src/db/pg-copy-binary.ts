@@ -350,16 +350,15 @@ export function decodeTime(buf: Buffer): number {
 
 /**
  * TIMETZ: int64 microseconds since midnight + int32 timezone offset in seconds.
- * PG stores the offset as seconds to ADD to get UTC (opposite of ISO convention).
+ * PG stores the offset with inverted sign from ISO (POSIX convention):
+ * positive = west of UTC, negative = east of UTC.
+ * UTC = local_time + pg_offset.
  * → UTC milliseconds since midnight.
  */
 export function decodeTimeTZ(buf: Buffer): number {
   const micros = buf.readBigInt64BE(0);
   const tzOffsetSeconds = buf.readInt32BE(8);
-  // PG's tz offset: local_time + offset = UTC. But PG stores the offset
-  // with inverted sign from ISO: a positive PG offset means west of UTC.
-  // The time value is already in local time, so UTC = local - pgOffset.
-  const utcMicros = micros - BigInt(tzOffsetSeconds) * 1_000_000n;
+  const utcMicros = micros + BigInt(tzOffsetSeconds) * 1_000_000n;
   let ms = Number(utcMicros / 1000n);
   // Normalize to [0, MS_PER_DAY).
   if (ms < 0 || ms >= MS_PER_DAY) {

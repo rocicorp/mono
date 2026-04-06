@@ -294,13 +294,39 @@ describe('binary decoders', () => {
     expect(decodeTime(buf)).toBe(0);
   });
 
-  test('decodeTimeTZ', () => {
-    // 12:30:00 local with UTC+0 offset (offset=0 means UTC in PG)
+  test('decodeTimeTZ UTC', () => {
+    // 12:30:00+00 — PG offset = 0
     const buf = Buffer.alloc(12);
     buf.writeBigInt64BE(45_000_000_000n); // 12:30:00 in microseconds
-    buf.writeInt32BE(0, 8); // UTC offset = 0
-    const result = decodeTimeTZ(buf);
-    expect(result).toBe(45_000_000);
+    buf.writeInt32BE(0, 8);
+    expect(decodeTimeTZ(buf)).toBe(45_000_000);
+  });
+
+  test('decodeTimeTZ east of UTC', () => {
+    // 12:30:00+05 (UTC+5, east) — PG stores offset as -18000 (POSIX: negative = east)
+    // UTC = 12:30 - 5h = 07:30 = 27_000_000 ms
+    const buf = Buffer.alloc(12);
+    buf.writeBigInt64BE(45_000_000_000n);
+    buf.writeInt32BE(-18000, 8);
+    expect(decodeTimeTZ(buf)).toBe(27_000_000);
+  });
+
+  test('decodeTimeTZ west of UTC', () => {
+    // 12:30:00-05 (UTC-5, west) — PG stores offset as +18000 (POSIX: positive = west)
+    // UTC = 12:30 + 5h = 17:30 = 63_000_000 ms
+    const buf = Buffer.alloc(12);
+    buf.writeBigInt64BE(45_000_000_000n);
+    buf.writeInt32BE(18000, 8);
+    expect(decodeTimeTZ(buf)).toBe(63_000_000);
+  });
+
+  test('decodeTimeTZ wraps across midnight', () => {
+    // 01:00:00+05 (UTC+5) — PG offset = -18000
+    // UTC = 01:00 - 5h = -4h → normalizes to 20:00 = 72_000_000 ms
+    const buf = Buffer.alloc(12);
+    buf.writeBigInt64BE(3_600_000_000n); // 01:00 in microseconds
+    buf.writeInt32BE(-18000, 8);
+    expect(decodeTimeTZ(buf)).toBe(72_000_000);
   });
 
   test('decodeNumeric positive', () => {
@@ -428,9 +454,10 @@ describe('makeBinaryDecoder', () => {
     expect(decode(Buffer.from('active'))).toBe('active');
   });
 
-  test('fallback decoder (unknown type)', () => {
-    const decode = makeBinaryDecoder({typeOID: 99999, dataType: 'unknown'});
-    expect(decode(Buffer.from('raw text'))).toBe('raw text');
+  test('unknown type throws', () => {
+    expect(() =>
+      makeBinaryDecoder({typeOID: 99999, dataType: 'unknown'}),
+    ).toThrow('No binary decoder for type OID 99999');
   });
 
   test('array decoder (int[])', () => {
