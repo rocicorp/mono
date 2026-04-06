@@ -990,7 +990,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return startAsyncSpan(
       tracer,
       `vs.#runInLockForClient(${cmd})`,
-      async () => {
+      async span => {
+        span.setAttribute('clientGroupID', this.id);
+        span.setAttribute('clientID', clientID);
         let client: ClientHandler | undefined;
         let result: R | undefined;
         try {
@@ -1480,7 +1482,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
     customQueryTransformMode: CustomQueryTransformMode,
   ) {
-    return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async () => {
+    return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
+      span.setAttribute('clientGroupID', this.id);
       assert(
         this.#pipelines.initialized(),
         'pipelines must be initialized (syncQueryPipelineSet)',
@@ -1829,9 +1832,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         pokers,
       );
 
-      for (const patch of await updater.deleteUnreferencedRows(lc)) {
-        await pokers.addPatch(patch);
-      }
+      await startAsyncSpan(
+        tracer,
+        'vs.#syncQueryPipelineSet.deleteUnreferencedRows',
+        async () => {
+          for (const patch of await updater.deleteUnreferencedRows(lc)) {
+            await pokers.addPatch(patch);
+          }
+        },
+      );
 
       // Commit the changes and update the CVR snapshot.
       this.#cvr = await this.#flushUpdater(lc, updater);
@@ -1848,7 +1857,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       // Signal clients to commit.
-      await pokers.end(finalVersion);
+      await startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet.pokeEnd', () =>
+        pokers.end(finalVersion),
+      );
 
       const wallTime = performance.now() - start;
       lc.info?.(
@@ -1979,9 +1990,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           );
           const patches = await updater.received(lc, rows);
 
-          for (const patch of patches) {
-            await pokers.addPatch(patch);
-          }
+          await startAsyncSpan(
+            tracer,
+            'processBatch.flushToClient',
+            async span => {
+              span.setAttribute('patches', patches.length);
+              for (const patch of patches) {
+                await pokers.addPatch(patch);
+              }
+            },
+          );
           rows.clear();
         });
 
@@ -2049,7 +2067,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
   ): Promise<'success' | ResetPipelinesSignal> {
-    return startAsyncSpan(tracer, 'vs.#advancePipelines', async () => {
+    return startAsyncSpan(tracer, 'vs.#advancePipelines', async span => {
+      span.setAttribute('clientGroupID', this.id);
       assert(
         this.#pipelines.initialized(),
         'pipelines must be initialized (advancePipelines',
@@ -2097,7 +2116,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const finalVersion = this.#cvr.version;
 
       // Signal clients to commit.
-      await pokers.end(finalVersion);
+      await startAsyncSpan(tracer, 'vs.#advancePipelines.pokeEnd', () =>
+        pokers.end(finalVersion),
+      );
 
       const wallTime = performance.now() - start;
       const totalProcessTime = timer.totalElapsed();
