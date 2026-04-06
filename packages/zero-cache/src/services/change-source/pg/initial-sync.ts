@@ -487,7 +487,7 @@ async function getInitialDownloadState(
 
 const USE_TEXT_COPY = process.env.ZERO_INITIAL_SYNC_TEXT_COPY === '1';
 
-async function copy(
+function copy(
   lc: LogContext,
   {spec: table, status}: DownloadState,
   dbClient: PostgresDB,
