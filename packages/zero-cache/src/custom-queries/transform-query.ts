@@ -1,4 +1,6 @@
+import {trace} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
+import {startAsyncSpan} from '../../../otel/src/span.ts';
 import {TimedCache} from '../../../shared/src/cache.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -24,6 +26,8 @@ import {
 } from '../custom/fetch.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import type {ShardID} from '../types/shards.ts';
+
+const tracer = trace.getTracer('custom-query-transformer');
 
 /**
  * Transforms a custom query by calling the user's API server.
@@ -108,19 +112,24 @@ export class CustomQueryTransformer {
     const queryIDs = request.map(r => r.id);
 
     try {
-      const transformResponse = await fetchFromAPIServer(
-        transformResponseMessageSchema,
-        'transform',
-        this.#lc,
-        userQueryURL ??
-          must(
-            this.#config.url[0],
-            'A ZERO_QUERY_URL must be configured for custom queries',
+      const transformResponse = await startAsyncSpan(
+        tracer,
+        'customQueryTransformer.fetchFromAPIServer',
+        () =>
+          fetchFromAPIServer(
+            transformResponseMessageSchema,
+            'transform',
+            this.#lc,
+            userQueryURL ??
+              must(
+                this.#config.url[0],
+                'A ZERO_QUERY_URL must be configured for custom queries',
+              ),
+            this.#urlPatterns,
+            this.#shard,
+            headerOptions,
+            ['transform', request] satisfies TransformRequestMessage,
           ),
-        this.#urlPatterns,
-        this.#shard,
-        headerOptions,
-        ['transform', request] satisfies TransformRequestMessage,
       );
 
       if (transformResponse[0] === 'transformFailed') {
