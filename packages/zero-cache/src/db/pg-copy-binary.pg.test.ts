@@ -538,6 +538,71 @@ describe('pg-copy-binary', () => {
     expect(binaryResult).toEqual(textResult);
   });
 
+  test('built-in types without binary decoders (::text fallback)', async () => {
+    await sql`
+      CREATE TABLE unknown_builtin_types (
+        a macaddr,
+        b interval,
+        c point,
+        d circle,
+        e bit(8),
+        f varbit(16)
+      )`;
+    await sql`INSERT INTO unknown_builtin_types VALUES
+      ('08:00:2b:01:02:03',
+       '1 year 2 months 3 days 04:05:06', '(1.5,2.5)', '<(0,0),5>',
+       B'10101010', B'110011'),
+      ('00:00:00:00:00:00',
+       '00:00:00', '(0,0)', '<(1,2),3.5>',
+       B'00000000', B'1'),
+      (NULL, NULL, NULL, NULL, NULL, NULL)`;
+
+    const cols = await getColumnOIDs('unknown_builtin_types');
+    const textResult = await copyText('unknown_builtin_types', cols);
+    const binaryResult = await copyBinary('unknown_builtin_types', cols);
+    expect(binaryResult).toEqual(textResult);
+  });
+
+  // inet and cidr have a known divergence: PG's ::text cast (used by binary
+  // COPY path) uses `network_show` which always includes the netmask
+  // (e.g. "192.168.1.1/32"), while PG's text output function `inet_out`
+  // (used by text COPY) omits it for host addresses (e.g. "192.168.1.1").
+  // See postgres src/backend/utils/adt/network.c.
+  test('inet/cidr ::text cast includes netmask (known divergence)', async () => {
+    await sql`
+      CREATE TABLE inet_types (
+        a inet,
+        b cidr
+      )`;
+    await sql`INSERT INTO inet_types VALUES
+      ('192.168.1.1', '10.0.0.0/8'),
+      ('::1', '2001:db8::/32'),
+      (NULL, NULL)`;
+
+    const cols = await getColumnOIDs('inet_types');
+    const textResult = await copyText('inet_types', cols);
+    const binaryResult = await copyBinary('inet_types', cols);
+
+    // text path: inet_out omits /32 and /128 for host addresses
+    expect(textResult).toEqual([
+      '192.168.1.1',
+      '10.0.0.0/8',
+      '::1',
+      '2001:db8::/32',
+      null,
+      null,
+    ]);
+    // binary path: network_show always includes the netmask
+    expect(binaryResult).toEqual([
+      '192.168.1.1/32',
+      '10.0.0.0/8',
+      '::1/128',
+      '2001:db8::/32',
+      null,
+      null,
+    ]);
+  });
+
   test('mixed known and unknown types', async () => {
     await sql.unsafe(`CREATE TYPE status_composite AS (code int4, label text)`);
     await sql`
