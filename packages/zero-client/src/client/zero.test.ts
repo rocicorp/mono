@@ -32,7 +32,6 @@ import {
   clearBrowserOverrides,
   overrideBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
-import {findLast} from '../../../shared/src/find-last.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
@@ -330,8 +329,7 @@ describe('onOnlineChange callback', () => {
     // And followed by a reconnect with the longer BACKOFF_MS.
     await tickAFewTimes(vi, BACKOFF_MS);
     await z.triggerConnected();
-    const connectMsg = findLast(
-      z.testLogSink.messages,
+    const connectMsg = z.testLogSink.messages.findLast(
       ([level, _context, args]) =>
         level === 'info' && args.find(arg => /Connecting to/.test(String(arg))),
     );
