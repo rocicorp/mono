@@ -173,7 +173,7 @@ export function liteTypeString(
   textArray: boolean,
 ): LiteTypeString {
   let typeString = upstreamDataType;
-  assert(typeString.indexOf('|') === -1, 'Upstream type should not contain |');
+  assert(!typeString.includes('|'), 'Upstream type should not contain |');
   if (notNull) {
     typeString += NOT_NULL_ATTRIBUTE;
   }
@@ -223,6 +223,8 @@ export function isArray(liteTypeString: LiteTypeString) {
   );
 }
 
+const invalidDataTypeRe = /^.+\|.*\[\]/;
+
 export function assertValidLiteColumnSpec(spec: ColumnSpec) {
   const {dataType} = spec;
   assert(
@@ -237,5 +239,5 @@ export function assertValidLiteColumnSpec(spec: ColumnSpec) {
   );
 
   // and no [] after |
-  assert(!/^.+\|.*\[\]/.test(dataType), `Invalid dataType ${dataType}`);
+  assert(!invalidDataTypeRe.test(dataType), `Invalid dataType ${dataType}`);
 }

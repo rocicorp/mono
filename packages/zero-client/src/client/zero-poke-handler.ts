@@ -222,7 +222,8 @@ export function mergePokes(
     return undefined;
   }
   const {baseCookie} = pokeBuffer[0].pokeStart;
-  const lastPoke = pokeBuffer[pokeBuffer.length - 1];
+  // oxlint-disable-next-line typescript/no-non-null-assertion
+  const lastPoke = pokeBuffer.at(-1)!;
   const {cookie} = lastPoke.pokeEnd;
   const mergedPatch: PatchOperationInternal[] = [];
   const mergedLastMutationIDChanges: Record<string, number> = {};

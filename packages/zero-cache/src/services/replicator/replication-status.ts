@@ -187,6 +187,7 @@ function getReplicatedTables(db: Database): ReplicatedTable[] {
     fullTables,
   );
 
+  // oxlint-disable-next-line e18e/prefer-array-to-sorted
   return [...fullTables.entries()].sort(byKeys).map(([table, spec]) => ({
     table,
     columns: Object.entries(spec.columns)

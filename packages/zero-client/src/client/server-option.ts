@@ -29,7 +29,7 @@ function validateServerParam(paramName: string, server: string): HTTPString {
   if (pathComponents[0] === '') {
     pathComponents.shift();
   }
-  if (pathComponents[pathComponents.length - 1] === '') {
+  if (pathComponents.at(-1) === '') {
     pathComponents.pop();
   }
   if (pathComponents.length > 1) {

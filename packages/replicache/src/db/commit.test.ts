@@ -50,12 +50,9 @@ describe('base snapshot', () => {
     genesisHash = b.chain[0].chunk.hash;
     await withRead(store, async dagRead => {
       expect(
-        (
-          await baseSnapshotFromHash(
-            b.chain[b.chain.length - 1].chunk.hash,
-            dagRead,
-          )
-        ).chunk.hash,
+        // oxlint-disable-next-line typescript/no-non-null-assertion
+        (await baseSnapshotFromHash(b.chain.at(-1)!.chunk.hash, dagRead)).chunk
+          .hash,
       ).toBe(genesisHash);
     });
 
@@ -63,12 +60,9 @@ describe('base snapshot', () => {
     const baseHash = await withRead(store, async dagRead => {
       const baseHash = await dagRead.getHead('main');
       expect(
-        (
-          await baseSnapshotFromHash(
-            b.chain[b.chain.length - 1].chunk.hash,
-            dagRead,
-          )
-        ).chunk.hash,
+        // oxlint-disable-next-line typescript/no-non-null-assertion
+        (await baseSnapshotFromHash(b.chain.at(-1)!.chunk.hash, dagRead)).chunk
+          .hash,
       ).toBe(baseHash);
       return baseHash;
     });
@@ -77,12 +71,9 @@ describe('base snapshot', () => {
     await b.addLocal(clientID);
     await withRead(store, async dagRead => {
       expect(
-        (
-          await baseSnapshotFromHash(
-            b.chain[b.chain.length - 1].chunk.hash,
-            dagRead,
-          )
-        ).chunk.hash,
+        // oxlint-disable-next-line typescript/no-non-null-assertion
+        (await baseSnapshotFromHash(b.chain.at(-1)!.chunk.hash, dagRead)).chunk
+          .hash,
       ).toBe(baseHash);
     });
   };
@@ -109,7 +100,8 @@ describe('local mutations', () => {
 
     await b.addLocal(clientID);
 
-    const headHash = b.chain[b.chain.length - 1].chunk.hash;
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    const headHash = b.chain.at(-1)!.chunk.hash;
     const commits = await withRead(store, dagRead =>
       localMutations(headHash, dagRead),
     );
@@ -142,7 +134,7 @@ test('local mutations greater than', async () => {
   await b.addLocal(clientID2);
   await b.addLocal(clientID1);
   await b.addLocal(clientID1);
-  const headCommit = b.chain[b.chain.length - 1];
+  const headCommit = b.chain.at(-1)!;
 
   expect(
     await withRead(store, dagRead =>
@@ -205,7 +197,8 @@ describe('chain', () => {
     await b.addGenesis(clientID);
 
     let got: Commit<Meta>[] = await withRead(store, dagRead =>
-      commitChain(b.chain[b.chain.length - 1].chunk.hash, dagRead),
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      commitChain(b.chain.at(-1)!.chunk.hash, dagRead),
     );
 
     expect(got).toHaveLength(1);
@@ -219,7 +212,8 @@ describe('chain', () => {
     );
     await b.addLocal(clientID);
 
-    const headHash = b.chain[b.chain.length - 1].chunk.hash;
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    const headHash = b.chain.at(-1)!.chunk.hash;
     got = await withRead(store, dagRead => commitChain(headHash, dagRead));
     expect(got).toHaveLength(3);
     expect(got[0]).toEqual(b.chain[3]);

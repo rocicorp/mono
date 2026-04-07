@@ -85,7 +85,7 @@ export function getSchema(lc: LogContext, replica: Database): Schema {
     includeBackfillingColumns: false,
   });
   const tables = Object.fromEntries(
-    [...specs.values()].map(table => {
+    Array.from(specs.values(), table => {
       const {
         tableSpec: {name, primaryKey},
         zqlSpec: columns,

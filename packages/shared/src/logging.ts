@@ -5,8 +5,8 @@ import {
   type LogLevel,
   type LogSink,
 } from '@rocicorp/logger';
-import chalk from 'chalk';
 import {pid} from 'node:process';
+import {styleText} from 'node:util';
 import {stringify} from './bigint-json.ts';
 
 export type LogConfig = {
@@ -14,11 +14,13 @@ export type LogConfig = {
   format: 'text' | 'json';
 };
 
-const colors = {
-  debug: chalk.grey,
-  warn: chalk.yellow,
-  error: chalk.red,
-};
+function style(color: 'gray' | 'yellow' | 'red', args: unknown[]) {
+  return styleText(color, args.join(''));
+}
+
+const COLOR_DEBUG = 'gray';
+const COLOR_WARN = 'yellow';
+const COLOR_ERROR = 'red';
 
 /**
  * Returns an object for writing colorized output to a provided console.
@@ -29,16 +31,16 @@ export const colorConsole = {
     console.log(...args);
   },
   debug: (...args: unknown[]) => {
-    console.debug(colors.debug(...args));
+    console.debug(style(COLOR_DEBUG, args));
   },
   info: (...args: unknown[]) => {
     console.info(...args);
   },
   warn: (...args: unknown[]) => {
-    console.warn(colors.warn(...args));
+    console.warn(style(COLOR_WARN, args));
   },
   error: (...args: unknown[]) => {
-    console.error(colors.error(...args));
+    console.error(style(COLOR_ERROR, args));
   },
 };
 

@@ -79,8 +79,8 @@ function DemoLoadedPill({
   const [fading, setFading] = useState(false);
 
   useEffect(() => {
-    const fadeTimer = setTimeout(() => setFading(true), 8000);
-    const hideTimer = setTimeout(() => setVisible(false), 8500);
+    const fadeTimer = setTimeout(setFading, 8000, true);
+    const hideTimer = setTimeout(setVisible, 8500, false);
     return () => {
       clearTimeout(fadeTimer);
       clearTimeout(hideTimer);

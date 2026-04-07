@@ -41,14 +41,13 @@ export const emptyHash = emptyUUID as unknown as Hash;
  */
 export const newRandomHash = makeNewRandomHashFunctionInternal();
 
+const fakeHashRe = /^[0-9a-v]{0,8}$/;
+
 /**
  * Creates a function that generates UUID hashes for tests.
  */
 export function makeNewFakeHashFunction(hashPrefix = 'fake'): () => Hash {
-  assert(
-    /^[0-9a-v]{0,8}$/.test(hashPrefix),
-    `Invalid hash prefix: ${hashPrefix}`,
-  );
+  assert(fakeHashRe.test(hashPrefix), `Invalid hash prefix: ${hashPrefix}`);
   let i = 0;
   return () => {
     const count = String(i++);

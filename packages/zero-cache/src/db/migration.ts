@@ -76,7 +76,8 @@ export async function runSchemaMigrations(
     versionMigrations[0][0] > 0,
     `Versions must be non-zero positive numbers`,
   );
-  const codeVersion = versionMigrations[versionMigrations.length - 1][0];
+  // oxlint-disable-next-line typescript/no-non-null-assertion
+  const codeVersion = versionMigrations.at(-1)![0];
 
   log.info?.(
     `Checking schema for compatibility with ${debugName} at schema v${codeVersion}`,

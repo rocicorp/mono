@@ -238,14 +238,12 @@ test('try push [DD31]', async () => {
     },
   ];
 
-  for (const c of cases) {
+  cases.forEach(async c => {
     // Reset state of the store.
     b.chain.length = startingNumCommits;
     await withWrite(store, async w => {
-      await w.setHead(
-        DEFAULT_HEAD_NAME,
-        b.chain[b.chain.length - 1].chunk.hash,
-      );
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      await w.setHead(DEFAULT_HEAD_NAME, b.chain.at(-1)!.chunk.hash);
       await w.removeHead(SYNC_HEAD_NAME);
     });
     for (let i = 0; i < c.numPendingMutations; i++) {
@@ -305,5 +303,5 @@ test('try push [DD31]', async () => {
     );
 
     expect(pusherResult, `name: ${c.name}`).toEqual(c.expPusherResult);
-  }
+  });
 });

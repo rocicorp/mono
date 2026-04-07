@@ -193,7 +193,7 @@ async function checkAndUpdateUpstream(
   }
 
   // Verify that the publications match what is being replicated.
-  const requested = [...shard.publications].sort();
+  const requested = shard.publications.toSorted();
   const replicated = upstreamReplica.publications
     .filter(p => !p.startsWith(internalPublicationPrefix(shard)))
     .sort();

@@ -269,7 +269,8 @@ abstract class NodeImpl<Value> {
   ): Promise<NodeImpl<Value> | DataNodeImpl>;
 
   maxKey(): string {
-    return this.entries[this.entries.length - 1][0];
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    return this.entries.at(-1)![0];
   }
 
   getChildNodeSize(tree: BTreeRead): number {
@@ -688,8 +689,10 @@ export function partition<T>(
   }
 
   if (sum > 0) {
-    if (sizes.length > 0 && sum + sizes[sizes.length - 1] <= max) {
-      partitions[partitions.length - 1].push(...accum);
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    if (sizes.length > 0 && sum + sizes.at(-1)! <= max) {
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      partitions.at(-1)!.push(...accum);
     } else {
       partitions.push(accum);
     }

@@ -287,7 +287,8 @@ function computeDelayAndUpdateDurations(
     return delay;
   }
 
-  const {ok} = sendRecords[sendRecords.length - 1];
+  // oxlint-disable-next-line typescript/no-non-null-assertion
+  const {ok} = sendRecords.at(-1)!;
   const {maxConnections, minDelayMs} = delegate;
 
   if (!ok) {
@@ -327,13 +328,15 @@ function median(values: number[]) {
 }
 
 function didLastSendRequestFail(sendRecords: SendRecord[]) {
-  return sendRecords.length > 0 && !sendRecords[sendRecords.length - 1].ok;
+  // oxlint-disable-next-line typescript/no-non-null-assertion
+  return sendRecords.length > 0 && !sendRecords.at(-1)!.ok;
 }
 
 function recovered(sendRecords: SendRecord[]) {
   return (
     sendRecords.length > 1 &&
     !sendRecords[sendRecords.length - 2].ok &&
-    sendRecords[sendRecords.length - 1].ok
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    sendRecords.at(-1)!.ok
   );
 }

@@ -26,7 +26,7 @@
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.18",
-    "oxfmt": "^0.43.0",
+    "oxfmt": "^0.44.0",
     "react": "^18.3.1",
     "shared": "0.0.0",
     "zero-client": "0.0.0",

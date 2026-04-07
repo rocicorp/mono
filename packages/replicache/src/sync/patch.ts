@@ -4,6 +4,7 @@ import type {
   ReadonlyJSONObject,
   ReadonlyJSONValue,
 } from '../../../shared/src/json.ts';
+import type {DiffOperation} from '../btree/node.ts';
 import type {Write} from '../db/write.ts';
 import {
   type FrozenJSONObject,
@@ -11,7 +12,6 @@ import {
   deepFreeze,
 } from '../frozen-json.ts';
 import type {PatchOperationInternal} from '../patch-operation.ts';
-import type {DiffOperation} from '../btree/node.ts';
 
 export type Diff =
   | DiffOperation<string>
@@ -42,7 +42,7 @@ export async function apply(
             if (
               !p.constrain ||
               p.constrain.length === 0 ||
-              p.constrain.indexOf(key) > -1
+              p.constrain.includes(key)
             ) {
               entries.push([key, value]);
             }

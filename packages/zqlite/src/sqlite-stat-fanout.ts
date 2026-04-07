@@ -171,7 +171,7 @@ export class SQLiteStatFanout {
    */
   getFanout(tableName: string, columns: string[]): FanoutResult {
     // Cache key uses sorted columns for consistency
-    const cacheKey = `${tableName}:${[...columns].sort().join(',')}`;
+    const cacheKey = `${tableName}:${columns.toSorted().join(',')}`;
     const cached = this.#cache.get(cacheKey);
     if (cached) {
       return cached;

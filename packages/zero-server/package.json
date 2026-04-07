@@ -24,7 +24,7 @@
     "@prisma/client": "^7.2.0",
     "@vitest/runner": "4.1.2",
     "drizzle-orm": "^0.45.1",
-    "oxfmt": "^0.43.0",
+    "oxfmt": "^0.44.0",
     "pg": "^8.16.3",
     "postgres": "3.4.7",
     "prisma": "^7.2.0",

@@ -120,7 +120,8 @@ export class FetchMocker {
     response: T | HandlerFn<T> | StatusResponse,
   ): this {
     this.post(urlSubstring, response);
-    this.#handlers[this.#handlers.length - 1].once = true;
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    this.#handlers.at(-1)!.once = true;
     return this;
   }
 
@@ -140,6 +141,6 @@ export class FetchMocker {
 
   /** Get the parsed JSON body of the last request. */
   lastBody(): unknown {
-    return this.#bodies[this.#bodies.length - 1];
+    return this.#bodies.at(-1);
   }
 }
