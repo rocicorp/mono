@@ -253,6 +253,18 @@ describe('binary decoders', () => {
     expect(result).toBeCloseTo(946_684_800_000 + 0.5, 3);
   });
 
+  test('decodeTimestamp +Infinity', () => {
+    const buf = Buffer.alloc(8);
+    buf.writeBigInt64BE(0x7fffffffffffffffn);
+    expect(decodeTimestamp(buf)).toBe(Infinity);
+  });
+
+  test('decodeTimestamp -Infinity', () => {
+    const buf = Buffer.alloc(8);
+    buf.writeBigInt64BE(-0x8000000000000000n);
+    expect(decodeTimestamp(buf)).toBe(-Infinity);
+  });
+
   test('decodeDate', () => {
     // Work backward from a known date to PG days.
     const expected = Date.UTC(2024, 0, 15);
@@ -278,6 +290,18 @@ describe('binary decoders', () => {
     const result = decodeDate(buf);
     const expected = Date.UTC(1999, 11, 31);
     expect(result).toBe(expected);
+  });
+
+  test('decodeDate +Infinity', () => {
+    const buf = Buffer.alloc(4);
+    buf.writeInt32BE(0x7fffffff);
+    expect(decodeDate(buf)).toBe(Infinity);
+  });
+
+  test('decodeDate -Infinity', () => {
+    const buf = Buffer.alloc(4);
+    buf.writeInt32BE(-0x80000000);
+    expect(decodeDate(buf)).toBe(-Infinity);
   });
 
   test('decodeTime', () => {
@@ -370,6 +394,24 @@ describe('binary decoders', () => {
     buf.writeUInt16BE(0xc000, 4); // NaN
     buf.writeInt16BE(0, 6);
     expect(decodeNumeric(buf)).toBeNaN();
+  });
+
+  test('decodeNumeric +Infinity', () => {
+    const buf = Buffer.alloc(8);
+    buf.writeInt16BE(0, 0);
+    buf.writeInt16BE(0, 2);
+    buf.writeUInt16BE(0xd000, 4); // +Infinity
+    buf.writeInt16BE(0, 6);
+    expect(decodeNumeric(buf)).toBe(Infinity);
+  });
+
+  test('decodeNumeric -Infinity', () => {
+    const buf = Buffer.alloc(8);
+    buf.writeInt16BE(0, 0);
+    buf.writeInt16BE(0, 2);
+    buf.writeUInt16BE(0xf000, 4); // -Infinity
+    buf.writeInt16BE(0, 6);
+    expect(decodeNumeric(buf)).toBe(-Infinity);
   });
 });
 

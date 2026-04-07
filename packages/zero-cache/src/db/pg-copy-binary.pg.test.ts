@@ -270,6 +270,8 @@ describe('pg-copy-binary', () => {
       ('2024-01-15 12:30:00', '2024-01-15 12:30:00+00'),
       ('2000-01-01 00:00:00', '2000-01-01 00:00:00+00'),
       ('1999-06-15 23:59:59.123456', '1999-06-15 23:59:59.123456+00'),
+      ('infinity', 'infinity'),
+      ('-infinity', '-infinity'),
       (NULL, NULL)`;
 
     const cols = await getColumnOIDs('ts_types');
@@ -286,6 +288,8 @@ describe('pg-copy-binary', () => {
       ('2000-01-01'),
       ('1970-01-01'),
       ('1999-12-31'),
+      ('infinity'),
+      ('-infinity'),
       (NULL)`;
 
     const cols = await getColumnOIDs('date_types');
@@ -326,6 +330,8 @@ describe('pg-copy-binary', () => {
       (1000000),
       (0.001),
       ('NaN'),
+      ('Infinity'),
+      ('-Infinity'),
       (NULL)`;
 
     const cols = await getColumnOIDs('numeric_types');

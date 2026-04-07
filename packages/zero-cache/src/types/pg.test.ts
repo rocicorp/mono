@@ -70,6 +70,11 @@ describe('timestampToFpMillis', () => {
     expect(timestampToFpMillis(timestamp)).toBe(result);
   });
 
+  test('infinity', () => {
+    expect(timestampToFpMillis('infinity')).toBe(Infinity);
+    expect(timestampToFpMillis('-infinity')).toBe(-Infinity);
+  });
+
   test('throws on invalid timestamp', () => {
     expect(() => timestampToFpMillis('not a timestamp')).toThrow(
       'Error parsing not a timestamp',

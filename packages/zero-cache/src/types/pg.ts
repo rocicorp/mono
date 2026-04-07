@@ -21,6 +21,8 @@ const pgTimestampRe =
 
 // exported for testing.
 export function timestampToFpMillis(timestamp: string): number {
+  if (timestamp === 'infinity') return Infinity;
+  if (timestamp === '-infinity') return -Infinity;
   const match = timestamp.match(pgTimestampRe);
   if (!match) {
     throw new Error(`Error parsing ${timestamp}`);
@@ -216,6 +218,8 @@ export function postgresTimeToMilliseconds(timeString: string): number {
 }
 
 function dateToUTCMidnight(date: string): number {
+  if (date === 'infinity') return Infinity;
+  if (date === '-infinity') return -Infinity;
   const d = new Date(date);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }

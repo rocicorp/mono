@@ -41,6 +41,12 @@ const PG_EPOCH_UNIX_DAYS = 10_957;
 
 const MS_PER_DAY = 86_400_000;
 
+// Sentinel values for infinity in PG binary format.
+const PG_TIMESTAMP_INFINITY = 0x7fffffffffffffffn;
+const PG_TIMESTAMP_NEG_INFINITY = -0x8000000000000000n;
+const PG_DATE_INFINITY = 0x7fffffff;
+const PG_DATE_NEG_INFINITY = -0x80000000;
+
 /**
  * Streaming parser for PostgreSQL `COPY ... TO STDOUT WITH (FORMAT binary)`.
  *
@@ -323,6 +329,8 @@ export function decodeUUID(buf: Buffer): string {
  */
 export function decodeTimestamp(buf: Buffer): number {
   const microseconds = buf.readBigInt64BE(0);
+  if (microseconds === PG_TIMESTAMP_INFINITY) return Infinity;
+  if (microseconds === PG_TIMESTAMP_NEG_INFINITY) return -Infinity;
   // Split into whole milliseconds and sub-millisecond remainder.
   const wholeMillis = Number(microseconds / 1000n);
   const remainderMicros = Number(microseconds % 1000n);
@@ -335,6 +343,8 @@ export function decodeTimestamp(buf: Buffer): number {
  */
 export function decodeDate(buf: Buffer): number {
   const pgDays = buf.readInt32BE(0);
+  if (pgDays === PG_DATE_INFINITY) return Infinity;
+  if (pgDays === PG_DATE_NEG_INFINITY) return -Infinity;
   return (pgDays + PG_EPOCH_UNIX_DAYS) * MS_PER_DAY;
 }
 
@@ -370,6 +380,8 @@ export function decodeTimeTZ(buf: Buffer): number {
 // NUMERIC binary format constants.
 const NUMERIC_NEG = 0x4000;
 const NUMERIC_NAN = 0xc000;
+const NUMERIC_PINF = 0xd000;
+const NUMERIC_NINF = 0xf000;
 const NBASE = 10_000;
 
 /**
@@ -387,6 +399,12 @@ export function decodeNumeric(buf: Buffer): number {
 
   if (sign === NUMERIC_NAN) {
     return NaN;
+  }
+  if (sign === NUMERIC_PINF) {
+    return Infinity;
+  }
+  if (sign === NUMERIC_NINF) {
+    return -Infinity;
   }
   if (ndigits === 0) {
     return 0;
