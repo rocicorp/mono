@@ -77,8 +77,8 @@ jobs:
           --start-point main \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.7 \
-          --threshold-min-sample-size 2 \
+          --threshold-lower-boundary 0.6 \
+          --threshold-min-sample-size 5 \
           --threshold-max-sample-size 10 \
           --err
 
@@ -101,7 +101,7 @@ jobs:
           --start-point-reset \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.7 \
-          --threshold-min-sample-size 2 \
+          --threshold-lower-boundary 0.6 \
+          --threshold-min-sample-size 5 \
           --threshold-max-sample-size 10 \
           --err
