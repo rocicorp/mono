@@ -506,8 +506,6 @@ export class QueryImpl<
       };
     }
 
-    assert(!scalar, 'scalar option only supports one-hop relationships');
-
     if (isTwoHop(related)) {
       const [firstRelation, secondRelation] = related;
       assert(isCompoundKey(firstRelation.sourceField), 'Invalid relationship');
@@ -552,6 +550,7 @@ export class QueryImpl<
               },
               op: 'EXISTS',
               ...(flip !== undefined ? {flip} : {}),
+              ...(scalar !== undefined ? {scalar} : {}),
             },
           },
         },
