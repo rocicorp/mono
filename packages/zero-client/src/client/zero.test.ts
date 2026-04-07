@@ -3703,7 +3703,7 @@ describe('CRUD', () => {
 
     // Optional fields can be set to null/undefined or left off completely.
     await setComment({id: 'c', issueID: '3'});
-    expect(view.data.at(-1)).toEqual({
+    expect(view.data[view.data.length - 1]).toEqual({
       id: 'c',
       issueID: '3',
       text: null,
@@ -3711,7 +3711,7 @@ describe('CRUD', () => {
     });
 
     await setComment({id: 'd', issueID: '4', text: undefined});
-    expect(view.data.at(-1)).toEqual({
+    expect(view.data[view.data.length - 1]).toEqual({
       id: 'd',
       issueID: '4',
       text: null,
@@ -3719,7 +3719,7 @@ describe('CRUD', () => {
     });
 
     await setComment({id: 'e', issueID: '5', text: undefined});
-    expect(view.data.at(-1)).toEqual({
+    expect(view.data[view.data.length - 1]).toEqual({
       id: 'e',
       issueID: '5',
       text: null,

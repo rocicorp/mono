@@ -274,8 +274,6 @@ export {sql};
 
 const PREVIOUSLY_SEEN_VALUE = Symbol('PREVIOUSLY_SEEN_VALUE');
 
-const whitespacePrefixRe = /^\s*/;
-
 function formatFn(
   items: readonly SQLItem[],
   {escapeIdentifier, formatValue}: FormatConfig,
@@ -342,9 +340,7 @@ function formatFn(
   if (text.trim()) {
     const lines = text.split('\n');
     const min = Math.min(
-      ...lines
-        .filter(l => l.trim() !== '')
-        .map(l => whitespacePrefixRe.exec(l)![0].length),
+      ...lines.filter(l => l.trim() !== '').map(l => /^\s*/.exec(l)![0].length),
     );
     if (min) {
       text = lines.map(line => line.substr(min)).join('\n');

@@ -116,7 +116,7 @@ describe('Set', () => {
 
 describe('SetLike', () => {
   function asMap<T>(a: Iterable<T>): Map<T, T> {
-    return new Map(Array.from(a, v => [v, v]));
+    return new Map([...a].map(v => [v, v]));
   }
 
   test('equals', () => {

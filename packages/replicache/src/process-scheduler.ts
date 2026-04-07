@@ -13,6 +13,7 @@ export class ProcessScheduler {
   #scheduledResolver: Resolver<void> | undefined = undefined;
   #runResolver: Resolver<void> | undefined = undefined;
   #runPromise = Promise.resolve();
+  // oxlint-disable-next-line no-unused-private-class-members -- False positive, this is used in #run
   #throttlePromise = Promise.resolve();
 
   /**

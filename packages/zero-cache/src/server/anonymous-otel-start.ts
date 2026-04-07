@@ -30,8 +30,6 @@ export type ActiveUsers = {
   users_30da_legacy: number;
 };
 
-const hostNameRe = /^[a-f0-9]{12}$/;
-
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
   #starting = false;
@@ -497,7 +495,7 @@ class AnonymousTelemetryManager {
 
       if (
         process.env.DOCKER_CONTAINER_ID ||
-        process.env.HOSTNAME?.match(hostNameRe)
+        process.env.HOSTNAME?.match(/^[a-f0-9]{12}$/)
       ) {
         return true;
       }

@@ -43,7 +43,7 @@ export function parseTTL(ttl: TTL): number {
   if (ttl === 'forever') {
     return -1;
   }
-  const multi = multiplier[ttl.at(-1) as TimeUnit];
+  const multi = multiplier[ttl[ttl.length - 1] as TimeUnit];
   return Number(ttl.slice(0, -1)) * multi;
 }
 

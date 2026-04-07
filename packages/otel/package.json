@@ -14,7 +14,7 @@
     "@opentelemetry/api": "^1.9.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.43.0",
     "shared": "0.0.0"
   }
 }

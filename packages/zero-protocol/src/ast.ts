@@ -154,7 +154,6 @@ function mustCompoundKey(field: readonly string[]): CompoundKey {
 }
 
 export const compoundKeySchema: v.Type<CompoundKey> = v.readonly(
-  // oxlint-disable-next-line e18e/prefer-spread-syntax
   v.tuple([v.string()]).concat(v.array(v.string())),
 );
 

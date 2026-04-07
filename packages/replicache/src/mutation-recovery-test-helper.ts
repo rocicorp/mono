@@ -98,8 +98,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
   const localMetas: LocalMetaDD31[] = [];
   for (let i = 0; i < numLocal; i++) {
     await b.addLocal(clientID);
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    const {meta} = b.chain.at(-1)!;
+    const {meta} = b.chain[b.chain.length - 1];
     assertLocalMetaDD31(meta);
     localMetas.push(meta);
   }

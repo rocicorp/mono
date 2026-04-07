@@ -130,17 +130,16 @@ export function millisecondsToPostgresTime(milliseconds: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}+00`;
 }
 
-// Regular expression to match HH:MM:SS, HH:MM:SS.mmm, or HH:MM:SS+00 / HH:MM:SS.mmm+00
-// Supports optional timezone offset
-const timeRegex =
-  /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(?:([+-])(\d{1,2})(?::(\d{2}))?)?$/;
-
 export function postgresTimeToMilliseconds(timeString: string): number {
   // Validate basic format
   if (!timeString || typeof timeString !== 'string') {
     throw new Error('Invalid time string: must be a non-empty string');
   }
 
+  // Regular expression to match HH:MM:SS, HH:MM:SS.mmm, or HH:MM:SS+00 / HH:MM:SS.mmm+00
+  // Supports optional timezone offset
+  const timeRegex =
+    /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(?:([+-])(\d{1,2})(?::(\d{2}))?)?$/;
   const match = timeString.match(timeRegex);
 
   if (!match) {

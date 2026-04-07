@@ -1839,8 +1839,8 @@ test('online', async () => {
 
   expect(rep.online).toBe(false);
   expect(
-    consoleDebugStub.mock.calls.some(args =>
-      args.join('\n').includes('Push threw'),
+    consoleDebugStub.mock.calls.some(
+      args => args.join('\n').indexOf('Push threw') > -1,
     ),
   );
   expect(log).toEqual([false]);
@@ -1853,8 +1853,8 @@ test('online', async () => {
   await tickAFewTimes(vi, 20);
 
   expect(
-    !consoleDebugStub.mock.calls.some(args =>
-      args.join('\n').includes('Push threw'),
+    !consoleDebugStub.mock.calls.some(
+      args => args.join('\n').indexOf('Push threw') > -1,
     ),
   );
   expect(rep.online).toBe(true);

@@ -13,7 +13,7 @@ export function requestIdle(timeout: number): Promise<void> {
     if (typeof requestIdleCallback === 'function') {
       requestIdleCallback(() => resolve(), {timeout});
     } else {
-      setTimeout(resolve, timeout);
+      setTimeout(() => resolve(), timeout);
     }
   });
 }

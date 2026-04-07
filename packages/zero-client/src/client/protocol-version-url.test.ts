@@ -25,7 +25,6 @@ test('When the URL changes we need to update the protocol version', async () => 
 
   // The order of query parameters does not matter. Sort them before hashing.
   const sorted = new URLSearchParams(
-    // oxlint-disable-next-line e18e/prefer-array-to-sorted
     [...url.searchParams.entries()].sort((a, b) => stringCompare(a[0], b[0])),
   );
 

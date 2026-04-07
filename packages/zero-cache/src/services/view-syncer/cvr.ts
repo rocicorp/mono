@@ -3,7 +3,6 @@ import {startAsyncSpan, startSpan} from '../../../../otel/src/span.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {type JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {toSorted} from '../../../../shared/src/iterables.ts';
 import {
   deepEqual,
   type ReadonlyJSONValue,
@@ -34,7 +33,6 @@ import {
   cmpVersions,
   maxVersion,
   oneAfter,
-  versionString,
   type ClientQueryRecord,
   type ClientRecord,
   type CustomQueryRecord,
@@ -43,6 +41,7 @@ import {
   type QueryRecord,
   type RowID,
   type RowRecord,
+  versionString,
 } from './schema/types.ts';
 import {tracer} from './tracer.ts';
 import {ttlClockAsNumber, type TTLClock} from './ttl-clock.ts';
@@ -372,7 +371,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         return patches;
       }
       const newVersion = this._ensureNewVersion();
-      client.desiredQueryIDs = toSorted(union(current, needed), stringCompare);
+      client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
       for (const id of needed) {
         const q = must(queries.find(({hash}) => hash === id));
@@ -441,8 +440,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
 
       const newVersion = this._ensureNewVersion();
-      client.desiredQueryIDs = toSorted(
-        difference(current, remove),
+      client.desiredQueryIDs = [...difference(current, remove)].sort(
         stringCompare,
       );
 
@@ -1075,7 +1073,7 @@ export function getInactiveQueries(cvr: CVR): {
   }
 
   // First sort all the queries that have TTL. Oldest first.
-  return toSorted(inactive.values(), (a, b) => {
+  return [...inactive.values()].sort((a, b) => {
     if (a.ttl === b.ttl) {
       return (
         ttlClockAsNumber(a.inactivatedAt) - ttlClockAsNumber(b.inactivatedAt)

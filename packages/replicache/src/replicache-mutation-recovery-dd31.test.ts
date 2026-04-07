@@ -906,7 +906,7 @@ describe('DD31', () => {
     fetchMocker.post(pushURL, (_url: string, body: unknown) => {
       assertPushRequestV1(body);
       pushRequestJSONBodies.push(body);
-      if (body.mutations.some(m => m.clientID === client2ID)) {
+      if (body.mutations.find(m => m.clientID === client2ID)) {
         throw new Error('test error in push');
       } else {
         return 'ok';

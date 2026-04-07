@@ -1,4 +1,3 @@
-import {toSorted} from '../../../../shared/src/iterables.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
   difference,
@@ -30,7 +29,7 @@ export function checkClientSchema(
   const errors: string[] = [];
   const clientTables = new Set(Object.keys(clientSchema.tables));
   const missingTables = difference(clientTables, tableSpecs);
-  for (const missing of toSorted(missingTables)) {
+  for (const missing of [...missingTables].sort()) {
     if (fullTables.has(missing)) {
       errors.push(
         `The "${missing}" table is missing a primary key or non-null ` +
@@ -57,7 +56,7 @@ export function checkClientSchema(
     }
   }
   const tables = intersection(tableSpecs, clientTables);
-  for (const table of toSorted(tables)) {
+  for (const table of [...tables].sort()) {
     const clientSpec = clientSchema.tables[table];
     const serverSpec = must(tableSpecs.get(table)); // guaranteed by intersection
     const fullSpec = must(fullTables.get(table));
@@ -65,7 +64,7 @@ export function checkClientSchema(
     const clientColumns = new Set(Object.keys(clientSpec.columns));
     const syncedColumns = new Set(Object.keys(serverSpec.zqlSpec));
     const missingColumns = difference(clientColumns, syncedColumns);
-    for (const missing of toSorted(missingColumns)) {
+    for (const missing of [...missingColumns].sort()) {
       if (fullSpec.columns[missing]) {
         errors.push(
           `The "${table}"."${missing}" column cannot be synced because it ` +

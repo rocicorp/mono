@@ -10,8 +10,6 @@ function isElement(node: Parent | null): node is Element {
   return node !== null && node.type === 'element' && 'tagName' in node;
 }
 
-const videoExtensionsRe = /\.(mp4|webm|ogg)$/;
-
 /**
  * Custom rehype plugin to transform <img> with video extensions to <video>.
  */
@@ -27,7 +25,7 @@ const rehypeImageToVideo: Plugin = () => tree => {
 
       if (
         node.tagName === 'img' &&
-        videoExtensionsRe.test(node.properties?.src as string)
+        /\.(mp4|webm|ogg)$/.test(node.properties?.src as string)
       ) {
         const properties = node.properties || {};
         const title = properties.title as string | undefined;

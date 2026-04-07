@@ -346,8 +346,7 @@ class BNode<K> {
   }
 
   maxKey() {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    return this.keys.at(-1)!;
+    return this.keys[this.keys.length - 1];
   }
 
   minKey(): K | undefined {

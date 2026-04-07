@@ -28,13 +28,14 @@ export function getLastConnectErrorValue(reason: ZeroError) {
   return `${isServerError(reason) ? 'server_' : 'client_'}${camelToSnake(reason.kind)}` as const;
 }
 
-const upperCasesRegExp = /\.?(?=[A-Z])/;
-
 // camelToSnake is used to convert a ZeroErrorKind into a suitable
 // metric name, eg AuthInvalidated => auth_invalidated. It converts
 // both PascalCase and camelCase to snake_case.
 function camelToSnake(kind: ZeroErrorKind): string {
-  return kind.split(upperCasesRegExp).join('_').toLowerCase();
+  return kind
+    .split(/\.?(?=[A-Z])/)
+    .join('_')
+    .toLowerCase();
 }
 
 /**

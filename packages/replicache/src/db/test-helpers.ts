@@ -158,8 +158,10 @@ async function addSnapshot(
     const w = await newWriteSnapshotDD31(
       await mustGetHeadHash(headName, dagWrite),
       lastMutationIDs ?? {
-        // oxlint-disable-next-line typescript/no-non-null-assertion
-        [clientID]: await chain.at(-1)!.getNextMutationID(clientID, dagWrite),
+        [clientID]: await chain[chain.length - 1].getNextMutationID(
+          clientID,
+          dagWrite,
+        ),
       },
       deepFreeze(cookie),
       dagWrite,

@@ -497,7 +497,7 @@ class Diff implements SnapshotDiff {
 
             if (
               table === this.#permissionsTable &&
-              prevValues.some(
+              prevValues.find(
                 prevValue => prevValue.permissions !== nextValue.permissions,
               )
             ) {

@@ -56,7 +56,7 @@ function createMapperFrom(
  */
 export function validator(tablesToColumns: Map<string, string[]>): NameMapper {
   const identity = new Map(
-    Array.from(tablesToColumns.entries(), ([tableName, columns]) => [
+    [...tablesToColumns.entries()].map(([tableName, columns]) => [
       tableName,
       {
         tableName,

@@ -1053,9 +1053,9 @@ export class CVRStore {
           queryFlushes = this.#flushQueries(tx, lc);
 
           // Count both full updates and partial-only updates
-          const partialOnlyCount = [
-            ...this.#pendingQueryPartialUpdates.keys(),
-          ].filter(key => !this.#pendingQueryUpdates.has(key)).length;
+          const partialOnlyCount = Array.from(
+            this.#pendingQueryPartialUpdates.keys(),
+          ).filter(key => !this.#pendingQueryUpdates.has(key)).length;
 
           stats.queries = this.#pendingQueryUpdates.size + partialOnlyCount;
           stats.statements +=
@@ -1106,7 +1106,7 @@ export class CVRStore {
       (this.#pendingInstanceWrite ? 1 : 0) +
       this.#writes.size +
       (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
-      ([...this.#pendingQueryPartialUpdates.keys()].filter(
+      (Array.from(this.#pendingQueryPartialUpdates.keys()).filter(
         key => !this.#pendingQueryUpdates.has(key),
       ).length > 0
         ? 1

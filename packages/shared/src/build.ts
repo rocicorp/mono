@@ -1,4 +1,3 @@
-// oxlint-disable e18e/prefer-static-regex
 import {readFileSync} from 'node:fs';
 
 const external = [

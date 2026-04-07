@@ -1020,15 +1020,11 @@ function mustGetPrimaryKey(
 ): PrimaryKey {
   const pKeys = must(primaryKeys, 'primaryKey map must be non-null');
 
-  const rv = pKeys.get(table);
-  assert(
-    rv,
-    () =>
-      // oxlint-disable-next-line typescript/restrict-template-expressions e18e/prefer-array-to-sorted
-      `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
+  return must(
+    pKeys.get(table),
+    `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
       `Check the spelling and ensure that the table has a primary key.`,
   );
-  return rv;
 }
 
 /**

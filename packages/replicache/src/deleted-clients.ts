@@ -43,9 +43,14 @@ function compare(a: ClientIDPair, b: ClientIDPair): number {
 export function normalizeDeletedClients(
   deletedClients: DeletedClients,
 ): DeletedClients {
-  return deletedClients
-    .toSorted(compare)
-    .filter((item, i, arr) => i === 0 || compare(item, arr[i - 1]) !== 0);
+  // dedupe
+  return [...deletedClients]
+    .sort(compare)
+    .filter(
+      (item, index) =>
+        index === 0 ||
+        compare(item, [...deletedClients].sort(compare)[index - 1]) !== 0,
+    );
 }
 
 export function mergeDeletedClients(
@@ -186,4 +191,11 @@ export async function confirmDeletedClients(
         !deletedClientIDSet.has(clientID),
     ),
   );
+}
+
+/**
+ * Sorts and dedupes the given array.
+ */
+export function normalize<T>(arr: readonly T[]): T[] {
+  return [...new Set(arr)].sort();
 }

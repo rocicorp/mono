@@ -145,7 +145,7 @@ function histogramAscii(
           const hi = (y + 1) * symbols.length;
           const offset = Math.round(b * scale) | 0;
           if (lo >= offset) l += ' ';
-          else if (hi <= offset) l += symbols.at(-1);
+          else if (hi <= offset) l += symbols[symbols.length - 1];
           else l += symbols[clamp(lo, offset, hi) % symbols.length];
         }
       }
@@ -162,7 +162,7 @@ function histogramAscii(
         const hi = (y + 1) * symbols.length;
         const offset = Math.round(b * scale) | 0;
         if (lo >= offset) l += ' ';
-        else if (hi <= offset) l += symbols.at(-1);
+        else if (hi <= offset) l += symbols[symbols.length - 1];
         else l += symbols[clamp(lo, offset, hi) % symbols.length];
       }
       if (colors) l += ansi.reset;
@@ -179,7 +179,7 @@ function histogramAscii(
           const hi = (y + 1) * symbols.length;
           const offset = Math.round(b * scale) | 0;
           if (lo >= offset) l += ' ';
-          else if (hi <= offset) l += symbols.at(-1);
+          else if (hi <= offset) l += symbols[symbols.length - 1];
           else l += symbols[clamp(lo, offset, hi) % symbols.length];
         }
       }

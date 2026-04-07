@@ -730,8 +730,6 @@ type TypedDefineQueries<S extends Schema> = {
   >;
 };
 
-const separatorRe = /[.|]/;
-
 // ----------------------------------------------------------------------------
 // getQuery / mustGetQuery
 // ----------------------------------------------------------------------------
@@ -740,7 +738,7 @@ export function getQuery<QD extends QueryDefinitions, S extends Schema>(
   queries: QueryRegistry<QD, S>,
   name: string,
 ): FromQueryTree<QD, S> | undefined {
-  const q = getValueAtPath(queries, name, separatorRe);
+  const q = getValueAtPath(queries, name, /[.|]/);
   return q as FromQueryTree<QD, S> | undefined;
 }
 

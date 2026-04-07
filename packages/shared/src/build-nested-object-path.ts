@@ -45,8 +45,7 @@ export function buildNestedObjectPath<
     }
     current = next as Record<string, unknown>;
   }
-  // oxlint-disable-next-line typescript/no-non-null-assertion
-  current[parts.at(-1)!] = value;
+  current[parts[parts.length - 1]] = value;
   return target as DeepMerge<T, BuildNested<Path, Separator, Value>>;
 }
 

@@ -465,7 +465,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
         <div className="set-filter-container">
-          {Array.from(qs.entries(), ([key, val]) => {
+          {[...qs.entries()].map(([key, val]) => {
             if (key === 'label' || key === 'creator' || key === 'assignee') {
               return (
                 <span

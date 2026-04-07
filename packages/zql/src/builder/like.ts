@@ -12,8 +12,6 @@ export function getLikePredicate(
   };
 }
 
-const likePatternRe = /_|%|\\/;
-
 function getLikeOp(pattern: string, flags: 'i' | ''): (lhs: string) => boolean {
   // if lhs does not contain '%' or '_' then it is a simple string comparison.
   // if it does contain '%' or '_' then it is a regex comparison.
@@ -21,7 +19,7 @@ function getLikeOp(pattern: string, flags: 'i' | ''): (lhs: string) => boolean {
   // '_' is a wildcard for a single character
   // Postgres SQL allows escaping using `\`.
 
-  if (!likePatternRe.test(pattern)) {
+  if (!/_|%|\\/.test(pattern)) {
     if (flags === 'i') {
       const rhsLower = pattern.toLowerCase();
       return (lhs: string) => lhs.toLowerCase() === rhsLower;

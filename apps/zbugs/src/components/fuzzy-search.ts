@@ -1,5 +1,3 @@
-const whitespaceRegex = /\s/;
-
 export function fuzzySearch<T>(
   searchQuery: string,
   items: readonly T[],
@@ -40,7 +38,7 @@ export function fuzzySearch<T>(
   }
 
   function isWhitespace(c: string): boolean {
-    return whitespaceRegex.test(c);
+    return /\s/.test(c);
   }
 
   const ranked = items

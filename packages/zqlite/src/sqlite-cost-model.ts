@@ -1,16 +1,16 @@
-import SQLite3Database from '@rocicorp/zero-sqlite3';
-import {assert} from '../../shared/src/asserts.ts';
-import {must} from '../../shared/src/must.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
-import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
 import type {
   ConnectionCostModel,
   CostModelCost,
 } from '../../zql/src/planner/planner-connection.ts';
 import type {PlannerConstraint} from '../../zql/src/planner/planner-constraint.ts';
+import SQLite3Database from '@rocicorp/zero-sqlite3';
+import {buildSelectQuery, type NoSubqueryCondition} from './query-builder.ts';
 import type {Database, Statement} from './db.ts';
 import {compileInline} from './internal/sql-inline.ts';
-import {buildSelectQuery, type NoSubqueryCondition} from './query-builder.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
+import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
 import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
 
 /**
@@ -175,7 +175,7 @@ function estimateCost(
   fanout: CostModelCost['fanout'],
 ): CostModelCost {
   // Sort by selectId to process in execution order
-  const sorted = scanstats.toSorted((a, b) => a.selectId - b.selectId);
+  const sorted = [...scanstats].sort((a, b) => a.selectId - b.selectId);
 
   let totalRows = 0;
   let totalCost = 0;

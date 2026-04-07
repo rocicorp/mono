@@ -1,12 +1,10 @@
 // This module provides URLs for worker files.
 
-const tsRe = /\.ts$/;
-
 function resolve(path: string): URL {
   const {url} = import.meta;
   if (url.endsWith('.js')) {
     // When compiled, change .ts to .js
-    path = path.replace(tsRe, '.js');
+    path = path.replace(/\.ts$/, '.js');
   }
   return new URL(path, url);
 }

@@ -1,4 +1,3 @@
-// oxlint-disable e18e/prefer-static-regex
 import type {
   Condition,
   CorrelatedSubquery,

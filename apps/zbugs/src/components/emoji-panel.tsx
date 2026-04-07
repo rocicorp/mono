@@ -203,7 +203,7 @@ const EmojiMenuButton = memo(
 
 function groupAndSortEmojis(emojis: readonly Emoji[]): Record<string, Emoji[]> {
   // Sort the emojis by creation time. Not sure how to sort this with ZQL.
-  const sortedEmojis = emojis.toSorted((a, b) => a.created - b.created);
+  const sortedEmojis = [...emojis].sort((a, b) => a.created - b.created);
   const rv: Record<string, Emoji[]> = {};
   for (const emoji of sortedEmojis) {
     const normalizedEmoji = normalizeEmoji(emoji.value);

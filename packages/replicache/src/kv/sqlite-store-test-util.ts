@@ -39,13 +39,15 @@ function createCleanupFunction(
     clearAllNamedStores();
 
     // Clean up tracked store names using the store provider's drop method
-    const cleanupPromises = Array.from(createdStoreNames, async storeName => {
-      try {
-        await storeProvider.drop(storeName);
-      } catch {
-        // Ignore cleanup errors
-      }
-    });
+    const cleanupPromises = Array.from(createdStoreNames).map(
+      async storeName => {
+        try {
+          await storeProvider.drop(storeName);
+        } catch (_error) {
+          // Ignore cleanup errors
+        }
+      },
+    );
 
     // Wait for all cleanup operations to complete
     void Promise.all(cleanupPromises).finally(() => {
