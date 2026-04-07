@@ -1,12 +1,15 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {PostgresDB} from '../types/pg.ts';
 
+const MAX_WARMUP_CONNECTIONS = 5;
+
 export async function warmupConnections(
   lc: LogContext,
   db: PostgresDB,
   name: string,
 ) {
-  const {max, host} = db.options;
+  const {host} = db.options;
+  const max = Math.min(db.options.max, MAX_WARMUP_CONNECTIONS);
   await Promise.allSettled(
     Array.from({length: max}, () => db`SELECT 1`.simple().execute()),
   );
