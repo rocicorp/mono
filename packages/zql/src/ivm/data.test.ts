@@ -57,7 +57,9 @@ test('compareValues', () => {
       fc.boolean(),
       fc.oneof(fc.double(), fc.fullUnicodeString()),
       (b, v) => {
-        expect(() => compareValues(b, v)).toThrow('expected boolean');
+        expect(() => compareValues(b, v)).toThrow(
+          /Cannot compare values of different types: boolean and (number|string)/,
+        );
       },
     ),
   );
@@ -79,7 +81,9 @@ test('compareValues', () => {
       fc.double(),
       fc.oneof(fc.boolean(), fc.fullUnicodeString()),
       (n, v) => {
-        expect(() => compareValues(n, v)).toThrow('expected number');
+        expect(() => compareValues(n, v)).toThrow(
+          /Cannot compare values of different types: number and (boolean|string)/,
+        );
       },
     ),
   );
@@ -95,7 +99,9 @@ test('compareValues', () => {
       fc.fullUnicodeString(),
       fc.oneof(fc.boolean(), fc.double()),
       (s, v) => {
-        expect(() => compareValues(s, v)).toThrow('expected string');
+        expect(() => compareValues(s, v)).toThrow(
+          /Cannot compare values of different types: string and (boolean|number)/,
+        );
       },
     ),
   );

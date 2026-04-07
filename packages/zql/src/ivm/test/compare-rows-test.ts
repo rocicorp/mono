@@ -75,7 +75,7 @@ export function compareRowsTest(
       order: [['a', 'asc']],
       r1: {a: 1},
       r2: {a: 'foo'},
-      expected: 'expected number',
+      expected: 'Cannot compare values of different types: number and string',
     },
   ];
 
