@@ -57,12 +57,6 @@ export function compareValues(a: Value, b: Value): number {
     return a ? 1 : -1;
   }
 
-  if (typeof a !== typeof b) {
-    throw new Error(
-      `Cannot compare values of different types: ${typeof a} and ${typeof b}`,
-    );
-  }
-
   // check with null after since it is less likely to be the common case and we
   // want to avoid the extra checks in that case
   if (a === null) {
@@ -71,6 +65,13 @@ export function compareValues(a: Value, b: Value): number {
   if (b === null) {
     return 1;
   }
+
+  if (typeof a !== typeof b) {
+    throw new Error(
+      `Cannot compare values of different types: ${typeof a} and ${typeof b}`,
+    );
+  }
+
   throw new Error(`Unsupported type: ${a}`);
 }
 
