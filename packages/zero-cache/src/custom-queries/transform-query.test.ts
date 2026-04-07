@@ -20,7 +20,11 @@ import {
   type TransformFailedBody,
 } from '../../../zero-protocol/src/error.ts';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
-import {compileUrlPattern, fetchFromAPIServer} from '../custom/fetch.ts';
+import {fetchFromAPIServer} from '../custom/fetch.ts';
+import type {
+  ConnectionContext,
+  HeaderOptions,
+} from '../services/view-syncer/connection-context-manager.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import type {ShardID} from '../types/shards.ts';
 import {CustomQueryTransformer} from './transform-query.ts';
@@ -30,9 +34,6 @@ vi.mock('../custom/fetch.ts');
 const mockFetchFromAPIServer = fetchFromAPIServer as MockedFunction<
   typeof fetchFromAPIServer
 >;
-const mockCompileUrlPattern = compileUrlPattern as MockedFunction<
-  typeof compileUrlPattern
->;
 
 describe('CustomQueryTransformer', () => {
   const mockShard: ShardID = {
@@ -40,12 +41,162 @@ describe('CustomQueryTransformer', () => {
     shardNum: 1,
   };
   const lc = createSilentLogContext();
+  const defaultAuth = 'test-token';
 
   const pullUrl = 'https://api.example.com/pull';
-  const headerOptions = {
+  const headerOptions: HeaderOptions = {
     apiKey: 'test-api-key',
-    token: 'test-token',
   };
+
+  function makeContext(
+    options: {
+      headerOptions?: HeaderOptions | undefined;
+      userQueryURL?: string | undefined;
+      forwardCookies?: boolean | undefined;
+      auth?: string | undefined;
+      userID?: string | undefined;
+    } = {},
+  ): ConnectionContext {
+    const normalizedHeaderOptions: HeaderOptions = options.forwardCookies
+      ? (options.headerOptions ?? headerOptions)
+      : {...(options.headerOptions ?? headerOptions), cookie: undefined};
+    const auth = options.auth ?? defaultAuth;
+
+    return {
+      state: 'provisional',
+      clientID: 'test-client',
+      wsID: 'test-ws',
+      userID: options.userID,
+      auth: auth ? {type: 'opaque', raw: auth} : undefined,
+      profileID: null,
+      baseCookie: null,
+      protocolVersion: 0,
+      revision: 0,
+      revalidateAt: undefined,
+      insertionOrder: 0,
+      queryContext: {
+        url: options.userQueryURL ?? pullUrl,
+        allowedUrlPatterns: [new URLPattern(pullUrl)],
+        headerOptions: normalizedHeaderOptions,
+      },
+      pushContext: {
+        url: undefined,
+        allowedUrlPatterns: [],
+        headerOptions: {
+          apiKey: undefined,
+          allowedClientHeaders: undefined,
+          customHeaders: undefined,
+          cookie: undefined,
+          origin: undefined,
+        },
+      },
+    };
+  }
+
+  function makeTransformer(
+    options: {forwardCookies?: boolean | undefined} = {},
+  ) {
+    const transformer = new CustomQueryTransformer(lc, mockShard);
+    return {
+      transform(
+        inputHeaderOptions: HeaderOptions,
+        queries: Iterable<CustomQueryRecord>,
+        userQueryURL: string | undefined,
+        contextOptions: {
+          auth?: string | undefined;
+          userID?: string | undefined;
+        } = {},
+      ) {
+        return transformer.transform(
+          makeContext({
+            headerOptions: inputHeaderOptions,
+            userQueryURL,
+            forwardCookies: options.forwardCookies,
+            ...contextOptions,
+          }),
+          queries,
+        );
+      },
+
+      validate(
+        inputHeaderOptions: HeaderOptions,
+        userQueryURL: string | undefined,
+        contextOptions: {
+          auth?: string | undefined;
+          userID?: string | undefined;
+        } = {},
+      ) {
+        return transformer.validate(
+          makeContext({
+            headerOptions: inputHeaderOptions,
+            userQueryURL,
+            forwardCookies: options.forwardCookies,
+            ...contextOptions,
+          }),
+        );
+      },
+    };
+  }
+
+  function expectContext(
+    options: {
+      headerOptions?: HeaderOptions | undefined;
+      userQueryURL?: string | undefined;
+      forwardCookies?: boolean | undefined;
+      auth?: string | undefined;
+      userID?: string | undefined;
+    } = {},
+  ) {
+    const normalizedHeaderOptions: HeaderOptions = options.forwardCookies
+      ? (options.headerOptions ?? headerOptions)
+      : {...(options.headerOptions ?? headerOptions), cookie: undefined};
+    const auth = options.auth ?? defaultAuth;
+
+    return expect.objectContaining({
+      userID: options.userID,
+      auth: auth ? {type: 'opaque', raw: auth} : undefined,
+      queryContext: expect.objectContaining({
+        url: options.userQueryURL ?? pullUrl,
+        allowedUrlPatterns: expect.arrayContaining([
+          expectUrlPatternMatching(pullUrl),
+        ]),
+        headerOptions: normalizedHeaderOptions,
+      }),
+    });
+  }
+
+  function transformRequest(queries: Iterable<CustomQueryRecord>) {
+    return [
+      'transform',
+      Array.from(queries, ({id, name, args}) => ({id, name, args})),
+    ] as const;
+  }
+
+  function transformedMessage(
+    body: TransformResponseBody,
+  ): TransformResponseMessage {
+    return ['transformed', body];
+  }
+
+  function transformFailedMessage(
+    body: TransformFailedBody,
+  ): TransformResponseMessage {
+    return ['transformFailed', body];
+  }
+
+  function expectLastTransformFetch(
+    queries: Iterable<CustomQueryRecord>,
+    options: Parameters<typeof expectContext>[0] = {},
+  ) {
+    expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'transform',
+      lc,
+      expectContext(options),
+      mockShard,
+      transformRequest(queries),
+    );
+  }
 
   // Helper to match URLPattern that matches a specific URL
   const expectUrlPatternMatching = (expectedUrl: string) =>
@@ -133,11 +284,20 @@ describe('CustomQueryTransformer', () => {
     },
   ];
 
+  type TransformAttempt = Awaited<
+    ReturnType<ReturnType<typeof makeTransformer>['transform']>
+  >;
+
+  function expectTransformAttempt(
+    actual: TransformAttempt,
+    expected: TransformAttempt['result'],
+    cached = false,
+  ) {
+    expect(actual).toEqual({result: expected, cached});
+  }
+
   beforeEach(() => {
     mockFetchFromAPIServer.mockReset();
-    mockCompileUrlPattern.mockReturnValue(
-      new URLPattern('https://api.example.com/pull'),
-    );
     vi.clearAllTimers();
     vi.useFakeTimers();
   });
@@ -147,19 +307,11 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should transform queries successfully and return TransformedAndHashed array', async () => {
-    mockFetchFromAPIServer.mockResolvedValue([
-      'transformed',
-      mockQueryResponses,
-    ] satisfies TransformResponseMessage);
-
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
+    mockFetchFromAPIServer.mockResolvedValue(
+      transformedMessage(mockQueryResponses),
     );
+
+    const transformer = makeTransformer();
     const result = await transformer.transform(
       headerOptions,
       mockQueries,
@@ -167,31 +319,44 @@ describe('CustomQueryTransformer', () => {
     );
 
     // Verify the API was called correctly
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      pullUrl,
-      [expectUrlPatternMatching(pullUrl)],
-      mockShard,
-      headerOptions,
-      [
-        'transform',
-        [
-          {id: 'query1', name: 'getUserById', args: [123]},
-          {id: 'query2', name: 'getPostsByUser', args: ['user123', 10]},
-        ],
-      ],
-    );
+    expectLastTransformFetch(mockQueries);
 
     // Verify the result
-    expect(result).toEqual(transformResults);
+    expectTransformAttempt(result, transformResults);
+  });
+
+  test('validate should hit the API with an empty transform request', async () => {
+    mockFetchFromAPIServer.mockResolvedValue(transformedMessage([]));
+
+    const transformer = makeTransformer();
+    const result = await transformer.validate(headerOptions, undefined);
+
+    expectLastTransformFetch([]);
+    expect(result).toBeUndefined();
+  });
+
+  test('validate should pass through transformFailed responses', async () => {
+    const transformFailedBody: TransformFailedBody = {
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.Parse,
+      message: 'Unable to validate query credentials',
+      queryIDs: [],
+    };
+
+    mockFetchFromAPIServer.mockResolvedValue(
+      transformFailedMessage(transformFailedBody),
+    );
+
+    const transformer = makeTransformer();
+    const result = await transformer.validate(headerOptions, undefined);
+
+    expect(result).toEqual(transformFailedBody);
   });
 
   test('should handle errored queries in response', async () => {
-    mockFetchFromAPIServer.mockResolvedValue([
-      'transformed',
-      [
+    mockFetchFromAPIServer.mockResolvedValue(
+      transformedMessage([
         mockQueryResponses[0],
         {
           error: 'app',
@@ -200,24 +365,17 @@ describe('CustomQueryTransformer', () => {
           message: 'Query syntax error',
           details: {reason: 'syntax error'},
         },
-      ],
-    ] satisfies TransformResponseMessage);
-
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
+      ]),
     );
+
+    const transformer = makeTransformer();
     const result = await transformer.transform(
       headerOptions,
       mockQueries,
       undefined,
     );
 
-    expect(result).toEqual([
+    expectTransformAttempt(result, [
       transformResults[0],
       {
         error: 'app',
@@ -243,14 +401,7 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockRejectedValue(httpError);
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
     const result = await transformer.transform(
       headerOptions,
       mockQueries,
@@ -258,7 +409,7 @@ describe('CustomQueryTransformer', () => {
     );
 
     // Should return TransformFailedBody with queryIDs filled in
-    expect(result).toEqual({
+    expectTransformAttempt(result, {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.HTTP,
@@ -270,39 +421,22 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should handle empty queries array', async () => {
-    mockFetchFromAPIServer.mockResolvedValue(['transformed', []]);
+    mockFetchFromAPIServer.mockResolvedValue(transformedMessage([]));
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
     const result = await transformer.transform(headerOptions, [], undefined);
 
     expect(mockFetchFromAPIServer).not.toHaveBeenCalled();
-    expect(result).toEqual([]);
+    expectTransformAttempt(result, [], true);
   });
 
   test('should not fetch cached responses', async () => {
     const mockSuccessResponse = () =>
-      [
-        'transformed',
-        [mockQueryResponses[0]],
-      ] satisfies TransformResponseMessage;
+      transformedMessage([mockQueryResponses[0]]);
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     // First call - should fetch
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
@@ -316,26 +450,16 @@ describe('CustomQueryTransformer', () => {
       undefined,
     );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1); // Still only called once
-    expect(result).toEqual([transformResults[0]]);
+    expectTransformAttempt(result, [transformResults[0]], true);
   });
 
   test('should cache successful responses for 5 seconds', async () => {
     const mockSuccessResponse = () =>
-      [
-        'transformed',
-        [mockQueryResponses[0]],
-      ] satisfies TransformResponseMessage;
+      transformedMessage([mockQueryResponses[0]]);
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     // First call
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
@@ -354,44 +478,20 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should handle mixed cached and uncached queries', async () => {
-    const mockResponse1 = () =>
-      [
-        'transformed',
-        [mockQueryResponses[0]],
-      ] satisfies TransformResponseMessage;
+    const mockResponse1 = () => transformedMessage([mockQueryResponses[0]]);
 
-    const mockResponse2 = () =>
-      [
-        'transformed',
-        [mockQueryResponses[1]],
-      ] satisfies TransformResponseMessage;
+    const mockResponse2 = () => transformedMessage([mockQueryResponses[1]]);
 
     mockFetchFromAPIServer
       .mockResolvedValueOnce(mockResponse1())
       .mockResolvedValueOnce(mockResponse2());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     // Cache first query
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
-    expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      'https://api.example.com/pull',
-      [expectUrlPatternMatching('https://api.example.com/pull')],
-      mockShard,
-      headerOptions,
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
+    expectLastTransformFetch([mockQueries[0]]);
 
     // Now call with both queries - only second should be fetched
     const result = await transformer.transform(
@@ -400,42 +500,21 @@ describe('CustomQueryTransformer', () => {
       undefined,
     );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
-    expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      pullUrl,
-      [expectUrlPatternMatching(pullUrl)],
-      mockShard,
-      headerOptions,
-      [
-        'transform',
-        [{id: 'query2', name: 'getPostsByUser', args: ['user123', 10]}],
-      ],
-    );
+    expectLastTransformFetch([mockQueries[1]]);
 
     // Verify combined result includes both cached and fresh data
-    expect(result).toHaveLength(2);
-    expect(result).toEqual(expect.arrayContaining(transformResults));
+    expect(result.cached).toBe(false);
+    expect(result.result).toHaveLength(2);
+    expect(result.result).toEqual(expect.arrayContaining(transformResults));
   });
 
   test('should not forward cookies if forwardCookies is false', async () => {
     const mockSuccessResponse = () =>
-      [
-        'transformed',
-        [mockQueryResponses[0]],
-      ] satisfies TransformResponseMessage;
+      transformedMessage([mockQueryResponses[0]]);
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     // Call with cookies in header options
     const result = await transformer.transform(
@@ -444,37 +523,20 @@ describe('CustomQueryTransformer', () => {
       undefined,
     );
 
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      pullUrl,
-      [expectUrlPatternMatching(pullUrl)],
-      mockShard,
-      headerOptions, // Cookies should not be forwarded
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
-    expect(result).toEqual([transformResults[0]]);
+    expectLastTransformFetch([mockQueries[0]], {
+      headerOptions: {...headerOptions, cookie: 'test-cookie'},
+    });
+    expectTransformAttempt(result, [transformResults[0]]);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
   });
 
   test('should forward cookies if forwardCookies is true', async () => {
     const mockSuccessResponse = () =>
-      [
-        'transformed',
-        [mockQueryResponses[0]],
-      ] satisfies TransformResponseMessage;
+      transformedMessage([mockQueryResponses[0]]);
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: true,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer({forwardCookies: true});
 
     // Call with cookies in header options
     const result = await transformer.transform(
@@ -483,45 +545,29 @@ describe('CustomQueryTransformer', () => {
       undefined,
     );
 
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      pullUrl,
-      [expectUrlPatternMatching(pullUrl)],
-      mockShard,
-      {...headerOptions, cookie: 'test-cookie'}, // Cookies should be forwarded
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
-    expect(result).toEqual([transformResults[0]]);
+    expectLastTransformFetch([mockQueries[0]], {
+      headerOptions: {...headerOptions, cookie: 'test-cookie'},
+      forwardCookies: true,
+    });
+    expectTransformAttempt(result, [transformResults[0]]);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
   });
 
   test('should not cache error responses', async () => {
     const mockErrorResponse = () =>
-      [
-        'transformed',
-        [
-          {
-            error: 'app',
-            id: 'query1',
-            name: 'getUserById',
-            message: 'Query syntax error',
-            details: {reason: 'Query syntax error'},
-          },
-        ],
-      ] satisfies TransformResponseMessage;
+      transformedMessage([
+        {
+          error: 'app',
+          id: 'query1',
+          name: 'getUserById',
+          message: 'Query syntax error',
+          details: {reason: 'Query syntax error'},
+        },
+      ]);
 
     mockFetchFromAPIServer.mockResolvedValue(mockErrorResponse());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     // First call - should fetch and get error
     const result1 = await transformer.transform(
@@ -530,7 +576,7 @@ describe('CustomQueryTransformer', () => {
       undefined,
     );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
-    expect(result1).toEqual([
+    expectTransformAttempt(result1, [
       {
         error: 'app',
         id: 'query1',
@@ -546,39 +592,22 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
   });
 
-  test('should use cache key based on header options and query id', async () => {
+  test('should use cache key based on auth context and query id', async () => {
     const mockSuccessResponse = () =>
-      [
-        'transformed',
-        [mockQueryResponses[0]],
-      ] satisfies TransformResponseMessage;
+      transformedMessage([mockQueryResponses[0]]);
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
-    const differentHeaderOptions = {
-      apiKey: 'different-api-key',
-      token: 'different-token',
-    };
-
+    const transformer = makeTransformer();
     // Cache with first header options
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
 
-    // Call with different header options - should fetch again due to different cache key
+    // Call with different auth - should fetch again due to different cache key
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
-    await transformer.transform(
-      differentHeaderOptions,
-      [mockQueries[0]],
-      undefined,
-    );
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined, {
+      auth: 'different-token',
+    });
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
 
     // Call again with original header options - should use cache
@@ -591,70 +620,32 @@ describe('CustomQueryTransformer', () => {
     const customUrl = 'https://custom-api.example.com/transform';
 
     const mockSuccessResponse = () =>
-      [
-        'transformed',
-        [mockQueryResponses[0]],
-      ] satisfies TransformResponseMessage;
+      transformedMessage([mockQueryResponses[0]]);
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     const userQueryURL = customUrl;
 
     await transformer.transform(headerOptions, [mockQueries[0]], userQueryURL);
 
     // Verify custom URL was used instead of default
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      customUrl,
-      [expectUrlPatternMatching(pullUrl)], // Pattern still compiled from config
-      mockShard,
-      headerOptions,
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
+    expectLastTransformFetch([mockQueries[0]], {userQueryURL: customUrl});
   });
 
   test('should use default URL when userQueryURL is undefined', async () => {
     const mockSuccessResponse = () =>
-      [
-        'transformed',
-        [mockQueryResponses[0]],
-      ] satisfies TransformResponseMessage;
+      transformedMessage([mockQueryResponses[0]]);
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
 
     // Verify default URL from config was used
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      pullUrl,
-      [expectUrlPatternMatching(pullUrl)],
-      mockShard,
-      headerOptions,
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
+    expectLastTransformFetch([mockQueries[0]]);
   });
 
   test('should reject disallowed custom URL', async () => {
@@ -667,14 +658,7 @@ describe('CustomQueryTransformer', () => {
       ),
     );
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     const userQueryURL = disallowedUrl;
 
@@ -685,7 +669,7 @@ describe('CustomQueryTransformer', () => {
     );
 
     // Should return TransformFailedBody with the error message
-    expect(result).toEqual({
+    expectTransformAttempt(result, {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
@@ -696,16 +680,7 @@ describe('CustomQueryTransformer', () => {
     });
 
     // Verify the disallowed URL was attempted to be used
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      disallowedUrl,
-      [expectUrlPatternMatching(pullUrl)], // Pattern still compiled from config
-      mockShard,
-      headerOptions,
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
+    expectLastTransformFetch([mockQueries[0]], {userQueryURL: disallowedUrl});
   });
 
   test('should handle ProtocolError with TransformFailed kind', async () => {
@@ -719,14 +694,7 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockRejectedValue(protocolError);
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     // Should return TransformFailedBody with queryIDs filled in
     const result = await transformer.transform(
@@ -735,7 +703,7 @@ describe('CustomQueryTransformer', () => {
       undefined,
     );
 
-    expect(result).toEqual({
+    expectTransformAttempt(result, {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Timeout,
@@ -744,16 +712,7 @@ describe('CustomQueryTransformer', () => {
     });
 
     // Verify the API was called
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      pullUrl,
-      [expectUrlPatternMatching(pullUrl)],
-      mockShard,
-      headerOptions,
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
+    expectLastTransformFetch([mockQueries[0]]);
   });
 
   test('should convert non-ProtocolError exceptions to error responses', async () => {
@@ -761,14 +720,7 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockRejectedValue(genericError);
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     // This should NOT throw, but return error responses
     const result = await transformer.transform(
@@ -778,7 +730,7 @@ describe('CustomQueryTransformer', () => {
     );
 
     // Verify it returns an error response instead of throwing
-    expect(result).toEqual({
+    expectTransformAttempt(result, {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
@@ -787,16 +739,7 @@ describe('CustomQueryTransformer', () => {
     });
 
     // Verify the API was called
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(),
-      'transform',
-      lc,
-      pullUrl,
-      [expectUrlPatternMatching(pullUrl)],
-      mockShard,
-      headerOptions,
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
+    expectLastTransformFetch([mockQueries[0]]);
   });
 
   test('should pass through transformFailed response from API server', async () => {
@@ -809,16 +752,11 @@ describe('CustomQueryTransformer', () => {
       queryIDs: ['query1', 'query2'],
     };
 
-    mockFetchFromAPIServer.mockResolvedValue([
-      'transformFailed',
-      transformFailedBody,
-    ] satisfies TransformResponseMessage);
-
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {url: [pullUrl], forwardCookies: false},
-      mockShard,
+    mockFetchFromAPIServer.mockResolvedValue(
+      transformFailedMessage(transformFailedBody),
     );
+
+    const transformer = makeTransformer();
 
     const result = await transformer.transform(
       headerOptions,
@@ -827,17 +765,13 @@ describe('CustomQueryTransformer', () => {
     );
 
     // Should return transformFailedBody when transformFailed response is received
-    expect(result).toEqual(transformFailedBody);
+    expectTransformAttempt(result, transformFailedBody);
   });
 
   test('should handle non-Error exceptions', async () => {
     mockFetchFromAPIServer.mockRejectedValue('string error thrown');
 
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {url: [pullUrl], forwardCookies: false},
-      mockShard,
-    );
+    const transformer = makeTransformer();
 
     const result = await transformer.transform(
       headerOptions,
@@ -845,7 +779,7 @@ describe('CustomQueryTransformer', () => {
       undefined,
     );
 
-    expect(result).toEqual({
+    expectTransformAttempt(result, {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,

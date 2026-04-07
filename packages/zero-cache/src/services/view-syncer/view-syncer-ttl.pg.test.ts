@@ -61,6 +61,7 @@ let connectWithQueueAndSource: (
 };
 let setTimeoutFn: Mock<typeof setTimeout>;
 let inspectorDelegate: InspectorDelegate;
+let clearMocks: () => void;
 
 function callNextSetTimeout(delta: number, expectedDelay?: number) {
   // Sanity check that the system time is the mocked time.
@@ -85,6 +86,7 @@ const SYNC_CONTEXT: SyncContext = {
   httpCookie: undefined,
   origin: undefined,
   userID: 'bar',
+  auth: undefined,
 };
 
 beforeEach<PgTest>(async ({testDBs}) => {
@@ -100,6 +102,7 @@ beforeEach<PgTest>(async ({testDBs}) => {
     connectWithQueueAndSource,
     setTimeoutFn,
     inspectorDelegate,
+    clearMocks,
   } = await setup(testDBs, 'view_syncer_ttl_test', permissionsAll));
   inspectorDelegate.setAuthenticated(serviceID);
 
@@ -107,6 +110,7 @@ beforeEach<PgTest>(async ({testDBs}) => {
     inspectorDelegate.clearAuthenticated(serviceID);
 
     vi.useRealTimers();
+    clearMocks();
     await vs.stop();
     await viewSyncerDone;
     await testDBs.drop(cvrDB, upstreamDb);

@@ -1,9 +1,15 @@
-import {assert, describe, expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
-import {AuthSessionImpl, pickToken, type ValidateLegacyJWT} from './auth.ts';
+import {
+  isAuthErrorBody,
+  pickToken,
+  resolveAuth,
+  type ValidateLegacyJWT,
+} from './auth.ts';
 
 describe('pickToken', () => {
   const lc = createSilentLogContext();
@@ -72,154 +78,149 @@ describe('pickToken', () => {
   });
 });
 
-describe('AuthSession', () => {
+describe('resolveAuth', () => {
   const lc = createSilentLogContext();
 
-  test('binds first userID and rejects mismatched userID', async () => {
-    const authSession = new AuthSessionImpl(lc, 'cg1', undefined);
-    expect(await authSession.update('u1', 't1')).toEqual({ok: true});
-
-    const mismatch = await authSession.update('u2', 't2');
-    assert(!mismatch.ok, 'Expected mismatch update to fail');
-    expect(mismatch.error.kind).toBe(ErrorKind.Unauthorized);
+  test('resolves opaque auth without group binding side effects', async () => {
+    await expect(
+      resolveAuth(lc, undefined, 'u1', 'opaque-1', undefined),
+    ).resolves.toEqual({type: 'opaque', raw: 'opaque-1'});
   });
 
-  test('same opaque token does not change revision', async () => {
-    const authSession = new AuthSessionImpl(lc, 'cg1', undefined);
-    expect(authSession.revision).toBe(0);
-    expect(await authSession.update('u1', 't1')).toEqual({ok: true});
-    expect(authSession.revision).toBe(1);
-    expect(authSession.auth?.raw).toBe('t1');
-
-    expect(await authSession.update('u1', 't1')).toEqual({ok: true});
-    expect(authSession.revision).toBe(1);
+  test('treats empty auth as unauthenticated when no prior auth exists', async () => {
+    await expect(resolveAuth(lc, undefined, 'u1', '', undefined)).resolves.toBe(
+      undefined,
+    );
   });
 
-  test('rejects missing auth if client group is authenticated', async () => {
-    const authSession = new AuthSessionImpl(lc, 'cg1', undefined);
-    expect(await authSession.update('u1', 't1')).toEqual({ok: true});
-    const result = await authSession.update('u1', '');
-    assert(!result.ok, 'Expected missing auth update to fail');
-    expect(result.error.kind).toBe(ErrorKind.Unauthorized);
-    expect(result.error.message).toContain('No token provided');
-  });
-
-  test('treats empty token as missing auth when unauthenticated', async () => {
-    const authSession = new AuthSessionImpl(lc, 'cg1', undefined);
-    expect(await authSession.update('u1', '')).toEqual({ok: true});
-    expect(authSession.auth?.raw).toBe(undefined);
-    expect(authSession.revision).toBe(0);
-  });
-
-  test('opaque updates revise only on material changes', async () => {
-    const authSession = new AuthSessionImpl(lc, 'cg1', undefined);
-
-    expect(await authSession.update('u1', 't1')).toEqual({ok: true});
-    expect(authSession.auth?.raw).toBe('t1');
-    expect(authSession.revision).toBe(1);
-
-    expect(await authSession.update('u1', 't1')).toEqual({ok: true});
-    expect(authSession.revision).toBe(1);
-
-    expect(await authSession.update('u1', 't2')).toEqual({ok: true});
-    expect(authSession.auth?.raw).toBe('t2');
-    expect(authSession.revision).toBe(2);
-
-    expect(await authSession.update('u1', '')).toEqual({
-      ok: false,
-      error: {
+  test('rejects missing auth when previous auth exists', async () => {
+    await expect(
+      resolveAuth(lc, {type: 'opaque', raw: 'opaque-1'}, 'u1', '', undefined),
+    ).rejects.toMatchObject({
+      errorBody: {
         kind: ErrorKind.Unauthorized,
-        message:
-          'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
         origin: ErrorOrigin.ZeroCache,
       },
     });
-    expect(authSession.auth?.raw).toBe('t2');
-    expect(authSession.revision).toBe(2);
-
-    expect(await authSession.update('u1', 't3')).toEqual({ok: true});
-    expect(authSession.auth?.raw).toBe('t3');
-    expect(authSession.revision).toBe(3);
   });
 
-  test('legacy validator receives bound userID and updates JWT auth', async () => {
-    const validateLegacyJWT: ValidateLegacyJWT = (token, ctx) =>
-      Promise.resolve({
-        type: 'jwt',
-        raw: token,
-        decoded: {sub: ctx.userID, iat: 1},
-      });
-    const authSession = new AuthSessionImpl(lc, 'cg1', validateLegacyJWT);
+  test('uses the legacy validator when configured', async () => {
+    // oxlint-disable-next-line require-await
+    const validateLegacyJWT: ValidateLegacyJWT = async (token, ctx) => ({
+      type: 'jwt',
+      raw: token,
+      decoded: {sub: ctx.userID ?? 'missing-user-id', iat: 1},
+    });
 
-    expect(await authSession.update('u1', 'jwt-1')).toEqual({ok: true});
-    expect(authSession.auth).toEqual({
+    await expect(
+      resolveAuth(lc, undefined, 'u1', 'jwt-1', validateLegacyJWT),
+    ).resolves.toEqual({
       type: 'jwt',
       raw: 'jwt-1',
       decoded: {sub: 'u1', iat: 1},
     });
   });
 
-  test('legacy validator failure maps to AuthInvalidated', async () => {
-    const validateLegacyJWT: ValidateLegacyJWT = () =>
-      Promise.reject(new Error('bad token'));
-    const authSession = new AuthSessionImpl(lc, 'cg1', validateLegacyJWT);
-
-    const result = await authSession.update('u1', 'jwt-1');
-    assert(!result.ok, 'Expected legacy JWT validation failure');
-    expect(result.error.kind).toBe(ErrorKind.AuthInvalidated);
-    expect(result.error.origin).toBe(ErrorOrigin.ZeroCache);
-  });
-
-  test('protocol errors from validator are preserved', async () => {
-    const validateLegacyJWT: ValidateLegacyJWT = () =>
-      Promise.reject(
-        new ProtocolError({
-          kind: ErrorKind.Unauthorized,
-          message: 'nope',
-          origin: ErrorOrigin.ZeroCache,
-        }),
-      );
-    const authSession = new AuthSessionImpl(lc, 'cg1', validateLegacyJWT);
-
-    const result = await authSession.update('u1', 'jwt-1');
-    assert(!result.ok, 'Expected protocol error from validator');
-    expect(result.error.kind).toBe(ErrorKind.Unauthorized);
-    expect(result.error.message).toBe('nope');
-  });
-
-  test('failed first validation does not bind userID', async () => {
-    const validateLegacyJWT: ValidateLegacyJWT = (token, ctx) => {
-      if (token === 'bad-token') {
-        return Promise.reject(new Error('bad token'));
-      }
-      return Promise.resolve({
-        type: 'jwt',
-        raw: token,
-        decoded: {sub: ctx.userID, iat: 1},
-      });
-    };
-    const authSession = new AuthSessionImpl(lc, 'cg1', validateLegacyJWT);
-
-    const failed = await authSession.update('alice', 'bad-token');
-    assert(!failed.ok, 'Expected bad-token update to fail');
-    expect(failed.error.kind).toBe(ErrorKind.AuthInvalidated);
-
-    expect(await authSession.update('bob', 'good-token')).toEqual({ok: true});
-    expect(authSession.auth).toEqual({
-      type: 'jwt',
-      raw: 'good-token',
-      decoded: {sub: 'bob', iat: 1},
+  test('rejects authenticated requests without a userID', async () => {
+    await expect(
+      resolveAuth(lc, undefined, undefined, 'opaque-1', undefined),
+    ).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.Unauthorized,
+        message: 'Authenticated connections require a userID.',
+        origin: ErrorOrigin.ZeroCache,
+      },
     });
   });
 
-  test('clear() resets auth state', async () => {
-    const authSession = new AuthSessionImpl(lc, 'cg1', undefined);
-    expect(await authSession.update('u1', 't1')).toEqual({ok: true});
-    expect(authSession.auth?.raw).toBe('t1');
-    expect(authSession.revision).toBe(1);
+  test('preserves protocol errors from the validator', async () => {
+    // oxlint-disable-next-line require-await
+    const validateLegacyJWT: ValidateLegacyJWT = async () => {
+      throw new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'nope',
+        origin: ErrorOrigin.ZeroCache,
+      });
+    };
 
-    authSession.clear();
-    expect(authSession.auth?.raw).toBe(undefined);
-    expect(authSession.revision).toBe(0);
+    await expect(
+      resolveAuth(lc, undefined, 'u1', 'jwt-1', validateLegacyJWT),
+    ).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.Unauthorized,
+        message: 'nope',
+      },
+    });
+  });
+
+  test('rejects changing auth type from jwt to opaque', async () => {
+    await expect(
+      resolveAuth(
+        lc,
+        {type: 'jwt', raw: 'jwt-1', decoded: {sub: 'u1', iat: 1}},
+        'u1',
+        'opaque-1',
+        undefined,
+      ),
+    ).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.Unauthorized,
+        origin: ErrorOrigin.ZeroCache,
+      },
+    });
+  });
+
+  test('maps validator failures to AuthInvalidated', async () => {
+    // oxlint-disable-next-line require-await
+    const validateLegacyJWT: ValidateLegacyJWT = async () => {
+      throw new Error('bad token');
+    };
+
+    await expect(
+      resolveAuth(lc, undefined, 'u1', 'jwt-1', validateLegacyJWT),
+    ).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.AuthInvalidated,
+        origin: ErrorOrigin.ZeroCache,
+      },
+    });
+  });
+});
+
+describe('isAuthErrorBody', () => {
+  test('matches HTTP auth failures', () => {
+    expect(
+      isAuthErrorBody({
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 401,
+        bodyPreview: 'Unauthorized',
+        message: 'Fetch from API server returned non-OK status 401',
+        mutationIDs: [],
+      }),
+    ).toBe(true);
+  });
+
+  test('matches legacy push HTTP auth failures', () => {
+    expect(
+      isAuthErrorBody({
+        error: 'http',
+        status: 403,
+        details: 'Forbidden',
+        mutationIDs: [],
+      }),
+    ).toBe(true);
+  });
+
+  test('does not match non-auth push failures', () => {
+    expect(
+      isAuthErrorBody({
+        error: 'http',
+        status: 500,
+        details: 'Server error',
+        mutationIDs: [],
+      }),
+    ).toBe(false);
   });
 });

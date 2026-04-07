@@ -5,7 +5,6 @@ import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
-import type {AuthSession, ValidateLegacyJWT} from '../../auth/auth.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -33,9 +32,9 @@ describe('permissions', () => {
   let cvrDB: PostgresDB;
   let upstreamDb: PostgresDB;
   let vs: ViewSyncerService;
-  let authSession: AuthSession;
   let viewSyncerDone: Promise<void>;
   let replicator: FakeReplicator;
+  let clearMocks: () => void;
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
@@ -46,48 +45,26 @@ describe('permissions', () => {
     httpCookie: undefined,
     origin: undefined,
     userID: 'bar',
+    auth: undefined,
   };
 
   beforeEach<PgTest>(async ({testDBs}) => {
-    const validateLegacyJWT: ValidateLegacyJWT = token => {
-      switch (token) {
-        case 'user-token':
-          return Promise.resolve({
-            type: 'jwt',
-            raw: token,
-            decoded: {sub: 'bar', role: 'user', iat: 0},
-          });
-        case 'admin-token':
-          return Promise.resolve({
-            type: 'jwt',
-            raw: token,
-            decoded: {sub: 'bar', role: 'admin', iat: 1},
-          });
-        default:
-          return Promise.reject(new Error(`Unexpected test token: ${token}`));
-      }
-    };
-
     ({
       stateChanges,
       connect,
       vs,
-      authSession,
       viewSyncerDone,
       cvrDB,
       upstreamDb,
       replicaDbFile,
       replicator,
-    } = await setup(
-      testDBs,
-      'view_syncer_permissions_test',
-      permissions,
-      validateLegacyJWT,
-    ));
+      clearMocks,
+    } = await setup(testDBs, 'view_syncer_permissions_test', permissions));
 
     return async () => {
       // Restores fake date if used.
       vi.useRealTimers();
+      clearMocks();
       await vs.stop();
       await viewSyncerDone;
       await testDBs.drop(cvrDB, upstreamDb);
@@ -96,9 +73,16 @@ describe('permissions', () => {
   });
 
   test('client with user role followed by client with admin role', async () => {
-    expect(await authSession.update('foo', 'user-token')).toEqual({ok: true});
+    const userContext: SyncContext = {
+      ...SYNC_CONTEXT,
+      auth: {
+        type: 'jwt',
+        raw: 'user-token',
+        decoded: {sub: 'bar', role: 'user', iat: 0},
+      },
+    };
 
-    const client = connect(SYNC_CONTEXT, [
+    const client = connect(userContext, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     stateChanges.push({state: 'version-ready'});
@@ -140,13 +124,18 @@ describe('permissions', () => {
 
     // New client connects with same everything (client group, user id) but brings a new role.
     // This should transform their existing queries to return the data they can now see.
-    expect(await authSession.update('foo', 'admin-token')).toEqual({
-      ok: true,
-    });
+    const adminContext: SyncContext = {
+      ...userContext,
+      auth: {
+        type: 'jwt',
+        raw: 'admin-token',
+        decoded: {sub: 'bar', role: 'admin', iat: 1},
+      },
+    };
 
     const client2 = connect(
       {
-        ...SYNC_CONTEXT,
+        ...adminContext,
         clientID: 'bar',
       },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
@@ -443,16 +432,18 @@ describe('permissions', () => {
   });
 
   test('query for comments does not return issue rows as those are gotten by the permission system', async () => {
-    expect(await authSession.update('foo', 'admin-token')).toEqual({
-      ok: true,
-    });
-
-    const client = connect(
-      {
-        ...SYNC_CONTEXT,
+    const adminContext: SyncContext = {
+      ...SYNC_CONTEXT,
+      auth: {
+        type: 'jwt',
+        raw: 'admin-token',
+        decoded: {sub: 'bar', role: 'admin', iat: 1},
       },
-      [{op: 'put', hash: 'query-hash2', ast: COMMENTS_QUERY}],
-    );
+    };
+
+    const client = connect(adminContext, [
+      {op: 'put', hash: 'query-hash2', ast: COMMENTS_QUERY},
+    ]);
     stateChanges.push({state: 'version-ready'});
     await nextPoke(client);
     // Should receive comments since they can see issues as the admin

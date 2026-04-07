@@ -1,17 +1,22 @@
 import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
+import type {PushFailedBody} from '../../../../zero-protocol/src/error.ts';
 import type {
   Mutation,
   PushBody,
   PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
-import {combinePushes, PusherService} from './pusher.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import type {PushFailedBody} from '../../../../zero-protocol/src/error.ts';
-import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
-import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
+import {
+  type ConnectionContext,
+  ConnectionContextManagerImpl,
+  type ConnectionSelector,
+} from '../view-syncer/connection-context-manager.ts';
+import {combinePushes, PusherService} from './pusher.ts';
 
 const config = {
   app: {
@@ -26,6 +31,181 @@ const config = {
 
 const clientID = 'test-cid';
 const wsID = 'test-wsid';
+const lc = createSilentLogContext();
+
+type TestConnectionOptions = {
+  clientID?: string | undefined;
+  wsID?: string | undefined;
+  auth?: string | undefined;
+  httpCookie?: string | undefined;
+  origin?: string | undefined;
+  userID?: string | undefined;
+  userPushURL?: string | undefined;
+  userPushHeaders?: Record<string, string> | undefined;
+};
+
+const contextManagers = new WeakMap<
+  PusherService,
+  ConnectionContextManagerImpl
+>();
+
+function newPusherService(pushConfig: {
+  url: string[];
+  apiKey?: string | undefined;
+  forwardCookies: boolean;
+  allowedClientHeaders?: string[] | undefined;
+}): PusherService {
+  const contextManager = new ConnectionContextManagerImpl(
+    lc,
+    undefined,
+    undefined,
+    {
+      url: undefined,
+      apiKey: undefined,
+      allowedClientHeaders: undefined,
+      forwardCookies: false,
+    },
+    {
+      url: pushConfig.url,
+      apiKey: pushConfig.apiKey,
+      allowedClientHeaders: pushConfig.allowedClientHeaders,
+      forwardCookies: pushConfig.forwardCookies,
+    },
+  );
+  const pusher = new PusherService(config, lc, 'cgid', contextManager);
+  contextManagers.set(pusher, contextManager);
+  return pusher;
+}
+
+function getContextManager(
+  pusher: PusherService,
+): ConnectionContextManagerImpl {
+  const contextManager = contextManagers.get(pusher);
+  if (!contextManager) {
+    throw new Error('Missing context manager for test pusher');
+  }
+  return contextManager;
+}
+
+function registerConnection(
+  pusher: PusherService,
+  options: TestConnectionOptions = {},
+): ConnectionSelector {
+  const contextManager = getContextManager(pusher);
+  const resolvedClientID = options.clientID ?? clientID;
+  const selector = {
+    clientID: resolvedClientID,
+    wsID: options.wsID ?? `ws-${resolvedClientID}`,
+  };
+
+  contextManager.registerConnection(
+    selector,
+    {
+      protocolVersion: 0,
+      clientID: resolvedClientID,
+      clientGroupID: 'cgid',
+      profileID: null,
+      baseCookie: null,
+      timestamp: Date.now(),
+      lmID: 0,
+      wsID: selector.wsID,
+      debugPerf: false,
+      auth: options.auth,
+      userID: options.userID,
+      initConnectionMsg: undefined,
+      httpCookie: options.httpCookie,
+      origin: options.origin,
+    },
+    getAuth(options.auth),
+  );
+  contextManager.initConnection(selector, {
+    desiredQueriesPatch: [],
+    userPushURL: options.userPushURL,
+    userPushHeaders: options.userPushHeaders,
+  });
+
+  return selector;
+}
+
+function openConnection(
+  pusher: PusherService,
+  options: TestConnectionOptions = {},
+) {
+  const selector = registerConnection(pusher, options);
+  return {
+    selector,
+    stream: pusher.initConnection(selector),
+  };
+}
+
+const authCache = new Map<string, NonNullable<ConnectionContext['auth']>>();
+
+function getAuth(raw: string | undefined) {
+  if (raw === undefined) {
+    return undefined;
+  }
+  let auth = authCache.get(raw);
+  if (!auth) {
+    auth = {type: 'opaque', raw};
+    authCache.set(raw, auth);
+  }
+  return auth;
+}
+
+function makeEntry(
+  push: PushBody,
+  options: {
+    clientID?: string | undefined;
+    wsID?: string | undefined;
+    revision?: number | undefined;
+    auth?: string | undefined;
+    httpCookie?: string | undefined;
+    origin?: string | undefined;
+    userID?: string | undefined;
+    userPushURL?: string | undefined;
+  } = {},
+) {
+  const resolvedClientID =
+    options.clientID ?? push.mutations[0]?.clientID ?? clientID;
+  return {
+    push,
+    context: {
+      state: 'provisional',
+      clientID: resolvedClientID,
+      wsID: options.wsID ?? `ws-${resolvedClientID}`,
+      userID: options.userID,
+      auth: getAuth(options.auth),
+      profileID: null,
+      baseCookie: null,
+      protocolVersion: 0,
+      revision: options.revision ?? 0,
+      revalidateAt: undefined,
+      insertionOrder: 0,
+      queryContext: {
+        url: undefined,
+        allowedUrlPatterns: [],
+        headerOptions: {
+          customHeaders: undefined,
+          cookie: options.httpCookie,
+          origin: options.origin,
+          apiKey: undefined,
+          allowedClientHeaders: undefined,
+        },
+      },
+      pushContext: {
+        url: options.userPushURL,
+        allowedUrlPatterns: [],
+        headerOptions: {
+          customHeaders: undefined,
+          cookie: options.httpCookie,
+          origin: options.origin,
+          apiKey: undefined,
+          allowedClientHeaders: undefined,
+        },
+      },
+    } satisfies ConnectionContext,
+  };
+}
 
 describe('combine pushes', () => {
   test('empty array', () => {
@@ -42,22 +222,8 @@ describe('combine pushes', () => {
 
   test('stop after pushes', () => {
     const [pushes, terminate] = combinePushes([
-      {
-        push: makePush(1),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-
-        clientID,
-      },
-      {
-        push: makePush(1),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-
-        clientID,
-      },
+      makeEntry(makePush(1), {auth: 'a'}),
+      makeEntry(makePush(1), {auth: 'a'}),
       undefined,
     ]);
     expect(pushes).toHaveLength(1);
@@ -66,23 +232,9 @@ describe('combine pushes', () => {
 
   test('stop in the middle', () => {
     const [pushes, terminate] = combinePushes([
-      {
-        push: makePush(1),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-
-        clientID,
-      },
+      makeEntry(makePush(1), {auth: 'a'}),
       undefined,
-      {
-        push: makePush(1),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-
-        clientID,
-      },
+      makeEntry(makePush(1), {auth: 'a'}),
     ]);
     expect(pushes).toHaveLength(1);
     expect(pushes[0].push.mutations).toHaveLength(1);
@@ -92,39 +244,19 @@ describe('combine pushes', () => {
 
   test('combines pushes for same clientID', () => {
     const [pushes, terminate] = combinePushes([
-      {
-        push: makePush(1, 'client1'),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client1',
-      },
-      {
-        push: makePush(2, 'client1'),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client1',
-      },
-      {
-        push: makePush(1, 'client2'),
-        auth: 'b',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client2',
-      },
+      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
+      makeEntry(makePush(2, 'client1'), {clientID: 'client1', auth: 'a'}),
+      makeEntry(makePush(1, 'client2'), {clientID: 'client2', auth: 'b'}),
     ]);
 
     expect(pushes).toHaveLength(2);
     expect(terminate).toBe(false);
 
-    // Verify client1's pushes are combined
-    const client1Push = pushes.find(p => p.clientID === 'client1');
+    const client1Push = pushes.find(p => p.context.clientID === 'client1');
     expect(client1Push).toBeDefined();
-    expect(client1Push?.push.mutations).toHaveLength(3); // 1 + 2 mutations
+    expect(client1Push?.push.mutations).toHaveLength(3);
 
-    // Verify client2's push is separate
-    const client2Push = pushes.find(p => p.clientID === 'client2');
+    const client2Push = pushes.find(p => p.context.clientID === 'client2');
     expect(client2Push).toBeDefined();
     expect(client2Push?.push.mutations).toHaveLength(1);
   });
@@ -132,47 +264,46 @@ describe('combine pushes', () => {
   test('throws on jwt mismatch for same client', () => {
     expect(() =>
       combinePushes([
-        {
-          push: makePush(1, 'client1'),
-          auth: 'a',
-          httpCookie: undefined,
-          origin: undefined,
-          clientID: 'client1',
-        },
-        {
-          push: makePush(2, 'client1'),
-          auth: 'b',
-          httpCookie: undefined, // Different JWT
-          origin: undefined,
-          clientID: 'client1',
-        },
+        makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
+        makeEntry(makePush(2, 'client1'), {clientID: 'client1', auth: 'b'}),
       ]),
     ).toThrow('auth must be the same for all pushes with the same clientID');
+  });
+
+  test('throws on userID mismatch for same client', () => {
+    expect(() =>
+      combinePushes([
+        makeEntry(makePush(1, 'client1'), {
+          clientID: 'client1',
+          auth: 'a',
+          userID: 'user-1',
+        }),
+        makeEntry(makePush(2, 'client1'), {
+          clientID: 'client1',
+          auth: 'a',
+          userID: 'user-2',
+        }),
+      ]),
+    ).toThrow('userID must be the same for all pushes with the same clientID');
   });
 
   test('throws on schema version mismatch for same client', () => {
     expect(() =>
       combinePushes([
-        {
-          push: {
+        makeEntry(
+          {
             ...makePush(1, 'client1'),
             schemaVersion: 1,
           },
-          auth: 'a',
-          httpCookie: undefined,
-          origin: undefined,
-          clientID: 'client1',
-        },
-        {
-          push: {
+          {clientID: 'client1', auth: 'a'},
+        ),
+        makeEntry(
+          {
             ...makePush(2, 'client1'),
-            schemaVersion: 2, // Different schema version
+            schemaVersion: 2,
           },
-          auth: 'a',
-          httpCookie: undefined,
-          origin: undefined,
-          clientID: 'client1',
-        },
+          {clientID: 'client1', auth: 'a'},
+        ),
       ]),
     ).toThrow(
       'schemaVersion must be the same for all pushes with the same clientID',
@@ -182,26 +313,20 @@ describe('combine pushes', () => {
   test('throws on push version mismatch for same client', () => {
     expect(() =>
       combinePushes([
-        {
-          push: {
+        makeEntry(
+          {
             ...makePush(1, 'client1'),
             pushVersion: 1,
           },
-          auth: 'a',
-          httpCookie: undefined,
-          origin: undefined,
-          clientID: 'client1',
-        },
-        {
-          push: {
+          {clientID: 'client1', auth: 'a'},
+        ),
+        makeEntry(
+          {
             ...makePush(2, 'client1'),
-            pushVersion: 2, // Different push version
+            pushVersion: 2,
           },
-          auth: 'a',
-          httpCookie: undefined,
-          origin: undefined,
-          clientID: 'client1',
-        },
+          {clientID: 'client1', auth: 'a'},
+        ),
       ]),
     ).toThrow(
       'pushVersion must be the same for all pushes with the same clientID',
@@ -210,28 +335,22 @@ describe('combine pushes', () => {
 
   test('combines compatible pushes with same schema version and push version', () => {
     const [pushes, terminate] = combinePushes([
-      {
-        push: {
+      makeEntry(
+        {
           ...makePush(1, 'client1'),
           schemaVersion: 1,
           pushVersion: 1,
         },
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client1',
-      },
-      {
-        push: {
+        {clientID: 'client1', auth: 'a'},
+      ),
+      makeEntry(
+        {
           ...makePush(2, 'client1'),
           schemaVersion: 1,
           pushVersion: 1,
         },
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client1',
-      },
+        {clientID: 'client1', auth: 'a'},
+      ),
     ]);
 
     expect(pushes).toHaveLength(1);
@@ -241,92 +360,41 @@ describe('combine pushes', () => {
 
   test('handles multiple clients with multiple pushes', () => {
     const [pushes, terminate] = combinePushes([
-      {
-        push: makePush(1, 'client1'),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client1',
-      },
-      {
-        push: makePush(2, 'client2'),
-        auth: 'b',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client2',
-      },
-      {
-        push: makePush(1, 'client1'),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client1',
-      },
-      {
-        push: makePush(3, 'client2'),
-        auth: 'b',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client2',
-      },
+      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
+      makeEntry(makePush(2, 'client2'), {clientID: 'client2', auth: 'b'}),
+      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
+      makeEntry(makePush(3, 'client2'), {clientID: 'client2', auth: 'b'}),
     ]);
 
     expect(pushes).toHaveLength(2);
     expect(terminate).toBe(false);
 
-    // Verify client1's pushes are combined
-    const client1Push = pushes.find(p => p.clientID === 'client1');
+    const client1Push = pushes.find(p => p.context.clientID === 'client1');
     expect(client1Push?.push.mutations).toHaveLength(2);
 
-    // Verify client2's pushes are combined
-    const client2Push = pushes.find(p => p.clientID === 'client2');
+    const client2Push = pushes.find(p => p.context.clientID === 'client2');
     expect(client2Push?.push.mutations).toHaveLength(5);
   });
 
   test('preserves mutation order within client', () => {
     const [pushes] = combinePushes([
-      {
-        push: makePush(1, 'client1'),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client1',
-      },
-      {
-        push: makePush(1, 'client2'),
-        auth: 'b',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client2',
-      },
-      {
-        push: makePush(1, 'client1'),
-        auth: 'a',
-        httpCookie: undefined,
-        origin: undefined,
-        clientID: 'client1',
-      },
+      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
+      makeEntry(makePush(1, 'client2'), {clientID: 'client2', auth: 'b'}),
+      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
     ]);
 
-    const client1Push = pushes.find(p => p.clientID === 'client1');
+    const client1Push = pushes.find(p => p.context.clientID === 'client1');
     expect(client1Push?.push.mutations[0].id).toBeLessThan(
       client1Push?.push.mutations[1].id || 0,
     );
   });
 });
-
-const lc = createSilentLogContext();
 describe('pusher service', () => {
   test('the service can be stopped', async () => {
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      forwardCookies: false,
+    });
     let shutDown = false;
     void pusher.run().then(() => {
       shutDown = true;
@@ -335,26 +403,26 @@ describe('pusher service', () => {
     expect(shutDown).toBe(true);
   });
 
-  test('the service sets authorization headers', async () => {
+  test('the service sets authorization and user headers', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockResolvedValue({
       ok: true,
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined, undefined);
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    pusher.enqueuePush(selector, makePush(1));
 
     await pusher.stop();
 
@@ -362,6 +430,7 @@ describe('pusher service', () => {
       'Content-Type': 'application/json',
       'X-Api-Key': 'api-key',
       'Authorization': 'Bearer jwt',
+      'X-User-ID': 'user-123',
     });
 
     fetch.mockReset();
@@ -373,27 +442,27 @@ describe('pusher service', () => {
       ok: true,
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-        allowedClientHeaders: [
-          'x-vercel-automation-bypass-secret',
-          'x-custom-header',
-        ],
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+      allowedClientHeaders: [
+        'x-vercel-automation-bypass-secret',
+        'x-custom-header',
+      ],
+    });
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined, {
-      'x-vercel-automation-bypass-secret': 'my-secret',
-      'x-custom-header': 'custom-value',
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userPushHeaders: {
+        'x-vercel-automation-bypass-secret': 'my-secret',
+        'x-custom-header': 'custom-value',
+      },
     });
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    pusher.enqueuePush(selector, makePush(1));
 
     await pusher.stop();
 
@@ -414,24 +483,24 @@ describe('pusher service', () => {
       ok: true,
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-        // allowedClientHeaders not set - secure by default
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+      // allowedClientHeaders not set - secure by default
+    });
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined, {
-      'x-vercel-automation-bypass-secret': 'my-secret',
-      'x-custom-header': 'custom-value',
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userPushHeaders: {
+        'x-vercel-automation-bypass-secret': 'my-secret',
+        'x-custom-header': 'custom-value',
+      },
     });
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    pusher.enqueuePush(selector, makePush(1));
 
     await pusher.stop();
 
@@ -450,25 +519,24 @@ describe('pusher service', () => {
       ok: true,
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined, undefined);
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+    });
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    pusher.enqueuePush(selector, makePush(1));
 
     await pusher.stop();
 
     expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
-      `"http://example.com/?schema=zero_0&appID=zero"`,
+      '"http://example.com/?schema=zero_0&appID=zero"',
     );
 
     fetch.mockReset();
@@ -481,46 +549,38 @@ describe('pusher service', () => {
       await apiServerReturn.promise;
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
 
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined, undefined);
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
-    // release control of the loop so the push can be sent
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+    });
+    pusher.enqueuePush(selector, makePush(1));
     await Promise.resolve();
 
-    // We should have sent the first push
     expect(fetch.mock.calls).toHaveLength(1);
     expect(JSON.parse(fetch.mock.calls[0][1].body).mutations).toHaveLength(1);
 
-    // We have not resolved the API server yet so these should stack up
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    pusher.enqueuePush(selector, makePush(1));
     await Promise.resolve();
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    pusher.enqueuePush(selector, makePush(1));
     await Promise.resolve();
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    pusher.enqueuePush(selector, makePush(1));
     await Promise.resolve();
 
-    // no new pushes sent yet since we are still waiting on the user's API server
     expect(fetch.mock.calls).toHaveLength(1);
 
-    // let the API server go
     apiServerReturn.resolve();
-    // wait for the pusher to finish
     await new Promise(resolve => {
       setTimeout(resolve, 0);
     });
 
-    // We sent all the pushes in one batch
     expect(JSON.parse(fetch.mock.calls[1][1].body).mutations).toHaveLength(3);
     expect(fetch.mock.calls).toHaveLength(2);
   });
@@ -531,20 +591,20 @@ describe('pusher service', () => {
       ok: true,
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined, undefined);
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      httpCookie: 'my-cookie',
+    });
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', 'my-cookie', undefined);
+    pusher.enqueuePush(selector, makePush(1));
 
     await pusher.stop();
 
@@ -557,20 +617,20 @@ describe('pusher service', () => {
       ok: true,
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: true,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: true,
+    });
     void pusher.run();
-    pusher.initConnection(clientID, wsID, undefined, undefined);
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      httpCookie: 'my-cookie',
+    });
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', 'my-cookie', undefined);
+    pusher.enqueuePush(selector, makePush(1));
 
     await pusher.stop();
 
@@ -580,6 +640,141 @@ describe('pusher service', () => {
     );
   });
 
+  test('successful pushes validate the live connection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
+
+    expect(
+      getContextManager(pusher).getConnectionContext(selector),
+    ).toMatchObject({
+      clientID,
+      wsID,
+      state: 'provisional',
+      revision: 1,
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await vi.waitFor(() =>
+      expect(
+        getContextManager(pusher).getConnectionContext(selector),
+      ).toMatchObject({
+        clientID,
+        wsID,
+        userID: 'user-123',
+        state: 'validated',
+        revision: 1,
+      }),
+    );
+    expect(getContextManager(pusher).getGroupState()).toMatchObject({
+      userID: 'user-123',
+      validated: true,
+      backgroundConnection: selector,
+    });
+
+    await pusher.stop();
+  });
+
+  test('push auth failure responses remove the live connection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.HTTP,
+          status: 403,
+          bodyPreview: 'Forbidden',
+          message: 'Fetch from API server returned non-OK status 403',
+          mutationIDs: [{clientID, id: 1}],
+        }),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector, stream} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+      errorBody: expect.objectContaining({
+        kind: ErrorKind.PushFailed,
+        status: 403,
+      }),
+    });
+    expect(
+      getContextManager(pusher).getConnectionContext(selector),
+    ).toBeUndefined();
+
+    await pusher.stop();
+  });
+
+  test('non-OK 401 push failures remove the live connection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    const response = {
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve('Unauthorized access'),
+      clone() {
+        return response;
+      },
+    };
+    fetch.mockResolvedValue(response);
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector, stream} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+      errorBody: expect.objectContaining({
+        kind: ErrorKind.PushFailed,
+        status: 401,
+      }),
+    });
+    expect(
+      getContextManager(pusher).getConnectionContext(selector),
+    ).toBeUndefined();
+
+    await pusher.stop();
+  });
+
   test('ack mutation responses sends cleanup mutation via HTTP', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockResolvedValue({
@@ -587,19 +782,16 @@ describe('pusher service', () => {
       json: () => Promise.resolve({mutations: []}),
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: true,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: true,
+    });
     void pusher.run();
 
-    await pusher.ackMutationResponses({
+    const requester = registerConnection(pusher, {clientID: 'test-client'});
+
+    await pusher.ackMutationResponses(requester, {
       clientID: 'test-client',
       id: 42,
     });
@@ -628,20 +820,16 @@ describe('pusher service', () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockRejectedValue(new Error('Network error'));
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: true,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: true,
+    });
     void pusher.run();
 
-    // Should not throw - errors are logged and swallowed
-    await pusher.ackMutationResponses({
+    const requester = registerConnection(pusher, {clientID: 'test-client'});
+
+    await pusher.ackMutationResponses(requester, {
       clientID: 'test-client',
       id: 42,
     });
@@ -654,121 +842,327 @@ describe('pusher service', () => {
   test('ack mutation responses skips cleanup when no push URL configured', async () => {
     const fetch = (global.fetch = vi.fn());
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: [],
-        forwardCookies: true,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: [],
+      forwardCookies: true,
+    });
     void pusher.run();
 
-    await pusher.ackMutationResponses({
+    const requester = registerConnection(pusher, {clientID: 'test-client'});
+
+    await pusher.ackMutationResponses(requester, {
       clientID: 'test-client',
       id: 42,
     });
 
     await pusher.stop();
 
-    // No fetch call should be made
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  test('ack mutation responses uses custom URL from initConnection', async () => {
+  test('ack mutation responses uses custom configs from initConnection', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({mutations: []}),
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://default.com', 'http://custom.com/push'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://default.com', 'http://custom.com/push'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+      allowedClientHeaders: ['x-custom-header'],
+    });
     void pusher.run();
 
-    // Initialize connection with custom URL
-    pusher.initConnection(
+    const requester = registerConnection(pusher, {
       clientID,
       wsID,
-      'http://custom.com/push?tenant=foo',
-      undefined,
-    );
+      auth: 'jwt',
+      httpCookie: 'my-cookie',
+      origin: 'https://app.example',
+      userID: 'user-123',
+      userPushHeaders: {
+        'x-custom-header': 'custom-value',
+      },
+    });
 
-    await pusher.ackMutationResponses({
-      clientID: 'test-client',
+    await pusher.ackMutationResponses(requester, {
+      clientID,
       id: 42,
     });
 
     await pusher.stop();
 
     expect(fetch).toHaveBeenCalledTimes(1);
-    const [url] = fetch.mock.calls[0];
-    // Should use the custom URL with query params, not the default URL
-    expect(url).toBe(
-      'http://custom.com/push?tenant=foo&schema=zero_0&appID=zero',
+    expect(fetch.mock.calls[0][1]?.headers).toMatchObject({
+      'X-Api-Key': 'api-key',
+      'x-custom-header': 'custom-value',
+      'Authorization': 'Bearer jwt',
+      'Origin': 'https://app.example',
+      'X-User-ID': 'user-123',
+    });
+    expect(fetch.mock.calls[0][1]?.headers).not.toHaveProperty('Cookie');
+  });
+
+  test('ack mutation responses passes auth headers', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://default.com', 'http://custom.com/push'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+      allowedClientHeaders: ['x-custom-header'],
+    });
+    void pusher.run();
+
+    const requester = registerConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      httpCookie: 'my-cookie',
+      origin: 'https://app.example',
+      userPushHeaders: {
+        'x-custom-header': 'custom-value',
+      },
+    });
+
+    await pusher.ackMutationResponses(requester, {
+      clientID,
+      id: 42,
+    });
+
+    await pusher.stop();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][1]?.headers).toMatchObject({
+      'X-Api-Key': 'api-key',
+      'x-custom-header': 'custom-value',
+      'Authorization': 'Bearer jwt',
+      'Origin': 'https://app.example',
+    });
+    expect(fetch.mock.calls[0][1]?.headers).not.toHaveProperty('Cookie');
+  });
+
+  test('delete client mutations use the requester connection context for all cleanup requests', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = newPusherService({
+      url: [
+        'http://default.com',
+        'http://requester.com/push',
+        'http://custom-a.com/push',
+        'http://custom-b.com/push',
+      ],
+      apiKey: 'api-key',
+      forwardCookies: false,
+      allowedClientHeaders: ['x-custom-header'],
+    });
+    void pusher.run();
+
+    const requester = registerConnection(pusher, {
+      clientID: 'requester',
+      wsID: 'ws-requester',
+      auth: 'jwt',
+      httpCookie: 'my-cookie',
+      origin: 'https://app.example',
+      userPushURL: 'http://requester.com/push',
+      userPushHeaders: {
+        'x-custom-header': 'requester',
+      },
+    });
+    registerConnection(pusher, {
+      clientID: 'client-a',
+      wsID: 'ws-a',
+      userPushURL: 'http://custom-a.com/push',
+      userPushHeaders: {
+        'x-custom-header': 'a',
+      },
+    });
+    registerConnection(pusher, {
+      clientID: 'client-b',
+      wsID: 'ws-b',
+      userPushURL: 'http://custom-b.com/push',
+      userPushHeaders: {
+        'x-custom-header': 'b',
+      },
+    });
+
+    await pusher.deleteClientMutations(requester, ['client-a', 'client-b']);
+
+    await pusher.stop();
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    expect(fetch.mock.calls[0][0]).toBe(
+      'http://requester.com/push?schema=zero_0&appID=zero',
     );
+    expect(fetch.mock.calls[0][1]?.headers).toMatchObject({
+      'X-Api-Key': 'api-key',
+      'x-custom-header': 'requester',
+      'Authorization': 'Bearer jwt',
+      'Origin': 'https://app.example',
+    });
+    expect(fetch.mock.calls[0][1]?.headers).not.toHaveProperty('Cookie');
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
+      clientGroupID: 'cgid',
+      mutations: [
+        {
+          clientID: 'client-a',
+          name: '_zero_cleanupResults',
+          args: [
+            {
+              type: 'bulk',
+              clientGroupID: 'cgid',
+              clientIDs: ['client-a'],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(fetch.mock.calls[1][0]).toBe(
+      'http://requester.com/push?schema=zero_0&appID=zero',
+    );
+    expect(fetch.mock.calls[1][1]?.headers).toMatchObject({
+      'X-Api-Key': 'api-key',
+      'x-custom-header': 'requester',
+      'Authorization': 'Bearer jwt',
+      'Origin': 'https://app.example',
+    });
+    expect(fetch.mock.calls[1][1]?.headers).not.toHaveProperty('Cookie');
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
+      clientGroupID: 'cgid',
+      mutations: [
+        {
+          clientID: 'client-b',
+          name: '_zero_cleanupResults',
+          args: [
+            {
+              type: 'bulk',
+              clientGroupID: 'cgid',
+              clientIDs: ['client-b'],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test('delete client mutations skip cleanup when the requester connection is missing', async () => {
+    const fetch = (global.fetch = vi.fn());
+
+    const pusher = newPusherService({
+      url: ['http://default.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+
+    await pusher.deleteClientMutations(
+      {clientID: 'requester', wsID: 'ws-requester'},
+      ['client-a', 'client-b'],
+    );
+
+    await pusher.stop();
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test('delete client mutations forwards cookies when configured', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://default.com'],
+      apiKey: 'api-key',
+      forwardCookies: true,
+    });
+    void pusher.run();
+
+    const requester = registerConnection(pusher, {
+      clientID: 'requester',
+      wsID: 'ws-requester',
+      auth: 'jwt',
+      httpCookie: 'my-cookie',
+      origin: 'https://app.example',
+      userID: 'user-123',
+    });
+
+    await pusher.deleteClientMutations(requester, ['client-a']);
+
+    await pusher.stop();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][1]?.headers).toMatchObject({
+      'Authorization': 'Bearer jwt',
+      'Cookie': 'my-cookie',
+      'Origin': 'https://app.example',
+      'X-User-ID': 'user-123',
+    });
   });
 });
 
 describe('initConnection', () => {
   test('initConnection returns a stream', () => {
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
 
-    // const result = pusher.initConnection(clientID, wsID, undefined, undefined);
-    // expect(result.type).toBe('stream');
+    const selector = registerConnection(pusher, {clientID, wsID});
+    const stream = pusher.initConnection(selector);
+
+    expect(stream[Symbol.asyncIterator]).toBeTypeOf('function');
   });
 
   test('initConnection throws if it was already called for the same clientID and wsID', () => {
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    pusher.initConnection('c1', 'ws1', undefined, undefined);
-    expect(() =>
-      pusher.initConnection('c1', 'ws1', undefined, undefined),
-    ).toThrow('Connection was already initialized');
+
+    const selector = registerConnection(pusher, {
+      clientID: 'c1',
+      wsID: 'ws1',
+    });
+    pusher.initConnection(selector);
+    expect(() => pusher.initConnection(selector)).toThrow(
+      'Connection was already initialized',
+    );
   });
 
   test('initConnection destroys prior stream for same client when wsID changes', async () => {
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    const stream1 = pusher.initConnection('c1', 'ws1', undefined, undefined);
-    pusher.initConnection('c1', 'ws2', undefined, undefined);
+
+    const {stream: stream1} = openConnection(pusher, {
+      clientID: 'c1',
+      wsID: 'ws1',
+    });
+    openConnection(pusher, {
+      clientID: 'c1',
+      wsID: 'ws2',
+    });
     const iterator = stream1[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
       done: true,
@@ -783,26 +1177,23 @@ describe('initConnection', () => {
       json: () => Promise.resolve({mutations: []}),
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://default.com', 'http://custom.com/push'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://default.com', 'http://custom.com/push'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
 
-    const userPushURL = 'http://custom.com/push';
-
-    pusher.initConnection(clientID, wsID, userPushURL, undefined);
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userPushURL: 'http://custom.com/push',
+    });
+    pusher.enqueuePush(selector, makePush(1));
 
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    // Verify custom URL was used instead of default
     expect(fetch.mock.calls[0][0]).toEqual(
       'http://custom.com/push?schema=zero_0&appID=zero',
     );
@@ -817,29 +1208,86 @@ describe('initConnection', () => {
       json: () => Promise.resolve({mutations: []}),
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://default.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://default.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
 
-    pusher.initConnection(clientID, wsID, undefined, undefined);
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+    });
+    pusher.enqueuePush(selector, makePush(1));
 
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    // Verify default URL was used
     expect(fetch.mock.calls[0][0]).toEqual(
       'http://default.com/?schema=zero_0&appID=zero',
     );
 
     await pusher.stop();
+  });
+
+  test('routes custom push URL and headers per client connection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = newPusherService({
+      url: [
+        'http://default.com',
+        'http://custom-a.com/push',
+        'http://custom-b.com/push',
+      ],
+      apiKey: 'api-key',
+      forwardCookies: false,
+      allowedClientHeaders: ['x-custom-header'],
+    });
+    void pusher.run();
+
+    const {selector: selectorA} = openConnection(pusher, {
+      clientID: 'client-a',
+      wsID: 'ws-a',
+      auth: 'jwt-a',
+      userPushURL: 'http://custom-a.com/push',
+      userPushHeaders: {
+        'x-custom-header': 'a',
+      },
+    });
+    const {selector: selectorB} = openConnection(pusher, {
+      clientID: 'client-b',
+      wsID: 'ws-b',
+      auth: 'jwt-b',
+      userPushURL: 'http://custom-b.com/push',
+      userPushHeaders: {
+        'x-custom-header': 'b',
+      },
+    });
+
+    pusher.enqueuePush(selectorA, makePush(1, 'client-a'));
+    pusher.enqueuePush(selectorB, makePush(1, 'client-b'));
+
+    await pusher.stop();
+
+    expect(fetch.mock.calls[0][0]).toBe(
+      'http://custom-a.com/push?schema=zero_0&appID=zero',
+    );
+    expect(fetch.mock.calls[0][1]?.headers).toMatchObject({
+      'x-custom-header': 'a',
+      'Authorization': 'Bearer jwt-a',
+    });
+    expect(fetch.mock.calls[1][0]).toBe(
+      'http://custom-b.com/push?schema=zero_0&appID=zero',
+    );
+    expect(fetch.mock.calls[1][1]?.headers).toMatchObject({
+      'x-custom-header': 'b',
+      'Authorization': 'Bearer jwt-b',
+    });
   });
 });
 
@@ -849,88 +1297,65 @@ describe('pusher streaming', () => {
   });
 
   test('returns ok for subsequent pushes from same client', () => {
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
 
-    pusher.initConnection(clientID, wsID, undefined, undefined);
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined, undefined);
-    const result = pusher.enqueuePush(
+    const {selector} = openConnection(pusher, {
       clientID,
-      makePush(1),
-      'jwt',
-      undefined,
-      undefined,
-    );
+      wsID,
+      auth: 'jwt',
+    });
+    pusher.enqueuePush(selector, makePush(1));
+    const result = pusher.enqueuePush(selector, makePush(1));
     expect(result.type).toBe('ok');
   });
 
   test('cleanup removes client subscription', () => {
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
 
-    const stream1 = pusher.initConnection(
+    const {selector, stream: stream1} = openConnection(pusher, {
       clientID,
-      'ws1',
-      undefined,
-      undefined,
-    );
+      wsID: 'ws1',
+      auth: 'jwt',
+    });
 
-    pusher.enqueuePush(
-      clientID,
-      makePush(1, clientID),
-      'jwt',
-      undefined,
-      undefined,
-    );
+    pusher.enqueuePush(selector, makePush(1, clientID));
 
     stream1.cancel();
 
-    // After cleanup, should get a new stream (even if same wsid)
-    expect(() =>
-      pusher.initConnection(clientID, 'ws1', undefined, undefined),
-    ).not.toThrow();
+    const replacement = registerConnection(pusher, {
+      clientID,
+      wsID: 'ws1',
+    });
+    expect(() => pusher.initConnection(replacement)).not.toThrow();
   });
 
   test('new websocket for same client creates new downstream', async () => {
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
 
-    const stream1 = pusher.initConnection(
+    const {stream: stream1} = openConnection(pusher, {
       clientID,
-      'ws1',
-      undefined,
-      undefined,
-    );
-    pusher.initConnection(clientID, 'ws2', undefined, undefined);
+      wsID: 'ws1',
+    });
+    openConnection(pusher, {
+      clientID,
+      wsID: 'ws2',
+    });
 
-    // should not be iterable anymore as it is closed by the arrival of ws2
     const iterator = stream1[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
       done: true,
@@ -950,26 +1375,19 @@ describe('pusher errors', () => {
       json: () => Promise.resolve(errorResponse),
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
 
-    const stream = pusher.initConnection(clientID, 'ws1', undefined, undefined);
-    pusher.enqueuePush(
+    const {selector, stream} = openConnection(pusher, {
       clientID,
-      makePush(1, clientID),
-      'jwt',
-      undefined,
-      undefined,
-    );
+      wsID: 'ws1',
+      auth: 'jwt',
+    });
+    pusher.enqueuePush(selector, makePush(1, clientID));
 
     const iterator = stream[Symbol.asyncIterator]();
     const failure = iterator.next();
@@ -1041,106 +1459,6 @@ describe('pusher errors', () => {
     );
   });
 
-  test('invokes auth failure handler on 401 push failure', async () => {
-    const fetch = (global.fetch = vi.fn());
-    fetch.mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          kind: ErrorKind.PushFailed,
-          origin: ErrorOrigin.ZeroCache,
-          reason: ErrorReason.HTTP,
-          status: 401,
-          bodyPreview: 'Unauthorized access',
-          message: 'Fetch from API server returned non-OK status 401',
-          mutationIDs: [{clientID, id: 1}],
-        } satisfies PushResponse),
-    });
-
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
-    void pusher.run();
-    const onAuthFailure = vi.fn();
-    const stream = pusher.initConnection(
-      clientID,
-      wsID,
-      undefined,
-      undefined,
-      onAuthFailure,
-    );
-
-    pusher.enqueuePush(
-      clientID,
-      makePush(1, clientID),
-      'jwt',
-      undefined,
-      undefined,
-    );
-
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
-      ProtocolErrorWithLevel,
-    );
-    expect(onAuthFailure).toHaveBeenCalledTimes(1);
-  });
-
-  test('does not invoke auth failure handler on non-auth push failure', async () => {
-    const fetch = (global.fetch = vi.fn());
-    fetch.mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          kind: ErrorKind.PushFailed,
-          origin: ErrorOrigin.ZeroCache,
-          reason: ErrorReason.HTTP,
-          status: 500,
-          bodyPreview: 'Internal Server Error',
-          message: 'Fetch from API server returned non-OK status 500',
-          mutationIDs: [{clientID, id: 1}],
-        } satisfies PushResponse),
-    });
-
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
-    void pusher.run();
-    const onAuthFailure = vi.fn();
-    const stream = pusher.initConnection(
-      clientID,
-      wsID,
-      undefined,
-      undefined,
-      onAuthFailure,
-    );
-
-    pusher.enqueuePush(
-      clientID,
-      makePush(1, clientID),
-      'jwt',
-      undefined,
-      undefined,
-    );
-
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
-      ProtocolErrorWithLevel,
-    );
-    expect(onAuthFailure).not.toHaveBeenCalled();
-  });
-
   test('emits error message with legacy http error format', async () => {
     await expectPushErrorResponse(
       {
@@ -1198,26 +1516,19 @@ describe('pusher errors', () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockRejectedValue('string error');
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    const stream = pusher.initConnection(clientID, wsID, undefined, undefined);
 
-    pusher.enqueuePush(
+    const {selector, stream} = openConnection(pusher, {
       clientID,
-      makePush(1, clientID),
-      'jwt',
-      undefined,
-      undefined,
-    );
+      wsID,
+      auth: 'jwt',
+    });
+    pusher.enqueuePush(selector, makePush(1, clientID));
 
     const iterator = stream[Symbol.asyncIterator]();
     const failure = iterator.next();
@@ -1263,26 +1574,19 @@ describe('pusher errors', () => {
       json: () => Promise.resolve(oooResponse),
     });
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
 
-    const stream = pusher.initConnection(clientID, 'ws1', undefined, undefined);
-    pusher.enqueuePush(
+    const {selector, stream} = openConnection(pusher, {
       clientID,
-      makePush(3, clientID),
-      'jwt',
-      undefined,
-      undefined,
-    );
+      wsID: 'ws1',
+      auth: 'jwt',
+    });
+    pusher.enqueuePush(selector, makePush(3, clientID));
 
     const iterator = stream[Symbol.asyncIterator]();
     const failure = iterator.next();
@@ -1325,44 +1629,26 @@ describe('pusher errors', () => {
     };
     fetch.mockResolvedValue(mockResponse);
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    const stream1 = pusher.initConnection(
-      'client1',
-      'ws1',
-      undefined,
-      undefined,
-    );
-    const stream2 = pusher.initConnection(
-      'client2',
-      'ws2',
-      undefined,
-      undefined,
-    );
 
-    pusher.enqueuePush(
-      'client1',
-      makePush(1, 'client1'),
-      'jwt',
-      undefined,
-      undefined,
-    );
-    pusher.enqueuePush(
-      'client2',
-      makePush(1, 'client2'),
-      'jwt',
-      undefined,
-      undefined,
-    );
+    const {selector: selector1, stream: stream1} = openConnection(pusher, {
+      clientID: 'client1',
+      wsID: 'ws1',
+      auth: 'jwt',
+    });
+    const {selector: selector2, stream: stream2} = openConnection(pusher, {
+      clientID: 'client2',
+      wsID: 'ws2',
+      auth: 'jwt',
+    });
+
+    pusher.enqueuePush(selector1, makePush(1, 'client1'));
+    pusher.enqueuePush(selector2, makePush(1, 'client2'));
 
     const iterator1 = stream1[Symbol.asyncIterator]();
     const iterator2 = stream2[Symbol.asyncIterator]();
@@ -1412,26 +1698,19 @@ describe('pusher errors', () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockRejectedValue(new Error('Network error'));
 
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    const stream = pusher.initConnection(clientID, wsID, undefined, undefined);
 
-    pusher.enqueuePush(
+    const {selector, stream} = openConnection(pusher, {
       clientID,
-      makePush(1, clientID),
-      'jwt',
-      undefined,
-      undefined,
-    );
+      wsID,
+      auth: 'jwt',
+    });
+    pusher.enqueuePush(selector, makePush(1, clientID));
 
     const iterator = stream[Symbol.asyncIterator]();
     const failure = iterator.next();
@@ -1454,31 +1733,20 @@ describe('pusher errors', () => {
   });
 
   test('rejects disallowed custom URL', async () => {
-    const pusher = new PusherService(
-      config,
-      {
-        url: ['http://allowed.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
+    const pusher = newPusherService({
+      url: ['http://allowed.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
     void pusher.run();
-    const stream = pusher.initConnection(
+    const {selector, stream} = openConnection(pusher, {
       clientID,
       wsID,
-      'http://malicious.com/endpoint',
-      undefined,
-    );
+      auth: 'jwt',
+      userPushURL: 'http://malicious.com/endpoint',
+    });
 
-    pusher.enqueuePush(
-      clientID,
-      makePush(1, clientID),
-      'jwt',
-      undefined,
-      undefined,
-    );
+    pusher.enqueuePush(selector, makePush(1, clientID));
 
     const iterator = stream[Symbol.asyncIterator]();
     const failure = iterator.next();

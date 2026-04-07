@@ -10,8 +10,10 @@ import type {
 } from '../../../../zero-protocol/src/inspect-down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
-import type {AuthSession, ValidateLegacyJWT} from '../../auth/auth.ts';
-import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
+import type {
+  CustomQueryTransformer,
+  TransformAttempt,
+} from '../../custom-queries/transform-query.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
@@ -35,6 +37,13 @@ import type {ViewSyncerService} from './view-syncer.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
+  function transformAttempt(
+    result: TransformAttempt['result'],
+    cached = false,
+  ): TransformAttempt {
+    return {result, cached};
+  }
+
   let replicaDbFile: DbFile;
   let cvrDB: PostgresDB;
   let upstreamDb: PostgresDB;
@@ -62,10 +71,12 @@ describe('view-syncer/service', () => {
     httpCookie: undefined,
     origin: undefined,
     userID: 'user-123',
+    auth: undefined,
   };
 
   let delegate: InspectorDelegate;
   let customQueryTransformer: CustomQueryTransformer | undefined;
+  let clearMocks: () => void;
 
   beforeEach<PgTest>(async ({testDBs}) => {
     ({
@@ -79,12 +90,16 @@ describe('view-syncer/service', () => {
       connectWithQueueAndSource,
       inspectorDelegate: delegate,
       customQueryTransformer,
-    } = await setup(testDBs, 'view_syncer_inspect_test', permissionsAll));
+      clearMocks,
+    } = await setup(testDBs, 'view_syncer_inspect_test', permissionsAll, {
+      queryFetchMode: 'empty-validation',
+    }));
 
     delegate.setAuthenticated(serviceID);
 
     return async () => {
       vi.useRealTimers();
+      clearMocks();
       await vs.stop();
       await viewSyncerDone;
       await testDBs.drop(cvrDB, upstreamDb);
@@ -462,13 +477,15 @@ describe('view-syncer/service', () => {
     // Spy on the transform method and mock its return value
     using transformSpy = vi
       .spyOn(customQueryTransformer, 'transform')
-      .mockResolvedValue([
-        {
-          id: 'test-query-id',
-          transformedAst: ISSUES_QUERY,
-          transformationHash: 'test-hash-123',
-        },
-      ]);
+      .mockResolvedValue(
+        transformAttempt([
+          {
+            id: 'test-query-id',
+            transformedAst: ISSUES_QUERY,
+            transformationHash: 'test-hash-123',
+          },
+        ]),
+      );
 
     await vs.inspect(SYNC_CONTEXT, [
       'inspect',
@@ -494,13 +511,19 @@ describe('view-syncer/service', () => {
 
     // Verify the transformer was called with correct parameters
     expect(transformSpy).toHaveBeenCalledOnce();
-    const [headerOptions, queries, userQueryURL] = transformSpy.mock.lastCall!;
+    const [ctx, queries] = transformSpy.mock.lastCall!;
 
-    expect(headerOptions).toEqual({
-      apiKey: undefined,
-      token: undefined,
-      cookie: undefined,
-    });
+    expect(ctx.queryContext.headerOptions).toEqual(
+      expect.objectContaining({
+        apiKey: undefined,
+        allowedClientHeaders: undefined,
+        customHeaders: undefined,
+        token: undefined,
+        cookie: undefined,
+        origin: undefined,
+        userID: 'user-123',
+      }),
+    );
 
     const queriesArray = [...queries];
     expect(queriesArray).toHaveLength(1);
@@ -509,7 +532,7 @@ describe('view-syncer/service', () => {
       args: ['arg1', 'arg2'],
       type: 'custom',
     });
-    expect(userQueryURL).toBeUndefined();
+    expect(ctx.queryContext.url).toMatch(/\/api\/zero\/pull$/);
   });
 
   describe('inspect error handling', () => {
@@ -563,7 +586,7 @@ describe('view-syncer/service', () => {
       // Spy on the transform method and make it return an empty array (no results)
       using transformSpy = vi
         .spyOn(customQueryTransformer, 'transform')
-        .mockResolvedValue([]);
+        .mockResolvedValue(transformAttempt([]));
 
       await vs.inspect(SYNC_CONTEXT, [
         'inspect',
@@ -605,14 +628,16 @@ describe('view-syncer/service', () => {
       // Spy on the transform method and make it return an error result
       using transformSpy = vi
         .spyOn(customQueryTransformer, 'transform')
-        .mockResolvedValue([
-          {
-            id: 'test-query',
-            name: 'myQuery',
-            error: 'app',
-            message: 'Invalid query syntax: Missing required field',
-          },
-        ]);
+        .mockResolvedValue(
+          transformAttempt([
+            {
+              id: 'test-query',
+              name: 'myQuery',
+              error: 'app',
+              message: 'Invalid query syntax: Missing required field',
+            },
+          ]),
+        );
 
       await vs.inspect(SYNC_CONTEXT, [
         'inspect',
@@ -643,7 +668,6 @@ describe('view-syncer/service', () => {
     let restrictiveUpstreamDb: PostgresDB;
     let restrictiveStateChanges: Subscription<ReplicaState>;
     let restrictiveVs: ViewSyncerService;
-    let restrictiveAuthSession: AuthSession;
     let restrictiveViewSyncerDone: Promise<void>;
     let restrictiveConnectWithQueueAndSource: (
       ctx: SyncContext,
@@ -655,44 +679,31 @@ describe('view-syncer/service', () => {
       source: Source<Downstream>;
     };
     let restrictiveDelegate: InspectorDelegate;
+    let restrictiveClearMocks: () => void;
 
     beforeEach<PgTest>(async ({testDBs}) => {
-      const validateLegacyJWT: ValidateLegacyJWT = token => {
-        if (token === 'jwt-admin-token') {
-          return Promise.resolve({
-            type: 'jwt',
-            raw: token,
-            decoded: {
-              sub: 'user-123',
-              role: 'admin',
-              iat: Date.now(),
-            },
-          });
-        }
-        return Promise.reject(new Error(`Unexpected test token: ${token}`));
-      };
-
       ({
         replicaDbFile: restrictiveReplicaDbFile,
         cvrDB: restrictiveCvrDB,
         upstreamDb: restrictiveUpstreamDb,
         stateChanges: restrictiveStateChanges,
         vs: restrictiveVs,
-        authSession: restrictiveAuthSession,
         viewSyncerDone: restrictiveViewSyncerDone,
         connectWithQueueAndSource: restrictiveConnectWithQueueAndSource,
         inspectorDelegate: restrictiveDelegate,
+        clearMocks: restrictiveClearMocks,
       } = await setup(
         testDBs,
         'view_syncer_restrictive_permissions_test',
         permissions,
-        validateLegacyJWT,
+        {queryFetchMode: 'empty-validation'},
       ));
 
       restrictiveDelegate.setAuthenticated(serviceID);
 
       return async () => {
         vi.useRealTimers();
+        restrictiveClearMocks();
         await restrictiveVs.stop();
         await restrictiveViewSyncerDone;
         await testDBs.drop(restrictiveCvrDB, restrictiveUpstreamDb);
@@ -758,14 +769,21 @@ describe('view-syncer/service', () => {
     });
 
     test('permission filter with auth data substitutes actual values', async () => {
-      expect(
-        await restrictiveAuthSession.update('admin', 'jwt-admin-token'),
-      ).toEqual({
-        ok: true,
-      });
+      const authContext: SyncContext = {
+        ...SYNC_CONTEXT,
+        auth: {
+          type: 'jwt',
+          raw: 'jwt-admin-token',
+          decoded: {
+            sub: 'user-123',
+            role: 'admin',
+            iat: Date.now(),
+          },
+        },
+      };
 
       const {queue: client} = restrictiveConnectWithQueueAndSource(
-        SYNC_CONTEXT,
+        authContext,
         [],
       );
 
@@ -776,7 +794,7 @@ describe('view-syncer/service', () => {
 
       const inspectId = 'test-restrictive-permissions-with-auth';
 
-      await restrictiveVs.inspect(SYNC_CONTEXT, [
+      await restrictiveVs.inspect(authContext, [
         'inspect',
         {
           op: 'analyze-query',

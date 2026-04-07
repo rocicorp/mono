@@ -39,6 +39,7 @@ describe('view-syncer/yield-during-advance', () => {
   let replicator: FakeReplicator;
   let stateChanges: Subscription<ReplicaState>;
   let viewSyncerDone: Promise<void>;
+  let clearMocks: () => void;
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
@@ -55,6 +56,7 @@ describe('view-syncer/yield-during-advance', () => {
     httpCookie: undefined,
     origin: undefined,
     userID: 'bar',
+    auth: undefined,
   };
 
   afterEach(() => {
@@ -69,11 +71,13 @@ describe('view-syncer/yield-during-advance', () => {
       vs,
       replicator,
       viewSyncerDone,
+      clearMocks,
       connect,
       stateChanges,
     } = await setup(testDBs, 'view_syncer_yield_advance_test', permissionsAll));
 
     return async () => {
+      clearMocks();
       await vs.stop();
       await viewSyncerDone;
       await testDBs.drop(cvrDB, upstreamDb);
