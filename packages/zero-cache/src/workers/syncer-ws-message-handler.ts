@@ -151,7 +151,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   type: 'fatal',
                   error: {
                     kind: ErrorKind.InvalidPush,
-                    message: `Legacy CRUD mutations are enabled in this configuration.`,
+                    message: `Support for legacy CRUD mutations is disabled`,
                     origin: ErrorOrigin.ZeroCache,
                   },
                 } satisfies HandlerResult,
