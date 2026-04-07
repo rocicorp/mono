@@ -1,9 +1,4 @@
 import {compareUTF8} from 'compare-utf8';
-import {
-  assertBoolean,
-  assertNumber,
-  assertString,
-} from '../../../shared/src/asserts.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {Stream} from './stream.ts';
@@ -35,28 +30,14 @@ export type Node = {
  * @returns < 0 if a < b, 0 if a === b, > 0 if a > b
  */
 export function compareValues(a: Value, b: Value): number {
-  a = normalizeUndefined(a);
-  b = normalizeUndefined(b);
+  a = a ?? null;
+  b = b ?? null;
 
   if (a === b) {
     return 0;
   }
-  if (a === null) {
-    return -1;
-  }
-  if (b === null) {
-    return 1;
-  }
-  if (typeof a === 'boolean') {
-    assertBoolean(b);
-    return a ? 1 : -1;
-  }
-  if (typeof a === 'number') {
-    assertNumber(b);
-    return a - b;
-  }
-  if (typeof a === 'string') {
-    assertString(b);
+
+  if (typeof a === 'string' && typeof b === 'string') {
     // We compare all strings in Zero as UTF-8. This is the default on SQLite
     // and we need to match it. See:
     // https://blog.replicache.dev/blog/replicache-11-adventures-in-text-encoding.
@@ -67,6 +48,30 @@ export function compareValues(a: Value, b: Value): number {
     // https://www.sqlite.org/c3ref/create_collation.html
     return compareUTF8(a, b);
   }
+
+  if (typeof a === 'number' && typeof b === 'number') {
+    return a - b;
+  }
+
+  if (typeof a === 'boolean' && typeof b === 'boolean') {
+    return a ? 1 : -1;
+  }
+
+  // check with null after since it is less likely to be the common case and we
+  // want to avoid the extra checks in that case
+  if (a === null) {
+    return -1;
+  }
+  if (b === null) {
+    return 1;
+  }
+
+  if (typeof a !== typeof b) {
+    throw new Error(
+      `Cannot compare values of different types: ${typeof a} and ${typeof b}`,
+    );
+  }
+
   throw new Error(`Unsupported type: ${a}`);
 }
 
