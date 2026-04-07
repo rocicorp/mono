@@ -41,9 +41,11 @@ const PG_EPOCH_UNIX_DAYS = 10_957;
 
 const MS_PER_DAY = 86_400_000;
 
-// Sentinel values for infinity in PG binary format.
-const PG_TIMESTAMP_INFINITY = 0x7fffffffffffffffn;
-const PG_TIMESTAMP_NEG_INFINITY = -0x8000000000000000n;
+// Sentinel values for infinity in PG binary format (as hi/lo int32 pairs).
+const PG_TIMESTAMP_INF_HI = 0x7fffffff;
+const PG_TIMESTAMP_INF_LO = 0xffffffff;
+const PG_TIMESTAMP_NEG_INF_HI = -0x80000000; // readInt32BE of 0x80000000
+const PG_TIMESTAMP_NEG_INF_LO = 0;
 const PG_DATE_INFINITY = 0x7fffffff;
 const PG_DATE_NEG_INFINITY = -0x80000000;
 
@@ -326,15 +328,19 @@ export function decodeUUID(buf: Buffer): string {
  * → floating-point milliseconds since Unix epoch.
  *
  * Matches the output of `timestampToFpMillis()` in `types/pg.ts`.
+ *
+ * Uses Number arithmetic (avoiding BigInt) for speed. The microsecond value
+ * fits safely in a Number for all practical dates (up to ~year 285,000).
  */
 export function decodeTimestamp(buf: Buffer): number {
-  const microseconds = buf.readBigInt64BE(0);
-  if (microseconds === PG_TIMESTAMP_INFINITY) return Infinity;
-  if (microseconds === PG_TIMESTAMP_NEG_INFINITY) return -Infinity;
-  // Split into whole milliseconds and sub-millisecond remainder.
-  const wholeMillis = Number(microseconds / 1000n);
-  const remainderMicros = Number(microseconds % 1000n);
-  return wholeMillis + PG_EPOCH_UNIX_MILLIS + remainderMicros * 0.001;
+  const hi = buf.readInt32BE(0);
+  const lo = buf.readUInt32BE(4);
+  if (hi === PG_TIMESTAMP_INF_HI && lo === PG_TIMESTAMP_INF_LO) return Infinity;
+  if (hi === PG_TIMESTAMP_NEG_INF_HI && lo === PG_TIMESTAMP_NEG_INF_LO) {
+    return -Infinity;
+  }
+  const microseconds = hi * 0x100000000 + lo;
+  return microseconds / 1000 + PG_EPOCH_UNIX_MILLIS;
 }
 
 /**
@@ -351,11 +357,14 @@ export function decodeDate(buf: Buffer): number {
 /**
  * TIME: int64 microseconds since midnight → milliseconds since midnight.
  * Matches `postgresTimeToMilliseconds()` in `types/pg.ts`.
+ *
+ * Max value is 86,400,000,000 (~8.6e10), well within Number.MAX_SAFE_INTEGER.
  */
 export function decodeTime(buf: Buffer): number {
-  const micros = buf.readBigInt64BE(0);
-  // Truncate to integer milliseconds (matching text parser behavior).
-  return Number(micros / 1000n);
+  const hi = buf.readInt32BE(0);
+  const lo = buf.readUInt32BE(4);
+  const micros = hi * 0x100000000 + lo;
+  return Math.trunc(micros / 1000);
 }
 
 /**
@@ -364,12 +373,16 @@ export function decodeTime(buf: Buffer): number {
  * positive = west of UTC, negative = east of UTC.
  * UTC = local_time + pg_offset.
  * → UTC milliseconds since midnight.
+ *
+ * Max value ~1.3e11 microseconds, well within Number.MAX_SAFE_INTEGER.
  */
 export function decodeTimeTZ(buf: Buffer): number {
-  const micros = buf.readBigInt64BE(0);
+  const hi = buf.readInt32BE(0);
+  const lo = buf.readUInt32BE(4);
+  const localMicros = hi * 0x100000000 + lo;
   const tzOffsetSeconds = buf.readInt32BE(8);
-  const utcMicros = micros + BigInt(tzOffsetSeconds) * 1_000_000n;
-  let ms = Number(utcMicros / 1000n);
+  const utcMicros = localMicros + tzOffsetSeconds * 1_000_000;
+  let ms = Math.trunc(utcMicros / 1000);
   // Normalize to [0, MS_PER_DAY).
   if (ms < 0 || ms >= MS_PER_DAY) {
     ms = ((ms % MS_PER_DAY) + MS_PER_DAY) % MS_PER_DAY;
@@ -411,9 +424,10 @@ export function decodeNumeric(buf: Buffer): number {
   }
 
   let result = 0;
+  let scale = NBASE ** weight;
   for (let i = 0; i < ndigits; i++) {
-    const digit = buf.readInt16BE(8 + i * 2);
-    result += digit * NBASE ** (weight - i);
+    result += buf.readInt16BE(8 + i * 2) * scale;
+    scale /= NBASE;
   }
   return sign === NUMERIC_NEG ? -result : result;
 }
