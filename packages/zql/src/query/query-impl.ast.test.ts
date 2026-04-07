@@ -2107,12 +2107,74 @@ test('one in schema should not imply limit 1 in the ast -- the user needs to get
   });
 });
 
-test('scalar option throws on two-hop relationship', () => {
+test('scalar option on two-hop relationship applies to inner condition', () => {
   const issueQuery = newQuery(schema, 'issue');
 
-  expect(() => issueQuery.whereExists('labels', {scalar: true})).toThrow(
-    'scalar option only supports one-hop relationships',
-  );
+  expect(
+    ast(
+      issueQuery.whereExists('labels', q => q.where('name', 'foo'), {
+        scalar: true,
+        flip: true,
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "table": "issue",
+      "where": {
+        "flip": true,
+        "op": "EXISTS",
+        "related": {
+          "correlation": {
+            "childField": [
+              "issueId",
+            ],
+            "parentField": [
+              "id",
+            ],
+          },
+          "subquery": {
+            "alias": "zsubq_labels",
+            "table": "issueLabel",
+            "where": {
+              "flip": true,
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "labelId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_zhidden_labels",
+                  "table": "label",
+                  "where": {
+                    "left": {
+                      "name": "name",
+                      "type": "column",
+                    },
+                    "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "foo",
+                    },
+                    "type": "simple",
+                  },
+                },
+                "system": "client",
+              },
+              "scalar": true,
+              "type": "correlatedSubquery",
+            },
+          },
+          "system": "client",
+        },
+        "type": "correlatedSubquery",
+      },
+    }
+  `);
 });
 
 describe('whereExists with scalar option', () => {
