@@ -575,6 +575,12 @@ test('zero-cache --help', () => {
                                                                         workers may improve initial sync speed; however, note that local disk throughput                                      
                                                                         (i.e. IOPS), upstream CPU, and network bandwidth may also be bottlenecks.                                             
                                                                                                                                                                                               
+     --initial-sync-text-copy boolean                                   default: false                                                                                                        
+       ZERO_INITIAL_SYNC_TEXT_COPY env                                                                                                                                                        
+                                                                        Use text-format COPY instead of binary COPY for the initial sync.                                                     
+                                                                        This is slower but can work around issues with binary encoding of                                                     
+                                                                        certain data types.                                                                                                   
+                                                                                                                                                                                              
      --lazy-startup boolean                                             default: false                                                                                                        
        ZERO_LAZY_STARTUP env                                                                                                                                                                  
                                                                         Delay starting the majority of zero-cache until first request.                                                        
