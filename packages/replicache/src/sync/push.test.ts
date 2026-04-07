@@ -79,149 +79,149 @@ type Case = {
 };
 
 const cases: Case[] = [
-    {
-      name: '0 pending',
-      numPendingMutations: 0,
-      expPushReq: undefined,
-      pushResult: undefined,
-      expPusherResult: undefined,
-    },
-    {
-      name: '1 pending',
-      numPendingMutations: 1,
-      expPushReq: {
-        profileID,
-        clientGroupID,
-        mutations: [
-          {
-            clientID,
-            id: 2,
-            name: 'mutator_name_2',
-            args: deepFreeze([2]),
-            timestamp: 42,
-          },
-        ],
-        pushVersion: PUSH_VERSION_DD31,
-        schemaVersion: pushSchemaVersion,
-      },
-      pushResult: 'ok',
-      expPusherResult: {
-        httpRequestInfo: {
-          httpStatusCode: 200,
-          errorMessage: '',
+  {
+    name: '0 pending',
+    numPendingMutations: 0,
+    expPushReq: undefined,
+    pushResult: undefined,
+    expPusherResult: undefined,
+  },
+  {
+    name: '1 pending',
+    numPendingMutations: 1,
+    expPushReq: {
+      profileID,
+      clientGroupID,
+      mutations: [
+        {
+          clientID,
+          id: 2,
+          name: 'mutator_name_2',
+          args: deepFreeze([2]),
+          timestamp: 42,
         },
+      ],
+      pushVersion: PUSH_VERSION_DD31,
+      schemaVersion: pushSchemaVersion,
+    },
+    pushResult: 'ok',
+    expPusherResult: {
+      httpRequestInfo: {
+        httpStatusCode: 200,
+        errorMessage: '',
       },
     },
-    {
-      name: '2 pending',
-      numPendingMutations: 2,
-      expPushReq: {
-        profileID,
-        clientGroupID,
-        mutations: [
-          // These mutations aren't actually added to the chain until the test
-          // case runs, but we happen to know how they are created by the db
-          // test helpers so we use that knowledge here.
-          {
-            clientID,
-            id: 2,
-            name: 'mutator_name_2',
-            args: deepFreeze([2]),
-            timestamp: 42,
-          },
-          {
-            clientID,
-            id: 3,
-            name: 'mutator_name_3',
-            args: deepFreeze([3]),
-            timestamp: 42,
-          },
-        ],
-        pushVersion: PUSH_VERSION_DD31,
-        schemaVersion: pushSchemaVersion,
-      },
-      pushResult: 'ok',
-      expPusherResult: {
-        httpRequestInfo: {
-          httpStatusCode: 200,
-          errorMessage: '',
+  },
+  {
+    name: '2 pending',
+    numPendingMutations: 2,
+    expPushReq: {
+      profileID,
+      clientGroupID,
+      mutations: [
+        // These mutations aren't actually added to the chain until the test
+        // case runs, but we happen to know how they are created by the db
+        // test helpers so we use that knowledge here.
+        {
+          clientID,
+          id: 2,
+          name: 'mutator_name_2',
+          args: deepFreeze([2]),
+          timestamp: 42,
         },
-      },
-    },
-    {
-      name: '2 mutations to push, push errors',
-      numPendingMutations: 2,
-      expPushReq: {
-        profileID,
-        clientGroupID: clientGroupID as ClientGroupID,
-        mutations: [
-          // These mutations aren't actually added to the chain until the test
-          // case runs, but we happen to know how they are created by the db
-          // test helpers so we use that knowledge here.
-          {
-            clientID,
-            id: 2,
-            name: 'mutator_name_2',
-            args: deepFreeze([2]),
-            timestamp: 42,
-          },
-          {
-            clientID,
-            id: 3,
-            name: 'mutator_name_3',
-            args: deepFreeze([3]),
-            timestamp: 42,
-          },
-        ],
-        pushVersion: PUSH_VERSION_DD31,
-        schemaVersion: pushSchemaVersion,
-      },
-      pushResult: {error: 'FetchNotOk(500)'},
-      expPusherResult: {
-        httpRequestInfo: {
-          httpStatusCode: 500,
-          errorMessage: 'Fetch not OK',
+        {
+          clientID,
+          id: 3,
+          name: 'mutator_name_3',
+          args: deepFreeze([3]),
+          timestamp: 42,
         },
+      ],
+      pushVersion: PUSH_VERSION_DD31,
+      schemaVersion: pushSchemaVersion,
+    },
+    pushResult: 'ok',
+    expPusherResult: {
+      httpRequestInfo: {
+        httpStatusCode: 200,
+        errorMessage: '',
       },
     },
+  },
+  {
+    name: '2 mutations to push, push errors',
+    numPendingMutations: 2,
+    expPushReq: {
+      profileID,
+      clientGroupID: clientGroupID as ClientGroupID,
+      mutations: [
+        // These mutations aren't actually added to the chain until the test
+        // case runs, but we happen to know how they are created by the db
+        // test helpers so we use that knowledge here.
+        {
+          clientID,
+          id: 2,
+          name: 'mutator_name_2',
+          args: deepFreeze([2]),
+          timestamp: 42,
+        },
+        {
+          clientID,
+          id: 3,
+          name: 'mutator_name_3',
+          args: deepFreeze([3]),
+          timestamp: 42,
+        },
+      ],
+      pushVersion: PUSH_VERSION_DD31,
+      schemaVersion: pushSchemaVersion,
+    },
+    pushResult: {error: 'FetchNotOk(500)'},
+    expPusherResult: {
+      httpRequestInfo: {
+        httpStatusCode: 500,
+        errorMessage: 'Fetch not OK',
+      },
+    },
+  },
 
-    {
-      name: '2 mutations to push, push errors',
-      numPendingMutations: 2,
-      expPushReq: {
-        profileID,
-        clientGroupID: clientGroupID as ClientGroupID,
-        mutations: [
-          // These mutations aren't actually added to the chain until the test
-          // case runs, but we happen to know how they are created by the db
-          // test helpers so we use that knowledge here.
-          {
-            clientID,
-            id: 2,
-            name: 'mutator_name_2',
-            args: deepFreeze([2]),
-            timestamp: 42,
-          },
-          {
-            clientID,
-            id: 3,
-            name: 'mutator_name_3',
-            args: deepFreeze([3]),
-            timestamp: 42,
-          },
-        ],
-        pushVersion: PUSH_VERSION_DD31,
-        schemaVersion: pushSchemaVersion,
-      },
-      pushResult: {error: 'FetchNotOk(500)'},
-      expPusherResult: {
-        httpRequestInfo: {
-          httpStatusCode: 500,
-          errorMessage: 'Fetch not OK',
+  {
+    name: '2 mutations to push, push errors',
+    numPendingMutations: 2,
+    expPushReq: {
+      profileID,
+      clientGroupID: clientGroupID as ClientGroupID,
+      mutations: [
+        // These mutations aren't actually added to the chain until the test
+        // case runs, but we happen to know how they are created by the db
+        // test helpers so we use that knowledge here.
+        {
+          clientID,
+          id: 2,
+          name: 'mutator_name_2',
+          args: deepFreeze([2]),
+          timestamp: 42,
         },
+        {
+          clientID,
+          id: 3,
+          name: 'mutator_name_3',
+          args: deepFreeze([3]),
+          timestamp: 42,
+        },
+      ],
+      pushVersion: PUSH_VERSION_DD31,
+      schemaVersion: pushSchemaVersion,
+    },
+    pushResult: {error: 'FetchNotOk(500)'},
+    expPusherResult: {
+      httpRequestInfo: {
+        httpStatusCode: 500,
+        errorMessage: 'Fetch not OK',
       },
     },
-  ];
+  },
+];
 
 test.for(cases)('try push [DD31] $name', async c => {
   const store = new TestStore();
