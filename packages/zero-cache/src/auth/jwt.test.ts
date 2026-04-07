@@ -1,7 +1,7 @@
 import {SignJWT, type JWTPayload} from 'jose';
 import {describe, expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
-import type {AuthConfig} from '../config/zero-config.ts';
+import type {AuthConfig, LegacyJWTAuthConfig} from '../config/zero-config.ts';
 import {createJwkPair, tokenConfigOptions, verifyToken} from './jwt.ts';
 
 describe('symmetric key', () => {
@@ -41,6 +41,14 @@ test('token config options', async () => {
   ]);
 });
 
+test('token config options ignores non-jwt auth scheduler knobs', async () => {
+  const config: AuthConfig = {
+    revalidateIntervalSeconds: 60,
+    retransformIntervalSeconds: 120,
+  };
+  await expect(tokenConfigOptions(config)).toEqual([]);
+});
+
 test('no options set', async () => {
   await expect(verifyToken({}, '', {})).rejects.toThrowError(
     'verifyToken was called but no auth options',
@@ -48,7 +56,7 @@ test('no options set', async () => {
 });
 
 function commonTests(
-  config: AuthConfig,
+  config: LegacyJWTAuthConfig,
   makeToken: (
     tokenData: JWTPayload,
   ) => Promise<{expected: JWTPayload; token: string}>,
