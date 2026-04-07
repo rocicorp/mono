@@ -1,13 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect, test} from 'vitest';
 import {TestStore} from '../dag/test-store.ts';
-import {DEFAULT_HEAD_NAME} from '../db/commit.ts';
 import {readFromDefaultHead} from '../db/read.ts';
 import {ChainBuilder} from '../db/test-helpers.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {Pusher, PusherResult} from '../pusher.ts';
-import {withRead, withWrite} from '../with-transactions.ts';
+import {withRead} from '../with-transactions.ts';
 import type {ClientGroupID} from './ids.ts';
 import {
   PUSH_VERSION_DD31,
@@ -15,7 +14,6 @@ import {
   type PushRequestV1,
   push,
 } from './push.ts';
-import {SYNC_HEAD_NAME} from './sync-head-name.ts';
 
 type FakePusherArgs = {
   expPush: boolean;
@@ -64,36 +62,23 @@ function makeFakePusher(options: FakePusherArgs): Pusher {
   };
 }
 
-test('try push [DD31]', async () => {
-  const formatVersion = FormatVersion.Latest;
-  const clientGroupID = 'test_client_group_id';
-  const clientID = 'test_client_id';
-  const store = new TestStore();
-  const lc = new LogContext();
-  const b = new ChainBuilder(store);
-  await b.addGenesis(clientID, {
-    2: {prefix: 'local', jsonPointer: ''},
-  });
-  await b.addSnapshot([['foo', 'bar']], clientID);
+const clientGroupID = 'test_client_group_id';
+const clientID = 'test_client_id';
+const requestID = 'request_id';
+const profileID = 'test_profile_id';
+const pushSchemaVersion = 'pushSchemaVersion';
 
-  const startingNumCommits = b.chain.length;
+type Case = {
+  name: string;
 
-  const requestID = 'request_id';
-  const profileID = 'test_profile_id';
+  // Push expectations.
+  numPendingMutations: number;
+  expPushReq: PushRequestV1 | undefined;
+  pushResult: undefined | 'ok' | {error: string};
+  expPusherResult: PusherResult | undefined;
+};
 
-  // Push
-  const pushSchemaVersion = 'pushSchemaVersion';
-
-  type Case = {
-    name: string;
-
-    // Push expectations.
-    numPendingMutations: number;
-    expPushReq: PushRequestV1 | undefined;
-    pushResult: undefined | 'ok' | {error: string};
-    expPusherResult: PusherResult | undefined;
-  };
-  const cases: Case[] = [
+const cases: Case[] = [
     {
       name: '0 pending',
       numPendingMutations: 0,
@@ -238,70 +223,70 @@ test('try push [DD31]', async () => {
     },
   ];
 
-  cases.forEach(async c => {
-    // Reset state of the store.
-    b.chain.length = startingNumCommits;
-    await withWrite(store, async w => {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      await w.setHead(DEFAULT_HEAD_NAME, b.chain.at(-1)!.chunk.hash);
-      await w.removeHead(SYNC_HEAD_NAME);
-    });
-    for (let i = 0; i < c.numPendingMutations; i++) {
-      await b.addLocal(clientID);
-    }
-
-    // There was an index added after the snapshot, and one for each local
-    // commit. Here we scan to ensure that we get values when scanning using one
-    // of the indexes created. We do this because after calling begin_sync we
-    // check that the index no longer returns values, demonstrating that it was
-    // rebuilt.
-    if (c.numPendingMutations > 0) {
-      await withRead(store, async dagRead => {
-        const read = await readFromDefaultHead(dagRead, formatVersion);
-        let got = false;
-
-        const indexMap = read.getMapForIndex('2');
-
-        for await (const _ of indexMap.scan('')) {
-          got = true;
-          break;
-        }
-        expect(got).toBe(true);
-      });
-    }
-
-    // See explanation in FakePusher for why we do this dance with the
-    // push_result.
-    const [expPush, pushErr] = (() => {
-      switch (c.pushResult) {
-        case undefined:
-          return [false, undefined] as const;
-        case 'ok':
-          return [true, undefined] as const;
-        default:
-          return [true, c.pushResult.error] as const;
-      }
-    })();
-
-    const pusher = makeFakePusher({
-      expPush,
-      expPushReq: c.expPushReq,
-      expRequestID: requestID,
-      error: pushErr,
-    });
-
-    const pusherResult = await push(
-      requestID,
-      store,
-      lc,
-      profileID,
-      clientGroupID,
-      clientID,
-      pusher,
-      pushSchemaVersion,
-      PUSH_VERSION_DD31,
-    );
-
-    expect(pusherResult, `name: ${c.name}`).toEqual(c.expPusherResult);
+test.for(cases)('try push [DD31] $name', async c => {
+  const store = new TestStore();
+  const lc = new LogContext();
+  const b = new ChainBuilder(store);
+  await b.addGenesis(clientID, {
+    2: {prefix: 'local', jsonPointer: ''},
   });
+  await b.addSnapshot([['foo', 'bar']], clientID);
+
+  for (let i = 0; i < c.numPendingMutations; i++) {
+    await b.addLocal(clientID);
+  }
+
+  // There was an index added after the snapshot, and one for each local
+  // commit. Here we scan to ensure that we get values when scanning using one
+  // of the indexes created. We do this because after calling begin_sync we
+  // check that the index no longer returns values, demonstrating that it was
+  // rebuilt.
+  if (c.numPendingMutations > 0) {
+    await withRead(store, async dagRead => {
+      const read = await readFromDefaultHead(dagRead, FormatVersion.Latest);
+      let got = false;
+
+      const indexMap = read.getMapForIndex('2');
+
+      for await (const _ of indexMap.scan('')) {
+        got = true;
+        break;
+      }
+      expect(got).toBe(true);
+    });
+  }
+
+  // See explanation in FakePusher for why we do this dance with the
+  // push_result.
+  const [expPush, pushErr] = (() => {
+    switch (c.pushResult) {
+      case undefined:
+        return [false, undefined] as const;
+      case 'ok':
+        return [true, undefined] as const;
+      default:
+        return [true, c.pushResult.error] as const;
+    }
+  })();
+
+  const pusher = makeFakePusher({
+    expPush,
+    expPushReq: c.expPushReq,
+    expRequestID: requestID,
+    error: pushErr,
+  });
+
+  const pusherResult = await push(
+    requestID,
+    store,
+    lc,
+    profileID,
+    clientGroupID,
+    clientID,
+    pusher,
+    pushSchemaVersion,
+    PUSH_VERSION_DD31,
+  );
+
+  expect(pusherResult).toEqual(c.expPusherResult);
 });

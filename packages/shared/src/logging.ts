@@ -15,7 +15,7 @@ export type LogConfig = {
 };
 
 function style(color: 'gray' | 'yellow' | 'red', args: unknown[]) {
-  return styleText(color, args.join(''));
+  return styleText(color, args.join(' '));
 }
 
 const COLOR_DEBUG = 'gray';
