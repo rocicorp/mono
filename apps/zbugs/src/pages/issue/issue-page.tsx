@@ -18,7 +18,6 @@ import {toast} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
-import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
@@ -1048,7 +1047,7 @@ function useShowToastForNewComment(
     }
 
     for (const commentID of newCommentIDs) {
-      const index = findLastIndex(comments, c => c.id === commentID);
+      const index = comments.findLastIndex(c => c.id === commentID);
       if (index === -1) {
         continue;
       }
