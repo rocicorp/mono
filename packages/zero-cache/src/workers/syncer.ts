@@ -72,7 +72,7 @@ export class Syncer implements SingletonService {
   readonly id = `syncer-${pid}`;
   readonly #lc: LogContext;
   readonly #viewSyncers: ServiceRunner<ViewSyncer & ActivityBasedService>;
-  readonly #mutagens: ServiceRunner<Mutagen & Service>;
+  readonly #mutagens: ServiceRunner<Mutagen & Service> | undefined;
   readonly #pushers: ServiceRunner<Pusher & Service> | undefined;
   readonly #connections = new Map<string, Connection>();
   readonly #drainCoordinator = new DrainCoordinator();
@@ -90,7 +90,7 @@ export class Syncer implements SingletonService {
       drainCoordinator: DrainCoordinator,
       validateLegacyJWT: ValidateLegacyJWT | undefined,
     ) => ViewSyncer & ActivityBasedService,
-    mutagenFactory: (id: string) => Mutagen & Service,
+    mutagenFactory: ((id: string) => Mutagen & Service) | undefined,
     pusherFactory: ((id: string) => Pusher & Service) | undefined,
     parent: Worker,
   ) {
@@ -112,7 +112,9 @@ export class Syncer implements SingletonService {
         ),
       v => v.keepalive(),
     );
-    this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
+    if (mutagenFactory) {
+      this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
+    }
     if (pusherFactory) {
       this.#pushers = new ServiceRunner(lc, pusherFactory, p => p.hasRefs());
     }
@@ -181,10 +183,10 @@ export class Syncer implements SingletonService {
       existing.close(`replaced by ${params.wsID}`);
     }
 
-    const mutagen = this.#mutagens.getService(clientGroupID);
+    const mutagen = this.#mutagens?.getService(clientGroupID);
     const pusher = this.#pushers?.getService(clientGroupID);
     // a new connection is using the mutagen and pusher. Bump their ref counts.
-    mutagen.ref();
+    mutagen?.ref();
     pusher?.ref();
 
     let connection: Connection;
@@ -206,12 +208,12 @@ export class Syncer implements SingletonService {
           }
           // Connection is closed. We can unref the mutagen and pusher.
           // If their ref counts are zero, they will stop themselves and set themselves invalid.
-          mutagen.unref();
+          mutagen?.unref();
           pusher?.unref();
         },
       );
     } catch (e) {
-      mutagen.unref();
+      mutagen?.unref();
       pusher?.unref();
       throw e;
     }

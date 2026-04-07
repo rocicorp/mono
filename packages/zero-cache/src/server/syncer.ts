@@ -5,6 +5,7 @@ import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
 import {AuthSessionImpl, type ValidateLegacyJWT} from '../auth/auth.ts';
@@ -70,26 +71,29 @@ export default function runWorker(
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  const {cvr, upstream} = config;
-  assert(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set');
-  assert(upstream.maxConnsPerWorker, 'upstream.maxConnsPerWorker must be set');
+  const {cvr, upstream, enableCrudMutations} = config;
 
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
   const cvrDB = pgClient(lc, cvr.db, {
-    max: cvr.maxConnsPerWorker,
+    max: must(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set'),
     connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
 
-  const upstreamDB = pgClient(lc, upstream.db, {
-    max: upstream.maxConnsPerWorker,
-    connection: {['application_name']: `zero-sync-worker-${pid}-upstream`},
-  });
+  const upstreamDB = enableCrudMutations
+    ? pgClient(lc, upstream.db, {
+        max: must(
+          upstream.maxConnsPerWorker,
+          'upstream.maxConnsPerWorker must be set',
+        ),
+        connection: {['application_name']: `zero-sync-worker-${pid}-upstream`},
+      })
+    : undefined;
 
   const dbWarmup = Promise.allSettled([
     warmupConnections(lc, cvrDB, 'cvr'),
-    warmupConnections(lc, upstreamDB, 'upstream'),
+    upstreamDB ? warmupConnections(lc, upstreamDB, 'upstream') : promiseVoid,
   ]);
 
   const tmpDir = config.storageDBTmpDir ?? tmpdir();
@@ -170,15 +174,19 @@ export default function runWorker(
     );
   };
 
-  const mutagenFactory = (id: string) =>
-    new MutagenService(
-      lc.withContext('component', 'mutagen').withContext('clientGroupID', id),
-      shard,
-      id,
-      upstreamDB,
-      config,
-      writeAuthzStorage,
-    );
+  const mutagenFactory = upstreamDB
+    ? (id: string) =>
+        new MutagenService(
+          lc
+            .withContext('component', 'mutagen')
+            .withContext('clientGroupID', id),
+          shard,
+          id,
+          upstreamDB,
+          config,
+          writeAuthzStorage,
+        )
+    : undefined;
 
   const pusherFactory =
     config.push.url === undefined && config.mutate.url === undefined

@@ -162,6 +162,12 @@ test('zero-cache --help', () => {
                                                                         If not specified, no client-provided headers are forwarded (secure by default).                                       
                                                                         Example: ZERO_QUERY_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id                                              
                                                                                                                                                                                               
+     --enable-crud-mutations boolean                                    default: true                                                                                                         
+       ZERO_ENABLE_CRUD_MUTATIONS env                                                                                                                                                         
+                                                                        Enables support for legacy CRUD mutations. When this is false, no connections                                         
+                                                                        are made from view-syncers to the upstream db, and push messages with CRUD mutations                                  
+                                                                        result in an InvalidPush response.                                                                                    
+                                                                                                                                                                                              
      --cvr-db string                                                    optional                                                                                                              
        ZERO_CVR_DB env                                                                                                                                                                        
                                                                         The Postgres database used to store CVRs. CVRs (client view records) keep track                                       
