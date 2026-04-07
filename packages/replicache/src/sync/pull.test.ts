@@ -451,10 +451,8 @@ test('begin try pull DD31', async () => {
     // Reset state of the store.
     b.chain.length = startingNumCommits;
     await withWrite(store, async w => {
-      await w.setHead(
-        DEFAULT_HEAD_NAME,
-        b.chain[b.chain.length - 1].chunk.hash,
-      );
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      await w.setHead(DEFAULT_HEAD_NAME, b.chain.at(-1)!.chunk.hash);
       await w.removeHead(SYNC_HEAD_NAME);
     });
     for (let i = 0; i < c.numPendingMutations; i++) {
@@ -538,7 +536,7 @@ test('begin try pull DD31', async () => {
           await asyncIterableToArray(bTreeRead.entries())
         ).map(e => [e[0], e[1]] as const);
         gotValueMap.sort((a, b) => stringCompare(a[0], b[0]));
-        const expValueMap = Array.from(expSyncHead.valueMap);
+        const expValueMap = [...expSyncHead.valueMap];
         expValueMap.sort((a, b) => stringCompare(a[0], b[0]));
         expect(expValueMap).toEqual(gotValueMap);
 
@@ -671,10 +669,8 @@ describe('maybe end try pull', () => {
         await b.addLocal(clientID);
       }
       let basisHash = await withWriteNoImplicitCommit(store, async dagWrite => {
-        await dagWrite.setHead(
-          DEFAULT_HEAD_NAME,
-          b.chain[b.chain.length - 1].chunk.hash,
-        );
+        // oxlint-disable-next-line typescript/no-non-null-assertion
+        await dagWrite.setHead(DEFAULT_HEAD_NAME, b.chain.at(-1)!.chunk.hash);
 
         // Add snapshot and replayed commits to the sync chain.
         assert(

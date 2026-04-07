@@ -92,9 +92,11 @@ async function run() {
   });
 }
 
+const wsRe = /\s+/;
+
 function getName({name, cmd}: {name: string; cmd: string}) {
   if (name === 'node') {
-    const parts = cmd.split(/\s+/);
+    const parts = cmd.split(wsRe);
     for (let i = parts.length - 1; i >= 0; i--) {
       const part = parts[i];
       const lastSlash = part.lastIndexOf('/');

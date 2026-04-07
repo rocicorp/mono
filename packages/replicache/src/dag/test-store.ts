@@ -58,6 +58,7 @@ export class TestStore extends StoreImpl {
 }
 
 function sortByHash(arr: Iterable<Chunk>): Chunk[] {
+  // oxlint-disable-next-line e18e/prefer-array-to-sorted
   return [...arr].sort((a, b) => stringCompare(String(a.hash), String(b.hash)));
 }
 

@@ -32,6 +32,7 @@ import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts'
 import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
+import {separatorRe} from './push-processor.ts';
 
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
@@ -554,7 +555,7 @@ export function getMutation(
   name: string,
   // oxlint-disable-next-line no-explicit-any
 ): CustomMutatorImpl<any> {
-  const path = name.split(/\.|\|/);
+  const path = name.split(separatorRe);
   const mutator = getObjectAtPath(mutators, path);
   assert(typeof mutator === 'function', `could not find mutator ${name}`);
 

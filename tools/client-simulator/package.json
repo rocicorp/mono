@@ -17,7 +17,7 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
-    "oxfmt": "^0.43.0",
+    "oxfmt": "^0.44.0",
     "shared": "0.0.0",
     "zero-protocol": "0.0.0"
   }

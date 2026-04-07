@@ -797,7 +797,9 @@ class TransactionProcessor {
 
     // Common parts of the INSERT sql statement.
     const insertColsStr = [...cols, ZERO_VERSION_COLUMN_NAME].map(id).join(',');
-    const qMarks = Array.from({length: cols.length + 1}, () => '?').join(',');
+    const qMarks = Array.from({length: cols.length + 1})
+      .fill('?')
+      .join(',');
     const rowKeyColsStr = rowKeyCols.map(id).join(',');
 
     let backfilled = 0;

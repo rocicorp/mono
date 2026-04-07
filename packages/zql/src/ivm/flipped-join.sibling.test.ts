@@ -1,18 +1,18 @@
 import {expect, suite, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtChange} from './catch.ts';
+import {FlippedJoin} from './flipped-join.ts';
 import type {Input} from './operator.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import type {SourceChange} from './source.ts';
-import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {FlippedJoin} from './flipped-join.ts';
 import {consume} from './stream.ts';
+import {createSource} from './test/source-factory.ts';
 
 const lc = createSilentLogContext();
 
@@ -1149,9 +1149,10 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
     parent = join;
   }
 
-  const finalJoin = joins[joins.length - 1];
+  const finalJoin = joins.at(-1);
 
-  const c = new Catch(finalJoin);
+  // oxlint-disable-next-line typescript/no-non-null-assertion
+  const c = new Catch(finalJoin!);
   c.fetch();
 
   log.length = 0;

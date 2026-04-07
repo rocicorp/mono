@@ -31,7 +31,7 @@ export class VizDelegate extends QueryDelegateBase<undefined> {
 
   getGraph(): Graph {
     return {
-      nodes: Array.from(this.#nodeIds.values()),
+      nodes: [...this.#nodeIds.values()],
       edges: this.#edges,
     };
   }

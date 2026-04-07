@@ -573,14 +573,14 @@ describe('kitchen sink query', () => {
 
     let rows: unknown[] = [];
     view.addListener(data => {
-      rows = [...data].map(row => ({
+      rows = Array.from(data, row => ({
         ...row,
         owner: row.owner,
-        comments: [...row.comments].map(comment => ({
+        comments: Array.from(row.comments, comment => ({
           ...comment,
           revisions: [...comment.revisions],
         })),
-        labels: [...row.labels].map(label => ({
+        labels: Array.from(row.labels, label => ({
           ...label,
         })),
       }));

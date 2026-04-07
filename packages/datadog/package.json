@@ -7,7 +7,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@vitest/runner": "4.1.2",
-    "oxfmt": "^0.43.0",
+    "oxfmt": "^0.44.0",
     "shared": "0.0.0",
     "typescript": "~6.0.2",
     "vitest": "4.1.2"

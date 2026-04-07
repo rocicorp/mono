@@ -38,9 +38,9 @@ async function createMutationSequenceFixture() {
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   await b.addLocal(clientID);
-  const localCommit1 = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
+  const localCommit1 = b.chain.at(-1) as Commit<LocalMetaDD31>;
   await b.addLocal(clientID);
-  const localCommit2 = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
+  const localCommit2 = b.chain.at(-1) as Commit<LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
   const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
@@ -149,7 +149,7 @@ async function createMissingMutatorFixture() {
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   await b.addLocal(clientID);
-  const localCommit = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
+  const localCommit = b.chain.at(-1) as Commit<LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
   const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
@@ -446,7 +446,7 @@ async function testThrowsErrorOnClientIDMismatch(
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   await b.addLocal(clientID);
-  const localCommit = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
+  const localCommit = b.chain.at(-1) as Commit<LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
   const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
@@ -505,9 +505,9 @@ async function testThrowsErrorOnMutationIDMismatch(
   await b.addGenesis(clientID);
   await b.addSnapshot([['foo', 'bar']], clientID);
   await b.addLocal(clientID);
-  const localCommit1 = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
+  const localCommit1 = b.chain.at(-1) as Commit<LocalMetaDD31>;
   await b.addLocal(clientID);
-  const localCommit2 = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
+  const localCommit2 = b.chain.at(-1) as Commit<LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
   const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 

@@ -26,7 +26,7 @@ test('calculates bucket ranges dynamically', () => {
   expect(ranges.length).toBe(12); // Ensure ranges reflect resizing
   expect(ranges[0]).toEqual([0, 1]);
   expect(ranges[1]).toEqual([1, 2]);
-  expect(ranges[ranges.length - 1]).toEqual([1024, 2048]);
+  expect(ranges.at(-1)).toEqual([1024, 2048]);
 });
 
 test('serializes and deserializes dynamically resized histogram', () => {

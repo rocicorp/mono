@@ -15,7 +15,7 @@ export function generateUniqueValues<T>(
   while (values.size < length) {
     values.add(generator());
   }
-  return Array.from(values);
+  return [...values];
 }
 
 export function shuffle<T>(rng: Rng, array: T[]): T[] {

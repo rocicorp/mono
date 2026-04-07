@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@types/pidusage": "^2.0.5",
-    "oxfmt": "^0.43.0",
+    "oxfmt": "^0.44.0",
     "shared": "0.0.0"
   }
 }

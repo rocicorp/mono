@@ -21,7 +21,7 @@
   "devDependencies": {
     "@types/tmp": "^0.2.6",
     "otel": "0.0.0",
-    "oxfmt": "^0.43.0",
+    "oxfmt": "^0.44.0",
     "shared": "0.0.0",
     "typescript": "~6.0.2",
     "z2s": "0.0.0",

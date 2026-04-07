@@ -33,12 +33,13 @@
     "bench:bmf:silent": "npx turbo run bench:bmf:silent --concurrency=1"
   },
   "devDependencies": {
+    "@e18e/eslint-plugin": "^0.3.0",
     "@vitest/browser-playwright": "^4.1.2",
     "@vitest/coverage-v8": "4.1.2",
     "@vitest/runner": "4.1.2",
     "baseline-browser-mapping": "^2.10.11",
-    "oxfmt": "^0.43.0",
-    "oxlint": "^1.57.0",
+    "oxfmt": "^0.44.0",
+    "oxlint": "^1.59.0",
     "oxlint-tsgolint": "^0.17.4",
     "syncpack": "^14.2.1",
     "tsx": "^4.21.0",

@@ -49,7 +49,8 @@ function displayList<T>(
 
   const suffix = `${toDisplay(
     expected[expected.length - 2],
-  )} ${word} ${toDisplay(expected[expected.length - 1])}`;
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+  )} ${word} ${toDisplay(expected.at(-1)!)}`;
   if (expected.length === 2) {
     return suffix;
   }

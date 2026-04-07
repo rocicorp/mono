@@ -156,7 +156,7 @@ export class CustomQueryTransformer {
         this.#cache.set(cacheKey, transformed);
       }
 
-      return newResponses.concat(cachedResponses);
+      return [...newResponses, ...cachedResponses];
     } catch (e) {
       if (
         isProtocolError(e) &&

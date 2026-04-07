@@ -43,7 +43,7 @@ const costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 const clientToServerMapper = clientToServer(schema.tables);
 
 // Helper to benchmark planning time
-function benchmarkPlanning<TTable extends keyof typeof schema.tables & string>(
+function benchmarkPlanning<TTable extends keyof typeof schema.tables>(
   name: string,
   query: Query<TTable, typeof schema>,
 ) {

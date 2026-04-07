@@ -271,7 +271,7 @@ export function parseOptionsAdvanced<T extends Options>(
 
     const typeLabel = [
       literals.size
-        ? String([...literals].map(l => `{underline ${l}}`))
+        ? String(Array.from(literals, l => `{underline ${l}}`))
         : multiple
           ? `{underline ${terminalType}[]}`
           : `{underline ${terminalType}}`,

@@ -1,23 +1,23 @@
 import {describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {assert} from '../../shared/src/asserts.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import type {Change} from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';
-import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
 import {format} from './internal/sql.ts';
+import {filtersToSQL} from './query-builder.ts';
 import {
   fromSQLiteTypes,
   TableSource,
   UnsupportedValueError,
 } from './table-source.ts';
-import {filtersToSQL} from './query-builder.ts';
-import {assert} from '../../shared/src/asserts.ts';
-import {must} from '../../shared/src/must.ts';
-import {consume} from '../../zql/src/ivm/stream.ts';
 
 const columns = {
   id: {type: 'string'},
@@ -114,7 +114,7 @@ describe('fetching from a table source', () => {
       name: 'complex source with compound order',
       sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {constraint: undefined, start: undefined},
-      expectedRows: allRows.slice().sort(compoundComparator),
+      expectedRows: allRows.toSorted(compoundComparator),
     },
     {
       name: 'complex source with compound order and constraint',
@@ -129,7 +129,7 @@ describe('fetching from a table source', () => {
         constraint: undefined,
         start: {row: allRows[4], basis: 'after'},
       },
-      expectedRows: allRows.slice().sort(compoundComparator).slice(5),
+      expectedRows: allRows.toSorted(compoundComparator).slice(5),
     },
     {
       name: 'complex source with compound order and start `after` and constraint',
@@ -150,7 +150,7 @@ describe('fetching from a table source', () => {
         constraint: undefined,
         start: {row: allRows[4], basis: 'at'},
       },
-      expectedRows: allRows.slice().sort(compoundComparator).slice(4),
+      expectedRows: allRows.toSorted(compoundComparator).slice(4),
     },
     {
       name: 'complex source with compound order and start `at` and constraint',
@@ -291,7 +291,7 @@ describe('fetched value types', () => {
 
       if (c.output) {
         expect(
-          [...input.fetch({})].map(node =>
+          Array.from(input.fetch({}), node =>
             node === 'yield' ? node : node.row,
           ),
         ).toEqual([c.output]);
