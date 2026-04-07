@@ -21,7 +21,7 @@ const tracer = trace.getTracer('syncer-ws-server', version);
 
 export class SyncerWsMessageHandler implements MessageHandler {
   readonly #viewSyncer: ViewSyncer;
-  readonly #mutagen: Mutagen;
+  readonly #mutagen: Mutagen | undefined;
   readonly #mutationLock: Lock;
   readonly #lc: LogContext;
   readonly #clientGroupID: string;
@@ -32,7 +32,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
     lc: LogContext,
     connectParams: ConnectParams,
     viewSyncer: ViewSyncer,
-    mutagen: Mutagen,
+    mutagen: Mutagen | undefined,
     pusher: Pusher | undefined,
   ) {
     const {
@@ -120,10 +120,19 @@ export class SyncerWsMessageHandler implements MessageHandler {
             // #pusher will throw if it sees a CRUD mutation.
             // #mutagen will throw if it see a custom mutation.
             if (mutations[0].type === 'custom') {
-              assert(
-                this.#pusher,
-                'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
-              );
+              if (!this.#pusher) {
+                return [
+                  {
+                    type: 'fatal',
+                    error: {
+                      kind: ErrorKind.InvalidPush,
+                      message:
+                        'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
+                      origin: ErrorOrigin.ZeroCache,
+                    },
+                  } satisfies HandlerResult,
+                ];
+              }
               return [
                 this.#pusher.enqueuePush(
                   this.#syncContext.clientID,
@@ -132,6 +141,20 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   this.#syncContext.httpCookie,
                   this.#syncContext.origin,
                 ),
+              ];
+            }
+
+            const mutagen = this.#mutagen;
+            if (!mutagen) {
+              return [
+                {
+                  type: 'fatal',
+                  error: {
+                    kind: ErrorKind.InvalidPush,
+                    message: `Support for legacy CRUD mutations is disabled`,
+                    origin: ErrorOrigin.ZeroCache,
+                  },
+                } satisfies HandlerResult,
               ];
             }
 
@@ -147,7 +170,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
             const ret = await this.#mutationLock.withLock(async () => {
               const errors: ErrorBody[] = [];
               for (const mutation of mutations) {
-                const maybeError = await this.#mutagen.processMutation(
+                const maybeError = await mutagen.processMutation(
                   mutation,
                   auth?.decoded,
                   this.#pusher !== undefined,

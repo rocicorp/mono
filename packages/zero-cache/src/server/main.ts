@@ -52,7 +52,7 @@ export default async function runWorker(
   const processes = new ProcessManager(lc, parent);
 
   const {numSyncWorkers: numSyncers} = config;
-  if (config.upstream.maxConns < numSyncers) {
+  if (config.enableCrudMutations && config.upstream.maxConns < numSyncers) {
     throw new Error(
       `Insufficient upstream connections (${config.upstream.maxConns}) for ${numSyncers} syncers.` +
         `Increase ZERO_UPSTREAM_MAX_CONNS or decrease ZERO_NUM_SYNC_WORKERS (which defaults to available cores).`,

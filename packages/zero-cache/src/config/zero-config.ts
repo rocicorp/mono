@@ -350,6 +350,15 @@ export const zeroOptions = {
   getQueries: getQueriesOptions,
   query: queryOptions,
 
+  enableCrudMutations: {
+    type: v.boolean().default(true),
+    desc: [
+      `Enables support for legacy CRUD mutations. When this is {bold false}, no connections`,
+      `are made from view-syncers to the upstream db, and push messages with CRUD mutations`,
+      `result in an InvalidPush response.`,
+    ],
+  },
+
   cvr: {
     db: {
       type: v.string().optional(),
