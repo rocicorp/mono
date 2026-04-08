@@ -10,7 +10,24 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
 	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
 
-FROM litestream/litestream:0.5.10 AS litestream-v5
+# TODO: Use the official litestream-v5 build once the v3-restore-fix is in it.
+# FROM litestream/litestream:0.5.10 AS litestream-v5
+
+FROM golang:1.25 AS litestream-v5
+
+WORKDIR /src/
+RUN mkdir litestream && cd litestream && \
+    git init && \
+    git remote add origin https://github.com/rocicorp/litestream.git && \
+    git fetch --depth 1 origin b22a474549dce181f64c2182d86a05ad9108f741 && \
+    git checkout FETCH_HEAD
+WORKDIR /src/litestream/
+
+ARG LITESTREAM_VERSION=0.5.10+b22a474549dce181f64c2182d86a05ad9108f741  # v3-restore-fix
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+	--mount=type=cache,target=/go/pkg \
+	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
 
 FROM node:22.15.0-alpine3.20
 
