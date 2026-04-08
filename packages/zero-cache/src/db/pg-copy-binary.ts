@@ -423,13 +423,68 @@ export function decodeNumeric(buf: Buffer): number {
     return 0;
   }
 
-  let result = 0;
-  let scale = NBASE ** weight;
+  // Accumulate base-10000 digits into an integer, then do a single
+  // division at the end. Repeated `scale /= NBASE` accumulates
+  // floating-point error (e.g. 9900 * 0.0001 = 0.9900000000000001).
+  // A single division lets IEEE 754 round to the nearest double,
+  // matching the text path's `Number("0.99")` behavior.
+  //
+  // For numerics with many digits (ndigits > 3), intVal can exceed
+  // MAX_SAFE_INTEGER. In that case, fall back to building a string
+  // and using Number() to match the text path exactly.
+  if (ndigits > 3) {
+    return decodeNumericViaString(buf, ndigits, weight, sign);
+  }
+
+  let intVal = 0;
   for (let i = 0; i < ndigits; i++) {
-    result += buf.readInt16BE(8 + i * 2) * scale;
-    scale /= NBASE;
+    intVal = intVal * NBASE + buf.readInt16BE(8 + i * 2);
+  }
+
+  // weight indicates the power-of-NBASE of the first digit.
+  // shift is how many base-10000 positions to divide by.
+  const shift = ndigits - weight - 1;
+  let result;
+  if (shift > 0) {
+    result = intVal / NBASE ** shift;
+  } else if (shift < 0) {
+    result = intVal * NBASE ** -shift;
+  } else {
+    result = intVal;
   }
   return sign === NUMERIC_NEG ? -result : result;
+}
+
+/**
+ * Fallback for numerics with many base-10000 digits where accumulating
+ * into an integer would exceed MAX_SAFE_INTEGER. Builds the decimal
+ * string and uses Number() to match the text path exactly.
+ */
+function decodeNumericViaString(
+  buf: Buffer,
+  ndigits: number,
+  weight: number,
+  sign: number,
+): number {
+  // Number of base-10000 digit groups before the decimal point.
+  const intGroups = weight + 1;
+
+  let str = '';
+  for (let i = 0; i < ndigits; i++) {
+    const digit = buf.readInt16BE(8 + i * 2);
+    if (i === intGroups) {
+      str = str || '0';
+      str += '.';
+    }
+    str += i === 0 ? String(digit) : String(digit).padStart(4, '0');
+  }
+
+  // Append trailing zero groups if the integer part extends beyond ndigits.
+  if (intGroups > ndigits) {
+    str += '0'.repeat((intGroups - ndigits) * 4);
+  }
+
+  return Number((sign === NUMERIC_NEG ? '-' : '') + str);
 }
 
 /**
