@@ -480,7 +480,7 @@ export class Zero<
       });
     }
 
-    this.#checkAuthValid(userID, options.auth);
+    this.#checkAuthValid(userID ?? undefined, options.auth);
 
     const cacheURL = options.cacheURL ?? options.server;
     const server = getServer(cacheURL);
@@ -644,7 +644,7 @@ export class Zero<
       internalReplicacheImplMap.set(this, rep);
     }
     this.#server = server;
-    this.userID = userID;
+    this.userID = userID ?? undefined;
     this.#lc = lc.withContext('clientID', rep.clientID);
     this.#connection = new ConnectionImpl(
       this.#connectionManager,

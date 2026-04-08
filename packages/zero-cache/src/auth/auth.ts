@@ -33,6 +33,16 @@ function isProvidedAuth(wireAuth: string | undefined): wireAuth is string {
   return wireAuth !== undefined && wireAuth !== '';
 }
 
+export function authEquals(a: Auth | undefined, b: Auth | undefined) {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return a.type === b.type && a.raw === b.raw;
+}
+
 /**
  * Resolves one auth snapshot transition without binding it to a client group.
  */
@@ -88,6 +98,11 @@ export async function resolveAuth(
           'Token type cannot change from JWT to opaque. Connections are pinned to a single token type.',
         origin: ErrorOrigin.ZeroCache,
       });
+    }
+
+    if (previousAuth?.type === 'opaque' && previousAuth.raw === wireAuth) {
+      lc.debug?.(`Opaque auth unchanged, reusing previous snapshot`);
+      return previousAuth;
     }
 
     lc.debug?.(`Updated auth with opaque token`);

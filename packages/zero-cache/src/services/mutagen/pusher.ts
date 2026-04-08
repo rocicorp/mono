@@ -20,7 +20,7 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
-import {isAuthErrorBody} from '../../auth/auth.ts';
+import {authEquals, isAuthErrorBody} from '../../auth/auth.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
@@ -628,7 +628,7 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
     'revision must be the same for all pushes',
   );
   assert(
-    left.context.auth === right.context.auth,
+    authEquals(left.context.auth, right.context.auth),
     'auth must be the same for all pushes with the same clientID',
   );
   assert(

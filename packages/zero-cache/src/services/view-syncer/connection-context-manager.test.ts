@@ -297,6 +297,9 @@ describe('ConnectionContextManager', () => {
     );
     register(manager, 'c1', 'ws1', 'user-1');
     validate(manager, 'c1', 'ws1');
+    const previousAuth = manager.mustGetConnectionContext(
+      selector('c1', 'ws1'),
+    ).auth;
 
     await expect(
       manager.updateAuth(selector('c1', 'ws1'), {auth: 'token-ws1'}),
@@ -312,6 +315,9 @@ describe('ConnectionContextManager', () => {
       wsID: 'ws1',
     });
     expect(manager.getGroupState().retransformAt).toBe(11_000);
+    expect(manager.mustGetConnectionContext(selector('c1', 'ws1')).auth).toBe(
+      previousAuth,
+    );
   });
 
   test('demotes only the connection whose auth materially changes', async () => {
