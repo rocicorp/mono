@@ -1,3 +1,4 @@
+import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, vi} from 'vitest';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -30,6 +31,18 @@ function scheduled401(queryIDs: string[]) {
     reason: ErrorReason.HTTP,
     status: 401,
     bodyPreview: '{ "error": "Unauthorized" }',
+  } as const;
+}
+
+function scheduled500(queryIDs: string[]) {
+  return {
+    kind: ErrorKind.TransformFailed,
+    message: 'Fetch from API server returned non-OK status 500',
+    origin: ErrorOrigin.ZeroCache,
+    queryIDs,
+    reason: ErrorReason.HTTP,
+    status: 500,
+    bodyPreview: '{ "error": "Internal Server Error" }',
   } as const;
 }
 
@@ -190,6 +203,91 @@ describe('view-syncer/auth maintenance', () => {
         timeout: 2_000,
       });
     });
+
+    test('scheduled revalidation retries after transient query failure without disconnecting', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(scheduled500([]))
+        .mockResolvedValueOnce(undefined);
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-1'}},
+        [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+      );
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+      expect(client.size()).toBe(0);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => expect(validateSpy).toHaveBeenCalledTimes(2), {
+        timeout: 2_000,
+      });
+      expect(client.size()).toBe(0);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => expect(validateSpy).toHaveBeenCalledTimes(3), {
+        timeout: 2_000,
+      });
+      expect(client.size()).toBe(0);
+    });
+
+    test('ignores stale scheduled revalidation failures after auth changes', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      const staleValidation = resolver<ReturnType<typeof scheduled401>>();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValueOnce(undefined)
+        .mockImplementationOnce(() => staleValidation.promise);
+
+      const authContext: SyncContext = {
+        ...SYNC_CONTEXT,
+        auth: {type: 'opaque', raw: 'token-1'},
+      };
+      const selector = {
+        clientID: authContext.clientID,
+        wsID: authContext.wsID,
+      };
+      const client = connect(authContext, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => expect(validateSpy).toHaveBeenCalledTimes(2), {
+        timeout: 2_000,
+      });
+      expect(validateSpy.mock.calls[1][0].auth?.raw).toBe('token-1');
+
+      await vs.contextManager.updateAuth(selector, {auth: 'token-2'});
+
+      // resolve the stale validation for the original auth
+      staleValidation.resolve(scheduled401([]));
+
+      await Promise.resolve();
+
+      expect(vs.contextManager.getConnectionContext(selector)).toMatchObject({
+        clientID: selector.clientID,
+        wsID: selector.wsID,
+        revision: 2,
+        state: 'provisional',
+      });
+    });
   });
 
   describe('scheduled background retransform', () => {
@@ -340,6 +438,74 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformSpy.mock.calls[2][0].userID).toBe('user-1');
       expect(transformSpy.mock.calls[3][0].auth?.raw).toBe('token-replacement');
       expect(transformSpy.mock.calls[3][0].userID).toBe('user-1');
+    });
+
+    test('scheduled background retransform retries after transient query failure without disconnecting', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValue(undefined);
+      using transformSpy = vi
+        .spyOn(transformer!, 'transform')
+        .mockResolvedValueOnce({
+          result: [
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ],
+          cached: false,
+        })
+        .mockResolvedValueOnce({
+          result: scheduled500(['custom-1']),
+          cached: false,
+        })
+        .mockResolvedValueOnce({
+          result: [
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ],
+          cached: false,
+        });
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},
+        [
+          {
+            op: 'put',
+            hash: 'custom-1',
+            name: 'named-query-1',
+            args: ['thing'],
+          },
+        ],
+      );
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(client.size()).toBe(0);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledTimes(2), {
+        timeout: 2_000,
+      });
+      expect(client.size()).toBe(0);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledTimes(3), {
+        timeout: 2_000,
+      });
+      expect(client.size()).toBe(0);
     });
   });
 });

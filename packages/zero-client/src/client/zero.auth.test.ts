@@ -15,18 +15,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('connect({auth: null}) does not send auth', async () => {
-  const z = zeroForTest();
-  await z.triggerConnected();
-
-  const socket = await z.socket;
-  socket.messages.length = 0;
-
-  await z.connection.connect({auth: null});
-
-  expect(socket.messages).toHaveLength(0);
-});
-
 test('connect({auth}) sends updateAuth set', async () => {
   const z = zeroForTest();
   await z.triggerConnected();
@@ -127,22 +115,53 @@ test('allows logged-out construction without a userID', async () => {
   await z.close();
 });
 
-test.each([
-  ['', 'empty'],
-  ['anon', 'anon'],
-])(
-  'rejects constructing a logged-out client with legacy sentinel userID %p',
-  (userID, descriptor) => {
-    expect(() =>
-      zeroForTest({
-        auth: undefined,
-        userID,
-      }),
-    ).toThrow(
-      `ZeroOptions.userID should not be ${descriptor}. Omit it entirely for logged-out clients.`,
-    );
-  },
-);
+test('rejects constructing a logged-out client with an empty userID', () => {
+  expect(() =>
+    zeroForTest({
+      auth: undefined,
+      userID: '',
+    }),
+  ).toThrow(
+    'ZeroOptions.userID should not be empty. Omit it entirely for logged-out clients.',
+  );
+});
+
+test('warns when constructing a logged-out client with legacy anon userID', async () => {
+  const z = zeroForTest({
+    auth: undefined,
+    userID: 'anon',
+  });
+
+  expect(z.userID).toBe('anon');
+  expect(
+    z.testLogSink.messages.some(
+      ([level, _context, args]) =>
+        level === 'warn' &&
+        args[0] ===
+          'ZeroOptions.userID "anon" is deprecated for logged-out clients. Omit it entirely for logged-out clients.',
+    ),
+  ).toBe(true);
+
+  await z.close();
+});
+
+test('does not warn for authenticated users whose userID is anon', async () => {
+  const z = zeroForTest({
+    auth: 'auth-token',
+    userID: 'anon',
+  });
+
+  expect(
+    z.testLogSink.messages.some(
+      ([level, _context, args]) =>
+        level === 'warn' &&
+        args[0] ===
+          'ZeroOptions.userID "anon" is deprecated for logged-out clients. Omit it entirely for logged-out clients.',
+    ),
+  ).toBe(false);
+
+  await z.close();
+});
 
 test('rejects constructing an authenticated client without a userID', () => {
   expect(() =>

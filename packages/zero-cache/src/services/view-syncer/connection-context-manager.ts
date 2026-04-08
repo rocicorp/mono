@@ -84,6 +84,8 @@ export type GroupAuthState = {
 
   backgroundConnection: ConnectionSelector | undefined;
   retransformAt: number | undefined;
+  // Defer all maintenance in case a transient failure occurs.
+  maintenanceNotBeforeAt: number | undefined;
 };
 
 export type ConnectionContextManager = {
@@ -126,6 +128,8 @@ export type ConnectionContextManager = {
     revision: number,
   ): void;
 
+  deferMaintenance(kind: 'revalidate' | 'retransform'): void;
+
   getConnectionContext(
     selector: ConnectionSelector,
   ): Readonly<ConnectionContext> | undefined;
@@ -164,6 +168,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     userID: undefined,
     backgroundConnection: undefined,
     retransformAt: undefined,
+    maintenanceNotBeforeAt: undefined,
     validated: false,
   };
 
@@ -425,6 +430,20 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     this.#updateBackgroundRetransformDeadline(true);
   }
 
+  deferMaintenance(kind: 'revalidate' | 'retransform'): void {
+    const intervalMs =
+      kind === 'revalidate'
+        ? this.#revalidateIntervalMs
+        : this.#retransformIntervalMs;
+    if (intervalMs === undefined) {
+      return;
+    }
+    this.#group.maintenanceNotBeforeAt = Math.max(
+      this.#group.maintenanceNotBeforeAt ?? 0,
+      this.#now() + intervalMs,
+    );
+  }
+
   /** Returns the current live record for a client slot, if any. */
   getConnectionContext(
     selector: ConnectionSelector,
@@ -470,8 +489,8 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
    *
    * The result is a pure snapshot: callers decide which actions to run and
    * when to wake up next. `earliestDeadlineAt` is the earliest outstanding
-   * maintenance deadline, including overdue work, so it may be less than or
-   * equal to the manager clock.
+   * maintenance deadline, including overdue work, unless a transient failure
+   * has deferred all scheduled maintenance until `maintenanceNotBeforeAt`.
    */
   planMaintenance(): {
     dueRevalidations: Readonly<ConnectionContext>[];
@@ -498,11 +517,29 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       );
     }
 
+    const dueRetransform =
+      this.#group.retransformAt !== undefined &&
+      this.#group.retransformAt <= now;
+    const maintenanceNotBeforeAt = this.#group.maintenanceNotBeforeAt;
+
+    if (
+      maintenanceNotBeforeAt !== undefined &&
+      maintenanceNotBeforeAt > now &&
+      earliestDeadlineAt !== undefined
+    ) {
+      return {
+        dueRevalidations: [],
+        dueRetransform: false,
+        earliestDeadlineAt: Math.max(
+          earliestDeadlineAt,
+          maintenanceNotBeforeAt,
+        ),
+      };
+    }
+
     return {
       dueRevalidations: dueRevalidations.sort(compareByInsertionOrder),
-      dueRetransform:
-        this.#group.retransformAt !== undefined &&
-        this.#group.retransformAt <= now,
+      dueRetransform,
       earliestDeadlineAt,
     };
   }

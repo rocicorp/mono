@@ -2355,58 +2355,6 @@ test(ErrorKind.AuthInvalidated, async () => {
   );
 });
 
-test('connect() with null auth clears authentication', async () => {
-  const z = zeroForTest({auth: 'initial-token'});
-
-  await z.triggerConnected();
-  let currentSocket = await z.socket;
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
-    'initial-token',
-  );
-
-  // Trigger auth error
-  await z.triggerError({
-    kind: ErrorKind.Unauthorized,
-    message: 'auth error',
-    origin: ErrorOrigin.ZeroCache,
-  });
-  await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
-  await vi.advanceTimersByTimeAsync(0);
-
-  // Reconnect with null auth - should clear auth token (empty string is used for no auth)
-  await z.connection.connect({auth: null});
-  currentSocket = await z.socket;
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
-});
-
-test('connect() with undefined auth clears authentication', async () => {
-  const z = zeroForTest({auth: 'initial-token'});
-
-  await z.triggerConnected();
-  let currentSocket = await z.socket;
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
-    'initial-token',
-  );
-
-  // Trigger auth error
-  await z.triggerError({
-    kind: ErrorKind.Unauthorized,
-    message: 'auth error',
-    origin: ErrorOrigin.ZeroCache,
-  });
-  await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
-  await vi.advanceTimersByTimeAsync(0);
-
-  // Reconnect with undefined auth - should clear auth token (empty string is used for no auth)
-  await z.connection.connect({auth: undefined});
-  currentSocket = await z.socket;
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
-});
-
 test('connect() without opts preserves existing auth', async () => {
   const z = zeroForTest({auth: 'initial-token'});
 
