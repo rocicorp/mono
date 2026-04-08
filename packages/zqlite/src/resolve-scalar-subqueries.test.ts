@@ -6,11 +6,19 @@ import type {
   SimpleCondition,
 } from '../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../zql/src/query/query.ts';
+import {schema} from '../../zql/src/query/test/test-schemas.ts';
 import {
   extractLiteralEqualityConstraints,
   isSimpleSubquery,
   resolveSimpleScalarSubqueries,
 } from './resolve-scalar-subqueries.ts';
+
+function ast(q: AnyQuery): AST {
+  return asQueryInternals(q).ast;
+}
 
 function makeTableSpecs(
   entries: Record<string, PrimaryKey[]>,
@@ -657,6 +665,55 @@ test('resolves scalar subqueries inside correlatedSubquery (EXISTS) conditions',
   });
   expect(companions).toHaveLength(1);
   expect(companions[0].ast.table).toBe('label');
+});
+
+test('resolves scalar + flip on junction edge (issue -> issueLabel -> label)', () => {
+  const specs = makeTableSpecs({
+    label: [['id'], ['name']],
+  });
+
+  const inputAST = ast(
+    newQuery(schema, 'issue').whereExists(
+      'labels',
+      q => q.where('name', 'foo'),
+      {scalar: true, flip: true},
+    ),
+  );
+
+  const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
+    inputAST,
+    specs,
+    () => 'label-foo-id',
+  );
+
+  // The inner scalar subquery is resolved to a literal condition,
+  // and the outer EXISTS with flip: true is preserved.
+  expect(resolved.where).toMatchObject({
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    flip: true,
+    related: {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueId'],
+      },
+      subquery: {
+        table: 'issueLabel',
+        alias: 'zsubq_labels',
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'labelId'},
+          right: {type: 'literal', value: 'label-foo-id'},
+        },
+      },
+    },
+  });
+  expect(companions).toHaveLength(1);
+  expect(companions[0].ast.table).toBe('label');
+  expect(companions[0].childField).toBe('id');
+  expect(companions[0].resolvedValue).toBe('label-foo-id');
 });
 
 test('resolves scalar subqueries inside AND of correlatedSubquery conditions', () => {
