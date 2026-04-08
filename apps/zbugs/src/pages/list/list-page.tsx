@@ -189,7 +189,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     ) =>
       queries.issueListV2({
         listContext: listContextParams,
-        userID: z.userID,
         limit,
         start,
         dir,

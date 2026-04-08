@@ -132,10 +132,11 @@ async function withAuth<T extends {headers: IncomingHttpHeaders}>(
   request: T,
   reply: FastifyReply,
   handler: (authData: JWTData | undefined) => Promise<void>,
+  verifyUserID: boolean = true,
 ) {
   let authData: JWTData | undefined;
   try {
-    authData = await maybeVerifyAuth(request.headers);
+    authData = await maybeVerifyAuth(request.headers, verifyUserID);
   } catch (e) {
     if (e instanceof Error) {
       reply.status(401).send(e.message);
@@ -164,37 +165,28 @@ async function mutateHandler(
   }>,
   reply: FastifyReply,
 ) {
-  let jwtData: JWTData | undefined;
-  try {
-    jwtData = await maybeVerifyAuth(request.headers);
-  } catch (e) {
-    if (e instanceof Error) {
-      reply.status(401).send(e.message);
-      return;
-    }
-    throw e;
-  }
+  await withAuth(request, reply, async jwtData => {
+    const postCommitTasks: (() => Promise<void>)[] = [];
+    const mutators = createServerMutators(postCommitTasks);
 
-  const postCommitTasks: (() => Promise<void>)[] = [];
-  const mutators = createServerMutators(postCommitTasks);
+    const response = await handleMutateRequest(
+      dbProvider,
+      (transact, _mutation) =>
+        transact((tx, name, args) => {
+          const mutator = mustGetMutator(mutators, name);
+          return mutator.fn({tx, args, ctx: jwtData});
+        }),
+      request.query,
+      request.body,
+      'info',
+    );
 
-  const response = await handleMutateRequest(
-    dbProvider,
-    (transact, _mutation) =>
-      transact((tx, name, args) => {
-        const mutator = mustGetMutator(mutators, name);
-        return mutator.fn({tx, args, ctx: jwtData});
-      }),
-    request.query,
-    request.body,
-    'info',
-  );
+    // we don't yet handle errors here, since Loops emails return 429 very often
+    // and we don't want to block the mutation
+    await Promise.allSettled(postCommitTasks.map(task => task()));
 
-  // we don't yet handle errors here, since Loops emails return 429 very often
-  // and we don't want to block the mutation
-  await Promise.allSettled(postCommitTasks.map(task => task()));
-
-  reply.send(response);
+    reply.send(response);
+  });
 }
 
 // this endpoint was kept for backwards compatibility
@@ -233,23 +225,29 @@ async function queryHandler(
 fastify.post<{
   Body: {contentType: string};
 }>('/api/upload/presigned-url', async (request, reply) => {
-  await withAuth(request, reply, async authData => {
-    if (!authData) {
-      reply.status(401).send('Authentication required');
-      return;
-    }
-
-    try {
-      const result = await getPresignedUrl(request.body.contentType);
-      reply.send(result);
-    } catch (error) {
-      if (error instanceof Error) {
-        reply.status(500).send(error.message);
+  await withAuth(
+    request,
+    reply,
+    async authData => {
+      if (!authData) {
+        reply.status(401).send('Authentication required');
         return;
       }
-      reply.status(500).send('Failed to generate presigned URL');
-    }
-  });
+
+      try {
+        const result = await getPresignedUrl(request.body.contentType);
+        reply.send(result);
+      } catch (error) {
+        if (error instanceof Error) {
+          reply.status(500).send(error.message);
+          return;
+        }
+        reply.status(500).send('Failed to generate presigned URL');
+      }
+    },
+    // don't verify the user ID header since this is from the client
+    false,
+  );
 });
 
 fastify.get<{
@@ -301,6 +299,7 @@ fastify.get<{
 
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
+  verifyUserID: boolean,
 ): Promise<JWTData | undefined> {
   let {authorization} = headers;
   if (!authorization) {
@@ -318,9 +317,19 @@ async function maybeVerifyAuth(
     throw new Error('VITE_PUBLIC_JWK is not set');
   }
 
-  return jwtDataSchema.parse(
+  const jwtData = jwtDataSchema.parse(
     (await jwtVerify(authorization, JSON.parse(jwk))).payload,
   );
+
+  if (verifyUserID) {
+    const userIDFromHeader = headers['x-user-id'];
+
+    if (userIDFromHeader !== jwtData.sub) {
+      throw new Error(`X-User-ID must match the authenticated user`);
+    }
+  }
+
+  return jwtData;
 }
 
 export default async function handler(
