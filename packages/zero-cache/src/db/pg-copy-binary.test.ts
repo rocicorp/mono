@@ -182,7 +182,7 @@ describe('BinaryCopyParser', () => {
     const parser = new BinaryCopyParser();
     const val = Buffer.from('xy', 'utf8');
     const full = Buffer.concat([pgcopyHeader(), tuple(val, null), trailer()]);
-    const chunks = Array.from(full).map(b => Buffer.from([b]));
+    const chunks = Array.from(full, b => Buffer.from([b]));
     const results = parseAll(parser, ...chunks);
     expect(results).toHaveLength(2);
     expect(results[0]!.toString('utf8')).toBe('xy');
@@ -484,7 +484,7 @@ describe('makeBinaryDecoder', () => {
     const buf = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
     const result = decode(buf);
     expect(result).toBeInstanceOf(Uint8Array);
-    expect(Array.from(result as Uint8Array)).toEqual([0xde, 0xad, 0xbe, 0xef]);
+    expect([...(result as Uint8Array)]).toEqual([0xde, 0xad, 0xbe, 0xef]);
   });
 
   test('Enum decoder', () => {
