@@ -1,3 +1,4 @@
+import {context, propagation} from '@opentelemetry/api';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import 'urlpattern-polyfill';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
@@ -154,6 +155,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   if (headerOptions.origin) {
     headers['Origin'] = headerOptions.origin;
   }
+  propagation.inject(context.active(), headers);
 
   const urlObj = new URL(url);
   const params = new URLSearchParams(urlObj.search);
