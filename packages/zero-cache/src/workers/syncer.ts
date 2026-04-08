@@ -4,7 +4,12 @@ import {pid} from 'node:process';
 import type {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {isProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {
+  isProtocolError,
+  ProtocolError,
+} from '../../../zero-protocol/src/error.ts';
 import {resolveAuth, type Auth, type ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
@@ -175,14 +180,13 @@ export class Syncer implements SingletonService {
 
     // Verify JWT BEFORE touching existing connections - prevents unauthenticated
     // attackers from force-disconnecting legitimate users via DoS.
-    // TODO(0xcadams): With opaque tokens, `resolveAuth()` only checks that the token is
-    // present and shaped consistently; the API server does the real auth later.
     try {
       initialAuth = await resolveAuth(
         this.#lc
           .withContext('clientGroupID', clientGroupID)
           .withContext('clientID', clientID),
-        // no previous auth, since this is a new connection
+        // no previous auth, since this is a new connection, and resolveAuth is
+        // connection scoped, not client group scoped
         undefined,
         userID,
         auth,
@@ -209,8 +213,27 @@ export class Syncer implements SingletonService {
 
     const viewSyncer = this.#viewSyncers.getService(clientGroupID);
     const contextManager = viewSyncer.contextManager;
+    const group = contextManager.getGroupState();
 
-    // Only check for and close existing connections AFTER auth is validated
+    // TODO(0xcadams): we only check for user ID mismatch here if the group is
+    // already validated. This prevents wrong-user reconnects from evicting a
+    // healthy connection, but it does not protect against same-user reconnects
+    // with an invalid opaque token. The long-term fix is to keep the replacement
+    // connection pending until its auth is fully validated, and only then replace
+    // the existing socket.
+    if (group.validated && group.userID !== userID) {
+      const error = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message:
+          'Client groups are pinned to a single userID. Connection userID does not match existing client group userID.',
+        origin: ErrorOrigin.ZeroCache,
+      });
+      sendError(this.#lc, ws, error.errorBody);
+      ws.close(3000, error.message);
+      return;
+    }
+
+    // Check for and close existing connections AFTER auth is validated
     const existing = this.#connections.get(clientID);
     if (existing) {
       this.#lc.debug?.(

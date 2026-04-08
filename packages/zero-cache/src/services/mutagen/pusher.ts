@@ -162,6 +162,12 @@ export class PusherService implements Service, Pusher {
     }
   }
 
+  /**
+   * Bulk cleanup is routed through the requester's push context.
+   *
+   * This assumes the client group shares a compatible push endpoint/auth
+   * context.
+   */
   async deleteClientMutations(
     requester: ConnectionSelector,
     clientIDs: string[],
