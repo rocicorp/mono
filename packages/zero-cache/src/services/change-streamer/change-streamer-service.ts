@@ -599,6 +599,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
     await this.#storer.stop();
+    await this.#source.stop();
   }
 }
 

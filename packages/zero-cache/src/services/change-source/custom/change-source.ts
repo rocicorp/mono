@@ -104,6 +104,10 @@ class CustomChangeSource implements ChangeSource {
     return null; // Not supported for custom sources
   }
 
+  stop(): Promise<void> {
+    return Promise.resolve();
+  }
+
   startStream(
     clientWatermark: string,
     backfillRequests: BackfillRequest[] = [],

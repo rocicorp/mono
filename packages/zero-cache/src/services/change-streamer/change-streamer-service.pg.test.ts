@@ -13,6 +13,7 @@ import {expectTables, test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
+import type {ChangeSource} from '../change-source/change-source.ts';
 import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {ReplicationStatusPublisher} from '../replicator/replication-status.ts';
@@ -77,6 +78,7 @@ describe('change-streamer/service', () => {
             acks: {push: status => acks.enqueue(status)},
           }),
         startLagReporter: () => Promise.resolve({nextSendTimeMs: 123}),
+        stop: () => Promise.resolve(),
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
@@ -939,7 +941,8 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
       startLagReporter: () => null,
-    };
+      stop: () => Promise.resolve(),
+    } satisfies ChangeSource;
     const streamer = await initializeStreamer(
       lc,
       shard,
@@ -967,7 +970,8 @@ describe('change-streamer/service', () => {
         return resolver().promise;
       }),
       startLagReporter: () => null,
-    };
+      stop: () => Promise.resolve(),
+    } satisfies ChangeSource;
     let streamer = await initializeStreamer(
       lc,
       shard,
@@ -1029,7 +1033,9 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
       startLagReporter: () => null,
-    };
+      stop: () => Promise.resolve(),
+    } satisfies ChangeSource;
+
     const streamer = await initializeStreamer(
       lc,
       shard,
@@ -1069,7 +1075,9 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
       startLagReporter: () => null,
-    };
+      stop: () => Promise.resolve(),
+    } satisfies ChangeSource;
+
     const streamer = await initializeStreamer(
       lc,
       shard,
@@ -1126,7 +1134,9 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
       startLagReporter: () => null,
-    };
+      stop: () => Promise.resolve(),
+    } satisfies ChangeSource;
+
     const streamer = await initializeStreamer(
       lc,
       shard,
@@ -1200,7 +1210,9 @@ describe('change-streamer/service', () => {
           }),
         ),
       startLagReporter: () => null,
-    };
+      stop: () => Promise.resolve(),
+    } satisfies ChangeSource;
+
     const streamer = await initializeStreamer(
       lc,
       shard,
