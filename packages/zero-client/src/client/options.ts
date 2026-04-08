@@ -55,15 +55,17 @@ export type ZeroOptions<
   auth?: string | null | undefined;
 
   /**
-   * A unique identifier for the user. Must be non-empty.
+   * A unique identifier for the user.
    *
    * Each userID gets its own client-side storage so that the app can switch
    * between users without losing state.
    *
+   * Omit this only for logged-out clients.
+   *
    * This must match the `sub` claim of the `auth` token if
    * `auth` is provided.
    */
-  userID: string;
+  userID?: string | undefined;
 
   /**
    * Distinguishes the storage used by this Zero instance from that of other

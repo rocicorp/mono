@@ -656,6 +656,17 @@ describe('createSocket', () => {
       expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
     },
     {
+      socketURL: 'ws://example.com/' as WSString,
+      baseCookie: null,
+      clientID: 'clientID',
+      userID: undefined,
+      auth: '',
+      lmid: 0,
+      debugPerf: false,
+      now: 0,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&baseCookie=&ts=0&lmid=0&wsid=wsidx&profileID=${mockProfileID}`,
+    },
+    {
       socketURL: 'ws://example.com/prefix' as WSString,
       baseCookie: null,
       clientID: 'clientID',
@@ -758,12 +769,12 @@ describe('createSocket', () => {
       socketURL: 'ws://example.com/' as WSString,
       baseCookie: null,
       clientID: 'clientID',
-      userID: 'userID',
+      userID: undefined,
       auth: '',
       lmid: 0,
       debugPerf: false,
       now: 456,
-      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&profileID=${mockProfileID}&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
+      expectedURL: `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&baseCookie=&ts=456&lmid=0&wsid=wsidx&profileID=${mockProfileID}&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
       additionalConnectParams: {
         reason: 'rehome',
         backoff: '100',
@@ -775,7 +786,7 @@ describe('createSocket', () => {
     socketURL: WSString;
     baseCookie: NullableVersion;
     clientID: string;
-    userID: string;
+    userID: string | undefined;
     auth: string | undefined;
     lmid: number;
     debugPerf: boolean;

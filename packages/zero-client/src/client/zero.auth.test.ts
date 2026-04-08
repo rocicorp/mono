@@ -44,7 +44,7 @@ test('connect({auth}) sends updateAuth set', async () => {
   expect(msg).toEqual(['updateAuth', {auth: 'next-token'}]);
 });
 
-test('sends updateAuth even when auth changes', async () => {
+test('sends updateAuth even when auth is unchanged', async () => {
   const z = zeroForTest({auth: 'test-auth'});
   await z.triggerConnected();
 
@@ -114,4 +114,58 @@ test('updated auth is sent once and reused for later reconnect handshakes', asyn
   await z.connection.connect();
   socket = await z.socket;
   expect(decodeSecProtocols(socket.protocol).authToken).toBe('token-2');
+});
+
+test('allows logged-out construction without a userID', async () => {
+  const z = zeroForTest({
+    auth: undefined,
+    userID: undefined,
+  });
+
+  expect(z.userID).toBeUndefined();
+
+  await z.close();
+});
+
+test.each([
+  ['', 'empty'],
+  ['anon', 'anon'],
+])(
+  'rejects constructing a logged-out client with legacy sentinel userID %p',
+  (userID, descriptor) => {
+    expect(() =>
+      zeroForTest({
+        auth: undefined,
+        userID,
+      }),
+    ).toThrow(
+      `ZeroOptions.userID should not be ${descriptor}. Omit it entirely for logged-out clients.`,
+    );
+  },
+);
+
+test('rejects constructing an authenticated client without a userID', () => {
+  expect(() =>
+    zeroForTest({
+      auth: 'auth-token',
+      userID: undefined,
+    }),
+  ).toThrow('ZeroOptions.userID is required when auth is set.');
+});
+
+test('connect({auth}) rejects on a logged-out client without a userID', async () => {
+  const z = zeroForTest({
+    auth: undefined,
+    userID: undefined,
+  });
+  await z.triggerConnected();
+
+  const socket = await z.socket;
+  socket.messages.length = 0;
+
+  await expect(z.connection.connect({auth: 'next-token'})).rejects.toThrow(
+    'ZeroOptions.userID is required when auth is set.',
+  );
+
+  await z.close();
 });
