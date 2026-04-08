@@ -78,8 +78,8 @@ jobs:
           --threshold-measure throughput \
           --threshold-test t_test \
           --threshold-lower-boundary 0.99 \
-          --threshold-min-sample-size 2 \
-          --threshold-max-sample-size 8 \
+          --threshold-min-sample-size 3 \
+          --threshold-max-sample-size 12 \
           --err
 
       - name: Upload benchmark results (PR)
@@ -102,6 +102,6 @@ jobs:
           --threshold-measure throughput \
           --threshold-test t_test \
           --threshold-lower-boundary 0.99 \
-          --threshold-min-sample-size 2 \
-          --threshold-max-sample-size 8 \
+          --threshold-min-sample-size 3 \
+          --threshold-max-sample-size 12 \
           --err
