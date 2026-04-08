@@ -444,25 +444,36 @@ describe('ZeroProvider', () => {
       });
     });
 
-    test('calls connection.connect when null auth is provided and then changes', () => {
-      const mockZero = createMockZero();
+    test('recreates zero when auth changes from undefined to a value', () => {
+      const mockZero1 = createMockZero('client-1');
+      const mockZero2 = createMockZero('client-2');
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(function () {
-        return mockZero;
+      ZeroMock.mockImplementationOnce(function () {
+        return mockZero1;
+      }).mockImplementationOnce(function () {
+        return mockZero2;
       });
 
       const schema = {} as Schema;
+      let capturedZero: Zero<Schema> | undefined;
+
+      function TestComponent() {
+        capturedZero = useZero<Schema>();
+        return <div>test</div>;
+      }
 
       const root = renderWithRoot(
         <ZeroProvider
           cacheURL="https://example.com"
           schema={schema}
-          auth={null}
+          auth={undefined}
           userID="test-user"
         >
-          <div>test</div>
+          <TestComponent />
         </ZeroProvider>,
       );
+
+      expect(capturedZero).toBe(mockZero1);
 
       act(() => {
         root.render(
@@ -472,59 +483,81 @@ describe('ZeroProvider', () => {
             auth="token-new"
             userID="test-user"
           >
-            <div>test</div>
+            <TestComponent />
           </ZeroProvider>,
         );
       });
 
-      expect(mockZero.connection.connect).toHaveBeenCalledWith({
-        auth: 'token-new',
-      });
-      expect(mockZero.connection.connect).toHaveBeenCalledTimes(1);
-      expect(mockZero.close).not.toHaveBeenCalled();
+      expect(ZeroMock).toHaveBeenCalledTimes(2);
+      expect(ZeroMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          auth: 'token-new',
+        }),
+      );
+      expect(mockZero1.close).toHaveBeenCalledTimes(1);
+      expect(mockZero1.connection.connect).not.toHaveBeenCalled();
+      expect(mockZero2.connection.connect).not.toHaveBeenCalled();
+      expect(capturedZero).toBe(mockZero2);
 
       act(() => {
         root.unmount();
       });
     });
 
-    test('calls connection.connect when no auth value is provided and then changes', () => {
-      const mockZero = createMockZero();
+    test('recreates zero when auth changes from a value to undefined', () => {
+      const mockZero1 = createMockZero('client-1');
+      const mockZero2 = createMockZero('client-2');
       const ZeroMock = vi.mocked(ZeroConstructor);
-      ZeroMock.mockImplementation(function () {
-        return mockZero;
+      ZeroMock.mockImplementationOnce(function () {
+        return mockZero1;
+      }).mockImplementationOnce(function () {
+        return mockZero2;
       });
 
       const schema = {} as Schema;
+      let capturedZero: Zero<Schema> | undefined;
+
+      function TestComponent() {
+        capturedZero = useZero<Schema>();
+        return <div>test</div>;
+      }
 
       const root = renderWithRoot(
         <ZeroProvider
           cacheURL="https://example.com"
           schema={schema}
+          auth="token-initial"
           userID="test-user"
         >
-          <div>test</div>
+          <TestComponent />
         </ZeroProvider>,
       );
+
+      expect(capturedZero).toBe(mockZero1);
 
       act(() => {
         root.render(
           <ZeroProvider
             cacheURL="https://example.com"
             schema={schema}
-            auth="token-new"
+            auth={undefined}
             userID="test-user"
           >
-            <div>test</div>
+            <TestComponent />
           </ZeroProvider>,
         );
       });
 
-      expect(mockZero.connection.connect).toHaveBeenCalledWith({
-        auth: 'token-new',
-      });
-      expect(mockZero.connection.connect).toHaveBeenCalledTimes(1);
-      expect(mockZero.close).not.toHaveBeenCalled();
+      expect(ZeroMock).toHaveBeenCalledTimes(2);
+      expect(ZeroMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          auth: undefined,
+        }),
+      );
+      expect(mockZero1.close).toHaveBeenCalledTimes(1);
+      expect(mockZero1.connection.connect).not.toHaveBeenCalled();
+      expect(mockZero2.connection.connect).not.toHaveBeenCalled();
+      expect(capturedZero).toBe(mockZero2);
 
       act(() => {
         root.unmount();

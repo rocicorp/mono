@@ -194,6 +194,20 @@ const authOptions = {
       `Use cookie-based authentication or an auth token instead - see https://zero.rocicorp.dev/docs/auth.`,
     ],
   },
+  revalidateIntervalSeconds: {
+    type: v.number().optional(),
+    desc: [
+      `The interval in seconds between periodic /query auth revalidation for validated connections.`,
+      `If unset, periodic auth revalidation is disabled.`,
+    ],
+  },
+  retransformIntervalSeconds: {
+    type: v.number().optional(),
+    desc: [
+      `The interval in seconds between periodic shared /query retransform work for a client group.`,
+      `If unset, periodic shared retransform is disabled.`,
+    ],
+  },
 };
 
 const makeDeprecationMessage = (flag: string) =>
@@ -297,8 +311,13 @@ const getQueriesOptions = makeMutatorQueryOptions(
   'send synced queries',
 );
 
-/** @deprecated */
 export type AuthConfig = Config<typeof authOptions>;
+
+/** @deprecated used only by legacy JWT verification helpers */
+export type LegacyJWTAuthConfig = Pick<
+  AuthConfig,
+  'jwk' | 'jwksUrl' | 'secret' | 'issuer' | 'audience'
+>;
 
 // Note: --help will list flags in the order in which they are defined here,
 // so order the fields such that the important (e.g. required) ones are first.
@@ -474,7 +493,6 @@ export const zeroOptions = {
 
   shard: shardOptions,
 
-  /** @deprecated */
   auth: authOptions,
 
   port: {

@@ -13,6 +13,8 @@ import {isProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
 import {randInt} from '../../../shared/src/rand.ts';
+import type {ConnectionContext} from '../services/view-syncer/connection-context-manager.ts';
+import {must} from '../../../shared/src/must.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -34,15 +36,6 @@ export function compileUrlPattern(pattern: string): URLPattern {
     );
   }
 }
-
-export type HeaderOptions = {
-  apiKey?: string | undefined;
-  customHeaders?: Record<string, string> | undefined;
-  allowedClientHeaders?: readonly string[] | undefined;
-  token?: string | undefined;
-  cookie?: string | undefined;
-  origin?: string | undefined;
-};
 
 /**
  * Filters custom headers based on the allowed headers list.
@@ -99,20 +92,27 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   validator: TValidator,
   source: 'push' | 'transform',
   lc: LogContext,
-  url: string,
-  allowedUrlPatterns: URLPattern[],
+  ctx: ConnectionContext,
   shard: ShardID,
-  headerOptions: HeaderOptions,
   body: ReadonlyJSONValue,
 ) {
   const fetchFromAPIServerID = randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
-  lc = lc.withContext('fetchFromAPIServerID', fetchFromAPIServerID);
+  lc = lc
+    .withContext('fetchFromAPIServerID', fetchFromAPIServerID)
+    .withContext('source', source);
+
+  const fetchConfig = source === 'push' ? ctx.pushContext : ctx.queryContext;
+  const url = must(
+    fetchConfig.url,
+    `Fetch config for ${source} is missing URL`,
+  );
+  const headerOptions = fetchConfig.headerOptions;
 
   lc.debug?.('fetchFromAPIServer called', {
     url,
   });
 
-  if (!urlMatch(url, allowedUrlPatterns)) {
+  if (!urlMatch(url, fetchConfig.allowedUrlPatterns ?? [])) {
     throw new ProtocolErrorWithLevel(
       source === 'push'
         ? {
@@ -146,8 +146,11 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       headerOptions.allowedClientHeaders,
     ),
   );
-  if (headerOptions.token) {
-    headers['Authorization'] = `Bearer ${headerOptions.token}`;
+  if (ctx.userID) {
+    headers['X-User-ID'] = ctx.userID;
+  }
+  if (ctx.auth?.raw) {
+    headers['Authorization'] = `Bearer ${ctx.auth.raw}`;
   }
   if (headerOptions.cookie) {
     headers['Cookie'] = headerOptions.cookie;

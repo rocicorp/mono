@@ -3,7 +3,7 @@ import {hasMemStore} from '../../../replicache/src/kv/mem-store.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {Zero} from './zero.ts';
+import {LOGGED_OUT_STORAGE_USER_ID, Zero} from './zero.ts';
 
 const schema = createSchema({
   tables: [
@@ -156,4 +156,18 @@ test('delete closes and removes all databases for the same zero instance', async
 
   await zOther.close();
   await zOther.delete();
+});
+
+test('logged-out client uses a private storage sentinel for idb naming', async () => {
+  const zero = new Zero({
+    storageKey,
+    schema,
+    kvStore: 'mem',
+  });
+
+  expect(zero.idbName).toEqual(
+    `rep:zero-${LOGGED_OUT_STORAGE_USER_ID}-o92aeop6ci3f:7:49.32bj126fs2e3f`,
+  );
+
+  await zero.close();
 });

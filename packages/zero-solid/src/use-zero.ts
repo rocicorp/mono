@@ -72,8 +72,6 @@ export function createUseZero<
   return () => useZero<S, MD, Context>();
 }
 
-const NO_AUTH_SET = Symbol();
-
 export function ZeroProvider<
   S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
@@ -89,14 +87,22 @@ export function ZeroProvider<
     | ZeroOptions<S, MD, Context>
   ),
 ) {
+  let prevAuth = 'auth' in props ? props.auth : undefined;
+
+  const auth = createMemo(() => ('auth' in props ? props.auth : undefined));
+  const hasAuth = createMemo(() => typeof auth() === 'string');
+
   const zero = createMemo(() => {
     if ('zero' in props) {
       return props.zero;
     }
 
+    hasAuth();
+
     const [, options] = splitProps(props, ['children', 'auth']);
 
-    const authValue = untrack(() => props.auth);
+    const authValue = untrack(auth);
+    prevAuth = authValue;
     const createdZero = new Zero({
       ...options,
       ...(authValue !== undefined ? {auth: authValue} : {}),
@@ -107,13 +113,6 @@ export function ZeroProvider<
     return createdZero;
   });
 
-  const auth = createMemo<
-    typeof NO_AUTH_SET | ZeroOptions<S, MD, Context>['auth']
-  >(() => ('auth' in props ? props.auth : NO_AUTH_SET));
-
-  let prevAuth: typeof NO_AUTH_SET | ZeroOptions<S, MD, Context>['auth'] =
-    NO_AUTH_SET;
-
   createEffect(() => {
     const currentZero = zero();
     if (!currentZero || 'zero' in props) {
@@ -122,16 +121,13 @@ export function ZeroProvider<
 
     const currentAuth = auth();
 
-    if (prevAuth === NO_AUTH_SET) {
-      prevAuth = currentAuth;
-      return;
-    }
-
     if (currentAuth !== prevAuth) {
+      const previousAuth = prevAuth;
       prevAuth = currentAuth;
-      void currentZero.connection.connect({
-        auth: currentAuth === NO_AUTH_SET ? undefined : currentAuth,
-      });
+
+      if (typeof previousAuth === 'string' && typeof currentAuth === 'string') {
+        void currentZero.connection.connect({auth: currentAuth});
+      }
     }
   });
 

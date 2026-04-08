@@ -17,7 +17,7 @@ export type ConnectParams = {
   readonly wsID: string;
   readonly debugPerf: boolean;
   readonly auth: string | undefined;
-  readonly userID: string;
+  readonly userID: string | undefined;
   readonly initConnectionMsg: InitConnectionMessage | undefined;
   readonly httpCookie: string | undefined;
   readonly origin: string | undefined;
@@ -46,7 +46,7 @@ export function getConnectParams(
     const timestamp = params.getInteger('ts', true);
     const lmID = params.getInteger('lmid', true);
     const wsID = params.get('wsid', false) ?? '';
-    const userID = params.get('userID', false) ?? '';
+    const userID = params.get('userID', false) ?? undefined;
     const debugPerf = params.getBoolean('debugPerf');
     const {initConnectionMessage, authToken} = decodeSecProtocols(
       must(headers['sec-websocket-protocol']),

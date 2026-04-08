@@ -3,18 +3,17 @@ import {unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import type {JWTAuth} from '../../auth/auth.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import {
   getServerVersion,
   isAdminPasswordValid,
 } from '../../config/zero-config.ts';
-import type {HeaderOptions} from '../../custom/fetch.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {analyzeQuery} from '../analyze.ts';
 import type {ClientHandler} from './client-handler.ts';
+import type {ConnectionContext} from './connection-context-manager.ts';
 import type {CVRStore} from './cvr-store.ts';
 import type {CVRSnapshot} from './cvr.ts';
 
@@ -27,9 +26,7 @@ export async function handleInspect(
   clientGroupID: string,
   cvrStore: CVRStore,
   config: NormalizedZeroConfig,
-  headerOptions: HeaderOptions,
-  userQueryURL: string | undefined,
-  auth: JWTAuth | undefined,
+  ctx: ConnectionContext,
 ): Promise<void> {
   // Check if the client is already authenticated. We only authenticate the clientGroup
   // once per "worker".
@@ -116,8 +113,7 @@ export async function handleInspect(
           ast = await inspectorDelegate.transformCustomQuery(
             body.name,
             body.args,
-            headerOptions,
-            userQueryURL,
+            ctx,
           );
           legacyQuery = false;
         }
@@ -150,7 +146,7 @@ export async function handleInspect(
           body.options?.syncedRows,
           body.options?.vendedRows,
           permissions,
-          auth,
+          ctx.auth?.type === 'jwt' ? ctx.auth : undefined,
           body.options?.joinPlans,
         );
         client.sendInspectResponse(lc, {

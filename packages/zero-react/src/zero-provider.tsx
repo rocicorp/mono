@@ -63,8 +63,6 @@ export type ZeroProviderProps<
   children: ReactNode;
 };
 
-const NO_AUTH_SET = Symbol();
-
 export function ZeroProvider<
   S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
@@ -76,7 +74,8 @@ export function ZeroProvider<
     isExternalZero ? props.zero : undefined,
   );
 
-  const auth = 'auth' in props ? props.auth : NO_AUTH_SET;
+  const auth = 'auth' in props ? props.auth : undefined;
+  const hasAuth = typeof auth === 'string';
   const prevAuthRef = useRef<typeof auth>(auth);
 
   const keysWithoutAuth = useMemo(
@@ -100,6 +99,7 @@ export function ZeroProvider<
     }
 
     const z = new Zero(props);
+    prevAuthRef.current = auth;
     init?.(z);
     setZero(z);
 
@@ -109,18 +109,20 @@ export function ZeroProvider<
     };
     // we intentionally don't include auth in the dependency array
     // to avoid closing zero when auth changes
-  }, [init, ...keysWithoutAuth]);
+  }, [hasAuth, init, ...keysWithoutAuth]);
 
   useEffect(() => {
     if (!zero || isExternalZero) return;
 
-    const authChanged = auth !== prevAuthRef.current;
+    const prevAuth = prevAuthRef.current;
+    const authChanged = auth !== prevAuth;
 
     if (authChanged) {
       prevAuthRef.current = auth;
-      void zero.connection.connect({
-        auth: auth === NO_AUTH_SET ? undefined : auth,
-      });
+
+      if (typeof prevAuth === 'string' && typeof auth === 'string') {
+        void zero.connection.connect({auth});
+      }
     }
   }, [auth, zero]);
 

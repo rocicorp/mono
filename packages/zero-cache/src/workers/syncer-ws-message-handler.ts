@@ -11,9 +11,10 @@ import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import {
-  type SyncContext,
-  type ViewSyncer,
-} from '../services/view-syncer/view-syncer.ts';
+  type ConnectionContextManager,
+  type ConnectionSelector,
+} from '../services/view-syncer/connection-context-manager.ts';
+import {type ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
 
@@ -25,29 +26,22 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #mutationLock: Lock;
   readonly #lc: LogContext;
   readonly #clientGroupID: string;
-  readonly #syncContext: SyncContext;
+  readonly #connectionSelector: ConnectionSelector;
+  readonly #contextManager: ConnectionContextManager;
   readonly #pusher: Pusher | undefined;
 
   constructor(
     lc: LogContext,
     connectParams: ConnectParams,
+    contextManager: ConnectionContextManager,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen | undefined,
     pusher: Pusher | undefined,
   ) {
-    const {
-      clientGroupID,
-      clientID,
-      profileID,
-      wsID,
-      baseCookie,
-      protocolVersion,
-      httpCookie,
-      origin,
-      userID,
-    } = connectParams;
+    const {clientGroupID, clientID, wsID} = connectParams;
     this.#viewSyncer = viewSyncer;
     this.#mutagen = mutagen;
+    this.#contextManager = contextManager;
     this.#mutationLock = new Lock();
     this.#lc = lc
       .withContext('connection')
@@ -56,15 +50,9 @@ export class SyncerWsMessageHandler implements MessageHandler {
       .withContext('wsID', wsID);
     this.#clientGroupID = clientGroupID;
     this.#pusher = pusher;
-    this.#syncContext = {
+    this.#connectionSelector = {
       clientID,
-      profileID,
       wsID,
-      baseCookie,
-      protocolVersion,
-      httpCookie,
-      origin,
-      userID,
     };
   }
 
@@ -84,7 +72,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           tracer,
           'connection.push',
           async () => {
-            const {clientGroupID, mutations, auth: pushAuth} = msg[1];
+            const {clientGroupID, mutations} = msg[1];
             if (clientGroupID !== this.#clientGroupID) {
               return [
                 {
@@ -98,14 +86,6 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   },
                 } satisfies HandlerResult,
               ];
-            }
-
-            // for backwards compatibility, if the push contains auth, we update it
-            if (pushAuth) {
-              await viewSyncer.updateAuth(this.#syncContext, [
-                'updateAuth',
-                {auth: pushAuth},
-              ]);
             }
 
             if (mutations.length === 0) {
@@ -134,13 +114,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 ];
               }
               return [
-                this.#pusher.enqueuePush(
-                  this.#syncContext.clientID,
-                  msg[1],
-                  viewSyncer.auth?.raw,
-                  this.#syncContext.httpCookie,
-                  this.#syncContext.origin,
-                ),
+                this.#pusher.enqueuePush(this.#connectionSelector, msg[1]),
               ];
             }
 
@@ -158,7 +132,9 @@ export class SyncerWsMessageHandler implements MessageHandler {
               ];
             }
 
-            const auth = viewSyncer.auth;
+            const auth = this.#contextManager.mustGetConnectionContext(
+              this.#connectionSelector,
+            ).auth;
             assert(
               auth?.type !== 'opaque',
               'Only JWT auth is supported for CRUD mutations',
@@ -194,32 +170,51 @@ export class SyncerWsMessageHandler implements MessageHandler {
       }
       case 'changeDesiredQueries':
         await startAsyncSpan(tracer, 'connection.changeDesiredQueries', () =>
-          viewSyncer.changeDesiredQueries(this.#syncContext, msg),
+          viewSyncer.changeDesiredQueries(this.#connectionSelector, msg),
         );
         break;
       case 'updateAuth':
         await startAsyncSpan(tracer, 'connection.updateAuth', async () => {
-          await viewSyncer.updateAuth(this.#syncContext, msg);
+          const initialConnection =
+            this.#contextManager.mustGetConnectionContext(
+              this.#connectionSelector,
+            );
+          const updatedConnection = await this.#contextManager.updateAuth(
+            this.#connectionSelector,
+            msg[1],
+          );
+          const authRevisionChanged =
+            updatedConnection.revision !== initialConnection.revision;
+
+          await viewSyncer.updateAuth(
+            this.#connectionSelector,
+            msg,
+            authRevisionChanged,
+          );
         });
         break;
       case 'deleteClients': {
         const deletedClientIDs = await startAsyncSpan(
           tracer,
           'connection.deleteClients',
-          () => viewSyncer.deleteClients(this.#syncContext, msg),
+          () => viewSyncer.deleteClients(this.#connectionSelector, msg),
         );
         if (this.#pusher && deletedClientIDs.length > 0) {
-          await this.#pusher.deleteClientMutations(deletedClientIDs);
+          await this.#pusher.deleteClientMutations(
+            this.#connectionSelector,
+            deletedClientIDs,
+          );
         }
         break;
       }
       case 'initConnection': {
+        this.#contextManager.initConnection(this.#connectionSelector, msg[1]);
         const ret: HandlerResult[] = [
           {
             type: 'stream',
             source: 'viewSyncer',
             stream: startSpan(tracer, 'connection.initConnection', () =>
-              viewSyncer.initConnection(this.#syncContext, msg),
+              viewSyncer.initConnection(this.#connectionSelector, msg),
             ),
           },
         ];
@@ -232,13 +227,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           ret.push({
             type: 'stream',
             source: 'pusher',
-            stream: this.#pusher.initConnection(
-              this.#syncContext.clientID,
-              this.#syncContext.wsID,
-              msg[1].userPushURL,
-              msg[1].userPushHeaders,
-              () => viewSyncer.clearAuth(),
-            ),
+            stream: this.#pusher.initConnection(this.#connectionSelector),
           });
         }
 
@@ -250,13 +239,16 @@ export class SyncerWsMessageHandler implements MessageHandler {
 
       case 'inspect':
         await startAsyncSpan(tracer, 'connection.inspect', () =>
-          viewSyncer.inspect(this.#syncContext, msg),
+          viewSyncer.inspect(this.#connectionSelector, msg),
         );
         break;
 
       case 'ackMutationResponses':
         if (this.#pusher) {
-          await this.#pusher.ackMutationResponses(msg[1]);
+          await this.#pusher.ackMutationResponses(
+            this.#connectionSelector,
+            msg[1],
+          );
         }
         break;
 

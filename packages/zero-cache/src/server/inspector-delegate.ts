@@ -12,7 +12,7 @@ import {
 } from '../../../zql/src/query/metrics-delegate.ts';
 import {isDevelopmentMode} from '../config/normalize.ts';
 import type {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
-import type {HeaderOptions} from '../custom/fetch.ts';
+import type {ConnectionContext} from '../services/view-syncer/connection-context-manager.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 
@@ -107,8 +107,7 @@ export class InspectorDelegate implements MetricsDelegate {
   async transformCustomQuery(
     name: string,
     args: readonly ReadonlyJSONValue[],
-    headerOptions: HeaderOptions,
-    userQueryURL: string | undefined,
+    ctx: ConnectionContext,
   ): Promise<AST> {
     assert(
       this.#customQueryTransformer,
@@ -127,17 +126,13 @@ export class InspectorDelegate implements MetricsDelegate {
       },
     ];
 
-    const results = await this.#customQueryTransformer.transform(
-      headerOptions,
-      queries,
-      userQueryURL,
-    );
+    const results = await this.#customQueryTransformer.transform(ctx, queries);
 
-    if ('kind' in results) {
-      throw new ProtocolErrorWithLevel(results, 'warn');
+    if ('kind' in results.result) {
+      throw new ProtocolErrorWithLevel(results.result, 'warn');
     }
 
-    const result = results[0];
+    const result = results.result[0];
     if (!result) {
       throw new Error('No transformation result returned');
     }

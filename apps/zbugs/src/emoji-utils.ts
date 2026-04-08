@@ -7,7 +7,7 @@ export type Emoji = Row['emoji'] & {
 
 export function formatEmojiCreatorList(
   emojis: Emoji[],
-  currentUserID: string,
+  currentUserID: string | undefined,
 ): string {
   assert(emojis.length > 0, 'Expected at least one emoji');
   const names = emojis
@@ -39,7 +39,7 @@ export function formatEmojiCreatorList(
 
 export function formatEmojiTooltipText(
   emojis: Emoji[],
-  currentUserID: string,
+  currentUserID: string | undefined,
 ): string {
   const names = formatEmojiCreatorList(emojis, currentUserID);
   return `${names} reacted with ${emojis[0].annotation}`;
@@ -57,8 +57,11 @@ export function setSkinTone(emoji: string, skinTone: number): string {
 
 export function findEmojiForCreator(
   emojis: Emoji[],
-  userID: string,
+  userID: string | undefined,
 ): string | undefined {
+  if (userID === undefined) {
+    return undefined;
+  }
   for (const emoji of emojis) {
     if (emoji.creatorID === userID) {
       return emoji.id;

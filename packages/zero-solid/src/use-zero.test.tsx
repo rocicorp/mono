@@ -345,10 +345,12 @@ describe('ZeroProvider', () => {
       expect(zero.connection.connect).not.toHaveBeenCalled();
     });
 
-    test('calls connection.connect when auth changes from undefined to a value', () => {
-      const zero = createMockZero();
-      ZeroMock.mockImplementation(function () {
-        return zero;
+    test('recreates zero when auth changes from undefined to a value', () => {
+      const zeros = [createMockZero('client-1'), createMockZero('client-2')];
+      const capturedOptions: ZeroOptions<Schema>[] = [];
+      ZeroMock.mockImplementation(function (options) {
+        capturedOptions.push(options as ZeroOptions<Schema>);
+        return zeros[capturedOptions.length - 1]!;
       });
 
       const schema = {} as Schema;
@@ -365,24 +367,29 @@ describe('ZeroProvider', () => {
         </ZeroProvider>
       );
 
-      renderHook(() => useZero<Schema>(), {
+      const {result} = renderHook(() => useZero<Schema>(), {
         initialProps: [],
         wrapper,
       });
 
+      expect(result()).toBe(zeros[0]);
+
       setAuth('token-new');
 
-      expect(zero.connection.connect).toHaveBeenCalledWith({
-        auth: 'token-new',
-      });
-      expect(zero.connection.connect).toHaveBeenCalledTimes(1);
-      expect(ZeroMock).toHaveBeenCalledTimes(1);
+      expect(ZeroMock).toHaveBeenCalledTimes(2);
+      expect(capturedOptions[1]?.auth).toBe('token-new');
+      expect(zeros[0].close).toHaveBeenCalledTimes(1);
+      expect(zeros[0].connection.connect).not.toHaveBeenCalled();
+      expect(zeros[1].connection.connect).not.toHaveBeenCalled();
+      expect(result()).toBe(zeros[1]);
     });
 
-    test('calls connection.connect with undefined when auth prop is changed to undefined', () => {
-      const zero = createMockZero();
-      ZeroMock.mockImplementation(function () {
-        return zero;
+    test('recreates zero when auth changes from a value to undefined', () => {
+      const zeros = [createMockZero('client-1'), createMockZero('client-2')];
+      const capturedOptions: ZeroOptions<Schema>[] = [];
+      ZeroMock.mockImplementation(function (options) {
+        capturedOptions.push(options as ZeroOptions<Schema>);
+        return zeros[capturedOptions.length - 1]!;
       });
 
       const schema = {} as Schema;
@@ -399,23 +406,21 @@ describe('ZeroProvider', () => {
         </ZeroProvider>
       );
 
-      renderHook(() => useZero<Schema>(), {
+      const {result} = renderHook(() => useZero<Schema>(), {
         initialProps: [],
         wrapper,
       });
 
+      expect(result()).toBe(zeros[0]);
+
       setAuth(undefined);
 
-      expect(zero.connection.connect).toHaveBeenCalledWith({auth: undefined});
-      expect(zero.connection.connect).toHaveBeenCalledTimes(1);
-      expect(ZeroMock).toHaveBeenCalledTimes(1);
-
-      zero.connection.connect.mockClear();
-
-      setAuth('token-new');
-
-      expect(zero.connection.connect).toHaveBeenCalledWith({auth: 'token-new'});
-      expect(zero.connection.connect).toHaveBeenCalledTimes(1);
+      expect(ZeroMock).toHaveBeenCalledTimes(2);
+      expect(capturedOptions[1]).not.toHaveProperty('auth');
+      expect(zeros[0].close).toHaveBeenCalledTimes(1);
+      expect(zeros[0].connection.connect).not.toHaveBeenCalled();
+      expect(zeros[1].connection.connect).not.toHaveBeenCalled();
+      expect(result()).toBe(zeros[1]);
     });
 
     test('does not call connection.connect when zero is provided externally and auth changes', () => {

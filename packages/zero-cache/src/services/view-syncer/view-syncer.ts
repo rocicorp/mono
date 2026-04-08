@@ -23,7 +23,6 @@ import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-cl
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import {
   isProtocolError,
   ProtocolError,
@@ -35,15 +34,16 @@ import type {
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {UpdateAuthMessage} from '../../../../zero-protocol/src/update-auth.ts';
 import {clampTTL, MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
-import type {Auth, AuthSession, AuthUpdateResult} from '../../auth/auth.ts';
+import {isAuthErrorBody, type Auth} from '../../auth/auth.ts';
 import {
   transformAndHashQuery,
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
-import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
-import type {HeaderOptions} from '../../custom/fetch.ts';
+import type {
+  CustomQueryTransformer,
+  TransformAttempt,
+} from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
@@ -53,6 +53,7 @@ import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {
   getLogLevel,
   ProtocolErrorWithLevel,
+  wrapWithProtocolError,
 } from '../../types/error-with-level.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -69,6 +70,11 @@ import {
   type PokeHandler,
   type RowPatch,
 } from './client-handler.ts';
+import type {
+  ConnectionContext,
+  ConnectionContextManager,
+  ConnectionSelector,
+} from './connection-context-manager.ts';
 import {ClientNotFoundError, CVRStore} from './cvr-store.ts';
 import type {CVRUpdater} from './cvr.ts';
 import {
@@ -104,42 +110,44 @@ import {
   type TTLClock,
 } from './ttl-clock.ts';
 
-export type SyncContext = {
-  readonly clientID: string;
-  readonly wsID: string;
+const PROTOCOL_VERSION_ATTR = 'protocol.version';
+
+export interface ViewSyncer {
+  initConnection(
+    selector: ConnectionSelector,
+    initConnectionMessage: InitConnectionMessage,
+  ): Source<Downstream>;
+
+  changeDesiredQueries(
+    selector: ConnectionSelector,
+    msg: ChangeDesiredQueriesMessage,
+  ): Promise<void>;
+
+  deleteClients(
+    selector: ConnectionSelector,
+    msg: DeleteClientsMessage,
+  ): Promise<string[]>;
+
+  inspect(selector: ConnectionSelector, msg: InspectUpMessage): Promise<void>;
+  updateAuth(
+    selector: ConnectionSelector,
+    msg: UpdateAuthMessage,
+    authRevisionChanged: boolean,
+  ): Promise<void>;
+
+  // Connection context management is owned by the view syncer for disconnect cleanup.
+  contextManager: ConnectionContextManager;
+}
+
+export type SyncContext = ConnectionSelector & {
   readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
   readonly httpCookie: string | undefined;
   readonly origin: string | undefined;
-  readonly userID: string;
-};
-
-const PROTOCOL_VERSION_ATTR = 'protocol.version';
-
-export interface ViewSyncer {
-  initConnection(
-    ctx: SyncContext,
-    msg: InitConnectionMessage,
-  ): Source<Downstream>;
-
-  changeDesiredQueries(
-    ctx: SyncContext,
-    msg: ChangeDesiredQueriesMessage,
-  ): Promise<void>;
-
-  deleteClients(ctx: SyncContext, msg: DeleteClientsMessage): Promise<string[]>;
-
-  inspect(context: SyncContext, msg: InspectUpMessage): Promise<void>;
-
+  readonly userID: string | undefined;
   readonly auth: Auth | undefined;
-  initAuthSession(
-    userID: string,
-    wireAuth: string | undefined,
-  ): Promise<AuthUpdateResult>;
-  updateAuth(ctx: SyncContext, msg: UpdateAuthMessage): Promise<void>;
-  clearAuth(): void;
-}
+};
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
 
@@ -171,6 +179,10 @@ type CustomQueryTransformMode = 'all' | 'missing';
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
+  // Centralized connection/group auth bookkeeping plus maintenance policy.
+  // Network validation still happens in ViewSyncerService.
+  readonly contextManager: ConnectionContextManager;
+
   readonly #shard: ShardID;
   readonly #lc: LogContext;
   readonly #pipelines: PipelineDriver;
@@ -178,11 +190,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
-  readonly #queryConfig: ZeroConfig['query'];
-  readonly #authSession: AuthSession;
-
-  userQueryURL?: string | undefined;
-  userQueryHeaders?: Record<string, string> | undefined;
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -231,12 +238,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
 
-  #httpCookie: string | undefined;
-  #origin: string | undefined;
-
-  #lastAuthRevision: number = 0;
-
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
+  #authMaintenanceTimer: ReturnType<SetTimeout> | 0 = 0;
   readonly #setTimeout: SetTimeout;
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
@@ -314,21 +317,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     drainCoordinator: DrainCoordinator,
     slowHydrateThreshold: number,
     inspectorDelegate: InspectorDelegate,
+    contextManager: ConnectionContextManager,
     customQueryTransformer: CustomQueryTransformer | undefined,
     runPriorityOp: <T>(
       lc: LogContext,
       description: string,
       op: () => Promise<T>,
     ) => Promise<T>,
-    authSession: AuthSession,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
-    const queryConfig = config.query?.url ? config.query : config.getQueries;
     this.#config = config;
     this.id = clientGroupID;
+    this.contextManager = contextManager;
     this.#shard = shard;
-    this.#queryConfig = queryConfig;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
@@ -337,7 +339,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#slowHydrateThreshold = slowHydrateThreshold;
     this.#inspectorDelegate = inspectorDelegate;
     this.#customQueryTransformer = customQueryTransformer;
-    this.#authSession = authSession;
     this.#cvrStore = new CVRStore(
       lc,
       cvrDb,
@@ -352,33 +353,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#runPriorityOp = runPriorityOp;
     // Wait for the first connection to init.
     this.keepalive();
-  }
-
-  get auth(): Auth | undefined {
-    return this.#authSession.auth;
-  }
-
-  clearAuth(): void {
-    this.#authSession.clear();
-    this.#lastAuthRevision = 0;
-  }
-
-  initAuthSession(
-    userID: string,
-    wireAuth: string | undefined,
-  ): Promise<AuthUpdateResult> {
-    return this.#authSession.update(userID, wireAuth);
-  }
-
-  #getHeaderOptions(forwardCookie: boolean): HeaderOptions {
-    return {
-      apiKey: this.#queryConfig.apiKey,
-      customHeaders: this.userQueryHeaders,
-      allowedClientHeaders: this.#queryConfig.allowedClientHeaders,
-      token: this.#authSession.auth?.raw,
-      cookie: forwardCookie ? this.#httpCookie : undefined,
-      origin: this.#origin,
-    };
   }
 
   #runInLockWithCVR(
@@ -433,6 +407,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // Clear cached state if an error is encountered.
         this.#cvr = undefined;
         throw e;
+      } finally {
+        // Lock-scoped work is where validated connections gain or lose
+        // schedulable auth-maintenance deadlines. Recompute the single wakeup
+        // after every locked operation; out-of-lock fail/close transitions only
+        // clear or relax deadlines, so a stale earlier wakeup is harmless.
+        this.#scheduleAuthMaintenance(lc);
       }
     });
   }
@@ -509,7 +489,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           // all the custom queries, this #syncQueryPipelineSet call
           // should retransform those that are missing from #pipelines, which
           // are those which errored or changed transform hash
-          await this.#syncQueryPipelineSet(lc, cvr, 'missing');
+          await this.#syncQueryPipelineSet(lc, cvr, 'missing', undefined);
           this.#pipelinesSynced = true;
         });
       }
@@ -547,7 +527,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.debug?.('Queries have expired');
       // #syncQueryPipelineSet() will remove the expired queries.
       if (this.#pipelinesSynced) {
-        await this.#syncQueryPipelineSet(lc, cvr, 'missing');
+        await this.#syncQueryPipelineSet(lc, cvr, 'missing', undefined);
       }
     }
 
@@ -618,6 +598,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #deleteClientDueToDisconnect(clientID: string, client: ClientHandler) {
+    this.contextManager.closeConnection({
+      clientID,
+      wsID: client.wsID,
+    });
+
     // Note: It is okay to delete / cleanup clients without acquiring the lock.
     // In fact, it is important to do so in order to guarantee that idle cleanup
     // is performed in a timely manner, regardless of the amount of work
@@ -644,47 +629,103 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#expiredQueriesTimer = 0;
   }
 
+  #stopAuthMaintenanceTimer() {
+    if (this.#authMaintenanceTimer !== 0) {
+      this.#lc.debug?.('Stopping auth maintenance timer');
+    }
+    clearTimeout(this.#authMaintenanceTimer);
+    this.#authMaintenanceTimer = 0;
+  }
+
+  /**
+   * Schedules the auth maintenance wakeup from coordinator-derived
+   * deadlines. The timer plumbing is intentionally separate from the actual
+   * revalidation/retransform work so future policy changes only need to update
+   * the maintenance workers, not the wakeup logic.
+   *
+   * This is intentionally cheap & idempotent, so it can be called frequently
+   * when upstream state might have changed.
+   */
+  #scheduleAuthMaintenance(lc: LogContext) {
+    this.#stopAuthMaintenanceTimer();
+
+    const plan = this.contextManager.planMaintenance();
+    if (plan.earliestDeadlineAt === undefined) {
+      lc.debug?.('No auth maintenance wakeup scheduled');
+      return;
+    }
+
+    const delay = Math.max(0, plan.earliestDeadlineAt - Date.now());
+    lc.debug?.(
+      `Scheduling auth maintenance timer at ${new Date(plan.earliestDeadlineAt).toISOString()}`,
+      {
+        delay,
+        earliestDeadlineAt: plan.earliestDeadlineAt,
+      },
+    );
+    this.#authMaintenanceTimer = this.#setTimeout(() => {
+      this.#authMaintenanceTimer = 0;
+      this.#runInLockWithCVR((lc, cvr) =>
+        this.#runAuthMaintenance(lc, cvr),
+      ).catch(e =>
+        // If an error occurs (e.g. ownership change), propagate the error
+        // to the main run() loop via the #stateChanges Subscription.
+        this.#stateChanges.fail(e),
+      );
+    }, delay);
+  }
+
+  async #runAuthMaintenance(lc: LogContext, _cvr: CVRSnapshot): Promise<void> {
+    const plan = this.contextManager.planMaintenance();
+    if (plan.dueRevalidations.length === 0 && !plan.dueRetransform) {
+      lc.debug?.('Auth maintenance woke up with no due work');
+      return;
+    }
+
+    lc.debug?.('Auth maintenance woke up with pending work', {
+      dueRevalidations: plan.dueRevalidations.length,
+      dueRetransform: plan.dueRetransform,
+    });
+
+    for (const connection of plan.dueRevalidations) {
+      try {
+        await this.#validateConnection(connection);
+      } catch (e) {
+        if (isProtocolError(e) && isTransformFailedError(e)) {
+          lc.warn?.(
+            'Scheduled auth revalidation failed; deferring auth maintenance',
+            {
+              clientID: connection.clientID,
+              wsID: connection.wsID,
+              message: e.message,
+            },
+          );
+          this.contextManager.deferMaintenance('revalidate');
+          return;
+        }
+        throw e;
+      }
+    }
+
+    // Revalidation can change which connection is safe for shared background work.
+    // Replan before deciding whether to run the group retransform.
+    const refreshedPlan = this.contextManager.planMaintenance();
+    if (refreshedPlan.dueRetransform) {
+      await this.#runBackgroundRetransform(lc);
+    }
+  }
+
   initConnection(
-    ctx: SyncContext,
+    selector: ConnectionSelector,
     initConnectionMessage: InitConnectionMessage,
   ): Source<Downstream> {
     this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
-      const {
-        clientID,
-        profileID,
-        wsID,
-        baseCookie,
-        httpCookie,
-        origin,
-        protocolVersion,
-      } = ctx;
-      this.#httpCookie = httpCookie;
-      this.#origin = origin;
-
-      // Handle custom query URL and headers
-      const [, {userQueryURL, userQueryHeaders}] = initConnectionMessage;
-      if (this.userQueryURL === undefined) {
-        // First client in the group - store its parameters
-        this.userQueryURL = userQueryURL;
-        this.userQueryHeaders = userQueryHeaders;
-      } else {
-        // Validate that subsequent clients have compatible parameters
-        if (this.userQueryURL !== userQueryURL) {
-          this.#lc.warn?.(
-            'Client provided different query parameters than client group',
-            {
-              clientID,
-              clientURL: userQueryURL,
-              clientGroupURL: this.userQueryURL,
-            },
-          );
-        }
-      }
+      const ctx = this.contextManager.mustGetConnectionContext(selector);
 
       const lc = this.#lc
-        .withContext('clientID', clientID)
-        .withContext('wsID', wsID);
+        .withContext('clientID', ctx.clientID)
+        .withContext('wsID', ctx.wsID);
 
       // Setup the downstream connection.
       const downstream = Subscription.create<Downstream>({
@@ -692,14 +733,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           err
             ? lc[getLogLevel(err)]?.(`client closed with error`, err)
             : lc.info?.('client closed');
-          this.#deleteClientDueToDisconnect(clientID, newClient);
+          this.#deleteClientDueToDisconnect(ctx.clientID, newClient);
           this.#activeClients.add(-1, {
-            [PROTOCOL_VERSION_ATTR]: protocolVersion,
+            [PROTOCOL_VERSION_ATTR]: ctx.protocolVersion,
           });
         },
       });
       this.#activeClients.add(1, {
-        [PROTOCOL_VERSION_ATTR]: protocolVersion,
+        [PROTOCOL_VERSION_ATTR]: ctx.protocolVersion,
       });
 
       if (this.#clients.size === 0) {
@@ -714,14 +755,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const newClient = new ClientHandler(
         lc,
         this.id,
-        clientID,
-        wsID,
+        ctx.clientID,
+        ctx.wsID,
         this.#shard,
-        baseCookie,
+        ctx.baseCookie,
         downstream,
       );
-      this.#clients.get(clientID)?.close(`replaced by wsID: ${wsID}`);
-      this.#clients.set(clientID, newClient);
+      this.#clients.get(ctx.clientID)?.close(`replaced by wsID: ${ctx.wsID}`);
+      this.#clients.set(ctx.clientID, newClient);
 
       // Note: initConnection() must be synchronous so that `downstream` is
       // immediately returned to the caller (connection.ts). This ensures
@@ -743,6 +784,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               'warn',
             );
           }
+          // Every new websocket must revalidate so shared maintenance always
+          // has a current validated connection to fall back to.
+          if (!(await this.#validateConnection(ctx))) {
+            return;
+          }
           await this.#handleConfigUpdate(
             lc,
             clientID,
@@ -753,7 +799,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             // `cg${clientGroupID}`, as is done in the schema migration.
             // As clients update to the zero version with the profileID logic,
             // the value will be correspondingly in the CVR db.
-            profileID ?? `cg${this.id}`,
+            ctx.profileID ?? `cg${this.id}`,
+            ctx,
           );
           // this.#authData  and cvr (in particular cvr.clientSchema) have been
           // initialized, signal the run loop to run.
@@ -767,83 +814,84 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   async changeDesiredQueries(
-    ctx: SyncContext,
+    selector: ConnectionSelector,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void> {
     await this.#runInLockForClient(
-      ctx,
+      selector,
       msg,
-      async (lc, clientID, msg: Partial<InitConnectionBody>, cvr) => {
-        let customQueryTransformMode: CustomQueryTransformMode = 'missing';
-        const currentAuthRevision = this.#authSession.revision;
-        if (this.#lastAuthRevision < currentAuthRevision) {
-          customQueryTransformMode = 'all';
-          lc.debug?.(
-            'Auth revision changed, setting customQueryTransformMode to all',
-          );
-        }
-
-        const result = await this.#handleConfigUpdate(
+      (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
+        this.#handleConfigUpdate(
           lc,
           clientID,
           msg,
           cvr,
-          customQueryTransformMode,
-        );
+          'missing',
+          undefined,
+          this.contextManager.mustGetConnectionContext(selector),
+        ),
+    );
+  }
 
-        // commit the new revision after the config update is successful
-        if (customQueryTransformMode === 'all') {
-          this.#lastAuthRevision = currentAuthRevision;
+  async updateAuth(
+    selector: ConnectionSelector,
+    msg: UpdateAuthMessage,
+    authRevisionChanged: boolean,
+  ): Promise<void> {
+    await this.#runInLockForClient(
+      selector,
+      msg,
+      async (lc, clientID, _, cvr) => {
+        // Avoid revalidation and query re-transformation if the revision is the same
+        if (!authRevisionChanged) {
+          lc.debug?.('Auth unchanged, skipping query re-transformation');
+          return;
+        }
+        lc.debug?.('Auth changed, re-validating and re-transforming queries');
+
+        const connection =
+          this.contextManager.mustGetConnectionContext(selector);
+
+        // If pipelines are not yet synced, there is no transform request that
+        // can absorb validation, so validate immediately.
+        if (!this.#pipelinesSynced) {
+          if (!(await this.#validateConnection(connection))) {
+            return;
+          }
         }
 
-        return result;
+        // Re-transform all queries so auth-sensitive query expansion matches
+        // the newly validated credential.
+        return await this.#handleConfigUpdate(
+          lc,
+          clientID,
+          {}, // no config updates, but we want to trigger re-transformation of custom queries if auth changed
+          cvr,
+          'all',
+          undefined,
+          connection,
+        );
       },
     );
   }
 
-  async updateAuth(ctx: SyncContext, msg: UpdateAuthMessage): Promise<void> {
-    await this.#runInLockForClient(ctx, msg, async (lc, clientID, _, cvr) => {
-      // update auth and check if the revision has changed
-      // if it has, we need to re-transform all queries since the auth data may be used in the transformation
-      const authResult = await this.#authSession.update(
-        ctx.userID,
-        msg[1].auth,
-      );
-      if (!authResult.ok) {
-        throw new ProtocolErrorWithLevel(authResult.error, 'warn');
-      }
-      const currentAuthRevision = this.#authSession.revision;
-      if (this.#lastAuthRevision >= currentAuthRevision) {
-        lc.debug?.('Auth revision unchanged, skipping query re-transformation');
-        return;
-      } else {
-        lc.debug?.('Auth revision changed, re-transforming queries');
-      }
-
-      const result = await this.#handleConfigUpdate(
-        lc,
-        clientID,
-        {}, // no config updates, but we want to trigger re-transformation of custom queries if auth changed
-        cvr,
-        'all',
-      );
-
-      // commit the new revision after the config update is successful
-      this.#lastAuthRevision = currentAuthRevision;
-
-      return result;
-    });
-  }
-
   async deleteClients(
-    ctx: SyncContext,
+    selector: ConnectionSelector,
     msg: DeleteClientsMessage,
   ): Promise<string[]> {
     const deletedClientIDs = await this.#runInLockForClient(
-      ctx,
+      selector,
       [msg[0], {deleted: msg[1]}],
       (lc, clientID, msg: Partial<InitConnectionBody>, cvr) =>
-        this.#handleConfigUpdate(lc, clientID, msg, cvr, 'missing'),
+        this.#handleConfigUpdate(
+          lc,
+          clientID,
+          msg,
+          cvr,
+          'missing',
+          undefined,
+          this.contextManager.mustGetConnectionContext(selector),
+        ),
     );
     return deletedClientIDs ?? [];
   }
@@ -924,6 +972,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
     clientID: string,
     customQueryTransformMode: CustomQueryTransformMode,
+    ctx: ConnectionContext | undefined,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
   ): Promise<CVRSnapshot> {
     const updater = new CVRConfigDrivenUpdater(
@@ -958,7 +1007,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     if (this.#pipelinesSynced) {
-      await this.#syncQueryPipelineSet(lc, this.#cvr, customQueryTransformMode);
+      await this.#syncQueryPipelineSet(
+        lc,
+        this.#cvr,
+        customQueryTransformMode,
+        ctx,
+      );
     }
 
     return this.#cvr;
@@ -969,7 +1023,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * optionally adding the `newClient` if supplied.
    */
   #runInLockForClient<B, R = void, M extends [cmd: string, B] = [string, B]>(
-    ctx: SyncContext,
+    selector: ConnectionSelector,
     msg: M,
     fn: (
       lc: LogContext,
@@ -980,7 +1034,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     newClient?: ClientHandler,
   ): Promise<R | undefined> {
     this.#lc.debug?.('viewSyncer.#runInLockForClient');
-    const {clientID, wsID} = ctx;
+    const {clientID, wsID} = selector;
     const [cmd, body] = msg;
 
     if (newClient || !this.#clients.has(clientID)) {
@@ -995,6 +1049,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         span.setAttribute('clientID', clientID);
         let client: ClientHandler | undefined;
         let result: R | undefined;
+        let ctx: ConnectionContext | undefined;
         try {
           await this.#runInLockWithCVR(async (lc, cvr) => {
             lc = lc
@@ -1010,6 +1065,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               // Connections may have been drained or dropped due to an error.
               return;
             }
+
+            ctx = this.contextManager.getConnectionContext(selector);
 
             if (newClient) {
               assert(
@@ -1030,9 +1087,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('wsID', wsID)
             .withContext('cmd', cmd);
           lc[getLogLevel(e)]?.(`closing connection with error`, e);
-          if (isTransformAuthFailure(e)) {
-            lc.debug?.('Auth failure detected in transform response');
-            this.clearAuth();
+          if (ctx) {
+            this.contextManager.failConnection(selector, ctx.revision);
           }
           if (client) {
             // Ideally, propagate the exception to the client's downstream subscription ...
@@ -1069,7 +1125,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
     customQueryTransformMode: CustomQueryTransformMode,
-    profileID?: string,
+    profileID: string | undefined,
+    ctx: ConnectionContext,
   ) =>
     startAsyncSpan(tracer, 'vs.#handleConfigUpdate', async () => {
       const deletedClientIDs: string[] = [];
@@ -1080,6 +1137,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         cvr,
         clientID,
         customQueryTransformMode,
+        ctx,
         updater => {
           const {ttlClock} = cvr;
           const patches: PatchToVersion[] = [];
@@ -1282,6 +1340,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
+    const backgroundContext =
+      this.contextManager.mustGetBackgroundConnectionContext();
     const customQueryTransformer = this.#customQueryTransformer;
     if (customQueryTransformer && customQueries.size > 0) {
       // Always transform custom queries during initialization to ensure
@@ -1291,19 +1351,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         '#hydrateUnchangedQueries transforming custom queries',
         () =>
           customQueryTransformer.transform(
-            this.#getHeaderOptions(this.#queryConfig.forwardCookies),
+            backgroundContext,
             customQueries.values(),
-            this.userQueryURL,
           ),
       );
+      if (!transformedCustomQueries.cached) {
+        this.contextManager.validateConnection(
+          backgroundContext,
+          backgroundContext.revision,
+        );
+      }
 
       // Only process queries that successfully transformed and transformed to
       // the same transformationHash as in the CVR here.
       // Queries that failed to transform will be retransformed by
       // #syncQueryPipelineSet, if they fail again errors will be sent to
       // the client.
-      if (Array.isArray(transformedCustomQueries)) {
-        for (const q of transformedCustomQueries) {
+      if (Array.isArray(transformedCustomQueries.result)) {
+        for (const q of transformedCustomQueries.result) {
           if ('error' in q) {
             customErrorCount++;
           } else if (
@@ -1318,7 +1383,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     for (const q of otherQueries) {
-      const auth = this.#authSession.auth;
       const transformed = transformAndHashQuery(
         lc,
         q.id,
@@ -1326,7 +1390,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         must(this.#pipelines.currentPermissions()).permissions ?? {
           tables: {},
         },
-        auth?.type === 'jwt' ? auth : undefined,
+        backgroundContext.auth?.type === 'jwt'
+          ? backgroundContext.auth
+          : undefined,
         q.type === 'internal',
       );
       if (transformed.transformationHash === q.transformationHash) {
@@ -1481,6 +1547,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
     customQueryTransformMode: CustomQueryTransformMode,
+    ctx: ConnectionContext | undefined,
   ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
       span.setAttribute('clientGroupID', this.id);
@@ -1512,6 +1579,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         origQuery: QueryRecord;
         transformed: TransformedAndHashed;
       }[] = [];
+      // When a specific connection triggered this work, use its context.
+      // Only background/shared sync work falls back to the selected
+      // validated connection.
+      const resolvedContext =
+        ctx ?? this.contextManager.mustGetBackgroundConnectionContext();
+
       for (const [id, query] of cvrQueryEntires) {
         if (query.type === 'custom') {
           // This should always match, no?
@@ -1525,7 +1598,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       for (const {id, query: origQuery} of otherQueries) {
         // This should always match, no?
         assert(id === origQuery.id, 'query id mismatch');
-        const auth = this.#authSession.auth;
         const transformed = transformAndHashQuery(
           lc,
           origQuery.id,
@@ -1533,7 +1605,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           must(this.#pipelines.currentPermissions()).permissions ?? {
             tables: {},
           },
-          auth?.type === 'jwt' ? auth : undefined,
+          resolvedContext.auth?.type === 'jwt'
+            ? resolvedContext.auth
+            : undefined,
           origQuery.type === 'internal',
         );
         transformedQueries.push({
@@ -1563,29 +1637,35 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // This ensures the user's API server validates authorization with the
         // current auth context.
         const transformStart = performance.now();
-        let transformedCustomQueries;
+        let transformedCustomQueries: TransformAttempt;
         try {
           transformedCustomQueries = await this.#runPriorityOp(
             lc,
             '#syncQueryPipelineSet transforming custom queries',
             () =>
               customQueryTransformer.transform(
-                this.#getHeaderOptions(true),
+                resolvedContext,
                 customQueriesToTransform,
-                this.userQueryURL,
               ),
           );
 
           // Check if transform failed entirely (HTTP error or server-side failure).
           // This should disconnect the client and keep existing pipelines intact.
-          if (
-            !Array.isArray(transformedCustomQueries) &&
-            transformedCustomQueries.kind === ErrorKind.TransformFailed
-          ) {
-            // TransformFailedBody indicates an HTTP or infrastructure error.
-            // Throw to disconnect the client without modifying pipelines.
-            throw new ProtocolErrorWithLevel(transformedCustomQueries, 'warn');
+          if ('kind' in transformedCustomQueries.result) {
+            throw new ProtocolErrorWithLevel(
+              transformedCustomQueries.result,
+              'warn',
+            );
           } else {
+            // If the transform wasn't cached, we mark the connection as validated.
+            // This also passes the revision to ensure that race conditions with auth
+            // don't validate stale credentials.
+            if (!transformedCustomQueries.cached) {
+              this.contextManager.validateConnection(
+                resolvedContext,
+                resolvedContext.revision,
+              );
+            }
             this.#queryTransformations.add(1, {result: 'success'});
           }
         } catch (e) {
@@ -1603,7 +1683,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         >();
         erroredQueryIDs = this.#processTransformedCustomQueries(
           lc,
-          transformedCustomQueries,
+          transformedCustomQueries.result,
           (q: TransformedAndHashed) => {
             const origQuery = customQueries.get(q.id);
             if (origQuery) {
@@ -2130,8 +2210,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  async inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
-    await this.#runInLockForClient(context, msg, this.#handleInspect);
+  async inspect(
+    selector: ConnectionSelector,
+    msg: InspectUpMessage,
+  ): Promise<void> {
+    await this.#runInLockForClient(selector, msg, this.#handleInspect);
   }
 
   // oxlint-disable-next-line require-await
@@ -2142,7 +2225,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
   ): Promise<void> => {
     const client = must(this.#clients.get(clientID));
-    const auth = this.#authSession.auth;
+    const ctx = this.contextManager.mustGetConnectionContext({
+      clientID,
+      wsID: client.wsID,
+    });
     return handleInspect(
       lc,
       body,
@@ -2152,11 +2238,122 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.id,
       this.#cvrStore,
       this.#config,
-      this.#getHeaderOptions(this.#queryConfig.forwardCookies ?? false),
-      this.userQueryURL,
-      auth?.type === 'jwt' ? auth : undefined,
+      ctx,
     );
   };
+
+  async #runBackgroundRetransform(lc: LogContext): Promise<void> {
+    const attemptRetransform = async (connection: ConnectionContext) => {
+      await this.#syncQueryPipelineSet(
+        lc,
+        must(this.#cvr, 'cvr missing during auth maintenance retransform'),
+        'all',
+        connection,
+      );
+      this.contextManager.markBackgroundRetransformSuccess(
+        {
+          clientID: connection.clientID,
+          wsID: connection.wsID,
+        },
+        connection.revision,
+      );
+    };
+
+    let backgroundConnection =
+      this.contextManager.getBackgroundConnectionContext();
+    if (!backgroundConnection) {
+      // The timer may have fired using an old deadline. If there is no longer a
+      // selected validated connection, shared background retransform is simply
+      // unschedulable until one exists again.
+      lc.debug?.('Skipping background retransform with no selected connection');
+      return;
+    }
+
+    for (;;) {
+      try {
+        await attemptRetransform(backgroundConnection);
+        return;
+      } catch (e) {
+        if (isProtocolError(e)) {
+          if (isAuthErrorBody(e.errorBody)) {
+            lc.warn?.(
+              'Background retransform auth failed; failing connection and searching for replacement',
+              {
+                clientID: backgroundConnection.clientID,
+                message: e.message,
+              },
+            );
+            this.#failMaintenanceConnection(backgroundConnection, e);
+          } else if (isTransformFailedError(e)) {
+            lc.warn?.(
+              'Background retransform failed; deferring auth maintenance',
+              {
+                clientID: backgroundConnection.clientID,
+                message: e.message,
+              },
+            );
+            this.contextManager.deferMaintenance('retransform');
+            return;
+          }
+        } else {
+          throw e;
+        }
+      }
+
+      const replacement = this.contextManager.getBackgroundConnectionContext();
+      if (!replacement) {
+        // The selected connection failed and nothing valid replaced it, so
+        // there is no credential left that can safely drive shared background
+        // reads.
+        lc.debug?.(
+          'No replacement connection available for background retransform',
+        );
+        return;
+      }
+
+      lc.debug?.(
+        'Retrying background retransform with replacement connection',
+        {
+          clientID: replacement.clientID,
+          wsID: replacement.wsID,
+        },
+      );
+      backgroundConnection = replacement;
+    }
+  }
+
+  async #validateConnection(ctx: ConnectionContext): Promise<boolean> {
+    try {
+      if (this.#customQueryTransformer) {
+        const validation = await this.#customQueryTransformer.validate(ctx);
+        if (validation !== undefined) {
+          throw new ProtocolErrorWithLevel(validation, 'warn');
+        }
+      }
+
+      this.contextManager.validateConnection(ctx, ctx.revision);
+      return true;
+    } catch (e) {
+      if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
+        this.#failMaintenanceConnection(ctx, e);
+        return false;
+      }
+      throw e;
+    }
+  }
+
+  #failMaintenanceConnection(ctx: ConnectionContext, error: ProtocolError) {
+    const failed = this.contextManager.failConnection(ctx, ctx.revision);
+    if (!failed) {
+      return;
+    }
+
+    const wrapped = wrapWithProtocolError(error);
+    const client = this.#clients.get(ctx.clientID);
+    if (client?.wsID === ctx.wsID) {
+      client.fail(wrapped);
+    }
+  }
 
   stop(): Promise<void> {
     this.#lc.info?.('stopping view syncer');
@@ -2166,10 +2363,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   async #cleanup(err?: unknown) {
-    this.clearAuth();
-
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
+    this.#stopAuthMaintenanceTimer();
 
     for (const client of this.#clients.values()) {
       if (err) {
@@ -2248,15 +2444,10 @@ function checkClientAndCVRVersions(
   }
 }
 
-function isTransformAuthFailure(error: unknown): boolean {
-  if (!isProtocolError(error)) {
-    return false;
-  }
-
+function isTransformFailedError(error: ProtocolError): boolean {
   return (
     error.errorBody.kind === ErrorKind.TransformFailed &&
-    error.errorBody.reason === ErrorReason.HTTP &&
-    (error.errorBody.status === 401 || error.errorBody.status === 403)
+    !isAuthErrorBody(error.errorBody)
   );
 }
 

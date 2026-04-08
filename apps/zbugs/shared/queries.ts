@@ -98,11 +98,9 @@ export const queries = defineQueries({
 
   issuePreloadV2: defineQuery(
     z.object({
-      userID: z.string(),
       projectName: z.string(),
     }),
-
-    ({ctx: auth, args: {userID, projectName}}) =>
+    ({ctx: auth, args: {projectName}}) =>
       applyIssuePermissions(
         builder.issue
           .whereExists(
@@ -111,7 +109,9 @@ export const queries = defineQueries({
             {scalar: true},
           )
           .related('labels')
-          .related('viewState', q => q.where('userID', userID))
+          .related('viewState', q =>
+            auth?.sub ? q.where('userID', auth.sub) : alwaysFalse(q),
+          )
           .related('creator')
           .related('assignee')
           .related('emoji', emoji => emoji.related('creator'))
@@ -181,10 +181,8 @@ export const queries = defineQueries({
     z.object({
       idField: z.union([z.literal('shortID'), z.literal('id')]),
       id: z.union([z.string(), z.number()]),
-      userID: z.string(),
     }),
-
-    ({args: {idField, id, userID}, ctx: auth}) =>
+    ({args: {idField, id}, ctx: auth}) =>
       applyIssuePermissions(
         builder.issue
           .where(idField, id)
@@ -193,9 +191,14 @@ export const queries = defineQueries({
           .related('creator')
           .related('assignee')
           .related('labels')
-          .related('notificationState', q => q.where('userID', userID))
+          .related('notificationState', q =>
+            auth?.sub ? q.where('userID', auth.sub) : alwaysFalse(q),
+          )
           .related('viewState', viewState =>
-            viewState.where('userID', userID).one(),
+            (auth?.sub
+              ? viewState.where('userID', auth.sub)
+              : alwaysFalse(viewState)
+            ).one(),
           )
           .related('comments', comments =>
             comments
@@ -214,15 +217,14 @@ export const queries = defineQueries({
   issueListV2: defineQuery(
     z.object({
       listContext: listContextParams,
-      userID: z.string(),
       limit: z.nullable(z.number()),
       start: z.nullable(issueRowSortSchema),
       dir: z.union([z.literal('forward'), z.literal('backward')]),
       inclusive: z.optional(z.boolean()),
     }),
 
-    ({ctx: auth, args: {listContext, userID, limit, start, dir, inclusive}}) =>
-      issueListV2(listContext, limit, userID, auth, start, dir, inclusive),
+    ({ctx: auth, args: {listContext, limit, start, dir, inclusive}}) =>
+      issueListV2(listContext, limit, auth?.sub, auth, start, dir, inclusive),
   ),
 
   /**
@@ -249,27 +251,6 @@ export const queries = defineQueries({
   // TODO(arv): Remove
 
   // The below queries are DEPRECATED
-  issuePreload: defineQuery(idValidator, ({ctx: auth, args: userID}) =>
-    applyIssuePermissions(
-      builder.issue
-        .related('labels')
-        .related('viewState', q => q.where('userID', userID))
-        .related('creator')
-        .related('assignee')
-        .related('emoji', emoji => emoji.related('creator'))
-        .related('comments', comments =>
-          comments
-            .related('creator')
-            .related('emoji', emoji => emoji.related('creator'))
-            .limit(10)
-            .orderBy('created', 'desc'),
-        )
-        .orderBy('modified', 'desc')
-        .orderBy('id', 'desc')
-        .limit(1000),
-      auth?.role,
-    ),
-  ),
   prevNext: defineQuery(
     z.object({
       listContext: z.nullable(listContextParams),
@@ -288,11 +269,10 @@ export const queries = defineQueries({
   issueList: defineQuery(
     z.object({
       listContext: listContextParams,
-      userID: z.string(),
       limit: z.number(),
     }),
-    ({ctx: auth, args: {listContext, userID, limit}}) =>
-      issueListV2(listContext, limit, userID, auth, null, 'forward', false),
+    ({ctx: auth, args: {listContext, limit}}) =>
+      issueListV2(listContext, limit, auth?.sub, auth, null, 'forward', false),
   ),
 
   userPicker: defineQuery(
@@ -334,7 +314,7 @@ export type ListContext = {
 function issueListV2(
   listContext: ListContextParams,
   limit: number | null,
-  userID: string,
+  userID: string | undefined,
   auth: AuthData | undefined,
   start: IssueRowSort | null,
   dir: 'forward' | 'backward',
@@ -355,7 +335,7 @@ export type ListQueryArgs = {
   issueQuery?: (typeof builder)['issue'] | undefined;
   listContext?: ListContext['params'] | undefined;
   project?: string | undefined;
-  userID?: string;
+  userID?: string | undefined;
   role?: Role | undefined;
   limit?: number | undefined;
   start?: IssueRowSort | undefined;

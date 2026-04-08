@@ -90,26 +90,26 @@ export interface Connection {
    * Resumes the connection from a terminal state.
    *
    * If called when not in a terminal state, this method does nothing.
+   * To clear existing auth credentials, create a new Zero instance with `auth` omitted.
    *
    * @param opts - Optional connection options
    * @param opts.auth - Token to use for authentication. If provided, this overrides
    *                    the stored auth credential for this connection attempt.
-   *                    If `null` or `undefined`, the stored auth credential is cleared.
    * @returns A promise that resolves once the connection state has transitioned to connecting.
    */
-  connect(opts?: {auth: string | null | undefined}): Promise<void>;
+  connect(opts?: {auth: string}): Promise<void>;
 }
 
 export class ConnectionImpl implements Connection {
   readonly #connectionManager: ConnectionManager;
   readonly #lc: LogContext;
   readonly #source: ConnectionSource;
-  readonly #setAuth: (auth: string | null | undefined) => void;
+  readonly #setAuth: (auth: string) => void;
 
   constructor(
     connectionManager: ConnectionManager,
     lc: LogContext,
-    setAuth: (auth: string | null | undefined) => void,
+    setAuth: (auth: string) => void,
   ) {
     this.#connectionManager = connectionManager;
     this.#lc = lc;
@@ -121,7 +121,7 @@ export class ConnectionImpl implements Connection {
     return this.#source;
   }
 
-  async connect(opts?: {auth: string | null | undefined}): Promise<void> {
+  async connect(opts?: {auth: string}): Promise<void> {
     const lc = this.#lc.withContext('connect');
 
     if (opts && 'auth' in opts) {

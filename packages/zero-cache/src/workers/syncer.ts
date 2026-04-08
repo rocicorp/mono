@@ -4,8 +4,14 @@ import {pid} from 'node:process';
 import type {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {type ValidateLegacyJWT} from '../auth/auth.ts';
-import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {
+  isProtocolError,
+  ProtocolError,
+} from '../../../zero-protocol/src/error.ts';
+import {resolveAuth, type Auth, type ValidateLegacyJWT} from '../auth/auth.ts';
+import {tokenConfigOptions} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
 import {
   recordConnectionAttempted,
@@ -21,6 +27,7 @@ import type {
   Service,
   SingletonService,
 } from '../services/service.ts';
+import type {ConnectionContextManager} from '../services/view-syncer/connection-context-manager.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {Worker} from '../types/processes.ts';
@@ -80,6 +87,7 @@ export class Syncer implements SingletonService {
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
   readonly #config: ZeroConfig;
+  readonly #validateLegacyJWT: ValidateLegacyJWT | undefined;
 
   constructor(
     lc: LogContext,
@@ -88,13 +96,19 @@ export class Syncer implements SingletonService {
       id: string,
       sub: Subscription<ReplicaState>,
       drainCoordinator: DrainCoordinator,
-      validateLegacyJWT: ValidateLegacyJWT | undefined,
     ) => ViewSyncer & ActivityBasedService,
     mutagenFactory: ((id: string) => Mutagen & Service) | undefined,
-    pusherFactory: ((id: string) => Pusher & Service) | undefined,
+    pusherFactory:
+      | ((
+          id: string,
+          contextManager: ConnectionContextManager,
+        ) => Pusher & Service)
+      | undefined,
     parent: Worker,
+    validateLegacyJWT: ValidateLegacyJWT | undefined,
   ) {
     this.#config = config;
+    this.#validateLegacyJWT = validateLegacyJWT;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent);
@@ -103,20 +117,19 @@ export class Syncer implements SingletonService {
     this.#lc = lc;
     this.#viewSyncers = new ServiceRunner(
       lc,
-      id =>
-        viewSyncerFactory(
-          id,
-          notifier.subscribe(),
-          this.#drainCoordinator,
-          this.#validateLegacyJWT(),
-        ),
+      id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
     );
     if (mutagenFactory) {
       this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
     }
     if (pusherFactory) {
-      this.#pushers = new ServiceRunner(lc, pusherFactory, p => p.hasRefs());
+      this.#pushers = new ServiceRunner(
+        lc,
+        id =>
+          pusherFactory(id, this.#viewSyncers.getService(id).contextManager),
+        p => p.hasRefs(),
+      );
     }
     this.#parent = parent;
     this.#wss = new WebSocketServer(getWebSocketServerOptions(config));
@@ -163,18 +176,64 @@ export class Syncer implements SingletonService {
       }
     }
 
-    const viewSyncer = this.#viewSyncers.getService(clientGroupID);
+    let initialAuth: Auth | undefined;
 
     // Verify JWT BEFORE touching existing connections - prevents unauthenticated
-    // attackers from force-disconnecting legitimate users via DoS
-    const authResult = await viewSyncer.initAuthSession(userID, auth);
-    if (!authResult.ok) {
-      sendError(this.#lc, ws, authResult.error);
-      ws.close(3000, authResult.error.message);
+    // attackers from force-disconnecting legitimate users via DoS.
+    try {
+      initialAuth = await resolveAuth(
+        this.#lc
+          .withContext('clientGroupID', clientGroupID)
+          .withContext('clientID', clientID),
+        // no previous auth, since this is a new connection, and resolveAuth is
+        // connection scoped, not client group scoped
+        undefined,
+        userID,
+        auth,
+        this.#validateLegacyJWT,
+      );
+    } catch (e) {
+      if (isProtocolError(e)) {
+        this.#lc.warn?.(
+          'Rejecting sync connection during initial auth resolution',
+          {
+            clientGroupID,
+            clientID,
+            userID,
+            hasProvidedAuth,
+            errorKind: e.message,
+          },
+        );
+        sendError(this.#lc, ws, e.errorBody);
+        ws.close(3000, e.errorBody.message);
+        return;
+      }
+      throw e;
+    }
+
+    const viewSyncer = this.#viewSyncers.getService(clientGroupID);
+    const contextManager = viewSyncer.contextManager;
+    const group = contextManager.getGroupState();
+
+    // TODO(0xcadams): we only check for user ID mismatch here if the group is
+    // already validated. This prevents wrong-user reconnects from evicting a
+    // healthy connection, but it does not protect against same-user reconnects
+    // with an invalid opaque token. The long-term fix is to keep the replacement
+    // connection pending until its auth is fully validated, and only then replace
+    // the existing socket.
+    if (group.validated && group.userID !== userID) {
+      const error = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message:
+          'Client groups are pinned to a single userID. Connection userID does not match existing client group userID.',
+        origin: ErrorOrigin.ZeroCache,
+      });
+      sendError(this.#lc, ws, error.errorBody);
+      ws.close(3000, error.message);
       return;
     }
 
-    // Only check for and close existing connections AFTER auth is validated
+    // Check for and close existing connections AFTER auth is validated
     const existing = this.#connections.get(clientID);
     if (existing) {
       this.#lc.debug?.(
@@ -182,6 +241,12 @@ export class Syncer implements SingletonService {
       );
       existing.close(`replaced by ${params.wsID}`);
     }
+
+    contextManager.registerConnection(
+      {clientID, wsID: params.wsID},
+      params,
+      initialAuth,
+    );
 
     const mutagen = this.#mutagens?.getService(clientGroupID);
     const pusher = this.#pushers?.getService(clientGroupID);
@@ -198,11 +263,16 @@ export class Syncer implements SingletonService {
         new SyncerWsMessageHandler(
           this.#lc,
           params,
+          contextManager,
           viewSyncer,
           mutagen,
           pusher,
         ),
         () => {
+          contextManager.closeConnection({
+            clientID,
+            wsID: params.wsID,
+          });
           if (this.#connections.get(clientID) === connection) {
             this.#connections.delete(clientID);
           }
@@ -213,6 +283,7 @@ export class Syncer implements SingletonService {
         },
       );
     } catch (e) {
+      contextManager.closeConnection({clientID, wsID: params.wsID});
       mutagen?.unref();
       pusher?.unref();
       throw e;
@@ -269,28 +340,5 @@ export class Syncer implements SingletonService {
     this.#wss.close();
     this.#stopped.resolve();
     return promiseVoid;
-  }
-
-  /** @deprecated used in JWT validation */
-  #validateLegacyJWT(): ValidateLegacyJWT | undefined {
-    const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
-    if (tokenOptions.length !== 1) {
-      return undefined;
-    }
-
-    return async (token, {userID}) => {
-      const decoded = await verifyToken(this.#config.auth, token, {
-        subject: userID,
-        ...(this.#config.auth?.issuer && {issuer: this.#config.auth.issuer}),
-        ...(this.#config.auth?.audience && {
-          audience: this.#config.auth.audience,
-        }),
-      });
-      return {
-        type: 'jwt',
-        raw: token,
-        decoded,
-      };
-    };
   }
 }

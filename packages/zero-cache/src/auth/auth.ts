@@ -7,6 +7,8 @@ import {
   ProtocolError,
   type ErrorBody,
 } from '../../../zero-protocol/src/error.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import type {PushError} from '../../../zero-protocol/src/push.ts';
 
 /** @deprecated JWT auth is deprecated */
 export type JWTAuth = {
@@ -22,42 +24,16 @@ export type OpaqueAuth = {
 
 export type Auth = OpaqueAuth | JWTAuth;
 
-export interface AuthSession {
-  /** Update the auth session with a new userID and token from the client */
-  update(
-    userID: string,
-    wireAuth: string | undefined,
-  ): Promise<AuthUpdateResult>;
-
-  /** The revision of the auth state */
-  get revision(): number;
-
-  /** The auth state for the session */
-  get auth(): Auth | undefined;
-
-  /** Clear the auth session, removing any stored auth and allowing a new userID to be bound on the next update. */
-  clear(): void;
-}
-
-export type AuthUpdateResult =
-  | {
-      readonly ok: true;
-    }
-  | {
-      readonly ok: false;
-      readonly error: ErrorBody;
-    };
-
 export type ValidateLegacyJWT = (
   token: string,
-  ctx: {readonly userID: string},
+  ctx: {readonly userID: string | undefined},
 ) => Promise<JWTAuth>;
 
 function isProvidedAuth(wireAuth: string | undefined): wireAuth is string {
   return wireAuth !== undefined && wireAuth !== '';
 }
 
-function authEquals(a: Auth | null | undefined, b: Auth | null | undefined) {
+export function authEquals(a: Auth | undefined, b: Auth | undefined) {
   if (a === b) {
     return true;
   }
@@ -67,129 +43,82 @@ function authEquals(a: Auth | null | undefined, b: Auth | null | undefined) {
   return a.type === b.type && a.raw === b.raw;
 }
 
-export class AuthSessionImpl implements AuthSession {
-  readonly id: string;
-  readonly #lc: LogContext;
-  readonly #validateLegacyJWT: ValidateLegacyJWT | undefined;
-  #auth: Auth | undefined = undefined;
-  #boundUserID: string | undefined;
-  #revision = 0;
+/**
+ * Resolves one auth snapshot transition without binding it to a client group.
+ */
+export async function resolveAuth(
+  lc: LogContext,
+  previousAuth: Auth | undefined,
+  userID: string | undefined,
+  wireAuth: string | undefined,
+  validateLegacyJWT: ValidateLegacyJWT | undefined,
+): Promise<Auth | undefined> {
+  try {
+    const hasProvidedAuth = isProvidedAuth(wireAuth);
 
-  constructor(
-    lc: LogContext,
-    clientGroupID: string,
-    validateLegacyJWT: ValidateLegacyJWT | undefined,
-  ) {
-    this.id = clientGroupID;
-    this.#lc = lc;
-    this.#validateLegacyJWT = validateLegacyJWT;
-  }
-
-  get auth(): Auth | undefined {
-    return this.#auth;
-  }
-
-  get revision(): number {
-    return this.#revision;
-  }
-
-  clear(): void {
-    const lc = this.#lc.withContext(
-      'boundUserID',
-      this.#boundUserID ?? 'unknown',
-    );
-    lc.debug?.(`Clearing auth session`);
-    this.#auth = undefined;
-    this.#boundUserID = undefined;
-    this.#revision = 0;
-  }
-
-  async update(
-    userID: string,
-    wireAuth: string | undefined,
-  ): Promise<AuthUpdateResult> {
-    try {
-      const lc = this.#lc.withContext('newUserID', userID);
-
-      // check if the auth update is trying to change the bound userID for this client group
-      if (this.#boundUserID && this.#boundUserID !== userID) {
-        return {
-          ok: false,
-          error: {
-            kind: ErrorKind.Unauthorized,
-            message:
-              'Client groups are pinned to a single user. Connection userID does not match existing client group userID.',
-            origin: ErrorOrigin.ZeroCache,
-          },
-        };
-      }
-
-      const previousAuth = this.#auth;
-      const hasProvidedAuth = isProvidedAuth(wireAuth);
-      let nextAuth = previousAuth;
-
-      if (previousAuth) {
-        lc.debug?.(`Attempting to update auth from previous value`);
-      } else {
-        lc.debug?.(`Attempting to initialize auth`);
-      }
-
-      if (!hasProvidedAuth && previousAuth) {
-        return {
-          ok: false,
-          error: {
-            kind: ErrorKind.Unauthorized,
-            message:
-              'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
-            origin: ErrorOrigin.ZeroCache,
-          },
-        };
-      }
-
-      if (!hasProvidedAuth) {
-        nextAuth = undefined;
-        lc.debug?.(`Cleared auth`);
-      } else if (this.#validateLegacyJWT !== undefined) {
-        const verifiedToken = await this.#validateLegacyJWT(wireAuth, {userID});
-        nextAuth = pickToken(this.#lc, this.#auth, verifiedToken);
-        lc.debug?.(`Updated auth with JWT`);
-      } else {
-        if (this.#auth?.type === 'jwt') {
-          throw new Error(
-            'Cannot change auth type from legacy to opaque token',
-          );
-        }
-        nextAuth = {
-          type: 'opaque',
-          raw: wireAuth,
-        };
-        lc.debug?.(`Updated auth with opaque token`);
-      }
-
-      this.#auth = nextAuth;
-      this.#boundUserID ??= userID;
-
-      if (!authEquals(previousAuth, nextAuth)) {
-        this.#revision++;
-      }
-    } catch (e) {
-      if (isProtocolError(e)) {
-        return {
-          ok: false,
-          error: e.errorBody,
-        };
-      }
-      return {
-        ok: false,
-        error: {
-          kind: ErrorKind.AuthInvalidated,
-          message: `Failed to decode auth token: ${String(e)}`,
-          origin: ErrorOrigin.ZeroCache,
-        },
-      };
+    if (previousAuth) {
+      lc.debug?.(`Attempting to update auth from previous value`);
+    } else {
+      lc.debug?.(`Attempting to initialize auth`);
     }
 
-    return {ok: true};
+    if (!hasProvidedAuth && previousAuth) {
+      throw new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message:
+          'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
+        origin: ErrorOrigin.ZeroCache,
+      });
+    }
+
+    if (!hasProvidedAuth) {
+      lc.debug?.(`Cleared auth`);
+      return undefined;
+    }
+
+    if (userID === undefined) {
+      throw new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'Authenticated connections require a userID.',
+        origin: ErrorOrigin.ZeroCache,
+      });
+    }
+
+    if (validateLegacyJWT !== undefined) {
+      const verifiedToken = await validateLegacyJWT(wireAuth, {userID});
+      const nextAuth = pickToken(lc, previousAuth, verifiedToken);
+      lc.debug?.(`Updated auth with JWT`);
+      return nextAuth;
+    }
+
+    if (previousAuth?.type === 'jwt') {
+      throw new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message:
+          'Token type cannot change from JWT to opaque. Connections are pinned to a single token type.',
+        origin: ErrorOrigin.ZeroCache,
+      });
+    }
+
+    if (previousAuth?.type === 'opaque' && previousAuth.raw === wireAuth) {
+      lc.debug?.(`Opaque auth unchanged, reusing previous snapshot`);
+      return previousAuth;
+    }
+
+    lc.debug?.(`Updated auth with opaque token`);
+    return {
+      type: 'opaque',
+      raw: wireAuth,
+    };
+  } catch (e) {
+    if (isProtocolError(e)) {
+      throw e;
+    }
+    throw new ProtocolError({
+      kind: ErrorKind.AuthInvalidated,
+      message: `Failed to decode auth token: ${String(e)}`,
+      origin: ErrorOrigin.ZeroCache,
+    });
   }
 }
 
@@ -277,4 +206,38 @@ export function pickToken(
       'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
     origin: ErrorOrigin.ZeroCache,
   });
+}
+
+export function isAuthErrorBody(ex: unknown): ex is ErrorBody | PushError {
+  if (typeof ex !== 'object' || ex === null) {
+    return false;
+  }
+
+  if ('error' in ex) {
+    return (
+      ex.error === 'http' &&
+      'status' in ex &&
+      (ex.status === 401 || ex.status === 403)
+    );
+  }
+
+  if (!('kind' in ex)) {
+    return false;
+  }
+
+  if (
+    ex.kind === ErrorKind.AuthInvalidated ||
+    ex.kind === ErrorKind.Unauthorized
+  ) {
+    return true;
+  }
+
+  return (
+    (ex.kind === ErrorKind.PushFailed ||
+      ex.kind === ErrorKind.TransformFailed) &&
+    'reason' in ex &&
+    ex.reason === ErrorReason.HTTP &&
+    'status' in ex &&
+    (ex.status === 401 || ex.status === 403)
+  );
 }
