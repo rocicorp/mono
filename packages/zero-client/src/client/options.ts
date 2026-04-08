@@ -45,6 +45,9 @@ export type ZeroOptions<
    * The call to `connect` is handled automatically by the ZeroProvider component
    * for React and SolidJS when the `auth` prop changes.
    *
+   * Transitions between authenticated and logged-out states recreate the Zero
+   * instance instead.
+   *
    * When `auth` changes while connected, Zero refreshes server-side auth context
    * and re-transforms queries without reconnecting.
    *
@@ -57,15 +60,16 @@ export type ZeroOptions<
   /**
    * A unique identifier for the user.
    *
+   * Omit this, or set to `null`, for logged-out clients.
+   *
+   * This is passed to the query/mutate endpoints via an `X-User-ID` header and
+   * must be used to validate claimed user identity against the provided auth
+   * on the server (either token or cookie auth).
+   *
    * Each userID gets its own client-side storage so that the app can switch
    * between users without losing state.
-   *
-   * Omit this only for logged-out clients.
-   *
-   * This must match the `sub` claim of the `auth` token if
-   * `auth` is provided.
    */
-  userID?: string | undefined;
+  userID?: string | null | undefined;
 
   /**
    * Distinguishes the storage used by this Zero instance from that of other
