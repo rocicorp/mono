@@ -76,10 +76,10 @@ jobs:
           --github-actions '${{ github.token }}' \
           --start-point main \
           --threshold-measure throughput \
-          --threshold-test percentage \
-          --threshold-lower-boundary 0.15 \
-          --threshold-min-sample-size 10 \
-          --threshold-max-sample-size 30 \
+          --threshold-test t_test \
+          --threshold-lower-boundary 0.99 \
+          --threshold-min-sample-size 3 \
+          --threshold-max-sample-size 12 \
           --err
 
       - name: Upload benchmark results (PR)
@@ -100,8 +100,8 @@ jobs:
           --start-point-clone-thresholds \
           --start-point-reset \
           --threshold-measure throughput \
-          --threshold-test percentage \
-          --threshold-lower-boundary 0.15 \
-          --threshold-min-sample-size 10 \
-          --threshold-max-sample-size 30 \
+          --threshold-test t_test \
+          --threshold-lower-boundary 0.99 \
+          --threshold-min-sample-size 3 \
+          --threshold-max-sample-size 12 \
           --err
