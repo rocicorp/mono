@@ -38,6 +38,7 @@ import {
   type LiteValueType,
 } from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
+import {PG_15, PG_17} from '../../../types/pg-versions.ts';
 import {
   pgClient,
   type PostgresDB,
@@ -67,6 +68,7 @@ export type InitialSyncOptions = {
   tableCopyWorkers: number;
   profileCopy?: boolean | undefined;
   textCopy?: boolean | undefined;
+  replicationSlotFailover?: boolean | undefined;
 };
 
 /** Server context to store with the initial sync metadata for debugging. */
@@ -85,7 +87,12 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers, profileCopy, textCopy = false} = syncOptions;
+  const {
+    tableCopyWorkers,
+    profileCopy,
+    textCopy = false,
+    replicationSlotFailover = false,
+  } = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = pgClient(lc, upstreamURI);
   const replicationSession = pgClient(lc, upstreamURI, {
@@ -97,7 +104,7 @@ export async function initialSync(
     tx,
   ).publish(lc, 'Initializing');
   try {
-    await checkUpstreamConfig(sql);
+    const pgVersion = await checkUpstreamConfig(sql);
 
     const {publications} = await ensurePublishedTables(lc, sql, shard);
     lc.info?.(`Upstream is setup with publications [${publications}]`);
@@ -108,7 +115,12 @@ export async function initialSync(
     let slot: ReplicationSlot;
     for (let first = true; ; first = false) {
       try {
-        slot = await createReplicationSlot(lc, replicationSession, slotName);
+        slot = await createReplicationSlot(
+          lc,
+          replicationSession,
+          slotName,
+          replicationSlotFailover && pgVersion >= PG_17,
+        );
         break;
       } catch (e) {
         if (first && e instanceof postgres.PostgresError) {
@@ -281,11 +293,12 @@ async function checkUpstreamConfig(sql: PostgresDB) {
       `Postgres must be configured with "wal_level = logical" (currently: "${walLevel})`,
     );
   }
-  if (version < 150000) {
+  if (version < PG_15) {
     throw new Error(
       `Must be running Postgres 15 or higher (currently: "${version}")`,
     );
   }
+  return version;
 }
 
 async function ensurePublishedTables(
@@ -378,12 +391,16 @@ export async function createReplicationSlot(
   lc: LogContext,
   session: postgres.Sql,
   slotName: string,
+  // Note: must be false if pgVersion < PG_17. Caller must verify.
+  failover = false,
 ): Promise<ReplicationSlot> {
-  const slot = (
-    await session.unsafe<ReplicationSlot[]>(
-      /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
-    )
-  )[0];
+  const [slot] = failover
+    ? await session.unsafe<ReplicationSlot[]>(
+        /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput (FAILOVER)`,
+      )
+    : await session.unsafe<ReplicationSlot[]>(
+        /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
+      );
   lc.info?.(`Created replication slot ${slotName}`, slot);
   return slot;
 }
