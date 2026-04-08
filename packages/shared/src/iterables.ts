@@ -93,3 +93,17 @@ class IterWrapper<T> implements IteratorWithHelpers<T>, IterableIterator<T> {
 export function wrapIterable<T>(iter: Iterable<T>): IteratorWithHelpers<T> {
   return iteratorFrom(iter);
 }
+
+/**
+ * This will make a new array where the elements are the same as the iterable
+ * but sorted according to the compare function. If the compare function is not
+ * provided, it will sort the elements in JS standard way which is string
+ * compare.
+ */
+export function toSorted<T>(
+  iter: Iterable<T>,
+  compare?: (a: T, b: T) => number,
+): T[] {
+  // oxlint-disable-next-line e18e/prefer-array-to-sorted
+  return [...iter].sort(compare);
+}

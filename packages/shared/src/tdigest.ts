@@ -126,7 +126,8 @@ export class TDigest {
         const projected = soFar + centroid.weight;
         if (projected <= limit) {
           soFar = projected;
-          this.#processed[this.#processed.length - 1].add(centroid);
+          // oxlint-disable-next-line typescript/no-non-null-assertion
+          this.#processed.at(-1)!.add(centroid);
         } else {
           const k1 = this.#integratedLocation(soFar / this.#processedWeight);
           limit = this.#processedWeight * this.#integratedQ(k1 + 1);
@@ -135,10 +136,8 @@ export class TDigest {
         }
       }
       this.#min = Math.min(this.#min, this.#processed[0].mean);
-      this.#max = Math.max(
-        this.#max,
-        this.#processed[this.#processed.length - 1].mean,
-      );
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      this.#max = Math.max(this.#max, this.#processed.at(-1)!.mean);
       this.#unprocessed.length = 0;
     }
   }
@@ -152,7 +151,7 @@ export class TDigest {
    */
   centroids(cl: CentroidList = []): CentroidList {
     this.#process();
-    return cl.concat(this.#processed);
+    return [...cl, ...this.#processed];
   }
 
   count(): number {
@@ -182,7 +181,7 @@ export class TDigest {
     // then nothing has changed since the last update.
     if (
       this.#cumulative.length > 0 &&
-      this.#cumulative[this.#cumulative.length - 1] === this.#processedWeight
+      this.#cumulative.at(-1) === this.#processedWeight
     ) {
       return;
     }
@@ -241,12 +240,8 @@ export class TDigest {
     const z1 =
       index - this.#processedWeight - this.#processed[lower - 1].weight / 2;
     const z2 = this.#processed[lower - 1].weight / 2 - z1;
-    return weightedAverage(
-      this.#processed[this.#processed.length - 1].mean,
-      z1,
-      this.#max,
-      z2,
-    );
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    return weightedAverage(this.#processed.at(-1)!.mean, z1, this.#max, z2);
   }
 
   /**
@@ -293,13 +288,15 @@ export class TDigest {
       return 0;
     }
     // Right Tail
-    const mn = this.#processed[this.#processed.length - 1].mean;
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    const mn = this.#processed.at(-1)!.mean;
     if (x >= mn) {
       if (this.#max - mn > 0) {
         return (
           1 -
           (((this.#max - x) / (this.#max - mn)) *
-            this.#processed[this.#processed.length - 1].weight) /
+            // oxlint-disable-next-line typescript/no-non-null-assertion
+            this.#processed.at(-1)!.weight) /
             this.#processedWeight /
             2
         );

@@ -32,7 +32,6 @@ import {
   clearBrowserOverrides,
   overrideBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
-import {findLast} from '../../../shared/src/find-last.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
@@ -330,8 +329,7 @@ describe('onOnlineChange callback', () => {
     // And followed by a reconnect with the longer BACKOFF_MS.
     await tickAFewTimes(vi, BACKOFF_MS);
     await z.triggerConnected();
-    const connectMsg = findLast(
-      z.testLogSink.messages,
+    const connectMsg = z.testLogSink.messages.findLast(
       ([level, _context, args]) =>
         level === 'info' && args.find(arg => /Connecting to/.test(String(arg))),
     );
@@ -3703,7 +3701,7 @@ describe('CRUD', () => {
 
     // Optional fields can be set to null/undefined or left off completely.
     await setComment({id: 'c', issueID: '3'});
-    expect(view.data[view.data.length - 1]).toEqual({
+    expect(view.data.at(-1)).toEqual({
       id: 'c',
       issueID: '3',
       text: null,
@@ -3711,7 +3709,7 @@ describe('CRUD', () => {
     });
 
     await setComment({id: 'd', issueID: '4', text: undefined});
-    expect(view.data[view.data.length - 1]).toEqual({
+    expect(view.data.at(-1)).toEqual({
       id: 'd',
       issueID: '4',
       text: null,
@@ -3719,7 +3717,7 @@ describe('CRUD', () => {
     });
 
     await setComment({id: 'e', issueID: '5', text: undefined});
-    expect(view.data[view.data.length - 1]).toEqual({
+    expect(view.data.at(-1)).toEqual({
       id: 'e',
       issueID: '5',
       text: null,

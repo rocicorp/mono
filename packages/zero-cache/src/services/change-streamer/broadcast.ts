@@ -197,7 +197,7 @@ export class Broadcast {
           processed: d.changes,
           elapsed: d.elapsed,
         })),
-        pending: [...this.#pending].map(sub => ({
+        pending: Array.from(this.#pending, sub => ({
           id: sub.id,
           ...sub.getStats(),
         })),

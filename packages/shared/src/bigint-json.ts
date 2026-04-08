@@ -12,7 +12,7 @@ import * as v from './valita.ts';
 function numberParser(_: unknown, v: string) {
   const n = +v;
   if (n >= Number.MIN_SAFE_INTEGER && n <= Number.MAX_SAFE_INTEGER) return n;
-  if (v.indexOf('.') !== -1 || v.indexOf('e') !== -1 || v.indexOf('E') !== -1) {
+  if (v.includes('.') || v.includes('e') || v.includes('E')) {
     return n;
   }
   return BigInt(v);

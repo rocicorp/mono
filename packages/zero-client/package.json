@@ -31,7 +31,7 @@
     "ast-to-zql": "0.0.0",
     "datadog": "0.0.0",
     "esbuild": "^0.27.4",
-    "oxfmt": "^0.43.0",
+    "oxfmt": "^0.44.0",
     "playwright": "^1.53.2",
     "replicache": "15.2.1",
     "shared": "0.0.0",

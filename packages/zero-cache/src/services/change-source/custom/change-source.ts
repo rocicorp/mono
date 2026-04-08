@@ -59,7 +59,7 @@ export async function initializeCustomChangeSource(
 
   if (shard.publications.length) {
     // Verify that the publications match what has been synced.
-    const requested = [...shard.publications].sort();
+    const requested = shard.publications.toSorted();
     const replicated = subscriptionState.publications.sort();
     if (!deepEqual(requested, replicated)) {
       throw new Error(
@@ -204,7 +204,7 @@ export async function initialSync(
           );
           initReplicationState(
             tx,
-            [...publications].sort(),
+            publications.toSorted(),
             commitWatermark,
             context,
             false,
