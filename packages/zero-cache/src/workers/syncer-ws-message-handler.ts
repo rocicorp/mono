@@ -1,4 +1,4 @@
-import {trace} from '@opentelemetry/api';
+import {ROOT_CONTEXT, context, propagation, trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
@@ -19,6 +19,19 @@ import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
+
+/**
+ * Wraps a function in an OTEL context extracted from a W3C traceparent header.
+ * This enables distributed tracing from the client through zero-cache to
+ * the user's API server.
+ */
+function withTraceparent<T>(traceparent: string | undefined, fn: () => T): T {
+  if (!traceparent) {
+    return fn();
+  }
+  const extracted = propagation.extract(ROOT_CONTEXT, {traceparent});
+  return context.with(extracted, fn);
+}
 
 export class SyncerWsMessageHandler implements MessageHandler {
   readonly #viewSyncer: ViewSyncer;
@@ -68,109 +81,113 @@ export class SyncerWsMessageHandler implements MessageHandler {
         lc.error?.('Pull is not supported by Zero');
         break;
       case 'push': {
-        return startAsyncSpan<HandlerResult[]>(
-          tracer,
-          'connection.push',
-          async () => {
-            const {clientGroupID, mutations} = msg[1];
-            if (clientGroupID !== this.#clientGroupID) {
-              return [
-                {
-                  type: 'fatal',
-                  error: {
-                    kind: ErrorKind.InvalidPush,
-                    message:
-                      `clientGroupID in mutation "${clientGroupID}" does not match ` +
-                      `clientGroupID of connection "${this.#clientGroupID}`,
-                    origin: ErrorOrigin.ZeroCache,
-                  },
-                } satisfies HandlerResult,
-              ];
-            }
-
-            if (mutations.length === 0) {
-              return [
-                {
-                  type: 'ok',
-                },
-              ];
-            }
-
-            // The client only ever sends 1 mutation per push.
-            // #pusher will throw if it sees a CRUD mutation.
-            // #mutagen will throw if it see a custom mutation.
-            if (mutations[0].type === 'custom') {
-              if (!this.#pusher) {
+        return withTraceparent(msg[1].traceparent, () =>
+          startAsyncSpan<HandlerResult[]>(
+            tracer,
+            'connection.push',
+            async () => {
+              const {clientGroupID, mutations} = msg[1];
+              if (clientGroupID !== this.#clientGroupID) {
                 return [
                   {
                     type: 'fatal',
                     error: {
                       kind: ErrorKind.InvalidPush,
                       message:
-                        'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
+                        `clientGroupID in mutation "${clientGroupID}" does not match ` +
+                        `clientGroupID of connection "${this.#clientGroupID}`,
                       origin: ErrorOrigin.ZeroCache,
                     },
                   } satisfies HandlerResult,
                 ];
               }
-              return [
-                this.#pusher.enqueuePush(this.#connectionSelector, msg[1]),
-              ];
-            }
 
-            const mutagen = this.#mutagen;
-            if (!mutagen) {
-              return [
-                {
-                  type: 'fatal',
-                  error: {
-                    kind: ErrorKind.InvalidPush,
-                    message: `Support for legacy CRUD mutations is disabled`,
-                    origin: ErrorOrigin.ZeroCache,
+              if (mutations.length === 0) {
+                return [
+                  {
+                    type: 'ok',
                   },
-                } satisfies HandlerResult,
-              ];
-            }
+                ];
+              }
 
-            const auth = this.#contextManager.mustGetConnectionContext(
-              this.#connectionSelector,
-            ).auth;
-            assert(
-              auth?.type !== 'opaque',
-              'Only JWT auth is supported for CRUD mutations',
-            );
-
-            // Hold a connection-level lock while processing mutations so that:
-            // 1. Mutations are processed in the order in which they are received and
-            // 2. A single view syncer connection cannot hog multiple upstream connections.
-            const ret = await this.#mutationLock.withLock(async () => {
-              const errors: ErrorBody[] = [];
-              for (const mutation of mutations) {
-                const maybeError = await mutagen.processMutation(
-                  mutation,
-                  auth?.decoded,
-                  this.#pusher !== undefined,
-                );
-                if (maybeError !== undefined) {
-                  errors.push({
-                    kind: maybeError[0],
-                    message: maybeError[1],
-                    origin: ErrorOrigin.ZeroCache,
-                  });
+              // The client only ever sends 1 mutation per push.
+              // #pusher will throw if it sees a CRUD mutation.
+              // #mutagen will throw if it see a custom mutation.
+              if (mutations[0].type === 'custom') {
+                if (!this.#pusher) {
+                  return [
+                    {
+                      type: 'fatal',
+                      error: {
+                        kind: ErrorKind.InvalidPush,
+                        message:
+                          'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
+                        origin: ErrorOrigin.ZeroCache,
+                      },
+                    } satisfies HandlerResult,
+                  ];
                 }
+                return [
+                  this.#pusher.enqueuePush(this.#connectionSelector, msg[1]),
+                ];
               }
-              if (errors.length > 0) {
-                return {type: 'transient', errors} satisfies HandlerResult;
+
+              const mutagen = this.#mutagen;
+              if (!mutagen) {
+                return [
+                  {
+                    type: 'fatal',
+                    error: {
+                      kind: ErrorKind.InvalidPush,
+                      message: `Support for legacy CRUD mutations is disabled`,
+                      origin: ErrorOrigin.ZeroCache,
+                    },
+                  } satisfies HandlerResult,
+                ];
               }
-              return {type: 'ok'} satisfies HandlerResult;
-            });
-            return [ret];
-          },
+
+              const auth = this.#contextManager.mustGetConnectionContext(
+                this.#connectionSelector,
+              ).auth;
+              assert(
+                auth?.type !== 'opaque',
+                'Only JWT auth is supported for CRUD mutations',
+              );
+
+              // Hold a connection-level lock while processing mutations so that:
+              // 1. Mutations are processed in the order in which they are received and
+              // 2. A single view syncer connection cannot hog multiple upstream connections.
+              const ret = await this.#mutationLock.withLock(async () => {
+                const errors: ErrorBody[] = [];
+                for (const mutation of mutations) {
+                  const maybeError = await mutagen.processMutation(
+                    mutation,
+                    auth?.decoded,
+                    this.#pusher !== undefined,
+                  );
+                  if (maybeError !== undefined) {
+                    errors.push({
+                      kind: maybeError[0],
+                      message: maybeError[1],
+                      origin: ErrorOrigin.ZeroCache,
+                    });
+                  }
+                }
+                if (errors.length > 0) {
+                  return {type: 'transient', errors} satisfies HandlerResult;
+                }
+                return {type: 'ok'} satisfies HandlerResult;
+              });
+              return [ret];
+            },
+          ),
         );
       }
       case 'changeDesiredQueries':
-        await startAsyncSpan(tracer, 'connection.changeDesiredQueries', () =>
-          viewSyncer.changeDesiredQueries(this.#connectionSelector, msg),
+        await withTraceparent(msg[1].traceparent, () =>
+          startAsyncSpan(tracer, 'connection.changeDesiredQueries', () =>
+            viewSyncer.changeDesiredQueries(this.#connectionSelector, msg),
+          ),
         );
         break;
       case 'updateAuth':
@@ -209,29 +226,31 @@ export class SyncerWsMessageHandler implements MessageHandler {
       }
       case 'initConnection': {
         this.#contextManager.initConnection(this.#connectionSelector, msg[1]);
-        const ret: HandlerResult[] = [
-          {
-            type: 'stream',
-            source: 'viewSyncer',
-            stream: startSpan(tracer, 'connection.initConnection', () =>
-              viewSyncer.initConnection(this.#connectionSelector, msg),
-            ),
-          },
-        ];
+        return withTraceparent(msg[1].traceparent, () => {
+          const ret: HandlerResult[] = [
+            {
+              type: 'stream',
+              source: 'viewSyncer',
+              stream: startSpan(tracer, 'connection.initConnection', () =>
+                viewSyncer.initConnection(this.#connectionSelector, msg),
+              ),
+            },
+          ];
 
-        // Given we support both CRUD and Custom mutators,
-        // we do not initialize the `pusher` unless the user has opted
-        // into custom mutations. We detect that by checking
-        // if the pushURL has been set.
-        if (this.#pusher) {
-          ret.push({
-            type: 'stream',
-            source: 'pusher',
-            stream: this.#pusher.initConnection(this.#connectionSelector),
-          });
-        }
+          // Given we support both CRUD and Custom mutators,
+          // we do not initialize the `pusher` unless the user has opted
+          // into custom mutations. We detect that by checking
+          // if the pushURL has been set.
+          if (this.#pusher) {
+            ret.push({
+              type: 'stream',
+              source: 'pusher',
+              stream: this.#pusher.initConnection(this.#connectionSelector),
+            });
+          }
 
-        return ret;
+          return ret;
+        });
       }
       case 'closeConnection':
         // This message is deprecated and no longer used.

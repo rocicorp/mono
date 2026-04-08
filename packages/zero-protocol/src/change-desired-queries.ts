@@ -3,6 +3,8 @@ import {upQueriesPatchSchema} from './queries-patch.ts';
 
 const changeDesiredQueriesBodySchema = v.object({
   desiredQueriesPatch: upQueriesPatchSchema,
+  /** W3C traceparent header for distributed tracing. */
+  traceparent: v.string().optional(),
 });
 
 export const changeDesiredQueriesMessageSchema = v.tuple([

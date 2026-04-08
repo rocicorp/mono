@@ -761,7 +761,10 @@ export class Zero<
       this.#mutationTracker,
       rep.clientID,
       schema.tables,
-      msg => this.#send(msg),
+      msg => {
+        msg[1].traceparent = this.#options.getTraceparent?.();
+        this.#send(msg);
+      },
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
       options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
@@ -1517,6 +1520,7 @@ export class Zero<
         'changeDesiredQueries',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
+          traceparent: this.#options.getTraceparent?.(),
         },
       ]);
     } else if (this.#initConnectionQueries === undefined) {
@@ -1535,6 +1539,7 @@ export class Zero<
           userPushHeaders: this.#options.mutateHeaders,
           userQueryURL: this.#options.queryURL ?? this.#options.getQueriesURL,
           userQueryHeaders: this.#options.queryHeaders,
+          traceparent: this.#options.getTraceparent?.(),
         },
       ]);
       this.#deletedClients = undefined;
@@ -1891,6 +1896,7 @@ export class Zero<
           mutations: [zeroM],
           pushVersion: req.pushVersion,
           requestID,
+          traceparent: this.#options.getTraceparent?.(),
         },
       ];
       send(socket, msg);

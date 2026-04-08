@@ -131,6 +131,8 @@ export const pushBodySchema = v.object({
    * and should not be included in push messages.
    */
   auth: v.string().optional(),
+  /** W3C traceparent header for distributed tracing. */
+  traceparent: v.string().optional(),
 });
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
