@@ -88,6 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [format, lint, check-types]
     strategy:
+      fail-fast: false
       matrix:
         shard: [1, 2, 3]
     env:
@@ -111,6 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [format, lint, check-types]
     strategy:
+      fail-fast: false
       matrix:
         pg-version: [18, 17, 16, 15]
         shard: [1, 2]
