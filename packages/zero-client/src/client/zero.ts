@@ -473,10 +473,11 @@ export class Zero<
       slowMaterializeThreshold = 5_000,
     } = options;
 
-    if (userID === '' || userID === 'anon') {
+    if (userID === '') {
       throw new ClientError({
         kind: ClientErrorKind.Internal,
-        message: `ZeroOptions.userID should not be ${userID === '' ? 'empty' : userID}. Omit it entirely for logged-out clients.`,
+        message:
+          'ZeroOptions.userID should not be empty. Omit it entirely for logged-out clients.',
       });
     }
 
@@ -646,6 +647,13 @@ export class Zero<
     this.#server = server;
     this.userID = userID ?? undefined;
     this.#lc = lc.withContext('clientID', rep.clientID);
+
+    if (userID === 'anon') {
+      this.#lc.warn?.(
+        'ZeroOptions.userID "anon" is deprecated for logged-out clients. Omit it entirely for logged-out clients.',
+      );
+    }
+
     this.#connection = new ConnectionImpl(
       this.#connectionManager,
       this.#lc,

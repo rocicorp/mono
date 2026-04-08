@@ -1,3 +1,4 @@
+import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, vi} from 'vitest';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -188,6 +189,55 @@ describe('view-syncer/auth maintenance', () => {
       );
       await vi.waitFor(() => expect(validateSpy).toHaveBeenCalledTimes(4), {
         timeout: 2_000,
+      });
+    });
+
+    test('ignores stale scheduled revalidation failures after auth changes', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      const staleValidation = resolver<ReturnType<typeof scheduled401>>();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValueOnce(undefined)
+        .mockImplementationOnce(() => staleValidation.promise);
+
+      const authContext: SyncContext = {
+        ...SYNC_CONTEXT,
+        auth: {type: 'opaque', raw: 'token-1'},
+      };
+      const selector = {
+        clientID: authContext.clientID,
+        wsID: authContext.wsID,
+      };
+      const client = connect(authContext, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => expect(validateSpy).toHaveBeenCalledTimes(2), {
+        timeout: 2_000,
+      });
+      expect(validateSpy.mock.calls[1][0].auth?.raw).toBe('token-1');
+
+      await vs.contextManager.updateAuth(selector, {auth: 'token-2'});
+
+      // resolve the stale validation for the original auth
+      staleValidation.resolve(scheduled401([]));
+
+      await Promise.resolve();
+
+      expect(vs.contextManager.getConnectionContext(selector)).toMatchObject({
+        clientID: selector.clientID,
+        wsID: selector.wsID,
+        revision: 2,
+        state: 'provisional',
       });
     });
   });

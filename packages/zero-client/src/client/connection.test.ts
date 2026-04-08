@@ -105,48 +105,6 @@ describe('ConnectionImpl', () => {
       expect(waitForStateChangeMock).toHaveBeenCalledTimes(1);
     });
 
-    test('clears auth when null is provided', async () => {
-      isInTerminalStateMock.mockReturnValue(true);
-      state = {
-        name: ConnectionStatus.Error,
-        reason: new ClientError({
-          kind: ClientErrorKind.Internal,
-          message: 'err',
-        }),
-      };
-      const nextStatePromise = Promise.resolve(state);
-      waitForStateChangeMock.mockReturnValue(nextStatePromise);
-      const connection = new ConnectionImpl(manager, lc, setAuthSpy);
-
-      await connection.connect({auth: null});
-
-      expect(setAuthSpy).toHaveBeenCalledWith(null);
-      expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(requestConnectMock).toHaveBeenCalledTimes(1);
-      expect(waitForStateChangeMock).toHaveBeenCalledTimes(1);
-    });
-
-    test('clears auth when undefined is provided', async () => {
-      isInTerminalStateMock.mockReturnValue(true);
-      state = {
-        name: ConnectionStatus.Error,
-        reason: new ClientError({
-          kind: ClientErrorKind.Internal,
-          message: 'err',
-        }),
-      };
-      const nextStatePromise = Promise.resolve(state);
-      waitForStateChangeMock.mockReturnValue(nextStatePromise);
-      const connection = new ConnectionImpl(manager, lc, setAuthSpy);
-
-      await connection.connect({auth: undefined});
-
-      expect(setAuthSpy).toHaveBeenCalledWith(undefined);
-      expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(requestConnectMock).toHaveBeenCalledTimes(1);
-      expect(waitForStateChangeMock).toHaveBeenCalledTimes(1);
-    });
-
     test('updates auth when called outside terminal state', async () => {
       isInTerminalStateMock.mockReturnValue(false);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);

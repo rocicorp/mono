@@ -2315,8 +2315,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #failMaintenanceConnection(ctx: ConnectionContext, error: ProtocolError) {
+    const failed = this.contextManager.failConnection(ctx, ctx.revision);
+    if (!failed) {
+      return;
+    }
+
     const wrapped = wrapWithProtocolError(error);
-    this.contextManager.failConnection(ctx, ctx.revision);
     const client = this.#clients.get(ctx.clientID);
     if (client?.wsID === ctx.wsID) {
       client.fail(wrapped);
