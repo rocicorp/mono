@@ -293,6 +293,11 @@ class PostgresChangeSource implements ChangeSource {
         : null;
   }
 
+  async stop(): Promise<void> {
+    this.#lagReporter?.stop();
+    await this.#db.end();
+  }
+
   async startLagReporter(): Promise<{nextSendTimeMs: number} | null> {
     if (this.#lagReporter) {
       try {
@@ -819,6 +824,11 @@ class LagReporter {
       );
     }
     return undefined;
+  }
+
+  stop() {
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
   }
 
   #scheduleNextReport(delayMs: number) {

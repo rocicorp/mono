@@ -31,4 +31,9 @@ export interface ChangeSource {
     afterWatermark: string,
     backfillRequests?: BackfillRequest[],
   ): Promise<ChangeStream>;
+
+  /**
+   * Releases connections and resources held by this change source.
+   */
+  stop(): Promise<void>;
 }
