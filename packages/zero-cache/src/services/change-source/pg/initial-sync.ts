@@ -17,6 +17,12 @@ import {
   createLiteTableStatement,
 } from '../../../db/create.ts';
 import * as Mode from '../../../db/mode-enum.ts';
+import {
+  BinaryCopyParser,
+  hasBinaryDecoder,
+  makeBinaryDecoder,
+  textCastDecoder,
+} from '../../../db/pg-copy-binary.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
 import {
   mapPostgresToLite,
@@ -60,6 +66,7 @@ import {
 export type InitialSyncOptions = {
   tableCopyWorkers: number;
   profileCopy?: boolean | undefined;
+  textCopy?: boolean | undefined;
 };
 
 /** Server context to store with the initial sync metadata for debugging. */
@@ -78,7 +85,7 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers, profileCopy} = syncOptions;
+  const {tableCopyWorkers, profileCopy, textCopy = false} = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = pgClient(lc, upstreamURI);
   const replicationSession = pgClient(lc, upstreamURI, {
@@ -200,7 +207,7 @@ export async function initialSync(
       const rowCounts = await Promise.all(
         downloads.map(table =>
           copiers.processReadTask((db, lc) =>
-            copy(lc, table, copyPool, db, tx),
+            copy(lc, table, copyPool, db, tx, textCopy),
           ),
         ),
       );
@@ -479,10 +486,24 @@ async function getInitialDownloadState(
   return state;
 }
 
-async function copy(
+function copy(
   lc: LogContext,
   {spec: table, status}: DownloadState,
   dbClient: PostgresDB,
+  from: PostgresTransaction,
+  to: Database,
+  textCopy: boolean,
+) {
+  if (textCopy) {
+    return copyText(lc, table, status, dbClient, from, to);
+  }
+  return copyBinary(lc, table, status, from, to);
+}
+
+async function copyBinary(
+  lc: LogContext,
+  table: PublishedTableSpec,
+  status: DownloadStatus,
   from: PostgresTransaction,
   to: Database,
 ) {
@@ -496,22 +517,36 @@ async function copy(
   const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
   const insertColumnList = columnNames.map(c => id(c)).join(',');
 
-  // (?,?,?,?,?)
   const valuesSql =
     columnNames.length > 0 ? `(${'?,'.repeat(columnNames.length - 1)}?)` : '()';
   const insertSql = /*sql*/ `
     INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
   const insertStmt = to.prepare(insertSql);
-  // INSERT VALUES (?,?,?,?,?),... x INSERT_BATCH_SIZE
   const insertBatchStmt = to.prepare(
     insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
   );
 
-  const {select} = makeDownloadStatements(table, columnNames);
+  // Build SELECT with ::text casts for columns without a known binary decoder.
+  const filterConditions = Object.values(table.publications)
+    .map(({rowFilter}) => rowFilter)
+    .filter(f => !!f);
+  const where =
+    filterConditions.length === 0
+      ? ''
+      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
+  const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)} ${where}`;
+  const selectColumns = orderedColumns.map(([name, spec]) =>
+    hasBinaryDecoder(spec) ? id(name) : `${id(name)}::text`,
+  );
+  const select = /*sql*/ `SELECT ${selectColumns.join(',')} ${fromTable}`;
+
+  const decoders = orderedColumns.map(([, spec]) =>
+    hasBinaryDecoder(spec) ? makeBinaryDecoder(spec) : textCastDecoder,
+  );
+
   const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 
-  // Preallocate the buffer of values to reduce memory allocation churn.
   const pendingValues: LiteValueType[] = Array.from({
     length: MAX_BUFFERED_ROWS * valuesPerRow,
   });
@@ -527,13 +562,11 @@ async function copy(
     for (; pendingRows > INSERT_BATCH_SIZE; pendingRows -= INSERT_BATCH_SIZE) {
       insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
     }
-    // Insert the remaining rows individually.
     for (; pendingRows > 0; pendingRows--) {
       insertStmt.run(pendingValues.slice(l, (l += valuesPerRow)));
     }
-    for (let i = 0; i < flushedRows; i++) {
-      // Reuse the array and unreference the values to allow GC.
-      // This is faster than allocating a new array every time.
+    const flushedValues = flushedRows * valuesPerRow;
+    for (let i = 0; i < flushedValues; i++) {
       pendingValues[i] = undefined as unknown as LiteValueType;
     }
     pendingSize = 0;
@@ -546,7 +579,128 @@ async function copy(
     );
   }
 
-  lc.info?.(`Starting copy stream of ${tableName}:`, select);
+  const binaryParser = new BinaryCopyParser();
+  let col = 0;
+
+  lc.info?.(`Starting binary copy stream of ${tableName}:`, select);
+
+  await pipeline(
+    await from
+      .unsafe(`COPY (${select}) TO STDOUT WITH (FORMAT binary)`)
+      .readable(),
+    new Writable({
+      highWaterMark: BUFFERED_SIZE_THRESHOLD,
+
+      write(
+        chunk: Buffer,
+        _encoding: string,
+        callback: (error?: Error) => void,
+      ) {
+        try {
+          for (const fieldBuf of binaryParser.parse(chunk)) {
+            pendingSize += fieldBuf === null ? 4 : fieldBuf.length;
+            pendingValues[pendingRows * valuesPerRow + col] =
+              fieldBuf === null ? null : decoders[col](fieldBuf);
+
+            if (++col === decoders.length) {
+              col = 0;
+              if (
+                ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
+                pendingSize >= BUFFERED_SIZE_THRESHOLD
+              ) {
+                flush();
+              }
+            }
+          }
+          callback();
+        } catch (e) {
+          callback(e instanceof Error ? e : new Error(String(e)));
+        }
+      },
+
+      final: (callback: (error?: Error) => void) => {
+        try {
+          flush();
+          callback();
+        } catch (e) {
+          callback(e instanceof Error ? e : new Error(String(e)));
+        }
+      },
+    }),
+  );
+
+  const elapsed = performance.now() - start;
+  lc.info?.(
+    `Finished copying ${status.rows} rows into ${tableName} ` +
+      `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
+  );
+  return {rows: status.rows, flushTime};
+}
+
+async function copyText(
+  lc: LogContext,
+  table: PublishedTableSpec,
+  status: DownloadStatus,
+  dbClient: PostgresDB,
+  from: PostgresTransaction,
+  to: Database,
+) {
+  const start = performance.now();
+  let flushTime = 0;
+
+  const tableName = liteTableName(table);
+  const orderedColumns = Object.entries(table.columns);
+
+  const columnNames = orderedColumns.map(([c]) => c);
+  const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
+  const insertColumnList = columnNames.map(c => id(c)).join(',');
+
+  const valuesSql =
+    columnNames.length > 0 ? `(${'?,'.repeat(columnNames.length - 1)}?)` : '()';
+  const insertSql = /*sql*/ `
+    INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
+  const insertStmt = to.prepare(insertSql);
+  const insertBatchStmt = to.prepare(
+    insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
+  );
+
+  const {select} = makeDownloadStatements(table, columnNames);
+  const valuesPerRow = columnSpecs.length;
+  const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
+
+  const pendingValues: LiteValueType[] = Array.from({
+    length: MAX_BUFFERED_ROWS * valuesPerRow,
+  });
+  let pendingRows = 0;
+  let pendingSize = 0;
+
+  function flush() {
+    const start = performance.now();
+    const flushedRows = pendingRows;
+    const flushedSize = pendingSize;
+
+    let l = 0;
+    for (; pendingRows > INSERT_BATCH_SIZE; pendingRows -= INSERT_BATCH_SIZE) {
+      insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
+    }
+    for (; pendingRows > 0; pendingRows--) {
+      insertStmt.run(pendingValues.slice(l, (l += valuesPerRow)));
+    }
+    const flushedValues = flushedRows * valuesPerRow;
+    for (let i = 0; i < flushedValues; i++) {
+      pendingValues[i] = undefined as unknown as LiteValueType;
+    }
+    pendingSize = 0;
+    status.rows += flushedRows;
+
+    const elapsed = performance.now() - start;
+    flushTime += elapsed;
+    lc.debug?.(
+      `flushed ${flushedRows} ${tableName} rows (${flushedSize} bytes) in ${elapsed.toFixed(3)} ms`,
+    );
+  }
+
+  lc.info?.(`Starting text copy stream of ${tableName}:`, select);
   const pgParsers = await getTypeParsers(dbClient, {returnJsonAsString: true});
   const parsers = columnSpecs.map(c => {
     const pgParse = pgParsers.getTypeParser(c.typeOID);
