@@ -83,6 +83,7 @@ function makeFactories(
   lc: LogContext,
   mutagensOut: MutagenService[],
   pushersOut: PusherService[],
+  contextManagersOut: Map<string, ConnectionContextManagerImpl>,
 ) {
   const storageDb = new Database(lc, ':memory:');
   storageDb.prepare(CREATE_STORAGE_TABLE).run();
@@ -97,9 +98,11 @@ function makeFactories(
     ) =>
       (() => {
         const stopped = resolver<void>();
+        const contextManager = new ConnectionContextManagerImpl(lc);
+        contextManagersOut.set(id, contextManager);
         return {
           id,
-          contextManager: new ConnectionContextManagerImpl(lc),
+          contextManager,
           initConnection: vi.fn(),
           changeDesiredQueries: vi.fn(),
           deleteClients: vi.fn(),
@@ -149,10 +152,12 @@ function makeFactories(
 function setupSyncer(lc: LogContext, config: ZeroConfig) {
   const mutagens: MutagenService[] = [];
   const pushers: PusherService[] = [];
+  const contextManagers = new Map<string, ConnectionContextManagerImpl>();
   const {viewSyncerFactory, mutagenFactory, pusherFactory} = makeFactories(
     lc,
     mutagens,
     pushers,
+    contextManagers,
   );
   const validateLegacyJWT: ValidateLegacyJWT | undefined =
     jwt.tokenConfigOptions(config.auth ?? {}).length === 1
@@ -178,7 +183,7 @@ function setupSyncer(lc: LogContext, config: ZeroConfig) {
     TEST_PARENT,
     validateLegacyJWT,
   );
-  return {syncer, mutagens, pushers};
+  return {syncer, mutagens, pushers, contextManagers};
 }
 
 const baseParams = {
@@ -537,6 +542,7 @@ describe('jwt auth missing options and missing endpoints', () => {
 
 describe('connection hijacking prevention', () => {
   let syncer: Syncer;
+  let contextManagers: Map<string, ConnectionContextManagerImpl>;
   let verifySpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -549,6 +555,7 @@ describe('connection hijacking prevention', () => {
       },
     } as ZeroConfig);
     syncer = env.syncer;
+    contextManagers = env.contextManagers;
   });
 
   afterEach(async () => {
@@ -643,6 +650,48 @@ describe('connection hijacking prevention', () => {
     // The new connection should be open
     expect((newWs as unknown as MockWebSocket).readyState).toBe(
       MockWebSocket.OPEN,
+    );
+  });
+
+  test('mismatched validated user does not replace existing connection', async () => {
+    const existingWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      existingWs,
+      {
+        clientGroupID: '1',
+        clientID: 'target-client',
+        userID: 'user-1',
+        wsID: 'ws-1',
+        protocolVersion: 30,
+      },
+      {} as any,
+    );
+
+    const contextManager = contextManagers.get('1');
+    expect(contextManager).toBeDefined();
+    contextManager!.validateConnection(
+      {clientID: 'target-client', wsID: 'ws-1'},
+      0,
+    );
+
+    const attackerWs = new MockWebSocket() as unknown as WebSocket;
+    await receiver(
+      attackerWs,
+      {
+        clientGroupID: '1',
+        clientID: 'target-client',
+        userID: 'user-2',
+        wsID: 'ws-2',
+        protocolVersion: 30,
+      },
+      {} as any,
+    );
+
+    expect((existingWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.OPEN,
+    );
+    expect((attackerWs as unknown as MockWebSocket).readyState).toBe(
+      MockWebSocket.CLOSED,
     );
   });
 
