@@ -29,6 +29,6 @@
     "xbytes": "^1.7.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.43.0"
+    "oxfmt": "^0.44.0"
   }
 }

@@ -1730,12 +1730,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
-      const removeQueriesQueryIds: Set<string> = new Set(
-        Object.values(cvr.queries)
+      const removeQueriesQueryIds: Set<string> = new Set([
+        ...Object.values(cvr.queries)
           .filter(q => expired(ttlClock, q))
-          .map(q => q.id)
-          .concat(erroredQueryIDs || []),
-      );
+          .map(q => q.id),
+        ...(erroredQueryIDs || []),
+      ]);
       const addQueries = transformedQueries
         .map(({id, transformed}) => ({
           id,
@@ -1772,7 +1772,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           lc,
           cvr,
           addQueries,
-          [...removeQueriesQueryIds].map(id => ({id})),
+          Array.from(removeQueriesQueryIds, id => ({id})),
         );
       } else {
         await this.#catchupClients(lc, cvr);

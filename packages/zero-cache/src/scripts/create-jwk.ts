@@ -1,11 +1,11 @@
-import chalk from 'chalk';
+import {styleText} from 'node:util';
 import {createJwkPair} from '../auth/jwt.ts';
 
 const {privateJwk, publicJwk} = await createJwkPair();
 // oxlint-disable-next-line no-console
 console.log(
-  chalk.red('PRIVATE KEY:\n\n'),
+  styleText('red', 'PRIVATE KEY:\n\n'),
   JSON.stringify(privateJwk),
-  chalk.green('\n\nPUBLIC KEY:\n\n'),
+  styleText('green', '\n\nPUBLIC KEY:\n\n'),
   JSON.stringify(publicJwk),
 );

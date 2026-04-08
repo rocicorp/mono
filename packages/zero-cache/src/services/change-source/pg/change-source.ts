@@ -193,7 +193,7 @@ async function checkAndUpdateUpstream(
   }
 
   // Verify that the publications match what is being replicated.
-  const requested = [...shard.publications].sort();
+  const requested = shard.publications.toSorted();
   const replicated = upstreamReplica.publications
     .filter(p => !p.startsWith(internalPublicationPrefix(shard)))
     .sort();
@@ -291,6 +291,11 @@ class PostgresChangeSource implements ChangeSource {
             lagReportIntervalMs,
           )
         : null;
+  }
+
+  async stop(): Promise<void> {
+    this.#lagReporter?.stop();
+    await this.#db.end();
   }
 
   async startLagReporter(): Promise<{nextSendTimeMs: number} | null> {
@@ -819,6 +824,11 @@ class LagReporter {
       );
     }
     return undefined;
+  }
+
+  stop() {
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
   }
 
   #scheduleNextReport(delayMs: number) {

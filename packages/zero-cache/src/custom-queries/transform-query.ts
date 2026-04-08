@@ -148,7 +148,7 @@ export class CustomQueryTransformer {
     }
 
     return {
-      result: newResponses.concat(cachedResponses),
+      result: [...newResponses, ...cachedResponses],
       cached,
     };
   }

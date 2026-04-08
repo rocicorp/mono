@@ -23,7 +23,7 @@ function createGraph(args: {
   );
 
   if (!allZeroRefCounts) {
-    const q = Array.from(new Set(heads));
+    const q = [...new Set(heads)];
     for (const k of q) {
       refCounts[hashes[k].toString()] = refCounts[hashes[k].toString()] + 1;
       q.push(...graph[k]);
@@ -54,7 +54,7 @@ function createLazyDelegate(
   const refsHashes = Object.fromEntries(
     Object.keys(refs).map(k => [fakeHash(k), refs[k].map(w => fakeHash(w))]),
   );
-  const countedHashes = new Set([...counted.values()].map(w => fakeHash(w)));
+  const countedHashes = new Set(Array.from(counted.values(), w => fakeHash(w)));
   return {
     getRefCount: hash => refCountsHashes[hash],
     getRefs: hash => refsHashes[hash],

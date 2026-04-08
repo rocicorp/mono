@@ -241,7 +241,7 @@ async function main() {
       await Promise.race([context.close(), wait(1000)]);
     } else {
       await new Promise(resolve => {
-        setTimeout(() => resolve(undefined), 2 ** 31 - 1);
+        setTimeout(resolve, 2 ** 31 - 1, undefined);
       }); // Don't let the dev server stop!
     }
   }

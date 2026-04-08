@@ -1,3 +1,4 @@
+// oxlint-disable e18e/prefer-static-regex
 /**
  * Generates parameterized template pools via Claude API for synthetic data generation.
  *

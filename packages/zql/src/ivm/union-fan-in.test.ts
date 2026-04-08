@@ -209,7 +209,7 @@ describe('UnionFanIn', () => {
       const input2 = mockOperator(mockSchema, data2);
 
       const fanIn = new UnionFanIn(fanOut, [input1, input2]);
-      const result = Array.from(skipYields(fanIn.fetch({} as FetchRequest)));
+      const result = [...skipYields(fanIn.fetch({} as FetchRequest))];
 
       expect(result).toHaveLength(4);
       expect(result.map(n => n.row.id)).toEqual([1, 2, 3, 4]);
@@ -219,7 +219,7 @@ describe('UnionFanIn', () => {
       const fanOut = mockUnionFanOut(mockSchema);
       const fanIn = new UnionFanIn(fanOut, []);
 
-      const result = Array.from(fanIn.fetch({} as FetchRequest));
+      const result = [...fanIn.fetch({} as FetchRequest)];
       expect(result).toHaveLength(0);
     });
 
@@ -238,7 +238,7 @@ describe('UnionFanIn', () => {
       const input2 = mockOperator(mockSchema, data2);
 
       const fanIn = new UnionFanIn(fanOut, [input1, input2]);
-      const result = Array.from(skipYields(fanIn.fetch({} as FetchRequest)));
+      const result = [...skipYields(fanIn.fetch({} as FetchRequest))];
 
       expect(result).toHaveLength(3);
       expect(result.map(n => n.row.id)).toEqual([1, 2, 3]);

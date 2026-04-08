@@ -543,7 +543,7 @@ describe('MutatorProxy', () => {
       const mutator = vi.fn(() => ({
         client: Promise.reject(clientError),
         server: new Promise((_, reject) => {
-          setTimeout(() => reject(serverError), 1);
+          setTimeout(reject, 1, serverError);
         }),
       }));
       const wrapped = proxy.wrapCustomMutator('testMutator', mutator);

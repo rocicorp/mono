@@ -1,4 +1,5 @@
 import {unreachable} from '../../shared/src/asserts.ts';
+import {toSorted} from '../../shared/src/iterables.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
   AST,
@@ -139,7 +140,7 @@ function transformLogicalCondition(
 
   args.add('cmp');
   args.add(type);
-  const argsCode = [...args].sort().join(', ');
+  const argsCode = toSorted(args).join(', ');
 
   return `.where(({${argsCode}}) => ${type}(${conditionsCode}))`;
 }

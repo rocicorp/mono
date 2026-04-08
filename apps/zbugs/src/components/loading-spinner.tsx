@@ -23,7 +23,7 @@ export function LoadingSpinner({forceShow}: {forceShow?: boolean | undefined}) {
   }
 
   useEffect(() => {
-    const timer = setTimeout(() => setShow(true), 500);
+    const timer = setTimeout(setShow, 500, true);
     return () => clearTimeout(timer);
   }, []);
 

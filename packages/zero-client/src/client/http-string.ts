@@ -12,12 +12,16 @@ export function toHTTPString(url: WSString): HTTPString {
   return ('http' + url.slice(2)) as HTTPString;
 }
 
+const httpsRe = /^https?:\/\//;
+
 export function assertHTTPString(url: string): asserts url is HTTPString {
-  assert(/^https?:\/\//.test(url), () => `Expected HTTP(S) URL, got "${url}"`);
+  assert(httpsRe.test(url), () => `Expected HTTP(S) URL, got "${url}"`);
 }
 
+const wssRe = /^wss?:\/\//;
+
 export function assertWSString(url: string): asserts url is WSString {
-  assert(/^wss?:\/\//.test(url), () => `Expected WS(S) URL, got "${url}"`);
+  assert(wssRe.test(url), () => `Expected WS(S) URL, got "${url}"`);
 }
 
 export function appendPath<T extends HTTPString | WSString>(

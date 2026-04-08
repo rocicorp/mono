@@ -160,7 +160,7 @@ describe('iterateLeaves', () => {
     const c = createLeaf('c');
     const obj = {a, b, c};
 
-    const result = Array.from(iterateLeaves(obj, isLeaf));
+    const result = [...iterateLeaves(obj, isLeaf)];
 
     expect(result).toHaveLength(3);
     expect(result[0]).toBe(a);
@@ -177,7 +177,7 @@ describe('iterateLeaves', () => {
       group2: {c},
     };
 
-    const result = Array.from(iterateLeaves(obj, isLeaf));
+    const result = [...iterateLeaves(obj, isLeaf)];
 
     expect(result).toHaveLength(3);
     expect(result[0]).toBe(a);
@@ -198,7 +198,7 @@ describe('iterateLeaves', () => {
       other: {d},
     };
 
-    const result = Array.from(iterateLeaves(obj, isLeaf));
+    const result = [...iterateLeaves(obj, isLeaf)];
 
     expect(result).toHaveLength(4);
     expect(result[0]).toBe(a);
@@ -208,7 +208,7 @@ describe('iterateLeaves', () => {
   });
 
   test('yields nothing from empty object', () => {
-    const result = Array.from(iterateLeaves({}, isLeaf));
+    const result = [...iterateLeaves({}, isLeaf)];
 
     expect(result).toHaveLength(0);
   });

@@ -60,12 +60,12 @@ export class Catch implements Output {
   }
 
   fetch(req: FetchRequest = {}) {
-    return [...this.#input.fetch(req)].map(expandNode);
+    return Array.from(this.#input.fetch(req), expandNode);
   }
 
   push(change: Change) {
     const fetch = this.#fetchOnPush
-      ? [...this.#input.fetch({})].map(expandNode)
+      ? Array.from(this.#input.fetch({}), expandNode)
       : [];
     const expandedChange = expandChange(change);
     if (this.#fetchOnPush) {
@@ -123,7 +123,7 @@ export function expandNode(node: Node | 'yield'): CaughtNode {
         relationships: Object.fromEntries(
           Object.entries(node.relationships).map(([k, v]) => [
             k,
-            [...v()].map(expandNode),
+            Array.from(v(), expandNode),
           ]),
         ),
       };

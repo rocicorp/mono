@@ -83,7 +83,7 @@ function LabelPopover({
   const handleCreateNewLabel = () => {
     if (
       input &&
-      !filteredLabels.find(
+      !filteredLabels.some(
         label => label.name.toLowerCase() === input.toLowerCase(),
       )
     ) {

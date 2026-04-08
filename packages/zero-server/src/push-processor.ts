@@ -20,6 +20,8 @@ import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts'
 import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 
+export const separatorRe = /[.|]/;
+
 export class PushProcessor<
   _S extends Schema,
   D extends Database<ExtractTransactionType<D>>,
@@ -101,7 +103,7 @@ export class PushProcessor<
     args: ReadonlyJSONValue | undefined,
   ): Promise<void> {
     // Legacy mutators used | as a separator, new mutators use .
-    const mutator = getValueAtPath(mutators, key, /\.|\|/);
+    const mutator = getValueAtPath(mutators, key, separatorRe);
     assert(typeof mutator === 'function', `could not find mutator ${key}`);
     if (isMutator(mutator)) {
       return mutator.fn({

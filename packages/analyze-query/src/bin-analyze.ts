@@ -1,7 +1,7 @@
 import '../../shared/src/dotenv.ts';
 
-import chalk from 'chalk';
 import fs from 'node:fs';
+import {styleText} from 'node:util';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
@@ -24,6 +24,7 @@ import {
   deployPermissionsOptions,
   loadSchemaAndPermissions,
 } from '../../zero-cache/src/scripts/permissions.ts';
+import {runAst} from '../../zero-cache/src/services/run-ast.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
@@ -43,7 +44,6 @@ import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {explainQueries} from './explain-queries.ts';
-import {runAst} from '../../zero-cache/src/services/run-ast.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -334,43 +334,50 @@ async function runHash(hash: string) {
 }
 
 if (config.outputSyncedRows) {
-  colorConsole.log(chalk.blue.bold('=== Synced Rows: ===\n'));
+  colorConsole.log(styleText(['blue', 'bold'], '=== Synced Rows: ===\n'));
   for (const [table, rows] of Object.entries(result.syncedRows ?? {})) {
-    colorConsole.log(chalk.bold(table + ':'), rows);
+    colorConsole.log(styleText('bold', table + ':'), rows);
   }
 }
 
-colorConsole.log(chalk.blue.bold('=== Query Stats: ===\n'));
-colorConsole.log(chalk.bold('total synced rows:'), result.syncedRowCount);
+colorConsole.log(styleText(['blue', 'bold'], '=== Query Stats: ===\n'));
+colorConsole.log(
+  styleText('bold', 'total synced rows:'),
+  result.syncedRowCount,
+);
 showStats();
 if (config.outputVendedRows) {
-  colorConsole.log(chalk.blue.bold('=== JS Row Scan Values: ===\n'));
+  colorConsole.log(
+    styleText(['blue', 'bold'], '=== JS Row Scan Values: ===\n'),
+  );
   for (const source of sources.values()) {
     colorConsole.log(
-      chalk.bold(`${source.tableSchema.name}:`),
+      styleText('bold', `${source.tableSchema.name}:`),
       debug.getVendedRows()?.[source.tableSchema.name] ?? {},
     );
   }
 }
 
-colorConsole.log(chalk.blue.bold('\n=== Rows Scanned (by SQLite): ===\n'));
+colorConsole.log(
+  styleText(['blue', 'bold'], '\n=== Rows Scanned (by SQLite): ===\n'),
+);
 const nvisitCounts = debug.getNVisitCounts();
 let totalNVisit = 0;
 for (const [table, queries] of Object.entries(nvisitCounts)) {
-  colorConsole.log(chalk.bold(`${table}:`), queries);
+  colorConsole.log(styleText('bold', `${table}:`), queries);
   for (const count of Object.values(queries)) {
     totalNVisit += count;
   }
 }
 colorConsole.log(
-  chalk.bold('total rows scanned:'),
+  styleText('bold', 'total rows scanned:'),
   colorRowsConsidered(totalNVisit),
 );
 
-colorConsole.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
+colorConsole.log(styleText(['blue', 'bold'], '\n\n=== Query Plans: ===\n'));
 const plans = explainQueries(debug.getVendedRowCounts() ?? {}, db);
 for (const [query, plan] of Object.entries(plans)) {
-  colorConsole.log(chalk.bold('query'), query);
+  colorConsole.log(styleText('bold', 'query'), query);
   colorConsole.log(plan.map((row, i) => colorPlanRow(row, i)).join('\n'));
   colorConsole.log('\n');
 }
@@ -385,17 +392,17 @@ function showStats() {
       totalRowsConsidered += v;
     }
     colorConsole.log(
-      chalk.bold(source.tableSchema.name + ' vended:'),
+      styleText('bold', source.tableSchema.name + ' vended:'),
       debug.getVendedRowCounts()?.[source.tableSchema.name] ?? {},
     );
   }
 
   colorConsole.log(
-    chalk.bold('Rows Read (into JS):'),
+    styleText('bold', 'Rows Read (into JS):'),
     colorRowsConsidered(totalRowsConsidered),
   );
   colorConsole.log(
-    chalk.bold('time:'),
+    styleText('bold', 'time:'),
     colorTime(result.end - result.start),
     'ms',
   );
@@ -403,28 +410,28 @@ function showStats() {
 
 function colorTime(duration: number) {
   if (duration < 100) {
-    return chalk.green(duration.toFixed(2) + 'ms');
+    return styleText('green', duration.toFixed(2) + 'ms');
   } else if (duration < 1000) {
-    return chalk.yellow(duration.toFixed(2) + 'ms');
+    return styleText('yellow', duration.toFixed(2) + 'ms');
   }
-  return chalk.red(duration.toFixed(2) + 'ms');
+  return styleText('red', duration.toFixed(2) + 'ms');
 }
 
 function colorRowsConsidered(n: number) {
   if (n < 1000) {
-    return chalk.green(n.toString());
+    return styleText('green', n.toString());
   } else if (n < 10000) {
-    return chalk.yellow(n.toString());
+    return styleText('yellow', n.toString());
   }
-  return chalk.red(n.toString());
+  return styleText('red', n.toString());
 }
 
 function colorPlanRow(row: string, i: number) {
   if (row.includes('SCAN')) {
     if (i === 0) {
-      return chalk.yellow(row);
+      return styleText('yellow', row);
     }
-    return chalk.red(row);
+    return styleText('red', row);
   }
-  return chalk.green(row);
+  return styleText('green', row);
 }

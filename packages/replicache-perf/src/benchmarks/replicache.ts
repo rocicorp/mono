@@ -597,7 +597,7 @@ export function benchmarkCreateIndex(opts: {numKeys: number}): Benchmark {
 
 export function sleep(ms: number): Promise<void> {
   return new Promise<void>(resolve => {
-    setTimeout(() => resolve(), ms);
+    setTimeout(resolve, ms);
   });
 }
 

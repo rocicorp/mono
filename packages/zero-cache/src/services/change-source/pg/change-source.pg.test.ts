@@ -42,7 +42,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   let upstreamURI: string;
   let replicationSlot: string;
   let replicaDbFile: DbFile;
-  let source: ChangeSource;
+  let source: ChangeSource | undefined;
   let streams: ChangeStream[];
 
   beforeEach<PgTest>(async ({testDBs}) => {
@@ -96,6 +96,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     return async () => {
       streams.forEach(s => s.changes.cancel());
+      await source?.stop();
       await testDBs.drop(upstream);
       replicaDbFile.delete();
     };
@@ -197,6 +198,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     let err;
     for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
       try {
+        assert(src, 'ChangeSource not initialized');
         const stream = await src.startStream(watermark);
         // cleanup in afterEach() ensures that replication slots are released
         streams.push(stream);
@@ -879,7 +881,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   ])('replication lag reports: %s', async (_name, startStreamAfterReport) => {
     await startReplication(10);
 
-    const initialSend = await source.startLagReporter();
+    const initialSend = await source?.startLagReporter();
     expect(initialSend).toMatchObject({
       nextSendTimeMs: expect.any(Number),
     });

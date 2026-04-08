@@ -157,9 +157,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     } else if (
       this.#coalesce &&
       this.#messages.length &&
-      this.#messages[this.#messages.length - 1] !== 'terminus'
+      this.#messages.at(-1) !== 'terminus'
     ) {
-      const prev = this.#messages[this.#messages.length - 1];
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      const prev = this.#messages.at(-1)!;
       assert(prev !== 'terminus', 'prev should not be terminus after check');
       this.#messages[this.#messages.length - 1] = {
         value: this.#coalesce(entry, prev),

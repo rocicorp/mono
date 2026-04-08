@@ -88,6 +88,6 @@ function addPrimaryKeys(
 
   return [
     ...orderBy,
-    ...[...primaryKeysToAdd].map(key => [key, 'asc'] as [string, 'asc']),
+    ...Array.from(primaryKeysToAdd, key => [key, 'asc'] as [string, 'asc']),
   ];
 }

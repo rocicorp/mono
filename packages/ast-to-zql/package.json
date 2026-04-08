@@ -13,7 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "oxfmt": "^0.43.0"
+    "oxfmt": "^0.44.0"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",

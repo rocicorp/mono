@@ -35,6 +35,7 @@ import {
   type SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
+import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 import type {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
@@ -43,7 +44,6 @@ import {
   toSQLiteType,
   type NoSubqueryCondition,
 } from './query-builder.ts';
-import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -110,7 +110,7 @@ export class TableSource implements Source {
     this.#shouldYield = shouldYield;
 
     assert(
-      this.#uniqueIndexes.has(JSON.stringify([...primaryKey].sort())),
+      this.#uniqueIndexes.has(JSON.stringify(primaryKey.toSorted())),
       `primary key ${primaryKey} does not have a UNIQUE index`,
     );
   }

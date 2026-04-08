@@ -87,7 +87,7 @@ if (!dbPath) {
   ): AnyQuery {
     return newQueryImpl(
       schema,
-      tableName as keyof typeof schema.tables & string,
+      tableName as keyof typeof schema.tables,
       queryAST,
       format,
       'test',
@@ -95,9 +95,10 @@ if (!dbPath) {
   }
 
   // Helper to benchmark planned vs unplanned
-  function registerBenchmark<
-    TTable extends keyof typeof schema.tables & string,
-  >(name: string, query: AnyQuery) {
+  function registerBenchmark<TTable extends keyof typeof schema.tables>(
+    name: string,
+    query: AnyQuery,
+  ) {
     const unplannedAST = asQueryInternals(query).ast;
     const format = asQueryInternals(query).format;
 

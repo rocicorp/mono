@@ -54,6 +54,7 @@ test('encode/decodeSecProtocols round-trip', () => {
         ),
         authToken: fc.option(
           fc.stringOf(
+            // oxlint-disable-next-line typescript/no-misused-spread
             fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz0123456789-_.'),
           ),
           {nil: undefined},
@@ -74,7 +75,9 @@ test('encode/decodeSecProtocols round-trip', () => {
 
 test('encodeSecProtocol with too much data', () => {
   // Creates a string that is too large for String.fromCharCode. This is different in different browsers.
-  const largeString = Array.from({length: 2 ** 20}, () => '\u{0}').join('');
+  const largeString = Array.from({length: 2 ** 20})
+    .fill('\u{0}')
+    .join('');
   const initConnectionMessage: InitConnectionMessage = [
     'initConnection',
     {desiredQueriesPatch: [{op: 'del', hash: largeString}]},

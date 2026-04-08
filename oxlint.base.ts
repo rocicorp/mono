@@ -7,6 +7,7 @@ import type {OxlintConfig} from 'oxlint';
  */
 export const baseConfig = {
   plugins: ['eslint', 'typescript', 'unicorn', 'jest'],
+  jsPlugins: ['@e18e/eslint-plugin'],
   ignorePatterns: [
     'node_modules',
     'dist',
@@ -139,5 +140,36 @@ export const baseConfig = {
     'unicorn/prefer-array-find': 'error',
     'unicorn/prefer-array-flat-map': 'error',
     'unicorn/prefer-set-has': 'error',
+
+    // e18e modernization rules
+    'e18e/prefer-array-at': 'error',
+    'e18e/prefer-array-fill': 'error',
+    'e18e/prefer-includes': 'error',
+    'e18e/prefer-array-to-reversed': 'error',
+    'e18e/prefer-array-to-sorted': 'error',
+    'e18e/prefer-array-to-spliced': 'error',
+    'e18e/prefer-nullish-coalescing': 'error',
+    'e18e/prefer-object-has-own': 'error',
+    'e18e/prefer-spread-syntax': 'error',
+    'e18e/prefer-url-canparse': 'error',
+
+    // e18e module replacement rules
+    'e18e/ban-dependencies': 'error',
+
+    // e18e performance improvement rules
+    'e18e/prefer-array-from-map': 'error',
+    'e18e/prefer-timer-args': 'error',
+    'e18e/prefer-date-now': 'error',
+    'e18e/prefer-regex-test': 'error',
+    'e18e/prefer-array-some': 'error',
+    'e18e/prefer-static-regex': 'error',
   },
+  overrides: [
+    {
+      files: ['**/*.test.*', '**/*.config.ts'],
+      rules: {
+        'e18e/prefer-static-regex': 'off',
+      },
+    },
+  ],
 } satisfies OxlintConfig;
