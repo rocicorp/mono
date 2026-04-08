@@ -60,7 +60,7 @@ describe('view-syncer/auth maintenance', () => {
   ) {
     vi.setSystemTime(Date.now() + delta);
     const matchingCall = [...setTimeoutFn.mock.calls]
-      .reverse()
+      .toReversed()
       .find(([, delay]) => delay === delta);
     const fn = matchingCall?.[0] ?? setTimeoutFn.mock.lastCall?.[0];
     expect(fn).toBeTypeOf('function');
