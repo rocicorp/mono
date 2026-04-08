@@ -356,6 +356,9 @@ class PushWorker {
         'The server behind ZERO_MUTATE_URL returned a push error.',
         response,
       );
+      // TODO(0xcadams): Fanout is keyed only by clientID here. If a response arrives
+      // after reconnect or re-auth, `#clients.get(clientID)` may point at a
+      // newer wsID/revision and fail the replacement downstream instead.
       const groupedMutationIDs = groupBy(
         response.mutationIDs ?? [],
         m => m.clientID,
@@ -412,6 +415,8 @@ class PushWorker {
       }
     } else {
       // Look for mutations results that should cause us to terminate the connection
+      // TODO(0xcadams): Same stale-routing issue as above: fatal mutation results are
+      // still mapped to the current downstream by clientID only.
       const groupedMutations = groupBy(response.mutations, m => m.id.clientID);
       for (const [clientID, mutations] of groupedMutations) {
         const client = this.#clients.get(clientID);

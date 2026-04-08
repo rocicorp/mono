@@ -688,7 +688,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
 
     for (const connection of plan.dueRevalidations) {
-      await this.#validateConnection(connection);
+      try {
+        await this.#validateConnection(connection);
+      } catch (e) {
+        if (isProtocolError(e) && isTransformFailedError(e)) {
+          lc.warn?.(
+            'Scheduled auth revalidation failed; deferring auth maintenance',
+            {
+              clientID: connection.clientID,
+              wsID: connection.wsID,
+              message: e.message,
+            },
+          );
+          this.contextManager.deferMaintenance('revalidate');
+          return;
+        }
+        throw e;
+      }
     }
 
     // Revalidation can change which connection is safe for shared background work.
@@ -2258,15 +2274,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         await attemptRetransform(backgroundConnection);
         return;
       } catch (e) {
-        if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
-          lc.warn?.(
-            'Background retransform auth failed; failing connection and searching for replacement',
-            {
-              clientID: backgroundConnection.clientID,
-              message: e.message,
-            },
-          );
-          this.#failMaintenanceConnection(backgroundConnection, e);
+        if (isProtocolError(e)) {
+          if (isAuthErrorBody(e.errorBody)) {
+            lc.warn?.(
+              'Background retransform auth failed; failing connection and searching for replacement',
+              {
+                clientID: backgroundConnection.clientID,
+                message: e.message,
+              },
+            );
+            this.#failMaintenanceConnection(backgroundConnection, e);
+          } else if (isTransformFailedError(e)) {
+            lc.warn?.(
+              'Background retransform failed; deferring auth maintenance',
+              {
+                clientID: backgroundConnection.clientID,
+                message: e.message,
+              },
+            );
+            this.contextManager.deferMaintenance('retransform');
+            return;
+          }
         } else {
           throw e;
         }
@@ -2414,6 +2442,13 @@ function checkClientAndCVRVersions(
       origin: ErrorOrigin.ZeroCache,
     });
   }
+}
+
+function isTransformFailedError(error: ProtocolError): boolean {
+  return (
+    error.errorBody.kind === ErrorKind.TransformFailed &&
+    !isAuthErrorBody(error.errorBody)
+  );
 }
 
 /**

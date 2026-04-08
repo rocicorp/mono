@@ -184,6 +184,7 @@ describe('ConnectionContextManager', () => {
       group: {
         userID: 'user-1',
         backgroundConnection: {clientID: 'c1', wsID: 'ws1'},
+        maintenanceNotBeforeAt: undefined,
         retransformAt: undefined,
         validated: true,
       },
@@ -206,6 +207,7 @@ describe('ConnectionContextManager', () => {
         userID: undefined,
         validated: true,
         backgroundConnection: {clientID: 'c1', wsID: 'ws1'},
+        maintenanceNotBeforeAt: undefined,
         retransformAt: undefined,
       },
     });
@@ -611,5 +613,52 @@ describe('ConnectionContextManager', () => {
     );
 
     expect(manager.getGroupState().retransformAt).toBe(4_000);
+  });
+
+  test('defers all scheduled maintenance until the group not-before deadline', () => {
+    let now = 1_000;
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      5,
+      2,
+      undefined,
+      undefined,
+      undefined,
+      () => now,
+    );
+    register(manager, 'c1', 'ws1', 'user-1');
+    register(manager, 'c2', 'ws2', 'user-1');
+    validate(manager, 'c1', 'ws1');
+    validate(manager, 'c2', 'ws2');
+
+    now = 3_000;
+    manager.deferMaintenance('retransform');
+
+    expect(manager.getGroupState().maintenanceNotBeforeAt).toBe(5_000);
+    expect(manager.planMaintenance()).toEqual({
+      dueRevalidations: [],
+      dueRetransform: false,
+      earliestDeadlineAt: 5_000,
+    });
+
+    now = 6_000;
+    manager.deferMaintenance('revalidate');
+
+    expect(manager.getGroupState().maintenanceNotBeforeAt).toBe(11_000);
+    expect(manager.planMaintenance()).toEqual({
+      dueRevalidations: [],
+      dueRetransform: false,
+      earliestDeadlineAt: 11_000,
+    });
+
+    now = 11_000;
+    expect(manager.planMaintenance()).toEqual({
+      dueRevalidations: [
+        expect.objectContaining({clientID: 'c1', wsID: 'ws1'}),
+        expect.objectContaining({clientID: 'c2', wsID: 'ws2'}),
+      ],
+      dueRetransform: true,
+      earliestDeadlineAt: 3_000,
+    });
   });
 });
