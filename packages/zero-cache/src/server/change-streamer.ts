@@ -92,7 +92,10 @@ export default async function runWorker(
               upstream.db,
               shard,
               replica.file,
-              initialSync,
+              {
+                ...initialSync,
+                replicationSlotFailover: upstream.pgReplicationSlotFailover,
+              },
               context,
               replicationLag.reportIntervalMs,
             )

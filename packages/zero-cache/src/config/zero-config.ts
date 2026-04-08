@@ -360,6 +360,20 @@ export const zeroOptions = {
       type: v.number().optional(),
       hidden: true, // Passed from main thread to sync workers
     },
+
+    pgReplicationSlotFailover: {
+      type: v.boolean().optional(),
+      desc: [
+        `For upstream Postgres versions 17+, creates replication slots with the`,
+        `{bold failover} parameter set to {bold true} to enable slot synchronization`,
+        `and failover. Note that additional Postgres-level configuration is necessary`,
+        `when enabling this option. For details, see:`,
+        ``,
+        `https://www.postgresql.org/docs/current/logicaldecoding-explanation.html#LOGICALDECODING-REPLICATION-SLOTS-SYNCHRONIZATION`,
+        ``,
+        `(Note that this option has no effect for Postgres versions before 17.)`,
+      ],
+    },
   },
 
   /** @deprecated */

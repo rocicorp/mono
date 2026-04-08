@@ -17,6 +17,7 @@ import {
   expectTables,
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
+import {PG_17} from '../../../types/pg-versions.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
 import {initialSync, INSERT_BATCH_SIZE} from './initial-sync.ts';
@@ -2602,7 +2603,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           },
           replica,
           getConnectionURI(upstream),
-          {tableCopyWorkers: 3},
+          {tableCopyWorkers: 3, replicationSlotFailover: true},
           TEST_CONTEXT,
         );
 
@@ -2679,13 +2680,20 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
         // Check replica state against the upstream slot.
         const r = replicas[i];
-        const slots = await upstream`
+        const slots = await upstream /*sql*/ `
         SELECT slot_name as "slotName", confirmed_flush_lsn as lsn 
           FROM pg_replication_slots WHERE slot_name = ${r.slot}`;
         expect(slots[0]).toEqual({
           slotName: r.slot,
           lsn: fromStateVersionString(replicaState.stateVersion),
         });
+
+        if (pgVersion >= PG_17) {
+          const [{failover}] = await upstream<{failover: boolean}[]> /*sql*/ `
+            SELECT failover FROM pg_replication_slots WHERE slot_name = ${r.slot}
+          `;
+          expect(failover).toBe(true);
+        }
 
         expect(eventSink.slice(0, 2)).toMatchObject([
           {
