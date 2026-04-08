@@ -358,6 +358,29 @@ describe('combine pushes', () => {
     expect(pushes[0].push.mutations).toHaveLength(3);
   });
 
+  test('combines pushes when auth matches by value across snapshots', () => {
+    const first = makeEntry(makePush(1, 'client1'), {
+      clientID: 'client1',
+      wsID: 'ws1',
+      revision: 1,
+      auth: 'a',
+    });
+    const second = makeEntry(makePush(1, 'client1'), {
+      clientID: 'client1',
+      wsID: 'ws1',
+      revision: 1,
+      auth: 'a',
+    });
+
+    second.context.auth = {type: 'opaque', raw: 'a'};
+
+    const [pushes, terminate] = combinePushes([first, second]);
+
+    expect(pushes).toHaveLength(1);
+    expect(terminate).toBe(false);
+    expect(pushes[0].push.mutations).toHaveLength(2);
+  });
+
   test('handles multiple clients with multiple pushes', () => {
     const [pushes, terminate] = combinePushes([
       makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),

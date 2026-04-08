@@ -3,6 +3,7 @@ import type {InitConnectionBody} from '../../../../zero-protocol/src/connect.ts'
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {
+  authEquals,
   resolveAuth,
   type Auth,
   type ValidateLegacyJWT,
@@ -667,16 +668,6 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       ? undefined
       : this.#now() + this.#revalidateIntervalMs;
   }
-}
-
-function authEquals(a: Auth | undefined, b: Auth | undefined) {
-  if (a === b) {
-    return true;
-  }
-  if (!a || !b) {
-    return false;
-  }
-  return a.type === b.type && a.raw === b.raw;
 }
 
 function snapshotConnection<T extends ConnectionContext | undefined>(

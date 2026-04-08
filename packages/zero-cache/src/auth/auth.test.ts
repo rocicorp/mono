@@ -87,6 +87,14 @@ describe('resolveAuth', () => {
     ).resolves.toEqual({type: 'opaque', raw: 'opaque-1'});
   });
 
+  test('reuses the existing opaque auth object when the token is unchanged', async () => {
+    const existingAuth = {type: 'opaque', raw: 'opaque-1'} as const;
+
+    await expect(
+      resolveAuth(lc, existingAuth, 'u1', 'opaque-1', undefined),
+    ).resolves.toBe(existingAuth);
+  });
+
   test('treats empty auth as unauthenticated when no prior auth exists', async () => {
     await expect(resolveAuth(lc, undefined, 'u1', '', undefined)).resolves.toBe(
       undefined,
