@@ -881,7 +881,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   ])('replication lag reports: %s', async (_name, startStreamAfterReport) => {
     await startReplication(10);
 
-    const initialSend = await source.startLagReporter();
+    const initialSend = await source?.startLagReporter();
     expect(initialSend).toMatchObject({
       nextSendTimeMs: expect.any(Number),
     });
