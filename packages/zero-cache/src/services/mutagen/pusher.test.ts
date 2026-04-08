@@ -1000,7 +1000,7 @@ describe('pusher service', () => {
 
     await pusher.stop();
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
 
     expect(fetch.mock.calls[0][0]).toBe(
       'http://requester.com/push?schema=zero_0&appID=zero',
@@ -1022,34 +1022,7 @@ describe('pusher service', () => {
             {
               type: 'bulk',
               clientGroupID: 'cgid',
-              clientIDs: ['client-a'],
-            },
-          ],
-        },
-      ],
-    });
-
-    expect(fetch.mock.calls[1][0]).toBe(
-      'http://requester.com/push?schema=zero_0&appID=zero',
-    );
-    expect(fetch.mock.calls[1][1]?.headers).toMatchObject({
-      'X-Api-Key': 'api-key',
-      'x-custom-header': 'requester',
-      'Authorization': 'Bearer jwt',
-      'Origin': 'https://app.example',
-    });
-    expect(fetch.mock.calls[1][1]?.headers).not.toHaveProperty('Cookie');
-    expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
-      clientGroupID: 'cgid',
-      mutations: [
-        {
-          clientID: 'client-b',
-          name: '_zero_cleanupResults',
-          args: [
-            {
-              type: 'bulk',
-              clientGroupID: 'cgid',
-              clientIDs: ['client-b'],
+              clientIDs: ['client-a', 'client-b'],
             },
           ],
         },
