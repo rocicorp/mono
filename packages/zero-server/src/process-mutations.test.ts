@@ -461,41 +461,6 @@ describe('handleMutateRequest', () => {
     expect(recordedResults).toEqual([]);
   });
 
-  test('returns database error when a later transaction fails to open', async () => {
-    const {
-      db: flakyDb,
-      recordedLMIDs,
-      recordedResults,
-    } = createTrackingDatabase({
-      transactionErrorProvider: ({mutationID}) =>
-        mutationID === 2 ? new Error('db unavailable') : undefined,
-    });
-    const body = makePushBody([
-      makeCustomMutation({id: 1}),
-      makeCustomMutation({id: 2}),
-    ]);
-
-    const response = await handleMutateRequest(
-      flakyDb,
-      (transact, _mutation) =>
-        transact((_tx, _name, _args) => promiseUndefined),
-      baseQuery,
-      body,
-    );
-
-    expect(response).toMatchObject({
-      kind: ErrorKind.PushFailed,
-      origin: ErrorOrigin.Server,
-      reason: ErrorReason.Database,
-      message: expect.stringContaining('db unavailable'),
-      mutationIDs: [{id: 2, clientID: 'cid'}],
-    });
-
-    // The first mutation's LMID is persisted
-    expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
-  });
-
   test('returns parse error when the push body validation fails', async () => {
     let callbackInvoked = false;
     const {

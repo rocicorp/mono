@@ -82,12 +82,6 @@ export type Parsed<D extends Database<ExtractTransactionType<D>>> = {
 
 type MutationPhase = 'preTransaction' | 'transactionPending' | 'postCommit';
 
-// Normalize failures thrown from user code into consumed-mutation failures.
-//
-// Anything thrown while handling a mutation is treated like an ApplicationError
-// unless it is already a protocol or transaction-machinery error. This keeps a
-// bad mutation from wedging the client behind endless retries while preserving a
-// separate retry boundary for transaction setup/commit failures.
 const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
   try {
     return await fn();
@@ -249,17 +243,6 @@ export async function handleMutateRequest<
   try {
     const transactor = new Transactor(dbProvider, pushBody, queryParams, lc);
 
-    // Mutation failure policy:
-    //   1. Pre-transaction user code failures are consumed: we still advance
-    //      LMID and persist an app-style failure result.
-    //   2. Once `transact()` is entered, user-code failures are also consumed,
-    //      but we never rerun the mutator callback. If we need to persist the
-    //      failure result we open one more transaction only to record it.
-    //   3. Database failures that happen before the mutator callback starts are
-    //      retryable push failures.
-    //   4. Database failures after the mutator callback starts are consumed so
-    //      we do not encourage client retries that could replay side effects.
-    //   5. Post-commit failures are logged, but the mutation remains committed.
     for (const m of pushBody.mutations) {
       // Handle internal mutations (like cleanup) directly without user dispatch
       if (m.type === 'custom' && m.name === CLEANUP_RESULTS_MUTATION_NAME) {
@@ -290,10 +273,6 @@ export async function handleMutateRequest<
 
       const transactProxy: TransactFn<D> = async innerCb => {
         mutationPhase = 'transactionPending';
-        // Anything thrown while handling user code inside the mutation is
-        // treated as a consumed-mutation failure. Only transaction-machinery
-        // failures that happen before the mutator starts escape as retryable
-        // push errors.
         const result = await transactor.transact(m, (tx, name, args) =>
           applicationErrorWrapper(() => innerCb(tx, name, args)),
         );
@@ -313,10 +292,8 @@ export async function handleMutateRequest<
         }
 
         if (mutationPhase === 'preTransaction') {
-          // Pre-transaction
           await transactor.persistPreTransactionFailure(m, error);
         } else if (mutationPhase === 'postCommit') {
-          // Post-commit
           lc.error?.(
             `Post-commit mutation handler failed for mutation ${m.id} for client ${m.clientID}`,
             error,
@@ -377,11 +354,6 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
-    // If user code fails after `transact()` is entered, or if the database
-    // fails after the mutator callback has started, we may open one more
-    // transaction to persist the failure result. That second attempt never
-    // reruns the mutator callback; it only advances LMID and writes the
-    // app-style failure response.
     let appErrorToPersist: ApplicationError | undefined = undefined;
     for (;;) {
       try {
@@ -415,8 +387,6 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
           };
         }
 
-        // User code failed while handling the mutation. Consume it by retrying
-        // once only to record the failure result, without rerunning the mutator.
         if (isApplicationError(error)) {
           if (appErrorToPersist !== undefined) {
             this.#lc.error?.(
@@ -528,9 +498,6 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
 
       return ret;
     } catch (error) {
-      // Only protocol/app failures are allowed to escape unchanged. Everything
-      // else is treated as transaction-machinery failure so callers can decide
-      // whether the mutation is still safely retryable.
       if (
         isApplicationError(error) ||
         error instanceof OutOfOrderMutation ||
