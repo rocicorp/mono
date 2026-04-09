@@ -89,7 +89,22 @@ describe('compareValues', () => {
 // ---- MemorySource fetch ----
 
 describe('MemorySource fetch', () => {
-  bench(`scan ${ISSUE_COUNT} rows`, function* () {
+  bench(`scan ${ISSUE_COUNT} rows, sort 1 key`, function* () {
+    const src = new MemorySource('issue', issueColumns, ['id']);
+    for (let i = 0; i < ISSUE_COUNT; i++) {
+      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+        /* consume */
+      }
+    }
+    const conn = src.connect([['id', 'asc']]);
+    const out = new Catch(conn);
+
+    yield () => {
+      out.fetch();
+    };
+  });
+
+  bench(`scan ${ISSUE_COUNT} rows, sort 2 keys`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
       for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
@@ -106,12 +121,54 @@ describe('MemorySource fetch', () => {
       out.fetch();
     };
   });
+
+  bench(`scan ${ISSUE_COUNT} rows, sort 4 keys`, function* () {
+    const src = new MemorySource('issue', issueColumns, ['id']);
+    for (let i = 0; i < ISSUE_COUNT; i++) {
+      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+        /* consume */
+      }
+    }
+    const conn = src.connect([
+      ['closed', 'asc'],
+      ['ownerId', 'asc'],
+      ['createdAt', 'asc'],
+      ['id', 'asc'],
+    ]);
+    const out = new Catch(conn);
+
+    yield () => {
+      out.fetch();
+    };
+  });
 });
 
 // ---- MemorySource push ----
 
 describe('MemorySource push', () => {
-  bench(`add/remove over ${ISSUE_COUNT} rows`, function* () {
+  bench(`add/remove over ${ISSUE_COUNT} rows, sort 1 key`, function* () {
+    const src = new MemorySource('issue', issueColumns, ['id']);
+    for (let i = 0; i < ISSUE_COUNT; i++) {
+      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+        /* consume */
+      }
+    }
+    const conn = src.connect([['id', 'asc']]);
+    new Catch(conn);
+
+    let idx = ISSUE_COUNT;
+    yield () => {
+      const row = makeIssueRow(idx++);
+      for (const _ of src.push({type: 'add', row})) {
+        /* consume */
+      }
+      for (const _ of src.push({type: 'remove', row})) {
+        /* consume */
+      }
+    };
+  });
+
+  bench(`add/remove over ${ISSUE_COUNT} rows, sort 2 keys`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
       for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
@@ -136,7 +193,61 @@ describe('MemorySource push', () => {
     };
   });
 
-  bench(`edit over ${ISSUE_COUNT} rows`, function* () {
+  bench(`add/remove over ${ISSUE_COUNT} rows, sort 4 keys`, function* () {
+    const src = new MemorySource('issue', issueColumns, ['id']);
+    for (let i = 0; i < ISSUE_COUNT; i++) {
+      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+        /* consume */
+      }
+    }
+    const conn = src.connect([
+      ['closed', 'asc'],
+      ['ownerId', 'asc'],
+      ['createdAt', 'asc'],
+      ['id', 'asc'],
+    ]);
+    new Catch(conn);
+
+    let idx = ISSUE_COUNT;
+    yield () => {
+      const row = makeIssueRow(idx++);
+      for (const _ of src.push({type: 'add', row})) {
+        /* consume */
+      }
+      for (const _ of src.push({type: 'remove', row})) {
+        /* consume */
+      }
+    };
+  });
+
+  bench(`edit over ${ISSUE_COUNT} rows, sort 1 key`, function* () {
+    const src = new MemorySource('issue', issueColumns, ['id']);
+    const rows: Row[] = [];
+    for (let i = 0; i < ISSUE_COUNT; i++) {
+      const row = makeIssueRow(i);
+      rows.push(row);
+      for (const _ of src.push({type: 'add', row})) {
+        /* consume */
+      }
+    }
+    const conn = src.connect([['id', 'asc']]);
+    new Catch(conn);
+
+    let idx = 0;
+    yield () => {
+      const oldRow = rows[idx % rows.length];
+      idx++;
+      const newRow = {...oldRow, title: `Updated ${idx}`};
+      for (const _ of src.push({type: 'edit', oldRow, row: newRow})) {
+        /* consume */
+      }
+      for (const _ of src.push({type: 'edit', oldRow: newRow, row: oldRow})) {
+        /* consume */
+      }
+    };
+  });
+
+  bench(`edit over ${ISSUE_COUNT} rows, sort 2 keys`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     const rows: Row[] = [];
     for (let i = 0; i < ISSUE_COUNT; i++) {
@@ -147,6 +258,38 @@ describe('MemorySource push', () => {
       }
     }
     const conn = src.connect([
+      ['createdAt', 'asc'],
+      ['id', 'asc'],
+    ]);
+    new Catch(conn);
+
+    let idx = 0;
+    yield () => {
+      const oldRow = rows[idx % rows.length];
+      idx++;
+      const newRow = {...oldRow, title: `Updated ${idx}`};
+      for (const _ of src.push({type: 'edit', oldRow, row: newRow})) {
+        /* consume */
+      }
+      for (const _ of src.push({type: 'edit', oldRow: newRow, row: oldRow})) {
+        /* consume */
+      }
+    };
+  });
+
+  bench(`edit over ${ISSUE_COUNT} rows, sort 4 keys`, function* () {
+    const src = new MemorySource('issue', issueColumns, ['id']);
+    const rows: Row[] = [];
+    for (let i = 0; i < ISSUE_COUNT; i++) {
+      const row = makeIssueRow(i);
+      rows.push(row);
+      for (const _ of src.push({type: 'add', row})) {
+        /* consume */
+      }
+    }
+    const conn = src.connect([
+      ['closed', 'asc'],
+      ['ownerId', 'asc'],
       ['createdAt', 'asc'],
       ['id', 'asc'],
     ]);
