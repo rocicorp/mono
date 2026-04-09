@@ -55,7 +55,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 47 adds optional auth token to push body
 // -- version 48 adds updateAuth
 // -- version 49 adds `scalar` to CorrelatedSubqueryCondition, removes scalarSubquery
-export const PROTOCOL_VERSION = 49;
+// -- version 50 adds OTEL headers to push and query messages
+export const PROTOCOL_VERSION = 50;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
