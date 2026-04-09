@@ -16,6 +16,8 @@ import {
   type MutationResult,
   type PushBody,
 } from '../../zero-protocol/src/push.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import {OutOfOrderMutation} from './process-mutations.ts';
@@ -33,6 +35,9 @@ beforeEach(async () => {
     CREATE SCHEMA IF NOT EXISTS zero_0;
     ${getClientsTableDefinition('zero_0')}
     ${getMutationsTableDefinition('zero_0')}
+    CREATE TABLE IF NOT EXISTS item (
+      id TEXT PRIMARY KEY
+    );
   `);
 
   return async () => {
@@ -70,6 +75,10 @@ const mutators = {
     baz: () => Promise.reject(new Error('application error')),
   },
 } as const;
+
+const itemSchema = createSchema({
+  tables: [table('item').columns({id: string()}).primaryKey('id')],
+});
 
 describe('out of order mutation', () => {
   test('first mutation is out of order', async () => {
@@ -247,6 +256,66 @@ test('lmid still moves forward if the mutator implementation throws', async () =
       },
     },
   ]);
+});
+
+test('db errors from tx.mutate are persisted as app failures', async () => {
+  await pg.unsafe(`INSERT INTO item (id) VALUES ('existing-item')`);
+
+  const processor = new PushProcessor(
+    new ZQLDatabase(new PostgresJSConnection(pg), itemSchema),
+  );
+  const dbMutators = {
+    item: {
+      insertDuplicate: async (tx: {
+        mutate: {item: {insert: (row: {id: string}) => Promise<void>}};
+      }) => {
+        await tx.mutate.item.insert({id: 'existing-item'});
+      },
+    },
+  };
+
+  const response = await processor.process(
+    dbMutators,
+    params,
+    makePush(1, customMutatorKey('|', ['item', 'insertDuplicate'])),
+  );
+
+  expect(response).toEqual({
+    mutations: [
+      {
+        id: {
+          clientID: 'cid',
+          id: 1,
+        },
+        result: {
+          error: 'app',
+          message: 'duplicate key value violates unique constraint "item_pkey"',
+          details: {
+            name: 'PostgresError',
+          },
+        },
+      },
+    ],
+  });
+
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 1n,
+      result: {
+        error: 'app',
+        message: 'duplicate key value violates unique constraint "item_pkey"',
+        details: {
+          name: 'PostgresError',
+        },
+      },
+    },
+  ]);
+  await checkClientsTable(pg, 1);
+
+  const items = await pg.unsafe(`SELECT id FROM item ORDER BY id`);
+  expect(items).toEqual([{id: 'existing-item'}]);
 });
 
 test('processes all mutations, even if all mutations throw app errors', async () => {
@@ -535,6 +604,95 @@ test('bails processing if a mutation throws an unknown error in error mode', asy
   // These are not written since error mode fails too
   await checkClientsTable(pg, undefined);
   await checkMutationsTable(pg, []);
+});
+
+test('consumes a mutation when the database fails after the mutator runs', async () => {
+  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
+    tables: {},
+    relationships: {},
+    version: 1,
+  });
+  const originalTransaction = db.transaction.bind(db);
+  let mutation1Runs = 0;
+  let mutation2Runs = 0;
+  let transactionCount = 0;
+
+  db.transaction = (<R>(
+    callback: Parameters<typeof originalTransaction>[0],
+    transactionInput?: Parameters<typeof originalTransaction>[1],
+  ): Promise<R> => {
+    transactionCount++;
+    return originalTransaction(async (tx, hooks) => {
+      const result = await callback(tx, hooks);
+      if (transactionInput?.mutationID === 1 && transactionCount === 1) {
+        throw new Error('commit failed after mutator ran');
+      }
+      return result as R;
+    }, transactionInput);
+  }) as typeof db.transaction;
+
+  const processor = new PushProcessor(db);
+  const localMutators = {
+    foo: {
+      // oxlint-disable-next-line require-await
+      commitFailure: async () => {
+        mutation1Runs++;
+      },
+      // oxlint-disable-next-line require-await
+      pass: async () => {
+        mutation2Runs++;
+      },
+    },
+  };
+
+  const response = await processor.process(
+    localMutators,
+    params,
+    makePush(
+      [1, 2],
+      [
+        customMutatorKey('|', ['foo', 'commitFailure']),
+        customMutatorKey('|', ['foo', 'pass']),
+      ],
+    ),
+  );
+
+  expect(response).toEqual({
+    mutations: [
+      {
+        id: {
+          clientID: 'cid',
+          id: 1,
+        },
+        result: {
+          error: 'app',
+          message: 'commit failed after mutator ran',
+        },
+      },
+      {
+        id: {
+          clientID: 'cid',
+          id: 2,
+        },
+        result: {},
+      },
+    ],
+  });
+
+  expect(mutation1Runs).toBe(1);
+  expect(mutation2Runs).toBe(1);
+  await checkClientsTable(pg, 2);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 1n,
+      result: {
+        error: 'app',
+        message: 'commit failed after mutator ran',
+      },
+    },
+  ]);
 });
 
 test('stops processing mutations as soon as it hits an out of order mutation', async () => {

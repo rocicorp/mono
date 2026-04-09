@@ -170,16 +170,20 @@ class FakeDatabase implements Database<FakeTransaction> {
     ) => MaybePromise<R>,
     _transactionInput?: TransactionProviderInput,
   ): Promise<R> {
+    let pendingLastMutationID = this.#lastMutationID;
     const hooks: TransactionProviderHooks = {
       updateClientMutationID: () => {
-        this.#lastMutationID += 1;
-        return Promise.resolve({lastMutationID: this.#lastMutationID});
+        pendingLastMutationID += 1;
+        return Promise.resolve({lastMutationID: pendingLastMutationID});
       },
       writeMutationResult: () => Promise.resolve(),
       deleteMutationResults: () => Promise.resolve(),
     };
 
-    return Promise.resolve(callback(this.#tx, hooks));
+    return Promise.resolve(callback(this.#tx, hooks)).then(result => {
+      this.#lastMutationID = pendingLastMutationID;
+      return result;
+    });
   }
 }
 
@@ -352,5 +356,139 @@ describe('mutator calling conventions', () => {
 
     expect(mutator).toHaveBeenCalledTimes(1);
     expect(mutator).toHaveBeenCalledWith(fakeTx, 'payload');
+  });
+});
+
+describe('mutator error handling', () => {
+  test('legacy custom mutator failures are returned as app errors and later mutations continue', async () => {
+    const processor = new PushProcessor<
+      Schema,
+      FakeDatabase,
+      CustomMutatorDefs<FakeTransaction>
+    >(new FakeDatabase());
+
+    const mutator = vi.fn(async (_tx: FakeTransaction, args: unknown) => {
+      if (args === 'fail') {
+        throw new Error('mutator exploded');
+      }
+    });
+    const mutators: CustomMutatorDefs<FakeTransaction> = {
+      foo: {
+        bar: mutator,
+      },
+    };
+
+    const response = await processor.process(mutators, dispatchTestParams, {
+      ...dispatchBodyBase,
+      mutations: [
+        {
+          type: 'custom',
+          clientID: 'test_client',
+          id: 1,
+          name: 'foo.bar',
+          timestamp: 0,
+          args: ['fail'],
+        },
+        {
+          type: 'custom',
+          clientID: 'test_client',
+          id: 2,
+          name: 'foo.bar',
+          timestamp: 0,
+          args: ['ok'],
+        },
+      ],
+    } satisfies PushBody);
+
+    expect(mutator).toHaveBeenCalledTimes(2);
+    expect(response).toEqual({
+      mutations: [
+        {
+          id: {
+            clientID: 'test_client',
+            id: 1,
+          },
+          result: {
+            error: 'app',
+            message: 'mutator exploded',
+          },
+        },
+        {
+          id: {
+            clientID: 'test_client',
+            id: 2,
+          },
+          result: {},
+        },
+      ],
+    });
+  });
+
+  test('defineMutator failures are returned as app errors and later mutations continue', async () => {
+    const fakeTx = createFakeTransaction();
+    const processor = new PushProcessor<
+      Schema,
+      FakeDatabase,
+      // oxlint-disable-next-line no-explicit-any
+      AnyMutatorRegistry | CustomMutatorDefs<any>
+    >(new FakeDatabase(fakeTx));
+
+    const capture = vi.fn(
+      async (opts: {args: string; ctx: undefined; tx: unknown}) => {
+        if (opts.args === 'duplicate') {
+          throw new Error('duplicate key value');
+        }
+      },
+    );
+    const mutators = defineMutators({
+      foo: {
+        bar: defineMutator(capture),
+      },
+    });
+
+    const response = await processor.process(mutators, dispatchTestParams, {
+      ...dispatchBodyBase,
+      mutations: [
+        {
+          type: 'custom',
+          clientID: 'test_client',
+          id: 1,
+          name: 'foo.bar',
+          timestamp: 0,
+          args: ['duplicate'],
+        },
+        {
+          type: 'custom',
+          clientID: 'test_client',
+          id: 2,
+          name: 'foo.bar',
+          timestamp: 0,
+          args: ['ok'],
+        },
+      ],
+    } satisfies PushBody);
+
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect(response).toEqual({
+      mutations: [
+        {
+          id: {
+            clientID: 'test_client',
+            id: 1,
+          },
+          result: {
+            error: 'app',
+            message: 'duplicate key value',
+          },
+        },
+        {
+          id: {
+            clientID: 'test_client',
+            id: 2,
+          },
+          result: {},
+        },
+      ],
+    });
   });
 });

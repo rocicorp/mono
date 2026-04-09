@@ -43,7 +43,7 @@ export class PushProcessor<
    * This function will parse the request, check the protocol version, and process each mutation in the request.
    * - If a mutation is out of order: processing will stop and an error will be returned. The zero client will retry the mutation.
    * - If a mutation has already been processed: it will be skipped and the processing will continue.
-   * - If a mutation receives an application error: it will be skipped, the error will be returned to the client, and processing will continue.
+   * - If running the mutator fails after the mutation is accepted: the mutation is consumed, the failure is returned to the client, and processing continues.
    *
    * @param mutators the custom mutators for the application
    * @param queryString the query string from the request sent by zero-cache. This will include zero's postgres schema name and appID.

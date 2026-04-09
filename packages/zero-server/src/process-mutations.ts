@@ -82,6 +82,12 @@ export type Parsed<D extends Database<ExtractTransactionType<D>>> = {
 
 type MutationPhase = 'preTransaction' | 'transactionPending' | 'postCommit';
 
+// Normalize failures thrown from user code into consumed-mutation failures.
+//
+// Anything thrown while handling a mutation is treated like an ApplicationError
+// unless it is already a protocol or transaction-machinery error. This keeps a
+// bad mutation from wedging the client behind endless retries while preserving a
+// separate retry boundary for transaction setup/commit failures.
 const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
   try {
     return await fn();
@@ -243,13 +249,17 @@ export async function handleMutateRequest<
   try {
     const transactor = new Transactor(dbProvider, pushBody, queryParams, lc);
 
-    // Each mutation goes through three phases:
-    //   1. Pre-transaction: user logic that runs before `transact` is called. If
-    //      this throws we still advance LMID and persist the failure result.
-    //   2. Transaction: the callback passed to `transact`, which can be retried
-    //      if it fails with an ApplicationError.
-    //   3. Post-commit: any logic that runs after `transact` resolves. Failures
-    //      here are logged but the mutation remains committed.
+    // Mutation failure policy:
+    //   1. Pre-transaction user code failures are consumed: we still advance
+    //      LMID and persist an app-style failure result.
+    //   2. Once `transact()` is entered, user-code failures are also consumed,
+    //      but we never rerun the mutator callback. If we need to persist the
+    //      failure result we open one more transaction only to record it.
+    //   3. Database failures that happen before the mutator callback starts are
+    //      retryable push failures.
+    //   4. Database failures after the mutator callback starts are consumed so
+    //      we do not encourage client retries that could replay side effects.
+    //   5. Post-commit failures are logged, but the mutation remains committed.
     for (const m of pushBody.mutations) {
       // Handle internal mutations (like cleanup) directly without user dispatch
       if (m.type === 'custom' && m.name === CLEANUP_RESULTS_MUTATION_NAME) {
@@ -280,7 +290,13 @@ export async function handleMutateRequest<
 
       const transactProxy: TransactFn<D> = async innerCb => {
         mutationPhase = 'transactionPending';
-        const result = await transactor.transact(m, innerCb);
+        // Anything thrown while handling user code inside the mutation is
+        // treated as a consumed-mutation failure. Only transaction-machinery
+        // failures that happen before the mutator starts escape as retryable
+        // push errors.
+        const result = await transactor.transact(m, (tx, name, args) =>
+          applicationErrorWrapper(() => innerCb(tx, name, args)),
+        );
         mutationPhase = 'postCommit';
         return result;
       };
@@ -361,16 +377,21 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
-    let appError: ApplicationError | undefined = undefined;
+    // If user code fails after `transact()` is entered, or if the database
+    // fails after the mutator callback has started, we may open one more
+    // transaction to persist the failure result. That second attempt never
+    // reruns the mutator callback; it only advances LMID and writes the
+    // app-style failure response.
+    let appErrorToPersist: ApplicationError | undefined = undefined;
     for (;;) {
       try {
-        const ret = await this.#transactImpl(mutation, cb, appError);
-        if (appError !== undefined) {
+        const ret = await this.#transactImpl(mutation, cb, appErrorToPersist);
+        if (appErrorToPersist !== undefined) {
           this.#lc.warn?.(
-            `Mutation ${mutation.id} for client ${mutation.clientID} was retried after an error`,
-            appError,
+            `Mutation ${mutation.id} for client ${mutation.clientID} was retried after an application error`,
+            appErrorToPersist,
           );
-          return makeAppErrorResponse(mutation, appError);
+          return makeAppErrorResponse(mutation, appErrorToPersist);
         }
 
         return ret;
@@ -394,26 +415,55 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
           };
         }
 
-        if (appError !== undefined) {
-          // Retry also failed → internal error, cannot skip mutation
-          this.#lc.error?.(
-            `Retry also failed for mutation ${mutation.id} for client ${mutation.clientID}`,
-            error,
+        // User code failed while handling the mutation. Consume it by retrying
+        // once only to record the failure result, without rerunning the mutator.
+        if (isApplicationError(error)) {
+          if (appErrorToPersist !== undefined) {
+            this.#lc.error?.(
+              `Retry failed while persisting application error for mutation ${mutation.id} for client ${mutation.clientID}`,
+              error,
+            );
+            throw error;
+          }
+
+          appErrorToPersist = error;
+          this.#lc.warn?.(
+            `Application error processing mutation ${mutation.id} for client ${mutation.clientID}, retrying without mutator`,
+            appErrorToPersist,
           );
-          throw error;
+          continue;
         }
 
-        // First attempt failed → store error and retry without mutator
-        const originalError =
-          error instanceof DatabaseTransactionError
-            ? (error.cause ?? error)
-            : error;
-        appError = wrapWithApplicationError(originalError);
-        this.#lc.warn?.(
-          `Error processing mutation ${mutation.id} for client ${mutation.clientID}, retrying without mutator`,
-          appError,
+        if (error instanceof DatabaseTransactionError) {
+          if (error.phase !== 'afterMutation') {
+            this.#lc.error?.(
+              `Database error processing mutation ${mutation.id} for client ${mutation.clientID} before mutator execution`,
+              error,
+            );
+            throw error;
+          }
+
+          if (appErrorToPersist !== undefined) {
+            this.#lc.error?.(
+              `Retry failed while persisting application error for mutation ${mutation.id} for client ${mutation.clientID}`,
+              error,
+            );
+            throw error;
+          }
+
+          appErrorToPersist = wrapWithApplicationError(error.cause ?? error);
+          this.#lc.warn?.(
+            `Database error processing mutation ${mutation.id} for client ${mutation.clientID} after mutator execution, retrying without mutator`,
+            appErrorToPersist,
+          );
+          continue;
+        }
+
+        this.#lc.error?.(
+          `Unexpected error processing mutation ${mutation.id} for client ${mutation.clientID}`,
+          error,
         );
-        continue;
+        throw error;
       }
     }
   };
@@ -436,15 +486,14 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
   async #transactImpl(
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
-    appError: ApplicationError | undefined,
+    appErrorToPersist: ApplicationError | undefined,
   ): Promise<MutationResponse> {
     let transactionPhase: DatabaseTransactionPhase = 'open';
 
     try {
       const ret = await this.#dbProvider.transaction(
         async (dbTx, transactionHooks) => {
-          // update the transaction phase to 'execute' after the transaction is opened
-          transactionPhase = 'execute';
+          transactionPhase = 'beforeMutation';
 
           await this.#checkAndIncrementLastMutationID(
             transactionHooks,
@@ -452,13 +501,17 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             mutation.id,
           );
 
-          if (appError === undefined) {
+          transactionPhase = 'afterMutation';
+          if (appErrorToPersist === undefined) {
             this.#lc.debug?.(
               `Executing mutator '${mutation.name}' (id=${mutation.id})`,
             );
             await cb(dbTx, mutation.name, mutation.args[0]);
           } else {
-            const mutationResult = makeAppErrorResponse(mutation, appError);
+            const mutationResult = makeAppErrorResponse(
+              mutation,
+              appErrorToPersist,
+            );
             await transactionHooks.writeMutationResult(mutationResult);
           }
 
@@ -475,6 +528,9 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
 
       return ret;
     } catch (error) {
+      // Only protocol/app failures are allowed to escape unchanged. Everything
+      // else is treated as transaction-machinery failure so callers can decide
+      // whether the mutation is still safely retryable.
       if (
         isApplicationError(error) ||
         error instanceof OutOfOrderMutation ||
@@ -624,15 +680,24 @@ async function processCleanupResultsMutation<
   );
 }
 
-type DatabaseTransactionPhase = 'open' | 'execute';
+type DatabaseTransactionPhase = 'open' | 'beforeMutation' | 'afterMutation';
 class DatabaseTransactionError extends Error {
+  readonly phase: DatabaseTransactionPhase;
+
   constructor(phase: DatabaseTransactionPhase, options?: ErrorOptions) {
     super(
       phase === 'open'
         ? `Failed to open database transaction: ${getErrorMessage(options?.cause)}`
-        : `Database transaction failed after opening: ${getErrorMessage(options?.cause)}`,
+        : phase === 'beforeMutation'
+          ? `Database transaction failed before mutator execution: ${getErrorMessage(
+              options?.cause,
+            )}`
+          : `Database transaction failed after mutator execution: ${getErrorMessage(
+              options?.cause,
+            )}`,
       options,
     );
     this.name = 'DatabaseTransactionError';
+    this.phase = phase;
   }
 }
