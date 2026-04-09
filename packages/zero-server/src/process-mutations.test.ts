@@ -319,12 +319,13 @@ describe('handleMutateRequest', () => {
     );
   });
 
-  test('transaction errors are persisted as application errors and LMID is updated', async () => {
+  test('mutator errors are persisted as application errors without rerunning the mutator', async () => {
     const {
       db: trackingDb,
       recordedLMIDs,
       recordedResults,
     } = createTrackingDatabase();
+    let mutation1Runs = 0;
 
     await handleMutateRequest(
       trackingDb,
@@ -332,6 +333,7 @@ describe('handleMutateRequest', () => {
         transact(async (_tx, _name, _args) => {
           await promiseUndefined;
           if (mutation.id === 1) {
+            mutation1Runs++;
             throw new Error('mutator exploded');
           }
         }),
@@ -339,9 +341,10 @@ describe('handleMutateRequest', () => {
       makePushBody([makeCustomMutation({id: 1}), makeCustomMutation({id: 2})]),
     );
 
-    // Transaction errors: LMID is updated for all mutations
+    expect(mutation1Runs).toBe(1);
+    // Application errors still advance LMID for all mutations
     expect(recordedLMIDs).toEqual([1, 2]);
-    // writeMutationResult is only called for the error
+    // writeMutationResult is only called for the persisted application error
     expect(recordedResults).toEqual([
       {
         id: {clientID: 'cid', id: 1},
@@ -759,16 +762,20 @@ describe('handleMutateRequest', () => {
 
   test.each([
     {
-      errorProviderKey: 'postTransactionErrorProvider' as const,
-      errorMsg: 'transient db timeout',
-    },
-    {
+      description: 'before the mutator runs',
       errorProviderKey: 'transactionErrorProvider' as const,
       errorMsg: 'connection refused',
+      expectedMutation2Runs: 0,
+    },
+    {
+      description: 'after the mutator runs',
+      errorProviderKey: 'postTransactionErrorProvider' as const,
+      errorMsg: 'transient db timeout',
+      expectedMutation2Runs: 1,
     },
   ])(
-    'retries on $errorProviderKey failure and returns app error when retry succeeds',
-    async ({errorProviderKey, errorMsg}) => {
+    'returns database error without persisting failure when the database fails $description',
+    async ({errorProviderKey, errorMsg, expectedMutation2Runs}) => {
       const {
         db: flakyDb,
         recordedLMIDs,
@@ -786,76 +793,17 @@ describe('handleMutateRequest', () => {
             ? new Error(errorMsg)
             : undefined,
       });
+      let mutation2Runs = 0;
 
       const response = await handleMutateRequest(
         flakyDb,
-        (transact, _mutation) =>
-          transact((_tx, _name, _args) => promiseUndefined),
-        baseQuery,
-        makePushBody([
-          makeCustomMutation({id: 1}),
-          makeCustomMutation({id: 2}),
-        ]),
-      );
-
-      // Both mutations complete; the second is retried and treated as app error
-      expect(response).toEqual({
-        mutations: [
-          {
-            id: {clientID: 'cid', id: 1},
-            result: {},
-          },
-          {
-            id: {clientID: 'cid', id: 2},
-            result: {
-              error: 'app',
-              message: errorMsg,
-            },
-          },
-        ],
-      });
-
-      // Both LMIDs are persisted (first attempt for m1, retry for m2)
-      expect(recordedLMIDs).toEqual([1, 2]);
-      // The retry persists the error result
-      expect(recordedResults).toEqual([
-        {
-          id: {clientID: 'cid', id: 2},
-          result: {
-            error: 'app',
-            message: errorMsg,
-          },
-        },
-      ]);
-    },
-  );
-
-  test.each([
-    {
-      errorProviderKey: 'postTransactionErrorProvider' as const,
-      errorMsg: 'persistent db failure',
-    },
-    {
-      errorProviderKey: 'transactionErrorProvider' as const,
-      errorMsg: 'persistent connection failure',
-    },
-  ])(
-    'retry double failure with $errorProviderKey returns database error',
-    async ({errorProviderKey, errorMsg}) => {
-      const {
-        db: flakyDb,
-        recordedLMIDs,
-        recordedResults,
-      } = createTrackingDatabase({
-        // Fail both attempts for mutationID 2
-        [errorProviderKey]: ({mutationID}: {mutationID: number | undefined}) =>
-          mutationID === 2 ? new Error(errorMsg) : undefined,
-      });
-
-      const response = await handleMutateRequest(
-        flakyDb,
-        (transact, _mutation) =>
-          transact((_tx, _name, _args) => promiseUndefined),
+        (transact, mutation) =>
+          transact((_tx, _name, _args) => {
+            if (mutation.id === 2) {
+              mutation2Runs++;
+            }
+            return promiseUndefined;
+          }),
         baseQuery,
         makePushBody([
           makeCustomMutation({id: 1}),
@@ -871,7 +819,8 @@ describe('handleMutateRequest', () => {
         mutationIDs: [{id: 2, clientID: 'cid'}],
       });
 
-      // First mutation's LMID is persisted, but the failing mutation's is not
+      expect(mutation2Runs).toBe(expectedMutation2Runs);
+      // The first mutation commits, but the database failure leaves mutation 2 unprocessed.
       expect(recordedLMIDs).toEqual([1]);
       expect(recordedResults).toEqual([]);
     },
