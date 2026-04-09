@@ -166,24 +166,29 @@ async function mutateHandler(
   reply: FastifyReply,
 ) {
   await withAuth(request, reply, async jwtData => {
-    const postCommitTasks: (() => Promise<void>)[] = [];
-    const mutators = createServerMutators(postCommitTasks);
-
     const response = await handleMutateRequest(
       dbProvider,
-      (transact, _mutation) =>
-        transact((tx, name, args) => {
+      async (transact, _mutation) => {
+        const postCommitTasks: (() => Promise<void>)[] = [];
+        const mutators = createServerMutators(postCommitTasks);
+
+        const mutationResponse = await transact((tx, name, args) => {
           const mutator = mustGetMutator(mutators, name);
           return mutator.fn({tx, args, ctx: jwtData});
-        }),
+        });
+
+        if (!('error' in mutationResponse.result)) {
+          // We do not want notification provider flakiness to fail the mutation,
+          // but we also only want these tasks to run for mutations that committed.
+          await Promise.allSettled(postCommitTasks.map(task => task()));
+        }
+
+        return mutationResponse;
+      },
       request.query,
       request.body,
       'info',
     );
-
-    // we don't yet handle errors here, since Loops emails return 429 very often
-    // and we don't want to block the mutation
-    await Promise.allSettled(postCommitTasks.map(task => task()));
 
     reply.send(response);
   });
@@ -322,7 +327,7 @@ async function maybeVerifyAuth(
   );
 
   if (verifyUserID) {
-    const userIDFromHeader = headers['x-user-id'] ?? headers['X-User-ID'];
+    const userIDFromHeader = headers['x-user-id'];
 
     if (userIDFromHeader !== jwtData.sub) {
       // oxlint-disable-next-line no-console
