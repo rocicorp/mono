@@ -299,7 +299,7 @@ fastify.get<{
 
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
-  _verifyUserID: boolean,
+  verifyUserID: boolean,
 ): Promise<JWTData | undefined> {
   let {authorization} = headers;
   if (!authorization) {
@@ -321,20 +321,17 @@ async function maybeVerifyAuth(
     (await jwtVerify(authorization, JSON.parse(jwk))).payload,
   );
 
-  const userIDFromHeader = headers['x-user-id'];
+  if (verifyUserID) {
+    const userIDFromHeader = headers['x-user-id'] ?? headers['X-User-ID'];
 
-  // oxlint-disable-next-line no-console
-  console.log(
-    `Authenticated request for user ${jwtData.sub} with user ID header: ${userIDFromHeader}`,
-  );
-
-  // if (verifyUserID) {
-  //   const userIDFromHeader = headers['x-user-id'];
-
-  //   if (userIDFromHeader !== jwtData.sub) {
-  //     throw new Error(`X-User-ID must match the authenticated user`);
-  //   }
-  // }
+    if (userIDFromHeader !== jwtData.sub) {
+      // oxlint-disable-next-line no-console
+      console.error(
+        `Request did not match for user ${jwtData.sub} with user ID header: ${userIDFromHeader}`,
+      );
+      throw new Error(`X-User-ID must match the authenticated user`);
+    }
+  }
 
   return jwtData;
 }

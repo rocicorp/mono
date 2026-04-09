@@ -32,6 +32,7 @@ import type {
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
+import {PG_17} from '../../../types/pg-versions.ts';
 import {isPostgresError, pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {
   upstreamSchema,
@@ -110,8 +111,6 @@ import {
   type Replica,
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
-
-const PG_17 = 170000;
 
 /**
  * Initializes a Postgres change source, including the initial sync of the
