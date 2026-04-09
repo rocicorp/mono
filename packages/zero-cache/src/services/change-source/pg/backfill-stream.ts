@@ -176,10 +176,10 @@ async function* stream<T>(
   lc: LogContext,
   tx: TransactionPool,
   backfill: BackfillParams,
-  {getTotalRows, getTotalBytes}: Pick<
-    DownloadStatements,
-    'getTotalRows' | 'getTotalBytes'
-  >,
+  {
+    getTotalRows,
+    getTotalBytes,
+  }: Pick<DownloadStatements, 'getTotalRows' | 'getTotalBytes'>,
   copyCommand: string,
   parser: {parse(chunk: Buffer): Iterable<T | null>},
   decoders: ((field: T) => JSONValue)[],
@@ -199,9 +199,12 @@ async function* stream<T>(
   };
 
   let elapsed = (performance.now() - start).toFixed(3);
-  lc.info?.(`Computed total rows and bytes for: ${copyCommand} (${elapsed} ms)`, {
-    status,
-  });
+  lc.info?.(
+    `Computed total rows and bytes for: ${copyCommand} (${elapsed} ms)`,
+    {
+      status,
+    },
+  );
   const copyStream = await tx.processReadTask(sql =>
     sql.unsafe(copyCommand).readable(),
   );

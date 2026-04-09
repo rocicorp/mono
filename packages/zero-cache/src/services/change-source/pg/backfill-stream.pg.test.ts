@@ -117,8 +117,7 @@ describe('backfill-stream', () => {
 
     // Binary mode returns JSON[] as a stringified array.
     // Text mode returns JSON[] as a parsed JS array.
-    const arr = (vals: unknown[]) =>
-      textCopy ? vals : JSON.stringify(vals);
+    const arr = (vals: unknown[]) => (textCopy ? vals : JSON.stringify(vals));
 
     expect(results).toMatchObject([
       {
@@ -173,8 +172,7 @@ describe('backfill-stream', () => {
       results.push(msg);
     }
 
-    const arr = (vals: unknown[]) =>
-      textCopy ? vals : JSON.stringify(vals);
+    const arr = (vals: unknown[]) => (textCopy ? vals : JSON.stringify(vals));
 
     // Columns should deduped and ordered: [id2, id1, a, c, b]
     expect(results).toMatchObject([
