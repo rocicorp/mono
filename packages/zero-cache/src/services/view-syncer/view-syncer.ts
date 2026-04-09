@@ -137,6 +137,9 @@ export interface ViewSyncer {
 
   // Connection context management is owned by the view syncer for disconnect cleanup.
   contextManager: ConnectionContextManager;
+
+  readonly queryCount: number;
+  readonly rowCount: number;
 }
 
 export type SyncContext = ConnectionSelector & {
@@ -295,6 +298,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'query.transformation-no-ops',
     'Number of times query transformation resulted in no-op (hash unchanged)',
   );
+  readonly #lockWaitTime = getOrCreateHistogram('sync', 'lock-wait-time', {
+    description: 'Time spent waiting to acquire the ViewSyncer lock.',
+    unit: 's',
+  });
+  readonly #pipelineResets = getOrCreateCounter(
+    'sync',
+    'pipeline-resets',
+    'Number of pipeline resets',
+  );
 
   readonly #inspectorDelegate: InspectorDelegate;
 
@@ -360,7 +372,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<void> {
     const rid = randomID();
     this.#lc.debug?.('about to acquire lock for cvr ', rid);
+    const lockWaitStart = performance.now();
     return this.#lock.withLock(async () => {
+      this.#lockWaitTime.record((performance.now() - lockWaitStart) / 1000);
       this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
       const lc = this.#lc.withContext('lock', rid);
       if (!this.#stateChanges.active) {
@@ -468,6 +482,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               return;
             }
             lc.info?.(`resetting pipelines: ${result.message}`);
+            this.#pipelineResets.add(1, {reason: result.reason});
             this.#pipelines.reset(clientSchema);
             this.#pipelinesSynced = false;
           }
@@ -539,6 +554,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #totalHydrationTimeMs(): number {
     return this.#pipelines.totalHydrationTimeMs();
+  }
+
+  get queryCount(): number {
+    return this.#pipelines.initialized() ? this.#pipelines.queries().size : 0;
+  }
+
+  get rowCount(): number {
+    return this.#cvrStore.rowCount;
   }
 
   #keepAliveUntil: number = 0;

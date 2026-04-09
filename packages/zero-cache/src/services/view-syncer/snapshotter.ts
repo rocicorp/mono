@@ -255,11 +255,20 @@ export interface SnapshotDiff extends Iterable<Change> {
  * change or truncate is encountered, which result in aborting the
  * advancement and resetting / rehydrating the pipelines.
  */
+export type ResetPipelinesReason =
+  | 'advancement-timeout'
+  | 'scalar-subquery'
+  | 'schema-change'
+  | 'truncation'
+  | 'permissions-change';
+
 export class ResetPipelinesSignal extends Error {
   readonly name = 'ResetPipelinesSignal';
+  readonly reason: ResetPipelinesReason;
 
-  constructor(msg: string) {
+  constructor(msg: string, reason: ResetPipelinesReason) {
     super(msg);
+    this.reason = reason;
   }
 }
 
@@ -436,12 +445,14 @@ class Diff implements SnapshotDiff {
               // The current map of `TableSpec`s may not have the correct or complete information.
               throw new ResetPipelinesSignal(
                 `schema for table ${table} has changed`,
+                'schema-change',
               );
             }
             if (op === TRUNCATE_OP) {
               // Truncates are also processed by rehydrating pipelines at current.
               throw new ResetPipelinesSignal(
                 `table ${table} has been truncated`,
+                'truncation',
               );
             }
             const specs = this.#syncableTables.get(table);
@@ -508,6 +519,7 @@ class Diff implements SnapshotDiff {
                       prevValue.permissions !== nextValue.permissions,
                   ).hash
                 } => ${nextValue.hash}`,
+                'permissions-change',
               );
             }
 

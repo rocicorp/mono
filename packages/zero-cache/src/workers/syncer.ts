@@ -18,6 +18,7 @@ import {
   recordConnectionSuccess,
   setActiveClientGroupsGetter,
 } from '../server/anonymous-otel-start.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
@@ -142,6 +143,36 @@ export class Syncer implements SingletonService {
     );
 
     setActiveClientGroupsGetter(() => this.#viewSyncers.size);
+
+    getOrCreateGauge(
+      'sync',
+      'active-client-groups',
+      'Number of active client groups',
+    ).addCallback(result => result.observe(this.#viewSyncers.size));
+
+    getOrCreateGauge(
+      'sync',
+      'queries',
+      'Active queries (pipelines) across all client groups',
+    ).addCallback(result => {
+      let total = 0;
+      for (const vs of this.#viewSyncers.getServices()) {
+        total += vs.queryCount;
+      }
+      result.observe(total);
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'rows',
+      'Tracked rows across all client groups',
+    ).addCallback(result => {
+      let total = 0;
+      for (const vs of this.#viewSyncers.getServices()) {
+        total += vs.rowCount;
+      }
+      result.observe(total);
+    });
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
