@@ -399,6 +399,26 @@ describe('change-source/pg', () => {
     `);
   });
 
+  test('publication must publish updates', () => {
+    expect(() =>
+      validatePublications(lc, {
+        publications: [
+          {
+            pubname: 'zero_data',
+            pubinsert: true,
+            pubupdate: false,
+            pubdelete: true,
+            pubtruncate: true,
+          },
+        ],
+        tables: [],
+        indexes: [],
+      }),
+    ).toThrowError(
+      'PUBLICATION zero_data must publish insert, update, delete, and truncate',
+    );
+  });
+
   type InvalidUpstreamCase = {
     error: string;
     setupUpstreamQuery: string;

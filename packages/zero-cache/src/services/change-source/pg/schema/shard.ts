@@ -406,7 +406,7 @@ export function validatePublications(
   published.publications.forEach(pub => {
     if (
       !pub.pubinsert ||
-      !pub.pubtruncate ||
+      !pub.pubupdate ||
       !pub.pubdelete ||
       !pub.pubtruncate
     ) {
