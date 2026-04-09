@@ -166,6 +166,19 @@ export class TransactionPool {
       await Promise.all(this.#workers);
     }
     this.#lc.debug?.('transaction pool done');
+
+    const elapsed = performance.now() - this.#start;
+    if (elapsed > 60_000) {
+      if (this.#stmts > 0) {
+        this.#lc.warn?.(
+          `finished long transaction with ${this.#stmts} statements (${elapsed.toFixed(3)} ms)`,
+        );
+      } else {
+        this.#lc.warn?.(
+          `finished long read transaction (${elapsed.toFixed(3)} ms)`,
+        );
+      }
+    }
   }
 
   #addWorker(db: PostgresDB) {
