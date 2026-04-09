@@ -854,15 +854,27 @@ type MinValue = typeof minValue;
 const maxValue = Symbol('max-value');
 type MaxValue = typeof maxValue;
 
-function makeBoundComparator(sort: Ordering) {
+function makeBoundComparator(sort: Ordering): Comparator {
+  // Pre-extract the first two keys/directions to avoid per-call array access.
+  // All paths share one function literal (single SFI) so the BTree comparator call site
+  // stays monomorphic across indexes with different sort orderings, preventing V8 IC deopt.
+  // Even a 2-SFI split (e.g. separate len=1 path) creates a polymorphic IC that
+  // measurably regresses performance, so we keep a single return body.
+  const len = sort.length;
+  const k0 = sort[0][0];
+  const a0 = sort[0][1] === 'asc';
+  const k1 = len > 1 ? sort[1][0] : '';
+  const a1 = len > 1 ? sort[1][1] === 'asc' : true;
+
   return (a: RowBound, b: RowBound) => {
+    const c0 = a0 ? compareBounds(a[k0], b[k0]) : compareBounds(b[k0], a[k0]);
+    if (len === 1 || c0 !== 0) return c0;
+    const c1 = a1 ? compareBounds(a[k1], b[k1]) : compareBounds(b[k1], a[k1]);
+    if (len === 2 || c1 !== 0) return c1;
     // Hot! Do not use destructuring
-    for (const entry of sort) {
-      const key = entry[0];
-      const cmp = compareBounds(a[key], b[key]);
-      if (cmp !== 0) {
-        return entry[1] === 'asc' ? cmp : -cmp;
-      }
+    for (let i = 2; i < len; i++) {
+      const cmp = compareBounds(a[sort[i][0]], b[sort[i][0]]);
+      if (cmp !== 0) return sort[i][1] === 'asc' ? cmp : -cmp;
     }
     return 0;
   };
