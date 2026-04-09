@@ -762,8 +762,15 @@ export class Zero<
       rep.clientID,
       schema.tables,
       msg => {
-        msg[1].traceparent = this.#options.getTraceparent?.();
-        this.#send(msg);
+        let body = msg[1];
+        if (this.#options.getTraceparent) {
+          body = {
+            ...msg[1],
+            traceparent: this.#options.getTraceparent?.(),
+          };
+        }
+
+        this.#send([msg[0], body]);
       },
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
