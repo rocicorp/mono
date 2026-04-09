@@ -530,6 +530,7 @@ export class PipelineDriver {
               throw new ResetPipelinesSignal(
                 `Scalar subquery value changed for ${meta.ast.table}: ` +
                   `${String(resolvedValue)} -> ${String(newValue)}`,
+                'scalar-subquery',
               );
             }
             const streamer = this.#streamer;
@@ -783,6 +784,7 @@ export class PipelineDriver {
         `Advancement exceeded timeout at ${pos} of ${numChanges} changes ` +
           `after ${elapsed} ms. Advancement time limited based on total ` +
           `hydration time of ${totalHydrationTimeMs} ms.`,
+        'advancement-timeout',
       );
     }
     return advanceTimer.elapsedLap() > this.#yieldThresholdMs();

@@ -109,6 +109,8 @@ function makeFactories(
           inspect: vi.fn(),
           updateAuth: vi.fn(),
           keepalive: () => true,
+          queryCount: 0,
+          rowCount: 0,
           stop() {
             stopped.resolve();
             return stopped.promise;
