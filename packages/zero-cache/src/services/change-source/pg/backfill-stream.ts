@@ -51,8 +51,9 @@ type StreamOptions = {
 
   /**
    * Use text-format COPY instead of binary COPY.
-   * This is slower but can work around issues with binary encoding of
-   * certain data types. Defaults to false (binary).
+   * Binary is faster and handles all types (unknown types are cast to
+   * `::text` in the SELECT). This flag exists as an escape hatch to
+   * revert to the old code path if needed.
    */
   textCopy?: boolean | undefined;
 };

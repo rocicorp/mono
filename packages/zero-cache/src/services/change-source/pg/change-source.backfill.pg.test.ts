@@ -30,7 +30,10 @@ const PG_18_UP = 180000;
 
 const TEST_CONTEXT = {boo: 'far'};
 
-describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
+describe.each([
+  {mode: 'binary', textCopy: false},
+  {mode: 'text', textCopy: true},
+])('change-source/pg/backfill-test ($mode)', ({textCopy}) => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let pgVersion: number;
@@ -103,7 +106,7 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
           shardNum: 0,
         },
         replicaDbFile.path,
-        {tableCopyWorkers: 5},
+        {tableCopyWorkers: 5, textCopy},
         TEST_CONTEXT,
       )
     ).changeSource;
