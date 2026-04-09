@@ -82,6 +82,8 @@ export type Parsed<D extends Database<ExtractTransactionType<D>>> = {
 
 type MutationPhase = 'preTransaction' | 'transactionPending' | 'postCommit';
 
+// Preserve protocol/transaction errors; treat other user-code failures as app
+// failures so the caller can decide whether to persist or return them.
 const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
   try {
     return await fn();
@@ -269,6 +271,8 @@ export async function handleMutateRequest<
         `Processing mutation '${m.name}' (id=${m.id}, clientID=${m.clientID})`,
       );
 
+      // Track whether `cb()` failed before `transact()`, inside it, or after it
+      // returned so we can persist, delegate, or just log respectively.
       let mutationPhase: MutationPhase = 'preTransaction';
 
       const transactProxy: TransactFn<D> = async innerCb => {
@@ -291,6 +295,9 @@ export async function handleMutateRequest<
           throw error;
         }
 
+        // Pre-transaction failures still need to be recorded here. Once inside
+        // `transact()`, that method either persists the failure or leaves it
+        // retryable as a push failure.
         if (mutationPhase === 'preTransaction') {
           await transactor.persistPreTransactionFailure(m, error);
         } else if (mutationPhase === 'postCommit') {
@@ -354,6 +361,9 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
+    // The mutator callback itself runs at most once. If the mutation has
+    // already been accepted, we may open one more transaction only to persist
+    // the failure result.
     let appErrorToPersist: ApplicationError | undefined = undefined;
     for (;;) {
       try {
@@ -388,6 +398,8 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
         }
 
         if (isApplicationError(error)) {
+          // The mutator failed intentionally. Retry once only to record the app
+          // failure after LMID has advanced, without rerunning the mutator.
           if (appErrorToPersist !== undefined) {
             this.#lc.error?.(
               `Retry failed while persisting application error for mutation ${mutation.id} for client ${mutation.clientID}`,
@@ -405,6 +417,9 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
         }
 
         if (error instanceof DatabaseTransactionError) {
+          // Transaction failures before acceptance stay retryable. Once LMID
+          // has advanced (`afterMutation`), turn the failure into an app error
+          // and persist it without rerunning the mutator.
           if (error.phase !== 'afterMutation') {
             this.#lc.error?.(
               `Database error processing mutation ${mutation.id} for client ${mutation.clientID} before mutator execution`,
@@ -471,6 +486,8 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             mutation.id,
           );
 
+          // After LMID advances, this mutation is considered accepted. Later
+          // failures are consumed and written back as app errors.
           transactionPhase = 'afterMutation';
           if (appErrorToPersist === undefined) {
             this.#lc.debug?.(
