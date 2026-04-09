@@ -374,9 +374,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.debug?.('about to acquire lock for cvr ', rid);
     const lockWaitStart = performance.now();
     return this.#lock.withLock(async () => {
-      this.#lockWaitTime.record(
-        (performance.now() - lockWaitStart) / 1000,
-      );
+      this.#lockWaitTime.record((performance.now() - lockWaitStart) / 1000);
       this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
       const lc = this.#lc.withContext('lock', rid);
       if (!this.#stateChanges.active) {
