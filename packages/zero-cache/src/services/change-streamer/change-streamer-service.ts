@@ -279,6 +279,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     'transactions',
     'Count of replicated transactions',
   );
+  readonly #changeCounter = getOrCreateCounter(
+    'replication',
+    'changes',
+    'Count of replicated changes (DML or DDL statements)',
+  );
 
   #latestStatus: Status;
   #stream: ChangeStream | undefined;
@@ -402,6 +407,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
               this.#txCounter.add(1);
               break;
             default:
+              if (type === 'data') {
+                this.#changeCounter.add(1);
+              }
               if (watermark === null) {
                 throw new UnrecoverableError(
                   `${type} change (${msg.tag}) received before 'begin' message`,
