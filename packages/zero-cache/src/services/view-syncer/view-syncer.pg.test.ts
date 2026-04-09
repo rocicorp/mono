@@ -1267,7 +1267,7 @@ describe('view-syncer/service', () => {
             "clientID": "foo",
             "insertionOrder": 1,
             "profileID": "p0000g00000003203",
-            "protocolVersion": 49,
+            "protocolVersion": 50,
             "pushContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
@@ -1552,70 +1552,70 @@ describe('view-syncer/service', () => {
       expect(transformSpy).toHaveBeenCalledTimes(2);
       // custom-1 is not transformed again
       expect(transformSpy.mock.calls[1]).toMatchInlineSnapshot(`
-                [
-                  {
-                    "auth": undefined,
-                    "baseCookie": null,
-                    "clientID": "foo",
-                    "insertionOrder": 1,
-                    "profileID": "p0000g00000003203",
-                    "protocolVersion": 49,
-                    "pushContext": {
-                      "allowedUrlPatterns": undefined,
-                      "headerOptions": {
-                        "allowedClientHeaders": undefined,
-                        "apiKey": undefined,
-                        "cookie": undefined,
-                        "customHeaders": undefined,
-                        "origin": undefined,
-                        "token": undefined,
-                        "userID": "user-1",
-                      },
-                      "url": undefined,
-                    },
-                    "queryContext": {
-                      "allowedUrlPatterns": [
-                        URLPattern {},
-                      ],
-                      "headerOptions": {
-                        "allowedClientHeaders": undefined,
-                        "apiKey": undefined,
-                        "cookie": undefined,
-                        "customHeaders": undefined,
-                        "origin": undefined,
-                        "token": undefined,
-                        "userID": "user-1",
-                      },
-                      "url": "http://my-pull-endpoint.dev/api/zero/pull",
-                    },
-                    "revalidateAt": undefined,
-                    "revision": 1,
-                    "state": "validated",
-                    "userID": "user-1",
-                    "wsID": "ws1",
+        [
+          {
+            "auth": undefined,
+            "baseCookie": null,
+            "clientID": "foo",
+            "insertionOrder": 1,
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
+            "pushContext": {
+              "allowedUrlPatterns": undefined,
+              "headerOptions": {
+                "allowedClientHeaders": undefined,
+                "apiKey": undefined,
+                "cookie": undefined,
+                "customHeaders": undefined,
+                "origin": undefined,
+                "token": undefined,
+                "userID": "user-1",
+              },
+              "url": undefined,
+            },
+            "queryContext": {
+              "allowedUrlPatterns": [
+                URLPattern {},
+              ],
+              "headerOptions": {
+                "allowedClientHeaders": undefined,
+                "apiKey": undefined,
+                "cookie": undefined,
+                "customHeaders": undefined,
+                "origin": undefined,
+                "token": undefined,
+                "userID": "user-1",
+              },
+              "url": "http://my-pull-endpoint.dev/api/zero/pull",
+            },
+            "revalidateAt": undefined,
+            "revision": 1,
+            "state": "validated",
+            "userID": "user-1",
+            "wsID": "ws1",
+          },
+          [
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "01",
                   },
-                  [
-                    {
-                      "args": [
-                        "thing",
-                      ],
-                      "clientState": {
-                        "foo": {
-                          "inactivatedAt": undefined,
-                          "ttl": 300000,
-                          "version": {
-                            "configVersion": 1,
-                            "stateVersion": "01",
-                          },
-                        },
-                      },
-                      "id": "custom-2",
-                      "name": "named-query-2",
-                      "type": "custom",
-                    },
-                  ],
-                ]
-              `);
+                },
+              },
+              "id": "custom-2",
+              "name": "named-query-2",
+              "type": "custom",
+            },
+          ],
+        ]
+      `);
     });
 
     test('different custom queries end up with the same query after transformation', async () => {
@@ -2232,88 +2232,88 @@ describe('view-syncer/service', () => {
       // First client should have called transform once
       expect(transformSpy).toHaveBeenCalledTimes(1);
       expect(transformSpy.mock.calls[0]).toMatchInlineSnapshot(`
-                [
-                  {
-                    "auth": undefined,
-                    "baseCookie": null,
-                    "clientID": "foo",
-                    "insertionOrder": 1,
-                    "profileID": "p0000g00000003203",
-                    "protocolVersion": 49,
-                    "pushContext": {
-                      "allowedUrlPatterns": undefined,
-                      "headerOptions": {
-                        "allowedClientHeaders": undefined,
-                        "apiKey": undefined,
-                        "cookie": undefined,
-                        "customHeaders": undefined,
-                        "origin": undefined,
-                        "token": undefined,
-                        "userID": "user-1",
-                      },
-                      "url": undefined,
-                    },
-                    "queryContext": {
-                      "allowedUrlPatterns": [
-                        URLPattern {},
-                      ],
-                      "headerOptions": {
-                        "allowedClientHeaders": undefined,
-                        "apiKey": undefined,
-                        "cookie": undefined,
-                        "customHeaders": undefined,
-                        "origin": undefined,
-                        "token": undefined,
-                        "userID": "user-1",
-                      },
-                      "url": "http://my-pull-endpoint.dev/api/zero/pull",
-                    },
-                    "revalidateAt": undefined,
-                    "revision": 1,
-                    "state": "validated",
-                    "userID": "user-1",
-                    "wsID": "ws1",
+        [
+          {
+            "auth": undefined,
+            "baseCookie": null,
+            "clientID": "foo",
+            "insertionOrder": 1,
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
+            "pushContext": {
+              "allowedUrlPatterns": undefined,
+              "headerOptions": {
+                "allowedClientHeaders": undefined,
+                "apiKey": undefined,
+                "cookie": undefined,
+                "customHeaders": undefined,
+                "origin": undefined,
+                "token": undefined,
+                "userID": "user-1",
+              },
+              "url": undefined,
+            },
+            "queryContext": {
+              "allowedUrlPatterns": [
+                URLPattern {},
+              ],
+              "headerOptions": {
+                "allowedClientHeaders": undefined,
+                "apiKey": undefined,
+                "cookie": undefined,
+                "customHeaders": undefined,
+                "origin": undefined,
+                "token": undefined,
+                "userID": "user-1",
+              },
+              "url": "http://my-pull-endpoint.dev/api/zero/pull",
+            },
+            "revalidateAt": undefined,
+            "revision": 1,
+            "state": "validated",
+            "userID": "user-1",
+            "wsID": "ws1",
+          },
+          [
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
                   },
-                  [
-                    {
-                      "args": [
-                        "thing",
-                      ],
-                      "clientState": {
-                        "foo": {
-                          "inactivatedAt": undefined,
-                          "ttl": 300000,
-                          "version": {
-                            "configVersion": 1,
-                            "stateVersion": "00",
-                          },
-                        },
-                      },
-                      "id": "custom-1",
-                      "name": "named-query-1",
-                      "type": "custom",
-                    },
-                    {
-                      "args": [
-                        "thing",
-                      ],
-                      "clientState": {
-                        "foo": {
-                          "inactivatedAt": undefined,
-                          "ttl": 300000,
-                          "version": {
-                            "configVersion": 1,
-                            "stateVersion": "00",
-                          },
-                        },
-                      },
-                      "id": "custom-2",
-                      "name": "named-query-2",
-                      "type": "custom",
-                    },
-                  ],
-                ]
-              `);
+                },
+              },
+              "id": "custom-1",
+              "name": "named-query-1",
+              "type": "custom",
+            },
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
+                  },
+                },
+              },
+              "id": "custom-2",
+              "name": "named-query-2",
+              "type": "custom",
+            },
+          ],
+        ]
+      `);
 
       // Create second client with same queries
       const client2 = connect(
@@ -2453,118 +2453,118 @@ describe('view-syncer/service', () => {
       // 2. Second client connection triggers transform again of all queries (separate validation)
       expect(transformSpy).toHaveBeenCalledTimes(2);
       expect(transformSpy.mock.calls[1]).toMatchInlineSnapshot(`
-                    [
-                      {
-                        "auth": undefined,
-                        "baseCookie": null,
-                        "clientID": "cq-c2-client",
-                        "insertionOrder": 2,
-                        "profileID": "p0000g00000003203",
-                        "protocolVersion": 49,
-                        "pushContext": {
-                          "allowedUrlPatterns": undefined,
-                          "headerOptions": {
-                            "allowedClientHeaders": undefined,
-                            "apiKey": undefined,
-                            "cookie": undefined,
-                            "customHeaders": undefined,
-                            "origin": undefined,
-                            "token": undefined,
-                            "userID": "user-1",
-                          },
-                          "url": undefined,
-                        },
-                        "queryContext": {
-                          "allowedUrlPatterns": [
-                            URLPattern {},
-                          ],
-                          "headerOptions": {
-                            "allowedClientHeaders": undefined,
-                            "apiKey": undefined,
-                            "cookie": undefined,
-                            "customHeaders": undefined,
-                            "origin": undefined,
-                            "token": undefined,
-                            "userID": "user-1",
-                          },
-                          "url": "http://my-pull-endpoint.dev/api/zero/pull",
-                        },
-                        "revalidateAt": undefined,
-                        "revision": 1,
-                        "state": "provisional",
-                        "userID": "user-1",
-                        "wsID": "cq-c2-wsid",
-                      },
-                      [
-                        {
-                          "args": [
-                            "thing",
-                          ],
-                          "clientState": {
-                            "cq-c2-client": {
-                              "inactivatedAt": undefined,
-                              "ttl": 300000,
-                              "version": {
-                                "configVersion": 1,
-                                "stateVersion": "01",
-                              },
-                            },
-                            "foo": {
-                              "inactivatedAt": undefined,
-                              "ttl": 300000,
-                              "version": {
-                                "configVersion": 1,
-                                "stateVersion": "00",
-                              },
-                            },
-                          },
-                          "id": "custom-1",
-                          "name": "named-query-1",
-                          "patchVersion": {
-                            "stateVersion": "01",
-                          },
-                          "transformationHash": "hash-1",
-                          "transformationVersion": {
-                            "stateVersion": "01",
-                          },
-                          "type": "custom",
-                        },
-                        {
-                          "args": [
-                            "thing",
-                          ],
-                          "clientState": {
-                            "cq-c2-client": {
-                              "inactivatedAt": undefined,
-                              "ttl": 300000,
-                              "version": {
-                                "configVersion": 1,
-                                "stateVersion": "01",
-                              },
-                            },
-                            "foo": {
-                              "inactivatedAt": undefined,
-                              "ttl": 300000,
-                              "version": {
-                                "configVersion": 1,
-                                "stateVersion": "00",
-                              },
-                            },
-                          },
-                          "id": "custom-2",
-                          "name": "named-query-2",
-                          "patchVersion": {
-                            "stateVersion": "01",
-                          },
-                          "transformationHash": "hash-2",
-                          "transformationVersion": {
-                            "stateVersion": "01",
-                          },
-                          "type": "custom",
-                        },
-                      ],
-                    ]
-                  `);
+        [
+          {
+            "auth": undefined,
+            "baseCookie": null,
+            "clientID": "cq-c2-client",
+            "insertionOrder": 2,
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
+            "pushContext": {
+              "allowedUrlPatterns": undefined,
+              "headerOptions": {
+                "allowedClientHeaders": undefined,
+                "apiKey": undefined,
+                "cookie": undefined,
+                "customHeaders": undefined,
+                "origin": undefined,
+                "token": undefined,
+                "userID": "user-1",
+              },
+              "url": undefined,
+            },
+            "queryContext": {
+              "allowedUrlPatterns": [
+                URLPattern {},
+              ],
+              "headerOptions": {
+                "allowedClientHeaders": undefined,
+                "apiKey": undefined,
+                "cookie": undefined,
+                "customHeaders": undefined,
+                "origin": undefined,
+                "token": undefined,
+                "userID": "user-1",
+              },
+              "url": "http://my-pull-endpoint.dev/api/zero/pull",
+            },
+            "revalidateAt": undefined,
+            "revision": 1,
+            "state": "provisional",
+            "userID": "user-1",
+            "wsID": "cq-c2-wsid",
+          },
+          [
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "cq-c2-client": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "01",
+                  },
+                },
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
+                  },
+                },
+              },
+              "id": "custom-1",
+              "name": "named-query-1",
+              "patchVersion": {
+                "stateVersion": "01",
+              },
+              "transformationHash": "hash-1",
+              "transformationVersion": {
+                "stateVersion": "01",
+              },
+              "type": "custom",
+            },
+            {
+              "args": [
+                "thing",
+              ],
+              "clientState": {
+                "cq-c2-client": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "01",
+                  },
+                },
+                "foo": {
+                  "inactivatedAt": undefined,
+                  "ttl": 300000,
+                  "version": {
+                    "configVersion": 1,
+                    "stateVersion": "00",
+                  },
+                },
+              },
+              "id": "custom-2",
+              "name": "named-query-2",
+              "patchVersion": {
+                "stateVersion": "01",
+              },
+              "transformationHash": "hash-2",
+              "transformationVersion": {
+                "stateVersion": "01",
+              },
+              "type": "custom",
+            },
+          ],
+        ]
+      `);
     });
 
     test('retransforms custom queries when opaque auth refreshes', async () => {

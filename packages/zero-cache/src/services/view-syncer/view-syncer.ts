@@ -1,4 +1,3 @@
-import {context} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -770,10 +769,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // that if the connection is subsequently closed, the `downstream`
       // subscription can be properly canceled even if #runInLockForClient()
       // has not had a chance to run.
-      const otelContext = context.active();
-      void context
-        .with(otelContext, () =>
-          this.#runInLockForClient(
+      void startAsyncSpan(tracer, 'vs.initConnection.async', () =>
+        this.#runInLockForClient(
             ctx,
             initConnectionMessage,
             async (lc, clientID, msg: InitConnectionBody, cvr) => {
