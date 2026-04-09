@@ -273,6 +273,7 @@ class PostgresChangeSource implements ChangeSource {
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#db = pgClient(lc, upstreamUri, {
+      max: 1,
       // used occasionally for schema changes, periodically for lag reporting
       ['idle_timeout']: 60,
       connection: {['application_name']: 'zero-replication-monitor'},
