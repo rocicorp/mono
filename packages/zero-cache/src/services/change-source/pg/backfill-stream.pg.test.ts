@@ -134,7 +134,7 @@ describe('backfill-stream', () => {
           [9n, 10, [9, 10, '11', {e: 12}], '{"d" : 9}'],
           [10n, 11, [10, 11, '12', {e: 13}], '{"d" : 10}'],
         ],
-        status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+        status: {rows: 10, totalRows: expect.any(Number), totalBytes: expect.any(Number)},
       },
       {
         tag: 'backfill-completed',
@@ -144,7 +144,7 @@ describe('backfill-stream', () => {
           rowKey: {columns: ['id1', 'id2']},
         },
         columns: ['c', 'b'],
-        status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+        status: {rows: 10, totalRows: expect.any(Number), totalBytes: expect.any(Number)},
       },
     ]);
   });
@@ -189,7 +189,7 @@ describe('backfill-stream', () => {
             '{"d" : 10}',
           ],
         ],
-        status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+        status: {rows: 10, totalRows: expect.any(Number), totalBytes: expect.any(Number)},
       },
       {
         tag: 'backfill-completed',
@@ -199,7 +199,7 @@ describe('backfill-stream', () => {
           rowKey: {columns: ['id2', 'id1']},
         },
         columns: ['a', 'c', 'b'],
-        status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
+        status: {rows: 10, totalRows: expect.any(Number), totalBytes: expect.any(Number)},
       },
     ]);
   });

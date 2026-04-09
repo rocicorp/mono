@@ -438,16 +438,10 @@ const MB = 1024 * 1024;
 const MAX_BUFFERED_ROWS = 10_000;
 const BUFFERED_SIZE_THRESHOLD = 8 * MB;
 
-export type DownloadStatements = {
-  select: string;
-  getTotalRows: string;
-  getTotalBytes: string;
-};
-
-export function makeDownloadStatements(
+export function makeSelectStatement(
   table: PublishedTableSpec,
   cols: string[],
-): DownloadStatements {
+): string {
   const filterConditions = Object.values(table.publications)
     .map(({rowFilter}) => rowFilter)
     .filter(f => !!f); // remove nulls
@@ -456,13 +450,27 @@ export function makeDownloadStatements(
       ? ''
       : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
   const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)} ${where}`;
-  const totalBytes = `(${cols.map(col => `SUM(COALESCE(pg_column_size(${id(col)}), 0))`).join(' + ')})`;
-  const stmts = {
-    select: /*sql*/ `SELECT ${cols.map(id).join(',')} ${fromTable}`,
-    getTotalRows: /*sql*/ `SELECT COUNT(*) AS "totalRows" ${fromTable}`,
-    getTotalBytes: /*sql*/ `SELECT ${totalBytes} AS "totalBytes" ${fromTable}`,
+  return /*sql*/ `SELECT ${cols.map(id).join(',')} ${fromTable}`;
+}
+
+/**
+ * Returns estimated row count and table size from pg_class catalog stats
+ * (maintained by ANALYZE / autovacuum). This is instant — no table scan.
+ */
+export async function getEstimatedTableSize(
+  sql: PostgresDB,
+  table: PublishedTableSpec,
+): Promise<{totalRows: number; totalBytes: number}> {
+  const result = await sql<{totalRows: number; totalBytes: number}[]>`
+    SELECT GREATEST(reltuples, 0)::bigint AS "totalRows",
+           GREATEST(relpages, 0)::bigint * current_setting('block_size')::bigint AS "totalBytes"
+    FROM pg_class
+    WHERE oid = ${`${table.schema}.${table.name}`}::regclass
+  `;
+  return {
+    totalRows: Number(result[0].totalRows),
+    totalBytes: Number(result[0].totalBytes),
   };
-  return stmts;
 }
 
 type DownloadState = {
@@ -478,13 +486,7 @@ async function getInitialDownloadState(
   const start = performance.now();
   const table = liteTableName(spec);
   const columns = Object.keys(spec.columns);
-  const stmts = makeDownloadStatements(spec, columns);
-  const rowsResult = sql
-    .unsafe<{totalRows: bigint}[]>(stmts.getTotalRows)
-    .execute();
-  const bytesResult = sql
-    .unsafe<{totalBytes: bigint}[]>(stmts.getTotalBytes)
-    .execute();
+  const {totalRows, totalBytes} = await getEstimatedTableSize(sql, spec);
 
   const state: DownloadState = {
     spec,
@@ -492,8 +494,8 @@ async function getInitialDownloadState(
       table,
       columns,
       rows: 0,
-      totalRows: Number((await rowsResult)[0].totalRows),
-      totalBytes: Number((await bytesResult)[0].totalBytes),
+      totalRows,
+      totalBytes,
     },
   };
   const elapsed = (performance.now() - start).toFixed(3);
@@ -681,7 +683,7 @@ async function copyText(
     insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
   );
 
-  const {select} = makeDownloadStatements(table, columnNames);
+  const select = makeSelectStatement(table, columnNames);
   const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 

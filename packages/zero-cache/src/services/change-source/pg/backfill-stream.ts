@@ -26,8 +26,8 @@ import {
 } from './backfill-metadata.ts';
 import {
   createReplicationSlot,
-  makeDownloadStatements,
-  type DownloadStatements,
+  getEstimatedTableSize,
+  makeSelectStatement,
 } from './initial-sync.ts';
 import {toStateVersionString} from './lsn.ts';
 import {getPublicationInfo} from './schema/published.ts';
@@ -93,9 +93,11 @@ export async function* streamBackfill(
 
     yield* stream(
       lc,
+      db,
       tx,
       backfill,
-      makeDownloadStatements(tableSpec, cols),
+      tableSpec,
+      makeSelectStatement(tableSpec, cols),
       cols.map(col => types.getTypeParser(tableSpec.columns[col].typeOID)),
       flushThresholdBytes,
     );
@@ -125,23 +127,20 @@ export async function* streamBackfill(
 
 async function* stream(
   lc: LogContext,
+  db: PostgresDB,
   tx: TransactionPool,
   backfill: BackfillParams,
-  {select, getTotalRows, getTotalBytes}: DownloadStatements,
+  tableSpec: PublishedTableSpec,
+  select: string,
   colParsers: TypeParser[],
   flushThresholdBytes: number,
 ): AsyncGenerator<MessageBackfill | BackfillCompleted> {
   const start = performance.now();
-  const [rows, bytes] = await tx.processReadTask(sql =>
-    Promise.all([
-      sql.unsafe<{totalRows: bigint}[]>(getTotalRows),
-      sql.unsafe<{totalBytes: bigint}[]>(getTotalBytes),
-    ]),
-  );
+  const {totalRows, totalBytes} = await getEstimatedTableSize(db, tableSpec);
   const status: DownloadStatus = {
     rows: 0,
-    totalRows: Number(rows[0].totalRows),
-    totalBytes: Number(bytes[0].totalBytes),
+    totalRows,
+    totalBytes,
   };
 
   let elapsed = (performance.now() - start).toFixed(3);
@@ -153,7 +152,7 @@ async function* stream(
   );
 
   const tsvParser = new TsvParser();
-  let totalBytes = 0;
+  let streamedBytes = 0;
   let totalMsgs = 0;
   let rowValues: JSONValue[][] = [];
   let bufferedBytes = 0;
@@ -161,7 +160,7 @@ async function* stream(
   const logFlushed = () => {
     lc.debug?.(
       `Flushed ${rowValues.length} rows, ${bufferedBytes} bytes ` +
-        `(total: rows=${status.rows}, msgs=${totalMsgs}, bytes=${totalBytes})`,
+        `(total: rows=${status.rows}, msgs=${totalMsgs}, bytes=${streamedBytes})`,
     );
   };
 
@@ -182,7 +181,7 @@ async function* stream(
       }
     }
     bufferedBytes += chunk.byteLength;
-    totalBytes += chunk.byteLength;
+    streamedBytes += chunk.byteLength;
 
     if (bufferedBytes >= flushThresholdBytes) {
       yield {tag: 'backfill', ...backfill, rowValues, status};
@@ -203,7 +202,7 @@ async function* stream(
   yield {tag: 'backfill-completed', ...backfill, status};
   elapsed = (performance.now() - start).toFixed(3);
   lc.info?.(
-    `Finished streaming ${status.rows} rows, ${totalMsgs} msgs, ${totalBytes} bytes ` +
+    `Finished streaming ${status.rows} rows, ${totalMsgs} msgs, ${streamedBytes} bytes ` +
       `(${elapsed} ms)`,
   );
 }
