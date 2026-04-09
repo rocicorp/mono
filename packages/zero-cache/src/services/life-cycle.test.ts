@@ -83,94 +83,103 @@ describe('shutdown', () => {
     await Promise.all(all.map(w => w.running.promise));
   });
 
-  test('graceful shutdown', async () => {
-    proc.emit('SIGTERM');
+  test.each([['SIGTERM'], ['SIGINT']])(
+    'graceful shutdown: %s',
+    async signal => {
+      proc.emit(signal);
 
-    await syncer1.draining.promise;
-    await syncer2.draining.promise;
+      await syncer1.draining.promise;
+      await syncer2.draining.promise;
 
-    syncer1.finishDrain.resolve();
-    syncer2.finishDrain.resolve();
+      syncer1.finishDrain.resolve();
+      syncer2.finishDrain.resolve();
 
-    await changeStreamer.draining.promise;
-    await replicator.draining.promise;
+      await changeStreamer.draining.promise;
+      await replicator.draining.promise;
 
-    changeStreamer.finishDrain.resolve();
-    replicator.finishDrain.resolve();
+      changeStreamer.finishDrain.resolve();
+      replicator.finishDrain.resolve();
 
-    await Promise.all(all.map(w => w.stopped.promise));
+      await Promise.all(all.map(w => w.stopped.promise));
 
-    expect(events).toEqual([
-      'drain user-facing',
-      'drain user-facing',
-      'stop user-facing',
-      'stop user-facing',
-      'drain supporting',
-      'drain supporting',
-      'stop supporting',
-      'stop supporting',
-    ]);
-  });
+      expect(events).toEqual([
+        'drain user-facing',
+        'drain user-facing',
+        'stop user-facing',
+        'stop user-facing',
+        'drain supporting',
+        'drain supporting',
+        'stop supporting',
+        'stop supporting',
+      ]);
+    },
+  );
 
-  test('error during graceful shutdown: %s', async () => {
-    proc.emit('SIGTERM');
+  test.each([['SIGTERM'], ['SIGINT']])(
+    'error during graceful shutdown: %s',
+    async signal => {
+      proc.emit(signal);
 
-    await syncer1.draining.promise;
-    await syncer2.draining.promise;
+      await syncer1.draining.promise;
+      await syncer2.draining.promise;
 
-    syncer1.stopped.reject('doh');
-    syncer2.finishDrain.resolve();
+      syncer1.stopped.reject('doh');
+      syncer2.finishDrain.resolve();
 
-    await changeStreamer.draining.promise;
-    await replicator.draining.promise;
+      await changeStreamer.draining.promise;
+      await replicator.draining.promise;
 
-    changeStreamer.finishDrain.resolve();
-    replicator.finishDrain.resolve();
+      changeStreamer.finishDrain.resolve();
+      replicator.finishDrain.resolve();
 
-    await Promise.allSettled(all.map(w => w.stopped.promise));
+      await Promise.allSettled(all.map(w => w.stopped.promise));
 
-    expect(events).toEqual([
-      'drain user-facing',
-      'drain user-facing',
-      'stop user-facing',
-      'drain supporting',
-      'drain supporting',
-      'stop supporting',
-      'stop supporting',
-    ]);
-  });
+      expect(events).toEqual([
+        'drain user-facing',
+        'drain user-facing',
+        'stop user-facing',
+        'drain supporting',
+        'drain supporting',
+        'stop supporting',
+        'stop supporting',
+      ]);
+    },
+  );
 
-  test('all error during graceful shutdown: %s', async () => {
-    proc.emit('SIGTERM');
+  test.each([['SIGTERM'], ['SIGINT']])(
+    'all error during graceful shutdown: %s',
+    async signal => {
+      proc.emit(signal);
 
-    await syncer1.draining.promise;
-    await syncer2.draining.promise;
+      await syncer1.draining.promise;
+      await syncer2.draining.promise;
 
-    syncer1.stopped.reject('doh');
-    syncer2.stopped.reject('doh');
+      syncer1.stopped.reject('doh');
+      syncer2.stopped.reject('doh');
 
-    await changeStreamer.draining.promise;
-    await replicator.draining.promise;
+      await changeStreamer.draining.promise;
+      await replicator.draining.promise;
 
-    changeStreamer.finishDrain.resolve();
-    replicator.finishDrain.resolve();
+      changeStreamer.finishDrain.resolve();
+      replicator.finishDrain.resolve();
 
-    await Promise.allSettled(all.map(w => w.stopped.promise));
+      await Promise.allSettled(all.map(w => w.stopped.promise));
 
-    expect(events).toEqual([
-      'drain user-facing',
-      'drain user-facing',
-      'drain supporting',
-      'drain supporting',
-      'stop supporting',
-      'stop supporting',
-    ]);
-  });
+      expect(events).toEqual([
+        'drain user-facing',
+        'drain user-facing',
+        'drain supporting',
+        'drain supporting',
+        'stop supporting',
+        'stop supporting',
+      ]);
+    },
+  );
 
   test.each([
     [
-      'SIGINT',
-      () => proc.emit('SIGINT'),
+      'SIGQUIT',
+      () => proc.emit('SIGQUIT'),
       [
         'stop supporting',
         'stop supporting',
@@ -179,8 +188,8 @@ describe('shutdown', () => {
       ],
     ],
     [
-      'SIGQUIT',
-      () => proc.emit('SIGQUIT'),
+      'SIGABRT',
+      () => proc.emit('SIGABRT'),
       [
         'stop supporting',
         'stop supporting',
