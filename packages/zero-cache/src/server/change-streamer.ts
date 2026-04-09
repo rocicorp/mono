@@ -73,7 +73,7 @@ export default async function runWorker(
     },
     {sendStringAsJson: true},
   );
-  void warmupConnections(lc, changeDB, 'change');
+  void warmupConnections(lc, changeDB, 'change').catch(() => {});
 
   const {autoReset, replicationLag} = config;
   const shard = getShardConfig(config);
