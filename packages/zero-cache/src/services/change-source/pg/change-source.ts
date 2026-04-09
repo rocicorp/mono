@@ -153,6 +153,7 @@ export async function initializePostgresChangeSource(
       upstreamReplica,
       context,
       lagReportIntervalMs,
+      syncOptions.textCopy,
     );
 
     return {subscriptionState, changeSource};
@@ -258,6 +259,7 @@ class PostgresChangeSource implements ChangeSource {
   readonly #replica: Replica;
   readonly #context: ServerContext;
   readonly #lagReporter: LagReporter | null;
+  readonly #textCopy: boolean;
 
   constructor(
     lc: LogContext,
@@ -266,6 +268,7 @@ class PostgresChangeSource implements ChangeSource {
     replica: Replica,
     context: ServerContext,
     lagReportIntervalMs: number,
+    textCopy?: boolean | undefined,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#db = pgClient(lc, upstreamUri, {
@@ -278,6 +281,7 @@ class PostgresChangeSource implements ChangeSource {
     this.#shard = shard;
     this.#replica = replica;
     this.#context = context;
+    this.#textCopy = textCopy ?? false;
     this.#lagReporter =
       lagReportIntervalMs > 0
         ? new LagReporter(
@@ -354,7 +358,9 @@ class PostgresChangeSource implements ChangeSource {
     // BackfillManager.
     const changes = new ChangeStreamMultiplexer(this.#lc, clientWatermark);
     const backfillManager = new BackfillManager(this.#lc, changes, req =>
-      streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req),
+      streamBackfill(this.#lc, this.#upstreamUri, this.#replica, req, {
+        textCopy: this.#textCopy,
+      }),
     );
     changes
       .addProducers(messages, backfillManager)
