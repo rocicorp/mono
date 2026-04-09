@@ -19,19 +19,27 @@ import type {SingletonService} from './service.ts';
  *   the `SIGTERM` signal only after all `user-facing` workers have
  *   exited.
  *
- * For other kill signals, such as `SIGQUIT`, all workers
- * are stopped without draining. Additionally, if any worker exits
- * unexpectedly, all workers sent an immediate `SIGQUIT` signal.
+ * For other kill signals, such as `SIGQUIT` and `SIGABRT`, all workers
+ * are stopped without draining. `SIGQUIT` is used to represent an
+ * intentional shutdown (for which draining is not beneficial), whereas
+ * `SIGABRT` is used for unexpected process exits.
  */
 export type WorkerType = 'user-facing' | 'supporting';
 
 export const GRACEFUL_SHUTDOWN = ['SIGTERM', 'SIGINT'] as const;
-export const FORCEFUL_SHUTDOWN = ['SIGQUIT'] as const;
+export const FORCEFUL_SHUTDOWN = ['SIGQUIT', 'SIGABRT'] as const;
+
+type GracefulShutdownSignal = (typeof GRACEFUL_SHUTDOWN)[number];
 
 // An internal error code used to indicate that a message has already been
 // logged at level ERRROR. When a process exits with this error code, the
 // parent process logs the exit at level WARN instead of ERROR.
 export const UNHANDLED_EXCEPTION_ERROR_CODE = 13;
+
+// An internal error code used to indicate that the server should exit
+// without draining (e.g. due to a supporting worker get a signal to shut
+// down), but the exit is otherwise intentional.
+const INTENTIONAL_SHUTDOWN_ERROR_CODE = 14;
 
 /**
  * Handles readiness, termination signals, and coordination of graceful
@@ -62,15 +70,25 @@ export class ProcessManager {
     proc.on('exit', code =>
       this.#kill(
         this.#all,
-        code === 0 ? GRACEFUL_SHUTDOWN[0] : FORCEFUL_SHUTDOWN[0],
+        code === 0
+          ? 'SIGTERM' // graceful, drained shutdown
+          : code === INTENTIONAL_SHUTDOWN_ERROR_CODE
+            ? 'SIGQUIT' // intentional abort without drain
+            : 'SIGABRT', // unintentional shutdown, alertable error
       ),
     );
 
     // For other (catchable) kill signals, exit with a non-zero error code
-    // to send a `SIGQUIT` to all workers. For this signal, workers are
-    // stopped immediately without draining. See `runUntilKilled()`.
+    // to send a `SIGQUIT` (intentional shutdown) or `SIGABRT` (unexpected
+    // shutdown) to all workers. For these signals, workers are stopped
+    // immediately without draining, since there is no merit to slowly draining
+    // when supporting workers have stopped.
+    //
+    // The logic for handling these signals is in `runUntilKilled()`.
     for (const signal of FORCEFUL_SHUTDOWN) {
-      proc.on(signal, () => this.#exit(-1));
+      proc.on(signal, () =>
+        this.#exit(signal === 'SIGQUIT' ? INTENTIONAL_SHUTDOWN_ERROR_CODE : -1),
+      );
     }
 
     this.#exitImpl = (code: number) => {
@@ -91,7 +109,7 @@ export class ProcessManager {
     void this.#lc.flush().finally(() => this.#exitImpl(code));
   }
 
-  #startDrain(signal: 'SIGTERM' | 'SIGINT' = 'SIGTERM') {
+  #startDrain(signal: GracefulShutdownSignal) {
     this.#lc.info?.(`initiating drain (${signal})`);
     this.#drainStart = Date.now();
     if (this.#userFacing.size) {
@@ -161,7 +179,7 @@ export class ProcessManager {
   #onExit(
     code: number,
     sig: NodeJS.Signals | null,
-    err: unknown | null,
+    err: unknown,
     type: WorkerType,
     name: string,
     worker: Subprocess | undefined,
@@ -175,25 +193,34 @@ export class ProcessManager {
     const pid = worker?.pid ?? process.pid;
 
     if (type === 'supporting') {
-      // The replication-manager has no user-facing workers.
-      // In this case, code === 0 shutdowns are not errors.
-      // Non-zero exits are warnings (not errors) since they're often transient issues.
-      const log = code === 0 && this.#userFacing.size === 0 ? 'info' : 'warn';
+      // Supporting workers like the replication-manager shut down without a
+      // drain signal when receiving protocol-specific instructions (like auto
+      // reset). In this case, a special error code is used to signal that the
+      // server should be shut down without draining, but it is otherwise not
+      // considered an unexpected/alertable error.
+      if (code === 0 && (this.#drainStart === 0 || this.#userFacing.size > 0)) {
+        code = INTENTIONAL_SHUTDOWN_ERROR_CODE;
+      }
+      const log =
+        code === 0 || code === INTENTIONAL_SHUTDOWN_ERROR_CODE
+          ? 'info'
+          : 'warn';
       this.#lc[log]?.(`${name} (${pid}) exited with code (${code})`, err ?? '');
-      return this.#exit(log === 'info' || code !== 0 ? code : -1);
+      return this.#exit(code);
     }
 
     const log =
-      this.#drainStart > 0 || code === UNHANDLED_EXCEPTION_ERROR_CODE
-        ? 'warn'
-        : 'error';
-    if (sig) {
-      this.#lc[log]?.(`${name} (${pid}) killed with (${sig})`, err ?? '');
-    } else if (code !== 0) {
-      this.#lc[log]?.(`${name} (${pid}) exited with code (${code})`, err ?? '');
-    } else {
-      this.#lc.info?.(`${name} (${pid}) exited with code (${code})`);
-    }
+      code === 0 || code === INTENTIONAL_SHUTDOWN_ERROR_CODE
+        ? 'info'
+        : this.#drainStart > 0 || code === UNHANDLED_EXCEPTION_ERROR_CODE
+          ? 'warn'
+          : 'error';
+    this.#lc[log]?.(
+      sig
+        ? `${name} (${pid}) killed with (${sig})`
+        : `${name} (${pid}) exited with code (${code})`,
+      err ?? '',
+    );
 
     // user-facing workers exited or finished draining.
     if (this.#userFacing.size === 0) {
@@ -207,9 +234,9 @@ export class ProcessManager {
       return this.#exit(0);
     }
 
-    // Exit only if not draining. If a user-facing worker exits unexpectedly
-    // during a drain, log a warning but let other user-facing workers drain.
-    if (log === 'error') {
+    if (this.#drainStart === 0) {
+      // If a user-facing worker exits without receiving a drain signal,
+      // shutdown the server.
       return this.#exit(code || -1);
     }
 
