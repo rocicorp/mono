@@ -173,6 +173,30 @@ export type ZeroOptions<
   queryHeaders?: Record<string, string> | undefined;
 
   /**
+   * Optional callback that returns a W3C `traceparent` header value for
+   * distributed tracing. Called before sending WebSocket messages that
+   * trigger API server calls (`push`, `changeDesiredQueries`,
+   * `initConnection`).
+   *
+   * This enables end-to-end trace correlation from your frontend through
+   * zero-cache to your API server.
+   *
+   * @example
+   * ```ts
+   * import {propagation, context} from '@opentelemetry/api';
+   *
+   * new Zero({
+   *   getTraceparent: () => {
+   *     const carrier: Record<string, string> = {};
+   *     propagation.inject(context.active(), carrier);
+   *     return carrier.traceparent;
+   *   },
+   * });
+   * ```
+   */
+  getTraceparent?: (() => string | undefined) | undefined;
+
+  /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
    *
    * @deprecated Use {@linkcode Connection.state.subscribe} on the Zero instance instead. e.g.

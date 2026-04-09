@@ -43,6 +43,8 @@ const initConnectionBodySchema = v.object({
    * queries from inactive clients.
    */
   activeClients: v.array(v.string()).optional(),
+  /** W3C traceparent header for distributed tracing. */
+  traceparent: v.string().optional(),
 });
 
 export const initConnectionMessageSchema = v.tuple([

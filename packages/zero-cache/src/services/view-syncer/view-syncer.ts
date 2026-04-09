@@ -769,44 +769,46 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // that if the connection is subsequently closed, the `downstream`
       // subscription can be properly canceled even if #runInLockForClient()
       // has not had a chance to run.
-      void this.#runInLockForClient(
-        ctx,
-        initConnectionMessage,
-        async (lc, clientID, msg: InitConnectionBody, cvr) => {
-          if (cvr.clientSchema === null && !msg.clientSchema) {
-            throw new ProtocolErrorWithLevel(
-              {
-                kind: ErrorKind.InvalidConnectionRequest,
-                message:
-                  'The initConnection message for a new client group must include client schema.',
-                origin: ErrorOrigin.ZeroCache,
-              },
-              'warn',
+      void startAsyncSpan(tracer, 'vs.initConnection.async', () =>
+        this.#runInLockForClient(
+          ctx,
+          initConnectionMessage,
+          async (lc, clientID, msg: InitConnectionBody, cvr) => {
+            if (cvr.clientSchema === null && !msg.clientSchema) {
+              throw new ProtocolErrorWithLevel(
+                {
+                  kind: ErrorKind.InvalidConnectionRequest,
+                  message:
+                    'The initConnection message for a new client group must include client schema.',
+                  origin: ErrorOrigin.ZeroCache,
+                },
+                'warn',
+              );
+            }
+            // Every new websocket must revalidate so shared maintenance always
+            // has a current validated connection to fall back to.
+            if (!(await this.#validateConnection(ctx))) {
+              return;
+            }
+            await this.#handleConfigUpdate(
+              lc,
+              clientID,
+              msg,
+              cvr,
+              'all', // re transform all on new connections
+              // Until the profileID is required in the URL, default it to
+              // `cg${clientGroupID}`, as is done in the schema migration.
+              // As clients update to the zero version with the profileID logic,
+              // the value will be correspondingly in the CVR db.
+              ctx.profileID ?? `cg${this.id}`,
+              ctx,
             );
-          }
-          // Every new websocket must revalidate so shared maintenance always
-          // has a current validated connection to fall back to.
-          if (!(await this.#validateConnection(ctx))) {
-            return;
-          }
-          await this.#handleConfigUpdate(
-            lc,
-            clientID,
-            msg,
-            cvr,
-            'all', // re transform all on new connections
-            // Until the profileID is required in the URL, default it to
-            // `cg${clientGroupID}`, as is done in the schema migration.
-            // As clients update to the zero version with the profileID logic,
-            // the value will be correspondingly in the CVR db.
-            ctx.profileID ?? `cg${this.id}`,
-            ctx,
-          );
-          // this.#authData  and cvr (in particular cvr.clientSchema) have been
-          // initialized, signal the run loop to run.
-          this.#initialized.resolve('initialized');
-        },
-        newClient,
+            // this.#authData  and cvr (in particular cvr.clientSchema) have been
+            // initialized, signal the run loop to run.
+            this.#initialized.resolve('initialized');
+          },
+          newClient,
+        ),
       ).catch(e => newClient.fail(e));
 
       return downstream;

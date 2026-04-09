@@ -1,3 +1,4 @@
+import {ROOT_CONTEXT, context, propagation} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
@@ -338,7 +339,14 @@ class PushWorker {
       const rest = this.#queue.drain();
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
-        const response = await this.#processPush(push);
+        const parentContext = push.push.traceparent
+          ? propagation.extract(ROOT_CONTEXT, {
+              traceparent: push.push.traceparent,
+            })
+          : context.active();
+        const response = await context.with(parentContext, () =>
+          this.#processPush(push),
+        );
         await this.#fanOutResponses(response);
       }
 
