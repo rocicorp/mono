@@ -27,7 +27,9 @@ import type {SingletonService} from './service.ts';
 export type WorkerType = 'user-facing' | 'supporting';
 
 export const GRACEFUL_SHUTDOWN = ['SIGTERM', 'SIGINT'] as const;
-export const FORCEFUL_SHUTDOWN = ['SIGABRT', 'SIGQUIT'] as const;
+export const FORCEFUL_SHUTDOWN = ['SIGQUIT', 'SIGABRT'] as const;
+
+type GracefulShutdownSignal = (typeof GRACEFUL_SHUTDOWN)[number];
 
 // An internal error code used to indicate that a message has already been
 // logged at level ERRROR. When a process exits with this error code, the
@@ -107,7 +109,7 @@ export class ProcessManager {
     void this.#lc.flush().finally(() => this.#exitImpl(code));
   }
 
-  #startDrain(signal: (typeof GRACEFUL_SHUTDOWN)[number]) {
+  #startDrain(signal: GracefulShutdownSignal) {
     this.#lc.info?.(`initiating drain (${signal})`);
     this.#drainStart = Date.now();
     if (this.#userFacing.size) {
