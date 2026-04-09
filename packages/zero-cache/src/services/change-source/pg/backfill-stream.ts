@@ -18,7 +18,6 @@ import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
-import {id} from '../../../types/sql.ts';
 import {SchemaIncompatibilityError} from '../common/backfill-manager.ts';
 import type {
   BackfillCompleted,
@@ -33,6 +32,7 @@ import {
 } from './backfill-metadata.ts';
 import {
   createReplicationSlot,
+  makeBinarySelectExprs,
   makeDownloadStatements,
   type DownloadStatements,
 } from './initial-sync.ts';
@@ -123,28 +123,23 @@ export async function* streamBackfill(
         flushThresholdBytes,
       );
     } else {
-      const colSpecs = cols.map(col => tableSpec.columns[col]);
-      const selectCols = cols.map((col, i) =>
-        hasBinaryDecoder(colSpecs[i]) ? id(col) : `${id(col)}::text`,
+      const binaryStmts = makeDownloadStatements(
+        tableSpec,
+        cols,
+        undefined,
+        undefined,
+        makeBinarySelectExprs(tableSpec, cols),
       );
-      const filterConditions = Object.values(tableSpec.publications)
-        .map(({rowFilter}) => rowFilter)
-        .filter(f => !!f);
-      const where =
-        filterConditions.length === 0
-          ? ''
-          : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
-      const fromTable = /*sql*/ `FROM ${id(tableSpec.schema)}.${id(tableSpec.name)} ${where}`;
-      const select = /*sql*/ `SELECT ${selectCols.join(',')} ${fromTable}`;
 
       yield* stream(
         lc,
         tx,
         backfill,
         stmts,
-        `COPY (${select}) TO STDOUT WITH (FORMAT binary)`,
+        `COPY (${binaryStmts.select}) TO STDOUT WITH (FORMAT binary)`,
         new BinaryCopyParser(),
-        colSpecs.map(spec => {
+        cols.map(col => {
+          const spec = tableSpec.columns[col];
           const decoder = hasBinaryDecoder(spec)
             ? makeBinaryDecoder(spec)
             : textCastDecoder;
