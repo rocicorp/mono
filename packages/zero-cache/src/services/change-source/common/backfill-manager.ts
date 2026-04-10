@@ -241,8 +241,8 @@ export class BackfillManager implements Cancelable, Listener {
       });
 
       if (msg.tag === 'backfill-completed' && tx < msg.watermark) {
-        // At this point it is ensured that #changeStreamReached() the
-        // msg.watermark. Given that guarantee, ensure that the version of the
+        // At this point it must be the case that #changeStreamReached() the
+        // backfill watermark. Given that guarantee, ensure that the version of the
         // transaction containing the backfill-completed message is at least up
         // to the backfill watermark, so that the final database state is never
         // earlier than any of the versions of backfilled rows.
