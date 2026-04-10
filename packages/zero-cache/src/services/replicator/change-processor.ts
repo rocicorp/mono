@@ -315,7 +315,7 @@ class TransactionProcessor {
   readonly #startMs: number;
   readonly #db: StatementRunner;
   readonly #mode: ChangeProcessorMode;
-  readonly #version: LexiVersion;
+  readonly #originalVersion: LexiVersion;
   readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
   readonly #tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>;
@@ -325,6 +325,7 @@ class TransactionProcessor {
   #pos = 0;
   #schemaChanged = false;
   #numChangeLogEntries = 0;
+  #version: LexiVersion;
 
   constructor(
     lc: LogContext,
@@ -366,6 +367,7 @@ class TransactionProcessor {
         unreachable();
     }
     this.#db = db;
+    this.#originalVersion = commitVersion;
     this.#version = commitVersion;
     this.#lc = lc.withContext('version', commitVersion);
     this.#changeLog = changeLog;
@@ -847,7 +849,12 @@ class TransactionProcessor {
 
   #completedBackfill: DownloadStatus | undefined;
 
-  processBackfillCompleted({relation, columns, status}: BackfillCompleted) {
+  processBackfillCompleted({
+    relation,
+    columns,
+    status,
+    watermark,
+  }: BackfillCompleted) {
     const tableName = liteTableName(relation);
     const rowKeyCols = relation.rowKey.columns;
     const cols = [...rowKeyCols, ...columns];
@@ -858,6 +865,7 @@ class TransactionProcessor {
     }
     // Given that new columns are being exposed for every row in the table, bump the
     // row version for all rows.
+    this.#setCompletedBackfillWatermark(watermark);
     this.#bumpVersions(relation);
     if (status) {
       this.#completedBackfill = {table: tableName, columns: cols, ...status};
@@ -875,14 +883,39 @@ class TransactionProcessor {
     // no backfills are in progress).
   }
 
+  // Before sending a `backfill-completed` message, the BackfillManager
+  // ensures that the replication stream has reached or exceeded the
+  // backfill watermark. This required by the algorithm to ensure that
+  // the data in each row, which may be a mix of pre-existing, backfilled,
+  // and new values, is consistent. (see backfill-manager.ts
+  // #changeStreamReached()).
+  //
+  // Note, however, that there may not necessarily have been a committed
+  // transaction since the backfill snapshot was taken. Because backfill
+  // rows are inserted with that watermark as the row version, it is
+  // important to ensure that the replica's stateVersion itself is at least
+  // at that watermark, to avoid having row versions _later_ than the
+  // stateVersion. If the current transaction's version is earlier than
+  // the backfill watermark, it will be bumped it to the backfill watermark
+  // so that a stateVersion is never behind any rowVersions.
+  #setCompletedBackfillWatermark(watermark: string) {
+    if (watermark > this.#version) {
+      this.#lc.info?.(
+        `bumping transaction version to backfill watermark ${watermark}`,
+      );
+      this.#version = watermark;
+    }
+  }
+
   processCommit(commit: MessageCommit, watermark: string): CommitResult {
-    if (watermark !== this.#version) {
+    if (watermark !== this.#originalVersion) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
           this.#version
         }: ${stringify(commit)}`,
       );
     }
+    watermark = this.#version;
     updateReplicationWatermark(this.#db, watermark);
 
     if (this.#schemaChanged) {

@@ -11,7 +11,11 @@ import {
 } from '../../db/lite-tables.ts';
 import type {LiteIndexSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {expectTables, initDB} from '../../test/lite.ts';
+import {
+  expectMatchingObjectsInTables,
+  expectTables,
+  initDB,
+} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
 import {DEL_OP, SET_OP} from './schema/change-log.ts';
@@ -2784,6 +2788,14 @@ describe('replicator/change-processor', () => {
             e: 2000n, // 87@101 not overwritten by backfill 2000
           },
           {
+            _0_version: '123',
+            a: 1000n,
+            b: 2000n,
+            c: 3000n,
+            d: 4n, // 4@123 not overwritten by backfill -1
+            e: 5n, // 5@123 not overwritten by backfill -2
+          },
+          {
             // rows introduced by backfill use the watermark as the version
             _0_version: '115',
             a: 10n,
@@ -2791,14 +2803,6 @@ describe('replicator/change-processor', () => {
             c: 30n,
             d: 5000n,
             e: 6000n,
-          },
-          {
-            _0_version: '123',
-            a: 1000n,
-            b: 2000n,
-            c: 3000n,
-            d: 4n, // 4@123 not overwritten by backfill -1
-            e: 5n, // 5@123 not overwritten by backfill -2
           },
         ],
         ['_zero.changeLog2']: [
@@ -3001,6 +3005,14 @@ describe('replicator/change-processor', () => {
             e: 2000n, // 87@101 not overwritten by backfill 2000
           },
           {
+            _0_version: '123',
+            a: 1000n,
+            b: 2000n,
+            c: 3000n,
+            d: 4n, // 4@123 not overwritten by backfill -1
+            e: 5n, // 5@123 not overwritten by backfill -2
+          },
+          {
             // rows introduced by backfill use the watermark as the version.
             // In practice this would correspond with an INSERT from the
             // replication stream.
@@ -3010,14 +3022,6 @@ describe('replicator/change-processor', () => {
             c: 30n,
             d: 5000n,
             e: 6000n,
-          },
-          {
-            _0_version: '123',
-            a: 1000n,
-            b: 2000n,
-            c: 3000n,
-            d: 4n, // 4@123 not overwritten by backfill -1
-            e: 5n, // 5@123 not overwritten by backfill -2
           },
         ],
         ['_zero.changeLog2']: [
@@ -3196,7 +3200,7 @@ describe('replicator/change-processor', () => {
             b: 54n,
             c: 76n,
             d: 90n, // 90@123 not overwritten by backfill 1000
-            e: 2000n, // 87@101 not overwritten by backfill 2000
+            e: 2000n, // 87@101 overwritten by backfill 2000
           },
           {
             _0_version: '123',
@@ -3282,6 +3286,238 @@ describe('replicator/change-processor', () => {
             schema: 'public',
             table: 'bff',
             minRowVersion: '123.02',
+            metadata: null,
+            upstreamMetadata: '{"rowKey":{"columns":["b","a","c"]}}',
+          },
+        ],
+      },
+      expectedTablesInBackupReplicatorChangeLog: ['bff'],
+    },
+    {
+      name: 'completed table backfill (backfill watermark later than last commit)',
+      setup: ``,
+      downstream: [
+        // Create a table that needs backfilling.
+        ['begin', bff.begin(), {commitWatermark: '0e'}],
+        [
+          'data',
+          bff.createTable(
+            {
+              schema: 'public',
+              name: 'bff',
+              primaryKey: ['b', 'a', 'c'],
+              columns: {
+                a: {dataType: 'int', pos: 0},
+                b: {dataType: 'int', pos: 1},
+                c: {dataType: 'int', pos: 2},
+                d: {dataType: 'int', pos: 3},
+                e: {dataType: 'int', pos: 4},
+              },
+            },
+            {
+              metadata: {rowKey: {columns: ['b', 'a', 'c']}},
+              backfill: {
+                a: {id: 1},
+                b: {id: 2},
+                c: {id: 3},
+                d: {id: 4},
+                e: {id: 5},
+              },
+            },
+          ),
+        ],
+        [
+          'data',
+          bff.createIndex({
+            name: 'bff_pkey',
+            schema: 'public',
+            tableName: 'bff',
+            unique: true,
+            columns: {
+              b: 'ASC',
+              a: 'ASC',
+              c: 'ASC',
+            },
+          }),
+        ],
+        ['commit', bff.commit(), {watermark: '0e'}],
+
+        // Partial update at 101
+        ['begin', bff.begin(), {commitWatermark: '101'}],
+        ['data', bff.update('bff', {a: 1, b: 2, c: 3, d: 500, e: 700})],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, d: 98})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, e: 87})],
+        ['data', bff.delete('bff', {a: 10, b: 20, c: 30})],
+        ['commit', fooBarBaz.commit(), {watermark: '101'}],
+
+        // Another partial update at 123
+        ['begin', bff.begin(), {commitWatermark: '123'}],
+        ['data', bff.update('bff', {a: 23, b: 45, c: 67, e: 77})],
+        ['data', bff.update('bff', {a: 32, b: 54, c: 76, d: 90})],
+        ['data', bff.delete('bff', {a: 100, b: 200, c: 300})],
+        // Row full row, so nothing to backfill
+        ['data', bff.update('bff', {a: 1000, b: 2000, c: 3000, d: 4, e: 5})],
+        ['commit', fooBarBaz.commit(), {watermark: '123'}],
+
+        // Backfill at a snapshot after the last commit (155)
+        ['begin', bff.begin(), {commitWatermark: '123.01'}],
+        [
+          'data',
+          {
+            tag: 'backfill',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            watermark: '155',
+            columns: ['d', 'e'],
+            rowValues: [
+              [2, 1, 3, 501, 701],
+              [54, 32, 76, 1000, 2000],
+              [45, 23, 67, 3000, 4000],
+              [20, 10, 30, 5000, 6000],
+              [200, 100, 300, 7000, 8000],
+              [2000, 1000, 3000, -1, -2],
+            ],
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.01'}],
+        ['begin', bff.begin(), {commitWatermark: '123.02'}],
+        [
+          'data',
+          {
+            tag: 'backfill-completed',
+            relation: {
+              schema: 'public',
+              name: 'bff',
+              rowKey: {columns: ['b', 'a', 'c']},
+            },
+            columns: ['d', 'e'],
+            watermark: '155',
+          },
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '123.02'}],
+      ],
+      data: {
+        'bff': [
+          {
+            _0_version: '101',
+            a: 1n,
+            b: 2n,
+            c: 3n,
+            d: 501n,
+            e: 701n,
+          },
+          {
+            _0_version: '123',
+            a: 23n,
+            b: 45n,
+            c: 67n,
+            d: 3000n, // 98@101 overwritten by backfill 3000
+            e: 4000n, // 77@123 overwritten by backfill 4000
+          },
+          {
+            _0_version: '123',
+            a: 32n,
+            b: 54n,
+            c: 76n,
+            d: 1000n, // 90@123 overwritten by backfill 1000
+            e: 2000n, // 87@101 overwritten by backfill 2000
+          },
+          {
+            _0_version: '123',
+            a: 1000n,
+            b: 2000n,
+            c: 3000n,
+            d: -1n, // 4@123 overwritten by backfill -1
+            e: -2n, // 5@123 overwritten by backfill -2
+          },
+          {
+            _0_version: '155',
+            a: 10n,
+            b: 20n,
+            c: 30n,
+            d: 5000n,
+            e: 6000n,
+          },
+          {
+            _0_version: '155',
+            a: 100n,
+            b: 200n,
+            c: 300n,
+            d: 7000n,
+            e: 8000n,
+          },
+        ],
+        ['_zero.changeLog2']: [
+          {
+            backfillingColumnVersions:
+              '{"a":"101","b":"101","c":"101","d":"101","e":"101"}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"a":1,"b":2,"c":3}',
+            stateVersion: '101',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","d":"101","e":"123"}',
+            op: 's',
+            pos: 0n,
+            rowKey: '{"a":23,"b":45,"c":67}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","e":"101","d":"123"}',
+            op: 's',
+            pos: 1n,
+            rowKey: '{"a":32,"b":54,"c":76}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 3n,
+            rowKey: '{"a":10,"b":20,"c":30}',
+            stateVersion: '101',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'd',
+            pos: 2n,
+            rowKey: '{"a":100,"b":200,"c":300}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions:
+              '{"a":"123","b":"123","c":"123","d":"123","e":"123"}',
+            op: 's',
+            pos: 3n,
+            rowKey: '{"a":1000,"b":2000,"c":3000}',
+            stateVersion: '123',
+            table: 'bff',
+          },
+          {
+            backfillingColumnVersions: '{}',
+            op: 'r',
+            pos: -1n,
+            rowKey: '155',
+            stateVersion: '155',
+            table: 'bff',
+          },
+        ],
+        [`_zero.replicationState`]: [{stateVersion: '155'}],
+        ['_zero.tableMetadata']: [
+          {
+            schema: 'public',
+            table: 'bff',
+            minRowVersion: '155',
             metadata: null,
             upstreamMetadata: '{"rowKey":{"columns":["b","a","c"]}}',
           },
@@ -3606,7 +3842,7 @@ describe('replicator/change-processor', () => {
         }
 
         if (log === 'all-entries') {
-          expectTables(replica, c.data, 'bigint');
+          expectMatchingObjectsInTables(replica, c.data, 'bigint');
         } else if (c.data['_zero.changeLog2']) {
           const fullChangeLog = c.data['_zero.changeLog2'] as {
             table: string;
@@ -3614,7 +3850,7 @@ describe('replicator/change-processor', () => {
           }[];
           const backfillingTables =
             c.expectedTablesInBackupReplicatorChangeLog ?? [];
-          expectTables(
+          expectMatchingObjectsInTables(
             replica,
             {
               ...c.data,
