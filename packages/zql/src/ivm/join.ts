@@ -229,22 +229,22 @@ export class Join implements Input {
         this.#childKey,
         this.#parentKey,
       );
-      const parentNodes = constraint ? this.#parent.fetch({constraint}) : [];
-
-      for (const parentNode of parentNodes) {
-        if (parentNode === 'yield') {
-          yield parentNode;
-          continue;
+      if (constraint) {
+        for (const parentNode of this.#parent.fetch({constraint})) {
+          if (parentNode === 'yield') {
+            yield parentNode;
+            continue;
+          }
+          this.#inprogressChildChange.position = parentNode.row;
+          const childChange = makeChildChange(
+            this.#processParentNode(parentNode.row, parentNode.relationships),
+            {
+              relationshipName: this.#relationshipName,
+              change,
+            },
+          );
+          yield* this.#output.push(childChange, this);
         }
-        this.#inprogressChildChange.position = parentNode.row;
-        const childChange = makeChildChange(
-          this.#processParentNode(parentNode.row, parentNode.relationships),
-          {
-            relationshipName: this.#relationshipName,
-            change,
-          },
-        );
-        yield* this.#output.push(childChange, this);
       }
     } finally {
       this.#inprogressChildChange = undefined;
