@@ -9,7 +9,6 @@ import {
   generateWithOverlayUnordered,
   isJoinMatch,
   rowEqualsForCompoundKey,
-  type JoinChangeOverlay,
 } from './join-utils.ts';
 import {
   throwOutput,
@@ -51,7 +50,8 @@ export class Join implements Input {
 
   #output: Output = throwOutput;
 
-  #inprogressChildChange: JoinChangeOverlay | undefined;
+  #inprogressChildChange: Change | undefined;
+  #inprogressChildChangePosition: Row | undefined;
 
   constructor({
     parent,
@@ -215,10 +215,8 @@ export class Join implements Input {
   }
 
   *#pushChildChange(childRow: Row, change: Change): Stream<'yield'> {
-    this.#inprogressChildChange = {
-      change,
-      position: undefined,
-    };
+    this.#inprogressChildChange = change;
+    this.#inprogressChildChangePosition = undefined;
     try {
       const constraint = buildJoinConstraint(
         childRow,
@@ -231,7 +229,7 @@ export class Join implements Input {
             yield parentNode;
             continue;
           }
-          this.#inprogressChildChange.position = parentNode.row;
+          this.#inprogressChildChangePosition = parentNode.row;
           const childChange: ChildChange = {
             type: 'child',
             node: this.#processParentNode(
@@ -268,26 +266,26 @@ export class Join implements Input {
         isJoinMatch(
           parentNodeRow,
           this.#parentKey,
-          this.#inprogressChildChange.change.node.row,
+          this.#inprogressChildChange.node.row,
           this.#childKey,
         ) &&
-        this.#inprogressChildChange.position &&
+        this.#inprogressChildChangePosition &&
         this.#schema.compareRows(
           parentNodeRow,
-          this.#inprogressChildChange.position,
+          this.#inprogressChildChangePosition,
         ) > 0
       ) {
         const childSchema = this.#child.getSchema();
         if (childSchema.sort === undefined) {
           return generateWithOverlayUnordered(
             stream,
-            this.#inprogressChildChange.change,
+            this.#inprogressChildChange,
             childSchema,
           );
         }
         return generateWithOverlay(
           stream,
-          this.#inprogressChildChange.change,
+          this.#inprogressChildChange,
           childSchema,
         );
       }
