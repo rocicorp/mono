@@ -2,7 +2,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {binarySearch} from '../../../shared/src/binary-search.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
-import type {Value} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {
@@ -19,7 +19,6 @@ import {
   generateWithOverlayNoYield,
   isJoinMatch,
   rowEqualsForCompoundKey,
-  type JoinChangeOverlay,
 } from './join-utils.ts';
 import {
   throwOutput,
@@ -60,7 +59,8 @@ export class FlippedJoin implements Input {
 
   #output: Output = throwOutput;
 
-  #inprogressChildChange: JoinChangeOverlay | undefined;
+  #inprogressChildChange: Change | undefined;
+  #inprogressChildChangePosition: Row | undefined;
 
   constructor({
     parent,
@@ -156,10 +156,10 @@ export class FlippedJoin implements Input {
     // (which should not yet have the node removed), would not even
     // be fetched here, and would be absent from the output all together.
     if (
-      this.#inprogressChildChange?.change[ChangeIndex.TYPE] ===
+      this.#inprogressChildChange?[ChangeIndex.TYPE] ===
       ChangeType.REMOVE
     ) {
-      const removedNode = this.#inprogressChildChange.change[ChangeIndex.NODE];
+      const removedNode = this.#inprogressChildChange[ChangeIndex.NODE];
       const compare = this.#child.getSchema().compareRows;
       const insertPos = binarySearch(childNodes.length, i =>
         compare(removedNode.row, childNodes[i].row),
@@ -250,9 +250,9 @@ export class FlippedJoin implements Input {
         let overlaidRelatedChildNodes = relatedChildNodes;
         if (
           this.#inprogressChildChange &&
-          this.#inprogressChildChange.position &&
+          this.#inprogressChildChangePosition &&
           isJoinMatch(
-            this.#inprogressChildChange.change[ChangeIndex.NODE].row,
+            this.#inprogressChildChange[ChangeIndex.NODE].row,
             this.#childKey,
             minParentNode.row,
             this.#parentKey,
@@ -263,25 +263,24 @@ export class FlippedJoin implements Input {
               .getSchema()
               .compareRows(
                 minParentNode.row,
-                this.#inprogressChildChange.position,
+                this.#inprogressChildChangePosition,
               ) <= 0;
           if (
-            this.#inprogressChildChange.change[ChangeIndex.TYPE] ===
+            this.#inprogressChildChange[ChangeIndex.TYPE] ===
             ChangeType.REMOVE
           ) {
             if (hasInprogressChildChangeBeenPushedForMinParentNode) {
               // Remove form relatedChildNodes since the removed child
               // was inserted into childNodes above.
               overlaidRelatedChildNodes = relatedChildNodes.filter(
-                n =>
-                  n !== this.#inprogressChildChange?.change[ChangeIndex.NODE],
+                  n => n !== this.#inprogressChildChange[ChangeIndex.NODE],
               );
             }
           } else if (!hasInprogressChildChangeBeenPushedForMinParentNode) {
             overlaidRelatedChildNodes = [
               ...generateWithOverlayNoYield(
                 relatedChildNodes,
-                this.#inprogressChildChange.change,
+                this.#inprogressChildChange,
                 this.#child.getSchema(),
               ),
             ];
@@ -349,10 +348,8 @@ export class FlippedJoin implements Input {
   }
 
   *#pushChildChange(change: Change, exists?: boolean): Stream<'yield'> {
-    this.#inprogressChildChange = {
-      change,
-      position: undefined,
-    };
+    this.#inprogressChildChange = change;
+    this.#inprogressChildChangePosition = undefined;
     try {
       const constraint = buildJoinConstraint(
         change[ChangeIndex.NODE].row,
@@ -367,10 +364,8 @@ export class FlippedJoin implements Input {
           yield 'yield';
           continue;
         }
-        this.#inprogressChildChange = {
-          change,
-          position: parentNode.row,
-        };
+        this.#inprogressChildChange = change;
+        this.#inprogressChildChangePosition = parentNode.row;
         const childNodeStream = () => {
           const constraint = buildJoinConstraint(
             parentNode.row,

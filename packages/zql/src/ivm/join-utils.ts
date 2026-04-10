@@ -8,11 +8,6 @@ import {compareValues, valuesEqual, type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 
-export type JoinChangeOverlay = {
-  change: Change;
-  position: Row | undefined;
-};
-
 export function generateWithOverlayNoYield(
   stream: Stream<Node>,
   overlay: Change,
