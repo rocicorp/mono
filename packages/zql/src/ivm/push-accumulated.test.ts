@@ -1,13 +1,24 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {beforeEach, describe, expect, test} from 'vitest';
 import {emptyArray, identity} from '../../../shared/src/sentinels.ts';
-import type {Change} from './change.js';
+import {ChangeIndex} from './change-index.js';
+import {ChangeType} from './change-type.js';
+import {
+  makeAddChange,
+  makeChildChange,
+  makeEditChange,
+  makeRemoveChange,
+  type AddChange,
+  type Change,
+  type EditChange,
+  type RemoveChange,
+} from './change.js';
 import type {InputBase, Output} from './operator.js';
 import {
+  pushAccumulatedChanges as genPushAccumulatedChanges,
   makeAddEmptyRelationships,
   mergeEmpty,
   mergeRelationships,
-  pushAccumulatedChanges as genPushAccumulatedChanges,
 } from './push-accumulated.js';
 import type {SourceSchema} from './schema.js';
 
@@ -20,7 +31,7 @@ function pushAccumulatedChanges(
   accumulatedPushes: Change[],
   output: Output,
   pusher: InputBase,
-  fanOutChangeType: Change['type'],
+  fanOutChangeType: ChangeType,
   mergeRelationships: (existing: Change, incoming: Change) => Change,
   addEmptyRelationships: (change: Change) => Change,
 ) {
@@ -36,17 +47,13 @@ function pushAccumulatedChanges(
   ];
 }
 
-const mockChildChange: Change = {
-  type: 'child',
-  node: {row: {id: 1}, relationships: {}},
-  child: {
-    change: {
-      type: 'add',
-      node: {row: {id: 2}, relationships: {}},
-    },
+const mockChildChange: Change = makeChildChange(
+  {row: {id: 1}, relationships: {}},
+  {
+    change: makeAddChange({row: {id: 2}, relationships: {}}),
     relationshipName: 'child',
   },
-};
+);
 
 const mockSchema: SourceSchema = {
   tableName: 'test',
@@ -79,51 +86,42 @@ describe('pushAccumulatedChanges', () => {
   describe('invariant: add coming in will only create adds coming out', () => {
     test('single add change passes through', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'add',
-          node: {row: {id: 1}, relationships: {}},
-        },
+        makeAddChange({row: {id: 1}, relationships: {}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'add',
+        ChangeType.ADD,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('add');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.ADD);
     });
 
     test('multiple add changes collapse to single add', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'add',
-          node: {row: {id: 1}, relationships: {rel1: () => []}},
-        },
-        {
-          type: 'add',
-          node: {row: {id: 1}, relationships: {rel2: () => []}},
-        },
+        makeAddChange({row: {id: 1}, relationships: {rel1: () => []}}),
+        makeAddChange({row: {id: 1}, relationships: {rel2: () => []}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'add',
+        ChangeType.ADD,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('add');
-      expect(Object.keys(pushedChanges[0]?.node?.relationships ?? {})).toEqual(
-        expect.arrayContaining(['rel1', 'rel2']),
-      );
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.ADD);
+      expect(
+        Object.keys(pushedChanges[0]?.[ChangeIndex.NODE]?.relationships ?? {}),
+      ).toEqual(expect.arrayContaining(['rel1', 'rel2']));
     });
 
     test('no changes when all branches filter out add', () => {
@@ -133,7 +131,7 @@ describe('pushAccumulatedChanges', () => {
         accumulatedPushes,
         output,
         mockPusher,
-        'add',
+        ChangeType.ADD,
         mergeRelationships,
         identity,
       );
@@ -145,184 +143,162 @@ describe('pushAccumulatedChanges', () => {
   describe('invariant: remove coming in will only create removes coming out', () => {
     test('single remove change passes through', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'remove',
-          node: {row: {id: 1}, relationships: {}},
-        },
+        makeRemoveChange({row: {id: 1}, relationships: {}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'remove',
+        ChangeType.REMOVE,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('remove');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.REMOVE);
     });
 
     test('multiple remove changes collapse to single remove', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'remove',
-          node: {row: {id: 1}, relationships: {rel1: () => []}},
-        },
-        {
-          type: 'remove',
-          node: {row: {id: 1}, relationships: {rel2: () => []}},
-        },
+        makeRemoveChange({row: {id: 1}, relationships: {rel1: () => []}}),
+        makeRemoveChange({row: {id: 1}, relationships: {rel2: () => []}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'remove',
+        ChangeType.REMOVE,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('remove');
-      expect(Object.keys(pushedChanges[0]?.node?.relationships ?? {})).toEqual(
-        expect.arrayContaining(['rel1', 'rel2']),
-      );
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.REMOVE);
+      expect(
+        Object.keys(pushedChanges[0]?.[ChangeIndex.NODE]?.relationships ?? {}),
+      ).toEqual(expect.arrayContaining(['rel1', 'rel2']));
     });
   });
 
   describe('invariant: edit coming in can create adds, removes, and edits coming out', () => {
     test('edit preserved as edit', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'edit',
-          node: {row: {id: 1, value: 2}, relationships: {}},
-          oldNode: {row: {id: 1, value: 1}, relationships: {}},
-        },
+        makeEditChange(
+          {row: {id: 1, value: 2}, relationships: {}},
+          {row: {id: 1, value: 1}, relationships: {}},
+        ),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'edit',
+        ChangeType.EDIT,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('edit');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.EDIT);
     });
 
     test('edit converted to add only', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'add',
-          node: {row: {id: 1, value: 2}, relationships: {}},
-        },
+        makeAddChange({row: {id: 1, value: 2}, relationships: {}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'edit',
+        ChangeType.EDIT,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('add');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.ADD);
     });
 
     test('edit converted to remove only', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'remove',
-          node: {row: {id: 1, value: 1}, relationships: {}},
-        },
+        makeRemoveChange({row: {id: 1, value: 1}, relationships: {}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'edit',
+        ChangeType.EDIT,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('remove');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.REMOVE);
     });
 
     test('edit split into add and remove recombines to edit', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'add',
-          node: {row: {id: 1, value: 2}, relationships: {}},
-        },
-        {
-          type: 'remove',
-          node: {row: {id: 1, value: 1}, relationships: {}},
-        },
+        makeAddChange({row: {id: 1, value: 2}, relationships: {}}),
+        makeRemoveChange({row: {id: 1, value: 1}, relationships: {}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'edit',
+        ChangeType.EDIT,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('edit');
-      expect(pushedChanges[0]).toEqual({
-        type: 'edit',
-        node: {row: {id: 1, value: 2}, relationships: {}},
-        oldNode: {row: {id: 1, value: 1}, relationships: {}},
-      });
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.EDIT);
+      expect(pushedChanges[0]).toEqual(
+        makeEditChange(
+          {row: {id: 1, value: 2}, relationships: {}},
+          {row: {id: 1, value: 1}, relationships: {}},
+        ),
+      );
     });
 
     test('edit supersedes add and remove when all three present', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'edit',
-          node: {row: {id: 1, value: 3}, relationships: {editRel: () => []}},
-          oldNode: {row: {id: 1, value: 0}, relationships: {}},
-        },
-        {
-          type: 'add',
-          node: {row: {id: 1, value: 2}, relationships: {addRel: () => []}},
-        },
-        {
-          type: 'remove',
-          node: {row: {id: 1, value: 1}, relationships: {removeRel: () => []}},
-        },
+        makeEditChange(
+          {row: {id: 1, value: 3}, relationships: {editRel: () => []}},
+          {row: {id: 1, value: 0}, relationships: {}},
+        ),
+        makeAddChange({
+          row: {id: 1, value: 2},
+          relationships: {addRel: () => []},
+        }),
+        makeRemoveChange({
+          row: {id: 1, value: 1},
+          relationships: {removeRel: () => []},
+        }),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'edit',
+        ChangeType.EDIT,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('edit');
-      const editChange = pushedChanges[0] as Extract<Change, {type: 'edit'}>;
-      expect(Object.keys(editChange.node.relationships)).toEqual(
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.EDIT);
+      const editChange = pushedChanges[0] as EditChange;
+      expect(Object.keys(editChange[ChangeIndex.NODE].relationships)).toEqual(
         expect.arrayContaining(['editRel', 'addRel']),
       );
-      expect(Object.keys(editChange.oldNode.relationships)).toEqual(
-        expect.arrayContaining(['removeRel']),
-      );
+      expect(
+        Object.keys(editChange[ChangeIndex.OLD_NODE].relationships),
+      ).toEqual(expect.arrayContaining(['removeRel']));
     });
   });
 
@@ -334,90 +310,75 @@ describe('pushAccumulatedChanges', () => {
         accumulatedPushes,
         output,
         mockPusher,
-        'child',
+        ChangeType.CHILD,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('child');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.CHILD);
     });
 
     test('child converted to add only', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'add',
-          node: {row: {id: 1}, relationships: {}},
-        },
+        makeAddChange({row: {id: 1}, relationships: {}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'child',
+        ChangeType.CHILD,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('add');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.ADD);
     });
 
     test('child converted to remove only', () => {
       const accumulatedPushes: Change[] = [
-        {
-          type: 'remove',
-          node: {row: {id: 1}, relationships: {}},
-        },
+        makeRemoveChange({row: {id: 1}, relationships: {}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'child',
+        ChangeType.CHILD,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('remove');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.REMOVE);
     });
 
     test('child takes precedence over add/remove when present', () => {
       const accumulatedPushes: Change[] = [
         mockChildChange,
-        {
-          type: 'add',
-          node: {row: {id: 1}, relationships: {}},
-        },
+        makeAddChange({row: {id: 1}, relationships: {}}),
       ];
 
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
         mockPusher,
-        'child',
+        ChangeType.CHILD,
         mergeRelationships,
         identity,
       );
 
       expect(pushedChanges).toHaveLength(1);
-      expect(pushedChanges[0]?.type).toBe('child');
+      expect(pushedChanges[0]?.[ChangeIndex.TYPE]).toBe(ChangeType.CHILD);
     });
 
     test('child ensures at most one add or remove (not both)', () => {
       // This should assert fail if both add and remove are present without child
       const accumulatedPushes: Change[] = [
-        {
-          type: 'add',
-          node: {row: {id: 1}, relationships: {}},
-        },
-        {
-          type: 'remove',
-          node: {row: {id: 2}, relationships: {}},
-        },
+        makeAddChange({row: {id: 1}, relationships: {}}),
+        makeRemoveChange({row: {id: 2}, relationships: {}}),
       ];
 
       expect(() => {
@@ -425,7 +386,7 @@ describe('pushAccumulatedChanges', () => {
           accumulatedPushes,
           output,
           mockPusher,
-          'child',
+          ChangeType.CHILD,
           mergeRelationships,
           identity,
         );
@@ -436,63 +397,58 @@ describe('pushAccumulatedChanges', () => {
 
 describe('mergeRelationships', () => {
   test('merges relationships from add changes', () => {
-    const left: Change = {
-      type: 'add',
-      node: {row: {id: 1}, relationships: {rel1: () => []}},
-    };
-    const right: Change = {
-      type: 'add',
-      node: {row: {id: 1}, relationships: {rel2: () => []}},
-    };
+    const left: Change = makeAddChange({
+      row: {id: 1},
+      relationships: {rel1: () => []},
+    });
+    const right: Change = makeAddChange({
+      row: {id: 1},
+      relationships: {rel2: () => []},
+    });
 
     const result = mergeRelationships(left, right);
 
-    expect(result.type).toBe('add');
-    expect(Object.keys(result.node.relationships)).toEqual(
+    expect(result[ChangeIndex.TYPE]).toBe(ChangeType.ADD);
+    expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
   });
 
   test('merges relationships from remove changes', () => {
-    const left: Change = {
-      type: 'remove',
-      node: {row: {id: 1}, relationships: {rel1: () => []}},
-    };
-    const right: Change = {
-      type: 'remove',
-      node: {row: {id: 1}, relationships: {rel2: () => []}},
-    };
+    const left: Change = makeRemoveChange({
+      row: {id: 1},
+      relationships: {rel1: () => []},
+    });
+    const right: Change = makeRemoveChange({
+      row: {id: 1},
+      relationships: {rel2: () => []},
+    });
 
     const result = mergeRelationships(left, right);
 
-    expect(result.type).toBe('remove');
-    expect(Object.keys(result.node.relationships)).toEqual(
+    expect(result[ChangeIndex.TYPE]).toBe(ChangeType.REMOVE);
+    expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
   });
 
   test('merges relationships from edit changes', () => {
-    const left: Change = {
-      type: 'edit',
-      node: {row: {id: 1}, relationships: {rel1: () => []}},
-      oldNode: {row: {id: 1}, relationships: {oldRel1: () => []}},
-    };
-    const right: Change = {
-      type: 'edit',
-      node: {row: {id: 1}, relationships: {rel2: () => []}},
-      oldNode: {row: {id: 1}, relationships: {oldRel2: () => []}},
-    };
+    const left: Change = makeEditChange(
+      {row: {id: 1}, relationships: {rel1: () => []}},
+      {row: {id: 1}, relationships: {oldRel1: () => []}},
+    );
+    const right: Change = makeEditChange(
+      {row: {id: 1}, relationships: {rel2: () => []}},
+      {row: {id: 1}, relationships: {oldRel2: () => []}},
+    );
 
-    const result = mergeRelationships(left, right) as Extract<
-      Change,
-      {type: 'edit'}
-    >;
+    const result = mergeRelationships(left, right) as EditChange;
 
-    expect(result.type).toBe('edit');
-    expect(Object.keys(result.node.relationships)).toEqual(
+    expect(result[ChangeIndex.TYPE]).toBe(ChangeType.EDIT);
+    expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
-    expect(Object.keys(result.oldNode.relationships)).toEqual(
+    expect(Object.keys(result[ChangeIndex.OLD_NODE].relationships)).toEqual(
       expect.arrayContaining(['oldRel1', 'oldRel2']),
     );
   });
@@ -501,87 +457,74 @@ describe('mergeRelationships', () => {
     const rel1Left = () => [];
     const rel1Right = () => [];
 
-    const left: Change = {
-      type: 'add',
-      node: {row: {id: 1}, relationships: {rel1: rel1Left}},
-    };
-    const right: Change = {
-      type: 'add',
-      node: {row: {id: 1}, relationships: {rel1: rel1Right}},
-    };
+    const left: Change = makeAddChange({
+      row: {id: 1},
+      relationships: {rel1: rel1Left},
+    });
+    const right: Change = makeAddChange({
+      row: {id: 1},
+      relationships: {rel1: rel1Right},
+    });
 
-    const result = mergeRelationships(left, right) as Extract<
-      Change,
-      {type: 'add'}
-    >;
+    const result = mergeRelationships(left, right) as AddChange;
 
-    expect(result.node.relationships.rel1).toBe(rel1Left);
+    expect(result[ChangeIndex.NODE].relationships.rel1).toBe(rel1Left);
   });
 
   test('merges edit with add', () => {
-    const left: Change = {
-      type: 'edit',
-      node: {row: {id: 1}, relationships: {editRel: () => []}},
-      oldNode: {row: {id: 1}, relationships: {}},
-    };
-    const right: Change = {
-      type: 'add',
-      node: {row: {id: 1}, relationships: {addRel: () => []}},
-    };
+    const left: Change = makeEditChange(
+      {row: {id: 1}, relationships: {editRel: () => []}},
+      {row: {id: 1}, relationships: {}},
+    );
+    const right: Change = makeAddChange({
+      row: {id: 1},
+      relationships: {addRel: () => []},
+    });
 
-    const result = mergeRelationships(left, right) as Extract<
-      Change,
-      {type: 'edit'}
-    >;
+    const result = mergeRelationships(left, right) as EditChange;
 
-    expect(result.type).toBe('edit');
-    expect(Object.keys(result.node.relationships)).toEqual(
+    expect(result[ChangeIndex.TYPE]).toBe(ChangeType.EDIT);
+    expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['editRel', 'addRel']),
     );
   });
 
   test('merges edit with remove', () => {
-    const left: Change = {
-      type: 'edit',
-      node: {row: {id: 1}, relationships: {}},
-      oldNode: {row: {id: 1}, relationships: {editOldRel: () => []}},
-    };
-    const right: Change = {
-      type: 'remove',
-      node: {row: {id: 1}, relationships: {removeRel: () => []}},
-    };
+    const left: Change = makeEditChange(
+      {row: {id: 1}, relationships: {}},
+      {row: {id: 1}, relationships: {editOldRel: () => []}},
+    );
+    const right: Change = makeRemoveChange({
+      row: {id: 1},
+      relationships: {removeRel: () => []},
+    });
 
-    const result = mergeRelationships(left, right) as Extract<
-      Change,
-      {type: 'edit'}
-    >;
+    const result = mergeRelationships(left, right) as EditChange;
 
-    expect(result.type).toBe('edit');
-    expect(Object.keys(result.oldNode.relationships)).toEqual(
+    expect(result[ChangeIndex.TYPE]).toBe(ChangeType.EDIT);
+    expect(Object.keys(result[ChangeIndex.OLD_NODE].relationships)).toEqual(
       expect.arrayContaining(['editOldRel', 'removeRel']),
     );
   });
 
   test('merges relationships from child changes', () => {
     const childInfo = {
-      change: {type: 'add' as const, node: {row: {id: 2}, relationships: {}}},
+      change: makeAddChange({row: {id: 2}, relationships: {}}),
       relationshipName: 'childRel',
     };
-    const left: Change = {
-      type: 'child',
-      node: {row: {id: 1}, relationships: {rel1: () => []}},
-      child: childInfo,
-    };
-    const right: Change = {
-      type: 'child',
-      node: {row: {id: 1}, relationships: {rel2: () => []}},
-      child: childInfo,
-    };
+    const left: Change = makeChildChange(
+      {row: {id: 1}, relationships: {rel1: () => []}},
+      childInfo,
+    );
+    const right: Change = makeChildChange(
+      {row: {id: 1}, relationships: {rel2: () => []}},
+      childInfo,
+    );
 
     const result = mergeRelationships(left, right);
 
-    expect(result.type).toBe('child');
-    expect(Object.keys(result.node.relationships)).toEqual(
+    expect(result[ChangeIndex.TYPE]).toBe(ChangeType.CHILD);
+    expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
   });
@@ -593,21 +536,15 @@ describe('makeAddEmptyRelationships', () => {
 
     const addEmptyRelationships = makeAddEmptyRelationships(schema);
 
-    const change: Change = {
-      type: 'add',
-      node: {row: {id: 1}, relationships: {}},
-    };
+    const change: Change = makeAddChange({row: {id: 1}, relationships: {}});
 
-    const result = addEmptyRelationships(change) as Extract<
-      Change,
-      {type: 'add'}
-    >;
+    const result = addEmptyRelationships(change) as AddChange;
 
-    expect(Object.keys(result.node.relationships)).toEqual(
+    expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
-    expect(result.node.relationships.rel1?.()).toEqual([]);
-    expect(result.node.relationships.rel2?.()).toEqual([]);
+    expect(result[ChangeIndex.NODE].relationships.rel1?.()).toEqual([]);
+    expect(result[ChangeIndex.NODE].relationships.rel2?.()).toEqual([]);
   });
 
   test('adds empty relationships for remove change', () => {
@@ -615,17 +552,11 @@ describe('makeAddEmptyRelationships', () => {
 
     const addEmptyRelationships = makeAddEmptyRelationships(schema);
 
-    const change: Change = {
-      type: 'remove',
-      node: {row: {id: 1}, relationships: {}},
-    };
+    const change: Change = makeRemoveChange({row: {id: 1}, relationships: {}});
 
-    const result = addEmptyRelationships(change) as Extract<
-      Change,
-      {type: 'remove'}
-    >;
+    const result = addEmptyRelationships(change) as RemoveChange;
 
-    expect(Object.keys(result.node.relationships)).toEqual(
+    expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
   });
@@ -635,21 +566,17 @@ describe('makeAddEmptyRelationships', () => {
 
     const addEmptyRelationships = makeAddEmptyRelationships(schema);
 
-    const change: Change = {
-      type: 'edit',
-      node: {row: {id: 1}, relationships: {}},
-      oldNode: {row: {id: 1}, relationships: {}},
-    };
+    const change: Change = makeEditChange(
+      {row: {id: 1}, relationships: {}},
+      {row: {id: 1}, relationships: {}},
+    );
 
-    const result = addEmptyRelationships(change) as Extract<
-      Change,
-      {type: 'edit'}
-    >;
+    const result = addEmptyRelationships(change) as EditChange;
 
-    expect(Object.keys(result.node.relationships)).toEqual(
+    expect(Object.keys(result[ChangeIndex.NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
-    expect(Object.keys(result.oldNode.relationships)).toEqual(
+    expect(Object.keys(result[ChangeIndex.OLD_NODE].relationships)).toEqual(
       expect.arrayContaining(['rel1', 'rel2']),
     );
   });
@@ -660,18 +587,15 @@ describe('makeAddEmptyRelationships', () => {
     const addEmptyRelationships = makeAddEmptyRelationships(schema);
 
     const existingRel = () => [{row: {id: 2}, relationships: {}}];
-    const change: Change = {
-      type: 'add',
-      node: {row: {id: 1}, relationships: {rel1: existingRel}},
-    };
+    const change: Change = makeAddChange({
+      row: {id: 1},
+      relationships: {rel1: existingRel},
+    });
 
-    const result = addEmptyRelationships(change) as Extract<
-      Change,
-      {type: 'add'}
-    >;
+    const result = addEmptyRelationships(change) as AddChange;
 
-    expect(result.node.relationships.rel1).toBe(existingRel);
-    expect(result.node.relationships.rel2?.()).toEqual([]);
+    expect(result[ChangeIndex.NODE].relationships.rel1).toBe(existingRel);
+    expect(result[ChangeIndex.NODE].relationships.rel2?.()).toEqual([]);
   });
 
   test('does not modify child changes', () => {
@@ -700,10 +624,7 @@ describe('makeAddEmptyRelationships', () => {
 
     const addEmptyRelationships = makeAddEmptyRelationships(schema);
 
-    const change: Change = {
-      type: 'add',
-      node: {row: {id: 1}, relationships: {}},
-    };
+    const change: Change = makeAddChange({row: {id: 1}, relationships: {}});
 
     const result = addEmptyRelationships(change);
 

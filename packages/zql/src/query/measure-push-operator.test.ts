@@ -1,6 +1,7 @@
 import {describe, expect, test, vi} from 'vitest';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Change} from '../ivm/change.ts';
+import {makeAddChange} from '../ivm/change.ts';
 import type {Node} from '../ivm/data.ts';
 import type {FetchRequest, Input, Output} from '../ivm/operator.ts';
 import type {SourceSchema} from '../ivm/schema.ts';
@@ -107,10 +108,7 @@ describe('MeasurePushOperator', () => {
     );
     measurePushOperator.setOutput(mockOutput);
 
-    const change: Change = {
-      type: 'add',
-      node: {} as Node,
-    };
+    const change: Change = makeAddChange({} as Node);
 
     [...measurePushOperator.push(change)];
 
@@ -148,10 +146,7 @@ describe('MeasurePushOperator', () => {
     );
     measurePushOperator.setOutput(mockOutput);
 
-    const change: Change = {
-      type: 'add',
-      node: {} as Node,
-    };
+    const change: Change = makeAddChange({} as Node);
 
     expect(() => [...measurePushOperator.push(change)]).toThrow('Test error');
     expect(mockMetricsDelegate.addMetric).not.toHaveBeenCalled();

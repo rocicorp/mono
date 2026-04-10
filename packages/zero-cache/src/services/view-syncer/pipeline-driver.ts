@@ -11,6 +11,8 @@ import {
   Debug,
   runtimeDebugFlags,
 } from '../../../../zql/src/builder/debug-delegate.ts';
+import {ChangeIndex} from '../../../../zql/src/ivm/change-index.ts';
+import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
 import {
@@ -514,16 +516,17 @@ export class PipelineDriver {
         companionInput.setOutput({
           push: (change: Change) => {
             let newValue: LiteralValue | null | undefined;
-            switch (change.type) {
-              case 'add':
-              case 'edit':
+            switch (change[ChangeIndex.TYPE]) {
+              case ChangeType.ADD:
+              case ChangeType.EDIT:
                 newValue =
-                  (change.node.row[childField] as LiteralValue) ?? null;
+                  (change[ChangeIndex.NODE].row[childField] as LiteralValue) ??
+                  null;
                 break;
-              case 'remove':
+              case ChangeType.REMOVE:
                 newValue = undefined;
                 break;
-              case 'child':
+              case ChangeType.CHILD:
                 return [];
             }
             if (!scalarValuesEqual(newValue, resolvedValue)) {
@@ -879,16 +882,21 @@ class Streamer {
         yield change;
         continue;
       }
-      const {type} = change;
-
-      switch (type) {
-        case 'add':
-        case 'remove': {
-          yield* this.#streamNodes(queryID, schema, type, () => [change.node]);
+      switch (change[ChangeIndex.TYPE]) {
+        case ChangeType.ADD: {
+          yield* this.#streamNodes(queryID, schema, 'add', () => [
+            change[ChangeIndex.NODE],
+          ]);
           break;
         }
-        case 'child': {
-          const {child} = change;
+        case ChangeType.REMOVE: {
+          yield* this.#streamNodes(queryID, schema, 'remove', () => [
+            change[ChangeIndex.NODE],
+          ]);
+          break;
+        }
+        case ChangeType.CHILD: {
+          const child = change[ChangeIndex.CHILD_DATA];
           const childSchema = must(
             schema.relationships[child.relationshipName],
           );
@@ -896,13 +904,13 @@ class Streamer {
           yield* this.#streamChanges(queryID, childSchema, [child.change]);
           break;
         }
-        case 'edit':
-          yield* this.#streamNodes(queryID, schema, type, () => [
-            {row: change.node.row, relationships: {}},
+        case ChangeType.EDIT:
+          yield* this.#streamNodes(queryID, schema, 'edit', () => [
+            {row: change[ChangeIndex.NODE].row, relationships: {}},
           ]);
           break;
         default:
-          unreachable(type);
+          unreachable(change[ChangeIndex.TYPE]);
       }
     }
   }
@@ -964,7 +972,7 @@ function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
       yield node;
       continue;
     }
-    yield {type: 'add', node};
+    yield [ChangeType.ADD, node, null];
   }
 }
 

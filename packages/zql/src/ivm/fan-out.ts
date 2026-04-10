@@ -1,4 +1,5 @@
 import {must} from '../../../shared/src/must.ts';
+import {ChangeIndex} from './change-index.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import type {FanIn} from './fan-in.ts';
@@ -77,6 +78,6 @@ export class FanOut implements FilterOperator {
     yield* must(
       this.#fanIn,
       'fan-out must have a corresponding fan-in set!',
-    ).fanOutDonePushingToAllBranches(change.type);
+    ).fanOutDonePushingToAllBranches(change[ChangeIndex.TYPE]);
   }
 }

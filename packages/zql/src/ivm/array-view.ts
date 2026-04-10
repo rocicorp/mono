@@ -4,11 +4,37 @@ import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import {skipYields, type Input, type Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {applyChange} from './view-apply-change.ts';
+import {applyChange, type ViewChange} from './view-apply-change.ts';
 import type {Entry, Format, View} from './view.ts';
+
+function changeToViewChange(change: Change): ViewChange {
+  switch (change[ChangeIndex.TYPE]) {
+    case ChangeType.ADD:
+      return {type: 'add', node: change[ChangeIndex.NODE]};
+    case ChangeType.REMOVE:
+      return {type: 'remove', node: change[ChangeIndex.NODE]};
+    case ChangeType.CHILD:
+      return {
+        type: 'child',
+        node: change[ChangeIndex.NODE],
+        child: {
+          relationshipName: change[ChangeIndex.CHILD_DATA].relationshipName,
+          change: changeToViewChange(change[ChangeIndex.CHILD_DATA].change),
+        },
+      };
+    case ChangeType.EDIT:
+      return {
+        type: 'edit',
+        node: change[ChangeIndex.NODE],
+        oldNode: change[ChangeIndex.OLD_NODE],
+      };
+  }
+}
 
 /**
  * Implements a materialized view of the output of an operator.
@@ -116,7 +142,13 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   push(change: Change) {
     this.#dirty = true;
-    applyChange(this.#root, change, this.#schema, '', this.#format);
+    applyChange(
+      this.#root,
+      changeToViewChange(change),
+      this.#schema,
+      '',
+      this.#format,
+    );
     return emptyArray;
   }
 

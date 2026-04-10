@@ -1,6 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {emptyArray, identity} from '../../../shared/src/sentinels.ts';
-import type {Change} from './change.ts';
+import type {ChangeType} from './change-type.ts';
+import {type Change} from './change.ts';
 import {type Node} from './data.ts';
 import type {FanOut} from './fan-out.ts';
 import {
@@ -72,7 +73,7 @@ export class FanIn implements FilterOperator {
     return emptyArray;
   }
 
-  *fanOutDonePushingToAllBranches(fanOutChangeType: Change['type']) {
+  *fanOutDonePushingToAllBranches(fanOutChangeType: ChangeType) {
     if (this.#inputs.length === 0) {
       assert(
         this.#accumulatedPushes.length === 0,

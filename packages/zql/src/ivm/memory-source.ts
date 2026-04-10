@@ -19,6 +19,7 @@ import {
 } from '../builder/filter.ts';
 import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';
 import type {Change} from './change.ts';
+import {makeAddChange, makeEditChange, makeRemoveChange} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
@@ -552,24 +553,13 @@ function* genPush(
       setOverlay({epoch: pushEpoch, change});
       const outputChange: Change =
         change.type === 'edit'
-          ? {
-              type: change.type,
-              oldNode: {
-                row: change.oldRow,
-                relationships: {},
-              },
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            }
-          : {
-              type: change.type,
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            };
+          ? makeEditChange(
+              {row: change.row, relationships: {}},
+              {row: change.oldRow, relationships: {}},
+            )
+          : change.type === 'add'
+            ? makeAddChange({row: change.row, relationships: {}})
+            : makeRemoveChange({row: change.row, relationships: {}});
       yield* filterPush(outputChange, output, input, filters?.predicate);
       yield undefined;
     }

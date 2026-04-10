@@ -1,13 +1,19 @@
 import {describe, expect, test} from 'vitest';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
+import {
+  makeAddChange,
+  makeChildChange,
+  makeEditChange,
+  makeRemoveChange,
+} from './change.ts';
 import type {Node} from './data.ts';
 import {
-  generateWithOverlayUnordered,
-  generateWithOverlayNoYieldUnordered,
-  rowEqualsForCompoundKey,
-  isJoinMatch,
   buildJoinConstraint,
+  generateWithOverlayNoYieldUnordered,
+  generateWithOverlayUnordered,
+  isJoinMatch,
+  rowEqualsForCompoundKey,
 } from './join-utils.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
@@ -47,7 +53,7 @@ describe('generateWithOverlayUnordered', () => {
         makeNode({id: 1}),
         makeNode({id: 2}),
       ];
-      const overlay: Change = {type: 'remove', node: makeNode({id: 3})};
+      const overlay: Change = makeRemoveChange(makeNode({id: 3}));
 
       const result = collectRows(
         generateWithOverlayUnordered(stream, overlay, schema),
@@ -57,7 +63,7 @@ describe('generateWithOverlayUnordered', () => {
 
     test('does not assert when overlay node is not in stream', () => {
       const stream: Stream<Node | 'yield'> = [];
-      const overlay: Change = {type: 'remove', node: makeNode({id: 99})};
+      const overlay: Change = makeRemoveChange(makeNode({id: 99}));
 
       const result = collectRows(
         generateWithOverlayUnordered(stream, overlay, schema),
@@ -73,7 +79,7 @@ describe('generateWithOverlayUnordered', () => {
         makeNode({id: 2}),
         makeNode({id: 3}),
       ];
-      const overlay: Change = {type: 'add', node: makeNode({id: 2})};
+      const overlay: Change = makeAddChange(makeNode({id: 2}));
 
       const result = collectRows(
         generateWithOverlayUnordered(stream, overlay, schema),
@@ -83,7 +89,7 @@ describe('generateWithOverlayUnordered', () => {
 
     test('asserts if no matching node found in stream', () => {
       const stream: Stream<Node | 'yield'> = [makeNode({id: 1})];
-      const overlay: Change = {type: 'add', node: makeNode({id: 99})};
+      const overlay: Change = makeAddChange(makeNode({id: 99}));
 
       expect(() =>
         collectNodes(generateWithOverlayUnordered(stream, overlay, schema)),
@@ -99,11 +105,10 @@ describe('generateWithOverlayUnordered', () => {
         makeNode({id: 1}),
         makeNode({id: 2, val: 'new'}),
       ];
-      const overlay: Change = {
-        type: 'edit',
-        node: makeNode({id: 2, val: 'new'}),
-        oldNode: makeNode({id: 2, val: 'old'}),
-      };
+      const overlay: Change = makeEditChange(
+        makeNode({id: 2, val: 'new'}),
+        makeNode({id: 2, val: 'old'}),
+      );
 
       const result = collectRows(
         generateWithOverlayUnordered(stream, overlay, schema),
@@ -113,11 +118,10 @@ describe('generateWithOverlayUnordered', () => {
 
     test('asserts if no matching node found in stream', () => {
       const stream: Stream<Node | 'yield'> = [makeNode({id: 1})];
-      const overlay: Change = {
-        type: 'edit',
-        node: makeNode({id: 99}),
-        oldNode: makeNode({id: 99}),
-      };
+      const overlay: Change = makeEditChange(
+        makeNode({id: 99}),
+        makeNode({id: 99}),
+      );
 
       expect(() =>
         collectNodes(generateWithOverlayUnordered(stream, overlay, schema)),
@@ -148,15 +152,11 @@ describe('generateWithOverlayUnordered', () => {
         },
       ];
 
-      const childChange: Change = {type: 'add', node: makeNode({cid: 'c'})};
-      const overlay: Change = {
-        type: 'child',
-        node: makeNode({id: 2}),
-        child: {
-          relationshipName: 'items',
-          change: childChange,
-        },
-      };
+      const childChange: Change = makeAddChange(makeNode({cid: 'c'}));
+      const overlay: Change = makeChildChange(makeNode({id: 2}), {
+        relationshipName: 'items',
+        change: childChange,
+      });
 
       const result = collectNodes(
         generateWithOverlayUnordered(stream, overlay, schemaWithRel),
@@ -178,14 +178,10 @@ describe('generateWithOverlayUnordered', () => {
       };
 
       const stream: Stream<Node | 'yield'> = [makeNode({id: 1})];
-      const overlay: Change = {
-        type: 'child',
-        node: makeNode({id: 99}),
-        child: {
-          relationshipName: 'items',
-          change: {type: 'add', node: makeNode({cid: 'c'})},
-        },
-      };
+      const overlay: Change = makeChildChange(makeNode({id: 99}), {
+        relationshipName: 'items',
+        change: makeAddChange(makeNode({cid: 'c'})),
+      });
 
       expect(() =>
         collectNodes(
@@ -206,10 +202,7 @@ describe('generateWithOverlayUnordered', () => {
         makeNode({a: 1, b: 2, val: 'y'}),
         makeNode({a: 2, b: 1, val: 'z'}),
       ];
-      const overlay: Change = {
-        type: 'add',
-        node: makeNode({a: 1, b: 2}),
-      };
+      const overlay: Change = makeAddChange(makeNode({a: 1, b: 2}));
 
       const result = collectRows(
         generateWithOverlayUnordered(stream, overlay, compoundSchema),
@@ -226,10 +219,7 @@ describe('generateWithOverlayUnordered', () => {
         makeNode({a: 1, b: 2}),
       ];
       // Matches a=1 but b differs
-      const overlay: Change = {
-        type: 'add',
-        node: makeNode({a: 1, b: 3}),
-      };
+      const overlay: Change = makeAddChange(makeNode({a: 1, b: 3}));
 
       expect(() =>
         collectNodes(
@@ -250,7 +240,7 @@ describe('generateWithOverlayUnordered', () => {
         'yield' as const,
         makeNode({id: 3}),
       ];
-      const overlay: Change = {type: 'add', node: makeNode({id: 2})};
+      const overlay: Change = makeAddChange(makeNode({id: 2}));
 
       const result = collectNodes(
         generateWithOverlayUnordered(stream, overlay, schema),
@@ -274,7 +264,7 @@ describe('generateWithOverlayNoYieldUnordered', () => {
       yield makeNode({id: 2});
       yield makeNode({id: 3});
     }
-    const overlay: Change = {type: 'add', node: makeNode({id: 2})};
+    const overlay: Change = makeAddChange(makeNode({id: 2}));
 
     const result = [
       ...generateWithOverlayNoYieldUnordered(stream(), overlay, schema),

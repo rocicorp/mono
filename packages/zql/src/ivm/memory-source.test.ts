@@ -5,6 +5,8 @@ import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {Catch} from './catch.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import {
   generateWithOverlayInner,
@@ -202,10 +204,14 @@ test('fetch during push edit change', () => {
   let fetchDuringPush = undefined;
   conn.setOutput({
     push(change: Change) {
-      expect(change).toEqual({
-        type: 'edit',
-        oldNode: {row: {a: 'a', b: 'b', c: 'c'}, relationships: {}},
-        node: {row: {a: 'a', b: 'b2', c: 'c2'}, relationships: {}},
+      expect(change[ChangeIndex.TYPE]).toBe(ChangeType.EDIT);
+      expect(change[ChangeIndex.NODE]).toEqual({
+        row: {a: 'a', b: 'b2', c: 'c2'},
+        relationships: {},
+      });
+      expect(change[ChangeIndex.OLD_NODE]).toEqual({
+        row: {a: 'a', b: 'b', c: 'c'},
+        relationships: {},
       });
       fetchDuringPush = [...conn.fetch({})];
       return emptyArray;

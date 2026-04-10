@@ -11,6 +11,12 @@ import {TestBuilderDelegate} from '../builder/test-builder-delegate.ts';
 import type {ResultType} from '../query/typed-view.ts';
 import {ArrayView} from './array-view.ts';
 import type {Change} from './change.ts';
+import {
+  makeAddChange,
+  makeChildChange,
+  makeEditChange,
+  makeRemoveChange,
+} from './change.ts';
 import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
 import type {Input} from './operator.ts';
@@ -736,12 +742,7 @@ test('collapse', () => {
       },
     },
   } as const;
-  consume(
-    view.push({
-      type: 'add',
-      ...changeSansType,
-    }),
-  );
+  consume(view.push(makeAddChange(changeSansType.node)));
   view.flush();
 
   expect(data).toMatchInlineSnapshot(`
@@ -761,81 +762,69 @@ test('collapse', () => {
     ]
   `);
 
-  consume(
-    view.push({
-      type: 'remove',
-      ...changeSansType,
-    }),
-  );
+  consume(view.push(makeRemoveChange(changeSansType.node)));
   view.flush();
 
   expect(data).toMatchInlineSnapshot(`[]`);
 
-  consume(
-    view.push({
-      type: 'add',
-      ...changeSansType,
-    }),
-  );
+  consume(view.push(makeAddChange(changeSansType.node)));
   // no commit
   expect(data).toMatchInlineSnapshot(`[]`);
 
   consume(
-    view.push({
-      type: 'child',
-      node: {
-        row: {
-          id: 1,
-          name: 'issue',
-        },
-        relationships: {
-          labels: () => [
-            {
-              row: {
-                id: 1,
-                issueId: 1,
-                labelId: 1,
-                extra: 'a',
-              },
-              relationships: {
-                labels: () => [
-                  {
-                    row: {
-                      id: 1,
-                      name: 'label',
+    view.push(
+      makeChildChange(
+        {
+          row: {
+            id: 1,
+            name: 'issue',
+          },
+          relationships: {
+            labels: () => [
+              {
+                row: {
+                  id: 1,
+                  issueId: 1,
+                  labelId: 1,
+                  extra: 'a',
+                },
+                relationships: {
+                  labels: () => [
+                    {
+                      row: {
+                        id: 1,
+                        name: 'label',
+                      },
+                      relationships: {},
                     },
-                    relationships: {},
-                  },
-                ],
+                  ],
+                },
               },
-            },
-            {
-              row: {
-                id: 2,
-                issueId: 1,
-                labelId: 2,
-                extra: 'b',
-              },
-              relationships: {
-                labels: () => [
-                  {
-                    row: {
-                      id: 2,
-                      name: 'label2',
+              {
+                row: {
+                  id: 2,
+                  issueId: 1,
+                  labelId: 2,
+                  extra: 'b',
+                },
+                relationships: {
+                  labels: () => [
+                    {
+                      row: {
+                        id: 2,
+                        name: 'label2',
+                      },
+                      relationships: {},
                     },
-                    relationships: {},
-                  },
-                ],
+                  ],
+                },
               },
-            },
-          ],
+            ],
+          },
         },
-      },
-      child: {
-        relationshipName: 'labels',
-        change: {
-          type: 'add',
-          node: {
+        {
+          relationshipName: 'labels',
+          change: makeAddChange({
             row: {
               id: 2,
               issueId: 1,
@@ -853,10 +842,10 @@ test('collapse', () => {
                 },
               ],
             },
-          },
+          }),
         },
-      },
-    }),
+      ),
+    ),
   );
   view.flush();
 
@@ -884,34 +873,59 @@ test('collapse', () => {
 
   // edit the hidden row
   consume(
-    view.push({
-      type: 'child',
-      node: {
-        row: {
-          id: 1,
-          name: 'issue',
-        },
-        relationships: {
-          labels: () => [
-            {
-              row: {
-                id: 1,
-                issueId: 1,
-                labelId: 1,
-                extra: 'a',
-              },
-              relationships: {
-                labels: () => [
-                  {
-                    row: {
-                      id: 1,
-                      name: 'label',
+    view.push(
+      makeChildChange(
+        {
+          row: {
+            id: 1,
+            name: 'issue',
+          },
+          relationships: {
+            labels: () => [
+              {
+                row: {
+                  id: 1,
+                  issueId: 1,
+                  labelId: 1,
+                  extra: 'a',
+                },
+                relationships: {
+                  labels: () => [
+                    {
+                      row: {
+                        id: 1,
+                        name: 'label',
+                      },
+                      relationships: {},
                     },
-                    relationships: {},
-                  },
-                ],
+                  ],
+                },
               },
-            },
+              {
+                row: {
+                  id: 2,
+                  issueId: 1,
+                  labelId: 2,
+                  extra: 'b2',
+                },
+                relationships: {
+                  labels: () => [
+                    {
+                      row: {
+                        id: 2,
+                        name: 'label2',
+                      },
+                      relationships: {},
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+        {
+          relationshipName: 'labels',
+          change: makeEditChange(
             {
               row: {
                 id: 2,
@@ -931,54 +945,29 @@ test('collapse', () => {
                 ],
               },
             },
-          ],
-        },
-      },
-      child: {
-        relationshipName: 'labels',
-        change: {
-          type: 'edit',
-          oldNode: {
-            row: {
-              id: 2,
-              issueId: 1,
-              labelId: 2,
-              extra: 'b',
-            },
-            relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 2,
-                    name: 'label2',
+            {
+              row: {
+                id: 2,
+                issueId: 1,
+                labelId: 2,
+                extra: 'b',
+              },
+              relationships: {
+                labels: () => [
+                  {
+                    row: {
+                      id: 2,
+                      name: 'label2',
+                    },
+                    relationships: {},
                   },
-                  relationships: {},
-                },
-              ],
+                ],
+              },
             },
-          },
-          node: {
-            row: {
-              id: 2,
-              issueId: 1,
-              labelId: 2,
-              extra: 'b2',
-            },
-            relationships: {
-              labels: () => [
-                {
-                  row: {
-                    id: 2,
-                    name: 'label2',
-                  },
-                  relationships: {},
-                },
-              ],
-            },
-          },
+          ),
         },
-      },
-    }),
+      ),
+    ),
   );
   view.flush();
 
@@ -1006,34 +995,59 @@ test('collapse', () => {
 
   // edit the leaf
   consume(
-    view.push({
-      type: 'child',
-      node: {
-        row: {
-          id: 1,
-          name: 'issue',
-        },
-        relationships: {
-          labels: () => [
-            {
-              row: {
-                id: 1,
-                issueId: 1,
-                labelId: 1,
-                extra: 'a',
-              },
-              relationships: {
-                labels: () => [
-                  {
-                    row: {
-                      id: 1,
-                      name: 'label',
+    view.push(
+      makeChildChange(
+        {
+          row: {
+            id: 1,
+            name: 'issue',
+          },
+          relationships: {
+            labels: () => [
+              {
+                row: {
+                  id: 1,
+                  issueId: 1,
+                  labelId: 1,
+                  extra: 'a',
+                },
+                relationships: {
+                  labels: () => [
+                    {
+                      row: {
+                        id: 1,
+                        name: 'label',
+                      },
+                      relationships: {},
                     },
-                    relationships: {},
-                  },
-                ],
+                  ],
+                },
               },
-            },
+              {
+                row: {
+                  id: 2,
+                  issueId: 1,
+                  labelId: 2,
+                  extra: 'b2',
+                },
+                relationships: {
+                  labels: () => [
+                    {
+                      row: {
+                        id: 2,
+                        name: 'label2x',
+                      },
+                      relationships: {},
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+        {
+          relationshipName: 'labels',
+          change: makeChildChange(
             {
               row: {
                 id: 2,
@@ -1053,22 +1067,9 @@ test('collapse', () => {
                 ],
               },
             },
-          ],
-        },
-      },
-      child: {
-        relationshipName: 'labels',
-        change: {
-          type: 'child',
-          node: {
-            row: {
-              id: 2,
-              issueId: 1,
-              labelId: 2,
-              extra: 'b2',
-            },
-            relationships: {
-              labels: () => [
+            {
+              relationshipName: 'labels',
+              change: makeEditChange(
                 {
                   row: {
                     id: 2,
@@ -1076,32 +1077,19 @@ test('collapse', () => {
                   },
                   relationships: {},
                 },
-              ],
-            },
-          },
-          child: {
-            relationshipName: 'labels',
-            change: {
-              type: 'edit',
-              oldNode: {
-                row: {
-                  id: 2,
-                  name: 'label2',
+                {
+                  row: {
+                    id: 2,
+                    name: 'label2',
+                  },
+                  relationships: {},
                 },
-                relationships: {},
-              },
-              node: {
-                row: {
-                  id: 2,
-                  name: 'label2x',
-                },
-                relationships: {},
-              },
+              ),
             },
-          },
+          ),
         },
-      },
-    }),
+      ),
+    ),
   );
   view.flush();
 
@@ -1230,12 +1218,7 @@ test('collapse-single', () => {
       },
     },
   } as const;
-  consume(
-    view.push({
-      type: 'add',
-      ...changeSansType,
-    }),
-  );
+  consume(view.push(makeAddChange(changeSansType.node)));
   view.flush();
 
   expect(data).toEqual([
@@ -1691,9 +1674,8 @@ test('edit to preserve relationships', () => {
     () => void 0,
   );
   consume(
-    view.push({
-      type: 'add',
-      node: {
+    view.push(
+      makeAddChange({
         row: {id: 1, title: 'issue1'},
         relationships: {
           labels: () => [
@@ -1703,13 +1685,12 @@ test('edit to preserve relationships', () => {
             },
           ],
         },
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    view.push({
-      type: 'add',
-      node: {
+    view.push(
+      makeAddChange({
         row: {id: 2, title: 'issue2'},
         relationships: {
           labels: () => [
@@ -1719,8 +1700,8 @@ test('edit to preserve relationships', () => {
             },
           ],
         },
-      },
-    }),
+      }),
+    ),
   );
   let data: unknown[] = [];
   view.addListener(entries => {
@@ -1758,14 +1739,15 @@ test('edit to preserve relationships', () => {
   `);
 
   consume(
-    view.push({
-      type: 'edit',
-      oldNode: {
-        row: {id: 1, title: 'issue1'},
-        relationships: {},
-      },
-      node: {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
-    }),
+    view.push(
+      makeEditChange(
+        {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
+        {
+          row: {id: 1, title: 'issue1'},
+          relationships: {},
+        },
+      ),
+    ),
   );
   view.flush();
   expect(data).toMatchInlineSnapshot(`
@@ -1799,11 +1781,12 @@ test('edit to preserve relationships', () => {
 
   // And now edit to change order
   consume(
-    view.push({
-      type: 'edit',
-      oldNode: {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
-      node: {row: {id: 3, title: 'issue1 is now issue3'}, relationships: {}},
-    }),
+    view.push(
+      makeEditChange(
+        {row: {id: 3, title: 'issue1 is now issue3'}, relationships: {}},
+        {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
+      ),
+    ),
   );
   view.flush();
   expect(data).toMatchInlineSnapshot(`

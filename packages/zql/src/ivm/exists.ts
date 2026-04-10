@@ -1,7 +1,9 @@
 import {areEqual} from '../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
-import {type Change} from './change.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
+import {makeAddChange, makeRemoveChange, type Change} from './change.ts';
 import {normalizeUndefined, type Node, type NormalizedValue} from './data.ts';
 import {
   throwFilterOutput,
@@ -108,31 +110,34 @@ export class Exists implements FilterOperator {
     assert(!this.#inPush, 'Unexpected re-entrancy');
     this.#inPush = true;
     try {
-      switch (change.type) {
+      switch (change[ChangeIndex.TYPE]) {
         // add, remove and edit cannot change the size of the
         // this.#relationshipName relationship, so simply #pushWithFilter
-        case 'add':
-        case 'edit':
-        case 'remove': {
+        case ChangeType.ADD:
+        case ChangeType.EDIT:
+        case ChangeType.REMOVE: {
           yield* this.#pushWithFilter(change);
           return;
         }
-        case 'child':
+        case ChangeType.CHILD:
           // Only add and remove child changes for the
           // this.#relationshipName relationship, can change the size
           // of the this.#relationshipName relationship, for other
           // child changes simply #pushWithFilter
           if (
-            change.child.relationshipName !== this.#relationshipName ||
-            change.child.change.type === 'edit' ||
-            change.child.change.type === 'child'
+            change[ChangeIndex.CHILD_DATA].relationshipName !==
+              this.#relationshipName ||
+            change[ChangeIndex.CHILD_DATA].change[ChangeIndex.TYPE] ===
+              ChangeType.EDIT ||
+            change[ChangeIndex.CHILD_DATA].change[ChangeIndex.TYPE] ===
+              ChangeType.CHILD
           ) {
             yield* this.#pushWithFilter(change);
             return;
           }
-          switch (change.child.change.type) {
-            case 'add': {
-              const size = yield* this.#fetchSize(change.node);
+          switch (change[ChangeIndex.CHILD_DATA].change[ChangeIndex.TYPE]) {
+            case ChangeType.ADD: {
+              const size = yield* this.#fetchSize(change[ChangeIndex.NODE]);
               if (size === 1) {
                 if (this.#not) {
                   // Since the add child change currently being processed is not
@@ -140,24 +145,18 @@ export class Exists implements FilterOperator {
                   // the remove being pushed to output (since the child has
                   // never been added to the output).
                   yield* this.#output.push(
-                    {
-                      type: 'remove',
-                      node: {
-                        row: change.node.row,
-                        relationships: {
-                          ...change.node.relationships,
-                          [this.#relationshipName]: () => [],
-                        },
+                    makeRemoveChange({
+                      row: change[ChangeIndex.NODE].row,
+                      relationships: {
+                        ...change[ChangeIndex.NODE].relationships,
+                        [this.#relationshipName]: () => [],
                       },
-                    },
+                    }),
                     this,
                   );
                 } else {
                   yield* this.#output.push(
-                    {
-                      type: 'add',
-                      node: change.node,
-                    },
+                    makeAddChange(change[ChangeIndex.NODE]),
                     this,
                   );
                 }
@@ -166,15 +165,12 @@ export class Exists implements FilterOperator {
               }
               return;
             }
-            case 'remove': {
-              const size = yield* this.#fetchSize(change.node);
+            case ChangeType.REMOVE: {
+              const size = yield* this.#fetchSize(change[ChangeIndex.NODE]);
               if (size === 0) {
                 if (this.#not) {
                   yield* this.#output.push(
-                    {
-                      type: 'add',
-                      node: change.node,
-                    },
+                    makeAddChange(change[ChangeIndex.NODE]),
                     this,
                   );
                 } else {
@@ -182,18 +178,17 @@ export class Exists implements FilterOperator {
                   // not pushed to output, the removed child needs to be added to
                   // the remove being pushed to output.
                   yield* this.#output.push(
-                    {
-                      type: 'remove',
-                      node: {
-                        row: change.node.row,
-                        relationships: {
-                          ...change.node.relationships,
-                          [this.#relationshipName]: () => [
-                            change.child.change.node,
+                    makeRemoveChange({
+                      row: change[ChangeIndex.NODE].row,
+                      relationships: {
+                        ...change[ChangeIndex.NODE].relationships,
+                        [this.#relationshipName]: () => [
+                          change[ChangeIndex.CHILD_DATA].change[
+                            ChangeIndex.NODE
                           ],
-                        },
+                        ],
                       },
-                    },
+                    }),
                     this,
                   );
                 }
@@ -238,7 +233,7 @@ export class Exists implements FilterOperator {
    * Pushes a change if this.#filter is true for its row.
    */
   *#pushWithFilter(change: Change, exists?: boolean): Stream<'yield'> {
-    if (yield* this.#filter(change.node, exists)) {
+    if (yield* this.#filter(change[ChangeIndex.NODE], exists)) {
       yield* this.#output.push(change, this);
     }
   }

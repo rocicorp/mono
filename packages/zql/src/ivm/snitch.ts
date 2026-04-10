@@ -1,5 +1,7 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import type {
@@ -90,21 +92,22 @@ export class Snitch implements Operator {
 }
 
 function toChangeRecord(change: Change): ChangeRecord {
-  switch (change.type) {
-    case 'add':
-    case 'remove':
-      return {type: change.type, row: change.node.row};
-    case 'edit':
+  switch (change[ChangeIndex.TYPE]) {
+    case ChangeType.ADD:
+      return {type: 'add', row: change[ChangeIndex.NODE].row};
+    case ChangeType.REMOVE:
+      return {type: 'remove', row: change[ChangeIndex.NODE].row};
+    case ChangeType.EDIT:
       return {
-        type: change.type,
-        row: change.node.row,
-        oldRow: change.oldNode.row,
+        type: 'edit',
+        row: change[ChangeIndex.NODE].row,
+        oldRow: change[ChangeIndex.OLD_NODE].row,
       };
-    case 'child':
+    case ChangeType.CHILD:
       return {
         type: 'child',
-        row: change.node.row,
-        child: toChangeRecord(change.child.change),
+        row: change[ChangeIndex.NODE].row,
+        child: toChangeRecord(change[ChangeIndex.CHILD_DATA].change),
       };
     default:
       unreachable(change);
