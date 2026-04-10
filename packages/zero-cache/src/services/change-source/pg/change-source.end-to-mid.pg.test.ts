@@ -1614,8 +1614,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               ['e', 'f'],
             ],
           },
-          {tag: 'backfill-completed'},
         ],
+        [{tag: 'backfill-completed'}],
         [
           {
             tag: 'backfill',
@@ -1624,8 +1624,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               ['e', 'f'],
             ],
           },
-          {tag: 'backfill-completed'},
         ],
+        [{tag: 'backfill-completed'}],
       ],
       {
         existing: [

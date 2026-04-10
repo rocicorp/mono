@@ -235,10 +235,19 @@ export class BackfillManager implements Cancelable, Listener {
       }
 
       const {major, minor = 0n} = stateVersionFromString(lastWatermark);
-      const tx = stateVersionToString({
+      let tx = stateVersionToString({
         major,
         minor: BigInt(minor) + 1n,
       });
+
+      if (msg.tag === 'backfill-completed' && tx < msg.watermark) {
+        // At this point it is ensured that #changeStreamReached() the
+        // msg.watermark. Given that guarantee, ensure that the version of the
+        // transaction containing the backfill-completed message is at least up
+        // to the backfill watermark, so that the final database state is never
+        // earlier than any of the versions of backfilled rows.
+        tx = msg.watermark;
+      }
 
       void changeStream.push([
         'begin',
@@ -262,10 +271,12 @@ export class BackfillManager implements Cancelable, Listener {
 
     for await (const msg of this.#backfillStreamer(state.request)) {
       // Before sending `backfill-completed`, the main replication stream
-      // may need to catch up.
+      // may need to catch up, and/or the current transaction may need to be
+      // committed to open a new transaction that's up to backfill watermark.
       const mustWaitBeforeFlush =
         msg.tag === 'backfill-completed' &&
-        this.#changeStreamReached(lc, msg.watermark);
+        (this.#changeStreamReached(lc, msg.watermark) ||
+          (backfillTx !== null && backfillTx < msg.watermark));
 
       // If necessary, yield the reservation to the main stream.
       if (

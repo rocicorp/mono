@@ -77,6 +77,10 @@ describe('backfill-manager', () => {
     return c;
   }
 
+  async function expectChanges(changes: ChangeStreamMessage[]) {
+    expect(await drainChanges(changes.length)).toMatchObject(changes);
+  }
+
   test('backfill initiated by change-streamer request', async () => {
     testStreams.push([
       {
@@ -120,7 +124,7 @@ describe('backfill-manager', () => {
 
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
-    expect(await drainChanges(5)).toMatchObject([
+    await expectChanges([
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
@@ -152,6 +156,12 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
+      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '130'},
+      ],
       [
         'data',
         {
@@ -161,7 +171,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -238,7 +248,7 @@ describe('backfill-manager', () => {
 
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
-    expect(await drainChanges(8)).toMatchObject([
+    await expectChanges([
       ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
       [
         'data',
@@ -288,6 +298,8 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
+      ['commit', {tag: 'commit'}, {watermark: '125.01'}],
+      ['begin', {tag: 'begin'}, {commitWatermark: '130'}],
       [
         'data',
         {
@@ -297,7 +309,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '125.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -570,7 +582,7 @@ describe('backfill-manager', () => {
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '125.01'},
+        {commitWatermark: '130'},
       ],
       [
         'data',
@@ -585,7 +597,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '125.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -658,7 +670,7 @@ describe('backfill-manager', () => {
 
     // The first request is canceled and only the changes from
     // the updated request are streamed.
-    expect(await drainChanges(6)).toMatchObject([
+    await expectChanges([
       ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
       [
         'data',
@@ -669,11 +681,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '125.01'},
-      ],
+      ['begin', {tag: 'begin'}, {commitWatermark: '130'}],
       [
         'data',
         {
@@ -687,7 +695,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '125.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -766,7 +774,7 @@ describe('backfill-manager', () => {
 
     // The first request is canceled and only the changes from
     // the updated request are streamed.
-    expect(await drainChanges(6)).toMatchObject([
+    await expectChanges([
       ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
       [
         'data',
@@ -777,11 +785,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '125.01'},
-      ],
+      ['begin', {tag: 'begin'}, {commitWatermark: '130'}],
       [
         'data',
         {
@@ -795,7 +799,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '125.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -876,7 +880,7 @@ describe('backfill-manager', () => {
 
     // The first request is canceled and only the changes from
     // the updated request are streamed.
-    expect(await drainChanges(6)).toMatchObject([
+    await expectChanges([
       ['begin', {tag: 'begin'}, {commitWatermark: '125'}],
       [
         'data',
@@ -888,11 +892,7 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '125'}],
-      [
-        'begin',
-        {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '125.01'},
-      ],
+      ['begin', {tag: 'begin'}, {commitWatermark: '130'}],
       [
         'data',
         {
@@ -906,7 +906,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '125.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -1305,7 +1305,7 @@ describe('backfill-manager', () => {
     changeStream.release('140');
     changeStream.pushStatus(['status', {ack: false}, {watermark: '150'}]);
 
-    expect(await drainChanges(12)).toMatchObject([
+    await expectChanges([
       ['begin', {tag: 'begin'}, {commitWatermark: '140'}],
       [
         'data',
@@ -1378,6 +1378,8 @@ describe('backfill-manager', () => {
           ],
         },
       ],
+      ['commit', {tag: 'commit'}, {watermark: '140.02'}],
+      ['begin', {tag: 'begin'}, {commitWatermark: '150'}],
       [
         'data',
         {
@@ -1387,7 +1389,7 @@ describe('backfill-manager', () => {
           watermark: '150',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '140.02'}],
+      ['commit', {tag: 'commit'}, {watermark: '150'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -1440,11 +1442,11 @@ describe('backfill-manager', () => {
 
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
-    expect(await drainChanges(3)).toMatchObject([
+    await expectChanges([
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.01'},
+        {commitWatermark: '130'},
       ],
       [
         'data',
@@ -1455,7 +1457,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -1557,7 +1559,7 @@ describe('backfill-manager', () => {
 
     changeStream.pushStatus(['status', {ack: false}, {watermark: '188'}]);
 
-    expect(await drainChanges(4)).toMatchObject([
+    await expectChanges([
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
@@ -1573,6 +1575,12 @@ describe('backfill-manager', () => {
           rowValues: [[1]],
         },
       ],
+      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+      [
+        'begin',
+        {tag: 'begin', json: 'p', skipAck: true},
+        {commitWatermark: '188'},
+      ],
       [
         'data',
         {
@@ -1582,7 +1590,7 @@ describe('backfill-manager', () => {
           watermark: '188',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '123.01'}],
+      ['commit', {tag: 'commit'}, {watermark: '188'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
@@ -1915,7 +1923,7 @@ describe('backfill-manager', () => {
     await sleep(100);
     changeStream.pushStatus(['status', {ack: false}, {watermark: '130'}]);
 
-    expect(await drainChanges(6)).toMatchObject([
+    await expectChanges([
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
@@ -1935,11 +1943,10 @@ describe('backfill-manager', () => {
         },
       ],
       ['commit', {tag: 'commit'}, {watermark: '123.01'}],
-
       [
         'begin',
         {tag: 'begin', json: 'p', skipAck: true},
-        {commitWatermark: '123.02'},
+        {commitWatermark: '130'},
       ],
       [
         'data',
@@ -1950,7 +1957,7 @@ describe('backfill-manager', () => {
           watermark: '130',
         },
       ],
-      ['commit', {tag: 'commit'}, {watermark: '123.02'}],
+      ['commit', {tag: 'commit'}, {watermark: '130'}],
     ] satisfies ChangeStreamMessage[]);
 
     expect(backfillRequests).toMatchObject([
