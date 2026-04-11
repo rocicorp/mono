@@ -52,6 +52,12 @@ export const schema = createSchema({
         d: number(),
       })
       .primaryKey('ts'),
+    table('arrayCases')
+      .columns({
+        id: string(),
+        tags: json<string[]>().optional(),
+      })
+      .primaryKey('id'),
     table('jsonCases')
       .columns({
         ...jsonCols,
@@ -120,6 +126,11 @@ CREATE TABLE "dateTypes" (
   "tswotz" TIMESTAMP WITHOUT TIME ZONE,
   "d" DATE,
   PRIMARY KEY ("ts")
+);
+
+CREATE TABLE "arrayCases" (
+  "id" TEXT PRIMARY KEY,
+  "tags" TEXT[]
 );
 
 CREATE TABLE "jsonbCases" (

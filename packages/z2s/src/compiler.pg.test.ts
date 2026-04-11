@@ -21,6 +21,9 @@ const timesTable = table('timesTable')
     id: string(),
     timeWithoutTz: number().from('time_without_tz'),
     timeWithoutTzArray: json<number[]>().from('time_without_tz_array'),
+    nullableTimeWithoutTzArray: json<number[]>().optional().from(
+      'nullable_time_without_tz_array',
+    ),
     timeWithTz: number().from('time_with_tz'),
     timeWithTzArray: json<number[]>().from('time_with_tz_array'),
   })
@@ -33,6 +36,7 @@ const serverSchema: ServerSchema = {
     id: {type: 'text', isArray: false, isEnum: false},
     time_without_tz: {type: 'time', isArray: false, isEnum: false},
     time_without_tz_array: {type: 'time', isArray: true, isEnum: false},
+    nullable_time_without_tz_array: {type: 'time', isArray: true, isEnum: false},
     time_with_tz: {type: 'timetz', isArray: false, isEnum: false},
     time_with_tz_array: {type: 'timetz', isArray: true, isEnum: false},
   },
@@ -49,6 +53,7 @@ describe('compiler with PostgreSQL', () => {
         id TEXT PRIMARY KEY,
         time_without_tz TIME NOT NULL,
         time_without_tz_array TIME[] NOT NULL,
+        nullable_time_without_tz_array TIME[],
         time_with_tz TIMETZ NOT NULL,
         time_with_tz_array TIMETZ[] NOT NULL
       );
@@ -57,12 +62,14 @@ describe('compiler with PostgreSQL', () => {
         id,
         time_without_tz,
         time_without_tz_array,
+        nullable_time_without_tz_array,
         time_with_tz,
         time_with_tz_array
       ) VALUES (
         'row1',
         '09:08:07.654',
         ARRAY['09:08:07.654'::time, '00:00:00'::time],
+        NULL,
         '01:00:00+02',
         ARRAY['01:00:00+02'::timetz, '23:00:00-02'::timetz]
       );
@@ -79,6 +86,7 @@ describe('compiler with PostgreSQL', () => {
         id,
         time_without_tz AS "timeWithoutTz",
         time_without_tz_array AS "timeWithoutTzArray",
+        nullable_time_without_tz_array AS "nullableTimeWithoutTzArray",
         time_with_tz AS "timeWithTz",
         time_with_tz_array AS "timeWithTzArray"
       FROM times
@@ -90,6 +98,7 @@ describe('compiler with PostgreSQL', () => {
         id: 'row1',
         timeWithoutTz: 32887654,
         timeWithoutTzArray: [32887654, 0],
+        nullableTimeWithoutTzArray: null,
         timeWithTz: 82800000,
         timeWithTzArray: [82800000, 3600000],
       },
@@ -108,4 +117,5 @@ describe('compiler with PostgreSQL', () => {
 
     expect(compiled).toEqual(raw);
   });
+
 });

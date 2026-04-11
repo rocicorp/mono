@@ -157,6 +157,31 @@ describe('makeSchemaCRUD', () => {
     });
   });
 
+  test('insert/update/upsert with nullable array columns preserves null', async () => {
+    await pg.begin(async tx => {
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
+      await crud.arrayCases.insert({id: '1', tags: null});
+      await checkDb(tx, 'arrayCases', [{id: '1', tags: null}]);
+
+      await crud.arrayCases.update({id: '1', tags: ['a', 'b']});
+      await checkDb(tx, 'arrayCases', [{id: '1', tags: ['a', 'b']}]);
+
+      await crud.arrayCases.update({id: '1', tags: null});
+      await checkDb(tx, 'arrayCases', [{id: '1', tags: null}]);
+
+      await crud.arrayCases.upsert({id: '1', tags: ['c']});
+      await checkDb(tx, 'arrayCases', [{id: '1', tags: ['c']}]);
+
+      await crud.arrayCases.upsert({id: '1', tags: null});
+      await checkDb(tx, 'arrayCases', [{id: '1', tags: null}]);
+    });
+  });
+
   test('upsert', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);
