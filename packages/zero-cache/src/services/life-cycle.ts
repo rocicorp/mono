@@ -39,7 +39,7 @@ export const UNHANDLED_EXCEPTION_ERROR_CODE = 13;
 // An internal error code used to indicate that the server should exit
 // without draining (e.g. due to a supporting worker get a signal to shut
 // down), but the exit is otherwise intentional.
-const INTENTIONAL_SHUTDOWN_ERROR_CODE = 14;
+export const INTENTIONAL_SHUTDOWN_ERROR_CODE = 14;
 
 /**
  * Handles readiness, termination signals, and coordination of graceful
@@ -110,6 +110,11 @@ export class ProcessManager {
   }
 
   #startDrain(signal: GracefulShutdownSignal) {
+    if (this.#all.size === 0) {
+      // Shutdown if a signal is received before any subprocesses are added.
+      this.#lc.info?.(`exiting on ${signal}`);
+      this.#exit(0);
+    }
     this.#lc.info?.(`initiating drain (${signal})`);
     this.#drainStart = Date.now();
     if (this.#userFacing.size) {

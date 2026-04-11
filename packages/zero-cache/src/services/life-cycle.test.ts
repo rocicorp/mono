@@ -4,6 +4,7 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {
+  INTENTIONAL_SHUTDOWN_ERROR_CODE,
   ProcessManager,
   runUntilKilled,
   type WorkerType,
@@ -82,6 +83,24 @@ describe('shutdown', () => {
 
     await Promise.all(all.map(w => w.running.promise));
   });
+
+  test.each([
+    ['SIGTERM', 0],
+    ['SIGINT', 0],
+    ['SIGQUIT', INTENTIONAL_SHUTDOWN_ERROR_CODE],
+    ['SIGABRT', -1],
+  ])(
+    'shutdown before workers started: %s',
+    async (signal, expectedExitCode) => {
+      const {promise: exitCode, resolve} = resolver<number>();
+      proc = new EventEmitter();
+      proc.on('exit', resolve);
+
+      new ProcessManager(lc, proc);
+      proc.emit(signal);
+      expect(await exitCode).toBe(expectedExitCode);
+    },
+  );
 
   test.each([['SIGTERM'], ['SIGINT']])(
     'graceful shutdown: %s',
