@@ -1,5 +1,5 @@
-import { ChangeType } from './change-type.ts';
-import type { Node } from './data.ts';
+import {ChangeType} from './change-type.ts';
+import type {Node} from './data.ts';
 
 /**
  * The `child` payload carried by a {@linkcode ChildChange}.
