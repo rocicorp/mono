@@ -132,11 +132,10 @@ async function withAuth<T extends {headers: IncomingHttpHeaders}>(
   request: T,
   reply: FastifyReply,
   handler: (authData: JWTData | undefined) => Promise<void>,
-  verifyUserID: boolean = true,
 ) {
   let authData: JWTData | undefined;
   try {
-    authData = await maybeVerifyAuth(request.headers, verifyUserID);
+    authData = await maybeVerifyAuth(request.headers);
   } catch (e) {
     if (e instanceof Error) {
       reply.status(401).send(e.message);
@@ -225,29 +224,23 @@ async function queryHandler(
 fastify.post<{
   Body: {contentType: string};
 }>('/api/upload/presigned-url', async (request, reply) => {
-  await withAuth(
-    request,
-    reply,
-    async authData => {
-      if (!authData) {
-        reply.status(401).send('Authentication required');
+  await withAuth(request, reply, async authData => {
+    if (!authData) {
+      reply.status(401).send('Authentication required');
+      return;
+    }
+
+    try {
+      const result = await getPresignedUrl(request.body.contentType);
+      reply.send(result);
+    } catch (error) {
+      if (error instanceof Error) {
+        reply.status(500).send(error.message);
         return;
       }
-
-      try {
-        const result = await getPresignedUrl(request.body.contentType);
-        reply.send(result);
-      } catch (error) {
-        if (error instanceof Error) {
-          reply.status(500).send(error.message);
-          return;
-        }
-        reply.status(500).send('Failed to generate presigned URL');
-      }
-    },
-    // don't verify the user ID header since this is from the client
-    false,
-  );
+      reply.status(500).send('Failed to generate presigned URL');
+    }
+  });
 });
 
 fastify.get<{
@@ -299,7 +292,6 @@ fastify.get<{
 
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
-  verifyUserID: boolean,
 ): Promise<JWTData | undefined> {
   let {authorization} = headers;
   if (!authorization) {
@@ -320,18 +312,6 @@ async function maybeVerifyAuth(
   const jwtData = jwtDataSchema.parse(
     (await jwtVerify(authorization, JSON.parse(jwk))).payload,
   );
-
-  if (verifyUserID) {
-    const userIDFromHeader = headers['x-user-id'] ?? headers['X-User-ID'];
-
-    if (userIDFromHeader !== jwtData.sub) {
-      // oxlint-disable-next-line no-console
-      console.error(
-        `Request did not match for user ${jwtData.sub} with user ID header: ${userIDFromHeader}`,
-      );
-      throw new Error(`X-User-ID must match the authenticated user`);
-    }
-  }
 
   return jwtData;
 }
