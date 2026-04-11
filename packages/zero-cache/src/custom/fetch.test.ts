@@ -216,42 +216,6 @@ describe('fetchFromAPIServer', () => {
     });
   });
 
-  test('includes X-User-ID when userID is provided', async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({success: true}), {status: 200}),
-    );
-
-    await fetchWithContext(validator, 'push', {userID: 'user-123'});
-
-    const init = mockFetch.mock.calls[0]![1];
-    expect(init?.headers).toEqual({
-      'Content-Type': 'application/json',
-      'X-User-ID': 'user-123',
-    });
-  });
-
-  test('userID overrides forwarded X-User-ID header', async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({success: true}), {status: 200}),
-    );
-
-    await fetchWithContext(validator, 'push', {
-      headerOptions: {
-        customHeaders: {
-          'X-User-ID': 'spoofed-user',
-        },
-        allowedClientHeaders: ['x-user-id'],
-      },
-      userID: 'real-user',
-    });
-
-    const init = mockFetch.mock.calls[0]![1];
-    expect(init?.headers).toEqual({
-      'Content-Type': 'application/json',
-      'X-User-ID': 'real-user',
-    });
-  });
-
   test('filters out all client headers when allowedClientHeaders is not set', async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({success: true}), {status: 200}),

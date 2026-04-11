@@ -426,7 +426,7 @@ describe('pusher service', () => {
     expect(shutDown).toBe(true);
   });
 
-  test('the service sets authorization and user headers', async () => {
+  test('the service sets authorization headers', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockResolvedValue({
       ok: true,
@@ -453,7 +453,6 @@ describe('pusher service', () => {
       'Content-Type': 'application/json',
       'X-Api-Key': 'api-key',
       'Authorization': 'Bearer jwt',
-      'X-User-ID': 'user-123',
     });
 
     fetch.mockReset();
@@ -923,7 +922,6 @@ describe('pusher service', () => {
       'x-custom-header': 'custom-value',
       'Authorization': 'Bearer jwt',
       'Origin': 'https://app.example',
-      'X-User-ID': 'user-123',
     });
     expect(fetch.mock.calls[0][1]?.headers).not.toHaveProperty('Cookie');
   });
@@ -1102,10 +1100,9 @@ describe('pusher service', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0][1]?.headers).toMatchObject({
-      'Authorization': 'Bearer jwt',
-      'Cookie': 'my-cookie',
-      'Origin': 'https://app.example',
-      'X-User-ID': 'user-123',
+      Authorization: 'Bearer jwt',
+      Cookie: 'my-cookie',
+      Origin: 'https://app.example',
     });
   });
 });

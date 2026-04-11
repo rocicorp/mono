@@ -62,10 +62,6 @@ export type ZeroOptions<
    *
    * Omit this, or set to `null`, for logged-out clients.
    *
-   * This is passed to the query/mutate endpoints via an `X-User-ID` header and
-   * must be used to validate claimed user identity against the provided auth
-   * on the server (either token or cookie auth).
-   *
    * Each userID gets its own client-side storage so that the app can switch
    * between users without losing state.
    */

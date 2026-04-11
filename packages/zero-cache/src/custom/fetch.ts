@@ -4,17 +4,17 @@ import 'urlpattern-polyfill';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
+import {randInt} from '../../../shared/src/rand.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import {type Type} from '../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {isProtocolError} from '../../../zero-protocol/src/error.ts';
+import type {ConnectionContext} from '../services/view-syncer/connection-context-manager.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
-import {randInt} from '../../../shared/src/rand.ts';
-import type {ConnectionContext} from '../services/view-syncer/connection-context-manager.ts';
-import {must} from '../../../shared/src/must.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -146,9 +146,6 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       headerOptions.allowedClientHeaders,
     ),
   );
-  if (ctx.userID) {
-    headers['X-User-ID'] = ctx.userID;
-  }
   if (ctx.auth?.raw) {
     headers['Authorization'] = `Bearer ${ctx.auth.raw}`;
   }
