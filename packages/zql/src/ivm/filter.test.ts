@@ -1,12 +1,12 @@
 import {expect, test, vi} from 'vitest';
-import {Catch} from './catch.ts';
-import {Filter} from './filter.ts';
-import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {buildFilterPipeline} from './filter-operators.ts';
-import {consume} from './stream.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
+import {Catch} from './catch.ts';
+import {buildFilterPipeline} from './filter-operators.ts';
+import {Filter} from './filter.ts';
+import {consume} from './stream.ts';
+import {createSource} from './test/source-factory.ts';
 
 const lc = createSilentLogContext();
 const mockDelegate = {

@@ -1,11 +1,11 @@
 import '../../../packages/shared/src/dotenv.ts';
 
 import * as fs from 'fs';
-import * as readline from 'readline';
 import {dirname, join} from 'path';
-import postgres from 'postgres';
+import * as readline from 'readline';
 import {pipeline} from 'stream/promises';
 import {fileURLToPath} from 'url';
+import postgres from 'postgres';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

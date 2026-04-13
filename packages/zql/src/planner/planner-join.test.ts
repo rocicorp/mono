@@ -1,7 +1,7 @@
 import {expect, suite, test} from 'vitest';
+import type {PlannerConstraint} from './planner-constraint.ts';
 import {UnflippableJoinError} from './planner-join.ts';
 import {CONSTRAINTS, createJoin} from './test/helpers.ts';
-import type {PlannerConstraint} from './planner-constraint.ts';
 
 suite('PlannerJoin', () => {
   test('initial state is semi-join, unpinned', () => {

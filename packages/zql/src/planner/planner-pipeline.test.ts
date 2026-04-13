@@ -1,8 +1,8 @@
 import {expect, suite, test} from 'vitest';
-import {PlannerSource} from './planner-source.ts';
-import {PlannerJoin} from './planner-join.ts';
-import {PlannerFanOut} from './planner-fan-out.ts';
 import {PlannerFanIn} from './planner-fan-in.ts';
+import {PlannerFanOut} from './planner-fan-out.ts';
+import {PlannerJoin} from './planner-join.ts';
+import {PlannerSource} from './planner-source.ts';
 import {PlannerTerminus} from './planner-terminus.ts';
 import {CONSTRAINTS, simpleCostModel} from './test/helpers.ts';
 

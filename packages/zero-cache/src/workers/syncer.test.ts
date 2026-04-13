@@ -25,11 +25,11 @@ vi.mock('../server/anonymous-otel-start.ts', () => ({
   setActiveClientGroupsGetter: vi.fn(),
 }));
 
-import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {type WebSocket} from 'ws';
 import {
   createSilentLogContext,

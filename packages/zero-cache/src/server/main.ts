@@ -1,5 +1,5 @@
-import {resolver} from '@rocicorp/resolver';
 import path from 'node:path';
+import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../shared/src/must.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';

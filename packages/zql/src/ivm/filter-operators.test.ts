@@ -1,6 +1,6 @@
 import {describe, expect, test, vi} from 'vitest';
-import type {FetchRequest, Input} from './operator.ts';
 import {FilterStart, type FilterOutput} from './filter-operators.ts';
+import type {FetchRequest, Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 
 describe('FilterStart', () => {

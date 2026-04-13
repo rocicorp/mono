@@ -1,3 +1,5 @@
+import {pid} from 'node:process';
+import {styleText} from 'node:util';
 /* oxlint-disable no-console */
 import {
   type Context,
@@ -5,8 +7,6 @@ import {
   type LogLevel,
   type LogSink,
 } from '@rocicorp/logger';
-import {pid} from 'node:process';
-import {styleText} from 'node:util';
 import {stringify} from './bigint-json.ts';
 
 export type LogConfig = {

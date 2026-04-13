@@ -1,11 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {ClientErrorKind} from './client-error-kind.ts';
 import type {
   ConnectionManager,
   ConnectionManagerState,
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
 import {
   type ConnectionState,
   ConnectionImpl,

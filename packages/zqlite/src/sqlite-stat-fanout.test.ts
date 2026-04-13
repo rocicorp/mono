@@ -1,9 +1,9 @@
 // oxlint-disable no-conditional-expect
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {Database} from './db.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
 import {must} from '../../shared/src/must.ts';
+import {Database} from './db.ts';
+import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
 
 describe('SQLiteStatFanout', () => {
   let db: Database;

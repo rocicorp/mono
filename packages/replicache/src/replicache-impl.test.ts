@@ -1,8 +1,8 @@
 import {describe, expect, test, vi} from 'vitest';
-import {ReplicacheImpl} from './replicache-impl.ts';
-import {initReplicacheTesting} from './test-util.ts';
-import type {ReplicacheOptions} from './replicache-options.ts';
 import {refresh} from './persist/refresh.ts';
+import {ReplicacheImpl} from './replicache-impl.ts';
+import type {ReplicacheOptions} from './replicache-options.ts';
+import {initReplicacheTesting} from './test-util.ts';
 
 vi.mock('./persist/refresh.ts', () => ({
   refresh: vi.fn().mockResolvedValue(undefined),

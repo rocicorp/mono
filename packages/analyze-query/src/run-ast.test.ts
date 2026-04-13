@@ -1,16 +1,16 @@
 import {beforeEach, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../../zero-cache/src/services/replicator/schema/table-metadata.ts';
+import {
+  runAst,
+  type RunAstOptions,
+} from '../../zero-cache/src/services/run-ast.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../zero-protocol/src/client-schema.ts';
 import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {Database} from '../../zqlite/src/db.ts';
-import {
-  runAst,
-  type RunAstOptions,
-} from '../../zero-cache/src/services/run-ast.ts';
 
 const minimalClientSchema: ClientSchema = {tables: {}};
 

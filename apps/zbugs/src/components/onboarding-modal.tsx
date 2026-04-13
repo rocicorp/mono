@@ -1,5 +1,5 @@
-import {Modal} from './modal.tsx';
 import {Button} from './button.tsx';
+import {Modal} from './modal.tsx';
 
 export function OnboardingModal({
   isOpen,

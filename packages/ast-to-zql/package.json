@@ -1,7 +1,7 @@
 {
   "name": "ast-to-zql",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "check-types": "tsc",
@@ -10,10 +10,12 @@
     "check-format": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "oxfmt": "^0.44.0"
+    "oxfmt": "^0.45.0"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",

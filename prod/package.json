@@ -1,13 +1,15 @@
 {
   "name": "prod",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "format": "oxfmt .",
-    "check-format": "oxfmt --check ."
+    "check-format": "oxfmt --check .",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "devDependencies": {
-    "oxfmt": "^0.44.0"
+    "oxfmt": "^0.45.0"
   }
 }

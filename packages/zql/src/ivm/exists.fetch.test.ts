@@ -1,21 +1,21 @@
 import {expect, suite, test, vi} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {BuilderDelegate} from '../builder/builder.ts';
 import {Catch, type CaughtNode} from './catch.ts';
 import {Exists} from './exists.ts';
+import {buildFilterPipeline, type FilterInput} from './filter-operators.ts';
 import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
-import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {buildFilterPipeline, type FilterInput} from './filter-operators.ts';
 import {consume} from './stream.ts';
-import type {BuilderDelegate} from '../builder/builder.ts';
+import {createSource} from './test/source-factory.ts';
 
 const base = {
   columns: [

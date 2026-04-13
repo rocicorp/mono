@@ -1,5 +1,5 @@
-import {SilentLogger} from '@rocicorp/logger';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
+import {SilentLogger} from '@rocicorp/logger';
 import type {PartialDeep} from 'type-fest';
 import {expect, test, vi} from 'vitest';
 import {

@@ -1,11 +1,11 @@
 import {describe, expect, test} from 'vitest';
 import type {PlanDebugEventJSON} from '../../../zero-protocol/src/analyze-query-result.ts';
-import type {PlanState} from './planner-graph.ts';
 import {
   AccumulatorDebugger,
   formatPlannerEvents,
   serializePlanDebugEvents,
 } from './planner-debug.ts';
+import type {PlanState} from './planner-graph.ts';
 
 describe('formatPlannerEvents', () => {
   test('formats simple plan with single attempt', () => {

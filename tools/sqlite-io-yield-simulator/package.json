@@ -1,14 +1,16 @@
 {
   "name": "sqlite-io-yield-simulator",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "go": "tsx src/main.ts",
     "check-types": "tsc",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
-    "lint": "oxlint --quiet --config ../../oxlint.config.ts"
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.4",
@@ -17,7 +19,7 @@
     "zqlite": "0.0.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.45.0",
     "shared": "0.0.0"
   }
 }

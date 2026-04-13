@@ -1,6 +1,6 @@
 import {expect, suite, test} from 'vitest';
-import {CONSTRAINTS, createConnection, createFanOut} from './test/helpers.ts';
 import type {PlannerNode} from './planner-node.ts';
+import {CONSTRAINTS, createConnection, createFanOut} from './test/helpers.ts';
 
 const unpinned = {
   pinned: false,

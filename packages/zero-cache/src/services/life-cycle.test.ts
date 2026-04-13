@@ -1,5 +1,5 @@
-import {resolver} from '@rocicorp/resolver';
 import EventEmitter from 'node:events';
+import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';

@@ -1,8 +1,8 @@
 import '../../../packages/shared/src/dotenv.ts';
 
+import {pipeline, Writable} from 'node:stream';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
-import {pipeline, Writable} from 'node:stream';
 import WebSocket, {createWebSocketStream} from 'ws';
 import {parseOptions} from '../../../packages/shared/src/options.ts';
 import * as v from '../../../packages/shared/src/valita.ts';

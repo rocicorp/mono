@@ -1,8 +1,8 @@
+import {PrismaPg} from '@prisma/adapter-pg';
 import {eq} from 'drizzle-orm';
 import {drizzle as drizzleNodePg} from 'drizzle-orm/node-postgres';
 import {pgTable, text} from 'drizzle-orm/pg-core';
 import {drizzle as drizzlePostgresJs} from 'drizzle-orm/postgres-js';
-import {PrismaPg} from '@prisma/adapter-pg';
 import {Client, Pool, type PoolClient} from 'pg';
 import type {ExpectStatic} from 'vitest';
 import {afterEach, beforeEach, describe, expectTypeOf, test} from 'vitest';
@@ -11,12 +11,12 @@ import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
 import {nanoid} from '../../../zero-client/src/util/nanoid.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {ZQLDatabase} from '../zql-database.ts';
 import {zeroDrizzle, type DrizzleTransaction} from './drizzle.ts';
-import {zeroPrisma} from './prisma.ts';
 import {zeroNodePg} from './pg.ts';
 import {zeroPostgresJS} from './postgresjs.ts';
-import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {zeroPrisma} from './prisma.ts';
 
 let postgresJsClient: PostgresDB;
 

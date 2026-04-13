@@ -1,13 +1,15 @@
 {
   "name": "zql-viz",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "npx api-extractor run --local && vite",
     "preview": "vite preview",
     "check-types": "tsc",
-    "check-types:watch": "tsc --watch"
+    "check-types:watch": "tsc --watch",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

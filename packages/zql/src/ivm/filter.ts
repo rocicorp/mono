@@ -1,5 +1,6 @@
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
+import {type Node} from './data.ts';
 import {
   throwFilterOutput,
   type FilterInput,
@@ -7,7 +8,6 @@ import {
   type FilterOutput,
 } from './filter-operators.ts';
 import {filterPush} from './filter-push.ts';
-import {type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 
 /**

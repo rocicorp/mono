@@ -1,6 +1,6 @@
+import {X, Lock, Globe} from 'lucide-react';
 import type {FC} from 'react';
 import {useState} from 'react';
-import {X, Lock, Globe} from 'lucide-react';
 
 interface CredentialsModalProps {
   isOpen: boolean;

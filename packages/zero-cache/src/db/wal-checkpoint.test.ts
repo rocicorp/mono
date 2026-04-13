@@ -1,6 +1,6 @@
+import {Worker} from 'worker_threads';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {Worker} from 'worker_threads';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {DbFile} from '../test/lite.ts';
 

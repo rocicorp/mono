@@ -1,6 +1,6 @@
+import {getHeapStatistics} from 'node:v8';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import {getHeapStatistics} from 'node:v8';
 import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';

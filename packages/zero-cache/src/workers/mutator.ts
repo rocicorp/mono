@@ -1,6 +1,6 @@
+import {pid} from 'node:process';
 import {resolver} from '@rocicorp/resolver';
 import type {SingletonService} from '../services/service.ts';
-import {pid} from 'node:process';
 
 // TODO:
 // - install websocket receiver

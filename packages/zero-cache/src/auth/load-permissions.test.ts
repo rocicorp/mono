@@ -1,5 +1,5 @@
-import {beforeEach, describe, expect, test} from 'vitest';
 import {LogContext} from '@rocicorp/logger';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {h128} from '../../../shared/src/hash.ts';
 import {
   createSilentLogContext,
@@ -7,8 +7,8 @@ import {
 } from '../../../shared/src/logging-test-utils.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Database} from '../../../zqlite/src/db.ts';
-import {StatementRunner} from '../db/statements.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
+import {StatementRunner} from '../db/statements.ts';
 import {loadPermissions} from './load-permissions.ts';
 
 describe('auth/load-permissions', () => {

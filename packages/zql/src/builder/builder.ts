@@ -37,8 +37,8 @@ import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
 import {planQuery} from '../planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../planner/planner-connection.ts';
-import {completeOrdering} from '../query/complete-ordering.ts';
 import type {PlanDebugger} from '../planner/planner-debug.ts';
+import {completeOrdering} from '../query/complete-ordering.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 

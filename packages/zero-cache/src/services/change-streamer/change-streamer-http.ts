@@ -1,6 +1,6 @@
+import type {IncomingMessage} from 'node:http';
 import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
-import type {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';

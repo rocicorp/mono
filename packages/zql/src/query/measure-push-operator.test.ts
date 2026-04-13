@@ -1,11 +1,11 @@
 import {describe, expect, test, vi} from 'vitest';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Change} from '../ivm/change.ts';
 import type {Node} from '../ivm/data.ts';
 import type {FetchRequest, Input, Output} from '../ivm/operator.ts';
 import type {SourceSchema} from '../ivm/schema.ts';
 import {MeasurePushOperator} from './measure-push-operator.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
-import {emptyArray} from '../../../shared/src/sentinels.ts';
 
 describe('MeasurePushOperator', () => {
   test('should pass through fetch calls', () => {

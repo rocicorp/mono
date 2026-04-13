@@ -12,8 +12,8 @@ import DropdownArrow from '../assets/icons/dropdown-arrow.svg?react';
 import {useClickOutside} from '../hooks/use-click-outside.ts';
 import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {umami} from '../umami.ts';
-import styles from './combobox.module.css';
 import {fuzzySearch} from './fuzzy-search.ts';
+import styles from './combobox.module.css';
 
 type Item<T> = {
   text: string;

@@ -1,8 +1,8 @@
-import type {LogContext} from '@rocicorp/logger';
 import {writeFile} from 'node:fs/promises';
 import {Session} from 'node:inspector/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import type {LogContext} from '@rocicorp/logger';
 
 /**
  * Convenience wrapper around a `node:inspector` {@link Session} for

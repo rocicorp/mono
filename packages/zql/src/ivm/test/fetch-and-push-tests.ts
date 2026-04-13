@@ -12,9 +12,9 @@ import {ArrayView} from '../array-view.ts';
 import {Catch} from '../catch.ts';
 import type {Input} from '../operator.ts';
 import type {Source, SourceChange} from '../source.ts';
+import {consume} from '../stream.ts';
 import type {Format} from '../view.ts';
 import {createSource} from './source-factory.ts';
-import {consume} from '../stream.ts';
 
 const lc = createSilentLogContext();
 

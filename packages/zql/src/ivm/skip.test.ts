@@ -1,12 +1,12 @@
 import {expect, suite, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Catch} from './catch.ts';
 import type {FetchRequest} from './operator.ts';
 import {type Bound, Skip} from './skip.ts';
 import type {SourceChange} from './source.ts';
-import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {consume} from './stream.ts';
+import {createSource} from './test/source-factory.ts';
 
 const lc = createSilentLogContext();
 

@@ -2,85 +2,28 @@
   "name": "replicache",
   "version": "15.2.1",
   "description": "Realtime sync for any backend stack",
+  "homepage": "https://replicache.dev/",
+  "bugs": {
+    "url": "https://bugs.rocicorp.dev"
+  },
+  "license": "Apache-2.0",
   "author": "Rocicorp, Inc.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rocicorp/mono.git",
     "directory": "packages/replicache"
   },
-  "license": "Apache-2.0",
-  "homepage": "https://replicache.dev/",
-  "bugs": {
-    "url": "https://bugs.rocicorp.dev"
+  "bin": {
+    "replicache": "./out/cli.cjs"
   },
-  "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:chromium": "VITEST_BROWSER=chromium vitest run --config vitest.config.web.ts",
-    "test:chromium:watch": "VITEST_BROWSER=chromium vitest --config vitest.config.web.ts",
-    "test:firefox": "VITEST_BROWSER=firefox vitest run --config vitest.config.web.ts",
-    "test:firefox:watch": "VITEST_BROWSER=firefox vitest --config vitest.config.web.ts",
-    "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
-    "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
-    "bench": "vitest bench --run",
-    "bench:watch": "vitest bench --watch",
-    "format": "oxfmt .",
-    "check-format": "oxfmt --check .",
-    "check-types": "tsc -p tsconfig.json && tsc -p tsconfig.build.json && tsc -p tool/tsconfig.json",
-    "check-types:watch": "tsc -p tsconfig.json  --watch",
-    "check-types:build:watch": "tsc -p tsconfig.build.json --watch",
-    "check-types:tool:watch": "tsc -p tool/tsconfig.json --watch",
-    "lint": "oxlint --type-aware src/",
-    "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
-    "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
-    "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
-    "postpack": "mv README.md README-external.md && mv README-org.md README.md"
-  },
-  "dependencies": {
-    "@badrap/valita": "0.3.11",
-    "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/resolver": "^1.0.2"
-  },
-  "devDependencies": {
-    "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-sqlite3": "^1.0.15",
-    "@types/command-line-usage": "^5.0.2",
-    "@vitest/runner": "4.1.3",
-    "command-line-args": "^6.0.1",
-    "command-line-usage": "^7.0.3",
-    "compare-utf8": "^0.2.0",
-    "esbuild": "^0.27.4",
-    "expo-sqlite": ">=15",
-    "oxfmt": "^0.44.0",
-    "playwright": "^1.53.2",
-    "shared": "0.0.0",
-    "typescript": "~6.0.2",
-    "vitest": "4.1.3"
-  },
-  "peerDependencies": {
-    "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-sqlite3": "^1.0.15",
-    "expo-sqlite": ">=15"
-  },
-  "peerDependenciesMeta": {
-    "expo-sqlite": {
-      "optional": true
-    },
-    "@op-engineering/op-sqlite": {
-      "optional": true
-    },
-    "@rocicorp/zero-sqlite3": {
-      "optional": true
-    }
-  },
+  "files": [
+    "out",
+    "!*.tsbuildinfo"
+  ],
   "type": "module",
   "main": "out/replicache.js",
   "module": "out/replicache.js",
   "types": "out/replicache/src/mod.d.ts",
-  "bin": {
-    "replicache": "./out/cli.cjs"
-  },
   "exports": {
     ".": {
       "types": "./out/replicache/src/mod.d.ts",
@@ -103,8 +46,67 @@
       "default": "./out/sqlite.js"
     }
   },
-  "files": [
-    "out",
-    "!*.tsbuildinfo"
-  ]
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:chromium": "VITEST_BROWSER=chromium vitest run --config vitest.config.web.ts",
+    "test:chromium:watch": "VITEST_BROWSER=chromium vitest --config vitest.config.web.ts",
+    "test:firefox": "VITEST_BROWSER=firefox vitest run --config vitest.config.web.ts",
+    "test:firefox:watch": "VITEST_BROWSER=firefox vitest --config vitest.config.web.ts",
+    "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
+    "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
+    "bench": "vitest bench --run",
+    "bench:watch": "vitest bench --watch",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
+    "check-types": "tsc -p tsconfig.json && tsc -p tsconfig.build.json && tsc -p tool/tsconfig.json",
+    "check-types:watch": "tsc -p tsconfig.json  --watch",
+    "check-types:build:watch": "tsc -p tsconfig.build.json --watch",
+    "check-types:tool:watch": "tsc -p tool/tsconfig.json --watch",
+    "lint": "oxlint --type-aware src/",
+    "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
+    "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
+    "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
+    "postpack": "mv README.md README-external.md && mv README-org.md README.md",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
+  },
+  "dependencies": {
+    "@badrap/valita": "0.3.11",
+    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/resolver": "^1.0.2"
+  },
+  "devDependencies": {
+    "@op-engineering/op-sqlite": ">=15",
+    "@rocicorp/zero-sqlite3": "^1.0.15",
+    "@types/command-line-usage": "^5.0.2",
+    "@vitest/runner": "4.1.3",
+    "command-line-args": "^6.0.1",
+    "command-line-usage": "^7.0.3",
+    "compare-utf8": "^0.2.0",
+    "esbuild": "^0.27.4",
+    "expo-sqlite": ">=15",
+    "oxfmt": "^0.45.0",
+    "playwright": "^1.53.2",
+    "shared": "0.0.0",
+    "typescript": "~6.0.2",
+    "vitest": "4.1.3"
+  },
+  "peerDependencies": {
+    "@op-engineering/op-sqlite": ">=15",
+    "@rocicorp/zero-sqlite3": "^1.0.15",
+    "expo-sqlite": ">=15"
+  },
+  "peerDependenciesMeta": {
+    "expo-sqlite": {
+      "optional": true
+    },
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    },
+    "@rocicorp/zero-sqlite3": {
+      "optional": true
+    }
+  }
 }

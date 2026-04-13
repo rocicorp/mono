@@ -1,15 +1,15 @@
 {
   "name": "zero-sst",
   "version": "1.0.0",
+  "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "author": "",
   "main": "index.ts",
   "scripts": {
     "format": "oxfmt .",
     "check-format": "oxfmt --check ."
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "@dotenvx/dotenvx": "^1.39.0",
     "sst": "3.8.9"

@@ -1,6 +1,6 @@
 import {expect, suite, test} from 'vitest';
-import {runFetchTest, type Sources} from './test/fetch-and-push-tests.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {runFetchTest, type Sources} from './test/fetch-and-push-tests.ts';
 import type {Format} from './view.ts';
 
 suite('one:many:one', () => {

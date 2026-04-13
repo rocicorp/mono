@@ -1,5 +1,5 @@
-import type {FC} from 'react';
 import {X, Activity, Check, AlertCircle} from 'lucide-react';
+import type {FC} from 'react';
 
 interface ServerStatusModalProps {
   isOpen: boolean;

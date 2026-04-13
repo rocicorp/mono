@@ -5,22 +5,22 @@ import {useCallback, useEffect, useState} from 'react';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
 import * as ts from 'typescript';
 import './App.css';
+// oxlint-disable-next-line no-restricted-imports
+import * as zero from '../../../packages/zero-client/src/mod.ts';
+import {mapAST} from '../../../packages/zero-protocol/src/ast.ts';
+import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
 import {CredentialsModal} from './components/credentials-modal.tsx';
 import {QueryEditor} from './components/query-editor.tsx';
 import {QueryHistory} from './components/query-history.tsx';
 import {ResultsViewer} from './components/results-viewer.tsx';
 import {ServerStatusModal} from './components/server-status-modal.tsx';
 import {VerticalNav} from './components/vertical-nav.tsx';
+import {VizDelegate} from './query-delegate.ts';
 import {
   type QueryHistoryItem,
   type RemoteRunResult,
   type Result,
 } from './types.ts';
-// oxlint-disable-next-line no-restricted-imports
-import * as zero from '../../../packages/zero-client/src/mod.ts';
-import {mapAST} from '../../../packages/zero-protocol/src/ast.ts';
-import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
-import {VizDelegate} from './query-delegate.ts';
 
 type AnyQuery = zero.Query<any, any, any>;
 const DEFAULT_QUERY = `const {

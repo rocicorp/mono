@@ -3,6 +3,11 @@ import {pipeline} from 'node:stream/promises';
 import {beforeEach, describe, expect} from 'vitest';
 import {stringify} from '../../../shared/src/bigint-json.ts';
 import {type PgTest, test} from '../test/db.ts';
+import {
+  JSON_STRINGIFIED,
+  liteValue,
+  type LiteValueType,
+} from '../types/lite.ts';
 import {type PostgresDB, type PostgresValueType} from '../types/pg.ts';
 import {
   BinaryCopyParser,
@@ -12,11 +17,6 @@ import {
 } from './pg-copy-binary.ts';
 import {TsvParser} from './pg-copy.ts';
 import {getTypeParsers} from './pg-type-parser.ts';
-import {
-  JSON_STRINGIFIED,
-  liteValue,
-  type LiteValueType,
-} from '../types/lite.ts';
 
 describe('pg-copy-binary', () => {
   let sql: PostgresDB;

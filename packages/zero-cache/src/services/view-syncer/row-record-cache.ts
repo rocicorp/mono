@@ -22,7 +22,6 @@ import {
   type RowsRow,
   rowsRowToRowRecord,
 } from './schema/cvr.ts';
-import {tracer} from './tracer.ts';
 import {
   cmpVersions,
   type CVRVersion,
@@ -32,6 +31,7 @@ import {
   versionString,
   versionToNullableCookie,
 } from './schema/types.ts';
+import {tracer} from './tracer.ts';
 
 const FLUSH_TYPE_ATTRIBUTE = 'flush.type';
 

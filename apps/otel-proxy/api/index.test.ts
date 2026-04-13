@@ -1,6 +1,5 @@
-import {describe, it, expect, vi, beforeEach} from 'vitest';
 import type {VercelRequest, VercelResponse} from '@vercel/node';
-
+import {describe, it, expect, vi, beforeEach} from 'vitest';
 import handler from './index';
 
 // Mock fetch

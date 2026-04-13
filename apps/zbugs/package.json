@@ -1,7 +1,7 @@
 {
   "name": "zbugs",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -32,7 +32,9 @@
     "test:watch": "vitest --config vitest.config.ts --project zbugs/no-pg",
     "analyze": "analyze -c vite.config.ts",
     "test:pg": "vitest run --config vitest.config.ts --project zbugs/pg-16",
-    "test:pg:watch": "vitest --config vitest.config.ts --project zbugs/pg-16"
+    "test:pg:watch": "vitest --config vitest.config.ts --project zbugs/pg-16",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.844.0",
@@ -83,7 +85,7 @@
     "@vitest/runner": "4.1.3",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.1",
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.45.0",
     "postcss-preset-env": "^7.4.3",
     "rehype-video": "^2.3.0",
     "shared": "0.0.0",

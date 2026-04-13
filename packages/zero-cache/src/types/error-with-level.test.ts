@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {getLogLevel, ProtocolErrorWithLevel} from './error-with-level.ts';
 
 describe('ProtocolErrorWithLevel', () => {

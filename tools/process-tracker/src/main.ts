@@ -1,6 +1,6 @@
+import {open} from 'node:fs/promises';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import find from 'find-process';
-import {open} from 'node:fs/promises';
 import pidusage from 'pidusage';
 import {parseOptions} from '../../../packages/shared/src/options.ts';
 import * as v from '../../../packages/shared/src/valita.ts';

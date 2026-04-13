@@ -13,15 +13,15 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {CREATE_STORAGE_TABLE, DatabaseStorage} from '../database-storage.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
-import {CREATE_STORAGE_TABLE, DatabaseStorage} from '../database-storage.ts';
-import type {Storage} from '../../../zql/src/ivm/operator.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,

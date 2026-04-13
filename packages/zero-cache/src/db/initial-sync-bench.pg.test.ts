@@ -11,16 +11,16 @@
  */
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {nanoid} from 'nanoid/non-secure';
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {nanoid} from 'nanoid/non-secure';
+import {must} from '../../../shared/src/must.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {initReplica} from '../services/change-source/common/replica-schema.ts';
 import {initialSync} from '../services/change-source/pg/initial-sync.ts';
-import type {ShardConfig} from '../types/shards.ts';
 import {pgClient} from '../types/pg.ts';
-import {must} from '../../../shared/src/must.ts';
+import type {ShardConfig} from '../types/shards.ts';
 
 const UPSTREAM_DB = process.env['ZERO_UPSTREAM_DB'];
 

@@ -1,8 +1,8 @@
 {
   "name": "zero-server",
-  "description": "Library to include in API servers for processing mutation and query requests",
   "version": "0.0.0",
   "private": true,
+  "description": "Library to include in API servers for processing mutation and query requests",
   "type": "module",
   "scripts": {
     "format": "oxfmt .",
@@ -14,7 +14,9 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:pg17": "vitest run --project='*17*'",
-    "test:pg17:watch": "vitest watch --project='*17*'"
+    "test:pg17:watch": "vitest watch --project='*17*'",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
     "@rocicorp/logger": "^5.4.0"
@@ -24,7 +26,7 @@
     "@prisma/client": "^7.2.0",
     "@vitest/runner": "4.1.3",
     "drizzle-orm": "^0.45.1",
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.45.0",
     "pg": "^8.16.3",
     "postgres": "3.4.7",
     "prisma": "^7.2.0",

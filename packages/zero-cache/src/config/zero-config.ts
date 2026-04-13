@@ -2,8 +2,8 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import type {LogContext} from '@rocicorp/logger';
 import {timingSafeEqual} from 'node:crypto';
+import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
   flagToEnv,

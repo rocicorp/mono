@@ -1,7 +1,7 @@
+import {gunzipSync} from 'zlib';
 import {LogContext} from '@rocicorp/logger';
 import {getLocal, type Mockttp} from 'mockttp';
 import {beforeEach, expect, test} from 'vitest';
-import {gunzipSync} from 'zlib';
 import {
   createSilentLogContext,
   TestLogSink,

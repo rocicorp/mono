@@ -1,6 +1,7 @@
 {
   "name": "replicache-perf",
   "private": true,
+  "type": "module",
   "scripts": {
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
@@ -8,9 +9,10 @@
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --type-aware src/",
     "build": "tsx tool/build.ts",
-    "perf": "npm run build && tsx src/runner.ts"
+    "perf": "npm run build && tsx src/runner.ts",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
-  "type": "module",
   "dependencies": {
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.2",
@@ -29,6 +31,6 @@
     "xbytes": "^1.7.0"
   },
   "devDependencies": {
-    "oxfmt": "^0.44.0"
+    "oxfmt": "^0.45.0"
   }
 }

@@ -1,19 +1,19 @@
 import {describe, expect, test} from 'vitest';
+import {Catch} from './catch.ts';
+import {compareValues, type Node} from './data.ts';
+import {Exists} from './exists.ts';
+import {FilterEnd, FilterStart} from './filter-operators.ts';
+import {FlippedJoin} from './flipped-join.ts';
+import {Join} from './join.ts';
+import {MemoryStorage} from './memory-storage.ts';
 import type {FetchRequest, Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
-import {compareValues, type Node} from './data.ts';
-import {FilterEnd, FilterStart} from './filter-operators.ts';
 import {Skip} from './skip.ts';
-import {Take} from './take.ts';
 import {Snitch} from './snitch.ts';
-import {Catch} from './catch.ts';
-import {Join} from './join.ts';
+import type {Stream} from './stream.ts';
+import {Take} from './take.ts';
 import {UnionFanIn} from './union-fan-in.ts';
 import {UnionFanOut} from './union-fan-out.ts';
-import {FlippedJoin} from './flipped-join.ts';
-import {Exists} from './exists.ts';
-import {MemoryStorage} from './memory-storage.ts';
 
 const YIELD_SOURCE_SCHEMA_BASE: SourceSchema = {
   tableName: 'table1',

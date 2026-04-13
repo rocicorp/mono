@@ -1,4 +1,7 @@
 import {describe, expect, test} from 'vitest';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Change} from './change.ts';
+import type {Node} from './data.ts';
 import {
   generateWithOverlayUnordered,
   generateWithOverlayNoYieldUnordered,
@@ -6,10 +9,7 @@ import {
   isJoinMatch,
   buildJoinConstraint,
 } from './join-utils.ts';
-import type {Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Change} from './change.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Stream} from './stream.ts';
 
 function makeNode(row: Row): Node {

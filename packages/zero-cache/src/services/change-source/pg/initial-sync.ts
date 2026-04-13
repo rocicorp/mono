@@ -1,11 +1,11 @@
+import {platform} from 'node:os';
+import {Writable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
 import {
   PG_CONFIGURATION_LIMIT_EXCEEDED,
   PG_INSUFFICIENT_PRIVILEGE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import {platform} from 'node:os';
-import {Writable} from 'node:stream';
-import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';

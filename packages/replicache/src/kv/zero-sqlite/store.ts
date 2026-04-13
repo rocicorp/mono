@@ -1,5 +1,5 @@
-import open, {type Statement} from '@rocicorp/zero-sqlite3';
 import {existsSync, unlinkSync} from 'node:fs';
+import open, {type Statement} from '@rocicorp/zero-sqlite3';
 import type {
   PreparedStatement,
   SQLiteDatabase,

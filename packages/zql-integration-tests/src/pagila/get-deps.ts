@@ -1,6 +1,6 @@
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {existsSync} from 'fs';
 import {readFile, writeFile} from 'fs/promises';
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';

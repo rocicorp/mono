@@ -1,8 +1,8 @@
+import {copyFileSync} from 'fs';
 import websocket from '@fastify/websocket';
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance, type FastifyRequest} from 'fastify';
-import {copyFileSync} from 'fs';
 import {afterAll, beforeEach, describe, expect, vi} from 'vitest';
 import WebSocket from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';

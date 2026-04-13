@@ -1,5 +1,5 @@
-import react from '@vitejs/plugin-react';
 import {fileURLToPath, URL} from 'node:url';
+import react from '@vitejs/plugin-react';
 import {defineConfig, type PluginOption, type ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
 import {makeDefine} from '../../packages/shared/src/build.ts';

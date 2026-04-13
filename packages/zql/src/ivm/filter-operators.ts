@@ -1,9 +1,9 @@
-import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
-import {type Node} from './data.ts';
+import type {BuilderDelegate} from '../builder/builder.ts';
 import type {Change} from './change.ts';
+import {type Node} from './data.ts';
+import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
-import type {BuilderDelegate} from '../builder/builder.ts';
 
 /**
  * The `where` clause of a ZQL query is implemented using a sub-graph of

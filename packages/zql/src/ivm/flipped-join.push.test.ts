@@ -1,11 +1,11 @@
 import {describe, expect, suite, test} from 'vitest';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {
   runPushTest,
   type SourceContents,
   type Sources,
 } from './test/fetch-and-push-tests.ts';
 import type {Format} from './view.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
 
 /**
  * These tests are based on join.push.test.ts.  Uses same cases.

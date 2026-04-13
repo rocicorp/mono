@@ -11,13 +11,15 @@
     "test:watch": "vitest watch",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
-    "lint": "oxlint --quiet --config ../../oxlint.config.ts"
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.45.0",
     "replicache": "15.2.1",
     "shared": "0.0.0"
   }

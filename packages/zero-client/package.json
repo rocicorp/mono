@@ -6,6 +6,8 @@
   "scripts": {
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check .",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -31,7 +33,7 @@
     "ast-to-zql": "0.0.0",
     "datadog": "0.0.0",
     "esbuild": "^0.27.4",
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.45.0",
     "playwright": "^1.53.2",
     "replicache": "15.2.1",
     "shared": "0.0.0",

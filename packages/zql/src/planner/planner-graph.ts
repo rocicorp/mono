@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {PlanDebugger} from './planner-debug.ts';
 import type {PlannerConnection} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
+import type {PlanDebugger} from './planner-debug.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerJoin} from './planner-join.ts';

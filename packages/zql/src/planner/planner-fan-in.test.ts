@@ -1,10 +1,10 @@
 import {expect, suite, test} from 'vitest';
-import {CONSTRAINTS, createConnection, createFanIn} from './test/helpers.ts';
+import type {Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {ConnectionCostModel, CostModelCost} from './planner-connection.ts';
+import {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource} from './planner-source.ts';
-import type {ConnectionCostModel, CostModelCost} from './planner-connection.ts';
-import type {Ordering} from '../../../zero-protocol/src/ast.ts';
-import {PlannerFanIn} from './planner-fan-in.ts';
+import {CONSTRAINTS, createConnection, createFanIn} from './test/helpers.ts';
 
 const unpinned = {
   pinned: false,

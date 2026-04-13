@@ -1,5 +1,5 @@
-import type {LogContext} from '@rocicorp/logger';
 import {tmpdir} from 'node:os';
+import type {LogContext} from '@rocicorp/logger';
 import {expect} from 'vitest';
 import {randInt} from '../../../shared/src/rand.ts';
 import {Database} from '../../../zqlite/src/db.ts';
