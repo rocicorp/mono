@@ -18,6 +18,7 @@ import {
   buildPipeline,
   type BuilderDelegate,
 } from '../../../zql/src/builder/builder.ts';
+import {ChangeType} from '../../../zql/src/ivm/change-type.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {skipYields} from '../../../zql/src/ivm/operator.ts';
 import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
@@ -138,7 +139,10 @@ export async function runAst(
       await yieldProcess();
       continue;
     }
-    assert(rowChange.type === 'add', 'Hydration only handles add row changes');
+    assert(
+      rowChange.type === ChangeType.ADD,
+      'Hydration only handles add row changes',
+    );
 
     // yield to other tasks to avoid blocking for too long
     if (syncedRowCount % 10 === 0) {

@@ -465,7 +465,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "3",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -478,7 +478,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "2",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -492,7 +492,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -506,7 +506,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "21",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -520,7 +520,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "20",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -533,7 +533,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -547,7 +547,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -573,7 +573,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "3",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -586,7 +586,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "2",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -600,7 +600,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -614,7 +614,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "21",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -628,7 +628,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "20",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -641,7 +641,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -655,7 +655,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -698,7 +698,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "31",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -711,7 +711,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "4",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -725,7 +725,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "41",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -757,7 +757,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -766,7 +766,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -775,7 +775,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "21",
           },
           "table": "comments",
-          "type": "remove",
+          "type": 1,
         },
       ]
     `);
@@ -822,7 +822,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -836,7 +836,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -860,7 +860,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
-          "type": "edit",
+          "type": 3,
         },
       ]
     `);
@@ -996,7 +996,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "3",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1010,7 +1010,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "2",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1024,7 +1024,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1038,7 +1038,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "21",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1052,7 +1052,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "20",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1066,7 +1066,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1080,7 +1080,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1103,7 +1103,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "foo",
           },
           "table": "uniques",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1116,7 +1116,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "boo",
           },
           "table": "uniques",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1144,7 +1144,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "boo",
           },
           "table": "uniques",
-          "type": "edit",
+          "type": 3,
         },
       ]
     `);
@@ -1167,7 +1167,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "foo",
           },
           "table": "uniques",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1180,7 +1180,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "boo",
           },
           "table": "uniques",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1201,7 +1201,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "foo",
           },
           "table": "uniques",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -1214,7 +1214,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "baz",
           },
           "table": "uniques",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1227,7 +1227,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "foo",
           },
           "table": "uniques",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1262,7 +1262,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID",
@@ -1272,7 +1272,7 @@ describe('view-syncer/pipeline-driver', () => {
             "labelID": "1",
           },
           "table": "issueLabels",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID",
@@ -1281,7 +1281,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "remove",
+          "type": 1,
         },
       ]
     `);
@@ -1310,7 +1310,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "querySubsetSchemaExists",
@@ -1324,7 +1324,7 @@ describe('view-syncer/pipeline-driver', () => {
             "legacyID": "1-1",
           },
           "table": "issueLabels",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "querySubsetSchemaExists",
@@ -1337,7 +1337,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1365,7 +1365,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1390,7 +1390,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID",
@@ -1405,7 +1405,7 @@ describe('view-syncer/pipeline-driver', () => {
             "labelID": "1",
           },
           "table": "issueLabels",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1538,7 +1538,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "2",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1553,7 +1553,7 @@ describe('view-syncer/pipeline-driver', () => {
             "labelID": "1",
           },
           "table": "issueLabels",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1566,7 +1566,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1581,7 +1581,7 @@ describe('view-syncer/pipeline-driver', () => {
             "labelID": "1",
           },
           "table": "issueLabels",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryID1",
@@ -1594,7 +1594,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1617,7 +1617,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "2",
           },
           "table": "issues",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -1627,7 +1627,7 @@ describe('view-syncer/pipeline-driver', () => {
             "labelID": "1",
           },
           "table": "issueLabels",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -1636,7 +1636,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -1646,7 +1646,7 @@ describe('view-syncer/pipeline-driver', () => {
             "labelID": "1",
           },
           "table": "issueLabels",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -1655,7 +1655,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "remove",
+          "type": 1,
         },
       ]
     `);
@@ -1792,7 +1792,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "4",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1816,7 +1816,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "41",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1832,7 +1832,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "4",
           },
           "table": "issues",
-          "type": "remove",
+          "type": 1,
         },
         {
           "queryID": "queryID1",
@@ -1841,7 +1841,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "41",
           },
           "table": "comments",
-          "type": "remove",
+          "type": 1,
         },
       ]
     `);
@@ -1930,7 +1930,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryScalar",
@@ -1944,7 +1944,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -1983,7 +1983,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryScalarSubsetSchema",
@@ -1997,7 +1997,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -2100,7 +2100,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "add",
+          "type": 0,
         },
         {
           "queryID": "queryScalarAnd",
@@ -2114,7 +2114,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "add",
+          "type": 0,
         },
       ]
     `);
@@ -2175,7 +2175,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": "edit",
+          "type": 3,
         },
       ]
     `);
@@ -2212,7 +2212,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "edit",
+          "type": 3,
         },
       ]
     `);
@@ -2274,7 +2274,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": "edit",
+          "type": 3,
         },
       ]
     `);

@@ -7,7 +7,12 @@ import {must} from '../../shared/src/must.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
 import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
-import type {Change} from '../../zql/src/ivm/change.ts';
+import {
+  makeAddChange,
+  makeEditChange,
+  makeRemoveChange,
+  type Change,
+} from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
@@ -354,9 +359,8 @@ test('pushing values does the correct writes and outputs', () => {
       }),
     );
 
-    expect(outputted.shift()).toEqual({
-      type: 'add',
-      node: {
+    expect(outputted.shift()).toEqual(
+      makeAddChange({
         relationships: {},
         row: {
           a: 1,
@@ -364,8 +368,8 @@ test('pushing values does the correct writes and outputs', () => {
           c: false,
           d: 'json string',
         },
-      },
-    });
+      }),
+    );
     expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0, d: '"json string"'}]);
 
     consume(
@@ -375,16 +379,15 @@ test('pushing values does the correct writes and outputs', () => {
       }),
     );
 
-    expect(outputted.shift()).toEqual({
-      type: 'remove',
-      node: {
+    expect(outputted.shift()).toEqual(
+      makeRemoveChange({
         relationships: {},
         row: {
           a: 1,
           b: 2.123,
         },
-      },
-    });
+      }),
+    );
     expect(read.all()).toEqual([]);
 
     expect(() => {
@@ -404,9 +407,8 @@ test('pushing values does the correct writes and outputs', () => {
       }),
     );
 
-    expect(outputted.shift()).toEqual({
-      type: 'add',
-      node: {
+    expect(outputted.shift()).toEqual(
+      makeAddChange({
         relationships: {},
         row: {
           a: 1,
@@ -414,8 +416,8 @@ test('pushing values does the correct writes and outputs', () => {
           c: true,
           d: {},
         },
-      },
-    });
+      }),
+    );
     expect(read.all()).toEqual([{a: 1, b: 2.123, c: 1, d: '{}'}]);
 
     expect(() => {
@@ -440,9 +442,8 @@ test('pushing values does the correct writes and outputs', () => {
       }),
     );
 
-    expect(outputted.shift()).toEqual({
-      type: 'add',
-      node: {
+    expect(outputted.shift()).toEqual(
+      makeAddChange({
         relationships: {},
         row: {
           a: 9007199254740991n,
@@ -450,8 +451,8 @@ test('pushing values does the correct writes and outputs', () => {
           c: true,
           d: [],
         },
-      },
-    });
+      }),
+    );
 
     expect(read.all()).toEqual([
       {a: 1, b: 2.123, c: 1, d: '{}'},
@@ -536,11 +537,12 @@ test('pushing values does the correct writes and outputs', () => {
       }),
     );
 
-    expect(outputted.shift()).toEqual({
-      type: 'edit',
-      oldNode: {row: {a: 1, b: 2.123, c: true, d: {}}, relationships: {}},
-      node: {row: {a: 1, b: 2.123, c: false, d: {a: true}}, relationships: {}},
-    });
+    expect(outputted.shift()).toEqual(
+      makeEditChange(
+        {row: {a: 1, b: 2.123, c: false, d: {a: true}}, relationships: {}},
+        {row: {a: 1, b: 2.123, c: true, d: {}}, relationships: {}},
+      ),
+    );
 
     expect(read.all()).toEqual([
       {a: 1, b: 2.123, c: 0, d: '{"a":true}'},
@@ -555,14 +557,15 @@ test('pushing values does the correct writes and outputs', () => {
         row: {a: 1, b: 3, c: false, d: {a: true}},
       }),
     );
-    expect(outputted.shift()).toEqual({
-      type: 'edit',
-      oldNode: {
-        row: {a: 1, b: 2.123, c: false, d: {a: true}},
-        relationships: {},
-      },
-      node: {row: {a: 1, b: 3, c: false, d: {a: true}}, relationships: {}},
-    });
+    expect(outputted.shift()).toEqual(
+      makeEditChange(
+        {row: {a: 1, b: 3, c: false, d: {a: true}}, relationships: {}},
+        {
+          row: {a: 1, b: 2.123, c: false, d: {a: true}},
+          relationships: {},
+        },
+      ),
+    );
     expect(read.all()).toEqual([
       {a: 9007199254740991, b: 3.456, c: 1, d: '[]'},
       {a: 1, b: 3, c: 0, d: '{"a":true}'},

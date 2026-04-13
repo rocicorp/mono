@@ -10,6 +10,7 @@ import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../zero-protocol/src/client-schema.ts';
 import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
+import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {Database} from '../../zqlite/src/db.ts';
 
 const minimalClientSchema: ClientSchema = {tables: {}};
@@ -296,7 +297,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
   vi.mocked(hydrate).mockImplementation(function* () {
     // First unique row from users table
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'users',
       queryID: 'test-query-id',
       rowKey: {id: 1},
@@ -305,7 +306,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
 
     // Second unique row from users table
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'users',
       queryID: 'test-query-id',
       rowKey: {id: 2},
@@ -314,7 +315,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
 
     // Duplicate of first row (same table + row content)
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'users',
       queryID: 'test-query-id',
       rowKey: {id: 1},
@@ -323,7 +324,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
 
     // Unique row from different table
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'posts',
       queryID: 'test-query-id',
       rowKey: {id: 1},
@@ -332,7 +333,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
 
     // Duplicate of the posts row
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'posts',
       queryID: 'test-query-id',
       rowKey: {id: 1},
@@ -341,7 +342,7 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
 
     // Another unique row from users (different content)
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'users',
       queryID: 'test-query-id',
       rowKey: {id: 3},
@@ -396,7 +397,7 @@ test('runAst handles case where all synced rows are duplicates', async () => {
 
     // Same row yielded multiple times
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'users',
       queryID: 'test-query-id',
       rowKey: {id: 1},
@@ -404,7 +405,7 @@ test('runAst handles case where all synced rows are duplicates', async () => {
     };
 
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'users',
       queryID: 'test-query-id',
       rowKey: {id: 1},
@@ -412,7 +413,7 @@ test('runAst handles case where all synced rows are duplicates', async () => {
     };
 
     yield {
-      type: 'add',
+      type: ChangeType.ADD,
       table: 'users',
       queryID: 'test-query-id',
       rowKey: {id: 1},

@@ -58,29 +58,19 @@ import {checkClientSchema} from './client-schema.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
-export type RowAdd = {
-  readonly type: 'add';
+type RowOp<Op extends Omit<ChangeType, ChangeType.CHILD>> = {
+  readonly type: Op;
   readonly queryID: string;
   readonly table: string;
   readonly rowKey: Row;
   readonly row: Row;
 };
 
-export type RowRemove = {
-  readonly type: 'remove';
-  readonly queryID: string;
-  readonly table: string;
-  readonly rowKey: Row;
-  readonly row: undefined;
-};
+export type RowAdd = RowOp<ChangeType.ADD>;
 
-export type RowEdit = {
-  readonly type: 'edit';
-  readonly queryID: string;
-  readonly table: string;
-  readonly rowKey: Row;
-  readonly row: Row;
-};
+export type RowRemove = RowOp<ChangeType.REMOVE>;
+
+export type RowEdit = RowOp<ChangeType.EDIT>;
 
 export type RowChange = RowAdd | RowRemove | RowEdit;
 
@@ -476,7 +466,7 @@ export class PipelineDriver {
       for (const {table, row} of companionRows) {
         const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
         yield {
-          type: 'add',
+          type: ChangeType.ADD,
           queryID,
           table,
           rowKey: getRowKey(primaryKey, row),
@@ -882,19 +872,16 @@ class Streamer {
         yield change;
         continue;
       }
-      switch (change[ChangeIndex.TYPE]) {
+      const type = change[ChangeIndex.TYPE];
+      switch (type) {
+        case ChangeType.REMOVE:
         case ChangeType.ADD: {
-          yield* this.#streamNodes(queryID, schema, 'add', () => [
+          yield* this.#streamNodes(queryID, schema, type, () => [
             change[ChangeIndex.NODE],
           ]);
           break;
         }
-        case ChangeType.REMOVE: {
-          yield* this.#streamNodes(queryID, schema, 'remove', () => [
-            change[ChangeIndex.NODE],
-          ]);
-          break;
-        }
+
         case ChangeType.CHILD: {
           const child = change[ChangeIndex.CHILD_DATA];
           const childSchema = must(
@@ -905,7 +892,7 @@ class Streamer {
           break;
         }
         case ChangeType.EDIT:
-          yield* this.#streamNodes(queryID, schema, 'edit', () => [
+          yield* this.#streamNodes(queryID, schema, type, () => [
             {row: change[ChangeIndex.NODE].row, relationships: {}},
           ]);
           break;
@@ -918,7 +905,7 @@ class Streamer {
   *#streamNodes(
     queryID: string,
     schema: SourceSchema,
-    op: 'add' | 'remove' | 'edit',
+    op: ChangeType.ADD | ChangeType.REMOVE | ChangeType.EDIT,
     nodes: () => Iterable<Node | 'yield'>,
   ): Iterable<RowChange | 'yield'> {
     const {tableName: table, system} = schema;
@@ -940,7 +927,7 @@ class Streamer {
       const {relationships} = node;
       let {row} = node;
       const rowKey = getRowKey(primaryKey, row);
-      if (op !== 'remove') {
+      if (op !== ChangeType.REMOVE) {
         const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
         if (
           typeof rowVersion === 'string' &&
@@ -955,7 +942,7 @@ class Streamer {
         queryID,
         table,
         rowKey,
-        row: op === 'remove' ? undefined : row,
+        row: op === ChangeType.REMOVE ? undefined : row,
       } as RowChange;
 
       for (const [relationship, children] of Object.entries(relationships)) {

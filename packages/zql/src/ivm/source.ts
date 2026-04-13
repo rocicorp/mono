@@ -5,6 +5,8 @@ import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import type {Input} from './operator.ts';
 import type {Stream} from './stream.ts';
 
+// TODO(arv): Make this a 3 tuple as well.
+
 export type SourceChangeAdd = {
   type: 'add';
   row: Row;
