@@ -199,7 +199,7 @@ export function printSummary(
 ) {
   if (results.length < 2) return;
 
-  const sorted = [...results].sort((a, b) => a.stats.avg - b.stats.avg);
+  const sorted = results.toSorted((a, b) => a.stats.avg - b.stats.avg);
   const fastest = sorted[0];
 
   const shortName = (name: string) =>
