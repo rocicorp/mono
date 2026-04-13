@@ -1,5 +1,7 @@
 import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
 import {emptyArray} from '../../shared/src/sentinels.ts';
+import {ChangeIndex} from '../../zql/src/ivm/change-index.ts';
+import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {
   applyChange,
   idSymbol,
@@ -156,7 +158,10 @@ export class SolidView implements Output {
     // using produce at the end of the transaction but read the relationships
     // now as they are only valid to read when the push is received.
     if (this.#builderRoot) {
-      this.#applyChangeToRoot(change, this.#builderRoot);
+      this.#applyChangeToRoot(
+        materializeRelationships(change),
+        this.#builderRoot,
+      );
     } else {
       this.#pendingChanges.push(materializeRelationships(change));
     }
@@ -207,25 +212,33 @@ export class SolidView implements Output {
 }
 
 function materializeRelationships(change: Change): ViewChange {
-  switch (change.type) {
-    case 'add':
-      return {type: 'add', node: materializeNodeRelationships(change.node)};
-    case 'remove':
-      return {type: 'remove', node: materializeNodeRelationships(change.node)};
-    case 'child':
+  switch (change[ChangeIndex.TYPE]) {
+    case ChangeType.ADD:
+      return {
+        type: 'add',
+        node: materializeNodeRelationships(change[ChangeIndex.NODE]),
+      };
+    case ChangeType.REMOVE:
+      return {
+        type: 'remove',
+        node: materializeNodeRelationships(change[ChangeIndex.NODE]),
+      };
+    case ChangeType.CHILD:
       return {
         type: 'child',
-        node: {row: change.node.row},
+        node: {row: change[ChangeIndex.NODE].row},
         child: {
-          relationshipName: change.child.relationshipName,
-          change: materializeRelationships(change.child.change),
+          relationshipName: change[ChangeIndex.CHILD_DATA].relationshipName,
+          change: materializeRelationships(
+            change[ChangeIndex.CHILD_DATA].change,
+          ),
         },
       };
-    case 'edit':
+    case ChangeType.EDIT:
       return {
         type: 'edit',
-        node: {row: change.node.row},
-        oldNode: {row: change.oldNode.row},
+        node: {row: change[ChangeIndex.NODE].row},
+        oldNode: {row: change[ChangeIndex.OLD_NODE].row},
       };
   }
 }

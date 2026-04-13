@@ -33,6 +33,7 @@ import type {
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {UpdateAuthMessage} from '../../../../zero-protocol/src/update-auth.ts';
+import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import {clampTTL, MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {isAuthErrorBody, type Auth} from '../../auth/auth.ts';
 import {
@@ -2133,15 +2134,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             parsedRow.contents = contents;
           };
           switch (type) {
-            case 'add':
+            case ChangeType.ADD:
               updateVersion(row);
               parsedRow.refCounts[queryID]++;
               break;
-            case 'edit':
+            case ChangeType.EDIT:
               updateVersion(row);
               // No update to refCounts.
               break;
-            case 'remove':
+            case ChangeType.REMOVE:
               parsedRow.refCounts[queryID]--;
               break;
             default:

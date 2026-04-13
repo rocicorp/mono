@@ -22,6 +22,11 @@ import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../../zql/src/ivm/source.ts';
 /**
  * Replicache needs to rebase mutations onto different
  * commits of it's b-tree. These mutations can have reads
@@ -214,28 +219,16 @@ function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
     const source = must(branch.getSource(name));
     switch (diff.op) {
       case 'del':
-        consume(
-          source.push({
-            type: 'remove',
-            row: diff.oldValue as Row,
-          }),
-        );
+        consume(source.push(makeSourceChangeRemove(diff.oldValue as Row)));
         break;
       case 'add':
-        consume(
-          source.push({
-            type: 'add',
-            row: diff.newValue as Row,
-          }),
-        );
+        consume(source.push(makeSourceChangeAdd(diff.newValue as Row)));
         break;
       case 'change':
         consume(
-          source.push({
-            type: 'edit',
-            row: diff.newValue as Row,
-            oldRow: diff.oldValue as Row,
-          }),
+          source.push(
+            makeSourceChangeEdit(diff.newValue as Row, diff.oldValue as Row),
+          ),
         );
         break;
     }

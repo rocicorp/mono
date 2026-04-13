@@ -1,7 +1,15 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
-import type {Change} from './change.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
+import {
+  makeAddChange,
+  makeChildChange,
+  makeEditChange,
+  makeRemoveChange,
+  type Change,
+} from './change.ts';
 import type {Node} from './data.ts';
 import type {InputBase, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -80,7 +88,7 @@ export function* pushAccumulatedChanges(
   accumulatedPushes: Change[],
   output: Output,
   pusher: InputBase,
-  fanOutChangeType: Change['type'],
+  fanOutChangeType: ChangeType,
   mergeRelationships: (existing: Change, incoming: Change) => Change,
   addEmptyRelationships: (change: Change) => Change,
 ): Stream<'yield'> {
@@ -91,23 +99,26 @@ export function* pushAccumulatedChanges(
   }
 
   // collapse down to a single change per type
-  const candidatesToPush = new Map<Change['type'], Change>();
+  const candidatesToPush = new Map<ChangeType, Change>();
   for (const change of accumulatedPushes) {
-    if (fanOutChangeType === 'child' && change.type !== 'child') {
+    if (
+      fanOutChangeType === ChangeType.CHILD &&
+      change[ChangeIndex.TYPE] !== ChangeType.CHILD
+    ) {
       assert(
-        candidatesToPush.has(change.type) === false,
+        candidatesToPush.has(change[ChangeIndex.TYPE]) === false,
         () =>
-          `Fan-in:child expected at most one ${change.type} when fan-out is of type child`,
+          `Fan-in:child expected at most one ${change[ChangeIndex.TYPE]} when fan-out is of type child`,
       );
     }
 
-    const existing = candidatesToPush.get(change.type);
+    const existing = candidatesToPush.get(change[ChangeIndex.TYPE]);
     let mergedChange = change;
     if (existing) {
       // merge in relationships
       mergedChange = mergeRelationships(existing, change);
     }
-    candidatesToPush.set(change.type, mergedChange);
+    candidatesToPush.set(change[ChangeIndex.TYPE], mergedChange);
   }
 
   accumulatedPushes.length = 0;
@@ -124,36 +135,39 @@ export function* pushAccumulatedChanges(
    *    - Many child changes because other operators may preserve the child change
    */
   switch (fanOutChangeType) {
-    case 'remove':
+    case ChangeType.REMOVE:
       assert(
-        types.length === 1 && types[0] === 'remove',
+        types.length === 1 && types[0] === ChangeType.REMOVE,
         'Fan-in:remove expected all removes',
       );
       yield* output.push(
-        addEmptyRelationships(must(candidatesToPush.get('remove'))),
+        addEmptyRelationships(must(candidatesToPush.get(ChangeType.REMOVE))),
         pusher,
       );
       return;
-    case 'add':
+    case ChangeType.ADD:
       assert(
-        types.length === 1 && types[0] === 'add',
+        types.length === 1 && types[0] === ChangeType.ADD,
         'Fan-in:add expected all adds',
       );
       yield* output.push(
-        addEmptyRelationships(must(candidatesToPush.get('add'))),
+        addEmptyRelationships(must(candidatesToPush.get(ChangeType.ADD))),
         pusher,
       );
       return;
-    case 'edit': {
+    case ChangeType.EDIT: {
       assert(
         types.every(
-          type => type === 'add' || type === 'remove' || type === 'edit',
+          type =>
+            type === ChangeType.ADD ||
+            type === ChangeType.REMOVE ||
+            type === ChangeType.EDIT,
         ),
         'Fan-in:edit expected all adds, removes, or edits',
       );
-      const addChange = candidatesToPush.get('add');
-      const removeChange = candidatesToPush.get('remove');
-      let editChange = candidatesToPush.get('edit');
+      const addChange = candidatesToPush.get(ChangeType.ADD);
+      const removeChange = candidatesToPush.get(ChangeType.REMOVE);
+      let editChange = candidatesToPush.get(ChangeType.EDIT);
 
       // If an `edit` is present, it supersedes `add` and `remove`
       // as it semantically represents both.
@@ -187,11 +201,12 @@ export function* pushAccumulatedChanges(
       // The right filter converts the edit into an add.
       if (addChange && removeChange) {
         yield* output.push(
-          addEmptyRelationships({
-            type: 'edit',
-            node: addChange.node,
-            oldNode: removeChange.node,
-          } as const),
+          addEmptyRelationships(
+            makeEditChange(
+              addChange[ChangeIndex.NODE],
+              removeChange[ChangeIndex.NODE],
+            ),
+          ),
           pusher,
         );
         return;
@@ -203,13 +218,13 @@ export function* pushAccumulatedChanges(
       );
       return;
     }
-    case 'child': {
+    case ChangeType.CHILD: {
       assert(
         types.every(
           type =>
-            type === 'add' || // exists can change child to add or remove
-            type === 'remove' || // exists can change child to add or remove
-            type === 'child', // other operators may preserve the child change
+            type === ChangeType.ADD || // exists can change child to add or remove
+            type === ChangeType.REMOVE || // exists can change child to add or remove
+            type === ChangeType.CHILD, // other operators may preserve the child change
         ),
         'Fan-in:child expected all adds, removes, or children',
       );
@@ -219,14 +234,14 @@ export function* pushAccumulatedChanges(
       );
 
       // If any branch preserved the original child change, that takes precedence over all other changes.
-      const childChange = candidatesToPush.get('child');
+      const childChange = candidatesToPush.get(ChangeType.CHILD);
       if (childChange) {
         yield* output.push(childChange, pusher);
         return;
       }
 
-      const addChange = candidatesToPush.get('add');
-      const removeChange = candidatesToPush.get('remove');
+      const addChange = candidatesToPush.get(ChangeType.ADD);
+      const removeChange = candidatesToPush.get(ChangeType.REMOVE);
 
       assert(
         addChange === undefined || removeChange === undefined,
@@ -251,113 +266,100 @@ export function mergeRelationships(left: Change, right: Change): Change {
   // change types will always match
   // unless we have an edit on the left
   // then the right could be edit, add, or remove
-  if (left.type === right.type) {
-    switch (left.type) {
-      case 'add': {
-        return {
-          type: 'add',
-          node: {
-            row: left.node.row,
-            relationships: {
-              ...right.node.relationships,
-              ...left.node.relationships,
-            },
+  if (left[ChangeIndex.TYPE] === right[ChangeIndex.TYPE]) {
+    switch (left[ChangeIndex.TYPE]) {
+      case ChangeType.ADD: {
+        return makeAddChange({
+          row: left[ChangeIndex.NODE].row,
+          relationships: {
+            ...right[ChangeIndex.NODE].relationships,
+            ...left[ChangeIndex.NODE].relationships,
           },
-        };
+        });
       }
-      case 'remove': {
-        return {
-          type: 'remove',
-          node: {
-            row: left.node.row,
-            relationships: {
-              ...right.node.relationships,
-              ...left.node.relationships,
-            },
+      case ChangeType.REMOVE: {
+        return makeRemoveChange({
+          row: left[ChangeIndex.NODE].row,
+          relationships: {
+            ...right[ChangeIndex.NODE].relationships,
+            ...left[ChangeIndex.NODE].relationships,
           },
-        };
+        });
       }
-      case 'edit': {
+      case ChangeType.EDIT: {
         assert(
-          right.type === 'edit',
+          right[ChangeIndex.TYPE] === ChangeType.EDIT,
           () =>
-            `mergeRelationships: when left.type is edit and types match, right.type must be edit, got ${right.type}`,
+            `mergeRelationships: when left.type is edit and types match, right.type must be edit, got ${right[ChangeIndex.TYPE]}`,
         );
         // merge edits into a single edit
-        return {
-          type: 'edit',
-          node: {
-            row: left.node.row,
+        return makeEditChange(
+          {
+            row: left[ChangeIndex.NODE].row,
             relationships: {
-              ...right.node.relationships,
-              ...left.node.relationships,
+              ...right[ChangeIndex.NODE].relationships,
+              ...left[ChangeIndex.NODE].relationships,
             },
           },
-          oldNode: {
-            row: left.oldNode.row,
+          {
+            row: left[ChangeIndex.OLD_NODE].row,
             relationships: {
-              ...right.oldNode.relationships,
-              ...left.oldNode.relationships,
+              ...right[ChangeIndex.OLD_NODE].relationships,
+              ...left[ChangeIndex.OLD_NODE].relationships,
             },
           },
-        };
+        );
       }
-      case 'child': {
+      case ChangeType.CHILD: {
         // Multiple branches may preserve the same child change, each adding
         // different relationships. Merge the relationships, keeping the child
         // (which should be identical across branches).
         assert(
-          right.type === 'child',
+          right[ChangeIndex.TYPE] === ChangeType.CHILD,
           () =>
-            `mergeRelationships: when left.type is child and types match, right.type must be child, got ${right.type}`,
+            `mergeRelationships: when left.type is child and types match, right.type must be child, got ${right[ChangeIndex.TYPE]}`,
         );
-        return {
-          type: 'child',
-          node: {
-            row: left.node.row,
+        return makeChildChange(
+          {
+            row: left[ChangeIndex.NODE].row,
             relationships: {
-              ...right.node.relationships,
-              ...left.node.relationships,
+              ...right[ChangeIndex.NODE].relationships,
+              ...left[ChangeIndex.NODE].relationships,
             },
           },
-          child: left.child,
-        };
+          left[ChangeIndex.CHILD_DATA],
+        );
       }
     }
   }
 
   // left is always an edit here
   assert(
-    left.type === 'edit',
+    left[ChangeIndex.TYPE] === ChangeType.EDIT,
     () =>
-      `mergeRelationships: when types differ, left.type must be edit, got left.type=${left.type}, right.type=${right.type}`,
+      `mergeRelationships: when types differ, left.type must be edit, got left.type=${left[ChangeIndex.TYPE]}, right.type=${right[ChangeIndex.TYPE]}`,
   );
-  switch (right.type) {
-    case 'add': {
-      return {
-        type: 'edit',
-        node: {
-          ...left.node,
+  switch (right[ChangeIndex.TYPE]) {
+    case ChangeType.ADD: {
+      return makeEditChange(
+        {
+          ...left[ChangeIndex.NODE],
           relationships: {
-            ...right.node.relationships,
-            ...left.node.relationships,
+            ...right[ChangeIndex.NODE].relationships,
+            ...left[ChangeIndex.NODE].relationships,
           },
         },
-        oldNode: left.oldNode,
-      };
+        left[ChangeIndex.OLD_NODE],
+      );
     }
-    case 'remove': {
-      return {
-        type: 'edit',
-        node: left.node,
-        oldNode: {
-          ...left.oldNode,
-          relationships: {
-            ...right.node.relationships,
-            ...left.oldNode.relationships,
-          },
+    case ChangeType.REMOVE: {
+      return makeEditChange(left[ChangeIndex.NODE], {
+        ...left[ChangeIndex.OLD_NODE],
+        relationships: {
+          ...right[ChangeIndex.NODE].relationships,
+          ...left[ChangeIndex.OLD_NODE].relationships,
         },
-      };
+      });
     }
   }
 
@@ -372,49 +374,39 @@ export function makeAddEmptyRelationships(
       return change;
     }
 
-    switch (change.type) {
-      case 'add':
-      case 'remove': {
-        const ret = {
-          ...change,
-          node: {
-            ...change.node,
-            relationships: {
-              ...change.node.relationships,
-            },
-          },
-        };
-
-        mergeEmpty(ret.node.relationships, Object.keys(schema.relationships));
-
-        return ret;
+    switch (change[ChangeIndex.TYPE]) {
+      case ChangeType.ADD: {
+        const relationships = {...change[ChangeIndex.NODE].relationships};
+        mergeEmpty(relationships, Object.keys(schema.relationships));
+        return makeAddChange({
+          row: change[ChangeIndex.NODE].row,
+          relationships,
+        });
       }
-      case 'edit': {
-        const ret = {
-          ...change,
-          node: {
-            ...change.node,
-            relationships: {
-              ...change.node.relationships,
-            },
-          },
-          oldNode: {
-            ...change.oldNode,
-            relationships: {
-              ...change.oldNode.relationships,
-            },
-          },
+      case ChangeType.REMOVE: {
+        const relationships = {...change[ChangeIndex.NODE].relationships};
+        mergeEmpty(relationships, Object.keys(schema.relationships));
+        return makeRemoveChange({
+          row: change[ChangeIndex.NODE].row,
+          relationships,
+        });
+      }
+      case ChangeType.EDIT: {
+        const nodeRelationships = {...change[ChangeIndex.NODE].relationships};
+        const oldNodeRelationships = {
+          ...change[ChangeIndex.OLD_NODE].relationships,
         };
-
-        mergeEmpty(ret.node.relationships, Object.keys(schema.relationships));
-        mergeEmpty(
-          ret.oldNode.relationships,
-          Object.keys(schema.relationships),
+        mergeEmpty(nodeRelationships, Object.keys(schema.relationships));
+        mergeEmpty(oldNodeRelationships, Object.keys(schema.relationships));
+        return makeEditChange(
+          {row: change[ChangeIndex.NODE].row, relationships: nodeRelationships},
+          {
+            row: change[ChangeIndex.OLD_NODE].row,
+            relationships: oldNodeRelationships,
+          },
         );
-
-        return ret;
       }
-      case 'child':
+      case ChangeType.CHILD:
         return change; // children only have relationships along the path to the change
     }
   };

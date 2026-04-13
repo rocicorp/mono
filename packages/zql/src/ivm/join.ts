@@ -1,7 +1,15 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {Change, ChildChange} from './change.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
+import {
+  makeAddChange,
+  makeChildChange,
+  makeEditChange,
+  makeRemoveChange,
+  type Change,
+} from './change.ts';
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
@@ -119,66 +127,62 @@ export class Join implements Input {
   }
 
   *#pushParent(change: Change): Stream<'yield'> {
-    switch (change.type) {
-      case 'add':
+    switch (change[ChangeIndex.TYPE]) {
+      case ChangeType.ADD:
         yield* this.#output.push(
-          {
-            type: 'add',
-            node: this.#processParentNode(
-              change.node.row,
-              change.node.relationships,
+          makeAddChange(
+            this.#processParentNode(
+              change[ChangeIndex.NODE].row,
+              change[ChangeIndex.NODE].relationships,
             ),
-          },
+          ),
           this,
         );
         break;
-      case 'remove':
+      case ChangeType.REMOVE:
         yield* this.#output.push(
-          {
-            type: 'remove',
-            node: this.#processParentNode(
-              change.node.row,
-              change.node.relationships,
+          makeRemoveChange(
+            this.#processParentNode(
+              change[ChangeIndex.NODE].row,
+              change[ChangeIndex.NODE].relationships,
             ),
-          },
+          ),
           this,
         );
         break;
-      case 'child':
+      case ChangeType.CHILD:
         yield* this.#output.push(
-          {
-            type: 'child',
-            node: this.#processParentNode(
-              change.node.row,
-              change.node.relationships,
+          makeChildChange(
+            this.#processParentNode(
+              change[ChangeIndex.NODE].row,
+              change[ChangeIndex.NODE].relationships,
             ),
-            child: change.child,
-          },
+            change[ChangeIndex.CHILD_DATA],
+          ),
           this,
         );
         break;
-      case 'edit': {
+      case ChangeType.EDIT: {
         // Assert the edit could not change the relationship.
         assert(
           rowEqualsForCompoundKey(
-            change.oldNode.row,
-            change.node.row,
+            change[ChangeIndex.OLD_NODE].row,
+            change[ChangeIndex.NODE].row,
             this.#parentKey,
           ),
           `Parent edit must not change relationship.`,
         );
         yield* this.#output.push(
-          {
-            type: 'edit',
-            oldNode: this.#processParentNode(
-              change.oldNode.row,
-              change.oldNode.relationships,
+          makeEditChange(
+            this.#processParentNode(
+              change[ChangeIndex.NODE].row,
+              change[ChangeIndex.NODE].relationships,
             ),
-            node: this.#processParentNode(
-              change.node.row,
-              change.node.relationships,
+            this.#processParentNode(
+              change[ChangeIndex.OLD_NODE].row,
+              change[ChangeIndex.OLD_NODE].relationships,
             ),
-          },
+          ),
           this,
         );
         break;
@@ -189,17 +193,17 @@ export class Join implements Input {
   }
 
   *#pushChild(change: Change): Stream<'yield'> {
-    switch (change.type) {
-      case 'add':
-      case 'remove':
-        yield* this.#pushChildChange(change.node.row, change);
+    switch (change[ChangeIndex.TYPE]) {
+      case ChangeType.ADD:
+      case ChangeType.REMOVE:
+        yield* this.#pushChildChange(change[ChangeIndex.NODE].row, change);
         break;
-      case 'child':
-        yield* this.#pushChildChange(change.node.row, change);
+      case ChangeType.CHILD:
+        yield* this.#pushChildChange(change[ChangeIndex.NODE].row, change);
         break;
-      case 'edit': {
-        const childRow = change.node.row;
-        const oldChildRow = change.oldNode.row;
+      case ChangeType.EDIT: {
+        const childRow = change[ChangeIndex.NODE].row;
+        const oldChildRow = change[ChangeIndex.OLD_NODE].row;
         // Assert the edit could not change the relationship.
         assert(
           rowEqualsForCompoundKey(oldChildRow, childRow, this.#childKey),
@@ -233,17 +237,13 @@ export class Join implements Input {
           continue;
         }
         this.#inprogressChildChange.position = parentNode.row;
-        const childChange: ChildChange = {
-          type: 'child',
-          node: this.#processParentNode(
-            parentNode.row,
-            parentNode.relationships,
-          ),
-          child: {
+        const childChange = makeChildChange(
+          this.#processParentNode(parentNode.row, parentNode.relationships),
+          {
             relationshipName: this.#relationshipName,
             change,
           },
-        };
+        );
         yield* this.#output.push(childChange, this);
       }
     } finally {
@@ -268,7 +268,7 @@ export class Join implements Input {
         isJoinMatch(
           parentNodeRow,
           this.#parentKey,
-          this.#inprogressChildChange.change.node.row,
+          this.#inprogressChildChange.change[ChangeIndex.NODE].row,
           this.#childKey,
         ) &&
         this.#inprogressChildChange.position &&

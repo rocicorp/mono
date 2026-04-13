@@ -1,40 +1,36 @@
+import {ChangeType} from './change-type.ts';
 import type {Node} from './data.ts';
 
-export type Change = AddChange | RemoveChange | ChildChange | EditChange;
-export type ChangeType = Change['type'];
+/**
+ * The `child` payload carried by a {@linkcode ChildChange}.
+ */
+export type ChildData = {
+  relationshipName: string;
+  change: Change;
+};
 
-// TODO: We should change these to classes to achieve monomorphic dispatch.
-// or add some runtime asserts that the order of the keys is always the same.
+export type Change = AddChange | RemoveChange | ChildChange | EditChange;
 
 /**
  * Represents a node (and all its children) getting added to the result.
  */
-export type AddChange = {
-  type: 'add';
-  node: Node;
-};
+export type AddChange = [type: ChangeType.ADD, node: Node, extra: null];
 
 /**
  * Represents a node (and all its children) getting removed from the result.
  */
-export type RemoveChange = {
-  type: 'remove';
-  node: Node;
-};
+export type RemoveChange = [type: ChangeType.REMOVE, node: Node, extra: null];
 
 /**
  * The node's row is unchanged, but one of its descendants has changed.
  * The node's relationships will reflect the change, `child` specifies the
  * specific descendant change.
  */
-export type ChildChange = {
-  type: 'child';
-  node: Node;
-  child: {
-    relationshipName: string;
-    change: Change;
-  };
-};
+export type ChildChange = [
+  type: ChangeType.CHILD,
+  node: Node,
+  child: ChildData,
+];
 
 /**
  * The row changed (in a way that the {@linkcode Source} determines). Most
@@ -58,8 +54,22 @@ export type ChildChange = {
  * the add.  This cleanup could be done if we move to multi-use Streams
  * for relationships.
  */
-export type EditChange = {
-  type: 'edit';
-  node: Node;
-  oldNode: Node;
-};
+export type EditChange = [type: ChangeType.EDIT, node: Node, oldNode: Node];
+
+// Factory functions — prefer these over constructing tuple literals directly.
+
+export function makeAddChange(node: Node): AddChange {
+  return [ChangeType.ADD, node, null];
+}
+
+export function makeRemoveChange(node: Node): RemoveChange {
+  return [ChangeType.REMOVE, node, null];
+}
+
+export function makeChildChange(node: Node, child: ChildData): ChildChange {
+  return [ChangeType.CHILD, node, child];
+}
+
+export function makeEditChange(node: Node, oldNode: Node): EditChange {
+  return [ChangeType.EDIT, node, oldNode];
+}

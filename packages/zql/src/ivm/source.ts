@@ -2,29 +2,34 @@ import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {TableSchema} from '../../../zero-types/src/schema.ts';
 import type {DebugDelegate} from '../builder/debug-delegate.ts';
+import {ChangeType} from './change-type.ts';
 import type {Input} from './operator.ts';
 import type {Stream} from './stream.ts';
 
-export type SourceChangeAdd = {
-  type: 'add';
-  row: Row;
-};
-
-export type SourceChangeRemove = {
-  type: 'remove';
-  row: Row;
-};
-
-export type SourceChangeEdit = {
-  type: 'edit';
-  row: Row;
-  oldRow: Row;
-};
+export type SourceChangeAdd = [type: ChangeType.ADD, row: Row, extra: null];
+export type SourceChangeRemove = [
+  type: ChangeType.REMOVE,
+  row: Row,
+  extra: null,
+];
+export type SourceChangeEdit = [type: ChangeType.EDIT, row: Row, oldRow: Row];
 
 export type SourceChange =
   | SourceChangeAdd
   | SourceChangeRemove
   | SourceChangeEdit;
+
+export function makeSourceChangeAdd(row: Row): SourceChangeAdd {
+  return [ChangeType.ADD, row, null];
+}
+
+export function makeSourceChangeRemove(row: Row): SourceChangeRemove {
+  return [ChangeType.REMOVE, row, null];
+}
+
+export function makeSourceChangeEdit(row: Row, oldRow: Row): SourceChangeEdit {
+  return [ChangeType.EDIT, row, oldRow];
+}
 
 /**
  * A source is an input that serves as the root data source of the pipeline.

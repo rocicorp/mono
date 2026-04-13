@@ -18,7 +18,9 @@ import {
   type NoSubqueryCondition,
 } from '../builder/filter.ts';
 import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';
+import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
+import {makeAddChange, makeEditChange, makeRemoveChange} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
@@ -41,6 +43,7 @@ import {
   type Start,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
+import {SourceChangeIndex} from './source-change-index.ts';
 import type {
   Source,
   SourceChange,
@@ -49,6 +52,7 @@ import type {
   SourceChangeRemove,
   SourceInput,
 } from './source.ts';
+import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
 import type {Stream} from './stream.ts';
 
 export type Overlay = {
@@ -390,9 +394,9 @@ export class MemorySource implements Source {
 
   #writeChange(change: SourceChange) {
     for (const {data} of this.#indexes.values()) {
-      switch (change.type) {
-        case 'add': {
-          const added = data.add(change.row);
+      switch (change[SourceChangeIndex.TYPE]) {
+        case ChangeType.ADD: {
+          const added = data.add(change[SourceChangeIndex.ROW]);
           // must succeed since we checked has() above.
           assert(
             added,
@@ -400,8 +404,8 @@ export class MemorySource implements Source {
           );
           break;
         }
-        case 'remove': {
-          const removed = data.delete(change.row);
+        case ChangeType.REMOVE: {
+          const removed = data.delete(change[SourceChangeIndex.ROW]);
           // must succeed since we checked has() above.
           assert(
             removed,
@@ -409,18 +413,18 @@ export class MemorySource implements Source {
           );
           break;
         }
-        case 'edit': {
+        case ChangeType.EDIT: {
           // TODO: We could see if the PK (form the index tree's perspective)
           // changed and if not we could use set.
           // We cannot just do `set` with the new value since the `oldRow` might
           // not map to the same entry as the new `row` in the index btree.
-          const removed = data.delete(change.oldRow);
+          const removed = data.delete(change[SourceChangeIndex.OLD_ROW]);
           // must succeed since we checked has() above.
           assert(
             removed,
             'MemorySource: edit remove must succeed since row existence was already checked',
           );
-          data.add(change.row);
+          data.add(change[SourceChangeIndex.ROW]);
           break;
         }
         default:
@@ -459,11 +463,16 @@ export function* genPushAndWriteWithSplitEdit(
   getNextEpoch: () => number,
 ) {
   let shouldSplitEdit = false;
-  if (change.type === 'edit') {
+  if (change[SourceChangeIndex.TYPE] === ChangeType.EDIT) {
     for (const {splitEditKeys} of connections) {
       if (splitEditKeys) {
         for (const key of splitEditKeys) {
-          if (!valuesEqual(change.row[key], change.oldRow[key])) {
+          if (
+            !valuesEqual(
+              change[SourceChangeIndex.ROW][key],
+              change[SourceChangeIndex.OLD_ROW][key],
+            )
+          ) {
             shouldSplitEdit = true;
             break;
           }
@@ -472,13 +481,10 @@ export function* genPushAndWriteWithSplitEdit(
     }
   }
 
-  if (change.type === 'edit' && shouldSplitEdit) {
+  if (change[SourceChangeIndex.TYPE] === ChangeType.EDIT && shouldSplitEdit) {
     yield* genPushAndWrite(
       connections,
-      {
-        type: 'remove',
-        row: change.oldRow,
-      },
+      makeSourceChangeRemove(change[SourceChangeIndex.OLD_ROW]),
       exists,
       setOverlay,
       writeChange,
@@ -486,10 +492,7 @@ export function* genPushAndWriteWithSplitEdit(
     );
     yield* genPushAndWrite(
       connections,
-      {
-        type: 'add',
-        row: change.row,
-      },
+      makeSourceChangeAdd(change[SourceChangeIndex.ROW]),
       exists,
       setOverlay,
       writeChange,
@@ -528,18 +531,24 @@ function* genPush(
   setOverlay: (o: Overlay | undefined) => void,
   pushEpoch: number,
 ) {
-  switch (change.type) {
-    case 'add':
+  switch (change[SourceChangeIndex.TYPE]) {
+    case ChangeType.ADD:
       assert(
-        !exists(change.row),
+        !exists(change[SourceChangeIndex.ROW]),
         () => `Row already exists ${stringify(change)}`,
       );
       break;
-    case 'remove':
-      assert(exists(change.row), () => `Row not found ${stringify(change)}`);
+    case ChangeType.REMOVE:
+      assert(
+        exists(change[SourceChangeIndex.ROW]),
+        () => `Row not found ${stringify(change)}`,
+      );
       break;
-    case 'edit':
-      assert(exists(change.oldRow), () => `Row not found ${stringify(change)}`);
+    case ChangeType.EDIT:
+      assert(
+        exists(change[SourceChangeIndex.OLD_ROW]),
+        () => `Row not found ${stringify(change)}`,
+      );
       break;
     default:
       unreachable(change);
@@ -551,25 +560,20 @@ function* genPush(
       conn.lastPushedEpoch = pushEpoch;
       setOverlay({epoch: pushEpoch, change});
       const outputChange: Change =
-        change.type === 'edit'
-          ? {
-              type: change.type,
-              oldNode: {
-                row: change.oldRow,
+        change[SourceChangeIndex.TYPE] === ChangeType.EDIT
+          ? makeEditChange(
+              {row: change[SourceChangeIndex.ROW], relationships: {}},
+              {row: change[SourceChangeIndex.OLD_ROW], relationships: {}},
+            )
+          : change[SourceChangeIndex.TYPE] === ChangeType.ADD
+            ? makeAddChange({
+                row: change[SourceChangeIndex.ROW],
                 relationships: {},
-              },
-              node: {
-                row: change.row,
+              })
+            : makeRemoveChange({
+                row: change[SourceChangeIndex.ROW],
                 relationships: {},
-              },
-            }
-          : {
-              type: change.type,
-              node: {
-                row: change.row,
-                relationships: {},
-              },
-            };
+              });
       yield* filterPush(outputChange, output, input, filters?.predicate);
       yield undefined;
     }
@@ -656,23 +660,23 @@ function computeOverlays(
     add: undefined,
     remove: undefined,
   };
-  switch (overlay?.change.type) {
-    case 'add':
+  switch (overlay?.change[SourceChangeIndex.TYPE]) {
+    case ChangeType.ADD:
       overlays = {
-        add: overlay.change.row,
+        add: overlay.change[SourceChangeIndex.ROW],
         remove: undefined,
       };
       break;
-    case 'remove':
+    case ChangeType.REMOVE:
       overlays = {
         add: undefined,
-        remove: overlay.change.row,
+        remove: overlay.change[SourceChangeIndex.ROW],
       };
       break;
-    case 'edit':
+    case ChangeType.EDIT:
       overlays = {
-        add: overlay.change.row,
-        remove: overlay.change.oldRow,
+        add: overlay.change[SourceChangeIndex.ROW],
+        remove: overlay.change[SourceChangeIndex.OLD_ROW],
       };
       break;
   }
@@ -786,17 +790,23 @@ export function* generateWithOverlayUnordered(
     overlayToApply = overlay;
   }
   let overlays: Overlays = {add: undefined, remove: undefined};
-  switch (overlayToApply?.change.type) {
-    case 'add':
-      overlays = {add: overlayToApply.change.row, remove: undefined};
-      break;
-    case 'remove':
-      overlays = {add: undefined, remove: overlayToApply.change.row};
-      break;
-    case 'edit':
+  switch (overlayToApply?.change[SourceChangeIndex.TYPE]) {
+    case ChangeType.ADD:
       overlays = {
-        add: overlayToApply.change.row,
-        remove: overlayToApply.change.oldRow,
+        add: overlayToApply.change[SourceChangeIndex.ROW],
+        remove: undefined,
+      };
+      break;
+    case ChangeType.REMOVE:
+      overlays = {
+        add: undefined,
+        remove: overlayToApply.change[SourceChangeIndex.ROW],
+      };
+      break;
+    case ChangeType.EDIT:
+      overlays = {
+        add: overlayToApply.change[SourceChangeIndex.ROW],
+        remove: overlayToApply.change[SourceChangeIndex.OLD_ROW],
       };
       break;
   }

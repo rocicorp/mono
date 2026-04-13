@@ -1,7 +1,9 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import {type Change, type EditChange} from './change.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
+import {makeAddChange, type Change, type EditChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import type {Comparator, Node} from './data.ts';
 import {
@@ -193,20 +195,23 @@ export class Cap implements Operator {
   }
 
   *push(change: Change): Stream<'yield'> {
-    if (change.type === 'edit') {
+    if (change[ChangeIndex.TYPE] === ChangeType.EDIT) {
       yield* this.#pushEditChange(change);
       return;
     }
 
-    const capStateKey = getCapStateKey(this.#partitionKey, change.node.row);
+    const capStateKey = getCapStateKey(
+      this.#partitionKey,
+      change[ChangeIndex.NODE].row,
+    );
     const capState = this.#storage.get(capStateKey);
     if (!capState) {
       return;
     }
 
-    const pk = serializePK(change.node.row, this.#primaryKey);
+    const pk = serializePK(change[ChangeIndex.NODE].row, this.#primaryKey);
 
-    if (change.type === 'add') {
+    if (change[ChangeIndex.TYPE] === ChangeType.ADD) {
       if (capState.size < this.#limit) {
         const pks = [...capState.pks, pk];
         this.#storage.set(capStateKey, {size: capState.size + 1, pks});
@@ -215,7 +220,7 @@ export class Cap implements Operator {
       }
       // Full — drop
       return;
-    } else if (change.type === 'remove') {
+    } else if (change[ChangeIndex.TYPE] === ChangeType.REMOVE) {
       const pkIndex = capState.pks.indexOf(pk);
       if (pkIndex === -1) {
         // Not in our set — drop
@@ -231,7 +236,9 @@ export class Cap implements Operator {
       const pkSet = new Set(pks);
       const constraint = this.#partitionKey
         ? (Object.fromEntries(
-            this.#partitionKey.map(key => [key, change.node.row[key]] as const),
+            this.#partitionKey.map(
+              key => [key, change[ChangeIndex.NODE].row[key]] as const,
+            ),
           ) as Constraint)
         : undefined;
 
@@ -257,12 +264,12 @@ export class Cap implements Operator {
         const replacementPK = serializePK(replacement.row, this.#primaryKey);
         pks.push(replacementPK);
         this.#storage.set(capStateKey, {size: newSize + 1, pks});
-        yield* this.#output.push({type: 'add', node: replacement}, this);
+        yield* this.#output.push(makeAddChange(replacement), this);
       } else {
         this.#storage.set(capStateKey, {size: newSize, pks});
         yield* this.#output.push(change, this);
       }
-    } else if (change.type === 'child') {
+    } else if (change[ChangeIndex.TYPE] === ChangeType.CHILD) {
       const pkSet = new Set(capState.pks);
       if (pkSet.has(pk)) {
         yield* this.#output.push(change, this);
@@ -273,20 +280,29 @@ export class Cap implements Operator {
   *#pushEditChange(change: EditChange): Stream<'yield'> {
     assert(
       !this.#partitionKeyComparator ||
-        this.#partitionKeyComparator(change.oldNode.row, change.node.row) === 0,
+        this.#partitionKeyComparator(
+          change[ChangeIndex.OLD_NODE].row,
+          change[ChangeIndex.NODE].row,
+        ) === 0,
       'Unexpected change of partition key',
     );
-    const capStateKey = getCapStateKey(this.#partitionKey, change.oldNode.row);
+    const capStateKey = getCapStateKey(
+      this.#partitionKey,
+      change[ChangeIndex.OLD_NODE].row,
+    );
     const capState = this.#storage.get(capStateKey);
     if (!capState) {
       return;
     }
 
-    const oldPK = serializePK(change.oldNode.row, this.#primaryKey);
+    const oldPK = serializePK(
+      change[ChangeIndex.OLD_NODE].row,
+      this.#primaryKey,
+    );
     const pkSet = new Set(capState.pks);
     if (pkSet.has(oldPK)) {
       // Update the PK in our set if it changed
-      const newPK = serializePK(change.node.row, this.#primaryKey);
+      const newPK = serializePK(change[ChangeIndex.NODE].row, this.#primaryKey);
       if (oldPK !== newPK) {
         const pks = capState.pks.map(p => (p === oldPK ? newPK : p));
         this.#storage.set(capStateKey, {size: capState.size, pks});

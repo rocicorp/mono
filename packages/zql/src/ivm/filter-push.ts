@@ -1,5 +1,7 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.ts';
 import type {InputBase, Output} from './operator.ts';
@@ -15,19 +17,19 @@ export function* filterPush(
     yield* output.push(change, pusher);
     return;
   }
-  switch (change.type) {
-    case 'add':
-    case 'remove':
-      if (predicate(change.node.row)) {
+  switch (change[ChangeIndex.TYPE]) {
+    case ChangeType.ADD:
+    case ChangeType.REMOVE:
+      if (predicate(change[ChangeIndex.NODE].row)) {
         yield* output.push(change, pusher);
       }
       break;
-    case 'child':
-      if (predicate(change.node.row)) {
+    case ChangeType.CHILD:
+      if (predicate(change[ChangeIndex.NODE].row)) {
         yield* output.push(change, pusher);
       }
       break;
-    case 'edit':
+    case ChangeType.EDIT:
       yield* maybeSplitAndPushEditChange(change, predicate, output, pusher);
       break;
     default:

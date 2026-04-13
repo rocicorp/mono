@@ -1,5 +1,6 @@
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {EditChange} from './change.ts';
+import {ChangeIndex} from './change-index.ts';
+import {makeAddChange, makeRemoveChange, type EditChange} from './change.ts';
 import type {InputBase, Output} from './operator.ts';
 
 /**
@@ -13,26 +14,14 @@ export function* maybeSplitAndPushEditChange(
   output: Output,
   pusher: InputBase,
 ) {
-  const oldWasPresent = predicate(change.oldNode.row);
-  const newIsPresent = predicate(change.node.row);
+  const oldWasPresent = predicate(change[ChangeIndex.OLD_NODE].row);
+  const newIsPresent = predicate(change[ChangeIndex.NODE].row);
 
   if (oldWasPresent && newIsPresent) {
     yield* output.push(change, pusher);
   } else if (oldWasPresent && !newIsPresent) {
-    yield* output.push(
-      {
-        type: 'remove',
-        node: change.oldNode,
-      },
-      pusher,
-    );
+    yield* output.push(makeRemoveChange(change[ChangeIndex.OLD_NODE]), pusher);
   } else if (!oldWasPresent && newIsPresent) {
-    yield* output.push(
-      {
-        type: 'add',
-        node: change.node,
-      },
-      pusher,
-    );
+    yield* output.push(makeAddChange(change[ChangeIndex.NODE]), pusher);
   }
 }

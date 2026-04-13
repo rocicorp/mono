@@ -1,5 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {ChangeIndex} from './change-index.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import type {FetchRequest, Input, Operator, Output} from './operator.ts';
@@ -28,7 +29,7 @@ export class UnionFanOut implements Operator {
     for (const output of this.#outputs) {
       yield* output.push(change, this);
     }
-    yield* must(this.#unionFanIn).fanOutDonePushing(change.type);
+    yield* must(this.#unionFanIn).fanOutDonePushing(change[ChangeIndex.TYPE]);
   }
 
   setOutput(output: Output): void {

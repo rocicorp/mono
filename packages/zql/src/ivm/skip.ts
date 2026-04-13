@@ -1,6 +1,13 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {AddChange, Change, ChildChange, RemoveChange} from './change.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
+import {
+  type AddChange,
+  type Change,
+  type ChildChange,
+  type RemoveChange,
+} from './change.ts';
 import type {Comparator, Node} from './data.ts';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.ts';
 import {
@@ -80,7 +87,7 @@ export class Skip implements Operator {
 
   *push(change: Change): Stream<'yield'> {
     const shouldBePresent = (row: Row) => this.#shouldBePresent(row);
-    if (change.type === 'edit') {
+    if (change[ChangeIndex.TYPE] === ChangeType.EDIT) {
       yield* maybeSplitAndPushEditChange(
         change,
         shouldBePresent,
@@ -92,7 +99,7 @@ export class Skip implements Operator {
 
     change satisfies AddChange | RemoveChange | ChildChange;
 
-    if (shouldBePresent(change.node.row)) {
+    if (shouldBePresent(change[ChangeIndex.NODE].row)) {
       yield* this.#output.push(change, this);
     }
   }

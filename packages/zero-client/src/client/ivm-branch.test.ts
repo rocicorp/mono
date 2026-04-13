@@ -20,6 +20,7 @@ import {consume} from '../../../zql/src/ivm/stream.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {createDb} from './test/create-db.ts';
 
+import {makeSourceChangeAdd} from '../../../zql/src/ivm/source.ts';
 test('fork', () => {
   const main = new IVMSourceBranch({
     users: {
@@ -35,12 +36,7 @@ test('fork', () => {
 
   // Add initial data to main
   const usersSource = main.getSource('users')!;
-  consume(
-    usersSource.push({
-      type: 'add',
-      row: {id: 'u1', name: 'Alice'},
-    }),
-  );
+  consume(usersSource.push(makeSourceChangeAdd({id: 'u1', name: 'Alice'})));
 
   // Fork should have same initial data
   const fork = main.fork();
@@ -58,19 +54,13 @@ test('fork', () => {
   `);
 
   // Mutate main
-  consume(
-    usersSource.push({
-      type: 'add',
-      row: {id: 'u2', name: 'Bob'},
-    }),
-  );
+  consume(usersSource.push(makeSourceChangeAdd({id: 'u2', name: 'Bob'})));
 
   // Mutate fork differently
   consume(
-    fork.getSource('users')!.push({
-      type: 'add',
-      row: {id: 'u3', name: 'Charlie'},
-    }),
+    fork
+      .getSource('users')!
+      .push(makeSourceChangeAdd({id: 'u3', name: 'Charlie'})),
   );
 
   // Verify main and fork evolved independently

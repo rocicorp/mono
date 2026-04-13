@@ -1,6 +1,8 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import {ChangeIndex} from './change-index.ts';
+import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import {compareValues, valuesEqual, type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
@@ -34,35 +36,37 @@ export function* generateWithOverlay(
     }
     let yieldNode = true;
     if (!applied) {
-      switch (overlay.type) {
-        case 'add': {
-          if (schema.compareRows(overlay.node.row, node.row) === 0) {
+      switch (overlay[ChangeIndex.TYPE]) {
+        case ChangeType.ADD: {
+          if (
+            schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
+          ) {
             applied = true;
             yieldNode = false;
           }
           break;
         }
-        case 'remove': {
-          if (schema.compareRows(overlay.node.row, node.row) < 0) {
+        case ChangeType.REMOVE: {
+          if (schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) < 0) {
             applied = true;
-            yield overlay.node;
+            yield overlay[ChangeIndex.NODE];
           }
           break;
         }
-        case 'edit': {
+        case ChangeType.EDIT: {
           if (
             !editOldApplied &&
-            schema.compareRows(overlay.oldNode.row, node.row) < 0
+            schema.compareRows(overlay[ChangeIndex.OLD_NODE].row, node.row) < 0
           ) {
             editOldApplied = true;
             if (editNewApplied) {
               applied = true;
             }
-            yield overlay.oldNode;
+            yield overlay[ChangeIndex.OLD_NODE];
           }
           if (
             !editNewApplied &&
-            schema.compareRows(overlay.node.row, node.row) === 0
+            schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
           ) {
             editNewApplied = true;
             if (editOldApplied) {
@@ -72,18 +76,24 @@ export function* generateWithOverlay(
           }
           break;
         }
-        case 'child': {
-          if (schema.compareRows(overlay.node.row, node.row) === 0) {
+        case ChangeType.CHILD: {
+          if (
+            schema.compareRows(overlay[ChangeIndex.NODE].row, node.row) === 0
+          ) {
             applied = true;
             yield {
               row: node.row,
               relationships: {
                 ...node.relationships,
-                [overlay.child.relationshipName]: () =>
+                [overlay[ChangeIndex.CHILD_DATA].relationshipName]: () =>
                   generateWithOverlay(
-                    node.relationships[overlay.child.relationshipName](),
-                    overlay.child.change,
-                    schema.relationships[overlay.child.relationshipName],
+                    node.relationships[
+                      overlay[ChangeIndex.CHILD_DATA].relationshipName
+                    ](),
+                    overlay[ChangeIndex.CHILD_DATA].change,
+                    schema.relationships[
+                      overlay[ChangeIndex.CHILD_DATA].relationshipName
+                    ],
                   ),
               },
             };
@@ -98,17 +108,17 @@ export function* generateWithOverlay(
     }
   }
   if (!applied) {
-    if (overlay.type === 'remove') {
+    if (overlay[ChangeIndex.TYPE] === ChangeType.REMOVE) {
       applied = true;
-      yield overlay.node;
-    } else if (overlay.type === 'edit') {
+      yield overlay[ChangeIndex.NODE];
+    } else if (overlay[ChangeIndex.TYPE] === ChangeType.EDIT) {
       assert(
         editNewApplied,
         'edit overlay: new node must be applied before old node',
       );
       editOldApplied = true;
       applied = true;
-      yield overlay.oldNode;
+      yield overlay[ChangeIndex.OLD_NODE];
     }
   }
 
@@ -132,10 +142,10 @@ export function* generateWithOverlayUnordered(
   schema: SourceSchema,
 ): Stream<Node | 'yield'> {
   // Eager inject
-  if (overlay.type === 'remove') {
-    yield overlay.node;
-  } else if (overlay.type === 'edit') {
-    yield overlay.oldNode;
+  if (overlay[ChangeIndex.TYPE] === ChangeType.REMOVE) {
+    yield overlay[ChangeIndex.NODE];
+  } else if (overlay[ChangeIndex.TYPE] === ChangeType.EDIT) {
+    yield overlay[ChangeIndex.OLD_NODE];
   }
 
   // Stream with inline suppress
@@ -146,28 +156,43 @@ export function* generateWithOverlayUnordered(
       continue;
     }
     if (!suppressed) {
-      if (overlay.type === 'add' || overlay.type === 'edit') {
+      if (
+        overlay[ChangeIndex.TYPE] === ChangeType.ADD ||
+        overlay[ChangeIndex.TYPE] === ChangeType.EDIT
+      ) {
         if (
-          rowEqualsForCompoundKey(overlay.node.row, node.row, schema.primaryKey)
+          rowEqualsForCompoundKey(
+            overlay[ChangeIndex.NODE].row,
+            node.row,
+            schema.primaryKey,
+          )
         ) {
           suppressed = true;
           continue;
         }
       }
-      if (overlay.type === 'child') {
+      if (overlay[ChangeIndex.TYPE] === ChangeType.CHILD) {
         if (
-          rowEqualsForCompoundKey(overlay.node.row, node.row, schema.primaryKey)
+          rowEqualsForCompoundKey(
+            overlay[ChangeIndex.NODE].row,
+            node.row,
+            schema.primaryKey,
+          )
         ) {
           suppressed = true;
           yield {
             row: node.row,
             relationships: {
               ...node.relationships,
-              [overlay.child.relationshipName]: () =>
+              [overlay[ChangeIndex.CHILD_DATA].relationshipName]: () =>
                 generateWithOverlay(
-                  node.relationships[overlay.child.relationshipName](),
-                  overlay.child.change,
-                  schema.relationships[overlay.child.relationshipName],
+                  node.relationships[
+                    overlay[ChangeIndex.CHILD_DATA].relationshipName
+                  ](),
+                  overlay[ChangeIndex.CHILD_DATA].change,
+                  schema.relationships[
+                    overlay[ChangeIndex.CHILD_DATA].relationshipName
+                  ],
                 ),
             },
           };
@@ -178,7 +203,7 @@ export function* generateWithOverlayUnordered(
     yield node;
   }
   assert(
-    suppressed || overlay.type === 'remove',
+    suppressed || overlay[ChangeIndex.TYPE] === ChangeType.REMOVE,
     'overlayGenerator: overlay was never applied to any fetched node',
   );
 }

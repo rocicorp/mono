@@ -9,6 +9,11 @@ import {
 } from '../../../zero-protocol/src/push.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../../zql/src/ivm/source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import {toPrimaryKeyString} from './keys.ts';
@@ -47,10 +52,9 @@ export async function insert(
     await tx.set(key, val);
     if (ivmBranch) {
       consume(
-        must(ivmBranch.getSource(arg.tableName)).push({
-          type: 'add',
-          row: arg.value,
-        }),
+        must(ivmBranch.getSource(arg.tableName)).push(
+          makeSourceChangeAdd(arg.value),
+        ),
       );
     }
   }
@@ -99,11 +103,9 @@ export async function update(
   await tx.set(key, next);
   if (ivmBranch) {
     consume(
-      must(ivmBranch.getSource(arg.tableName)).push({
-        type: 'edit',
-        oldRow: prev as Row,
-        row: next,
-      }),
+      must(ivmBranch.getSource(arg.tableName)).push(
+        makeSourceChangeEdit(next, prev as Row),
+      ),
     );
   }
 }
@@ -126,10 +128,9 @@ async function deleteImpl(
   await tx.del(key);
   if (ivmBranch) {
     consume(
-      must(ivmBranch.getSource(arg.tableName)).push({
-        type: 'remove',
-        row: prev as Row,
-      }),
+      must(ivmBranch.getSource(arg.tableName)).push(
+        makeSourceChangeRemove(prev as Row),
+      ),
     );
   }
 }

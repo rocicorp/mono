@@ -18,7 +18,6 @@ import {
 } from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
-
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
 
@@ -166,8 +165,8 @@ test('processChanges', () => {
     {type: 'add', node: {row: {id: 'e2', name: 'name2'}, relationships: {}}},
     {
       type: 'edit',
-      oldRow: {id: 'e1', name: 'name1'},
       row: {id: 'e1', name: 'name1.1'},
+      oldRow: {id: 'e1', name: 'name1'},
     },
   ]);
 
@@ -188,8 +187,8 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
       {type: 'add', node: {row: {id: 'e2', name: 'name2'}, relationships: {}}},
       {
         type: 'edit',
-        oldRow: {id: 'e1', name: 'name1'},
         row: {id: 'e1', name: 'name1.1'},
+        oldRow: {id: 'e1', name: 'name1'},
       },
     ]);
   };
