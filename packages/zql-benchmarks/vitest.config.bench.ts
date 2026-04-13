@@ -2,6 +2,7 @@ import {mergeConfig} from 'vitest/config';
 import {benchConfig} from '../shared/src/tool/vitest-config.ts';
 import {ChangeIndex} from '../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../zql/src/ivm/change-type.ts';
+import {SourceChangeIndex} from '../zql/src/ivm/source-change-index.ts';
 
 export default mergeConfig(benchConfig, {
   define: {
@@ -9,6 +10,7 @@ export default mergeConfig(benchConfig, {
     // them, so we inline them ourselves here.
     ...defineFromEnum('ChangeType', ChangeType),
     ...defineFromEnum('ChangeIndex', ChangeIndex),
+    ...defineFromEnum('SourceChangeIndex', SourceChangeIndex),
   },
 
   test: {
